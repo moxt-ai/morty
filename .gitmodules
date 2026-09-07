@@ -9,3 +9,6 @@
 	path = apps/workflow
 	url = https://github.com/moxt-ai/mobius-workflow.git
 	branch = main
+[submodule "authentication"]
+	path = authentication
+	url = https://github.com/moxt-ai/authentication.git

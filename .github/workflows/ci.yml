@@ -66,7 +66,23 @@ jobs:
       - name: Ensure browser and system dependencies
         run: pnpm exec playwright install --with-deps --only-shell chromium
 
-      - run: pnpm check
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+      - name: Tests with coverage
+        run: pnpm test:coverage
+
+      - name: Browser tests
+        run: pnpm test:browser
+
+      - name: Check unused code and dependencies
+        run: pnpm knip
 
   deploy:
     name: deploy
