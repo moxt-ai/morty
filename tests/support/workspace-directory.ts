@@ -3,7 +3,7 @@ import {
   type WorkspaceDirectory,
   WorkspaceError,
   workspacePageSize,
-} from "../../cloud/web/workspaces/contracts.ts";
+} from "../../web/workspaces/contracts.ts";
 
 // A stateful identity provider at the production directory port. Browser
 // scenarios exercise workspace flows without live accounts or auth automation.

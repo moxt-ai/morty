@@ -8,14 +8,14 @@
   "include": [
     "**/*.ts",
     "../scripts/**/*.ts",
-    "../cloud/src/**/*.ts",
+    "../worker/**/*.ts",
     "../vitest.config.ts",
     "../worker-configuration.d.ts",
-    "../cloud/shared/**/*.ts",
+    "../shared/**/*.ts",
     "../vite.config.ts",
     "**/*.tsx",
     "../vitest.browser.config.ts",
-    "../cloud/web/**/*.ts",
-    "../cloud/web/**/*.tsx"
+    "../web/**/*.ts",
+    "../web/**/*.tsx"
   ]
 }

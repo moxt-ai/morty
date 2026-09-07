@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import worker from "../cloud/src/index.ts";
+import worker from "../worker/application.ts";
 import {
   APP_ORIGIN,
   AUTH_TIME,
@@ -12,6 +12,48 @@ const configuration = {
   CLERK_JWT_KEY: issuer.publicKey,
   APP_ORIGIN,
   CLERK_SECRET_KEY: "sk_test_do_not_disclose",
+};
+
+const slackConfiguration = {
+  ...configuration,
+  CLERK_ISSUER_URL: "https://clerk.test",
+  AGENT_TRIGGER_RATE_LIMITER: {
+    get: () => undefined,
+    idFromName: () => undefined,
+  },
+  ASSETS: { fetch: () => Promise.resolve(new Response()) },
+  ATTACHMENTS: {
+    get: () => Promise.resolve(null),
+    put: () => Promise.resolve(),
+  },
+  AUTHENTICATION_BASE_URL: "https://identity.test",
+  DATABASE: {
+    batch: () => Promise.resolve([]),
+    prepare: () => undefined,
+  },
+  EVENTS: { send: () => Promise.resolve() },
+  MOBIUS_BASE_URL: "https://mobius.test",
+  OAUTH_STATE_SIGNING_KEY: "state-signing-key",
+  PUBLIC_BASE_URL: APP_ORIGIN,
+  SERVICE_AUTH_TOKEN: "service-token",
+  TOKEN_ENCRYPTION_KEY: btoa("a".repeat(32)),
+};
+
+const mobiusConfiguration = {
+  DIRECTORY_DATABASE: {
+    batch: () => Promise.resolve([]),
+    prepare: () => undefined,
+  },
+  RUNTIME_RELAY: {
+    get: () => undefined,
+    idFromName: () => undefined,
+  },
+  SESSION_RELAY: {
+    get: () => undefined,
+    idFromName: () => undefined,
+  },
+  SESSION_ACTIVE_SESSIONS_PER_PROJECT: "1000",
+  SESSION_ACTIVE_SESSIONS_PER_TENANT: "10000",
 };
 
 beforeEach(() => {
@@ -133,4 +175,28 @@ test("Given an unknown API route, When a visitor requests it, Then a JSON not-fo
   );
   expect(response.status).toBe(404);
   expect(await response.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
+});
+
+test("Given the combined Cloud service, When Slack health is requested, Then the imported Slack application responds", async () => {
+  const response = await worker.fetch(
+    new Request(`${APP_ORIGIN}/mobius-slack/api/health`),
+    slackConfiguration,
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    service: "app-slack",
+    status: "ok",
+  });
+});
+
+test("Given the combined Cloud service, When Mobius health is requested, Then the imported Mobius application responds", async () => {
+  const response = await worker.fetch(
+    new Request(`${APP_ORIGIN}/health`),
+    mobiusConfiguration,
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    service: "mobius-relay",
+    status: "ok",
+  });
 });

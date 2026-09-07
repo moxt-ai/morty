@@ -5,6 +5,7 @@ import { publicConfigSchema, sessionSchema } from "../shared/contracts.ts";
 import { App, type AppState, Page } from "./App.tsx";
 import { clerkDirectory, waitForClerk } from "./workspaces/clerk-directory.ts";
 import { WorkspaceError } from "./workspaces/contracts.ts";
+import { MobiusManagement } from "./workspaces/MobiusManagement.tsx";
 import { createWorkspaceRouter } from "./workspaces/router.tsx";
 import "./style.css";
 
@@ -65,31 +66,35 @@ async function start() {
       if (state.kind === "signed-in" && state.sessionId === session.id) return;
       disposeRouter();
       const directory = clerkDirectory(clerk);
-      const router = createWorkspaceRouter(directory, async (requestSignal) => {
-        const verificationSignal = AbortSignal.any([
-          requestSignal,
-          lifetime.signal,
-          AbortSignal.timeout(10_000),
-        ]);
-        if (clerk.session?.id !== session.id)
-          throw new WorkspaceError("FORBIDDEN");
-        const token = await waitForClerk(
-          () => session.getToken(),
-          verificationSignal,
-        );
-        if (!token) throw new WorkspaceError("FORBIDDEN");
-        const result = await fetch("/api/session", {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: verificationSignal,
-        });
-        if (!result.ok)
-          throw new WorkspaceError(
-            result.status === 401 ? "FORBIDDEN" : "UNAVAILABLE",
+      const router = createWorkspaceRouter(
+        directory,
+        async (requestSignal) => {
+          const verificationSignal = AbortSignal.any([
+            requestSignal,
+            lifetime.signal,
+            AbortSignal.timeout(10_000),
+          ]);
+          if (clerk.session?.id !== session.id)
+            throw new WorkspaceError("FORBIDDEN");
+          const token = await waitForClerk(
+            () => session.getToken(),
+            verificationSignal,
           );
-        const data: unknown = await result.json();
-        sessionSchema.parse(data);
-        verificationSignal.throwIfAborted();
-      });
+          if (!token) throw new WorkspaceError("FORBIDDEN");
+          const result = await fetch("/api/session", {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: verificationSignal,
+          });
+          if (!result.ok)
+            throw new WorkspaceError(
+              result.status === 401 ? "FORBIDDEN" : "UNAVAILABLE",
+            );
+          const data: unknown = await result.json();
+          sessionSchema.parse(data);
+          verificationSignal.throwIfAborted();
+        },
+        MobiusManagement,
+      );
       state = { kind: "signed-in", sessionId: session.id, router };
     }
     render();

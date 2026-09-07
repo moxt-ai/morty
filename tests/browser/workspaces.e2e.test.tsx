@@ -1,8 +1,14 @@
 import { RouterProvider } from "react-router/dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { render } from "vitest-browser-react";
-import type { WorkspaceDirectory } from "../../cloud/web/workspaces/contracts.ts";
-import { createWorkspaceRouter } from "../../cloud/web/workspaces/router.tsx";
+import type { WorkspaceDirectory } from "../../web/workspaces/contracts.ts";
+import { createWorkspaceRouter } from "../../web/workspaces/router.tsx";
+import {
+  type ChatApplicationProps,
+  type PairApplicationProps,
+  type SlackApplicationProps,
+  WorkspaceApplications,
+} from "../../web/workspaces/WorkspaceApplications.tsx";
 import { WorkspaceIdentityProvider } from "../support/workspace-directory.ts";
 
 beforeEach(() => {
@@ -16,14 +22,36 @@ afterEach(() => {
   vi.useRealTimers();
 });
 async function renderWorkspaces(directory: WorkspaceDirectory) {
-  const router = createWorkspaceRouter(directory, async (signal) => {
-    signal.throwIfAborted();
-  });
+  const PairApplication = ({ onConnected }: PairApplicationProps<string>) => (
+    <button type="button" onClick={() => onConnected("channel-1")}>
+      Complete pairing
+    </button>
+  );
+  const ChatApplication = ({ connection }: ChatApplicationProps<string>) => (
+    <p>Chat is ready for {connection}.</p>
+  );
+  const SlackApplication = ({ connection }: SlackApplicationProps<string>) => (
+    <p>Slack agent list is ready for {connection ?? "no channel"}.</p>
+  );
+  const WorkspaceManagement = () => (
+    <WorkspaceApplications
+      ChatApplication={ChatApplication}
+      PairApplication={PairApplication}
+      SlackApplication={SlackApplication}
+    />
+  );
+  const router = createWorkspaceRouter(
+    directory,
+    async (signal) => {
+      signal.throwIfAborted();
+    },
+    WorkspaceManagement,
+  );
   routers.push(router);
   return render(<RouterProvider router={router} />);
 }
 
-test("Given a signed-in user, When they create and open a workspace, Then they see its empty TODO page and can delete it after confirmation", async () => {
+test("Given a signed-in user, When they create and open a workspace, Then they see Pair, Chat, and Slack applications", async () => {
   const identity = new WorkspaceIdentityProvider();
   const screen = await renderWorkspaces(identity.forUser("alice"));
   await expect
@@ -36,8 +64,26 @@ test("Given a signed-in user, When they create and open a workspace, Then they s
     .getByRole("button", { name: "Create workspace", exact: true })
     .click();
   await screen.getByRole("link", { name: "Research team" }).click();
+  await expect.element(screen.getByRole("tab", { name: "Pair" })).toBeVisible();
   await expect
-    .element(screen.getByRole("heading", { name: "TODO", exact: true }))
+    .element(screen.getByRole("tab", { name: "Chat" }))
+    .toBeDisabled();
+  await expect
+    .element(screen.getByRole("tab", { name: "Slack" }))
+    .toBeVisible();
+  await expect
+    .element(screen.getByRole("button", { name: "Complete pairing" }))
+    .toBeVisible();
+  await screen.getByRole("button", { name: "Complete pairing" }).click();
+  await expect
+    .element(screen.getByRole("tab", { name: "Chat" }))
+    .toHaveAttribute("aria-selected", "true");
+  await expect
+    .element(screen.getByText("Chat is ready for channel-1."))
+    .toBeVisible();
+  await screen.getByRole("tab", { name: "Slack" }).click();
+  await expect
+    .element(screen.getByText("Slack agent list is ready for channel-1."))
     .toBeVisible();
   await expect
     .element(screen.getByText("Research team", { exact: true }))
@@ -88,7 +134,7 @@ test("Given a workspace URL belonging to another user, When it is opened directl
     .element(screen.getByRole("alert"))
     .toHaveTextContent("no longer have access");
   await expect
-    .element(screen.getByRole("heading", { name: "TODO" }))
+    .element(screen.getByRole("tab", { name: "Slack" }))
     .not.toBeInTheDocument();
   await screen.getByRole("link", { name: "All workspaces" }).click();
   await expect.element(screen.getByText("No workspaces yet")).toBeVisible();
@@ -107,7 +153,7 @@ test("Given more than one page of memberships, When a user changes pages and ope
     .not.toBeInTheDocument();
   await screen.getByRole("link", { name: "Team 21", exact: true }).click();
   await expect
-    .element(screen.getByRole("heading", { name: "TODO", exact: true }))
+    .element(screen.getByRole("tab", { name: "Slack" }))
     .toBeVisible();
   const path = window.location.pathname;
   await screen.unmount();

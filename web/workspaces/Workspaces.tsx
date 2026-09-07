@@ -1,3 +1,4 @@
+import type { ComponentType } from "react";
 import {
   Link,
   useFetcher,
@@ -226,7 +227,11 @@ export function WorkspaceList({ ui }: { readonly ui: WorkspaceStore }) {
   );
 }
 
-export function WorkspaceTodo() {
+export function WorkspaceDetail({
+  WorkspaceManagement,
+}: {
+  readonly WorkspaceManagement: ComponentType;
+}) {
   const workspace = useLoaderData<typeof loadWorkspace>();
   return (
     <>
@@ -240,11 +245,9 @@ export function WorkspaceTodo() {
         <p className="mb-3 break-words text-sm font-medium text-violet-700">
           {workspace.name}
         </p>
-        <h1 className="text-3xl font-semibold tracking-tight">TODO</h1>
-        <section
-          aria-label="Workspace content"
-          className="mt-8 min-h-80 rounded-2xl border border-zinc-200 bg-white"
-        />
+        <div className="mt-6">
+          <WorkspaceManagement />
+        </div>
       </section>
     </>
   );

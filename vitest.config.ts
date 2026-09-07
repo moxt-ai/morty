@@ -7,9 +7,9 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],
-      include: ["cloud/src/**/*.ts"],
+      include: ["worker/**/*.ts"],
       exclude: [
-        "cloud/src/testing/**",
+        "worker/testing/**",
         "tests/**",
         ...coverageConfigDefaults.exclude,
       ],

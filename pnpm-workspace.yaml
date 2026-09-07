@@ -1,6 +1,16 @@
 engineStrict: true
 minimumReleaseAge: 1440
 
+packages:
+  - apps/slack/packages/api
+  - apps/slack/packages/web-core
+  - apps/slack/packages/worker
+  - mobius/packages/protocol
+  - mobius/packages/relay-core
+  - mobius/packages/relay-cloudflare
+  - mobius/packages/web-core
+  - mobius/packages/web-sdk
+
 allowBuilds:
   bufferutil: false
   esbuild: true

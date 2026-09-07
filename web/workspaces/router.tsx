@@ -1,11 +1,12 @@
+import type { ComponentType } from "react";
 import { createBrowserRouter, Outlet, useNavigation } from "react-router";
 import type { WorkspaceDirectory } from "./contracts.ts";
 import { loadWorkspace, loadWorkspaces, mutateWorkspace } from "./data.ts";
 import { createWorkspaceStore } from "./store.ts";
 import {
+  WorkspaceDetail,
   WorkspaceFailure,
   WorkspaceList,
-  WorkspaceTodo,
 } from "./Workspaces.tsx";
 
 function WorkspaceLayout() {
@@ -25,6 +26,7 @@ function WorkspaceLayout() {
 export function createWorkspaceRouter(
   directory: WorkspaceDirectory,
   authorize: (signal: AbortSignal) => Promise<void>,
+  WorkspaceManagement: ComponentType,
 ) {
   const ui = createWorkspaceStore();
   const router = createBrowserRouter([
@@ -49,7 +51,9 @@ export function createWorkspaceRouter(
           path: "workspaces/:workspaceId",
           loader: ({ params: { workspaceId }, request }) =>
             loadWorkspace(directory, workspaceId, request),
-          element: <WorkspaceTodo />,
+          element: (
+            <WorkspaceDetail WorkspaceManagement={WorkspaceManagement} />
+          ),
           errorElement: <WorkspaceFailure />,
         },
         {
