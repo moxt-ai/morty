@@ -22,6 +22,15 @@ runs:
       uses: moxt-ai/mobius/.github/actions/source@8b180f3a039f913b584b2afdbdaaf10c13064128
     - id: slack
       uses: moxt-ai/mobius-slack/.github/actions/source@c3333333a7fb8064e00d6782f7d6f1a482d86772
+    - name: Materialize business sources
+      shell: bash
+      env:
+        MOBIUS_PATH: ${{ steps.mobius.outputs.path }}
+        SLACK_PATH: ${{ steps.slack.outputs.path }}
+      run: |
+        mkdir -p "$GITHUB_WORKSPACE/mobius" "$GITHUB_WORKSPACE/apps/slack"
+        cp -R "$MOBIUS_PATH/." "$GITHUB_WORKSPACE/mobius"
+        cp -R "$SLACK_PATH/." "$GITHUB_WORKSPACE/apps/slack"
     - name: Install Mobius dependencies
       shell: bash
       working-directory: ${{ steps.mobius.outputs.path }}
