@@ -80,10 +80,16 @@ Both CI jobs cache the pnpm store. Browser checks also cache Chromium's headless
 shell by operating system, architecture, and Playwright version. Installation
 reuses cached binaries while ensuring system libraries are present on each fresh
 runner. Cache misses download only the headless shell required by the scenarios.
- Deployments are serialized per environment and
+Deployments are serialized per environment and
 are not canceled while running. Both Workers serve the app and assets without
 database bindings. Local development uses the default `mobius-cloud-local`
 configuration and `.dev.vars`; it is not a deployment target.
+
+The physical D1 inventory is maintained in `infra/d1-shards.json`. These
+pre-created databases belong to the Cloud deployment infrastructure, but the
+Cloud Worker does not bind them. Business services own their tables and migration
+files. See [the storage contract](docs/storage.md) before connecting a service
+or moving existing data into a shared shard.
 
 ### Account and credentials
 

@@ -1,9 +1,9 @@
 # Mobius Cloud
 
 Mobius Cloud is the hosted, multi-workspace distribution of Mobius. It is built
-from independent services that share identity and workspace boundaries without
-sharing databases or hardcoding dependencies between Mobius and individual
-applications. The same service model also supports private deployments.
+from independent services that share identity and workspace boundaries. Cloud
+owns physical D1 shards; each business owns its tables and migrations within
+those shards. Services communicate through their APIs. The same service model also supports private deployments.
 
 ## Repository layout
 
@@ -36,7 +36,9 @@ The web app uses React 19, TypeScript, Vite, and Tailwind CSS 4. Clerk provides
 sign-up, sign-in, profile management, and sign-out. The Worker verifies signed
 session tokens locally before returning the current account. Authentication
 state is owned by Clerk. React Router loaders and actions manage workspace data;
-Zustand stores dialog state. There is no application database yet.
+Zustand stores dialog state. Cloud has no application database. Its physical
+D1 inventory lives in [configuration](infra/d1-shards.json); business services
+will use those shards through the [storage contract](docs/storage.md).
 
 Copy `.dev.vars.example` to `.dev.vars` and fill in your Clerk configuration
 before running the app at `http://localhost:5173`. See
@@ -88,20 +90,21 @@ multiple workspaces and can run Mobius, `app-slack`, `app-workflow`, and other
 `app-*` services.
 
 ```text
-Node A
-├── Mobius
-│   └── Mobius database: Workspace 1, Workspace 2
-├── app-slack
-│   └── app-slack database: Workspace 1
-├── app-workflow
-│   └── app-workflow database: Workspace 1, Workspace 2
-└── app-xxx
-    └── app-xxx database: Workspace 2
+Regional shard managed by Cloud
+├── Mobius tables and mobius_migrations
+├── Slack tables and slack_migrations
+└── Other applications' tables and migration histories
 ```
 
-A node is only a deployment grouping. It does not own a shared workspace database,
-and services must not depend on being deployed together. Every service keeps
-its own database and independently records which workspaces it serves.
+A node is a deployment grouping. A physical D1 shard can hold tables from several
+businesses and data from several workspaces. Each service owns its tables,
+migration files, and authorization. Sharing the database does not authorize a
+service to access another business's tables or bypass workspace checks.
+
+Cloud keeps the database inventory in a configuration file. The planned stable
+workspace-to-shard assignment lives in Clerk Organization private metadata;
+Cloud does not need a database of its own. See [storage](docs/storage.md) for
+regional placement, schema migrations, capacity, and current deployment status.
 
 Workspaces normally stay on the node where they were provisioned. This supports
 local access and limits a node failure to the workspaces served by that node.
@@ -116,7 +119,7 @@ correct endpoint during workspace or integration provisioning:
 - Agents call application URLs disclosed through their system prompt.
 - Slack is configured with the `app-slack` endpoint for the workspace's node.
 
-Each service verifies the caller and checks its own database for the workspace. If
+Each service verifies the caller and checks its own tables for the workspace. If
 a request reaches the wrong node, the service returns `WORKSPACE_NOT_SERVED`. It
 does not ask `cloud` to locate another node, forward the request, or migrate the
 workspace.
@@ -186,16 +189,17 @@ service owns its persistent and temporary state:
 
 | Service | State owned by the service |
 | --- | --- |
-| `cloud` | Workspace UI; future hosted nodes, placement, service URLs, and provisioning status |
+| `cloud` | Workspace UI, physical D1 inventory in configuration; planned placement in Clerk metadata |
 | `mobius` | Served workspaces, agents, daemon registrations, agent identity, and prompt contributions |
 | `app-slack` | Served workspaces, Slack installations, identity bindings, authorization, and conversation mappings |
 | `app-workflow` | Served workspaces, workflows, work items, schedules, execution history, and supervision state |
 | `app-*` | Served workspaces and application-specific business data |
 
-There is no cross-service runtime workspace database. `cloud` may coordinate
-hosted provisioning, but each service registration is independent and safe to
-retry. Caches, queues, locks, event deduplication, and online presence are also
-maintained by the service that uses them.
+A physical D1 shard is shared infrastructure. Each service independently owns
+its business data and migrations; there are no cross-business table dependencies.
+Cloud manages shard inventory through configuration and planned placement through
+Clerk metadata. Caches, queues, event deduplication, and online presence remain
+owned by the business that uses them.
 
 ## Private deployment
 

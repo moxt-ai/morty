@@ -39,10 +39,12 @@ The workspace TODO page is intentionally blank. Mobius agents and chat history,
 Mobius Slack connections, and additional applications will be integrated here.
 No agent, chat, Slack, or task data is provisioned by this slice.
 
-Cloud may later own node inventory, placement, service URLs, and provisioning
-status keyed by the Clerk Organization ID. Each service remains responsible for
-its own business data and workspace authorization. Services deployed together
-do not share a runtime workspace database.
+Cloud owns the physical D1 inventory in [configuration](../infra/d1-shards.json).
+It has no database bindings or application database. Business services will share
+regional shards while owning their tables and migration histories independently.
+Workspace placement is planned in Clerk Organization private metadata. The
+[storage contract](../docs/storage.md) records the created empty shards, current
+service databases, and remaining integration work.
 
 When service provisioning is implemented, workspace deletion must coordinate
 cleanup in those services before removing the Organization. Today there are no
