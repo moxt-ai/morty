@@ -19,9 +19,9 @@ runs:
           grep -Fqx "      uses: moxt-ai/$repository/.github/actions/source@$revision" .github/actions/business-sources/action.yml
         done
     - id: mobius
-      uses: moxt-ai/mobius/.github/actions/source@3be1e958cac24b1b3c073854c574c2aa4d587c43
+      uses: moxt-ai/mobius/.github/actions/source@c35ba71b0ce50942de727abe72c2b1e47da7a177
     - id: slack
-      uses: moxt-ai/mobius-slack/.github/actions/source@05d3900452f180d23515006633bcbb0ae5ffda76
+      uses: moxt-ai/mobius-slack/.github/actions/source@d2b250b67a3df9519a02fb6f061889b340ab8870
     - name: Install Mobius dependencies
       shell: bash
       working-directory: ${{ steps.mobius.outputs.path }}
