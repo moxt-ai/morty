@@ -147,12 +147,13 @@ verification applied files with this identical name through two configurations
 to one database and confirmed both business tables and both history records.
 
 Cloud CD applies each business's migrations across the selected environment's
-shards before releasing code that requires them. Releases are serialized per
-environment in the Cloud repository. Business repositories own SQL but do not
-trigger deployments. Different businesses must not change one another's tables,
-indexes, triggers, or migration histories, and must avoid cross-business foreign
-keys and SQL joins. D1 serializes database work; large schema changes still affect
-every business sharing that shard. Coordinate these changes through Cloud's release.
+new shared shards before deploying the Cloud Worker. Cloud releases are serialized
+per environment. Existing standalone service deployments and their databases
+remain managed by their original repositories. Different businesses must not
+change one another's tables, indexes, triggers, or migration histories in a shared
+shard, and must avoid cross-business foreign keys and SQL joins. D1 serializes
+database work; large schema changes still affect every business sharing that shard.
+Coordinate these shared-shard changes through Cloud's release.
 
 Use additive, backward-compatible migrations for rolling deployments. Keep old
 code working while shards are upgraded; do not publish code that requires a
@@ -191,27 +192,28 @@ restore, or independent capacity. Wrangler migrations support both layouts.
 
 ## Release inventory and migration gate
 
-Cloud's `CI` workflow is the only deployment entrypoint. It selects a Cloud commit,
-including the D1/R2 inventories and pinned Mobius and Slack revisions. Both business
+Cloud's `CI` workflow owns releases of the Cloud Worker and migrations on the new
+Cloud-managed shared shards. It selects a Cloud commit, including the D1/R2
+inventories and pinned Mobius and Slack migration revisions. Both business
 repositories expose a source-only internal action; GitHub downloads it with a
 temporary scoped token. `.github/actions/business-sources` checks the action SHAs
-against Cloud's submodules, installs dependencies, and builds the frontends.
-Update both pins together when selecting a new business version.
+against Cloud's submodules and installs the migration dependencies. Update both
+pins together when selecting a new business version.
 
 Pull requests apply both businesses' migrations locally to all staging and
-production shards. A release builds first, then applies both businesses' SQL to
-every shard in the selected environment with `--remote`. It also applies native
-migrations to the active service database before deploying any Worker. Migration
-failure stops deployment. The complete sequence is serialized per environment
-with cancellation disabled for a running release; migrations already applied
-remain recorded if a later shard fails. Use backward-compatible SQL so a partially
-completed migration rollout can be resumed while old code remains active.
+production shards using the same local database state for both businesses.
+Cloud CD builds its own Worker first, then applies both
+businesses' SQL to every shard in the selected environment with `--remote`, then
+deploys Cloud. A migration failure stops deployment. The complete sequence is
+serialized per environment with cancellation disabled for a running release;
+migrations already applied remain recorded if a later shard fails. Use
+backward-compatible SQL so an incomplete migration rollout can be resumed.
 
-Current deployment targets are Cloud plus Slack for staging, and Cloud plus
-Mobius relay for production. Main pushes release staging; manual dispatch on
-main selects either environment. Business CI checks code but has no deployment
-job. Merge the business deployment-removal PRs before the Cloud orchestration PR.
-This change does not create Mobius staging or Slack production Workers.
+Main pushes release Cloud staging; manual dispatch on main selects staging or
+production. Existing standalone deployments, including `mobius-relay.paraflow.biz`
+and Slack staging, retain their original workflows, domains, and storage. Cloud
+CD neither deploys those Workers nor migrates their databases. Updating the
+shared-shard migration source pin does not change a standalone deployment target.
 
 Cloud's Worker still has no D1 binding or SQL schema. Its CD invokes the migration
 commands owned by each business. R2 has no SQL migration step: Cloud provisions

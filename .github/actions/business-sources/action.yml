@@ -1,5 +1,5 @@
 name: Prepare business sources
-description: Load and build the business revisions selected by this Cloud release
+description: Load the business migration revisions selected by this Cloud release
 outputs:
   mobius-path:
     description: Mobius repository root
@@ -19,9 +19,9 @@ runs:
           grep -Fqx "      uses: moxt-ai/$repository/.github/actions/source@$revision" .github/actions/business-sources/action.yml
         done
     - id: mobius
-      uses: moxt-ai/mobius/.github/actions/source@2194bf98708a1bc44617a6361c07648fe428c73e
+      uses: moxt-ai/mobius/.github/actions/source@3be1e958cac24b1b3c073854c574c2aa4d587c43
     - id: slack
-      uses: moxt-ai/mobius-slack/.github/actions/source@207d1fd90bcf8742756fac9085d856244dae1349
+      uses: moxt-ai/mobius-slack/.github/actions/source@05d3900452f180d23515006633bcbb0ae5ffda76
     - name: Install Mobius dependencies
       shell: bash
       working-directory: ${{ steps.mobius.outputs.path }}
@@ -30,11 +30,3 @@ runs:
       shell: bash
       working-directory: ${{ steps.slack.outputs.path }}
       run: pnpm install --frozen-lockfile
-    - name: Build Mobius frontend
-      shell: bash
-      working-directory: ${{ steps.mobius.outputs.path }}
-      run: pnpm --filter @moxt-ai/mobius-web build
-    - name: Build Slack frontend
-      shell: bash
-      working-directory: ${{ steps.slack.outputs.path }}
-      run: pnpm --filter @moxt-ai/app-slack-web build

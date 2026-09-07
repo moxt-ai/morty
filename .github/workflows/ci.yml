@@ -77,6 +77,9 @@ jobs:
           MOBIUS_PATH: ${{ steps.businesses.outputs.mobius-path }}
           SLACK_PATH: ${{ steps.businesses.outputs.slack-path }}
         run: |
+          mkdir -p "$RUNNER_TEMP/shared-d1" "$MOBIUS_PATH/packages/relay-cloudflare/.wrangler" "$SLACK_PATH/packages/worker/.wrangler"
+          ln -s "$RUNNER_TEMP/shared-d1" "$MOBIUS_PATH/packages/relay-cloudflare/.wrangler/shards"
+          ln -s "$RUNNER_TEMP/shared-d1" "$SLACK_PATH/packages/worker/.wrangler/shards"
           for environment in staging production; do
             pnpm --dir "$MOBIUS_PATH" db:environment "$GITHUB_WORKSPACE/infra/d1-shards.json" "$environment" --local
             pnpm --dir "$SLACK_PATH" db:environment "$GITHUB_WORKSPACE/infra/d1-shards.json" "$environment" --local
@@ -183,54 +186,6 @@ jobs:
         run: |
           pnpm --dir "$MOBIUS_PATH" db:environment "$GITHUB_WORKSPACE/infra/d1-shards.json" "$DEPLOY_ENVIRONMENT" --remote
           pnpm --dir "$SLACK_PATH" db:environment "$GITHUB_WORKSPACE/infra/d1-shards.json" "$DEPLOY_ENVIRONMENT" --remote
-
-      - name: Migrate active Slack database
-        if: github.event_name != 'workflow_dispatch' || inputs.environment == 'staging'
-        working-directory: ${{ steps.businesses.outputs.slack-path }}
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm --filter @moxt-ai/app-slack-worker exec wrangler d1 migrations apply DATABASE --remote --env staging
-
-      - name: Migrate active Mobius database
-        if: github.event_name == 'workflow_dispatch' && inputs.environment == 'production'
-        working-directory: ${{ steps.businesses.outputs.mobius-path }}
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm --filter @moxt-ai/mobius-relay-cloudflare exec wrangler d1 migrations apply DIRECTORY_DATABASE --remote --config wrangler.r2.jsonc
-
-      - name: Deploy Slack staging
-        if: github.event_name != 'workflow_dispatch' || inputs.environment == 'staging'
-        working-directory: ${{ steps.businesses.outputs.slack-path }}
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm --filter @moxt-ai/app-slack-worker exec wrangler deploy --env staging
-
-      - name: Deploy Mobius production
-        if: github.event_name == 'workflow_dispatch' && inputs.environment == 'production'
-        working-directory: ${{ steps.businesses.outputs.mobius-path }}
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          pnpm --filter @moxt-ai/mobius-relay-cloudflare exec wrangler deploy \
-            --config wrangler.r2.jsonc \
-            --domain mobius-relay.paraflow.biz \
-            --strict \
-            --message "Cloud ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
-
-      - name: Verify business health
-        env:
-          DEPLOY_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
-        run: |
-          case "$DEPLOY_ENVIRONMENT" in
-            staging) url=https://mobius-slack-staging.paraflow.workers.dev/health; service=app-slack ;;
-            production) url=https://mobius-relay.paraflow.biz/health; service=mobius-relay ;;
-          esac
-          curl --fail --show-error --silent --connect-timeout 5 --max-time 15 \
-            --retry 5 --retry-all-errors "$url" | jq -e --arg service "$service" '.status == "ok" and .service == $service'
 
       - name: Deploy selected Cloud environment
         run: pnpm exec wrangler deploy --secrets-file "$RUNNER_TEMP/worker-secrets.json"
