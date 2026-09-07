@@ -63,8 +63,7 @@ and authorize workspace access at the serving Worker before reading or writing.
 R2 requires bucket provisioning and bindings, not SQL schema migrations. The four
 buckets are initially empty; existing archive/attachment buckets and bindings
 remain in use until regional runtime routing is implemented. Increasing D1 shard
-count within a region must not force an object copy. Future cross-region moves
-must account for objects separately from database rows.
+count within a region must not force an object copy.
 
 ## Workspace placement
 
