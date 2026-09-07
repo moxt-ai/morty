@@ -34,7 +34,8 @@ reservations. Session Durable Objects store session state; archives use R2 in th
 observed deployment. The current default source configuration is the Lite profile,
 which stores archive chunks in Session Durable Object SQLite instead. Slack D1
 stores installations, identity bindings, session mappings, event processing, and
-prompt recovery records. Its implementation is currently on `feat/slack-migration`.
+prompt recovery records. Its implementation is maintained on the Slack repository's
+`main` branch.
 
 ## Workspace placement
 
@@ -94,6 +95,10 @@ every shared database:
 | Mobius | `mobius_*` | `mobius_migrations` |
 | Slack | `slack_*` | `slack_migrations` |
 
+The namespace column is the target ownership convention; current initial schemas
+still contain some unprefixed tables. The migration commands below do not rename
+those tables.
+
 An illustrative Mobius binding is:
 
 ```jsonc
@@ -127,12 +132,29 @@ migration that failed on one of its target shards. Backfills should be bounded
 and resumable. A new shard must receive every enabled business's migrations at
 the deployed versions before it can accept workspaces.
 
-Both current service configurations use the default `d1_migrations` history.
-Their current table names also do not fully follow the namespaces above. Moving
-existing data requires an explicit schema/data migration and migration-history
-baseline. Changing the history table name alone would cause old migrations to
-appear unapplied. No existing databases, histories, or service bindings were
-modified as part of this provisioning work.
+Each business now exposes `pnpm db:shard` to initialize a selected database from
+this inventory. Run these commands from a checkout with submodules initialized:
+
+```bash
+git submodule update --init --recursive
+inventory="$(pwd)/infra/d1-shards.json"
+pnpm --dir mobius db:shard "$inventory" staging apac-01 --local
+pnpm --dir apps/slack db:shard "$inventory" staging apac-01 --local
+```
+
+Use `--remote` explicitly when applying a release to a Cloud database, and repeat
+for each target shard in the chosen environment. Install each service's own
+pnpm dependencies first. The commands require Bash, jq, realpath, and timeout.
+They validate the selected target, print its name and UUID, and run native
+Wrangler migrations with `mobius_migrations` or `slack_migrations` respectively.
+See the [Mobius migration guide](../mobius/docs/d1-migrations.md) and
+[Slack migration guide](../apps/slack/docs/d1-migrations.md) for release commands.
+
+New shards start from each business's initial SQL migration. There is no legacy
+history adoption, baseline copying, or existing-database conversion. The current
+Worker deployment configurations and database bindings remain unchanged.
+Initializing schema does not assign a workspace or switch runtime traffic, and
+no remote schema application is part of this repository synchronization.
 
 Table ownership is an application convention, not a D1 permission boundary. A
 Worker with a D1 binding can access the whole database. Choose separate databases
