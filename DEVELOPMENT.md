@@ -85,11 +85,14 @@ are not canceled while running. Both Workers serve the app and assets without
 database bindings. Local development uses the default `mobius-cloud-local`
 configuration and `.dev.vars`; it is not a deployment target.
 
-The physical D1 inventory is maintained in `infra/d1-shards.json`. These
+The physical D1 inventory is maintained in `infra/d1-shards.json`; regional R2
+buckets are listed in `infra/r2-buckets.json`. These
 pre-created databases belong to the Cloud deployment infrastructure, but the
 Cloud Worker does not bind them. Business services own their tables and migration
 files. See [the storage contract](docs/storage.md) before connecting a service
-or moving existing data into a shared shard.
+or releasing business migrations to the shared shards. Business CI consumes the
+versioned inventories through `.github/actions/storage-inventory` and applies
+D1 migrations before deploying its Worker. Cloud CI does not own business SQL.
 
 ### Account and credentials
 

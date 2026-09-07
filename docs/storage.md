@@ -37,6 +37,35 @@ stores installations, identity bindings, session mappings, event processing, and
 prompt recovery records. Its implementation is maintained on the Slack repository's
 `main` branch.
 
+## Regional R2 buckets
+
+Cloud owns the private R2 buckets in [infra/r2-buckets.json](../infra/r2-buckets.json).
+There is one bucket per environment and region:
+
+| Environment | Region hint | Bucket |
+| --- | --- | --- |
+| Staging | `apac` | `mobius-cloud-staging-apac-objects` |
+| Staging | `wnam` | `mobius-cloud-staging-wnam-objects` |
+| Production | `apac` | `mobius-cloud-production-apac-objects` |
+| Production | `wnam` | `mobius-cloud-production-wnam-objects` |
+
+Multiple D1 shards in one region can use the same R2 bucket. R2 does not impose
+a fixed bucket storage or object-count limit, so adding a D1 shard does not
+require another bucket. Location hints are best effort, not a specific city or
+a mainland-China placement guarantee.
+
+Use business and workspace prefixes when the new buckets are connected:
+`mobius/<workspaceId>/archives/...` and `slack/<workspaceId>/attachments/...`.
+Each business owns its object formats, versioning, and retention rules. Prefixes
+are an ownership convention, not an authorization boundary. Keep buckets private
+and authorize workspace access at the serving Worker before reading or writing.
+
+R2 requires bucket provisioning and bindings, not SQL schema migrations. The four
+buckets are initially empty; existing archive/attachment buckets and bindings
+remain in use until regional runtime routing is implemented. Increasing D1 shard
+count within a region must not force an object copy. Future cross-region moves
+must account for objects separately from database rows.
+
 ## Workspace placement
 
 The intended mapping is:
@@ -161,6 +190,27 @@ Worker with a D1 binding can access the whole database. Choose separate database
 if businesses later require database-enforced separation, independent whole-DB
 restore, or independent capacity. Wrangler migrations support both layouts.
 
+## Release inventory and migration gate
+
+Business CI uses the shared action at `.github/actions/storage-inventory`, pinned
+to a reviewed Cloud commit, to obtain both inventory paths. GitHub Actions access
+is enabled for the `moxt-ai` organization. GitHub supplies a temporary scoped token
+for downloading the internal action; no deploy key or personal token is stored
+in business repository secrets. The action only exposes files from its own pinned
+revision. Update the action pin when a business release should use new resources.
+
+The business release job must build first, apply its D1 migrations to every shard
+in the deployment environment, and only deploy the Worker after all migrations
+succeed. Mobius currently releases production; Slack currently releases staging.
+Existing service database migrations also run before deployment while those
+bindings remain active. Keep the entire migration/deploy sequence serialized per
+business and environment, with cancellation disabled for an in-progress release.
+Pull requests only validate locally; they do not migrate remote databases.
+
+Cloud's own Worker has no D1 schema and does not run business migrations. R2 has
+no SQL migration step: Cloud provisions its buckets, and businesses bind them
+when their runtime routing is ready.
+
 ## Capacity and relocation
 
 Monitor database size, query latency, overload errors, and write load per shard.
@@ -197,3 +247,7 @@ still an option for an unusually large or isolated workspace.
 - [D1 read replication](https://developers.cloudflare.com/d1/best-practices/read-replication/)
 - [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/)
 - [Clerk Organization metadata](https://clerk.com/docs/guides/organizations/metadata)
+
+- [R2 data location](https://developers.cloudflare.com/r2/reference/data-location/)
+- [R2 limits](https://developers.cloudflare.com/r2/platform/limits/)
+- [Sharing internal GitHub Actions](https://docs.github.com/en/actions/how-tos/reuse-automations/share-with-your-organization)

@@ -1,0 +1,22 @@
+name: Cloud storage inventory
+description: Expose the versioned D1 and R2 inventories to business release jobs
+outputs:
+  d1-path:
+    description: Absolute path to the D1 shard inventory
+    value: ${{ steps.inventory.outputs.d1-path }}
+  r2-path:
+    description: Absolute path to the regional R2 bucket inventory
+    value: ${{ steps.inventory.outputs.r2-path }}
+runs:
+  using: composite
+  steps:
+    - id: inventory
+      shell: bash
+      run: |
+        set -euo pipefail
+        d1_path="$(realpath "$GITHUB_ACTION_PATH/../../../infra/d1-shards.json")"
+        r2_path="$(realpath "$GITHUB_ACTION_PATH/../../../infra/r2-buckets.json")"
+        test -f "$d1_path"
+        test -f "$r2_path"
+        echo "d1-path=$d1_path" >> "$GITHUB_OUTPUT"
+        echo "r2-path=$r2_path" >> "$GITHUB_OUTPUT"
