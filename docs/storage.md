@@ -146,14 +146,13 @@ folder, and `migrations_table: "slack_migrations"`. Both repositories may contai
 verification applied files with this identical name through two configurations
 to one database and confirmed both business tables and both history records.
 
-Each business deploys independently and applies its own migrations across the
-environment's shards before releasing code that requires them. Serialize releases
-of the same business and environment in its CI. Different businesses must not
-change one another's tables, indexes, triggers, or migration histories, and must
-avoid cross-business foreign keys and SQL joins. D1 serializes database work;
-large schema changes still affect every business sharing that shard. Coordinate
-such changes through a scheduled release rather than introducing a new lock
-service by default. GitHub concurrency groups do not coordinate separate repos.
+Cloud CD applies each business's migrations across the selected environment's
+shards before releasing code that requires them. Releases are serialized per
+environment in the Cloud repository. Business repositories own SQL but do not
+trigger deployments. Different businesses must not change one another's tables,
+indexes, triggers, or migration histories, and must avoid cross-business foreign
+keys and SQL joins. D1 serializes database work; large schema changes still affect
+every business sharing that shard. Coordinate these changes through Cloud's release.
 
 Use additive, backward-compatible migrations for rolling deployments. Keep old
 code working while shards are upgraded; do not publish code that requires a
@@ -181,7 +180,7 @@ See the [Mobius migration guide](../mobius/docs/d1-migrations.md) and
 
 New shards start from each business's initial SQL migration. There is no legacy
 history adoption, baseline copying, or existing-database conversion. The current
-Worker deployment configurations and database bindings remain unchanged.
+Worker database and object-storage bindings remain unchanged.
 Initializing schema does not assign a workspace or switch runtime traffic, and
 no remote schema application is part of this repository synchronization.
 
@@ -192,24 +191,32 @@ restore, or independent capacity. Wrangler migrations support both layouts.
 
 ## Release inventory and migration gate
 
-Business CI uses the shared action at `.github/actions/storage-inventory`, pinned
-to a reviewed Cloud commit, to obtain both inventory paths. GitHub Actions access
-is enabled for the `moxt-ai` organization. GitHub supplies a temporary scoped token
-for downloading the internal action; no deploy key or personal token is stored
-in business repository secrets. The action only exposes files from its own pinned
-revision. Update the action pin when a business release should use new resources.
+Cloud's `CI` workflow is the only deployment entrypoint. It selects a Cloud commit,
+including the D1/R2 inventories and pinned Mobius and Slack revisions. Both business
+repositories expose a source-only internal action; GitHub downloads it with a
+temporary scoped token. `.github/actions/business-sources` checks the action SHAs
+against Cloud's submodules, installs dependencies, and builds the frontends.
+Update both pins together when selecting a new business version.
 
-The business release job must build first, apply its D1 migrations to every shard
-in the deployment environment, and only deploy the Worker after all migrations
-succeed. Mobius currently releases production; Slack currently releases staging.
-Existing service database migrations also run before deployment while those
-bindings remain active. Keep the entire migration/deploy sequence serialized per
-business and environment, with cancellation disabled for an in-progress release.
-Pull requests only validate locally; they do not migrate remote databases.
+Pull requests apply both businesses' migrations locally to all staging and
+production shards. A release builds first, then applies both businesses' SQL to
+every shard in the selected environment with `--remote`. It also applies native
+migrations to the active service database before deploying any Worker. Migration
+failure stops deployment. The complete sequence is serialized per environment
+with cancellation disabled for a running release; migrations already applied
+remain recorded if a later shard fails. Use backward-compatible SQL so a partially
+completed migration rollout can be resumed while old code remains active.
 
-Cloud's own Worker has no D1 schema and does not run business migrations. R2 has
-no SQL migration step: Cloud provisions its buckets, and businesses bind them
-when their runtime routing is ready.
+Current deployment targets are Cloud plus Slack for staging, and Cloud plus
+Mobius relay for production. Main pushes release staging; manual dispatch on
+main selects either environment. Business CI checks code but has no deployment
+job. Merge the business deployment-removal PRs before the Cloud orchestration PR.
+This change does not create Mobius staging or Slack production Workers.
+
+Cloud's Worker still has no D1 binding or SQL schema. Its CD invokes the migration
+commands owned by each business. R2 has no SQL migration step: Cloud provisions
+its buckets, and businesses bind them when runtime routing is ready. There is
+no copying or adoption of old database histories.
 
 ## Capacity and relocation
 

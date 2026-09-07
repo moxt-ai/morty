@@ -44,9 +44,9 @@ Worker types are generated from `wrangler.jsonc` into the ignored
 `worker-configuration.d.ts` file. Run `pnpm typegen` after changing bindings or
 the compatibility date. Build output and local Worker state are ignored too.
 
-The root toolchain owns `cloud/` and the root development files. Submodules
-(`mobius/` and `apps/*`) remain independent and are not installed, linted,
-built, or deployed by this project's CI.
+The root toolchain owns `cloud/` and the root development files. Business repositories keep their own checks and SQL files. Cloud CI additionally
+builds the pinned Mobius and Slack frontends and validates their migrations.
+Cloud CD owns deployment orchestration for those services.
 
 ## Workspace UI
 
@@ -90,9 +90,9 @@ buckets are listed in `infra/r2-buckets.json`. These
 pre-created databases belong to the Cloud deployment infrastructure, but the
 Cloud Worker does not bind them. Business services own their tables and migration
 files. See [the storage contract](docs/storage.md) before connecting a service
-or releasing business migrations to the shared shards. Business CI consumes the
-versioned inventories through `.github/actions/storage-inventory` and applies
-D1 migrations before deploying its Worker. Cloud CI does not own business SQL.
+or releasing business migrations to the shared shards. Cloud CD reads its own
+versioned inventory and applies both businesses' migrations before deploying.
+Business repositories do not trigger deployments.
 
 ### Account and credentials
 
@@ -109,7 +109,7 @@ Create GitHub environments named `staging` and `production`. Configure each:
 
 | Kind | Name | Value |
 | --- | --- | --- |
-| Secret | `CLOUDFLARE_API_TOKEN` | Cloudflare Edit Cloudflare Workers token scoped to the target account |
+| Secret | `CLOUDFLARE_API_TOKEN` | Cloudflare Workers deployment token with D1 Edit and Queues Edit, scoped to the target account |
 | Variable | `CLOUDFLARE_ACCOUNT_ID` | Target Cloudflare account ID |
 | Variable | `APP_ORIGIN` | Exact HTTPS origin of that environment, without a trailing slash |
 | Variable | `CLERK_PUBLISHABLE_KEY` | `pk_test_...` for staging, `pk_live_...` for production |
@@ -140,6 +140,21 @@ do not append `--env` to deploy an already built app.
 To release production, run the `CI` workflow manually on `main` and select
 `production`. This repeats all checks before deploying that selected commit.
 Staging deploys automatically when a pull request is merged to `main`.
+Cloud CD builds all selected code, migrates both businesses across every selected
+D1 shard, migrates the currently active service database, then deploys the service
+and Cloud Worker. A failed migration prevents every deployment step. Current
+service targets are Slack staging and Mobius relay production; Mobius staging
+and Slack production are not configured yet. Existing R2 and D1 bindings remain
+active until regional runtime routing is implemented.
+
+To update a business version, update its submodule commit and the corresponding
+SHA in `.github/actions/business-sources/action.yml` together. CI rejects a
+mismatch. The business repositories expose source-only internal actions to the
+organization, so GitHub can download the pinned revisions using temporary scoped
+tokens without a stored cross-repository PAT. Business CI continues to check
+business changes in its own repository; Cloud CI verifies the release composition.
+Merge the business changes that disable their deployment jobs before enabling
+Cloud CD, so only one repository owns releases.
 
 For a local release, use `pnpm deploy:staging` or `pnpm deploy:production`
 with `CLOUDFLARE_ACCOUNT_ID` set. Configure the runtime bindings first with
