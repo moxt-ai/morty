@@ -51,19 +51,18 @@ interface CloudBindings {
   readonly CLERK_ISSUER_URL?: unknown;
   readonly CLERK_JWT_KEY?: unknown;
   readonly CLERK_PUBLISHABLE_KEY?: unknown;
-  readonly CLERK_SECRET_KEY?: unknown;
   readonly DATABASE?: unknown;
   readonly DIRECTORY_DATABASE?: unknown;
   readonly EVENTS?: unknown;
   readonly MOBIUS_BASE_URL?: unknown;
-  readonly OAUTH_STATE_SIGNING_KEY?: unknown;
-  readonly PUBLIC_BASE_URL?: unknown;
-  readonly SERVICE_AUTH_TOKEN?: unknown;
+  readonly SLACK_MOBIUS_AUTH_TOKEN?: unknown;
+  readonly SLACK_OAUTH_STATE_SIGNING_KEY?: unknown;
+  readonly SLACK_SERVER_BASE_URL?: unknown;
+  readonly SLACK_TOKEN_ENCRYPTION_KEY?: unknown;
   readonly RUNTIME_RELAY?: unknown;
   readonly SESSION_ACTIVE_SESSIONS_PER_PROJECT?: unknown;
   readonly SESSION_ACTIVE_SESSIONS_PER_TENANT?: unknown;
   readonly SESSION_RELAY?: unknown;
-  readonly TOKEN_ENCRYPTION_KEY?: unknown;
 }
 
 interface MobiusBindings {
@@ -85,14 +84,13 @@ const slackBindingsSchema = z.object({
   CLERK_ISSUER_URL: z.url(),
   CLERK_JWT_KEY: z.string(),
   CLERK_PUBLISHABLE_KEY: z.string(),
-  CLERK_SECRET_KEY: z.string(),
   DATABASE: z.object({ batch: z.function(), prepare: z.function() }),
   EVENTS: z.object({ send: z.function() }),
   MOBIUS_BASE_URL: z.url(),
-  OAUTH_STATE_SIGNING_KEY: z.string().min(1),
-  PUBLIC_BASE_URL: z.url(),
-  SERVICE_AUTH_TOKEN: z.string().min(1),
-  TOKEN_ENCRYPTION_KEY: z.string().min(1),
+  SLACK_MOBIUS_AUTH_TOKEN: z.string().min(1),
+  SLACK_OAUTH_STATE_SIGNING_KEY: z.string().min(1),
+  SLACK_SERVER_BASE_URL: z.url(),
+  SLACK_TOKEN_ENCRYPTION_KEY: z.string().min(1),
 });
 
 function hasSlackBindings(

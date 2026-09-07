@@ -11,7 +11,6 @@ const configuration = {
   CLERK_PUBLISHABLE_KEY: issuer.publishableKey,
   CLERK_JWT_KEY: issuer.publicKey,
   APP_ORIGIN,
-  CLERK_SECRET_KEY: "sk_test_do_not_disclose",
 };
 
 const slackConfiguration = {
@@ -33,10 +32,10 @@ const slackConfiguration = {
   },
   EVENTS: { send: () => Promise.resolve() },
   MOBIUS_BASE_URL: "https://mobius.test",
-  OAUTH_STATE_SIGNING_KEY: "state-signing-key",
-  PUBLIC_BASE_URL: APP_ORIGIN,
-  SERVICE_AUTH_TOKEN: "service-token",
-  TOKEN_ENCRYPTION_KEY: btoa("a".repeat(32)),
+  SLACK_MOBIUS_AUTH_TOKEN: "service-token",
+  SLACK_OAUTH_STATE_SIGNING_KEY: "state-signing-key",
+  SLACK_SERVER_BASE_URL: APP_ORIGIN,
+  SLACK_TOKEN_ENCRYPTION_KEY: btoa("a".repeat(32)),
 };
 
 const mobiusConfiguration = {

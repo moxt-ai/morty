@@ -133,8 +133,15 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           APP_ORIGIN: ${{ vars.APP_ORIGIN }}
+          AUTHENTICATION_BASE_URL: ${{ vars.AUTHENTICATION_BASE_URL }}
+          CLERK_ISSUER_URL: ${{ vars.CLERK_ISSUER_URL }}
           CLERK_PUBLISHABLE_KEY: ${{ vars.CLERK_PUBLISHABLE_KEY }}
           CLERK_JWT_KEY: ${{ secrets.CLERK_JWT_KEY }}
+          MOBIUS_BASE_URL: ${{ vars.MOBIUS_BASE_URL }}
+          SLACK_MOBIUS_AUTH_TOKEN: ${{ secrets.SLACK_MOBIUS_AUTH_TOKEN }}
+          SLACK_OAUTH_STATE_SIGNING_KEY: ${{ secrets.SLACK_OAUTH_STATE_SIGNING_KEY }}
+          SLACK_SERVER_BASE_URL: ${{ vars.SLACK_SERVER_BASE_URL }}
+          SLACK_TOKEN_ENCRYPTION_KEY: ${{ secrets.SLACK_TOKEN_ENCRYPTION_KEY }}
           DEPLOY_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
         run: |
           node --input-type=module <<'JS'
@@ -148,10 +155,23 @@ jobs:
               const url = new URL(value);
               return url.protocol === 'https:' && url.origin === value;
             }),
+            AUTHENTICATION_BASE_URL: z.url(),
+            CLERK_ISSUER_URL: z.url(),
             CLERK_PUBLISHABLE_KEY: z.string().regex(/^pk_(test|live)_/),
             CLERK_JWT_KEY: z.string().startsWith('-----BEGIN PUBLIC KEY-----'),
             DEPLOY_ENVIRONMENT: z.enum(['staging', 'production']),
+            MOBIUS_BASE_URL: z.url(),
             RUNNER_TEMP: z.string().min(1),
+            SLACK_MOBIUS_AUTH_TOKEN: z.string().min(32),
+            SLACK_OAUTH_STATE_SIGNING_KEY: z.string().min(32),
+            SLACK_SERVER_BASE_URL: z.url(),
+            SLACK_TOKEN_ENCRYPTION_KEY: z.string().refine(value => {
+              try {
+                return Buffer.from(value, 'base64').byteLength === 32;
+              } catch {
+                return false;
+              }
+            }),
           }).safeParse(process.env);
           if (!config.success) {
             console.error('Missing or invalid deployment settings:',
@@ -166,8 +186,15 @@ jobs:
           }
           writeFileSync(join(settings.RUNNER_TEMP, 'worker-secrets.json'), JSON.stringify({
             APP_ORIGIN: settings.APP_ORIGIN,
+            AUTHENTICATION_BASE_URL: settings.AUTHENTICATION_BASE_URL,
+            CLERK_ISSUER_URL: settings.CLERK_ISSUER_URL,
             CLERK_PUBLISHABLE_KEY: settings.CLERK_PUBLISHABLE_KEY,
             CLERK_JWT_KEY: settings.CLERK_JWT_KEY,
+            MOBIUS_BASE_URL: settings.MOBIUS_BASE_URL,
+            SLACK_MOBIUS_AUTH_TOKEN: settings.SLACK_MOBIUS_AUTH_TOKEN,
+            SLACK_OAUTH_STATE_SIGNING_KEY: settings.SLACK_OAUTH_STATE_SIGNING_KEY,
+            SLACK_SERVER_BASE_URL: settings.SLACK_SERVER_BASE_URL,
+            SLACK_TOKEN_ENCRYPTION_KEY: settings.SLACK_TOKEN_ENCRYPTION_KEY,
           }), { mode: 0o600 });
           JS
 
