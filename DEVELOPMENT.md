@@ -72,7 +72,15 @@ Deployment uses two isolated Workers:
 | `staging` | `mobius-cloud-staging` | Successful checks after a push to `main`, or manual dispatch |
 | `production` | `mobius-cloud-production` | Manual CI dispatch selecting `production` from `main` |
 
-Pull requests only run checks. Deployments are serialized per environment and
+Pull requests only run checks. Like Mobius, the repository allows automatic
+squash merging after its required checks pass. Enable auto-merge on a reviewed
+pull request to merge it once those requirements are satisfied.
+
+Both CI jobs cache the pnpm store. Browser checks also cache Chromium's headless
+shell by operating system, architecture, and Playwright version. Installation
+reuses cached binaries while ensuring system libraries are present on each fresh
+runner. Cache misses download only the headless shell required by the scenarios.
+ Deployments are serialized per environment and
 are not canceled while running. Both Workers serve the app and assets without
 database bindings. Local development uses the default `mobius-cloud-local`
 configuration and `.dev.vars`; it is not a deployment target.

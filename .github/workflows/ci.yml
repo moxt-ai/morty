@@ -53,15 +53,25 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Install browser for workspace scenarios
-        run: pnpm exec playwright install --with-deps chromium
+      - name: Read Playwright version
+        id: playwright
+        run: node -e 'require("node:fs").appendFileSync(process.env.GITHUB_OUTPUT, "version=" + require("playwright/package.json").version + "\n")'
+
+      - name: Cache Playwright browser
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-shell-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+
+      - name: Ensure browser and system dependencies
+        run: pnpm exec playwright install --with-deps --only-shell chromium
 
       - run: pnpm check
 
   deploy:
     name: deploy
     needs: check
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
@@ -79,7 +89,20 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      - run: corepack enable
+      - name: Enable pnpm
+        id: pnpm
+        shell: bash
+        run: |
+          corepack enable
+          pnpm --version
+          echo "store-path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pnpm.outputs.store-path }}
+          key: pnpm-v11-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-v11-${{ runner.os }}-${{ runner.arch }}-
 
       - run: pnpm install --frozen-lockfile
 
