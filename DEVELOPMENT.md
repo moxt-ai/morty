@@ -23,8 +23,9 @@ Clerk publishable key and `CLERK_JWT_KEY` to the PEM public key from the same
 Clerk instance. Encode PEM line breaks as `\n` inside a quoted value. Set
 `APP_ORIGIN` to the exact browser origin, without a trailing slash.
 
-The browser reads only the publishable key from `GET /api/config`. It obtains
-a session token from Clerk and sends it as a Bearer token to `GET /api/session`.
+The browser reads only the publishable key from `GET /mobius-cloud/api/config`.
+It obtains a session token from Clerk and sends it as a Bearer token to
+`GET /mobius-cloud/api/session`.
 The Worker verifies the signature, expiry, and authorized party locally using
 Clerk's backend SDK, rejects pending sessions, and returns the user ID, session
 ID, and active organization ID (or null). This proves identity; future business

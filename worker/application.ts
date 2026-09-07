@@ -114,13 +114,7 @@ function hasMobiusBindings(
 }
 
 function isMobiusRequest(path: string): boolean {
-  return (
-    path === "/health" ||
-    path === "/api/pairings" ||
-    path.startsWith("/api/pairings/") ||
-    path.startsWith("/api/channels/") ||
-    path.startsWith("/api/projects/")
-  );
+  return path.startsWith("/mobius/api/");
 }
 
 function json(
@@ -207,7 +201,10 @@ export default {
       });
       return await injector.resolve("application").fetch(request);
     }
-    if (path !== "/api/config" && path !== "/api/session") {
+    if (
+      path !== "/mobius-cloud/api/config" &&
+      path !== "/mobius-cloud/api/session"
+    ) {
       return json({ error: { code: "NOT_FOUND", message: "Not found." } }, 404);
     }
     if (request.method !== "GET") {
@@ -221,7 +218,7 @@ export default {
     }
 
     const configuration = configurationSchema.safeParse(bindings);
-    if (path === "/api/config") {
+    if (path === "/mobius-cloud/api/config") {
       if (!configuration.success) {
         return json(
           {

@@ -32,7 +32,7 @@ async function start() {
     lifetime.signal,
     AbortSignal.timeout(20_000),
   ]);
-  const response = await fetch("/api/config", { signal });
+  const response = await fetch("/mobius-cloud/api/config", { signal });
   if (!response.ok) throw new Error("Sign-in configuration is unavailable.");
   const body: unknown = await response.json();
   const { publishableKey } = publicConfigSchema.parse(body);
@@ -81,7 +81,7 @@ async function start() {
             verificationSignal,
           );
           if (!token) throw new WorkspaceError("FORBIDDEN");
-          const result = await fetch("/api/session", {
+          const result = await fetch("/mobius-cloud/api/session", {
             headers: { Authorization: `Bearer ${token}` },
             signal: verificationSignal,
           });
