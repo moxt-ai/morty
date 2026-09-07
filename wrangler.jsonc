@@ -106,13 +106,14 @@
       "d1_databases": [
         {
           "binding": "DATABASE",
-          "database_name": "mobius-slack-staging",
-          "database_id": "44f698c5-a0c6-4353-938e-eca4a9df1edb",
+          "database_name": "mobius-cloud-staging-apac-01",
+          "database_id": "76a58022-7ee3-4faf-9cc2-db458231cd2e",
           "migrations_dir": "apps/slack/packages/worker/migrations"
         },
         {
           "binding": "DIRECTORY_DATABASE",
-          "database_name": "mobius-directory-staging",
+          "database_name": "mobius-cloud-staging-apac-01",
+          "database_id": "76a58022-7ee3-4faf-9cc2-db458231cd2e",
           "migrations_dir": "mobius/packages/relay-cloudflare/migrations/d1"
         }
       ],
@@ -150,12 +151,14 @@
       "d1_databases": [
         {
           "binding": "DATABASE",
-          "database_name": "mobius-slack-production",
+          "database_name": "mobius-cloud-production-apac-01",
+          "database_id": "9ba3f0bb-59f4-4a43-bf51-2a2317e75d01",
           "migrations_dir": "apps/slack/packages/worker/migrations"
         },
         {
           "binding": "DIRECTORY_DATABASE",
-          "database_name": "mobius-directory-production",
+          "database_name": "mobius-cloud-production-apac-01",
+          "database_id": "9ba3f0bb-59f4-4a43-bf51-2a2317e75d01",
           "migrations_dir": "mobius/packages/relay-cloudflare/migrations/d1"
         }
       ],
