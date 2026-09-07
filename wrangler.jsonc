@@ -84,11 +84,14 @@
       "workers_dev": false,
       "queues": {
         "producers": [
-          { "binding": "EVENTS", "queue": "mobius-slack-staging-events" }
+          {
+            "binding": "EVENTS",
+            "queue": "mobius-slack-cloud-staging-events"
+          }
         ],
         "consumers": [
           {
-            "queue": "mobius-slack-staging-events",
+            "queue": "mobius-slack-cloud-staging-events",
             "max_batch_size": 1,
             "max_retries": 5
           }
