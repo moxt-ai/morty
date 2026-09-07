@@ -76,7 +76,8 @@ Pull requests only run checks. Like Mobius, the repository allows automatic
 squash merging after its required checks pass. Enable auto-merge on a reviewed
 pull request to merge it once those requirements are satisfied.
 
-Both CI jobs cache the pnpm store. Browser checks also cache Chromium's headless
+Both CI jobs cache the pnpm store, including business dependencies. Cache keys
+include the root lockfile and pinned business source action. Browser checks also cache Chromium's headless
 shell by operating system, architecture, and Playwright version. Installation
 reuses cached binaries while ensuring system libraries are present on each fresh
 runner. Cache misses download only the headless shell required by the scenarios.
