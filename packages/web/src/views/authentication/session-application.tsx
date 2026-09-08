@@ -7,7 +7,7 @@ import {
   MobiusManagement,
   mobiusWorkspaceConnections,
 } from "@moxt-ai/mobius-cloud-web-core/management";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { verifySession } from "../../view-models/authentication/session.ts";
 import { App } from "../application/app.tsx";
 import { router as authRouter } from "./router.tsx";
@@ -17,21 +17,25 @@ function SignedInApplication() {
   const { session } = useSession();
   if (session === null || session === undefined)
     throw new Error("Missing active session");
+  const activeSession = useRef(session);
+  activeSession.current = session;
+  const sessionId = session.id;
+  const userId = session.user.id;
   const workspaceRouter = useMemo(
     () =>
       createWorkspaceRouter(
         clerkDirectory(clerk),
         (signal) =>
           verifySession(
-            session.id,
+            sessionId,
             clerk.session?.id,
-            () => session.getToken(),
+            () => activeSession.current.getToken(),
             signal,
           ),
         MobiusManagement,
-        mobiusWorkspaceConnections(session.user.id),
+        mobiusWorkspaceConnections(userId),
       ),
-    [clerk, session],
+    [clerk, sessionId, userId],
   );
   return <App state={{ kind: "signed-in", router: workspaceRouter }} />;
 }
