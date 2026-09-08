@@ -27,6 +27,9 @@ export default defineConfig({
                   project: v.parse(v.string(), sentry.SENTRY_PROJECT),
                   authToken: sentry.SENTRY_AUTH_TOKEN,
                   telemetry: false,
+                  errorHandler: (error) => {
+                      throw error;
+                  },
                   release: sentry.VITE_SENTRY_RELEASE ? { name: sentry.VITE_SENTRY_RELEASE } : {},
                   sourcemaps: {
                       assets: "./dist/client/**",

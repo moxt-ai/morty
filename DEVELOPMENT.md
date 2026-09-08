@@ -112,9 +112,9 @@ requests, are not reported as application failures.
 Staging uses the `paraflow/mobius-cloud-testing` Sentry project; production uses
 `paraflow/mobius-cloud`. Each GitHub deployment environment defines `SENTRY_DSN`,
 `SENTRY_ORG`, and `SENTRY_PROJECT` as variables. `SENTRY_AUTH_TOKEN` is a GitHub
-Actions secret used only during the build, with `org:read` and `project:releases`
-permissions. Use a dedicated CI token rather than an expiring interactive login.
-The deployment fails if any required Sentry setting is absent.
+Actions secret used only during the build. Use a dedicated organization CI token
+with `org:ci` scope rather than an expiring interactive login.
+The deployment fails if any required Sentry setting is absent or a Sentry upload fails.
 
 The build embeds the public DSN, environment, and `mobius-cloud@<commit>` release
 identifier. It uploads browser source maps to the selected project and removes
