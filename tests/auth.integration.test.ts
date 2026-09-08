@@ -7,6 +7,33 @@ import {
 } from "./support/identity-provider.ts";
 
 const issuer = new IdentityProvider();
+
+class InMemoryD1Statement {
+  readonly #query: string;
+  readonly #queries: string[];
+
+  constructor(query: string, queries: string[]) {
+    this.#query = query;
+    this.#queries = queries;
+  }
+
+  readonly bind = (..._values: readonly unknown[]) => this;
+  readonly run = async () => {
+    this.#queries.push(this.#query);
+    return { meta: { changes: 1 } };
+  };
+}
+
+class InMemoryD1Database {
+  readonly #queries: string[] = [];
+  readonly prepare = (query: string) =>
+    new InMemoryD1Statement(query, this.#queries);
+  readonly batch = async (statements: readonly InMemoryD1Statement[]) =>
+    await Promise.all(
+      statements.map(async (statement) => await statement.run()),
+    );
+}
+
 const configuration = {
   CLERK_PUBLISHABLE_KEY: issuer.publishableKey,
   CLERK_JWT_KEY: issuer.publicKey,
@@ -197,5 +224,32 @@ test("Given the combined Cloud service, When Mobius health is requested, Then th
   expect(await response.json()).toEqual({
     service: "mobius-relay",
     status: "ok",
+  });
+});
+
+test("Given Slack and Mobius share one Cloud Worker, When an organization member creates a pairing, Then Slack dispatches the Mobius request internally", async () => {
+  const slackDatabase = new InMemoryD1Database();
+  const directoryDatabase = new InMemoryD1Database();
+  const response = await worker.fetch(
+    new Request(`${APP_ORIGIN}/mobius-slack/api/slack/mobius/pairings`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${issuer.createSession("user_alice", APP_ORIGIN, "active", "org_team", "member")}`,
+      },
+    }),
+    {
+      ...slackConfiguration,
+      ...mobiusConfiguration,
+      CLERK_ISSUER_URL: "https://identity.clerk.accounts.dev",
+      DATABASE: slackDatabase,
+      DIRECTORY_DATABASE: directoryDatabase,
+    },
+  );
+
+  expect(response.status).toBe(201);
+  expect(await response.json()).toMatchObject({
+    channelId: expect.stringMatching(/^chn_/),
+    pairingCode: expect.any(String),
+    expiresAt: expect.any(String),
   });
 });

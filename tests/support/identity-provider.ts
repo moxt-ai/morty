@@ -19,6 +19,7 @@ export class IdentityProvider {
     origin: string = APP_ORIGIN,
     status: "active" | "pending" = "active",
     organizationId: string | null = null,
+    organizationRole = "admin",
   ): string {
     this.#sessionNumber += 1;
     const issuedAt = AUTH_TIME.getTime() / 1000;
@@ -36,7 +37,9 @@ export class IdentityProvider {
         exp: issuedAt + 60,
         v: 2,
         sts: status,
-        ...(organizationId === null ? {} : { o: { id: organizationId } }),
+        ...(organizationId === null
+          ? {}
+          : { o: { id: organizationId, rol: organizationRole } }),
       }),
     ).toString("base64url");
     const input = `${header}.${payload}`;

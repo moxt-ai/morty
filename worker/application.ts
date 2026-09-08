@@ -3,7 +3,9 @@ import {
   createSlackApplication,
   createSlackWorker,
 } from "@moxt-ai/app-slack-api";
+import { MobiusGateway } from "@moxt-ai/app-slack-api/gateway";
 import type { SlackQueueMessage } from "@moxt-ai/app-slack-api/infra";
+import { MobiusFetchGateway } from "@moxt-ai/app-slack-api/infra";
 import {
   CloudflareChannelRuntime,
   CloudflareSessionRuntime,
@@ -107,6 +109,34 @@ const mobiusBindingsSchema = z.object({
   SESSION_RELAY: z.object({ get: z.function(), idFromName: z.function() }),
 });
 
+class CloudMobiusFetchGateway extends MobiusFetchGateway {
+  readonly #bindings: CloudBindings;
+
+  constructor(baseUrl: string, bindings: CloudBindings) {
+    super(baseUrl);
+    this.#bindings = bindings;
+  }
+
+  override readonly fetch = async (
+    path: string,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    const configured = slackBindingsSchema.parse(this.#bindings);
+    const configuredUrl = new URL(configured.MOBIUS_BASE_URL);
+    const requestedUrl = new URL(path, configuredUrl);
+    if (!path.startsWith("/") || requestedUrl.origin !== configuredUrl.origin) {
+      return json({ error: { code: "NOT_FOUND", message: "Not found." } }, 404);
+    }
+    if (isMobiusRequest(requestedUrl.pathname)) {
+      return await fetchMobiusRequest(
+        new Request(requestedUrl, init),
+        this.#bindings,
+      );
+    }
+    return await fetch(new Request(requestedUrl, init));
+  };
+}
+
 function hasMobiusBindings(
   bindings: CloudBindings,
 ): bindings is CloudBindings & MobiusBindings {
@@ -135,6 +165,33 @@ function unauthenticated(): Response {
   );
 }
 
+async function fetchMobiusRequest(
+  request: Request,
+  bindings: CloudBindings,
+): Promise<Response> {
+  if (!hasMobiusBindings(bindings)) {
+    return json(
+      {
+        error: {
+          code: "MOBIUS_UNAVAILABLE",
+          message: "Mobius is temporarily unavailable.",
+        },
+      },
+      503,
+    );
+  }
+  const injector = createMobiusApplication({
+    channelRuntime: new CloudflareChannelRuntime(bindings.RUNTIME_RELAY),
+    pairingDirectory: new D1PairingDirectory(bindings.DIRECTORY_DATABASE),
+    sessionRuntime: new CloudflareSessionRuntime(
+      bindings.SESSION_RELAY,
+      bindings.DIRECTORY_DATABASE,
+      sessionQuotaFromEnvironment(bindings),
+    ),
+  });
+  return await injector.resolve("application").fetch(request);
+}
+
 const slackWorker = createSlackWorker<
   CloudBindings & WorkerBindings,
   ExecutionContext | undefined,
@@ -143,7 +200,14 @@ const slackWorker = createSlackWorker<
   const composition = createSlackApplication(
     createCloudflareEnvironment(bindings),
   );
-  const injector = composition.create();
+  const injector = composition.create(
+    composition.injector
+      .provideValue(
+        "mobiusFetchGateway",
+        new CloudMobiusFetchGateway(bindings.MOBIUS_BASE_URL, bindings),
+      )
+      .provideClass("mobius", MobiusGateway),
+  );
   return {
     fetchApi: async (request, environment, context) =>
       await injector
@@ -179,27 +243,7 @@ export default {
       return await slackWorker.fetch(request, bindings, context);
     }
     if (isMobiusRequest(path)) {
-      if (!hasMobiusBindings(bindings)) {
-        return json(
-          {
-            error: {
-              code: "MOBIUS_UNAVAILABLE",
-              message: "Mobius is temporarily unavailable.",
-            },
-          },
-          503,
-        );
-      }
-      const injector = createMobiusApplication({
-        channelRuntime: new CloudflareChannelRuntime(bindings.RUNTIME_RELAY),
-        pairingDirectory: new D1PairingDirectory(bindings.DIRECTORY_DATABASE),
-        sessionRuntime: new CloudflareSessionRuntime(
-          bindings.SESSION_RELAY,
-          bindings.DIRECTORY_DATABASE,
-          sessionQuotaFromEnvironment(bindings),
-        ),
-      });
-      return await injector.resolve("application").fetch(request);
+      return await fetchMobiusRequest(request, bindings);
     }
     if (
       path !== "/mobius-cloud/api/config" &&
