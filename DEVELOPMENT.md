@@ -37,7 +37,7 @@ or missing session tokens receive HTTP 401. Keep the configured JWT public key
 in sync when Clerk rotates signing keys. Local verification does not check
 server-side revocation on every request; tokens remain valid until expiry.
 
-Deployed Clerk configuration is scoped to each GitHub environment as described
+Deployed Clerk configuration is stored on each Cloudflare Worker as described
 below. Staging requires a Clerk development instance; production requires a
 separate production instance. Never reuse development keys in production.
 
@@ -108,25 +108,43 @@ Run `pnpm exec wrangler login` to authorize local access, then
 `CLOUDFLARE_ACCOUNT_ID` explicitly when deploying locally to an account with
 multiple organizations. Logging in does not configure CI credentials.
 
-Create GitHub environments named `staging` and `production`. Configure each:
+Create GitHub environments named `staging` and `production`. Each environment
+needs only a `CLOUDFLARE_API_TOKEN` secret: a Workers deployment token with D1
+Edit, scoped to the configured Cloudflare account. Restrict deployment to `main`.
+The account ID, deployment targets, and public deployment links are versioned
+in the repository; GitHub environment variables are not required.
 
-| Kind | Name | Value |
-| --- | --- | --- |
-| Secret | `CLOUDFLARE_API_TOKEN` | Cloudflare Workers deployment token with D1 Edit, scoped to the target account |
-| Variable | `CLOUDFLARE_ACCOUNT_ID` | Target Cloudflare account ID |
-| Variable | `APP_ORIGIN` | Exact HTTPS origin of that environment, without a trailing slash |
-| Variable | `CLERK_PUBLISHABLE_KEY` | `pk_test_...` for staging, `pk_live_...` for production |
-| Secret | `CLERK_JWT_KEY` | Corresponding PEM public key, with actual line breaks |
+Cloudflare owns the Worker runtime configuration. Provision these names on each
+Worker before deploying code that requires them:
 
-The public JWT key is stored as a GitHub secret only to simplify multiline
-configuration. No Clerk secret key is required. The deploy job validates these
-settings before building, then uploads runtime bindings together with the
-Worker version. Missing settings or the wrong Clerk key type stop deployment.
+| Worker setting | Purpose |
+| --- | --- |
+| `APP_ORIGIN` | Exact browser origin, without a trailing slash |
+| `CLERK_PUBLISHABLE_KEY` | `pk_test_...` for staging; `pk_live_...` for production |
+| `CLERK_ISSUER_URL` | Clerk issuer for the same environment |
+| `CLERK_JWT_KEY` | Corresponding PEM public key, with actual line breaks |
+| `AUTHENTICATION_BASE_URL` | Identity and authorization service URL |
+| `MOBIUS_BASE_URL` | Mobius service URL |
+| `SLACK_SERVER_BASE_URL` | Slack application's public base URL |
+| `SLACK_MOBIUS_AUTH_TOKEN` | Service-to-service authentication token |
+| `SLACK_OAUTH_STATE_SIGNING_KEY` | Slack OAuth state signing key |
+| `SLACK_TOKEN_ENCRYPTION_KEY` | Base64-encoded 32-byte key for stored Slack credentials |
 
-Use environment-scoped credentials; remove obsolete repository-level account
-variables and deployment secrets after migrating them to prevent fallback to
-an old account. Keep tokens in GitHub secrets and local private files, never
-in source control. Restrict each GitHub environment to the `main` branch.
+These settings are currently stored as Worker secrets, including the public
+keys and URLs. No Clerk secret API key is required. Do not copy the settings to
+GitHub or embed them in the frontend bundle. The browser obtains the publishable
+key from the running Worker's configuration endpoint.
+
+`wrangler.jsonc` declares the required secret names for each deployed environment
+and enables `keep_vars`. CI builds the selected environment, verifies the account,
+Worker name, and presence of its required secret names, then migrates databases
+and deploys. This check does not retrieve or validate secret values; validate
+values when provisioning or rotating them. Deployments inherit the existing
+Worker settings and do not generate or upload a secrets file.
+
+Use Cloudflare's dashboard or `wrangler secret put` to provision and rotate runtime
+settings. Preserve the encryption key when moving configuration: replacing it
+without migrating stored ciphertext makes existing Slack credentials unreadable.
 
 ### Build and release
 
@@ -156,12 +174,14 @@ scoped tokens without a stored cross-repository PAT. Business CI continues to
 check and deploy its own standalone service independently; Cloud CI verifies the
 new shared-shard migration composition.
 
-For a local release, use `pnpm deploy:staging` or `pnpm deploy:production`
-with `CLOUDFLARE_ACCOUNT_ID` set. Configure the runtime bindings first with
-`wrangler secret bulk --config wrangler.jsonc --env staging` (or `production`),
-or build and run `wrangler deploy --secrets-file PATH_TO_PRIVATE_JSON` with
-`APP_ORIGIN`, `CLERK_PUBLISHABLE_KEY`, and `CLERK_JWT_KEY` in the JSON file.
-The local `.dev.vars` file is only for development, not deployed credentials.
+For a local release, authenticate Wrangler and use `pnpm deploy:staging` or
+`pnpm deploy:production`. The account ID is already in the repository config.
+Provision missing settings on an existing Worker with
+`pnpm exec wrangler secret put NAME --config wrangler.jsonc --env staging`
+(or `production`). The command reads the value interactively. An entirely new
+Worker requires a one-time initial deployment with a private `--secrets-file`;
+subsequent releases preserve its settings without that file. The local
+`.dev.vars` file is only for development, not deployed credentials.
 
 
 ## Execution Boundary
