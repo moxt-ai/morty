@@ -134,7 +134,7 @@ class CloudMobiusFetchGateway extends MobiusFetchGateway {
     path: string,
     init?: RequestInit,
   ): Promise<Response> => {
-    const configured = slackBindingsSchema.parse(this.#bindings);
+    const configured = v.parse(slackBindingsSchema, this.#bindings);
     const configuredUrl = new URL(configured.MOBIUS_BASE_URL);
     const requestedUrl = new URL(path, configuredUrl);
     if (!path.startsWith("/") || requestedUrl.origin !== configuredUrl.origin) {
