@@ -3,12 +3,10 @@ import type { CloudBindings } from "../gateway/business-gateway.ts";
 import { type AuthenticationConfiguration, configurationSchema } from "./authentication-configuration.ts";
 
 export class ConfigurationStorage {
-    static readonly inject = ["bindings"] as const;
-
     private readonly bindings: CloudBindings;
 
-    constructor(bindings: CloudBindings) {
-        this.bindings = bindings;
+    constructor(cx: { readonly config: { readonly bindings: CloudBindings } }) {
+        this.bindings = cx.config.bindings;
     }
 
     readonly read = (): AuthenticationConfiguration | null => {

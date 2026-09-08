@@ -7,10 +7,9 @@ import { json } from "../infra/http.ts";
 export type { CloudBindings } from "../infra/cloud-bindings.ts";
 
 export class BusinessGateway {
-    static readonly inject = ["bindings"] as const;
     readonly #bindings: CloudBindings;
-    constructor(bindings: CloudBindings) {
-        this.#bindings = bindings;
+    constructor(cx: { readonly config: { readonly bindings: CloudBindings } }) {
+        this.#bindings = cx.config.bindings;
     }
     readonly fetch = async (request: Request, context?: ExecutionContext): Promise<Response> => {
         const path = new URL(request.url).pathname;

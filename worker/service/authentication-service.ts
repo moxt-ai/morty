@@ -8,14 +8,15 @@ type SessionResult =
     | { readonly kind: "unavailable" };
 
 export class AuthenticationService {
-    static readonly inject = ["configurationStorage", "clerkGateway"] as const;
-
     private readonly configuration: ConfigurationStorage;
     private readonly clerk: ClerkGateway;
 
-    constructor(configuration: ConfigurationStorage, clerk: ClerkGateway) {
-        this.configuration = configuration;
-        this.clerk = clerk;
+    constructor(cx: {
+        readonly storages: { readonly configuration: ConfigurationStorage };
+        readonly gateways: { readonly clerk: ClerkGateway };
+    }) {
+        this.configuration = cx.storages.configuration;
+        this.clerk = cx.gateways.clerk;
     }
 
     readonly publicConfiguration = (): { readonly publishableKey: string } | null => {

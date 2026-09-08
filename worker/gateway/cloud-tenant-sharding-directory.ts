@@ -11,8 +11,8 @@ import { isConfiguredTenantPlacement } from "../service/tenant-placement.ts";
 
 export class CloudTenantShardingDirectory implements TenantShardingDirectory {
     readonly bindings: CloudBindings;
-    constructor(bindings: CloudBindings) {
-        this.bindings = bindings;
+    constructor(cx: { readonly config: { readonly bindings: CloudBindings } }) {
+        this.bindings = cx.config.bindings;
     }
 
     readonly #context = (tenantId: string, placement: v.InferOutput<typeof tenantPlacementSchema>): TenantContext => {

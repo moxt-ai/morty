@@ -21,7 +21,7 @@ runs:
     - id: mobius
       uses: moxt-ai/mobius/.github/actions/source@17bdb3c332c3ac5fb3bec91fe0a797695d97380d
     - id: slack
-      uses: moxt-ai/mobius-slack/.github/actions/source@03c1cc96c20845756bc6b1562846e94d30fc373f
+      uses: moxt-ai/mobius-slack/.github/actions/source@8a6d4b1c5d7c81e763fc69879983824778503034
     - name: Materialize business sources
       shell: bash
       env:

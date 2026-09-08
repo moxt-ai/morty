@@ -1,25 +1,19 @@
 import * as v from "valibot";
 import { requestRegion } from "../gateway/workspace-creator.ts";
 import { json } from "../infra/http.ts";
-import type { AuthenticationService } from "../service/authentication-service.ts";
-import { WorkspaceCreationError, type WorkspaceCreator } from "../service/workspace-creator.ts";
+import { WorkspaceCreationError } from "../service/workspace-creator.ts";
+import type { CloudHttpEnvironment } from "./cloud-http-environment.ts";
 
-export class WorkspaceController {
-    static readonly inject = ["authenticationService", "workspaceCreator"] as const;
-    readonly #authentication: AuthenticationService;
-    readonly #creator: WorkspaceCreator;
-    constructor(authentication: AuthenticationService, creator: WorkspaceCreator) {
-        this.#authentication = authentication;
-        this.#creator = creator;
-    }
-    readonly fetch = async (request: Request): Promise<Response> => {
+export function createWorkspaceRoutes() {
+    return new Hono<CloudHttpEnvironment>().all("/workspaces", async (context) => {
+        const request = context.req.raw;
         if (request.method !== "POST") {
             return json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed." } }, 405, {
                 Allow: "POST",
             });
         }
         const token = request.headers.get("Authorization")?.match(/^Bearer ([^\s]+)$/i)?.[1];
-        const authentication = await this.#authentication.session(token, request.signal);
+        const authentication = await context.env.services.authentication.session(token, request.signal);
         if (authentication.kind === "unauthenticated") {
             return json({ error: { code: "UNAUTHENTICATED", message: "Sign in to continue." } }, 401);
         }
@@ -50,7 +44,7 @@ export class WorkspaceController {
         }
         try {
             return json(
-                await this.#creator.create(
+                await context.env.gateways.workspaceCreator.create(
                     { userId: authentication.session.userId, name: input.output.name, region: requestRegion(request) },
                     request.signal,
                 ),
@@ -73,5 +67,7 @@ export class WorkspaceController {
                     );
             }
         }
-    };
+    });
 }
+
+import { Hono } from "hono";

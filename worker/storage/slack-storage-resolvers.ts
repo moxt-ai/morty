@@ -68,8 +68,8 @@ function configuredR2Binding(bucketId: string, bindings: CloudSlackStorageBindin
 export class CloudDatabaseResolver implements DatabaseResolver {
     readonly #bindings: CloudSlackStorageBindings;
 
-    constructor(bindings: CloudSlackStorageBindings) {
-        this.#bindings = bindings;
+    constructor(cx: { readonly config: { readonly bindings: CloudSlackStorageBindings } }) {
+        this.#bindings = cx.config.bindings;
     }
 
     readonly resolve: DatabaseResolver["resolve"] = (sharding) => {
@@ -87,8 +87,8 @@ export class CloudDatabaseResolver implements DatabaseResolver {
 export class CloudAttachmentStorageResolver implements AttachmentStorageResolver {
     readonly #bindings: CloudSlackStorageBindings;
 
-    constructor(bindings: CloudSlackStorageBindings) {
-        this.#bindings = bindings;
+    constructor(cx: { readonly config: { readonly bindings: CloudSlackStorageBindings } }) {
+        this.#bindings = cx.config.bindings;
     }
 
     readonly resolve: AttachmentStorageResolver["resolve"] = (sharding) => {

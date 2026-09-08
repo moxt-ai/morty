@@ -20,10 +20,9 @@ const claimsSchema = v.pipe(
 );
 
 export class ClerkGateway {
-    static readonly inject = ["bindings"] as const;
-    readonly #bindings: CloudBindings;
-    constructor(bindings: CloudBindings) {
-        this.#bindings = bindings;
+    readonly #bindings: Pick<CloudBindings, "DEPLOY_ENVIRONMENT">;
+    constructor(cx: { readonly config: { readonly bindings: Pick<CloudBindings, "DEPLOY_ENVIRONMENT"> } }) {
+        this.#bindings = cx.config.bindings;
     }
     readonly verify = async (
         token: string,

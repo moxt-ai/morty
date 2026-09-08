@@ -6,10 +6,10 @@ import { json } from "../infra/http.ts";
 export class CloudMobiusFetchGateway extends MobiusFetchGateway {
     readonly #baseUrl: string;
     readonly #bindings: CloudBindings;
-    constructor(baseUrl: string, bindings: CloudBindings) {
-        super(baseUrl);
-        this.#baseUrl = baseUrl;
-        this.#bindings = bindings;
+    constructor(cx: { readonly config: { readonly mobiusBaseUrl: string; readonly bindings: CloudBindings } }) {
+        super(cx);
+        this.#baseUrl = cx.config.mobiusBaseUrl;
+        this.#bindings = cx.config.bindings;
     }
     override readonly fetch = async (path: string, init?: RequestInit): Promise<Response> => {
         const configured = new URL(this.#baseUrl);

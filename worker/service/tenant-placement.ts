@@ -174,9 +174,12 @@ function selectPlacement(
     return { d1ShardId: selected.id, r2BucketId: bucket.id, revision: 1 };
 }
 
-export function createTenantPlacementHandler(organizations: OrganizationDirectory): {
+export function createTenantPlacementHandler(cx: {
+    readonly gateways: { readonly organizations: OrganizationDirectory };
+}): {
     readonly fetch: (request: Request) => Promise<Response>;
 } {
+    const { organizations } = cx.gateways;
     const executor = new SerialExecutor();
     return {
         fetch: async (request) => {

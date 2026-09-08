@@ -10,10 +10,13 @@ const responseSchema = v.object({
 });
 
 export class DurableObjectWorkspaceCreator implements WorkspaceCreator {
-    static readonly inject = ["bindings"] as const;
-    readonly #bindings: CloudBindings;
-    constructor(bindings: CloudBindings) {
-        this.#bindings = bindings;
+    readonly #bindings: Pick<CloudBindings, "TENANT_PLACEMENT_ALLOCATOR" | "DEPLOY_ENVIRONMENT">;
+    constructor(cx: {
+        readonly config: {
+            readonly bindings: Pick<CloudBindings, "TENANT_PLACEMENT_ALLOCATOR" | "DEPLOY_ENVIRONMENT">;
+        };
+    }) {
+        this.#bindings = cx.config.bindings;
     }
     readonly create: WorkspaceCreator["create"] = async (input, parent) => {
         parent.throwIfAborted();

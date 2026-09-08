@@ -50,6 +50,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      hono:
+        specifier: ^4.13.5
+        version: 4.13.7
       lucide-react:
         specifier: ^1.39.0
         version: 1.41.0(react@19.2.8)
@@ -68,9 +71,6 @@ importers:
       tailwind-merge:
         specifier: ^3.6.0
         version: 3.6.0
-      typed-inject:
-        specifier: ^5.0.0
-        version: 5.0.0
       valibot:
         specifier: 1.4.2
         version: 1.4.2(typescript@7.0.2)
@@ -144,9 +144,6 @@ importers:
       pino:
         specifier: ^10.3.1
         version: 10.3.1
-      typed-inject:
-        specifier: ^5.0.0
-        version: 5.0.0
       valibot:
         specifier: 1.4.0
         version: 1.4.0(typescript@7.0.2)
@@ -182,9 +179,6 @@ importers:
       '@moxt-ai/app-slack-api':
         specifier: workspace:*
         version: link:../api
-      typed-inject:
-        specifier: 5.0.0
-        version: 5.0.0
       valibot:
         specifier: 1.4.0
         version: 1.4.0(typescript@7.0.2)

@@ -74,16 +74,25 @@ standalone business deployments remain owned by their original repositories.
 
 ## Worker architecture
 
-The Cloud Worker follows Slack's constructor-injected layering. `worker/application.ts`
-adapts Cloudflare fetch and queue events and owns the lifetime of the `typed-inject`
-container built by `worker/di/create-application.ts`.
+The Cloud Worker uses the same explicit context pattern as Slack.
+`worker/application.ts` adapts Cloudflare fetch and queue events. Its Hono route
+graph is constructed once; each event receives a fresh context constructed by
+`worker/di/create-dependencies.ts` from caller-supplied infrastructure.
 
-- `controller/` owns HTTP routing, request headers, and response status mapping.
+- `http/` contains inferred Hono route factories and owns request decoding,
+  headers, and response status mapping.
 - `service/` owns authentication policy and validated session results.
 - `entity/<domain>/` defines shared domain schemas and inferred types, plus database row schemas when Cloud owns persistence.
 - `storage/` reads and validates deployment configuration from Worker bindings.
 - `gateway/` owns Clerk token verification and the embedded Mobius/Slack integrations.
 - `infra/` contains shared HTTP response mechanics.
+
+The plain readonly context is `cx: { services, storages, gateways, logger, config }`.
+Services, storage components, and gateways declare only their required context
+subset. Hosts provide gateway instances through `createCloudDependencies`, and
+`createCloudInfrastructure` constructs the production adapters from current
+bindings. Cloud has no container registrations or injection metadata. See
+[the architecture document](docs/architecture.md) for composition and lifetimes.
 
 Cloud has no authentication database: business persistence remains in the embedded
 Mobius and Slack storage adapters. Configuration storage exposes only validated

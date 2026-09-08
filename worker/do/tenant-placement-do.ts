@@ -22,7 +22,13 @@ export class TenantPlacementAllocator extends DurableObject<AllocatorBindings> {
         if (!configured.CLERK_SECRET_KEY.startsWith(expectedPrefix)) {
             throw new Error("Clerk instance does not match deployment environment.");
         }
-        this.#handler = createTenantPlacementHandler(new ClerkOrganizationDirectory(configured.CLERK_SECRET_KEY));
+        this.#handler = createTenantPlacementHandler({
+            gateways: {
+                organizations: new ClerkOrganizationDirectory({
+                    config: { clerkSecretKey: configured.CLERK_SECRET_KEY },
+                }),
+            },
+        });
     }
     override readonly fetch = async (request: Request): Promise<Response> => await this.#handler.fetch(request);
 }

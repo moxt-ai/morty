@@ -27,8 +27,8 @@ function waitForBackend<T>(operation: () => Promise<T>, signal: AbortSignal): Pr
 export class ClerkOrganizationDirectory implements OrganizationDirectory {
     readonly #client: ReturnType<typeof createClerkClient>;
 
-    constructor(secretKey: string) {
-        this.#client = createClerkClient({ secretKey });
+    constructor(cx: { readonly config: { readonly clerkSecretKey: string } }) {
+        this.#client = createClerkClient({ secretKey: cx.config.clerkSecretKey });
     }
 
     readonly get = async (organizationId: string, signal: AbortSignal) => {

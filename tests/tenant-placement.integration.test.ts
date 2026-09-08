@@ -79,7 +79,7 @@ test("Given an allocation in progress, When a queued creation is cancelled, Then
     const organizations = new InMemoryOrganizationDirectory(true);
     const placement = { d1ShardId: "apac-01", r2BucketId: "apac", revision: 1 };
     organizations.add("org_existing", { mobiusCloud: { placement } });
-    const handler = createTenantPlacementHandler(organizations);
+    const handler = createTenantPlacementHandler({ gateways: { organizations } });
     const first = handler.fetch(placementRequest("First"));
     await organizations.listingStarted.promise;
     const controller = new AbortController();
@@ -110,7 +110,7 @@ test("Given uneven regional assignments, When a user creates a tenant, Then its 
     };
     organizations.add("org_existing_1", existingPlacement);
     organizations.add("org_existing_2", existingPlacement);
-    const placement = createTenantPlacementHandler(organizations);
+    const placement = createTenantPlacementHandler({ gateways: { organizations } });
 
     const response = await placement.fetch(placementRequest("Research team"));
 
@@ -138,7 +138,7 @@ test("Given uneven regional assignments, When a user creates a tenant, Then its 
 
 test("Given concurrent tenant creations, When their placement is allocated, Then each creation observes the previous frozen assignment", async () => {
     const organizations = new InMemoryOrganizationDirectory();
-    const placement = createTenantPlacementHandler(organizations);
+    const placement = createTenantPlacementHandler({ gateways: { organizations } });
 
     const responses = await Promise.all([
         placement.fetch(placementRequest("First team")),
@@ -180,7 +180,7 @@ test("Given an assigned resource was removed from inventory, When another tenant
             },
         },
     });
-    const placement = createTenantPlacementHandler(organizations);
+    const placement = createTenantPlacementHandler({ gateways: { organizations } });
 
     const response = await placement.fetch(placementRequest("Research team"));
 
@@ -197,7 +197,7 @@ test("Given an assigned resource was removed from inventory, When another tenant
 test("Given an existing Organization has no placement, When its trusted route is resolved, Then storage access is rejected", async () => {
     const organizations = new InMemoryOrganizationDirectory();
     organizations.add("org_legacy", {});
-    const placement = createTenantPlacementHandler(organizations);
+    const placement = createTenantPlacementHandler({ gateways: { organizations } });
 
     const response = await placement.fetch(lookupRequest("org_legacy"));
 
@@ -206,7 +206,9 @@ test("Given an existing Organization has no placement, When its trusted route is
 });
 
 test("Given an unknown Organization, When its trusted route is resolved, Then no legacy fallback is authorized", async () => {
-    const placement = createTenantPlacementHandler(new InMemoryOrganizationDirectory());
+    const placement = createTenantPlacementHandler({
+        gateways: { organizations: new InMemoryOrganizationDirectory() },
+    });
 
     const response = await placement.fetch(lookupRequest("org_unknown"));
 
