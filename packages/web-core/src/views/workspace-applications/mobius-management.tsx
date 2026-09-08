@@ -3,7 +3,12 @@ import {
   type ChannelConnection,
   MobiusChat,
   Pair,
+  readChannelConnection,
 } from "@moxt-ai/mobius-web-core";
+import {
+  BrowserWorkspaceConnections,
+  type WorkspaceConnectionProps,
+} from "../../view-models/workspaces/connections.ts";
 import { SlackManagement } from "./slack-management.tsx";
 import {
   type ChatApplicationProps,
@@ -30,10 +35,21 @@ function SlackApplication({
   return <SlackManagement connection={connection} />;
 }
 
-export function MobiusManagement() {
+export function mobiusWorkspaceConnections(userId: string) {
+  return new BrowserWorkspaceConnections(
+    userId,
+    window.localStorage,
+    readChannelConnection,
+  );
+}
+
+export function MobiusManagement(
+  props: WorkspaceConnectionProps<ChannelConnection>,
+) {
   return (
     <MobiusSlackContext context={{ mobiusUrl: window.location.origin }}>
       <WorkspaceApplications
+        {...props}
         ChatApplication={ChatApplication}
         PairApplication={PairApplication}
         SlackApplication={SlackApplication}

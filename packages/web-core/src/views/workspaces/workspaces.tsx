@@ -1,5 +1,11 @@
 import { Link } from "@tanstack/react-router";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import {
+  type FormEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useStore } from "zustand";
 import { workspacePageSize } from "../../view-models/workspaces/contracts.ts";
 import type {
@@ -280,10 +286,10 @@ export function WorkspaceList({
 
 export function WorkspaceDetail({
   workspace,
-  WorkspaceManagement,
+  children,
 }: {
   readonly workspace: Awaited<ReturnType<typeof loadWorkspace>>;
-  readonly WorkspaceManagement: React.ComponentType;
+  readonly children: ReactNode;
 }) {
   return (
     <>
@@ -298,9 +304,7 @@ export function WorkspaceDetail({
         <p className="mb-3 break-words text-sm font-medium text-violet-700">
           {workspace.name}
         </p>
-        <div className="mt-6">
-          <WorkspaceManagement />
-        </div>
+        <div className="mt-6">{children}</div>
       </section>
     </>
   );

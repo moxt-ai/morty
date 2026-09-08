@@ -1,10 +1,13 @@
 import {
+  BrowserWorkspaceConnections,
   type ChatApplicationProps,
   createWorkspaceRouter,
   type PairApplicationProps,
   type SlackApplicationProps,
   WorkspaceApplications,
+  type WorkspaceConnectionProps,
   type WorkspaceDirectory,
+  WorkspaceError,
 } from "@moxt-ai/mobius-cloud-web-core";
 import { RouterProvider } from "@tanstack/react-router";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -15,24 +18,64 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-09-07T00:00:00Z"));
   window.history.replaceState(null, "", "/");
+  window.localStorage.clear();
+  machines = new MachineDirectory();
 });
 afterEach(() => {
   vi.useRealTimers();
 });
-async function renderWorkspaces(directory: WorkspaceDirectory) {
-  const PairApplication = ({ onConnected }: PairApplicationProps<string>) => (
-    <button type="button" onClick={() => onConnected("channel-1")}>
+interface TestConnection {
+  readonly channelId: string;
+}
+
+class MachineDirectory {
+  readonly #channels = new Map<string, TestConnection>();
+  readonly pair = (): TestConnection => {
+    const connection = { channelId: "channel-1" };
+    this.#channels.set(connection.channelId, connection);
+    return connection;
+  };
+  readonly read = async (
+    channelId: string,
+    signal: AbortSignal,
+  ): Promise<TestConnection> => {
+    signal.throwIfAborted();
+    const connection = this.#channels.get(channelId);
+    if (connection === undefined) throw new WorkspaceError("UNAVAILABLE");
+    return connection;
+  };
+}
+
+let machines = new MachineDirectory();
+
+async function renderWorkspaces(
+  directory: WorkspaceDirectory,
+  userId = "alice",
+) {
+  const PairApplication = ({
+    onConnected,
+  }: PairApplicationProps<TestConnection>) => (
+    <button type="button" onClick={() => onConnected(machines.pair())}>
       Complete pairing
     </button>
   );
-  const ChatApplication = ({ connection }: ChatApplicationProps<string>) => (
-    <p>Chat is ready for {connection}.</p>
+  const ChatApplication = ({
+    connection,
+  }: ChatApplicationProps<TestConnection>) => (
+    <p>Chat is ready for {connection.channelId}.</p>
   );
-  const SlackApplication = ({ connection }: SlackApplicationProps<string>) => (
-    <p>Slack agent list is ready for {connection ?? "no channel"}.</p>
+  const SlackApplication = ({
+    connection,
+  }: SlackApplicationProps<TestConnection>) => (
+    <p>
+      Slack agent list is ready for {connection?.channelId ?? "no channel"}.
+    </p>
   );
-  const WorkspaceManagement = () => (
+  const WorkspaceManagement = (
+    props: WorkspaceConnectionProps<TestConnection>,
+  ) => (
     <WorkspaceApplications
+      {...props}
       ChatApplication={ChatApplication}
       PairApplication={PairApplication}
       SlackApplication={SlackApplication}
@@ -44,6 +87,7 @@ async function renderWorkspaces(directory: WorkspaceDirectory) {
       signal.throwIfAborted();
     },
     WorkspaceManagement,
+    new BrowserWorkspaceConnections(userId, window.localStorage, machines.read),
   );
   return render(<RouterProvider router={router} />);
 }
@@ -172,4 +216,97 @@ test("Given an unavailable identity provider, When connectivity returns and the 
   await expect
     .element(screen.getByRole("link", { name: "Research team" }))
     .toBeVisible();
+});
+
+test("Given a paired workspace, When the user reloads its page, Then Chat and Slack recover the existing machine without pairing again", async () => {
+  const identity = new WorkspaceIdentityProvider();
+  const id = identity.create("Connected team", "alice");
+  window.history.replaceState(null, "", `/workspaces/${id}`);
+  const screen = await renderWorkspaces(identity.forUser("alice"));
+  await screen.getByRole("button", { name: "Complete pairing" }).click();
+  await expect
+    .element(screen.getByText("Chat is ready for channel-1."))
+    .toBeVisible();
+  const path = window.location.pathname + window.location.search;
+  await screen.unmount();
+  window.history.replaceState(null, "", path);
+  const reopened = await renderWorkspaces(identity.forUser("alice"));
+  await expect
+    .element(reopened.getByText("Chat is ready for channel-1."))
+    .toBeVisible();
+  await expect
+    .element(reopened.getByRole("button", { name: "Complete pairing" }))
+    .not.toBeInTheDocument();
+  await reopened.getByRole("tab", { name: "Slack" }).click();
+  await expect
+    .element(reopened.getByText("Slack agent list is ready for channel-1."))
+    .toBeVisible();
+});
+
+test("Given a paired workspace, When another workspace or another signed-in member is opened, Then the saved machine is not reused across either boundary", async () => {
+  const identity = new WorkspaceIdentityProvider();
+  const first = identity.create("First team", "alice");
+  const second = identity.create("Second team", "alice");
+  identity.invite(first, "bob");
+  window.history.replaceState(null, "", `/workspaces/${first}`);
+  const screen = await renderWorkspaces(identity.forUser("alice"));
+  await screen.getByRole("button", { name: "Complete pairing" }).click();
+  await expect
+    .element(screen.getByText("Chat is ready for channel-1."))
+    .toBeVisible();
+  await screen.unmount();
+  window.history.replaceState(null, "", `/workspaces/${second}`);
+  const otherWorkspace = await renderWorkspaces(identity.forUser("alice"));
+  await expect
+    .element(otherWorkspace.getByRole("button", { name: "Complete pairing" }))
+    .toBeVisible();
+  await otherWorkspace.unmount();
+  window.history.replaceState(null, "", `/workspaces/${first}`);
+  const otherUser = await renderWorkspaces(identity.forUser("bob"), "bob");
+  await expect
+    .element(otherUser.getByRole("button", { name: "Complete pairing" }))
+    .toBeVisible();
+  await otherUser.unmount();
+  const originalUser = await renderWorkspaces(identity.forUser("alice"));
+  await expect
+    .element(originalUser.getByText("Chat is ready for channel-1."))
+    .toBeVisible();
+});
+
+test("Given an existing paired channel, When its workspace recovery link is opened, Then later visits to the plain workspace URL restore it", async () => {
+  const identity = new WorkspaceIdentityProvider();
+  const id = identity.create("Recovered team", "alice");
+  const channel = machines.pair();
+  window.history.replaceState(
+    null,
+    "",
+    `/workspaces/${id}?channel=${channel.channelId}`,
+  );
+  const screen = await renderWorkspaces(identity.forUser("alice"));
+  await expect
+    .element(screen.getByText("Chat is ready for channel-1."))
+    .toBeVisible();
+  await screen.unmount();
+  window.history.replaceState(null, "", `/workspaces/${id}`);
+  const reopened = await renderWorkspaces(identity.forUser("alice"));
+  await expect
+    .element(reopened.getByText("Chat is ready for channel-1."))
+    .toBeVisible();
+});
+
+test("Given a workspace recovery link for an inaccessible channel, When it is opened, Then restoration fails visibly without silently asking to pair again", async () => {
+  const identity = new WorkspaceIdentityProvider();
+  const id = identity.create("Unavailable machine", "alice");
+  window.history.replaceState(
+    null,
+    "",
+    `/workspaces/${id}?channel=unavailable`,
+  );
+  const screen = await renderWorkspaces(identity.forUser("alice"));
+  await expect
+    .element(screen.getByRole("alert"))
+    .toHaveTextContent("saved machine connection could not be restored");
+  await expect
+    .element(screen.getByRole("button", { name: "Complete pairing" }))
+    .not.toBeInTheDocument();
 });

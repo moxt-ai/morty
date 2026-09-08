@@ -3,6 +3,10 @@ export {
   waitForClerk,
 } from "./view-models/workspaces/clerk-directory.ts";
 export {
+  BrowserWorkspaceConnections,
+  type WorkspaceConnectionProps,
+} from "./view-models/workspaces/connections.ts";
+export {
   type Workspace,
   type WorkspaceDirectory,
   WorkspaceError,

@@ -9,6 +9,11 @@ import {
 } from "@tanstack/react-router";
 import type { ComponentType } from "react";
 import * as v from "valibot";
+import type {
+  BrowserWorkspaceConnections,
+  WorkspaceChannel,
+  WorkspaceConnectionProps,
+} from "../../view-models/workspaces/connections.ts";
 import {
   type WorkspaceDirectory,
   workspacePageSize,
@@ -73,10 +78,11 @@ function RouteFailure({
   );
 }
 
-export function createWorkspaceRouter(
+export function createWorkspaceRouter<TConnection extends WorkspaceChannel>(
   directory: WorkspaceDirectory,
   authorize: (signal: AbortSignal) => Promise<void>,
-  WorkspaceManagement: ComponentType,
+  WorkspaceManagement: ComponentType<WorkspaceConnectionProps<TConnection>>,
+  connections: BrowserWorkspaceConnections<TConnection>,
 ) {
   const ui = createWorkspaceStore();
   const rootRoute = createRootRoute({
@@ -132,14 +138,33 @@ export function createWorkspaceRouter(
   const detailRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/workspaces/$workspaceId",
-    loader: ({ abortController, params }) =>
-      loadWorkspace(directory, params.workspaceId, abortController.signal),
-    component: () => (
-      <WorkspaceDetail
-        workspace={detailRoute.useLoaderData()}
-        WorkspaceManagement={WorkspaceManagement}
-      />
-    ),
+    validateSearch: (search) => ({ channel: Reflect.get(search, "channel") }),
+    loaderDeps: ({ search }) => ({ channel: search.channel }),
+    loader: async ({ abortController, params, deps }) => {
+      const workspace = await loadWorkspace(
+        directory,
+        params.workspaceId,
+        abortController.signal,
+      );
+      const connection = await connections.load(
+        workspace.id,
+        deps.channel,
+        abortController.signal,
+      );
+      return { workspace, connection };
+    },
+    component: function WorkspaceDetailRoute() {
+      const { workspace, connection } = detailRoute.useLoaderData();
+      return (
+        <WorkspaceDetail workspace={workspace}>
+          <WorkspaceManagement
+            key={`${workspace.id}:${connection.kind === "connected" ? connection.connection.channelId : "unpaired"}`}
+            initialConnection={connection}
+            onConnected={(channel) => connections.save(workspace.id, channel)}
+          />
+        </WorkspaceDetail>
+      );
+    },
   });
   return createRouter({
     routeTree: rootRoute.addChildren([indexRoute, detailRoute]),

@@ -1,4 +1,5 @@
 import { type ComponentType, useState } from "react";
+import type { WorkspaceConnectionProps } from "../../view-models/workspaces/connections.ts";
 
 export interface PairApplicationProps<TConnection> {
   readonly onConnected: (connection: TConnection) => void;
@@ -27,15 +28,20 @@ export function WorkspaceApplications<TConnection>({
   ChatApplication,
   PairApplication,
   SlackApplication,
-}: {
+  initialConnection,
+  onConnected,
+}: WorkspaceConnectionProps<TConnection> & {
   readonly ChatApplication: ComponentType<ChatApplicationProps<TConnection>>;
   readonly PairApplication: ComponentType<PairApplicationProps<TConnection>>;
   readonly SlackApplication: ComponentType<SlackApplicationProps<TConnection>>;
 }) {
-  const [state, setState] = useState<WorkspaceApplicationState<TConnection>>({
-    kind: "unpaired",
-    selected: "pair",
-  });
+  const [state, setState] = useState<WorkspaceApplicationState<TConnection>>(
+    () =>
+      initialConnection.kind === "connected"
+        ? { ...initialConnection, selected: "chat" }
+        : { kind: "unpaired", selected: "pair" },
+  );
+  const [failure, setFailure] = useState<string | null>(null);
   const select = (selected: "pair" | "chat" | "slack"): void => {
     setState((current) => {
       if (current.kind === "unpaired") {
@@ -47,6 +53,7 @@ export function WorkspaceApplications<TConnection>({
 
   return (
     <>
+      {failure !== null && <p role="alert">{failure}</p>}
       <div
         aria-label="Workspace applications"
         className="border-b border-zinc-200"
@@ -94,9 +101,17 @@ export function WorkspaceApplications<TConnection>({
       >
         {state.selected === "pair" && (
           <PairApplication
-            onConnected={(connection) =>
-              setState({ kind: "connected", connection, selected: "chat" })
-            }
+            onConnected={(connection) => {
+              try {
+                onConnected(connection);
+                setFailure(null);
+                setState({ kind: "connected", connection, selected: "chat" });
+              } catch {
+                setFailure(
+                  "This browser could not save the machine connection. Allow site storage and try again.",
+                );
+              }
+            }}
           />
         )}
         {state.kind === "connected" && state.selected === "chat" && (

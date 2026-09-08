@@ -1,5 +1,4 @@
 import { SignOutButton, UserButton } from "@clerk/react";
-import type { createWorkspaceRouter } from "@moxt-ai/mobius-cloud-web-core";
 import { type AnyRouter, RouterProvider } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
@@ -9,7 +8,7 @@ export type AppState =
   | { readonly kind: "authentication"; readonly router: AnyRouter }
   | {
       readonly kind: "signed-in";
-      readonly router: ReturnType<typeof createWorkspaceRouter>;
+      readonly router: AnyRouter;
     };
 
 export function Page({

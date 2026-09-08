@@ -70,6 +70,17 @@ Cloud browser code follows the same package pattern and core stack as Slack:
 workspace behavior, TanStack Router owns browser routing, and Valibot validates
 untrusted boundary data.
 
+Workspace machine connections survive reloads in the same browser. Cloud stores
+only the channel ID under the signed-in user and workspace; Mobius continues to
+own the channel credential. The workspace loader checks membership before
+restoring and reauthorizing the channel. A failed restore shows an error instead
+of silently creating a new pairing request.
+
+For a channel paired before workspace persistence was introduced, open
+`/workspaces/<workspace-id>?channel=<channel-id>` in the original paired browser.
+Successful channel authorization saves the workspace association; later visits
+to the plain workspace URL restore it. The channel ID alone grants no access.
+
 ## Cloudflare Deployment
 
 Deployment uses two isolated Workers:

@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import { WorkspaceConnectionError } from "./connections.ts";
 import {
   type WorkspaceDirectory,
   WorkspaceError,
@@ -8,6 +9,8 @@ import {
 import type { WorkspaceStore } from "./store.ts";
 
 export function workspaceErrorMessage(cause: unknown): string {
+  if (cause instanceof WorkspaceConnectionError)
+    return "The saved machine connection could not be restored. Refresh to retry; you do not need to pair again.";
   if (cause instanceof DOMException && cause.name === "TimeoutError") {
     return "The request timed out. Refresh workspaces to check the result before trying again.";
   }
