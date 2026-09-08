@@ -6,6 +6,12 @@
   "keep_vars": true,
   "workers_dev": true,
   "preview_urls": false,
+  "observability": {
+    "logs": {
+      "enabled": false,
+      "invocation_logs": true
+    }
+  },
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
