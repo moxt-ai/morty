@@ -1,245 +1,237 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "mobius-cloud-local",
-  "main": "worker/index.ts",
-  "compatibility_date": "2026-09-07",
-  "keep_vars": true,
-  "workers_dev": true,
-  "preview_urls": false,
-  "observability": {
-    "enabled": true,
-    "logs": {
-      "enabled": true,
-      "invocation_logs": true
-    }
-  },
-  "assets": {
-    "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": [
-      "/mobius-cloud/api/*",
-      "/mobius/api/*",
-      "/mobius-slack/api/*"
-    ]
-  },
-  "queues": {
-    "producers": [{ "binding": "EVENTS", "queue": "app-slack-events" }],
-    "consumers": [
-      { "queue": "app-slack-events", "max_batch_size": 1, "max_retries": 5 }
-    ]
-  },
-  "r2_buckets": [
-    { "binding": "ATTACHMENTS", "bucket_name": "app-slack-attachments" }
-  ],
-  "d1_databases": [
-    {
-      "binding": "DATABASE",
-      "database_name": "app-slack",
-      "database_id": "replace-with-production-d1-id",
-      "migrations_dir": "apps/slack/packages/worker/migrations"
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "name": "mobius-cloud-local",
+    "main": "worker/index.ts",
+    "compatibility_date": "2026-09-07",
+    "keep_vars": true,
+    "workers_dev": true,
+    "preview_urls": false,
+    "observability": {
+        "enabled": true,
+        "logs": {
+            "enabled": true,
+            "invocation_logs": true
+        }
     },
-    {
-      "binding": "DIRECTORY_DATABASE",
-      "database_name": "mobius-directory",
-      "migrations_dir": "mobius/packages/relay-cloudflare/migrations/d1"
-    }
-  ],
-  "durable_objects": {
-    "bindings": [
-      {
-        "name": "AGENT_TRIGGER_RATE_LIMITER",
-        "class_name": "AgentTriggerRateLimiter"
-      },
-      {
-        "name": "RUNTIME_RELAY",
-        "class_name": "RuntimeRelay"
-      },
-      {
-        "name": "SESSION_RELAY",
-        "class_name": "LiteSessionRelay"
-      }
-    ]
-  },
-  "vars": {
-    "SESSION_ACTIVE_SESSIONS_PER_PROJECT": "1000",
-    "SESSION_ACTIVE_SESSIONS_PER_TENANT": "10000",
-    "SESSION_ARCHIVE_BYTES_PER_SESSION": "268435456"
-  },
-  "migrations": [
-    {
-      "tag": "slack-v1",
-      "new_sqlite_classes": ["AgentTriggerRateLimiter"]
+    "assets": {
+        "binding": "ASSETS",
+        "not_found_handling": "single-page-application",
+        "run_worker_first": ["/mobius-cloud/api/*", "/mobius/api/*", "/mobius-slack/api/*"]
     },
-    {
-      "tag": "mobius-v1",
-      "new_sqlite_classes": ["RuntimeRelay", "SessionRelay"]
+    "queues": {
+        "producers": [{ "binding": "EVENTS", "queue": "app-slack-events" }],
+        "consumers": [{ "queue": "app-slack-events", "max_batch_size": 1, "max_retries": 5 }]
     },
-    {
-      "tag": "mobius-v2",
-      "new_sqlite_classes": ["LiteSessionRelay"]
-    }
-  ],
-  "env": {
-    "staging": {
-      "name": "mobius-cloud-staging",
-      "secrets": {
-        "required": [
-          "APP_ORIGIN",
-          "AUTHENTICATION_BASE_URL",
-          "CLERK_ISSUER_URL",
-          "CLERK_PUBLISHABLE_KEY",
-          "CLERK_JWT_KEY",
-          "MOBIUS_BASE_URL",
-          "SLACK_MOBIUS_AUTH_TOKEN",
-          "SLACK_OAUTH_STATE_SIGNING_KEY",
-          "SLACK_SERVER_BASE_URL",
-          "SLACK_TOKEN_ENCRYPTION_KEY"
+    "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "app-slack-attachments" }],
+    "d1_databases": [
+        {
+            "binding": "DATABASE",
+            "database_name": "app-slack",
+            "database_id": "replace-with-production-d1-id",
+            "migrations_dir": "apps/slack/packages/worker/migrations"
+        },
+        {
+            "binding": "DIRECTORY_DATABASE",
+            "database_name": "mobius-directory",
+            "migrations_dir": "mobius/packages/relay-cloudflare/migrations/d1"
+        }
+    ],
+    "durable_objects": {
+        "bindings": [
+            {
+                "name": "AGENT_TRIGGER_RATE_LIMITER",
+                "class_name": "AgentTriggerRateLimiter"
+            },
+            {
+                "name": "RUNTIME_RELAY",
+                "class_name": "RuntimeRelay"
+            },
+            {
+                "name": "SESSION_RELAY",
+                "class_name": "LiteSessionRelay"
+            }
         ]
-      },
-      "vars": {
+    },
+    "vars": {
         "SESSION_ACTIVE_SESSIONS_PER_PROJECT": "1000",
         "SESSION_ACTIVE_SESSIONS_PER_TENANT": "10000",
         "SESSION_ARCHIVE_BYTES_PER_SESSION": "268435456"
-      },
-      "routes": [
-        {
-          "pattern": "mobius.paradev.biz",
-          "custom_domain": true
-        }
-      ],
-      "workers_dev": false,
-      "queues": {
-        "producers": [
-          {
-            "binding": "EVENTS",
-            "queue": "mobius-slack-cloud-staging-events"
-          }
-        ],
-        "consumers": [
-          {
-            "queue": "mobius-slack-cloud-staging-events",
-            "max_batch_size": 1,
-            "max_retries": 5
-          }
-        ]
-      },
-      "r2_buckets": [
-        {
-          "binding": "ATTACHMENTS",
-          "bucket_name": "mobius-slack-staging-attachments"
-        }
-      ],
-      "d1_databases": [
-        {
-          "binding": "DATABASE",
-          "database_name": "mobius-cloud-staging-apac-01",
-          "database_id": "76a58022-7ee3-4faf-9cc2-db458231cd2e",
-          "migrations_dir": "apps/slack/packages/worker/migrations"
-        },
-        {
-          "binding": "DIRECTORY_DATABASE",
-          "database_name": "mobius-cloud-staging-apac-01",
-          "database_id": "76a58022-7ee3-4faf-9cc2-db458231cd2e",
-          "migrations_dir": "mobius/packages/relay-cloudflare/migrations/d1"
-        }
-      ],
-      "durable_objects": {
-        "bindings": [
-          {
-            "name": "AGENT_TRIGGER_RATE_LIMITER",
-            "class_name": "AgentTriggerRateLimiter"
-          },
-          {
-            "name": "RUNTIME_RELAY",
-            "class_name": "RuntimeRelay"
-          },
-          {
-            "name": "SESSION_RELAY",
-            "class_name": "LiteSessionRelay"
-          }
-        ]
-      }
     },
-    "production": {
-      "name": "mobius-cloud-production",
-      "secrets": {
-        "required": [
-          "APP_ORIGIN",
-          "AUTHENTICATION_BASE_URL",
-          "CLERK_ISSUER_URL",
-          "CLERK_PUBLISHABLE_KEY",
-          "CLERK_JWT_KEY",
-          "MOBIUS_BASE_URL",
-          "SLACK_MOBIUS_AUTH_TOKEN",
-          "SLACK_OAUTH_STATE_SIGNING_KEY",
-          "SLACK_SERVER_BASE_URL",
-          "SLACK_TOKEN_ENCRYPTION_KEY"
-        ]
-      },
-      "vars": {
-        "SESSION_ACTIVE_SESSIONS_PER_PROJECT": "1000",
-        "SESSION_ACTIVE_SESSIONS_PER_TENANT": "10000",
-        "SESSION_ARCHIVE_BYTES_PER_SESSION": "268435456"
-      },
-      "routes": [
+    "migrations": [
         {
-          "pattern": "mobius.paraflow.biz",
-          "custom_domain": true
-        }
-      ],
-      "workers_dev": false,
-      "d1_databases": [
-        {
-          "binding": "DATABASE",
-          "database_name": "mobius-cloud-production-apac-01",
-          "database_id": "9ba3f0bb-59f4-4a43-bf51-2a2317e75d01",
-          "migrations_dir": "apps/slack/packages/worker/migrations"
+            "tag": "slack-v1",
+            "new_sqlite_classes": ["AgentTriggerRateLimiter"]
         },
         {
-          "binding": "DIRECTORY_DATABASE",
-          "database_name": "mobius-cloud-production-apac-01",
-          "database_id": "9ba3f0bb-59f4-4a43-bf51-2a2317e75d01",
-          "migrations_dir": "mobius/packages/relay-cloudflare/migrations/d1"
-        }
-      ],
-      "durable_objects": {
-        "bindings": [
-          {
-            "name": "AGENT_TRIGGER_RATE_LIMITER",
-            "class_name": "AgentTriggerRateLimiter"
-          },
-          {
-            "name": "RUNTIME_RELAY",
-            "class_name": "RuntimeRelay"
-          },
-          {
-            "name": "SESSION_RELAY",
-            "class_name": "LiteSessionRelay"
-          }
-        ]
-      },
-      "queues": {
-        "producers": [
-          {
-            "binding": "EVENTS",
-            "queue": "mobius-slack-cloud-production-events"
-          }
-        ],
-        "consumers": [
-          {
-            "queue": "mobius-slack-cloud-production-events",
-            "max_batch_size": 1,
-            "max_retries": 5
-          }
-        ]
-      },
-      "r2_buckets": [
+            "tag": "mobius-v1",
+            "new_sqlite_classes": ["RuntimeRelay", "SessionRelay"]
+        },
         {
-          "binding": "ATTACHMENTS",
-          "bucket_name": "mobius-slack-production-attachments"
+            "tag": "mobius-v2",
+            "new_sqlite_classes": ["LiteSessionRelay"]
         }
-      ]
-    }
-  },
-  "account_id": "95af7a3d67be8c49b1619544e3ce53c0"
+    ],
+    "env": {
+        "staging": {
+            "name": "mobius-cloud-staging",
+            "secrets": {
+                "required": [
+                    "APP_ORIGIN",
+                    "AUTHENTICATION_BASE_URL",
+                    "CLERK_ISSUER_URL",
+                    "CLERK_PUBLISHABLE_KEY",
+                    "CLERK_JWT_KEY",
+                    "MOBIUS_BASE_URL",
+                    "SLACK_MOBIUS_AUTH_TOKEN",
+                    "SLACK_OAUTH_STATE_SIGNING_KEY",
+                    "SLACK_SERVER_BASE_URL",
+                    "SLACK_TOKEN_ENCRYPTION_KEY"
+                ]
+            },
+            "vars": {
+                "SESSION_ACTIVE_SESSIONS_PER_PROJECT": "1000",
+                "SESSION_ACTIVE_SESSIONS_PER_TENANT": "10000",
+                "SESSION_ARCHIVE_BYTES_PER_SESSION": "268435456"
+            },
+            "routes": [
+                {
+                    "pattern": "mobius.paradev.biz",
+                    "custom_domain": true
+                }
+            ],
+            "workers_dev": false,
+            "queues": {
+                "producers": [
+                    {
+                        "binding": "EVENTS",
+                        "queue": "mobius-slack-cloud-staging-events"
+                    }
+                ],
+                "consumers": [
+                    {
+                        "queue": "mobius-slack-cloud-staging-events",
+                        "max_batch_size": 1,
+                        "max_retries": 5
+                    }
+                ]
+            },
+            "r2_buckets": [
+                {
+                    "binding": "ATTACHMENTS",
+                    "bucket_name": "mobius-slack-staging-attachments"
+                }
+            ],
+            "d1_databases": [
+                {
+                    "binding": "DATABASE",
+                    "database_name": "mobius-cloud-staging-apac-01",
+                    "database_id": "76a58022-7ee3-4faf-9cc2-db458231cd2e",
+                    "migrations_dir": "apps/slack/packages/worker/migrations"
+                },
+                {
+                    "binding": "DIRECTORY_DATABASE",
+                    "database_name": "mobius-cloud-staging-apac-01",
+                    "database_id": "76a58022-7ee3-4faf-9cc2-db458231cd2e",
+                    "migrations_dir": "mobius/packages/relay-cloudflare/migrations/d1"
+                }
+            ],
+            "durable_objects": {
+                "bindings": [
+                    {
+                        "name": "AGENT_TRIGGER_RATE_LIMITER",
+                        "class_name": "AgentTriggerRateLimiter"
+                    },
+                    {
+                        "name": "RUNTIME_RELAY",
+                        "class_name": "RuntimeRelay"
+                    },
+                    {
+                        "name": "SESSION_RELAY",
+                        "class_name": "LiteSessionRelay"
+                    }
+                ]
+            }
+        },
+        "production": {
+            "name": "mobius-cloud-production",
+            "secrets": {
+                "required": [
+                    "APP_ORIGIN",
+                    "AUTHENTICATION_BASE_URL",
+                    "CLERK_ISSUER_URL",
+                    "CLERK_PUBLISHABLE_KEY",
+                    "CLERK_JWT_KEY",
+                    "MOBIUS_BASE_URL",
+                    "SLACK_MOBIUS_AUTH_TOKEN",
+                    "SLACK_OAUTH_STATE_SIGNING_KEY",
+                    "SLACK_SERVER_BASE_URL",
+                    "SLACK_TOKEN_ENCRYPTION_KEY"
+                ]
+            },
+            "vars": {
+                "SESSION_ACTIVE_SESSIONS_PER_PROJECT": "1000",
+                "SESSION_ACTIVE_SESSIONS_PER_TENANT": "10000",
+                "SESSION_ARCHIVE_BYTES_PER_SESSION": "268435456"
+            },
+            "routes": [
+                {
+                    "pattern": "mobius.paraflow.biz",
+                    "custom_domain": true
+                }
+            ],
+            "workers_dev": false,
+            "d1_databases": [
+                {
+                    "binding": "DATABASE",
+                    "database_name": "mobius-cloud-production-apac-01",
+                    "database_id": "9ba3f0bb-59f4-4a43-bf51-2a2317e75d01",
+                    "migrations_dir": "apps/slack/packages/worker/migrations"
+                },
+                {
+                    "binding": "DIRECTORY_DATABASE",
+                    "database_name": "mobius-cloud-production-apac-01",
+                    "database_id": "9ba3f0bb-59f4-4a43-bf51-2a2317e75d01",
+                    "migrations_dir": "mobius/packages/relay-cloudflare/migrations/d1"
+                }
+            ],
+            "durable_objects": {
+                "bindings": [
+                    {
+                        "name": "AGENT_TRIGGER_RATE_LIMITER",
+                        "class_name": "AgentTriggerRateLimiter"
+                    },
+                    {
+                        "name": "RUNTIME_RELAY",
+                        "class_name": "RuntimeRelay"
+                    },
+                    {
+                        "name": "SESSION_RELAY",
+                        "class_name": "LiteSessionRelay"
+                    }
+                ]
+            },
+            "queues": {
+                "producers": [
+                    {
+                        "binding": "EVENTS",
+                        "queue": "mobius-slack-cloud-production-events"
+                    }
+                ],
+                "consumers": [
+                    {
+                        "queue": "mobius-slack-cloud-production-events",
+                        "max_batch_size": 1,
+                        "max_retries": 5
+                    }
+                ]
+            },
+            "r2_buckets": [
+                {
+                    "binding": "ATTACHMENTS",
+                    "bucket_name": "mobius-slack-production-attachments"
+                }
+            ]
+        }
+    },
+    "account_id": "95af7a3d67be8c49b1619544e3ce53c0"
 }

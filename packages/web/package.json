@@ -1,23 +1,23 @@
 {
-  "name": "@moxt-ai/mobius-cloud-web",
-  "version": "0.0.1",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "typecheck": "tsc --project tsconfig.json"
-  },
-  "dependencies": {
-    "@clerk/react": "6.15.1",
-    "@moxt-ai/mobius-cloud-web-core": "workspace:*",
-    "@tanstack/react-router": "1.170.32",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "valibot": "1.4.2"
-  },
-  "devDependencies": {
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.7",
-    "tailwindcss": "4.3.3",
-    "vite": "8.2.2"
-  }
+    "name": "@moxt-ai/mobius-cloud-web",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "typecheck": "tsc --project tsconfig.json"
+    },
+    "dependencies": {
+        "@clerk/react": "6.15.1",
+        "@moxt-ai/mobius-cloud-web-core": "workspace:*",
+        "@tanstack/react-router": "1.170.32",
+        "react": "19.2.8",
+        "react-dom": "19.2.8",
+        "valibot": "1.4.2"
+    },
+    "devDependencies": {
+        "@types/react": "19.2.18",
+        "@types/react-dom": "19.2.7",
+        "tailwindcss": "4.3.3",
+        "vite": "8.2.2"
+    }
 }

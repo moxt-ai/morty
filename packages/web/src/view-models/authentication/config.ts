@@ -1,22 +1,19 @@
 import * as v from "valibot";
 
 const publicConfigSchema = v.pipe(
-  v.object({
-    publishableKey: v.pipe(
-      v.string(),
-      v.regex(/^pk_(test|live)_[A-Za-z0-9_-]+$/u),
-    ),
-  }),
-  v.readonly(),
+    v.object({
+        publishableKey: v.pipe(v.string(), v.regex(/^pk_(test|live)_[A-Za-z0-9_-]+$/u)),
+    }),
+    v.readonly(),
 );
 
-export async function getPublicConfig(
-  signal: AbortSignal,
-): Promise<v.InferOutput<typeof publicConfigSchema>> {
-  const response = await fetch("/mobius-cloud/api/config", {
-    signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
-  });
-  if (!response.ok) throw new Error("Sign-in configuration is unavailable.");
-  const body: unknown = await response.json();
-  return v.parse(publicConfigSchema, body);
+export async function getPublicConfig(signal: AbortSignal): Promise<v.InferOutput<typeof publicConfigSchema>> {
+    const response = await fetch("/mobius-cloud/api/config", {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+    });
+    if (!response.ok) {
+        throw new Error("Sign-in configuration is unavailable.");
+    }
+    const body: unknown = await response.json();
+    return v.parse(publicConfigSchema, body);
 }

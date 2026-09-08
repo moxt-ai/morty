@@ -1,25 +1,25 @@
 {
-  "compilerOptions": {
-    "module": "esnext",
-    "target": "es2024",
-    "types": [],
-    "rewriteRelativeImportExtensions": true,
-    "verbatimModuleSyntax": true,
-    "erasableSyntaxOnly": true,
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-    "noPropertyAccessFromIndexSignature": true,
-    "noFallthroughCasesInSwitch": true,
-    "noImplicitOverride": true,
-    "noImplicitReturns": true,
-    "moduleResolution": "bundler",
-    "paths": {
-      "@/*": ["./mobius/packages/web-core/src/*"]
+    "compilerOptions": {
+        "module": "esnext",
+        "target": "es2024",
+        "types": [],
+        "rewriteRelativeImportExtensions": true,
+        "verbatimModuleSyntax": true,
+        "erasableSyntaxOnly": true,
+        "strict": true,
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true,
+        "noPropertyAccessFromIndexSignature": true,
+        "noFallthroughCasesInSwitch": true,
+        "noImplicitOverride": true,
+        "noImplicitReturns": true,
+        "moduleResolution": "bundler",
+        "paths": {
+            "@/*": ["./mobius/packages/web-core/src/*"]
+        },
+        "lib": ["es2024"],
+        "noEmit": true,
+        "skipLibCheck": true
     },
-    "lib": ["es2024"],
-    "noEmit": true,
-    "skipLibCheck": true
-  },
-  "include": ["worker/**/*.ts", "shared/**/*.ts", "worker-configuration.d.ts"]
+    "include": ["worker/**/*.ts", "shared/**/*.ts", "worker-configuration.d.ts"]
 }

@@ -1,21 +1,21 @@
 {
-  "extends": "../tsconfig.json",
-  "compilerOptions": {
-    "types": ["node", "vite/client"],
-    "jsx": "react-jsx",
-    "lib": ["es2024", "dom", "dom.iterable"]
-  },
-  "include": [
-    "**/*.ts",
-    "../scripts/**/*.ts",
-    "../worker/**/*.ts",
-    "../vitest.config.ts",
-    "../worker-configuration.d.ts",
-    "../shared/**/*.ts",
-    "../vite.config.ts",
-    "**/*.tsx",
-    "../vitest.browser.config.ts",
-    "../web/**/*.ts",
-    "../web/**/*.tsx"
-  ]
+    "extends": "../tsconfig.json",
+    "compilerOptions": {
+        "types": ["node", "vite/client"],
+        "jsx": "react-jsx",
+        "lib": ["es2024", "dom", "dom.iterable"]
+    },
+    "include": [
+        "**/*.ts",
+        "../scripts/**/*.ts",
+        "../worker/**/*.ts",
+        "../vitest.config.ts",
+        "../worker-configuration.d.ts",
+        "../shared/**/*.ts",
+        "../vite.config.ts",
+        "**/*.tsx",
+        "../vitest.browser.config.ts",
+        "../web/**/*.ts",
+        "../web/**/*.tsx"
+    ]
 }

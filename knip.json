@@ -1,16 +1,16 @@
 {
-  "$schema": "https://unpkg.com/knip@6/schema.json",
-  "project": ["scripts/**/*.ts", "worker/**/*.ts", "shared/**/*.ts"],
-  "ignoreDependencies": [
-    "@moxt-ai/mobius-protocol",
-    "@moxt-ai/mobius-web-sdk",
-    "@radix-ui/react-select",
-    "class-variance-authority",
-    "cloudflare",
-    "clsx",
-    "lucide-react",
-    "pino",
-    "streamdown",
-    "tailwind-merge"
-  ]
+    "$schema": "https://unpkg.com/knip@6/schema.json",
+    "project": ["scripts/**/*.ts", "worker/**/*.ts", "shared/**/*.ts"],
+    "ignoreDependencies": [
+        "@moxt-ai/mobius-protocol",
+        "@moxt-ai/mobius-web-sdk",
+        "@radix-ui/react-select",
+        "class-variance-authority",
+        "cloudflare",
+        "clsx",
+        "lucide-react",
+        "pino",
+        "streamdown",
+        "tailwind-merge"
+    ]
 }
