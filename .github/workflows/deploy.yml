@@ -73,6 +73,20 @@ jobs:
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
+      - name: Configure Clerk backend secret
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          case "$DEPLOY_ENVIRONMENT:$CLERK_SECRET_KEY" in
+            staging:sk_test_?*|production:sk_live_?*) ;;
+            *) echo "Missing or environment-mismatched CLERK_SECRET_KEY in GitHub environment secrets" >&2; exit 1 ;;
+          esac
+          printf '%s' "$CLERK_SECRET_KEY" |
+            timeout 60s pnpm exec wrangler secret put CLERK_SECRET_KEY \
+              --config wrangler.jsonc --env "$DEPLOY_ENVIRONMENT"
+
       - name: Verify remote runtime configuration
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

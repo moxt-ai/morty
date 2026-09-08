@@ -199,15 +199,20 @@ Run `pnpm exec wrangler login` to authorize local access, then
 multiple organizations. Logging in does not configure CI credentials.
 
 Create GitHub environments named `staging` and `production`. Each environment
-needs only a `CLOUDFLARE_API_TOKEN` secret: a Workers deployment token with D1
-Edit, scoped to the configured Cloudflare account. Restrict deployment to `main`. Configure a 15-minute wait timer on the
+needs a `CLOUDFLARE_API_TOKEN` secret: a Workers deployment token with D1
+Edit, scoped to the configured Cloudflare account. Also set `CLERK_SECRET_KEY`
+in each GitHub environment (`sk_test_...` for staging and `sk_live_...` for
+production). Deployment uploads this key to the selected Worker before verifying
+runtime configuration. Configure the Sentry settings described above as well.
+Restrict deployment to `main`. Configure a 15-minute wait timer on the
 `production` environment. GitHub enforces this delay before starting its job,
 including manual production releases; waiting does not occupy a runner.
 The account ID, deployment targets, and public deployment links are versioned
 in the repository; GitHub environment variables are not required.
 
-Cloudflare owns the Worker runtime configuration. Provision these names on each
-Worker before deploying code that requires them:
+Cloudflare stores the Worker runtime configuration. Deployment synchronizes
+`CLERK_SECRET_KEY` from GitHub environment secrets; provision the other names on
+each Worker before deploying code that requires them:
 
 | Worker setting | Purpose |
 | --- | --- |
@@ -246,8 +251,8 @@ and validated.
 
 These settings are currently stored as Worker secrets, including the public
 keys and URLs. The Clerk secret key is required only by the tenant placement
-allocator. Do not copy the settings to GitHub or embed them in the frontend
-bundle. The browser obtains the publishable key from the running Worker's
+allocator and is synchronized from GitHub during deployment. Keep runtime secrets
+out of the frontend bundle. The browser obtains the publishable key from the running Worker's
 configuration endpoint.
 
 `wrangler.jsonc` declares the required secret names for each deployed environment
