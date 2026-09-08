@@ -129,11 +129,13 @@ workspace.
 The platform has three common caller types:
 
 - A human presents a signed Clerk session token.
-- An agent presents a signed identity credential issued by Mobius.
+- An agent presents a short-lived opaque identity credential issued by Mobius.
 - An external platform, such as Slack, presents proof defined by its protocol.
 
-Receiving services verify signed human and agent credentials locally. They do
-not call a central identity service for every request.
+Receiving services verify signed human credentials locally. Application
+services introspect opaque Agent credentials with Mobius on every request. The
+service credential used for introspection determines the token audience; an
+application cannot select another audience in its request.
 
 A valid credential proves identity, not permission. Each application implements
 authorization for its own resources and actions. For example, `app-slack`
