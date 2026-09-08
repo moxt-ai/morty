@@ -63,7 +63,7 @@
         "@moxt-ai/mobius-relay-cloudflare": "workspace:*",
         "@moxt-ai/mobius-relay-core": "workspace:*",
         "@moxt-ai/mobius-web-core": "workspace:*",
-        "@moxt-ai/mobius-web-sdk": "workspace:*",
+        "@moxt-ai/mobius-sdk": "workspace:*",
         "@radix-ui/react-select": "2.3.7",
         "@tanstack/react-router": "1.170.32",
         "class-variance-authority": "^0.7.1",

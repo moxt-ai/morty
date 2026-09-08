@@ -3,7 +3,7 @@
     "project": ["scripts/**/*.ts", "worker/**/*.ts", "shared/**/*.ts"],
     "ignoreDependencies": [
         "@moxt-ai/mobius-protocol",
-        "@moxt-ai/mobius-web-sdk",
+        "@moxt-ai/mobius-sdk",
         "@radix-ui/react-select",
         "class-variance-authority",
         "cloudflare",

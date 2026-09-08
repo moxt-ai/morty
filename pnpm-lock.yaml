@@ -32,12 +32,12 @@ importers:
       '@moxt-ai/mobius-relay-core':
         specifier: workspace:*
         version: link:mobius/packages/relay-core
+      '@moxt-ai/mobius-sdk':
+        specifier: workspace:*
+        version: link:mobius/packages/web-sdk
       '@moxt-ai/mobius-web-core':
         specifier: workspace:*
         version: link:mobius/packages/web-core
-      '@moxt-ai/mobius-web-sdk':
-        specifier: workspace:*
-        version: link:mobius/packages/web-sdk
       '@radix-ui/react-select':
         specifier: 2.3.7
         version: 2.3.7(@types/react-dom@19.2.7(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -211,6 +211,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^5.20260905.1
         version: 5.20260906.1
+      '@moxt-ai/mobius-sdk':
+        specifier: workspace:*
+        version: link:../web-sdk
       wrangler:
         specifier: ^4.129.0
         version: 4.129.0(@cloudflare/workers-types@5.20260906.1)(bufferutil@4.1.0)(utf-8-validate@6.0.6)
@@ -226,10 +229,13 @@ importers:
       typed-inject:
         specifier: ^5.0.0
         version: 5.0.0
+      valibot:
+        specifier: 1.4.2
+        version: 1.4.2(typescript@7.0.2)
 
   mobius/packages/web-core:
     devDependencies:
-      '@moxt-ai/mobius-web-sdk':
+      '@moxt-ai/mobius-sdk':
         specifier: workspace:*
         version: link:../web-sdk
       '@radix-ui/react-select':

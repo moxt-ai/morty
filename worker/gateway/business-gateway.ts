@@ -5,7 +5,7 @@ import { MobiusFetchGateway } from "@moxt-ai/app-slack-api/infra";
 import {
     CloudflareChannelRuntime,
     CloudflareSessionRuntime,
-    D1PairingDirectory,
+    D1PairingGateway,
     sessionQuotaFromEnvironment,
 } from "@moxt-ai/mobius-relay-cloudflare/adapters";
 import { createMobiusApplication } from "@moxt-ai/mobius-relay-core";
@@ -122,16 +122,23 @@ async function fetchMobiusRequest(request: Request, bindings: CloudBindings): Pr
             503,
         );
     }
-    const injector = createMobiusApplication({
-        channelRuntime: new CloudflareChannelRuntime(bindings.RUNTIME_RELAY),
-        pairingDirectory: new D1PairingDirectory(bindings.DIRECTORY_DATABASE),
-        sessionRuntime: new CloudflareSessionRuntime(
-            bindings.SESSION_RELAY,
-            bindings.DIRECTORY_DATABASE,
-            sessionQuotaFromEnvironment(bindings),
-        ),
-    });
-    return await injector.resolve("application").fetch(request);
+    const sessions = new CloudflareSessionRuntime(
+        bindings.SESSION_RELAY,
+        bindings.DIRECTORY_DATABASE,
+        sessionQuotaFromEnvironment(bindings),
+    );
+    const application = createMobiusApplication({
+        channelGateway: new CloudflareChannelRuntime(bindings.RUNTIME_RELAY),
+        pairingGateway: new D1PairingGateway(bindings.DIRECTORY_DATABASE),
+        sessionCommands: sessions,
+        sessionQueries: sessions,
+        sessionTransfers: sessions,
+        sessionArtifacts: sessions,
+        sessionEventStreams: sessions,
+    })
+        .create()
+        .resolve("application");
+    return await application.fetch(request);
 }
 
 const slackWorker = createSlackWorker<
