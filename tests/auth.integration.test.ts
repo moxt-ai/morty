@@ -36,31 +36,64 @@ test("Given an invalid OAuth state and unavailable placement lookup, When the ca
 
 class InMemoryD1Statement {
     readonly #query: string;
-    readonly #queries: string[];
+    readonly #database: DatabaseSync;
+    readonly #values: readonly SQLInputValue[];
 
-    constructor(query: string, queries: string[]) {
+    constructor(query: string, database: DatabaseSync, values: readonly SQLInputValue[] = []) {
         this.#query = query;
-        this.#queries = queries;
+        this.#database = database;
+        this.#values = values;
     }
 
-    readonly bind = (..._values: readonly unknown[]) => this;
-    readonly first = async () => {
-        this.#queries.push(this.#query);
-        return { agents: "[]" };
-    };
+    readonly bind = (...values: readonly unknown[]) =>
+        new InMemoryD1Statement(
+            this.#query,
+            this.#database,
+            values.map((value) => v.parse(v.union([v.string(), v.number(), v.null()]), value)),
+        );
+    readonly first = async () => this.#database.prepare(this.#query).get(...this.#values) ?? null;
     readonly run = async () => {
-        this.#queries.push(this.#query);
-        return { meta: { changes: 1 } };
+        const result = this.#database.prepare(this.#query).run(...this.#values);
+        return { meta: { changes: Number(result.changes) } };
     };
 }
 
 class InMemoryD1Database {
+    readonly #database = new DatabaseSync(":memory:");
     readonly #queries: string[] = [];
     readonly queries = (): readonly string[] => [...this.#queries];
-    readonly prepare = (query: string) => new InMemoryD1Statement(query, this.#queries);
-    readonly batch = async (statements: readonly InMemoryD1Statement[]) =>
-        await Promise.all(statements.map(async (statement) => await statement.run()));
+    constructor() {
+        for (const path of [
+            "../mobius/packages/relay-cloudflare/migrations/d1/0001_schema.sql",
+            "../mobius/packages/relay-cloudflare/migrations/d1/0002_browser_credentials.sql",
+            "../apps/slack/packages/worker/migrations/0001_initial.sql",
+        ]) {
+            this.#database.exec(readFileSync(new URL(path, import.meta.url), "utf8"));
+        }
+        databases.push(this);
+    }
+    readonly close = () => this.#database.close();
+    readonly prepare = (query: string) => {
+        this.#queries.push(query);
+        return new InMemoryD1Statement(query, this.#database);
+    };
+    readonly batch = async (statements: readonly InMemoryD1Statement[]) => {
+        this.#database.exec("BEGIN");
+        try {
+            const result = [];
+            for (const statement of statements) {
+                result.push(await statement.run());
+            }
+            this.#database.exec("COMMIT");
+            return result;
+        } catch (error) {
+            this.#database.exec("ROLLBACK");
+            throw error;
+        }
+    };
 }
+
+const databases: InMemoryD1Database[] = [];
 
 class InMemoryR2Bucket {
     readonly #reads: string[] = [];
@@ -178,7 +211,12 @@ beforeEach(() => {
     vi.setSystemTime(AUTH_TIME);
 });
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+    for (const database of databases.splice(0)) {
+        database.close();
+    }
+    vi.useRealTimers();
+});
 
 function accountRequest(token: string): Request {
     return new Request(`${APP_ORIGIN}/mobius-cloud/api/session`, {
@@ -474,3 +512,42 @@ test("Given a tenant placed in APAC, When Slack reads an attachment, Then the in
     expect(tenantBucket.reads()).toEqual(["org_team/T123/file-1/report.pdf"]);
     expect(otherBucket.reads()).toHaveLength(0);
 });
+test("Given a verified workspace member, When they create two Mobius pairings, Then both belong to their existing workspace with separate projects", async () => {
+    const bindings = { ...configuration, ...mobiusConfiguration, DIRECTORY_DATABASE: new InMemoryD1Database() };
+    const create = async () => {
+        const response = await worker.fetch(
+            new Request(`${APP_ORIGIN}/mobius/api/pairings`, {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${issuer.createSession("user_alice", APP_ORIGIN, "active", "org_team", "member")}`,
+                },
+            }),
+            bindings,
+        );
+        expect(response.status).toBe(201);
+        const pairing = v.parse(v.object({ tenantId: v.string(), projectId: v.string() }), await response.json());
+        expect(pairing).toMatchObject({ tenantId: "org_team" });
+        return pairing;
+    };
+    expect((await create()).projectId).not.toBe((await create()).projectId);
+});
+
+test("Given no verified workspace membership, When a caller supplies a tenant ID to create a pairing, Then Cloud rejects the request", async () => {
+    for (const token of [undefined, issuer.createSession("user_alice", APP_ORIGIN)]) {
+        const response = await worker.fetch(
+            new Request(`${APP_ORIGIN}/mobius/api/pairings`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(token === undefined ? {} : { Authorization: `Bearer ${token}` }),
+                },
+                body: JSON.stringify({ tenantId: "org_team" }),
+            }),
+            { ...configuration, ...mobiusConfiguration, DIRECTORY_DATABASE: new InMemoryD1Database() },
+        );
+        expect(response.status).toBe(token === undefined ? 401 : 403);
+    }
+});
+
+import { readFileSync } from "node:fs";
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";

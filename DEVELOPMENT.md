@@ -101,6 +101,14 @@ boundary exercised by the existing authentication integration scenarios.
 
 ## Workspace UI
 
+Cloud Mobius pairing creation requires a verified Clerk session with an active
+organization. That organization ID is the pairing's tenant; no anonymous Mobius
+tenant is generated. The embedded Pair UI supplies its Clerk token, and Slack's
+internal pairing request forwards the initiating user's token for verification
+at the Mobius boundary. Missing authentication returns 401; a session without an
+active workspace returns 403. Pairing claims continue using the one-time code.
+
+
 A workspace is a Clerk Organization. The browser uses Clerk's authenticated
 Organization API for membership-scoped listing, creation, selection, and deletion.
 Clerk enforces membership and permissions for these operations. Enable Organizations
