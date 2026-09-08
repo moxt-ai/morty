@@ -9,6 +9,7 @@ import {
     sessionQuotaFromEnvironment,
 } from "@moxt-ai/mobius-relay-cloudflare/adapters";
 import { createMobiusApplication } from "@moxt-ai/mobius-relay-core";
+import { createInjector } from "typed-inject";
 import * as v from "valibot";
 import { SlackQueueController } from "../../apps/slack/packages/worker/src/controller/slack-queue-controller.ts";
 import {
@@ -127,17 +128,18 @@ async function fetchMobiusRequest(request: Request, bindings: CloudBindings): Pr
         bindings.DIRECTORY_DATABASE,
         sessionQuotaFromEnvironment(bindings),
     );
-    const application = createMobiusApplication({
-        channelGateway: new CloudflareChannelRuntime(bindings.RUNTIME_RELAY),
-        pairingGateway: new D1PairingGateway(bindings.DIRECTORY_DATABASE),
-        sessionCommands: sessions,
-        sessionQueries: sessions,
-        sessionTransfers: sessions,
-        sessionArtifacts: sessions,
-        sessionEventStreams: sessions,
-    })
-        .create()
-        .resolve("application");
+    const application = createMobiusApplication(
+        createInjector()
+            .provideValue("apiPrefix", "/mobius/api")
+            .provideValue("nowEpochMilliseconds", () => Date.now())
+            .provideValue("channelGateway", new CloudflareChannelRuntime(bindings.RUNTIME_RELAY))
+            .provideValue("pairingGateway", new D1PairingGateway(bindings.DIRECTORY_DATABASE))
+            .provideValue("sessionCommands", sessions)
+            .provideValue("sessionQueries", sessions)
+            .provideValue("sessionTransfers", sessions)
+            .provideValue("sessionArtifacts", sessions)
+            .provideValue("sessionEventStreams", sessions),
+    ).resolve("application");
     return await application.fetch(request);
 }
 
