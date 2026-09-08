@@ -22,12 +22,21 @@
         "producers": [{ "binding": "EVENTS", "queue": "app-slack-events" }],
         "consumers": [{ "queue": "app-slack-events", "max_batch_size": 1, "max_retries": 5 }]
     },
-    "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "app-slack-attachments" }],
+    "r2_buckets": [
+        { "binding": "R2_BUCKET_APAC", "bucket_name": "app-slack-attachments" },
+        { "binding": "R2_BUCKET_WNAM", "bucket_name": "mobius-cloud-local-wnam-objects" }
+    ],
     "d1_databases": [
         {
-            "binding": "DATABASE",
+            "binding": "D1_SHARD_APAC_01",
             "database_name": "app-slack",
             "database_id": "replace-with-production-d1-id",
+            "migrations_dir": "apps/slack/packages/worker/migrations"
+        },
+        {
+            "binding": "D1_SHARD_WNAM_01",
+            "database_name": "mobius-cloud-local-wnam-01",
+            "database_id": "00000000-0000-0000-0000-000000000002",
             "migrations_dir": "apps/slack/packages/worker/migrations"
         },
         {
@@ -49,10 +58,15 @@
             {
                 "name": "SESSION_RELAY",
                 "class_name": "LiteSessionRelay"
+            },
+            {
+                "name": "TENANT_PLACEMENT_ALLOCATOR",
+                "class_name": "TenantPlacementAllocator"
             }
         ]
     },
     "vars": {
+        "DEPLOY_ENVIRONMENT": "staging",
         "SESSION_ACTIVE_SESSIONS_PER_PROJECT": "1000",
         "SESSION_ACTIVE_SESSIONS_PER_TENANT": "10000",
         "SESSION_ARCHIVE_BYTES_PER_SESSION": "268435456"
@@ -69,6 +83,10 @@
         {
             "tag": "mobius-v2",
             "new_sqlite_classes": ["LiteSessionRelay"]
+        },
+        {
+            "tag": "tenant-placement-v1",
+            "new_sqlite_classes": ["TenantPlacementAllocator"]
         }
     ],
     "env": {
@@ -81,6 +99,7 @@
                     "CLERK_ISSUER_URL",
                     "CLERK_PUBLISHABLE_KEY",
                     "CLERK_JWT_KEY",
+                    "CLERK_SECRET_KEY",
                     "MOBIUS_BASE_URL",
                     "SLACK_MOBIUS_AUTH_TOKEN",
                     "SLACK_OAUTH_STATE_SIGNING_KEY",
@@ -89,6 +108,7 @@
                 ]
             },
             "vars": {
+                "DEPLOY_ENVIRONMENT": "staging",
                 "SESSION_ACTIVE_SESSIONS_PER_PROJECT": "1000",
                 "SESSION_ACTIVE_SESSIONS_PER_TENANT": "10000",
                 "SESSION_ARCHIVE_BYTES_PER_SESSION": "268435456"
@@ -116,17 +136,19 @@
                 ]
             },
             "r2_buckets": [
-                {
-                    "binding": "ATTACHMENTS",
-                    "bucket_name": "mobius-slack-staging-attachments"
-                }
+                { "binding": "R2_BUCKET_APAC", "bucket_name": "mobius-cloud-staging-apac-objects" },
+                { "binding": "R2_BUCKET_WNAM", "bucket_name": "mobius-cloud-staging-wnam-objects" }
             ],
             "d1_databases": [
                 {
-                    "binding": "DATABASE",
+                    "binding": "D1_SHARD_APAC_01",
                     "database_name": "mobius-cloud-staging-apac-01",
-                    "database_id": "76a58022-7ee3-4faf-9cc2-db458231cd2e",
-                    "migrations_dir": "apps/slack/packages/worker/migrations"
+                    "database_id": "76a58022-7ee3-4faf-9cc2-db458231cd2e"
+                },
+                {
+                    "binding": "D1_SHARD_WNAM_01",
+                    "database_name": "mobius-cloud-staging-wnam-01",
+                    "database_id": "bbdd94bf-f098-409a-b8d9-2bdbf6d2eda7"
                 },
                 {
                     "binding": "DIRECTORY_DATABASE",
@@ -137,6 +159,7 @@
             ],
             "durable_objects": {
                 "bindings": [
+                    { "name": "TENANT_PLACEMENT_ALLOCATOR", "class_name": "TenantPlacementAllocator" },
                     {
                         "name": "AGENT_TRIGGER_RATE_LIMITER",
                         "class_name": "AgentTriggerRateLimiter"
@@ -161,6 +184,7 @@
                     "CLERK_ISSUER_URL",
                     "CLERK_PUBLISHABLE_KEY",
                     "CLERK_JWT_KEY",
+                    "CLERK_SECRET_KEY",
                     "MOBIUS_BASE_URL",
                     "SLACK_MOBIUS_AUTH_TOKEN",
                     "SLACK_OAUTH_STATE_SIGNING_KEY",
@@ -169,6 +193,7 @@
                 ]
             },
             "vars": {
+                "DEPLOY_ENVIRONMENT": "production",
                 "SESSION_ACTIVE_SESSIONS_PER_PROJECT": "1000",
                 "SESSION_ACTIVE_SESSIONS_PER_TENANT": "10000",
                 "SESSION_ARCHIVE_BYTES_PER_SESSION": "268435456"
@@ -182,10 +207,24 @@
             "workers_dev": false,
             "d1_databases": [
                 {
-                    "binding": "DATABASE",
+                    "binding": "D1_SHARD_APAC_01",
                     "database_name": "mobius-cloud-production-apac-01",
-                    "database_id": "9ba3f0bb-59f4-4a43-bf51-2a2317e75d01",
-                    "migrations_dir": "apps/slack/packages/worker/migrations"
+                    "database_id": "9ba3f0bb-59f4-4a43-bf51-2a2317e75d01"
+                },
+                {
+                    "binding": "D1_SHARD_APAC_02",
+                    "database_name": "mobius-cloud-production-apac-02",
+                    "database_id": "c20de4d5-4d9b-4ed2-b11f-fd660124de2d"
+                },
+                {
+                    "binding": "D1_SHARD_WNAM_01",
+                    "database_name": "mobius-cloud-production-wnam-01",
+                    "database_id": "5e809606-9770-48ae-9c38-046903b0daa8"
+                },
+                {
+                    "binding": "D1_SHARD_WNAM_02",
+                    "database_name": "mobius-cloud-production-wnam-02",
+                    "database_id": "67c6aacd-29d1-4e0b-ae87-5a45d4ff69e3"
                 },
                 {
                     "binding": "DIRECTORY_DATABASE",
@@ -196,6 +235,7 @@
             ],
             "durable_objects": {
                 "bindings": [
+                    { "name": "TENANT_PLACEMENT_ALLOCATOR", "class_name": "TenantPlacementAllocator" },
                     {
                         "name": "AGENT_TRIGGER_RATE_LIMITER",
                         "class_name": "AgentTriggerRateLimiter"
@@ -226,10 +266,8 @@
                 ]
             },
             "r2_buckets": [
-                {
-                    "binding": "ATTACHMENTS",
-                    "bucket_name": "mobius-slack-production-attachments"
-                }
+                { "binding": "R2_BUCKET_APAC", "bucket_name": "mobius-cloud-production-apac-objects" },
+                { "binding": "R2_BUCKET_WNAM", "bucket_name": "mobius-cloud-production-wnam-objects" }
             ]
         }
     },

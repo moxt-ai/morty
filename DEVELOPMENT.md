@@ -31,8 +31,8 @@ Clerk's backend SDK, rejects pending sessions, and returns the user ID, session
 ID, and active organization ID (or null). This proves identity; future business
 endpoints must separately authorize workspace access.
 
-No Clerk secret key is needed by this runtime. Never prefix a secret key with
-`VITE_` or commit it. Missing configuration fails closed with HTTP 503; invalid
+Workspace creation requires a matching Clerk development `CLERK_SECRET_KEY`.
+Never prefix a secret key with `VITE_` or commit it. Missing configuration fails closed with HTTP 503; invalid
 or missing session tokens receive HTTP 401. Keep the configured JWT public key
 in sync when Clerk rotates signing keys. Local verification does not check
 server-side revocation on every request; tokens remain valid until expiry.
@@ -44,6 +44,28 @@ separate production instance. Never reuse development keys in production.
 Worker types are generated from `wrangler.jsonc` into the ignored
 `worker-configuration.d.ts` file. Run `pnpm typegen` after changing bindings or
 the compatibility date. Build output and local Worker state are ignored too.
+
+### Local storage and Cloudflare Tunnel
+
+The default local Worker uses the staging logical placement inventory with local
+APAC/WNAM D1 and R2 bindings. Initialize the local databases before verification:
+
+```bash
+pnpm exec wrangler d1 migrations apply D1_SHARD_APAC_01 --local
+pnpm exec wrangler d1 migrations apply D1_SHARD_WNAM_01 --local
+pnpm exec wrangler d1 migrations apply DIRECTORY_DATABASE --local
+```
+
+For an HTTPS origin, start `cloudflared tunnel --url http://localhost:5174`.
+Set `APP_ORIGIN`, `SLACK_SERVER_BASE_URL`, `MOBIUS_BASE_URL`, and
+`AUTHENTICATION_BASE_URL` in `.dev.vars` to the returned HTTPS origin, then run
+`pnpm dev --port 5174`. Restart Vite after changing secrets. A new quick tunnel
+gets a new origin, so update those values when restarting the tunnel.
+
+Use the Clerk session claims described in [the storage contract](docs/storage.md)
+and create a new workspace through Cloud. Existing Organizations without placement
+cannot access Cloud tenant storage. D1/R2 and Durable Objects run locally; Clerk
+sign-in and Organization creation use the configured development Clerk instance.
 
 The root toolchain owns `cloud/` and the root development files. Business repositories keep their own checks and SQL files. Cloud CI additionally
 loads pinned Mobius and Slack sources to validate their shared-shard migrations.
@@ -193,6 +215,7 @@ Worker before deploying code that requires them:
 | `CLERK_PUBLISHABLE_KEY` | `pk_test_...` for staging; `pk_live_...` for production |
 | `CLERK_ISSUER_URL` | Clerk issuer for the same environment |
 | `CLERK_JWT_KEY` | Corresponding PEM public key, with actual line breaks |
+| `CLERK_SECRET_KEY` | Corresponding Clerk Backend API key used only to create Organizations with storage placement |
 | `AUTHENTICATION_BASE_URL` | Identity and authorization service URL |
 | `MOBIUS_BASE_URL` | Mobius service URL |
 | `SLACK_SERVER_BASE_URL` | Slack application's public base URL |
@@ -200,10 +223,32 @@ Worker before deploying code that requires them:
 | `SLACK_OAUTH_STATE_SIGNING_KEY` | Slack OAuth state signing key |
 | `SLACK_TOKEN_ENCRYPTION_KEY` | Base64-encoded 32-byte key for stored Slack credentials |
 
+Configure these compact custom claims under **Clerk Dashboard → Sessions →
+Customize session token** so embedded businesses receive the active tenant's
+validated logical placement:
+
+```json
+{
+  "mobius_d1_shard_id": "{{org.public_metadata.mobiusCloud.placement.d1ShardId}}",
+  "mobius_r2_bucket_id": "{{org.public_metadata.mobiusCloud.placement.r2BucketId}}",
+  "mobius_placement_revision": "{{org.public_metadata.mobiusCloud.placement.revision}}"
+}
+```
+
+Use the corresponding staging or production Clerk instance. These logical IDs
+are routing data, not credentials or proof of tenant authorization.
+
+The deployed Cloud Worker also requires the inventory-derived bindings declared
+in `wrangler.jsonc`: `D1_SHARD_<logical ID>` for every D1 shard and
+`R2_BUCKET_<logical ID>` for every regional object bucket. Slack selects these
+bindings through its application injector only after placement has been resolved
+and validated.
+
 These settings are currently stored as Worker secrets, including the public
-keys and URLs. No Clerk secret API key is required. Do not copy the settings to
-GitHub or embed them in the frontend bundle. The browser obtains the publishable
-key from the running Worker's configuration endpoint.
+keys and URLs. The Clerk secret key is required only by the tenant placement
+allocator. Do not copy the settings to GitHub or embed them in the frontend
+bundle. The browser obtains the publishable key from the running Worker's
+configuration endpoint.
 
 `wrangler.jsonc` declares the required secret names for each deployed environment
 and enables `keep_vars`. CI builds the selected environment, verifies the account,

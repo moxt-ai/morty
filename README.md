@@ -189,7 +189,7 @@ service owns its persistent and temporary state:
 
 | Service | State owned by the service |
 | --- | --- |
-| `cloud` | Workspace UI, physical D1 inventory in configuration; planned placement in Clerk metadata |
+| `cloud` | Workspace UI, physical D1/R2 inventory in configuration, and frozen tenant placement in Clerk metadata |
 | `mobius` | Served workspaces, agents, daemon registrations, agent identity, and prompt contributions |
 | `app-slack` | Served workspaces, Slack installations, identity bindings, authorization, and conversation mappings |
 | `app-workflow` | Served workspaces, workflows, work items, schedules, execution history, and supervision state |
@@ -197,7 +197,7 @@ service owns its persistent and temporary state:
 
 A physical D1 shard is shared infrastructure. Each service independently owns
 its business data and migrations; there are no cross-business table dependencies.
-Cloud manages shard inventory through configuration and planned placement through
+Cloud manages shard inventory through configuration and tenant placement through
 Clerk metadata. Caches, queues, event deduplication, and online presence remain
 owned by the business that uses them.
 

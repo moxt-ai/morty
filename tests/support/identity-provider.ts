@@ -17,6 +17,11 @@ export class IdentityProvider {
         status: "active" | "pending" = "active",
         organizationId: string | null = null,
         organizationRole = "admin",
+        placement: {
+            readonly d1ShardId?: string;
+            readonly r2BucketId?: string;
+            readonly revision?: number;
+        } | null = null,
     ): string {
         this.#sessionNumber += 1;
         const issuedAt = AUTH_TIME.getTime() / 1000;
@@ -35,6 +40,13 @@ export class IdentityProvider {
                 v: 2,
                 sts: status,
                 ...(organizationId === null ? {} : { o: { id: organizationId, rol: organizationRole } }),
+                ...(placement === null
+                    ? {}
+                    : {
+                          mobius_d1_shard_id: placement.d1ShardId,
+                          mobius_r2_bucket_id: placement.r2BucketId,
+                          mobius_placement_revision: placement.revision,
+                      }),
             }),
         ).toString("base64url");
         const input = `${header}.${payload}`;

@@ -70,10 +70,10 @@ count within a region must not force an object copy.
 The intended mapping is:
 
 ```text
-Clerk Organization privateMetadata
+Clerk Organization publicMetadata
   -> logical shard ID within the configured environment
   -> database ID in infra/d1-shards.json
-  -> the business's preconfigured D1 binding
+  -> the business's allowlisted D1 binding
 ```
 
 For example, Cloud can maintain this small value on an Organization:
@@ -82,7 +82,8 @@ For example, Cloud can maintain this small value on an Organization:
 {
   "mobiusCloud": {
     "placement": {
-      "shardId": "apac-01",
+      "d1ShardId": "apac-01",
+      "r2BucketId": "apac",
       "revision": 1
     }
   }
@@ -90,16 +91,60 @@ For example, Cloud can maintain this small value on an Organization:
 ```
 
 Use the separate Clerk instance and shard inventory for each deployment
-environment. Cloud is the application owner of this metadata. Backend access
-is required for private metadata; no automatic allocator or metadata writes are
-implemented yet. Before adding automatic allocation, define one serialized
-assignment path so concurrent requests cannot assign a workspace twice.
+environment. Cloud is the application owner of this metadata. Workspace creation
+runs through one environment-scoped Durable Object, counts existing assignments,
+and creates the Organization with its placement in one Clerk Backend API call.
+APAC and Oceania requests select APAC; other and unknown request locations select
+WNAM. Within that region, the least-assigned D1 shard wins, with inventory order
+as the deterministic tie-breaker. The R2 bucket is the configured bucket for the
+same region.
+
+Placement is frozen when the Organization is created. Normal balancing never
+changes it. A future relocation must move the business data first, update the
+metadata explicitly, and increment `revision`; an assigned shard must remain in
+inventory until no Organization references it.
 
 Keep the inventory in configuration and stable assignment in Clerk. Capacity
 metrics come from Cloudflare monitoring. Do not use Clerk metadata as a lock,
-a frequently updated counter, or a transactional migration journal. Backend
-metadata requests have latency and rate limits, so services should cache resolved
-assignments with a bounded lifetime and invalidate them during planned moves.
+a frequently updated counter, or a transactional migration journal. The allocator
+derives counts from the Organizations while serialized rather than persisting a
+second assignment authority.
+
+The logical IDs are public routing data, not secrets. Clerk session customization
+copies the three individual placement fields into `mobius_d1_shard_id`,
+`mobius_r2_bucket_id`, and `mobius_placement_revision` claims. Businesses validate
+the claims against the environment inventory and still authorize the Organization
+membership independently. Cloud requires placement for every tenant. Missing or
+invalid placement rejects storage access, including for existing Organizations.
+
+Cloud supplies allowlisted D1/R2 bindings and a tenant-sharding directory. Slack
+establishes tenant context in its own identity, OAuth, file, webhook, and queue
+flows. Repositories select their database through `DatabaseResolver`; attachment
+services use `AttachmentStorageResolver`. A resolved `TenantContext` is passed
+explicitly through service and repository operations. Services are shared and
+their constructors do not select storage. Before tenant resolution, no tenant
+context exists; `{ hasShard: false }` is produced only by a resolved standalone
+tenant. Sharding is never registered as an injector default, and there
+is no per-tenant service graph, mutable active-shard holder, or forwarding database
+wrapper.
+
+Human authentication verifies Clerk claims once. Agent authentication verifies
+credentials once before looking up the tenant. OAuth state is verified before
+placement lookup. Signed account-link tokens include the tenant ID, so shard-local
+installation record IDs cannot route a link into another tenant. Slack owns app
+discovery SQL and signature verification; Cloud only supplies database candidates.
+Queue messages resolve independently before processing. Deployment batches remain
+limited to one message. Unknown, ambiguous, conflicting, and inventory-invalid
+routes fail closed.
+
+Cloud discovery enumerates only explicit `D1_SHARD_*` bindings. Cloud storage uses
+`D1_SHARD_*` and `R2_BUCKET_*` bindings, with no legacy binding or alias route.
+
+The initial rollout uses a database reset after the Cloud PR is merged, rather
+than migrating existing data. No reset is performed by the application or by CI.
+Existing Organizations without placement cannot access storage after cutover;
+new workspaces must be created through Cloud's allocator. Database reset does not
+delete Clerk Organizations, R2 objects, queued messages, or Durable Object state.
 
 Every service must validate the assignment against its configured environment,
 resolve the database through the allowlisted inventory, and authorize the caller

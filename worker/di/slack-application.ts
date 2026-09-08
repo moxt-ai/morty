@@ -1,0 +1,135 @@
+import {
+    ClockService,
+    createSlackApplication,
+    createSlackWorker,
+    DatabaseSlackAppDirectory,
+    SlackTokenService,
+} from "@moxt-ai/app-slack-api";
+import { IdentityGateway, SlackWebApi } from "@moxt-ai/app-slack-api/gateway";
+import { SecretCipher, type SlackQueueMessage, slackLogger } from "@moxt-ai/app-slack-api/infra";
+import { createInjector } from "typed-inject";
+import * as v from "valibot";
+import { SlackQueueController } from "../../apps/slack/packages/worker/src/controller/slack-queue-controller.ts";
+import type { WorkerBindings } from "../../apps/slack/packages/worker/src/di/create-cloudflare-environment.ts";
+import { CloudflareAgentTriggerLimiter } from "../../apps/slack/packages/worker/src/infra/cloudflare-agent-trigger-limiter.ts";
+import { CloudflareMobiusTransport } from "../../apps/slack/packages/worker/src/infra/cloudflare-mobius-transport.ts";
+import { CloudflareSlackQueue } from "../../apps/slack/packages/worker/src/infra/cloudflare-slack-queue.ts";
+import { D1SqlDatabase } from "../../apps/slack/packages/worker/src/storage/d1-database.ts";
+import { CloudMobiusFetchGateway } from "../gateway/cloud-mobius-fetch-gateway.ts";
+import { CloudTenantShardingDirectory } from "../gateway/cloud-tenant-sharding-directory.ts";
+import type { CloudBindings } from "../infra/cloud-bindings.ts";
+import { json } from "../infra/http.ts";
+import {
+    CloudAttachmentStorageResolver,
+    CloudDatabaseResolver,
+    configuredD1Candidates,
+} from "../storage/slack-storage-resolvers.ts";
+
+const slackBindingsSchema = v.object({
+    AGENT_TRIGGER_RATE_LIMITER: v.object({
+        get: v.function(),
+        idFromName: v.function(),
+    }),
+    ASSETS: v.object({ fetch: v.function() }),
+    AUTHENTICATION_BASE_URL: v.pipe(v.string(), v.url()),
+    CLERK_ISSUER_URL: v.pipe(v.string(), v.url()),
+    CLERK_JWT_KEY: v.string(),
+    CLERK_PUBLISHABLE_KEY: v.string(),
+    EVENTS: v.object({ send: v.function() }),
+    MOBIUS_BASE_URL: v.pipe(v.string(), v.url()),
+    SLACK_MOBIUS_AUTH_TOKEN: v.pipe(v.string(), v.minLength(1)),
+    SLACK_OAUTH_STATE_SIGNING_KEY: v.pipe(v.string(), v.minLength(1)),
+    SLACK_SERVER_BASE_URL: v.pipe(v.string(), v.url()),
+    SLACK_TOKEN_ENCRYPTION_KEY: v.pipe(v.string(), v.minLength(1)),
+});
+
+type SlackBindings = Omit<WorkerBindings, "DATABASE" | "ATTACHMENTS">;
+
+function hasSlackBindings(bindings: CloudBindings): bindings is CloudBindings & SlackBindings {
+    return v.safeParse(slackBindingsSchema, bindings).success;
+}
+
+const slack = createSlackWorker<
+    CloudBindings & SlackBindings,
+    ExecutionContext | undefined,
+    MessageBatch<SlackQueueMessage>
+>((bindings) => {
+    const environment = {
+        ...bindings,
+        agentTriggerLimiter: new CloudflareAgentTriggerLimiter(bindings.AGENT_TRIGGER_RATE_LIMITER),
+        mobiusTransport: new CloudflareMobiusTransport(),
+        queue: new CloudflareSlackQueue(bindings.EVENTS),
+    };
+    const tenants = new CloudTenantShardingDirectory(bindings);
+    const shardedDatabases = new CloudDatabaseResolver(bindings);
+    const shardedAttachments = new CloudAttachmentStorageResolver(bindings);
+    const cipher = new SecretCipher(environment.SLACK_TOKEN_ENCRYPTION_KEY);
+    const clock = new ClockService();
+    const configured = createInjector()
+        // Configuration and infrastructure
+        .provideValue("clock", clock)
+        .provideValue("clerkPublishableKey", environment.CLERK_PUBLISHABLE_KEY)
+        .provideValue("clerkJwtKey", environment.CLERK_JWT_KEY)
+        .provideValue("clerkIssuerUrl", environment.CLERK_ISSUER_URL)
+        .provideValue("clerkAuthorizedParties", [new URL(environment.SLACK_SERVER_BASE_URL).origin])
+        .provideValue("authenticationBaseUrl", environment.AUTHENTICATION_BASE_URL)
+        .provideValue("publicBaseUrl", environment.SLACK_SERVER_BASE_URL.replace(/\/$/u, ""))
+        .provideValue("mobiusBaseUrl", environment.MOBIUS_BASE_URL)
+        .provideValue("serviceToken", environment.SLACK_MOBIUS_AUTH_TOKEN)
+        .provideValue("nowEpochMilliseconds", () => Date.now())
+        .provideValue("logger", slackLogger)
+        .provideValue("secretEncryption", cipher)
+        .provideValue("queue", environment.queue)
+        // Storage
+        .provideValue("tenantShardingDirectory", tenants)
+        .provideValue("databaseResolver", shardedDatabases)
+        .provideValue("attachmentStorageResolver", shardedAttachments)
+        // Gateways
+        .provideClass("identityGateway", IdentityGateway)
+        .provideValue("slackWebApi", new SlackWebApi())
+        .provideValue("agentTriggerLimiter", environment.agentTriggerLimiter)
+        .provideValue("mobiusTransport", environment.mobiusTransport)
+        .provideValue(
+            "slackTokens",
+            new SlackTokenService(clock, () => crypto.randomUUID(), environment.SLACK_OAUTH_STATE_SIGNING_KEY),
+        )
+        .provideValue("mobiusFetchGateway", new CloudMobiusFetchGateway(bindings.MOBIUS_BASE_URL, bindings));
+    const directory = new DatabaseSlackAppDirectory(
+        configuredD1Candidates(bindings).map(({ database, shardId }) => ({
+            shardIds: [shardId],
+            database: new D1SqlDatabase(database),
+        })),
+        tenants,
+        configured.resolve("secretEncryption"),
+    );
+    const injector = createSlackApplication(configured.provideValue("slackAppDirectory", directory));
+    return {
+        fetchApi: async (request, environment, context) =>
+            await injector.resolve("application").fetch(request, environment, context),
+        fetchFile: injector.resolve("slackFileController").fetch,
+        consumeQueue: new SlackQueueController(injector.resolve("queueConsumer"), injector.resolve("logger")).consume,
+    };
+});
+
+export const slackApplication = {
+    fetch: async (request: Request, bindings: CloudBindings, context?: ExecutionContext) => {
+        if (!hasSlackBindings(bindings)) {
+            return json(
+                {
+                    error: {
+                        code: "SLACK_UNAVAILABLE",
+                        message: "Slack integration is temporarily unavailable.",
+                    },
+                },
+                503,
+            );
+        }
+        return await slack.fetch(request, bindings, context);
+    },
+    queue: async (batch, bindings) => {
+        if (!hasSlackBindings(bindings)) {
+            throw new Error("Slack queue configuration is unavailable.");
+        }
+        await slack.queue(batch, bindings);
+    },
+} satisfies ExportedHandler<CloudBindings, SlackQueueMessage>;

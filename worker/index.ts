@@ -5,3 +5,4 @@ export {
     SessionRelay,
 } from "../mobius/packages/relay-cloudflare/src/worker.ts";
 export { default } from "./application.ts";
+export { TenantPlacementAllocator } from "./do/tenant-placement-do.ts";

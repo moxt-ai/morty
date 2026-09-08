@@ -12,6 +12,18 @@ import {
     workspaceSchema,
 } from "./contracts.ts";
 
+const createWorkspaceErrorSchema = v.object({
+    error: v.object({
+        code: v.picklist([
+            "INVALID_INPUT",
+            "UNAUTHENTICATED",
+            "WORKSPACES_TIMEOUT",
+            "WORKSPACES_UNAVAILABLE",
+            "UNAVAILABLE",
+        ]),
+    }),
+});
+
 // Clerk owns the HTTP requests and does not expose AbortSignal. Stop waiting
 // on cancellation, but never retry mutations: their remote outcome may differ.
 export function waitForClerk<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
@@ -52,7 +64,7 @@ export function waitForClerk<T>(operation: () => Promise<T>, signal: AbortSignal
     });
 }
 
-type WorkspaceClerk = Pick<BrowserClerk, "createOrganization" | "getOrganization" | "setActive" | "user">;
+type WorkspaceClerk = Pick<BrowserClerk, "getOrganization" | "session" | "setActive" | "user">;
 
 export function clerkDirectory(clerk: WorkspaceClerk): WorkspaceDirectory {
     return {
@@ -80,14 +92,50 @@ export function clerkDirectory(clerk: WorkspaceClerk): WorkspaceDirectory {
                 if (!parsed.success) {
                     throw new WorkspaceError("INVALID_INPUT");
                 }
-                const organization = await clerk.createOrganization({
-                    name: parsed.output,
+                const session = clerk.session;
+                if (!session) {
+                    throw new WorkspaceError("FORBIDDEN");
+                }
+                const token = await session.getToken();
+                signal.throwIfAborted();
+                if (!token) {
+                    throw new WorkspaceError("FORBIDDEN");
+                }
+                const response = await fetch("/mobius-cloud/api/workspaces", {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ name: parsed.output }),
+                    signal,
                 });
-                return v.parse(workspaceSchema, {
-                    id: organization.id,
-                    name: organization.name,
-                    canDelete: organization.adminDeleteEnabled,
-                });
+                const body: unknown = await response.json();
+                if (response.ok) {
+                    const workspace = v.parse(workspaceSchema, body);
+                    await clerk.setActive({ organization: workspace.id });
+                    signal.throwIfAborted();
+                    const refreshedToken = await session.getToken({ skipCache: true });
+                    signal.throwIfAborted();
+                    if (!refreshedToken) {
+                        throw new WorkspaceError("FORBIDDEN");
+                    }
+                    return workspace;
+                }
+                const error = v.safeParse(createWorkspaceErrorSchema, body);
+                if (!error.success) {
+                    throw new WorkspaceError("UNAVAILABLE");
+                }
+                switch (error.output.error.code) {
+                    case "INVALID_INPUT":
+                        throw new WorkspaceError("INVALID_INPUT");
+                    case "UNAUTHENTICATED":
+                        throw new WorkspaceError("FORBIDDEN");
+                    case "UNAVAILABLE":
+                    case "WORKSPACES_TIMEOUT":
+                    case "WORKSPACES_UNAVAILABLE":
+                        throw new WorkspaceError("UNAVAILABLE");
+                }
             }, signal),
         open: (id, signal) =>
             waitForClerk(async () => {
