@@ -4,13 +4,13 @@ import {
   MobiusChat,
   Pair,
 } from "@moxt-ai/mobius-web-core";
-import { SlackManagement } from "./SlackManagement.tsx";
+import { SlackManagement } from "./slack-management.tsx";
 import {
   type ChatApplicationProps,
   type PairApplicationProps,
   type SlackApplicationProps,
   WorkspaceApplications,
-} from "./WorkspaceApplications.tsx";
+} from "./workspace-applications.tsx";
 
 function PairApplication({
   onConnected,

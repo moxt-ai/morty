@@ -1,11 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "project": [
-    "scripts/**/*.ts",
-    "worker/**/*.ts",
-    "shared/**/*.ts",
-    "web/**/*.{ts,tsx,css}"
-  ],
+  "project": ["scripts/**/*.ts", "worker/**/*.ts", "shared/**/*.ts"],
   "ignoreDependencies": [
     "@moxt-ai/mobius-protocol",
     "@moxt-ai/mobius-web-sdk",

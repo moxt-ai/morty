@@ -1,42 +1,72 @@
-import type { ComponentType } from "react";
-import {
-  Link,
-  useFetcher,
-  useLoaderData,
-  useLocation,
-  useNavigate,
-  useRevalidator,
-  useRouteError,
-} from "react-router";
+import { Link } from "@tanstack/react-router";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
-import { workspacePageSize } from "./contracts.ts";
-import {
-  type loadWorkspace,
-  type loadWorkspaces,
-  type mutateWorkspace,
-  workspaceErrorMessage,
-} from "./data.ts";
-import type { WorkspaceStore } from "./store.ts";
+import { workspacePageSize } from "../../view-models/workspaces/contracts.ts";
+import type {
+  loadWorkspace,
+  loadWorkspaces,
+  MutationResult,
+} from "../../view-models/workspaces/data.ts";
+import { workspaceErrorMessage } from "../../view-models/workspaces/data.ts";
+import type { WorkspaceStore } from "../../view-models/workspaces/store.ts";
 
 const primaryButton =
   "rounded-lg bg-violet-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-800 disabled:opacity-50";
 const secondaryButton =
   "rounded-lg border border-zinc-300 px-4 py-2.5 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50";
 
-// A callback ref owns only the native dialog's DOM lifecycle, not data loading.
 function openDialog(element: HTMLDialogElement | null) {
   if (!element) return;
   element.showModal();
   return () => element.close();
 }
 
-function WorkspaceDialog({ ui }: { readonly ui: WorkspaceStore }) {
+type MutateWorkspace = (
+  form: FormData,
+  signal: AbortSignal,
+) => Promise<MutationResult>;
+
+function WorkspaceDialog({
+  ui,
+  mutate,
+}: {
+  readonly ui: WorkspaceStore;
+  readonly mutate: MutateWorkspace;
+}) {
   const dialog = useStore(ui, (state) => state.dialog);
   const close = useStore(ui, (state) => state.closeDialog);
   const setName = useStore(ui, (state) => state.setName);
-  const fetcher = useFetcher<typeof mutateWorkspace>();
-  const busy = fetcher.state !== "idle";
+  const controller = useRef<AbortController>(undefined);
+  const [submission, setSubmission] = useState<
+    { readonly kind: "idle" } | { readonly kind: "busy" } | MutationResult
+  >({ kind: "idle" });
+  useEffect(
+    () => () =>
+      controller.current?.abort(new DOMException("Unmounted", "AbortError")),
+    [],
+  );
   if (dialog.kind === "closed") return null;
+  const busy = submission.kind === "busy";
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (busy) return;
+    const request = new AbortController();
+    controller.current = request;
+    setSubmission({ kind: "busy" });
+    void mutate(new FormData(event.currentTarget), request.signal).then(
+      (result) => {
+        if (!request.signal.aborted) setSubmission(result);
+      },
+      (cause: unknown) => {
+        if (!request.signal.aborted)
+          setSubmission({
+            kind: "failure",
+            message: workspaceErrorMessage(cause),
+          });
+      },
+    );
+  };
 
   return (
     <dialog
@@ -48,7 +78,7 @@ function WorkspaceDialog({ ui }: { readonly ui: WorkspaceStore }) {
         if (!busy) close();
       }}
     >
-      <fetcher.Form method="post" action="/?index">
+      <form onSubmit={submit}>
         <input type="hidden" name="intent" value={dialog.kind} />
         <h2
           id="workspace-dialog-title"
@@ -88,9 +118,9 @@ function WorkspaceDialog({ ui }: { readonly ui: WorkspaceStore }) {
             </p>
           </>
         )}
-        {fetcher.data?.kind === "failure" && (
+        {submission.kind === "failure" && (
           <p role="alert" className="mt-4 text-sm text-red-700">
-            {fetcher.data.message}
+            {submission.message}
           </p>
         )}
         <div className="mt-7 flex justify-end gap-3">
@@ -118,17 +148,31 @@ function WorkspaceDialog({ ui }: { readonly ui: WorkspaceStore }) {
                 : "Delete workspace"}
           </button>
         </div>
-      </fetcher.Form>
+      </form>
     </dialog>
   );
 }
 
-export function WorkspaceList({ ui }: { readonly ui: WorkspaceStore }) {
-  const { items, page, totalCount } = useLoaderData<typeof loadWorkspaces>();
+export function WorkspaceList({
+  data,
+  mutate,
+  refresh,
+  ui,
+}: {
+  readonly data: Awaited<ReturnType<typeof loadWorkspaces>>;
+  readonly mutate: MutateWorkspace;
+  readonly refresh: () => Promise<void>;
+  readonly ui: WorkspaceStore;
+}) {
+  const { items, page, totalCount } = data;
   const newWorkspace = useStore(ui, (state) => state.newWorkspace);
   const confirmDelete = useStore(ui, (state) => state.confirmDelete);
   const dialog = useStore(ui, (state) => state.dialog);
-  const revalidator = useRevalidator();
+  const [refreshing, setRefreshing] = useState(false);
+  const runRefresh = () => {
+    setRefreshing(true);
+    void refresh().finally(() => setRefreshing(false));
+  };
 
   return (
     <>
@@ -161,7 +205,8 @@ export function WorkspaceList({ ui }: { readonly ui: WorkspaceStore }) {
               className="flex min-w-0 flex-col rounded-xl border border-zinc-200 bg-white shadow-sm"
             >
               <Link
-                to={`/workspaces/${workspace.id}`}
+                to="/workspaces/$workspaceId"
+                params={{ workspaceId: workspace.id }}
                 className="flex flex-1 items-center gap-4 rounded-t-xl p-6 hover:bg-violet-50/50 focus-visible:outline-violet-600"
               >
                 <span
@@ -194,10 +239,8 @@ export function WorkspaceList({ ui }: { readonly ui: WorkspaceStore }) {
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
         <button
           type="button"
-          disabled={revalidator.state !== "idle"}
-          onClick={() => {
-            void revalidator.revalidate();
-          }}
+          disabled={refreshing}
+          onClick={runRefresh}
           className="text-sm text-zinc-500 hover:text-zinc-900 disabled:opacity-50"
         >
           Refresh workspaces
@@ -205,7 +248,11 @@ export function WorkspaceList({ ui }: { readonly ui: WorkspaceStore }) {
         {totalCount > workspacePageSize && (
           <nav aria-label="Workspace pages" className="flex items-center gap-4">
             {page > 1 ? (
-              <Link to={`/?page=${page - 1}`} className={secondaryButton}>
+              <Link
+                to="/"
+                search={{ page: page - 1 }}
+                className={secondaryButton}
+              >
                 Previous
               </Link>
             ) : (
@@ -213,7 +260,11 @@ export function WorkspaceList({ ui }: { readonly ui: WorkspaceStore }) {
             )}
             <span className="text-sm text-zinc-500">Page {page}</span>
             {page * workspacePageSize < totalCount ? (
-              <Link to={`/?page=${page + 1}`} className={secondaryButton}>
+              <Link
+                to="/"
+                search={{ page: page + 1 }}
+                className={secondaryButton}
+              >
                 Next
               </Link>
             ) : (
@@ -222,21 +273,23 @@ export function WorkspaceList({ ui }: { readonly ui: WorkspaceStore }) {
           </nav>
         )}
       </div>
-      {dialog.kind !== "closed" && <WorkspaceDialog ui={ui} />}
+      {dialog.kind !== "closed" && <WorkspaceDialog ui={ui} mutate={mutate} />}
     </>
   );
 }
 
 export function WorkspaceDetail({
+  workspace,
   WorkspaceManagement,
 }: {
-  readonly WorkspaceManagement: ComponentType;
+  readonly workspace: Awaited<ReturnType<typeof loadWorkspace>>;
+  readonly WorkspaceManagement: React.ComponentType;
 }) {
-  const workspace = useLoaderData<typeof loadWorkspace>();
   return (
     <>
       <Link
         to="/"
+        search={{ page: 1 }}
         className="text-sm font-medium text-zinc-500 hover:text-zinc-900"
       >
         ← All workspaces
@@ -253,14 +306,20 @@ export function WorkspaceDetail({
   );
 }
 
-export function WorkspaceFailure({ message }: { readonly message?: string }) {
-  const cause: unknown = useRouteError();
-  const navigate = useNavigate();
-  const location = useLocation();
+export function WorkspaceFailure({
+  cause,
+  message,
+  refresh,
+}: {
+  readonly cause?: unknown;
+  readonly message?: string;
+  readonly refresh?: () => void;
+}) {
   return (
     <>
       <Link
         to="/"
+        search={{ page: 1 }}
         className="text-sm font-medium text-zinc-500 hover:text-zinc-900"
       >
         ← All workspaces
@@ -271,17 +330,15 @@ export function WorkspaceFailure({ message }: { readonly message?: string }) {
       >
         {message ?? workspaceErrorMessage(cause)}
       </p>
-      <button
-        type="button"
-        onClick={() => {
-          void navigate(`${location.pathname}${location.search}`, {
-            replace: true,
-          });
-        }}
-        className="mt-5 text-sm text-zinc-500"
-      >
-        Refresh workspaces
-      </button>
+      {refresh && (
+        <button
+          type="button"
+          onClick={refresh}
+          className="mt-5 text-sm text-zinc-500"
+        >
+          Refresh workspaces
+        </button>
+      )}
     </>
   );
 }

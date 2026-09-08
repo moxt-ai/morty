@@ -1,31 +1,42 @@
-import { z } from "zod";
+import * as v from "valibot";
 
-export const workspaceIdSchema = z.string().regex(/^org_[A-Za-z0-9]+$/);
-export const workspaceNameSchema = z.string().trim().min(1).max(100);
+export const workspaceIdSchema = v.pipe(
+  v.string(),
+  v.regex(/^org_[A-Za-z0-9]+$/u),
+);
+export const workspaceNameSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(100),
+);
 
-export const workspaceIdentitySchema = z
-  .object({
+export const workspaceIdentitySchema = v.pipe(
+  v.object({
     id: workspaceIdSchema,
-    name: z.string().min(1),
-  })
-  .readonly();
+    name: v.pipe(v.string(), v.minLength(1)),
+  }),
+  v.readonly(),
+);
 
-export const workspaceSchema = z
-  .object({
+export const workspaceSchema = v.pipe(
+  v.object({
     id: workspaceIdSchema,
-    name: z.string().min(1),
-    canDelete: z.boolean(),
-  })
-  .readonly();
-export type Workspace = z.infer<typeof workspaceSchema>;
+    name: v.pipe(v.string(), v.minLength(1)),
+    canDelete: v.boolean(),
+  }),
+  v.readonly(),
+);
+export type Workspace = v.InferOutput<typeof workspaceSchema>;
 
-export const workspacePageSchema = z
-  .object({
-    items: z.array(workspaceSchema).readonly(),
-    totalCount: z.number().int().nonnegative(),
-  })
-  .readonly();
-type WorkspacePage = z.infer<typeof workspacePageSchema>;
+export const workspacePageSchema = v.pipe(
+  v.object({
+    items: v.pipe(v.array(workspaceSchema), v.readonly()),
+    totalCount: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  }),
+  v.readonly(),
+);
+type WorkspacePage = v.InferOutput<typeof workspacePageSchema>;
 
 // The signed-in identity provider is the authority for membership and deletion.
 export interface WorkspaceDirectory {

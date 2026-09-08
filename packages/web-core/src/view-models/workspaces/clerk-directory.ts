@@ -1,5 +1,6 @@
 import type { BrowserClerk } from "@clerk/react";
 import { isClerkAPIResponseError } from "@clerk/react/errors";
+import * as v from "valibot";
 import {
   type WorkspaceDirectory,
   WorkspaceError,
@@ -54,7 +55,12 @@ export function waitForClerk<T>(
   });
 }
 
-export function clerkDirectory(clerk: BrowserClerk): WorkspaceDirectory {
+type WorkspaceClerk = Pick<
+  BrowserClerk,
+  "createOrganization" | "getOrganization" | "setActive" | "user"
+>;
+
+export function clerkDirectory(clerk: WorkspaceClerk): WorkspaceDirectory {
   return {
     list: (page, signal) =>
       waitForClerk(async () => {
@@ -63,7 +69,7 @@ export function clerkDirectory(clerk: BrowserClerk): WorkspaceDirectory {
           initialPage: page,
           pageSize: workspacePageSize,
         });
-        return workspacePageSchema.parse({
+        return v.parse(workspacePageSchema, {
           items: memberships.data.map(({ organization, permissions }) => ({
             id: organization.id,
             name: organization.name,
@@ -76,12 +82,12 @@ export function clerkDirectory(clerk: BrowserClerk): WorkspaceDirectory {
       }, signal),
     create: (name, signal) =>
       waitForClerk(async () => {
-        const parsed = workspaceNameSchema.safeParse(name);
+        const parsed = v.safeParse(workspaceNameSchema, name);
         if (!parsed.success) throw new WorkspaceError("INVALID_INPUT");
         const organization = await clerk.createOrganization({
-          name: parsed.data,
+          name: parsed.output,
         });
-        return workspaceSchema.parse({
+        return v.parse(workspaceSchema, {
           id: organization.id,
           name: organization.name,
           canDelete: organization.adminDeleteEnabled,
@@ -89,18 +95,18 @@ export function clerkDirectory(clerk: BrowserClerk): WorkspaceDirectory {
       }, signal),
     open: (id, signal) =>
       waitForClerk(async () => {
-        if (!workspaceIdSchema.safeParse(id).success)
+        if (!v.safeParse(workspaceIdSchema, id).success)
           throw new WorkspaceError("NOT_FOUND");
         // Clerk verifies membership when making an Organization active. An
         // arbitrary URL cannot select an Organization belonging to someone else.
         await clerk.setActive({ organization: id });
         signal.throwIfAborted();
         const organization = await clerk.getOrganization(id);
-        return workspaceIdentitySchema.parse(organization);
+        return v.parse(workspaceIdentitySchema, organization);
       }, signal),
     remove: (id, signal) =>
       waitForClerk(async () => {
-        if (!workspaceIdSchema.safeParse(id).success)
+        if (!v.safeParse(workspaceIdSchema, id).success)
           throw new WorkspaceError("NOT_FOUND");
         const organization = await clerk.getOrganization(id);
         signal.throwIfAborted();

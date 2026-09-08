@@ -58,12 +58,17 @@ Clerk enforces membership and permissions for these operations. Enable Organizat
 and administrator deletion in each instance; organization selection must remain
 optional so new users can reach the workspace list before creating one.
 
-React Router loaders own list and detail requests; route actions own mutations and
-revalidation. Zustand owns only dialog state. Create and dispose the router with the
-Clerk session outside React rendering. Components subscribe and render without
-`useEffect` data fetching. Requests have deadlines and inherit route cancellation.
+TanStack Router loaders own list and detail requests; explicit form submissions own
+mutations and route invalidation. Zustand owns only dialog state. The Clerk shell
+creates the workspace router for the active session. Components subscribe and render
+without `useEffect` data fetching. Requests have deadlines and inherit route cancellation.
 The Clerk SDK does not expose HTTP cancellation, so cancellation stops waiting;
 mutations are never automatically retried because their remote result may be unknown.
+
+Cloud browser code follows the same package pattern and core stack as Slack:
+`packages/web` owns the Vite and Clerk shell, `packages/web-core` owns reusable
+workspace behavior, TanStack Router owns browser routing, and Valibot validates
+untrusted boundary data.
 
 ## Cloudflare Deployment
 

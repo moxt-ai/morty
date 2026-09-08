@@ -1,14 +1,14 @@
-import { RouterProvider } from "react-router/dom";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { render } from "vitest-browser-react";
-import type { WorkspaceDirectory } from "../../web/workspaces/contracts.ts";
-import { createWorkspaceRouter } from "../../web/workspaces/router.tsx";
 import {
   type ChatApplicationProps,
+  createWorkspaceRouter,
   type PairApplicationProps,
   type SlackApplicationProps,
   WorkspaceApplications,
-} from "../../web/workspaces/WorkspaceApplications.tsx";
+  type WorkspaceDirectory,
+} from "@moxt-ai/mobius-cloud-web-core";
+import { RouterProvider } from "@tanstack/react-router";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { render } from "vitest-browser-react";
 import { WorkspaceIdentityProvider } from "../support/workspace-directory.ts";
 
 beforeEach(() => {
@@ -16,9 +16,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date("2026-09-07T00:00:00Z"));
   window.history.replaceState(null, "", "/");
 });
-const routers: ReturnType<typeof createWorkspaceRouter>[] = [];
 afterEach(() => {
-  for (const router of routers.splice(0)) router.dispose();
   vi.useRealTimers();
 });
 async function renderWorkspaces(directory: WorkspaceDirectory) {
@@ -47,7 +45,6 @@ async function renderWorkspaces(directory: WorkspaceDirectory) {
     },
     WorkspaceManagement,
   );
-  routers.push(router);
   return render(<RouterProvider router={router} />);
 }
 
@@ -157,7 +154,6 @@ test("Given more than one page of memberships, When a user changes pages and ope
     .toBeVisible();
   const path = window.location.pathname;
   await screen.unmount();
-  routers.at(-1)?.dispose();
   window.history.replaceState(null, "", path);
   const reopened = await renderWorkspaces(identity.forUser("alice"));
   await expect

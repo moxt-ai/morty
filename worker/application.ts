@@ -11,36 +11,49 @@ import {
   sessionQuotaFromEnvironment,
 } from "@moxt-ai/mobius-relay-cloudflare/adapters";
 import { createMobiusApplication } from "@moxt-ai/mobius-relay-core";
-import { z } from "zod";
+import * as v from "valibot";
 import { SlackQueueController } from "../apps/slack/packages/worker/src/controller/slack-queue-controller.ts";
 import {
   createCloudflareEnvironment,
   type WorkerBindings,
 } from "../apps/slack/packages/worker/src/di/create-cloudflare-environment.ts";
-import { publicConfigSchema, sessionSchema } from "../shared/contracts.ts";
+import { publishableKeySchema, sessionSchema } from "../shared/contracts.ts";
 
-const configurationSchema = z
-  .object({
-    CLERK_PUBLISHABLE_KEY: publicConfigSchema.unwrap().shape.publishableKey,
-    CLERK_JWT_KEY: z.string().startsWith("-----BEGIN PUBLIC KEY-----"),
-    APP_ORIGIN: z.url().refine((value) => {
-      const url = new URL(value);
-      return ["http:", "https:"].includes(url.protocol) && url.origin === value;
-    }),
-  })
-  .readonly();
+const configurationSchema = v.pipe(
+  v.object({
+    CLERK_PUBLISHABLE_KEY: publishableKeySchema,
+    CLERK_JWT_KEY: v.pipe(
+      v.string(),
+      v.startsWith("-----BEGIN PUBLIC KEY-----"),
+    ),
+    APP_ORIGIN: v.pipe(
+      v.string(),
+      v.url(),
+      v.check((value) => {
+        const url = new URL(value);
+        return (
+          ["http:", "https:"].includes(url.protocol) && url.origin === value
+        );
+      }),
+    ),
+  }),
+  v.readonly(),
+);
 
-const claimsSchema = z
-  .object({
-    sub: z.string().startsWith("user_"),
-    sid: z.string().startsWith("sess_"),
-    sts: z.enum(["active", "pending"]).optional(),
-    o: z
-      .object({ id: z.string().startsWith("org_") })
-      .readonly()
-      .optional(),
-  })
-  .readonly();
+const claimsSchema = v.pipe(
+  v.object({
+    sub: v.pipe(v.string(), v.startsWith("user_")),
+    sid: v.pipe(v.string(), v.startsWith("sess_")),
+    sts: v.optional(v.picklist(["active", "pending"])),
+    o: v.optional(
+      v.pipe(
+        v.object({ id: v.pipe(v.string(), v.startsWith("org_")) }),
+        v.readonly(),
+      ),
+    ),
+  }),
+  v.readonly(),
+);
 
 interface CloudBindings {
   readonly AGENT_TRIGGER_RATE_LIMITER?: unknown;
@@ -73,44 +86,44 @@ interface MobiusBindings {
   readonly SESSION_RELAY: DurableObjectNamespace;
 }
 
-const slackBindingsSchema = z.object({
-  AGENT_TRIGGER_RATE_LIMITER: z.object({
-    get: z.function(),
-    idFromName: z.function(),
+const slackBindingsSchema = v.object({
+  AGENT_TRIGGER_RATE_LIMITER: v.object({
+    get: v.function(),
+    idFromName: v.function(),
   }),
-  ASSETS: z.object({ fetch: z.function() }),
-  ATTACHMENTS: z.object({ get: z.function(), put: z.function() }),
-  AUTHENTICATION_BASE_URL: z.url(),
-  CLERK_ISSUER_URL: z.url(),
-  CLERK_JWT_KEY: z.string(),
-  CLERK_PUBLISHABLE_KEY: z.string(),
-  DATABASE: z.object({ batch: z.function(), prepare: z.function() }),
-  EVENTS: z.object({ send: z.function() }),
-  MOBIUS_BASE_URL: z.url(),
-  SLACK_MOBIUS_AUTH_TOKEN: z.string().min(1),
-  SLACK_OAUTH_STATE_SIGNING_KEY: z.string().min(1),
-  SLACK_SERVER_BASE_URL: z.url(),
-  SLACK_TOKEN_ENCRYPTION_KEY: z.string().min(1),
+  ASSETS: v.object({ fetch: v.function() }),
+  ATTACHMENTS: v.object({ get: v.function(), put: v.function() }),
+  AUTHENTICATION_BASE_URL: v.pipe(v.string(), v.url()),
+  CLERK_ISSUER_URL: v.pipe(v.string(), v.url()),
+  CLERK_JWT_KEY: v.string(),
+  CLERK_PUBLISHABLE_KEY: v.string(),
+  DATABASE: v.object({ batch: v.function(), prepare: v.function() }),
+  EVENTS: v.object({ send: v.function() }),
+  MOBIUS_BASE_URL: v.pipe(v.string(), v.url()),
+  SLACK_MOBIUS_AUTH_TOKEN: v.pipe(v.string(), v.minLength(1)),
+  SLACK_OAUTH_STATE_SIGNING_KEY: v.pipe(v.string(), v.minLength(1)),
+  SLACK_SERVER_BASE_URL: v.pipe(v.string(), v.url()),
+  SLACK_TOKEN_ENCRYPTION_KEY: v.pipe(v.string(), v.minLength(1)),
 });
 
 function hasSlackBindings(
   bindings: CloudBindings,
 ): bindings is CloudBindings & WorkerBindings {
-  return slackBindingsSchema.safeParse(bindings).success;
+  return v.safeParse(slackBindingsSchema, bindings).success;
 }
 
-const mobiusBindingsSchema = z.object({
-  DIRECTORY_DATABASE: z.object({ batch: z.function(), prepare: z.function() }),
-  RUNTIME_RELAY: z.object({ get: z.function(), idFromName: z.function() }),
-  SESSION_ACTIVE_SESSIONS_PER_PROJECT: z.string().optional(),
-  SESSION_ACTIVE_SESSIONS_PER_TENANT: z.string().optional(),
-  SESSION_RELAY: z.object({ get: z.function(), idFromName: z.function() }),
+const mobiusBindingsSchema = v.object({
+  DIRECTORY_DATABASE: v.object({ batch: v.function(), prepare: v.function() }),
+  RUNTIME_RELAY: v.object({ get: v.function(), idFromName: v.function() }),
+  SESSION_ACTIVE_SESSIONS_PER_PROJECT: v.optional(v.string()),
+  SESSION_ACTIVE_SESSIONS_PER_TENANT: v.optional(v.string()),
+  SESSION_RELAY: v.object({ get: v.function(), idFromName: v.function() }),
 });
 
 function hasMobiusBindings(
   bindings: CloudBindings,
 ): bindings is CloudBindings & MobiusBindings {
-  return mobiusBindingsSchema.safeParse(bindings).success;
+  return v.safeParse(mobiusBindingsSchema, bindings).success;
 }
 
 function isMobiusRequest(path: string): boolean {
@@ -217,7 +230,7 @@ export default {
       );
     }
 
-    const configuration = configurationSchema.safeParse(bindings);
+    const configuration = v.safeParse(configurationSchema, bindings);
     if (path === "/mobius-cloud/api/config") {
       if (!configuration.success) {
         return json(
@@ -230,7 +243,9 @@ export default {
           503,
         );
       }
-      return json({ publishableKey: configuration.data.CLERK_PUBLISHABLE_KEY });
+      return json({
+        publishableKey: configuration.output.CLERK_PUBLISHABLE_KEY,
+      });
     }
     const token = request.headers
       .get("Authorization")
@@ -254,22 +269,22 @@ export default {
     let verified: unknown;
     try {
       verified = await verifyToken(token, {
-        jwtKey: configuration.data.CLERK_JWT_KEY,
-        authorizedParties: [configuration.data.APP_ORIGIN],
+        jwtKey: configuration.output.CLERK_JWT_KEY,
+        authorizedParties: [configuration.output.APP_ORIGIN],
       });
     } catch {
       return unauthenticated();
     }
     request.signal.throwIfAborted();
-    const claims = claimsSchema.safeParse(verified);
-    if (!claims.success || claims.data.sts === "pending") {
+    const claims = v.safeParse(claimsSchema, verified);
+    if (!claims.success || claims.output.sts === "pending") {
       return unauthenticated();
     }
     return json(
-      sessionSchema.parse({
-        userId: claims.data.sub,
-        sessionId: claims.data.sid,
-        organizationId: claims.data.o?.id ?? null,
+      v.parse(sessionSchema, {
+        userId: claims.output.sub,
+        sessionId: claims.output.sid,
+        organizationId: claims.output.o?.id ?? null,
       }),
     );
   },

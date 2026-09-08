@@ -11,7 +11,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "typecheck": "pnpm typegen && tsc --project tests/tsconfig.json && tsc --project web/tsconfig.json",
+    "typecheck": "pnpm typegen && tsc --project tests/tsconfig.json && pnpm --filter @moxt-ai/mobius-cloud-web-core --filter @moxt-ai/mobius-cloud-web typecheck",
     "check:no-chinese": "node scripts/check-no-chinese.ts",
     "lint": "biome ci --error-on-warnings && pnpm check:no-chinese",
     "lint:fix": "biome check --write --error-on-warnings && pnpm check:no-chinese",
@@ -47,7 +47,6 @@
     "knip": "^6.32.2",
     "playwright": "1.63.0",
     "simple-git-hooks": "^2.13.1",
-    "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "^4.1.10",
@@ -57,14 +56,15 @@
   "dependencies": {
     "@clerk/backend": "3.17.1",
     "@clerk/react": "6.15.1",
-    "@clerk/shared": "4.31.0",
     "@moxt-ai/app-slack-api": "workspace:*",
     "@moxt-ai/app-slack-web-core": "workspace:*",
+    "@moxt-ai/mobius-cloud-web-core": "workspace:*",
     "@moxt-ai/mobius-protocol": "workspace:*",
     "@moxt-ai/mobius-relay-cloudflare": "workspace:*",
     "@moxt-ai/mobius-relay-core": "workspace:*",
     "@moxt-ai/mobius-web-core": "workspace:*",
     "@moxt-ai/mobius-web-sdk": "workspace:*",
+    "@tanstack/react-router": "1.170.32",
     "@radix-ui/react-select": "2.3.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -72,10 +72,9 @@
     "pino": "^10.3.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router": "^8.3.1",
     "streamdown": "2.5.0",
     "tailwind-merge": "^3.6.0",
-    "zod": "^4.5.4",
+    "valibot": "1.4.2",
     "zustand": "^5.0.15"
   }
 }

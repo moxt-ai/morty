@@ -1,11 +1,9 @@
-import { redirect } from "react-router";
-import { z } from "zod";
+import * as v from "valibot";
 import {
   type WorkspaceDirectory,
   WorkspaceError,
   workspaceIdSchema,
   workspaceNameSchema,
-  workspacePageSize,
 } from "./contracts.ts";
 import type { WorkspaceStore } from "./store.ts";
 
@@ -32,71 +30,66 @@ export function workspaceErrorMessage(cause: unknown): string {
 
 export async function loadWorkspaces(
   directory: WorkspaceDirectory,
-  request: Request,
+  requestedPage: unknown,
+  requestSignal: AbortSignal,
 ) {
-  const parsed = z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(100_000)
-    .safeParse(new URL(request.url).searchParams.get("page") ?? 1);
-  const page = parsed.success ? parsed.data : 1;
-  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(15_000)]);
+  const parsed = v.safeParse(
+    v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(100_000)),
+    requestedPage,
+  );
+  const page = parsed.success ? parsed.output : 1;
+  const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(15_000)]);
   const result = await directory.list(page, signal);
   signal.throwIfAborted();
-  if (page > 1 && result.items.length === 0)
-    throw redirect(
-      `/?page=${Math.max(1, Math.ceil(result.totalCount / workspacePageSize))}`,
-    );
   return { ...result, page };
 }
 
 export async function loadWorkspace(
   directory: WorkspaceDirectory,
   id: unknown,
-  request: Request,
+  requestSignal: AbortSignal,
 ) {
-  const parsed = workspaceIdSchema.safeParse(id);
+  const parsed = v.safeParse(workspaceIdSchema, id);
   if (!parsed.success) throw new WorkspaceError("NOT_FOUND");
-  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(15_000)]);
-  const workspace = await directory.open(parsed.data, signal);
+  const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(15_000)]);
+  const workspace = await directory.open(parsed.output, signal);
   signal.throwIfAborted();
   return workspace;
 }
 
-const mutationSchema = z.discriminatedUnion("intent", [
-  z.object({ intent: z.literal("create"), name: workspaceNameSchema }),
-  z.object({ intent: z.literal("delete"), id: workspaceIdSchema }),
+const mutationSchema = v.variant("intent", [
+  v.object({ intent: v.literal("create"), name: workspaceNameSchema }),
+  v.object({ intent: v.literal("delete"), id: workspaceIdSchema }),
 ]);
 
-type MutationResult =
+export type MutationResult =
   | { readonly kind: "success" }
   | { readonly kind: "failure"; readonly message: string };
 
 export async function mutateWorkspace(
   directory: WorkspaceDirectory,
   ui: WorkspaceStore,
-  request: Request,
+  form: FormData,
+  requestSignal: AbortSignal,
 ): Promise<MutationResult> {
-  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(15_000)]);
+  const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(15_000)]);
   try {
-    const form = await request.formData();
     signal.throwIfAborted();
-    const parsed = mutationSchema.safeParse(Object.fromEntries(form));
+    const parsed = v.safeParse(mutationSchema, Object.fromEntries(form));
     if (!parsed.success) throw new WorkspaceError("INVALID_INPUT");
-    switch (parsed.data.intent) {
+    switch (parsed.output.intent) {
       case "create":
-        await directory.create(parsed.data.name, signal);
+        await directory.create(parsed.output.name, signal);
         break;
       case "delete":
-        await directory.remove(parsed.data.id, signal);
+        await directory.remove(parsed.output.id, signal);
         break;
     }
     signal.throwIfAborted();
     ui.getState().closeDialog();
     return { kind: "success" };
   } catch (cause) {
-    if (request.signal.aborted) throw request.signal.reason;
+    if (requestSignal.aborted) throw requestSignal.reason;
     return { kind: "failure", message: workspaceErrorMessage(cause) };
   }
 }
