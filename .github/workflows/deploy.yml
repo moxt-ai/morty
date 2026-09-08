@@ -68,28 +68,30 @@ jobs:
           node --input-type=module <<'JS'
           import { readFileSync } from 'node:fs';
           import { resolve } from 'node:path';
-          import { z } from 'zod';
-          const environment = z.enum(['staging', 'production']).parse(process.env.DEPLOY_ENVIRONMENT);
+          import * as v from 'valibot';
+          const environment = v.parse(v.picklist(['staging', 'production']), process.env.DEPLOY_ENVIRONMENT);
           const token = process.env.CLOUDFLARE_API_TOKEN;
           if (!token) throw new Error('Missing Cloudflare deployment token');
-          const deployment = z.object({ configPath: z.string() }).parse(
+          const deployment = v.parse(v.object({ configPath: v.string() }),
             JSON.parse(readFileSync('.wrangler/deploy/config.json', 'utf8')),
           );
-          const config = z.object({
-            account_id: z.literal('95af7a3d67be8c49b1619544e3ce53c0'),
-            name: z.literal(`mobius-cloud-${environment}`),
-            keep_vars: z.literal(true),
-            secrets: z.object({ required: z.array(z.string().regex(/^[A-Z][A-Z0-9_]*$/)).min(1) }),
-          }).parse(JSON.parse(readFileSync(resolve('.wrangler/deploy', deployment.configPath), 'utf8')));
+          const config = v.parse(v.object({
+            account_id: v.literal('95af7a3d67be8c49b1619544e3ce53c0'),
+            name: v.literal(`mobius-cloud-${environment}`),
+            keep_vars: v.literal(true),
+            secrets: v.object({
+              required: v.pipe(v.array(v.pipe(v.string(), v.regex(/^[A-Z][A-Z0-9_]*$/))), v.minLength(1)),
+            }),
+          }), JSON.parse(readFileSync(resolve('.wrangler/deploy', deployment.configPath), 'utf8')));
           const response = await fetch(
             `https://api.cloudflare.com/client/v4/accounts/${config.account_id}/workers/scripts/${config.name}/secrets`,
             { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30000), redirect: 'error' },
           );
           if (!response.ok) throw new Error(`Worker configuration lookup failed: HTTP ${response.status}`);
-          const inventory = z.object({
-            success: z.literal(true),
-            result: z.array(z.object({ name: z.string() })),
-          }).parse(await response.json());
+          const inventory = v.parse(v.object({
+            success: v.literal(true),
+            result: v.array(v.object({ name: v.string() })),
+          }), await response.json());
           const names = new Set(inventory.result.map(binding => binding.name));
           const missing = config.secrets.required.filter(name => !names.has(name));
           if (missing.length > 0) throw new Error(`Missing Worker runtime settings: ${missing.join(', ')}`);
