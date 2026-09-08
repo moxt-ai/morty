@@ -210,7 +210,28 @@
             "class_name": "LiteSessionRelay"
           }
         ]
-      }
+      },
+      "queues": {
+        "producers": [
+          {
+            "binding": "EVENTS",
+            "queue": "mobius-slack-cloud-production-events"
+          }
+        ],
+        "consumers": [
+          {
+            "queue": "mobius-slack-cloud-production-events",
+            "max_batch_size": 1,
+            "max_retries": 5
+          }
+        ]
+      },
+      "r2_buckets": [
+        {
+          "binding": "ATTACHMENTS",
+          "bucket_name": "mobius-slack-production-attachments"
+        }
+      ]
     }
   },
   "account_id": "95af7a3d67be8c49b1619544e3ce53c0"

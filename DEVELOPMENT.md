@@ -72,13 +72,13 @@ Deployment uses two isolated Workers:
 | Environment | Worker | Trigger |
 | --- | --- | --- |
 | `staging` | `mobius-cloud-staging` | Successful checks after a push to `main`, or manual dispatch |
-| `production` | `mobius-cloud-production` | Manual CI dispatch selecting `production` from `main` |
+| `production` | `mobius-cloud-production` | Successful automatic staging deployment, followed by a 15-minute environment wait; also manual dispatch |
 
 Pull requests only run checks. Like Mobius, the repository allows automatic
 squash merging after its required checks pass. Enable auto-merge on a reviewed
 pull request to merge it once those requirements are satisfied.
 
-Both CI jobs cache the pnpm store, including business dependencies. Cache keys
+Check and deployment jobs cache the pnpm store, including business dependencies. Cache keys
 include the root lockfile and pinned business source action. Browser checks also cache Chromium's headless
 shell by operating system, architecture, and Playwright version. Installation
 reuses cached binaries while ensuring system libraries are present on each fresh
@@ -110,7 +110,9 @@ multiple organizations. Logging in does not configure CI credentials.
 
 Create GitHub environments named `staging` and `production`. Each environment
 needs only a `CLOUDFLARE_API_TOKEN` secret: a Workers deployment token with D1
-Edit, scoped to the configured Cloudflare account. Restrict deployment to `main`.
+Edit, scoped to the configured Cloudflare account. Restrict deployment to `main`. Configure a 15-minute wait timer on the
+`production` environment. GitHub enforces this delay before starting its job,
+including manual production releases; waiting does not occupy a runner.
 The account ID, deployment targets, and public deployment links are versioned
 in the repository; GitHub environment variables are not required.
 
@@ -158,9 +160,18 @@ The Cloudflare Vite plugin selects the environment at **build time** using
 `CLOUDFLARE_ENV`. `wrangler deploy` uses the generated build configuration;
 do not append `--env` to deploy an already built app.
 
-To release production, run the `CI` workflow manually on `main` and select
-`production`. This repeats all checks before deploying that selected commit.
 Staging deploys automatically when a pull request is merged to `main`.
+After that CI run succeeds, the separate `Production` workflow deploys the
+same commit following the environment's 15-minute wait. Failed or canceled CI
+runs and pull request checks do not trigger production. The wait begins when
+the production job is triggered, so queueing can make the total delay longer.
+Production waiting does not block subsequent staging checks or deployments.
+An active production run is not canceled by a newer merge; only the newest
+pending automatic production run is retained.
+
+To release manually, run the `CI` workflow on `main` and select
+`production`. This repeats all checks and uses the same environment wait.
+Manual CI runs do not trigger another automatic production release.
 Cloud CD builds Cloud, migrates both businesses across every selected shared D1
 shard, then deploys the Cloud Worker. A failed migration prevents deployment.
 It does not deploy existing standalone Mobius or Slack Workers or migrate their
