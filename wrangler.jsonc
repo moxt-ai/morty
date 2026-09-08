@@ -3,6 +3,7 @@
   "name": "mobius-cloud-local",
   "main": "worker/index.ts",
   "compatibility_date": "2026-09-07",
+  "keep_vars": true,
   "workers_dev": true,
   "preview_urls": false,
   "assets": {
@@ -74,6 +75,20 @@
   "env": {
     "staging": {
       "name": "mobius-cloud-staging",
+      "secrets": {
+        "required": [
+          "APP_ORIGIN",
+          "AUTHENTICATION_BASE_URL",
+          "CLERK_ISSUER_URL",
+          "CLERK_PUBLISHABLE_KEY",
+          "CLERK_JWT_KEY",
+          "MOBIUS_BASE_URL",
+          "SLACK_MOBIUS_AUTH_TOKEN",
+          "SLACK_OAUTH_STATE_SIGNING_KEY",
+          "SLACK_SERVER_BASE_URL",
+          "SLACK_TOKEN_ENCRYPTION_KEY"
+        ]
+      },
       "vars": {
         "SESSION_ACTIVE_SESSIONS_PER_PROJECT": "1000",
         "SESSION_ACTIVE_SESSIONS_PER_TENANT": "10000",
@@ -140,6 +155,20 @@
     },
     "production": {
       "name": "mobius-cloud-production",
+      "secrets": {
+        "required": [
+          "APP_ORIGIN",
+          "AUTHENTICATION_BASE_URL",
+          "CLERK_ISSUER_URL",
+          "CLERK_PUBLISHABLE_KEY",
+          "CLERK_JWT_KEY",
+          "MOBIUS_BASE_URL",
+          "SLACK_MOBIUS_AUTH_TOKEN",
+          "SLACK_OAUTH_STATE_SIGNING_KEY",
+          "SLACK_SERVER_BASE_URL",
+          "SLACK_TOKEN_ENCRYPTION_KEY"
+        ]
+      },
       "vars": {
         "SESSION_ACTIVE_SESSIONS_PER_PROJECT": "1000",
         "SESSION_ACTIVE_SESSIONS_PER_TENANT": "10000",
@@ -181,7 +210,28 @@
             "class_name": "LiteSessionRelay"
           }
         ]
-      }
+      },
+      "queues": {
+        "producers": [
+          {
+            "binding": "EVENTS",
+            "queue": "mobius-slack-cloud-production-events"
+          }
+        ],
+        "consumers": [
+          {
+            "queue": "mobius-slack-cloud-production-events",
+            "max_batch_size": 1,
+            "max_retries": 5
+          }
+        ]
+      },
+      "r2_buckets": [
+        {
+          "binding": "ATTACHMENTS",
+          "bucket_name": "mobius-slack-production-attachments"
+        }
+      ]
     }
   },
   "account_id": "95af7a3d67be8c49b1619544e3ce53c0"
