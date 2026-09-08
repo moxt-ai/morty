@@ -50,6 +50,24 @@ loads pinned Mobius and Slack sources to validate their shared-shard migrations.
 Cloud CD applies those migrations before deploying its own Worker. Existing
 standalone business deployments remain owned by their original repositories.
 
+## Worker architecture
+
+The Cloud Worker follows Slack's constructor-injected layering. `worker/application.ts`
+adapts Cloudflare fetch and queue events and owns the lifetime of the `typed-inject`
+container built by `worker/di/create-application.ts`.
+
+- `controller/` owns HTTP routing, request headers, and response status mapping.
+- `service/` owns authentication policy and validated session results.
+- `entity/<domain>/` defines shared domain schemas and inferred types, plus database row schemas when Cloud owns persistence.
+- `storage/` reads and validates deployment configuration from Worker bindings.
+- `gateway/` owns Clerk token verification and the embedded Mobius/Slack integrations.
+- `infra/` contains shared HTTP response mechanics.
+
+Cloud has no authentication database: business persistence remains in the embedded
+Mobius and Slack storage adapters. Configuration storage exposes only validated
+authentication settings to the service. The public Worker entrypoint remains the
+boundary exercised by the existing authentication integration scenarios.
+
 ## Workspace UI
 
 A workspace is a Clerk Organization. The browser uses Clerk's authenticated

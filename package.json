@@ -74,6 +74,7 @@
         "react-dom": "^19.2.8",
         "streamdown": "2.5.0",
         "tailwind-merge": "^3.6.0",
+        "typed-inject": "^5.0.0",
         "valibot": "1.4.2",
         "zustand": "^5.0.15"
     }

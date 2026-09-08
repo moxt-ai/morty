@@ -68,6 +68,9 @@ importers:
       tailwind-merge:
         specifier: ^3.6.0
         version: 3.6.0
+      typed-inject:
+        specifier: ^5.0.0
+        version: 5.0.0
       valibot:
         specifier: 1.4.2
         version: 1.4.2(typescript@7.0.2)
