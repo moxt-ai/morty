@@ -1,4 +1,5 @@
 import { AuthenticateWithRedirectCallback, SignIn, SignUp, useUser } from "@clerk/react";
+import { reportApplicationError } from "@moxt-ai/mobius-cloud-web-core";
 import { createRootRoute, createRoute, createRouter, Link, Outlet } from "@tanstack/react-router";
 import { Page } from "../application/app.tsx";
 
@@ -117,5 +118,6 @@ export const router = createRouter({
         registerStepRoute,
         callbackRoute,
     ]),
+    defaultOnCatch: (error) => reportApplicationError(error, "authentication-route"),
     scrollRestoration: true,
 });

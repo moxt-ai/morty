@@ -9,6 +9,7 @@
     "dependencies": {
         "@clerk/react": "6.15.1",
         "@moxt-ai/mobius-cloud-web-core": "workspace:*",
+        "@sentry/react": "^10.73.0",
         "@tanstack/react-router": "1.170.32",
         "react": "19.2.8",
         "react-dom": "19.2.8",

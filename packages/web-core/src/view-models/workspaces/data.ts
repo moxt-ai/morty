@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import { reportApplicationError } from "../report-error.ts";
 import { WorkspaceConnectionError } from "./connections.ts";
 import { type WorkspaceDirectory, WorkspaceError, workspaceIdSchema, workspaceNameSchema } from "./contracts.ts";
 import type { WorkspaceStore } from "./store.ts";
@@ -86,6 +87,7 @@ export async function mutateWorkspace(
         if (requestSignal.aborted) {
             throw requestSignal.reason;
         }
+        reportApplicationError(cause, "workspace-mutation");
         return { kind: "failure", message: workspaceErrorMessage(cause) };
     }
 }

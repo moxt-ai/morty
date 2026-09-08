@@ -101,6 +101,40 @@ to the plain workspace URL restore it. The channel ID alone grants no access.
 
 ## Cloudflare Deployment
 
+### Browser error monitoring
+
+The browser initializes Sentry before React renders. Uncaught errors, unhandled
+promise rejections, route errors, and unexpected workspace mutation or sign-in
+bootstrap failures are reported while existing recovery screens remain available.
+Expected workspace validation, authorization, and not-found errors, and aborted
+requests, are not reported as application failures.
+
+Staging uses the `paraflow/mobius-cloud-testing` Sentry project; production uses
+`paraflow/mobius-cloud`. Each GitHub deployment environment defines `SENTRY_DSN`,
+`SENTRY_ORG`, and `SENTRY_PROJECT` as variables. `SENTRY_AUTH_TOKEN` is a GitHub
+Actions secret used only during the build, with `org:read` and `project:releases`
+permissions. Use a dedicated CI token rather than an expiring interactive login.
+The deployment fails if any required Sentry setting is absent.
+
+The build embeds the public DSN, environment, and `mobius-cloud@<commit>` release
+identifier. It uploads browser source maps to the selected project and removes
+them from the public assets before deployment. Never prefix the upload token
+with `VITE_`; only the DSN is public.
+
+Browser tracing samples all staging navigations and 10% of production navigations.
+It records browser performance and HTTP timings; Worker tracing is configured
+separately. The browser does not add tracing headers to outgoing requests.
+Session Replay and console/DOM breadcrumbs are disabled. Request bodies,
+headers, cookies, user fields, and URL query strings are removed from error
+reports; URL queries are also removed from navigation and HTTP breadcrumbs.
+
+Local development leaves Sentry disabled by default. To verify real ingestion,
+set `VITE_SENTRY_DSN` to the testing project's DSN, `VITE_SENTRY_ENVIRONMENT` to
+`staging`, and `VITE_SENTRY_RELEASE` to a distinct verification release before
+starting Vite. Trigger a controlled browser error in a disposable browser session,
+then verify its environment, release, and stack trace in the testing project.
+Do not use real conversation content or credentials in verification events.
+
 Deployment uses two isolated Workers:
 
 | Environment | Worker | Trigger |

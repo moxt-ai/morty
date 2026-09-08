@@ -1,4 +1,5 @@
 import { ClerkProvider } from "@clerk/react";
+import { reportApplicationError } from "@moxt-ai/mobius-cloud-web-core";
 import { useEffect, useState } from "react";
 import { getPublicConfig } from "../../view-models/authentication/config.ts";
 import { router as authRouter } from "../authentication/router.tsx";
@@ -20,8 +21,9 @@ export function Bootstrap() {
                     setState({ kind: "ready", publishableKey });
                 }
             },
-            () => {
+            (error: unknown) => {
                 if (!controller.signal.aborted) {
+                    reportApplicationError(error, "authentication-bootstrap");
                     setState({ kind: "failed" });
                 }
             },

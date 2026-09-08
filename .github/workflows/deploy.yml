@@ -56,9 +56,22 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Build selected environment
-        run: pnpm build
+        run: |
+          for setting in VITE_SENTRY_DSN SENTRY_ORG SENTRY_PROJECT SENTRY_AUTH_TOKEN; do
+            if [ -z "${!setting}" ]; then
+              echo "Missing Sentry deployment setting: $setting" >&2
+              exit 1
+            fi
+          done
+          pnpm build
         env:
           CLOUDFLARE_ENV: ${{ inputs.environment }}
+          VITE_SENTRY_DSN: ${{ vars.SENTRY_DSN }}
+          VITE_SENTRY_ENVIRONMENT: ${{ inputs.environment }}
+          VITE_SENTRY_RELEASE: mobius-cloud@${{ inputs.revision }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
       - name: Verify remote runtime configuration
         env:

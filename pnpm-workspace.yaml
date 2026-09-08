@@ -14,6 +14,7 @@ packages:
   - mobius/packages/web-sdk
 
 allowBuilds:
+  '@sentry/cli': true
   bufferutil: false
   esbuild: true
   simple-git-hooks: true

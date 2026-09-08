@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-router";
 import type { ComponentType } from "react";
 import * as v from "valibot";
+import { reportApplicationError } from "../../view-models/report-error.ts";
 import type {
     BrowserWorkspaceConnections,
     WorkspaceChannel,
@@ -136,6 +137,7 @@ export function createWorkspaceRouter<TConnection extends WorkspaceChannel>(
     });
     return createRouter({
         routeTree: rootRoute.addChildren([indexRoute, detailRoute]),
+        defaultOnCatch: (error) => reportApplicationError(error, "workspace-route"),
         scrollRestoration: true,
     });
 }

@@ -1,3 +1,4 @@
+export { reportApplicationError } from "./view-models/report-error.ts";
 export {
     clerkDirectory,
     waitForClerk,
