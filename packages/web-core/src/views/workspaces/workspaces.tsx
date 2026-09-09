@@ -1,23 +1,14 @@
 import { Link } from "@tanstack/react-router";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
+import { Button } from "../../components/ui/button.tsx";
+import { Card } from "../../components/ui/card.tsx";
+import { Dialog } from "../../components/ui/dialog.tsx";
+import { Input } from "../../components/ui/input.tsx";
 import { workspacePageSize } from "../../view-models/workspaces/contracts.ts";
 import type { loadWorkspace, loadWorkspaces, MutationResult } from "../../view-models/workspaces/data.ts";
 import { workspaceErrorMessage } from "../../view-models/workspaces/data.ts";
 import type { WorkspaceStore } from "../../view-models/workspaces/store.ts";
-
-const primaryButton =
-    "rounded-lg bg-violet-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-800 disabled:opacity-50";
-const secondaryButton =
-    "rounded-lg border border-zinc-300 px-4 py-2.5 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50";
-
-function openDialog(element: HTMLDialogElement | null) {
-    if (!element) {
-        return;
-    }
-    element.showModal();
-    return () => element.close();
-}
 
 type MutateWorkspace = (form: FormData, signal: AbortSignal) => Promise<MutationResult>;
 
@@ -61,28 +52,24 @@ function WorkspaceDialog({ ui, mutate }: { readonly ui: WorkspaceStore; readonly
     };
 
     return (
-        <dialog
-            ref={openDialog}
-            aria-labelledby="workspace-dialog-title"
-            className="m-auto w-[calc(100%-3rem)] max-w-md rounded-2xl border border-zinc-200 bg-white p-7 text-zinc-900 shadow-xl backdrop:bg-zinc-950/30"
-            onCancel={(event) => {
-                event.preventDefault();
-                if (!busy) {
-                    close();
-                }
-            }}
+        <Dialog
+            title={dialog.kind === "create" ? "New workspace" : "Delete workspace?"}
+            description={
+                dialog.kind === "create"
+                    ? "Create a shared place for your team and agents."
+                    : "Deleting a workspace removes access for all its members."
+            }
+            busy={busy}
+            onClose={close}
         >
             <form onSubmit={submit}>
                 <input type="hidden" name="intent" value={dialog.kind} />
-                <h2 id="workspace-dialog-title" className="text-xl font-semibold tracking-tight">
-                    {dialog.kind === "create" ? "New workspace" : "Delete workspace?"}
-                </h2>
                 {dialog.kind === "create" ? (
                     <div className="mt-6">
                         <label htmlFor="workspace-name" className="mb-2 block text-sm font-medium">
                             Workspace name
                         </label>
-                        <input
+                        <Input
                             id="workspace-name"
                             name="name"
                             value={dialog.name}
@@ -91,14 +78,13 @@ function WorkspaceDialog({ ui, mutate }: { readonly ui: WorkspaceStore; readonly
                             required
                             disabled={busy}
                             placeholder="e.g. Research team"
-                            className="w-full rounded-lg border border-zinc-300 px-3 py-2.5 outline-violet-600"
                         />
                     </div>
                 ) : (
                     <>
                         <input type="hidden" name="id" value={dialog.workspace.id} />
-                        <p className="mt-4 text-sm leading-6 text-zinc-600">
-                            Delete <strong className="break-words text-zinc-900">{dialog.workspace.name}</strong> and
+                        <p className="mt-4 text-[13px] leading-6 text-muted-foreground">
+                            Delete <strong className="break-words text-foreground">{dialog.workspace.name}</strong> and
                             remove access for all its members? This cannot be undone.
                         </p>
                     </>
@@ -109,23 +95,19 @@ function WorkspaceDialog({ ui, mutate }: { readonly ui: WorkspaceStore; readonly
                     </p>
                 )}
                 <div className="mt-7 flex justify-end gap-3">
-                    <button type="button" disabled={busy} onClick={close} className={secondaryButton}>
+                    <Button disabled={busy} onClick={close} variant="outline">
                         Cancel
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         type="submit"
                         disabled={busy || (dialog.kind === "create" && !dialog.name.trim())}
-                        className={
-                            dialog.kind === "create"
-                                ? primaryButton
-                                : "rounded-lg bg-red-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50"
-                        }
+                        variant={dialog.kind === "create" ? "primary" : "destructive"}
                     >
                         {busy ? "Saving…" : dialog.kind === "create" ? "Create workspace" : "Delete workspace"}
-                    </button>
+                    </Button>
                 </div>
             </form>
-        </dialog>
+        </Dialog>
     );
 }
 
@@ -154,81 +136,84 @@ export function WorkspaceList({
         <>
             <div className="mb-9 flex flex-wrap items-end justify-between gap-5">
                 <div>
-                    <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-violet-700">Mobius Cloud</p>
-                    <h1 className="text-3xl font-semibold tracking-tight">Workspaces</h1>
-                    <p className="mt-3 text-zinc-500">A shared place for your team and agents.</p>
+                    <p className="mb-2 text-xs font-medium text-primary">Mobius Cloud</p>
+                    <h1 className="text-2xl font-semibold tracking-tight">Workspaces</h1>
+                    <p className="mt-2 text-[13px] text-muted-foreground">A shared place for your team and agents.</p>
                 </div>
-                <button type="button" onClick={newWorkspace} className={primaryButton}>
-                    New workspace
-                </button>
+                <Button onClick={newWorkspace}>New workspace</Button>
             </div>
             {items.length === 0 ? (
-                <section className="rounded-2xl border border-dashed border-zinc-300 bg-white px-8 py-20 text-center">
-                    <h2 className="text-lg font-semibold">No workspaces yet</h2>
-                    <p className="mt-2 text-sm text-zinc-500">Create a workspace to get started.</p>
-                </section>
+                <Card asChild className="border-dashed px-6 py-16 text-center">
+                    <section>
+                        <h2 className="text-lg font-semibold">No workspaces yet</h2>
+                        <p className="mt-2 text-[13px] text-muted-foreground">Create a workspace to get started.</p>
+                    </section>
+                </Card>
             ) : (
                 <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {items.map((workspace) => (
-                        <li
-                            key={workspace.id}
-                            className="flex min-w-0 flex-col rounded-xl border border-zinc-200 bg-white shadow-sm"
-                        >
-                            <Link
-                                to="/workspaces/$workspaceId"
-                                params={{ workspaceId: workspace.id }}
-                                className="flex flex-1 items-center gap-4 rounded-t-xl p-6 hover:bg-violet-50/50 focus-visible:outline-violet-600"
-                            >
-                                <span
-                                    aria-hidden="true"
-                                    className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-lg font-semibold text-violet-800"
+                        <Card asChild key={workspace.id} className="flex flex-col">
+                            <li>
+                                <Link
+                                    to="/workspaces/$workspaceId"
+                                    params={{ workspaceId: workspace.id }}
+                                    className="flex flex-1 items-center gap-3 rounded-t-xl p-5 text-[13px] transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
                                 >
-                                    {workspace.name.slice(0, 1).toUpperCase()}
-                                </span>
-                                <span className="break-words font-semibold">{workspace.name}</span>
-                            </Link>
-                            <div className="flex min-h-12 items-center justify-between border-t border-zinc-100 px-6 py-3 text-xs">
-                                <span className="text-zinc-500">Workspace</span>
-                                {workspace.canDelete && (
-                                    <button
-                                        type="button"
-                                        aria-label={`Delete ${workspace.name}`}
-                                        onClick={() => confirmDelete(workspace)}
-                                        className="text-zinc-500 hover:text-red-700"
+                                    <span
+                                        aria-hidden="true"
+                                        className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-sm font-semibold text-primary"
                                     >
-                                        Delete
-                                    </button>
-                                )}
-                            </div>
-                        </li>
+                                        {workspace.name.slice(0, 1).toUpperCase()}
+                                    </span>
+                                    <span className="break-words font-semibold">{workspace.name}</span>
+                                </Link>
+                                <div className="flex min-h-12 items-center justify-between border-t border-border px-5 py-2 text-xs">
+                                    <span className="text-muted-foreground">Workspace</span>
+                                    {workspace.canDelete && (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            aria-label={`Delete ${workspace.name}`}
+                                            onClick={() => confirmDelete(workspace)}
+                                            className="hover:text-destructive"
+                                        >
+                                            Delete
+                                        </Button>
+                                    )}
+                                </div>
+                            </li>
+                        </Card>
                     ))}
                 </ul>
             )}
             <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-                <button
-                    type="button"
-                    disabled={refreshing}
-                    onClick={runRefresh}
-                    className="text-sm text-zinc-500 hover:text-zinc-900 disabled:opacity-50"
-                >
+                <Button variant="ghost" size="sm" disabled={refreshing} onClick={runRefresh}>
                     Refresh workspaces
-                </button>
+                </Button>
                 {totalCount > workspacePageSize && (
                     <nav aria-label="Workspace pages" className="flex items-center gap-4">
                         {page > 1 ? (
-                            <Link to="/" search={{ page: page - 1 }} className={secondaryButton}>
+                            <Button asChild variant="outline">
+                                <Link to="/" search={{ page: page - 1 }}>
+                                    Previous
+                                </Link>
+                            </Button>
+                        ) : (
+                            <Button variant="outline" disabled>
                                 Previous
-                            </Link>
-                        ) : (
-                            <span className="text-sm text-zinc-400">Previous</span>
+                            </Button>
                         )}
-                        <span className="text-sm text-zinc-500">Page {page}</span>
+                        <span className="text-xs text-muted-foreground">Page {page}</span>
                         {page * workspacePageSize < totalCount ? (
-                            <Link to="/" search={{ page: page + 1 }} className={secondaryButton}>
-                                Next
-                            </Link>
+                            <Button asChild variant="outline">
+                                <Link to="/" search={{ page: page + 1 }}>
+                                    Next
+                                </Link>
+                            </Button>
                         ) : (
-                            <span className="text-sm text-zinc-400">Next</span>
+                            <Button variant="outline" disabled>
+                                Next
+                            </Button>
                         )}
                     </nav>
                 )}
@@ -247,11 +232,13 @@ export function WorkspaceDetail({
 }) {
     return (
         <>
-            <Link to="/" search={{ page: 1 }} className="text-sm font-medium text-zinc-500 hover:text-zinc-900">
-                ← All workspaces
-            </Link>
+            <Button asChild variant="ghost" size="sm">
+                <Link to="/" search={{ page: 1 }}>
+                    ← All workspaces
+                </Link>
+            </Button>
             <section className="mt-8">
-                <p className="mb-3 break-words text-sm font-medium text-violet-700">{workspace.name}</p>
+                <p className="mb-3 break-words text-sm font-medium text-primary">{workspace.name}</p>
                 <div className="mt-6">{children}</div>
             </section>
         </>
@@ -269,16 +256,18 @@ export function WorkspaceFailure({
 }) {
     return (
         <>
-            <Link to="/" search={{ page: 1 }} className="text-sm font-medium text-zinc-500 hover:text-zinc-900">
-                ← All workspaces
-            </Link>
+            <Button asChild variant="ghost" size="sm">
+                <Link to="/" search={{ page: 1 }}>
+                    ← All workspaces
+                </Link>
+            </Button>
             <p role="alert" className="mt-8 rounded-xl border border-red-200 bg-white p-6 text-red-700">
                 {message ?? workspaceErrorMessage(cause)}
             </p>
             {refresh && (
-                <button type="button" onClick={refresh} className="mt-5 text-sm text-zinc-500">
+                <Button variant="ghost" onClick={refresh} className="mt-5">
                     Refresh workspaces
-                </button>
+                </Button>
             )}
         </>
     );

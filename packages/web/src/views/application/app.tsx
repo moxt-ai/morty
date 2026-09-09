@@ -1,4 +1,5 @@
 import { SignOutButton, UserButton } from "@clerk/react";
+import { Button } from "@moxt-ai/mobius-cloud-web-core";
 import { type AnyRouter, RouterProvider } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
@@ -13,9 +14,9 @@ export type AppState =
 
 export function Page({ children, account }: { readonly children: ReactNode; readonly account?: ReactNode }) {
     return (
-        <div className="min-h-screen bg-stone-50 text-zinc-900">
-            <header className="border-b border-zinc-200 bg-white">
-                <div className="mx-auto flex h-18 max-w-5xl items-center justify-between px-6">
+        <div className="min-h-screen bg-background font-sans text-foreground">
+            <header className="border-b border-border bg-card">
+                <div className="mx-auto flex min-h-16 max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
                     <a
                         className="flex items-center gap-3 font-semibold tracking-tight"
                         href="/"
@@ -23,20 +24,16 @@ export function Page({ children, account }: { readonly children: ReactNode; read
                     >
                         <span
                             aria-hidden="true"
-                            className="flex size-9 items-center justify-center rounded-xl bg-zinc-900 text-2xl text-white"
+                            className="flex size-9 items-center justify-center rounded-lg bg-primary text-2xl text-primary-foreground"
                         >
                             ∞
                         </span>
                         Mobius Cloud
                     </a>
-                    {account ?? (
-                        <span className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-                            Your agents. Connected.
-                        </span>
-                    )}
+                    {account ?? <span className="text-xs text-muted-foreground">Your agents. Connected.</span>}
                 </div>
             </header>
-            <main className="mx-auto max-w-5xl px-6 py-12 sm:py-16">{children}</main>
+            <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">{children}</main>
         </div>
     );
 }
@@ -65,9 +62,9 @@ export function App({ state }: { readonly state: AppState }) {
                     account={
                         <div className="flex items-center gap-5">
                             <SignOutButton redirectUrl="/">
-                                <button type="button" className="text-sm text-zinc-500 hover:text-zinc-900">
+                                <Button variant="ghost" size="sm">
                                     Sign out
-                                </button>
+                                </Button>
                             </SignOutButton>
                             <UserButton />
                         </div>

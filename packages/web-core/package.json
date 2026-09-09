@@ -17,6 +17,7 @@
         "@tanstack/react-router": "1.170.32",
         "react": "19.2.8",
         "react-dom": "19.2.8",
+        "radix-ui": "^1.6.7",
         "zustand": "5.0.15"
     },
     "dependencies": {
@@ -24,6 +25,7 @@
         "valibot": "1.4.2"
     },
     "devDependencies": {
+        "radix-ui": "^1.6.7",
         "@types/react": "19.2.18",
         "vite": "8.2.2"
     }

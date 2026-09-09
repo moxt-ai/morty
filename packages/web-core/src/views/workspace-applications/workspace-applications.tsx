@@ -1,5 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { type ComponentType, useState } from "react";
+import { Button } from "../../components/ui/button.tsx";
+import { Card } from "../../components/ui/card.tsx";
 import type { WorkspaceConnectionProps } from "../../view-models/workspaces/connections.ts";
 
 export interface PairApplicationProps<TConnection> {
@@ -41,13 +43,11 @@ export function WorkspaceApplications<TConnection>({
                 <section aria-label={selected === "chat" ? "Chat" : "Slack"} className="grid min-w-0 gap-5">
                     <header className="flex items-center justify-between gap-4">
                         <h2 className="text-xl font-semibold">{selected === "chat" ? "Chat" : "Slack"}</h2>
-                        <Link
-                            to={workspacePath}
-                            search={{}}
-                            className="text-sm font-medium text-emerald-700 hover:underline"
-                        >
-                            Back to workspace
-                        </Link>
+                        <Button asChild variant="outline">
+                            <Link to={workspacePath} search={{}}>
+                                Back to workspace
+                            </Link>
+                        </Button>
                     </header>
                     {selected === "slack" ? (
                         <SlackApplication />
@@ -75,30 +75,36 @@ export function WorkspaceApplications<TConnection>({
                         <ProjectsApplication />
                     </section>
                     <nav aria-label="Workspace applications" className="grid gap-5">
-                        <Link
-                            to={`${workspacePath}/chat`}
-                            search={{}}
-                            aria-label="Open Chat"
-                            className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition hover:border-emerald-500 hover:shadow-md focus-visible:outline-2 focus-visible:outline-emerald-600"
-                        >
-                            <h2 className="text-xl font-semibold">
-                                Chat <span aria-hidden="true">↗</span>
-                            </h2>
-                            <p className="mt-2 text-sm text-zinc-500">Open your local agent conversations.</p>
-                        </Link>
-                        <Link
-                            to={`${workspacePath}/slack`}
-                            search={{}}
-                            aria-label="Open Slack"
-                            className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition hover:border-emerald-500 hover:shadow-md focus-visible:outline-2 focus-visible:outline-emerald-600"
-                        >
-                            <h2 className="text-xl font-semibold">
-                                Slack <span aria-hidden="true">↗</span>
-                            </h2>
-                            <p className="mt-2 text-sm text-zinc-500">
-                                Manage Slack bots, installations, and bindings.
-                            </p>
-                        </Link>
+                        <Card asChild>
+                            <Link
+                                to={`${workspacePath}/chat`}
+                                search={{}}
+                                aria-label="Open Chat"
+                                className="p-5 transition-colors hover:border-ring hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
+                            >
+                                <h2 className="text-base font-semibold">
+                                    Chat <span aria-hidden="true">↗</span>
+                                </h2>
+                                <p className="mt-2 text-[13px] text-muted-foreground">
+                                    Open your local agent conversations.
+                                </p>
+                            </Link>
+                        </Card>
+                        <Card asChild>
+                            <Link
+                                to={`${workspacePath}/slack`}
+                                search={{}}
+                                aria-label="Open Slack"
+                                className="p-5 transition-colors hover:border-ring hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
+                            >
+                                <h2 className="text-base font-semibold">
+                                    Slack <span aria-hidden="true">↗</span>
+                                </h2>
+                                <p className="mt-2 text-[13px] text-muted-foreground">
+                                    Manage Slack bots, installations, and bindings.
+                                </p>
+                            </Link>
+                        </Card>
                     </nav>
                 </div>
             )}

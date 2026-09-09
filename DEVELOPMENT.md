@@ -141,6 +141,13 @@ to the plain workspace URL restore it. The channel ID alone grants no access.
 
 ### Slack bot bindings
 
+Cloud presentation primitives live in `packages/web-core/src/components/ui`.
+Buttons, inputs, cards, and Radix dialogs follow Slack's control sizing, green
+accent palette, focus styling, and modal behavior. Use `Button asChild` for
+navigation links and `Card asChild` for semantic card containers. Application
+styles and Tailwind source scanning remain in `packages/web/src/styles.css`;
+web-core does not import global CSS.
+
 Workspace pages use separate application paths beneath the existing app bar:
 
 - `/workspaces/<workspace-id>`: project/bot management and Chat/Slack navigation cards.

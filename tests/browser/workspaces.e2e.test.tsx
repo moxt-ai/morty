@@ -109,6 +109,19 @@ test("Given a signed-in user, When they open a workspace and navigate to Chat an
     await expect.element(screen.getByText("No workspaces yet")).toBeVisible();
 });
 
+test("Given a workspace creation dialog, When the user dismisses it, Then focus returns to its trigger and the unsaved draft is discarded", async () => {
+    const identity = new WorkspaceIdentityProvider();
+    const screen = await renderWorkspaces(identity.forUser("alice"));
+    await screen.getByRole("button", { name: "New workspace", exact: true }).click();
+    await expect.element(screen.getByRole("textbox", { name: "Workspace name" })).toHaveFocus();
+    await screen.getByRole("textbox", { name: "Workspace name" }).fill("Unsaved team");
+    await screen.getByRole("button", { name: "Close dialog" }).click();
+    await expect.element(screen.getByRole("dialog")).not.toBeInTheDocument();
+    await expect.element(screen.getByRole("button", { name: "New workspace", exact: true })).toHaveFocus();
+    await screen.getByRole("button", { name: "New workspace", exact: true }).click();
+    await expect.element(screen.getByRole("textbox", { name: "Workspace name" })).toHaveValue("");
+});
+
 test("Given memberships in two workspaces, When a user views their list, Then only their workspaces appear and only their managed workspace can be deleted", async () => {
     const identity = new WorkspaceIdentityProvider();
     identity.create("Alice's team", "alice");
