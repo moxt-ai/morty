@@ -212,6 +212,17 @@ test("Given a paired workspace, When the user reloads its page, Then Chat and Sl
     await expect.element(reopened.getByText("Slack bots are ready.")).toBeVisible();
 });
 
+test("Given Chat has no saved connection, When the user chooses a project through its recovery link, Then they can open their connected Chat", async () => {
+    const identity = new WorkspaceIdentityProvider();
+    const workspace = identity.create("Research team", "alice");
+    window.history.replaceState(null, "", `/workspaces/${workspace}/chat`);
+    const screen = await renderWorkspaces(identity.forUser("alice"));
+    await screen.getByRole("link", { name: "Choose a project", exact: true }).click();
+    await screen.getByRole("button", { name: "Select paired project" }).click();
+    await screen.getByRole("link", { name: "Open Chat" }).click();
+    await expect.element(screen.getByText("Chat is ready for channel-1.")).toBeVisible();
+});
+
 test("Given a paired workspace, When another workspace or another signed-in member is opened, Then the saved machine is not reused across either boundary", async () => {
     const identity = new WorkspaceIdentityProvider();
     const first = identity.create("First team", "alice");

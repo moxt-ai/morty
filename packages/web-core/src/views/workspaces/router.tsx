@@ -36,7 +36,10 @@ function WorkspaceLayout() {
     return (
         <>
             {loading && (
-                <p role="status" className="mb-4 text-sm text-zinc-500">
+                <p
+                    role="status"
+                    className="pointer-events-none fixed bottom-4 right-4 z-50 rounded-lg border border-border bg-card px-4 py-2 text-sm text-muted-foreground shadow-sm"
+                >
                     Loading workspace…
                 </p>
             )}

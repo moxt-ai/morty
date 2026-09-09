@@ -9,6 +9,15 @@ import { ProjectOwnerCredentials } from "../../packages/web-core/src/view-models
 import { MobiusBots } from "../../packages/web-core/src/views/workspace-applications/project-bot-management.tsx";
 
 class MobiusWorkspace {
+    statusAvailable = true;
+    botReads: "available" | "paused" | "failed" = "available";
+    readonly pendingBotReads = new Set<() => void>();
+    readonly resumeBotReads = () => {
+        this.botReads = "available";
+        for (const resume of this.pendingBotReads) {
+            resume();
+        }
+    };
     readonly #setups = new Map<string, BotSetup>();
     readonly #setup = (botId: string): BotSetup =>
         this.#setups.get(botId) ?? {
@@ -122,6 +131,9 @@ class MobiusWorkspace {
         },
         projectStatus: async (projectId, signal) => {
             signal.throwIfAborted();
+            if (!this.statusAvailable) {
+                throw new Error("Runtime status unavailable");
+            }
             return projectId === "project-new" && this.#paired ? "connected" : "offline";
         },
         listProjects: async (signal) => {
@@ -135,6 +147,27 @@ class MobiusWorkspace {
         },
         listBots: async (projectId, signal) => {
             signal.throwIfAborted();
+            if (this.botReads === "paused") {
+                await new Promise<void>((resolve, reject) => {
+                    const resume = () => {
+                        cleanup();
+                        resolve();
+                    };
+                    const abort = () => {
+                        cleanup();
+                        reject(signal.reason);
+                    };
+                    const cleanup = () => {
+                        this.pendingBotReads.delete(resume);
+                        signal.removeEventListener("abort", abort);
+                    };
+                    this.pendingBotReads.add(resume);
+                    signal.addEventListener("abort", abort, { once: true });
+                });
+            }
+            if (this.botReads === "failed") {
+                throw new Error("Bots temporarily unavailable");
+            }
             return this.#bots.get(projectId) ?? [];
         },
         createBot: async (projectId, input, signal) => {
@@ -154,6 +187,35 @@ beforeEach(() => {
     vi.setSystemTime(new Date("2026-09-09T00:00:00Z"));
 });
 afterEach(() => vi.useRealTimers());
+
+test("Given visible bots, When refresh is pending or fails, Then the list stays visible and the user can retry", async () => {
+    const workspace = new MobiusWorkspace(["project-one"]);
+    const screen = await render(<MobiusBots requests={workspace.requests} />);
+    await expect.element(screen.getByRole("listitem", { name: "Support" })).toBeVisible();
+    workspace.botReads = "paused";
+    await screen.getByRole("button", { name: "Refresh bots", exact: true }).click();
+    await expect.element(screen.getByRole("button", { name: "Refreshing bots…", exact: true })).toBeDisabled();
+    await expect.element(screen.getByRole("listitem", { name: "Support" })).toBeVisible();
+    workspace.resumeBotReads();
+    await expect.element(screen.getByRole("button", { name: "Refresh bots", exact: true })).toBeEnabled();
+    workspace.botReads = "failed";
+    await screen.getByRole("button", { name: "Refresh bots", exact: true }).click();
+    await expect.element(screen.getByRole("alert")).toHaveTextContent("Bots temporarily unavailable");
+    await expect.element(screen.getByRole("listitem", { name: "Support" })).toBeVisible();
+    workspace.botReads = "available";
+    await screen.getByRole("button", { name: "Refresh bots", exact: true }).click();
+    await expect.element(screen.getByRole("alert")).not.toBeInTheDocument();
+});
+
+test("Given runtime status is unavailable, When a user opens a project, Then its bots remain available for setup", async () => {
+    const workspace = new MobiusWorkspace(["project-one"]);
+    workspace.statusAvailable = false;
+    const screen = await render(<MobiusBots requests={workspace.requests} />);
+    await expect.element(screen.getByRole("listitem", { name: "Support" })).toBeVisible();
+    await expect.element(screen.getByText("Runtime status unavailable", { exact: true })).toBeVisible();
+    await screen.getByRole("button", { name: "Set up Support", exact: true }).click();
+    await expect.element(screen.getByRole("dialog")).toBeVisible();
+});
 
 test("Given a bot needing setup, When its owner selects a local agent and the runtime approves the configuration, Then the bot becomes ready with its saved instructions", async () => {
     const workspace = new MobiusWorkspace(["project-one"]);

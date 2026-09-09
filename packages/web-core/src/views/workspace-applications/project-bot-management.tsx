@@ -19,7 +19,14 @@ import type { ProjectApplicationProps } from "./workspace-applications.tsx";
 
 type Resource<T> =
     | { readonly kind: "loading" }
-    | { readonly kind: "ready"; readonly value: T }
+    | {
+          readonly kind: "ready";
+          readonly value: T;
+          readonly refresh:
+              | { readonly kind: "idle" }
+              | { readonly kind: "pending" }
+              | { readonly kind: "failed"; readonly message: string };
+      }
     | { readonly kind: "failed"; readonly message: string };
 function useDialogLifetime() {
     const lifetime = useRef<AbortController | null>(null);
@@ -37,25 +44,31 @@ function useDialogLifetime() {
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : "Mobius request failed. Try again.";
 }
-function useResource<T>(load: (signal: AbortSignal) => Promise<T>, revision: number): Resource<T> {
+function useResource<T>(load: (signal: AbortSignal) => Promise<T>, revision: number, retain = false): Resource<T> {
     const [state, setState] = useState<Resource<T>>({ kind: "loading" });
     // biome-ignore lint/correctness/useExhaustiveDependencies: Explicit refresh reloads the resource.
     useEffect(() => {
         const controller = new AbortController();
-        setState({ kind: "loading" });
+        setState((previous) =>
+            retain && previous.kind === "ready" ? { ...previous, refresh: { kind: "pending" } } : { kind: "loading" },
+        );
         void load(controller.signal)
             .then((value) => {
                 if (!controller.signal.aborted) {
-                    setState({ kind: "ready", value });
+                    setState({ kind: "ready", value, refresh: { kind: "idle" } });
                 }
             })
             .catch((error) => {
                 if (!controller.signal.aborted) {
-                    setState({ kind: "failed", message: errorMessage(error) });
+                    setState((previous) =>
+                        retain && previous.kind === "ready"
+                            ? { ...previous, refresh: { kind: "failed", message: errorMessage(error) } }
+                            : { kind: "failed", message: errorMessage(error) },
+                    );
                 }
             });
         return () => controller.abort();
-    }, [load, revision]);
+    }, [load, revision, retain]);
     return state;
 }
 function label(bot: { readonly lifecycle: string; readonly setupStatus?: string | undefined }) {
@@ -258,17 +271,14 @@ type ProjectDialog =
     | { readonly kind: "setup"; readonly bot: ManagedMobiusBot };
 function ProjectBots({ projectId, requests }: { readonly projectId: string; readonly requests: MobiusBotsRequests }) {
     const [revision, refresh] = useState(0);
-    const load = useCallback(
-        async (signal: AbortSignal) => {
-            const [bots, status] = await Promise.all([
-                requests.listBots(projectId, signal),
-                requests.projectStatus(projectId, signal),
-            ]);
-            return { bots, status };
-        },
+    const load = useCallback((signal: AbortSignal) => requests.listBots(projectId, signal), [projectId, requests]);
+    const loadStatus = useCallback(
+        (signal: AbortSignal) => requests.projectStatus(projectId, signal),
         [projectId, requests],
     );
-    const resource = useResource(load, revision);
+    const resource = useResource(load, revision, true);
+    const status = useResource(loadStatus, revision);
+    const refreshing = resource.kind === "ready" && resource.refresh.kind === "pending";
     const [dialog, setDialog] = useState<ProjectDialog>({ kind: "closed" });
     const canManage = requests.canManageProject(projectId);
     const changed = () => refresh((r) => r + 1);
@@ -280,20 +290,24 @@ function ProjectBots({ projectId, requests }: { readonly projectId: string; read
                 </p>
             ) : null}
             <div className="flex justify-between gap-3">
-                <Button variant="outline" onClick={changed}>
-                    Refresh bots
+                <Button variant="outline" onClick={changed} disabled={resource.kind === "loading" || refreshing}>
+                    {refreshing ? "Refreshing bots…" : "Refresh bots"}
                 </Button>
                 <Button aria-label="Add Mobius bot" disabled={!canManage} onClick={() => setDialog({ kind: "create" })}>
                     Add bot
                 </Button>
             </div>
+            {resource.kind === "ready" && resource.refresh.kind === "failed" ? (
+                <p role="alert">{resource.refresh.message} Showing previously loaded bots. Refresh to try again.</p>
+            ) : null}
+            {status.kind === "failed" ? <p role="status">Runtime status unavailable</p> : null}
             {resource.kind === "loading" ? (
                 <p role="status">Loading bots…</p>
             ) : resource.kind === "failed" ? (
                 <p role="alert">{resource.message}</p>
             ) : (
                 <ul className="grid gap-3">
-                    {resource.value.bots.map((bot) => (
+                    {resource.value.map((bot) => (
                         <li
                             aria-label={bot.displayName}
                             key={bot.botId}
@@ -302,7 +316,13 @@ function ProjectBots({ projectId, requests }: { readonly projectId: string; read
                             <strong className="text-sm">{bot.displayName}</strong>
                             <div className="flex flex-wrap items-center gap-3 text-xs">
                                 <span>{label(bot)}</span>
-                                <span>{resource.value.status}</span>
+                                <span>
+                                    {status.kind === "ready"
+                                        ? status.value
+                                        : status.kind === "loading"
+                                          ? "Checking runtime…"
+                                          : "Status unknown"}
+                                </span>
                                 {bot.lifecycle !== "archived" ? (
                                     <Button
                                         size="sm"

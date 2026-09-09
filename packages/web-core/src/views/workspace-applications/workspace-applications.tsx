@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { type ComponentType, useState } from "react";
+import { Button } from "../../components/ui/button.tsx";
 import { Card } from "../../components/ui/card.tsx";
 import type { WorkspaceConnectionProps } from "../../view-models/workspaces/connections.ts";
 
@@ -35,9 +36,16 @@ export function WorkspaceApplications<TConnection>({
                     ) : connection.kind === "connected" ? (
                         <ChatApplication connection={connection.connection} />
                     ) : (
-                        <p role="status" className="text-sm text-muted-foreground">
-                            Select a paired project in workspace management to open Chat.
-                        </p>
+                        <div className="flex flex-col items-start gap-4 self-start rounded-xl border border-border bg-card p-6">
+                            <p role="status" className="text-sm text-muted-foreground">
+                                Select a paired project in workspace management to open Chat.
+                            </p>
+                            <Button asChild>
+                                <Link to={workspacePath} search={{}}>
+                                    Choose a project
+                                </Link>
+                            </Button>
+                        </div>
                     )}
                 </section>
             ) : (
