@@ -34,7 +34,9 @@ runs:
     - name: Install Mobius dependencies
       shell: bash
       working-directory: ${{ steps.mobius.outputs.path }}
-      run: pnpm install --frozen-lockfile
+      run: |
+        pnpm install --frozen-lockfile
+        echo "$PWD/packages/relay-cloudflare-standalone/node_modules/.bin" >> "$GITHUB_PATH"
     - name: Install Slack dependencies
       shell: bash
       working-directory: ${{ steps.slack.outputs.path }}
