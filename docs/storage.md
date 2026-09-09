@@ -33,9 +33,8 @@ Mobius D1 stores pairing/channel access information, session indexes, and quota
 reservations. Session Durable Objects store session state; archives use R2 in the
 observed deployment. The current default source configuration is the Lite profile,
 which stores archive chunks in Session Durable Object SQLite instead. Slack D1
-stores installations, identity bindings, session mappings, and compact event and
-delivery receipts. Finished event bodies are cleared; prompts and rendered context
-are sent in memory. Its implementation is maintained on the Slack repository's
+stores installations, identity bindings, session mappings, event processing, and
+prompt recovery records. Its implementation is maintained on the Slack repository's
 `main` branch.
 
 ## Regional R2 buckets
@@ -55,32 +54,12 @@ a fixed bucket storage or object-count limit, so adding a D1 shard does not
 require another bucket. Location hints are best effort, not a specific city or
 a mainland-China placement guarantee.
 
-Use business and workspace prefixes when the new buckets are connected:
-`mobius/<workspaceId>/archives/...` and `slack-attachments/<workspaceId>/...`.
+Use business and workspace prefixes in the regional buckets:
+`mobius/<workspaceId>/<projectId>/<sessionId>/<contentId>` for immutable Mobius
+artifacts and archive chunks, and `slack/<workspaceId>/attachments/...` for Slack.
 Each business owns its object formats, versioning, and retention rules. Prefixes
 are an ownership convention, not an authorization boundary. Keep buckets private
 and authorize workspace access at the serving Worker before reading or writing.
-
-### Slack attachment retention
-
-New Slack attachment copies use
-`slack-attachments/<tenantId>/<teamId>/<fileId>/<filename>`. Each regional
-bucket has an enabled `slack-attachments-3-days` lifecycle rule scoped to
-`slack-attachments/`, expiring objects three days after upload. Overwriting an
-object restarts its age. R2 performs deletion asynchronously; three days is a
-retention target, not an exact access cutoff. Removed files return HTTP 404.
-
-Provision the same rule when adding a regional bucket:
-
-```bash
-pnpm exec wrangler r2 bucket lifecycle add <bucket-name> slack-attachments-3-days slack-attachments/ --expire-days 3
-pnpm exec wrangler r2 bucket lifecycle list <bucket-name>
-```
-
-Keep existing lifecycle rules when configuring retention. The prefix excludes
-Mobius archives and other businesses' objects. Earlier Slack copies used keys
-starting with the tenant ID; their download links remain supported, but this
-rule does not expire those existing unprefixed objects.
 
 R2 requires bucket provisioning and bindings, not SQL schema migrations. The four
 buckets are initially empty; existing archive/attachment buckets and bindings
@@ -152,7 +131,8 @@ wrapper.
 
 Human authentication verifies Clerk claims once. Agent authentication verifies
 credentials once before looking up the tenant. OAuth state is verified before
-placement lookup. Slack owns app
+placement lookup. Signed account-link tokens include the tenant ID, so shard-local
+installation record IDs cannot route a link into another tenant. Slack owns app
 discovery SQL and signature verification; Cloud only supplies database candidates.
 Queue messages resolve independently before processing. Deployment batches remain
 limited to one message. Unknown, ambiguous, conflicting, and inventory-invalid
@@ -160,6 +140,44 @@ routes fail closed.
 
 Cloud discovery enumerates only explicit `D1_SHARD_*` bindings. Cloud storage uses
 `D1_SHARD_*` and `R2_BUCKET_*` bindings, with no legacy binding or alias route.
+
+### Mobius runtime routing
+
+Cloud Mobius pairing creation requires a verified Clerk session with an active
+Organization and valid placement claims. The Organization ID becomes the Mobius
+tenant ID. The embedded Pair view sends that session token; Slack passes its
+authenticated tenant explicitly to the embedded Mobius gateway. Standalone Mobius
+requires an explicitly configured `MOBIUS_TENANT_ID`; pairing never creates a tenant.
+
+Mobius's Cloudflare adapters receive a `DatabaseResolver` and a `BucketResolver`.
+Both storage resolvers synchronously select bindings from already-resolved tenant
+placement, following Slack's resolver contract. Placement is resolved only by
+`TenantShardingDirectory.resolve(tenantId, signal)`.
+
+For credential-based requests, Mobius's internal core pairing identity service
+authenticates polling, host, daemon, browser, pairing-code, or access-grant
+credentials against the configured D1 candidates. It returns a unique tenant and
+source database. The pairing service resolves placement by that tenant ID and
+checks the selected database matches the authenticated source before continuing.
+Channel IDs and pairing codes never enter the placement or storage resolvers.
+Missing placement, conflicting routes, and unavailable bindings reject access.
+
+Cloud Runtime Durable Objects use the database resolver for credential checks and
+session operations. Cloud Session Durable Objects use the bucket resolver for R2
+content reads, writes, inspection, and deletion, including archive recovery.
+`SESSION_RELAY` now binds `SessionRelay`; `LiteSessionRelay` remains exported for
+existing class registrations. This switch does not copy existing Lite SQLite
+content or reassign old random Mobius tenants to Clerk Organizations. The initial
+reset rollout described below applies to this cutover as well.
+
+The standalone Worker supplies `SingleDatabaseResolver` and `SingleBucketResolver`
+for its existing bindings. Its Lite profile still stores content in Durable Object
+SQLite. Cloud no longer declares a `DIRECTORY_DATABASE` alias.
+
+`tests/mobius-sharding.integration.test.ts` exercises Cloud pairing, session
+directories, and artifact upload/deletion across two real local D1 databases, R2
+buckets, and Durable Objects. It uses a stateful placement authority instead of
+contacting Clerk's Organization directory, and real locally signed session tokens.
 
 The initial rollout uses a database reset after the Cloud PR is merged, rather
 than migrating existing data. No reset is performed by the application or by CI.

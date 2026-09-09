@@ -31,7 +31,7 @@ function isR2Bucket(value: unknown): value is R2Bucket {
     return v.safeParse(r2BindingSchema, value).success;
 }
 
-function configuredD1Binding(shardId: string, bindings: CloudSlackStorageBindings): D1Database | null {
+export function configuredD1Binding(shardId: string, bindings: CloudSlackStorageBindings): D1Database | null {
     const value =
         shardId === "apac-01"
             ? bindings.D1_SHARD_APAC_01
@@ -59,7 +59,7 @@ export function configuredD1Candidates(
     );
 }
 
-function configuredR2Binding(bucketId: string, bindings: CloudSlackStorageBindings): R2Bucket | null {
+export function configuredR2Binding(bucketId: string, bindings: CloudSlackStorageBindings): R2Bucket | null {
     const value =
         bucketId === "apac" ? bindings.R2_BUCKET_APAC : bucketId === "wnam" ? bindings.R2_BUCKET_WNAM : undefined;
     return isR2Bucket(value) ? value : null;

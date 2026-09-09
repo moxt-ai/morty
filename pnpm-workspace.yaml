@@ -10,6 +10,7 @@ packages:
   - mobius/packages/protocol
   - mobius/packages/relay-core
   - mobius/packages/relay-cloudflare
+  - mobius/packages/relay-cloudflare-standalone
   - mobius/packages/web-core
   - mobius/packages/web-sdk
 

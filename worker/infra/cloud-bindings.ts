@@ -13,7 +13,6 @@ export interface CloudBindings {
     readonly D1_SHARD_WNAM_01?: unknown;
     readonly D1_SHARD_WNAM_02?: unknown;
     readonly DEPLOY_ENVIRONMENT?: unknown;
-    readonly DIRECTORY_DATABASE?: unknown;
     readonly EVENTS?: unknown;
     readonly MOBIUS_BASE_URL?: unknown;
     readonly SLACK_MOBIUS_AUTH_TOKEN?: unknown;

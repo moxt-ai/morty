@@ -19,7 +19,7 @@ runs:
           grep -Fqx "      uses: moxt-ai/$repository/.github/actions/source@$revision" .github/actions/business-sources/action.yml
         done
     - id: mobius
-      uses: moxt-ai/mobius/.github/actions/source@e5ec0395ebc06e00fbb8307d8ae02556d6d264e1
+      uses: moxt-ai/mobius/.github/actions/source@10c4824b0acf0bc74afe9ea02b148047d40c0e0c
     - id: slack
       uses: moxt-ai/mobius-slack/.github/actions/source@48bbc50663e18c3dd31b916b23ffc6813edc5672
     - name: Materialize business sources
