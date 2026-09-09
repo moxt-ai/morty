@@ -2,10 +2,14 @@ import {
     CloudflareChannelRuntime,
     CloudflareSessionRuntime,
     D1PairingGateway,
+    D1PairingIdentityDirectory,
     sessionQuotaFromEnvironment,
 } from "@moxt-ai/mobius-relay-cloudflare/adapters";
 import { createRelayApp } from "@moxt-ai/mobius-relay-core";
 import * as v from "valibot";
+import { CloudflareBotApi } from "../../mobius/packages/relay-cloudflare/src/bot-api.ts";
+import { SingleDatabaseResolver } from "../../mobius/packages/relay-cloudflare-standalone/src/database-resolver.ts";
+import { StandaloneTenantShardingDirectory } from "../../mobius/packages/relay-cloudflare-standalone/src/tenant-sharding-directory.ts";
 import { ClerkGateway } from "../gateway/clerk-gateway.ts";
 import { WorkspacePairingTenantResolver } from "../gateway/workspace-pairing-tenant-resolver.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
@@ -14,6 +18,7 @@ import { AuthenticationService } from "../service/authentication-service.ts";
 import { ConfigurationStorage } from "../storage/configuration-storage.ts";
 
 interface MobiusBindings {
+    readonly BOT_CONNECTIONS: DurableObjectNamespace;
     readonly DIRECTORY_DATABASE: D1Database;
     readonly RUNTIME_RELAY: DurableObjectNamespace;
     readonly SESSION_ACTIVE_SESSIONS_PER_PROJECT?: string;
@@ -22,6 +27,7 @@ interface MobiusBindings {
 }
 
 const mobiusBindingsSchema = v.object({
+    BOT_CONNECTIONS: v.object({ get: v.function(), idFromName: v.function() }),
     DIRECTORY_DATABASE: v.object({ batch: v.function(), prepare: v.function() }),
     RUNTIME_RELAY: v.object({ get: v.function(), idFromName: v.function() }),
     SESSION_ACTIVE_SESSIONS_PER_PROJECT: v.optional(v.string()),
@@ -53,20 +59,28 @@ export async function fetchMobiusRequest(request: Request, bindings: CloudBindin
         config: { quota: sessionQuotaFromEnvironment(bindings) },
         gateways: {
             sessionRelay: bindings.SESSION_RELAY,
-            directoryDatabase: bindings.DIRECTORY_DATABASE,
+            databaseResolver: new SingleDatabaseResolver(bindings.DIRECTORY_DATABASE),
+            tenantShardingDirectory: new StandaloneTenantShardingDirectory(),
+            pairingIdentityDirectory: new D1PairingIdentityDirectory([bindings.DIRECTORY_DATABASE]),
             runtimeRelay: bindings.RUNTIME_RELAY,
         },
     };
     const sessions = new CloudflareSessionRuntime(infrastructure);
+    const channelRuntime = new CloudflareChannelRuntime(infrastructure);
+    const tenantResolver = new WorkspacePairingTenantResolver(
+        new AuthenticationService({
+            storages: { configuration: new ConfigurationStorage({ config: { bindings } }) },
+            gateways: { clerk: new ClerkGateway({ config: { bindings } }) },
+        }),
+    );
+    const bots = new CloudflareBotApi(bindings, channelRuntime, sessions, tenantResolver);
+    if (bots.handles(request)) {
+        return await bots.fetch(request);
+    }
     const application = createRelayApp({
-        channelGateway: new CloudflareChannelRuntime(infrastructure),
+        channelGateway: channelRuntime,
         pairingGateway: new D1PairingGateway(infrastructure),
-        pairingTenantResolver: new WorkspacePairingTenantResolver(
-            new AuthenticationService({
-                storages: { configuration: new ConfigurationStorage({ config: { bindings } }) },
-                gateways: { clerk: new ClerkGateway({ config: { bindings } }) },
-            }),
-        ),
+        pairingTenantResolver: tenantResolver,
         sessionCommands: sessions,
         sessionQueries: sessions,
         sessionTransfers: sessions,

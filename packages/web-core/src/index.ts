@@ -16,7 +16,6 @@ export {
 export {
     type ChatApplicationProps,
     type PairApplicationProps,
-    type SlackApplicationProps,
     WorkspaceApplications,
 } from "./views/workspace-applications/workspace-applications.tsx";
 export { createWorkspaceRouter } from "./views/workspaces/router.tsx";

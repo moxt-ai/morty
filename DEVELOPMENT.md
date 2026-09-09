@@ -103,8 +103,7 @@ boundary exercised by the existing authentication integration scenarios.
 
 Cloud Mobius pairing creation requires a verified Clerk session with an active
 organization. That organization ID is the pairing's tenant; no anonymous Mobius
-tenant is generated. The embedded Pair UI supplies its Clerk token, and Slack's
-internal pairing request forwards the initiating user's token for verification
+tenant is generated. The embedded Pair UI supplies its Clerk token for verification
 at the Mobius boundary. Missing authentication returns 401; a session without an
 active workspace returns 403. Pairing claims continue using the one-time code.
 
@@ -139,6 +138,33 @@ Successful channel authorization saves the workspace association; later visits
 to the plain workspace URL restore it. The channel ID alone grants no access.
 
 ## Cloudflare Deployment
+
+### Slack bot bindings
+
+Workspace pages use separate application paths beneath the existing app bar:
+
+- `/workspaces/<workspace-id>`: project/bot management and Chat/Slack navigation cards.
+- `/workspaces/<workspace-id>/chat`: the Mobius chat view (or pairing when no connection is saved).
+- `/workspaces/<workspace-id>/slack`: Slack bot management.
+
+Only the selected application view mounts. Chat connection restoration runs when
+opening Chat, so a stale chat connection does not block the workspace overview or Slack.
+
+Slack bots have independent identities and installations. Create a Mobius bot using
+the Mobius Bot API, then open the workspace's Slack page to set up a Slack bot and bind
+it by `botId`. Slack setup does not require a machine connection or Mobius bot.
+Binding uses a transient Mobius owner API credential to create a scoped connector
+and approve its reply target. Only the connector credential is encrypted and stored.
+Changing the binding keeps the Slack installation and isolates subsequent conversations
+under the new connection. Connector credentials expire after Mobius's configured lifetime;
+use Change Mobius bot to establish a new connection when renewal is needed.
+
+Cloud exposes Mobius's `/mobius/api/v1/*` Bot routes and binds `BOT_CONNECTIONS` to
+`BotConnectionActor`. Apply the existing Mobius directory migrations before deployment.
+Slack's complete replacement schema is in
+`apps/slack/packages/worker/migrations/0001_initial.sql`; this release requires a fresh
+Slack database schema. The planned post-merge Slack table reset is handled operationally.
+
 
 ### Browser error monitoring
 

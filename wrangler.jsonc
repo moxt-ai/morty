@@ -47,9 +47,10 @@
     ],
     "durable_objects": {
         "bindings": [
+            { "name": "BOT_CONNECTIONS", "class_name": "BotConnectionActor" },
             {
-                "name": "AGENT_TRIGGER_RATE_LIMITER",
-                "class_name": "AgentTriggerRateLimiter"
+                "name": "BOT_TRIGGER_RATE_LIMITER",
+                "class_name": "BotTriggerRateLimiter"
             },
             {
                 "name": "RUNTIME_RELAY",
@@ -87,6 +88,14 @@
         {
             "tag": "tenant-placement-v1",
             "new_sqlite_classes": ["TenantPlacementAllocator"]
+        },
+        {
+            "tag": "mobius-bots-v1",
+            "new_sqlite_classes": ["BotConnectionActor"]
+        },
+        {
+            "tag": "slack-bot-trigger-v2",
+            "renamed_classes": [{ "from": "AgentTriggerRateLimiter", "to": "BotTriggerRateLimiter" }]
         }
     ],
     "env": {
@@ -159,10 +168,11 @@
             ],
             "durable_objects": {
                 "bindings": [
+                    { "name": "BOT_CONNECTIONS", "class_name": "BotConnectionActor" },
                     { "name": "TENANT_PLACEMENT_ALLOCATOR", "class_name": "TenantPlacementAllocator" },
                     {
-                        "name": "AGENT_TRIGGER_RATE_LIMITER",
-                        "class_name": "AgentTriggerRateLimiter"
+                        "name": "BOT_TRIGGER_RATE_LIMITER",
+                        "class_name": "BotTriggerRateLimiter"
                     },
                     {
                         "name": "RUNTIME_RELAY",
@@ -235,10 +245,11 @@
             ],
             "durable_objects": {
                 "bindings": [
+                    { "name": "BOT_CONNECTIONS", "class_name": "BotConnectionActor" },
                     { "name": "TENANT_PLACEMENT_ALLOCATOR", "class_name": "TenantPlacementAllocator" },
                     {
-                        "name": "AGENT_TRIGGER_RATE_LIMITER",
-                        "class_name": "AgentTriggerRateLimiter"
+                        "name": "BOT_TRIGGER_RATE_LIMITER",
+                        "class_name": "BotTriggerRateLimiter"
                     },
                     {
                         "name": "RUNTIME_RELAY",

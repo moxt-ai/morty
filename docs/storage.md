@@ -152,8 +152,7 @@ wrapper.
 
 Human authentication verifies Clerk claims once. Agent authentication verifies
 credentials once before looking up the tenant. OAuth state is verified before
-placement lookup. Signed account-link tokens include the tenant ID, so shard-local
-installation record IDs cannot route a link into another tenant. Slack owns app
+placement lookup. Slack owns app
 discovery SQL and signature verification; Cloud only supplies database candidates.
 Queue messages resolve independently before processing. Deployment batches remain
 limited to one message. Unknown, ambiguous, conflicting, and inventory-invalid

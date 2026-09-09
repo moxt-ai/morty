@@ -13,6 +13,7 @@ import { reportApplicationError } from "../../view-models/report-error.ts";
 import type {
     BrowserWorkspaceConnections,
     WorkspaceChannel,
+    WorkspaceConnection,
     WorkspaceConnectionProps,
 } from "../../view-models/workspaces/connections.ts";
 import { type WorkspaceDirectory, workspacePageSize } from "../../view-models/workspaces/contracts.ts";
@@ -112,31 +113,44 @@ export function createWorkspaceRouter<TConnection extends WorkspaceChannel>(
             );
         },
     });
-    const detailRoute = createRoute({
-        getParentRoute: () => rootRoute,
-        path: "/workspaces/$workspaceId",
-        validateSearch: (search) => ({ channel: Reflect.get(search, "channel") }),
-        loaderDeps: ({ search }) => ({ channel: search.channel }),
-        loader: async ({ abortController, params, deps }) => {
-            const workspace = await loadWorkspace(directory, params.workspaceId, abortController.signal);
-            const connection = await connections.load(workspace.id, deps.channel, abortController.signal);
-            return { workspace, connection };
-        },
-        component: function WorkspaceDetailRoute() {
-            const { workspace, connection } = detailRoute.useLoaderData();
-            return (
-                <WorkspaceDetail workspace={workspace}>
-                    <WorkspaceManagement
-                        key={`${workspace.id}:${connection.kind === "connected" ? connection.connection.channelId : "unpaired"}`}
-                        initialConnection={connection}
-                        onConnected={(channel) => connections.save(workspace.id, channel)}
-                    />
-                </WorkspaceDetail>
-            );
-        },
-    });
+    function workspacePage(
+        path: "/workspaces/$workspaceId" | "/workspaces/$workspaceId/chat" | "/workspaces/$workspaceId/slack",
+    ) {
+        const detailRoute = createRoute({
+            getParentRoute: () => rootRoute,
+            path,
+            validateSearch: (search) => ({ channel: Reflect.get(search, "channel") }),
+            loaderDeps: ({ search }) => ({ channel: search.channel }),
+            loader: async ({ abortController, params, deps }) => {
+                const workspace = await loadWorkspace(directory, params.workspaceId, abortController.signal);
+                const connection: WorkspaceConnection<TConnection> =
+                    path.endsWith("/chat") || deps.channel !== undefined
+                        ? await connections.load(workspace.id, deps.channel, abortController.signal)
+                        : { kind: "unpaired" };
+                return { workspace, connection };
+            },
+            component: function WorkspaceDetailRoute() {
+                const { workspace, connection } = detailRoute.useLoaderData();
+                return (
+                    <WorkspaceDetail workspace={workspace}>
+                        <WorkspaceManagement
+                            key={`${workspace.id}:${connection.kind === "connected" ? connection.connection.channelId : "unpaired"}`}
+                            initialConnection={connection}
+                            onConnected={(channel) => connections.save(workspace.id, channel)}
+                        />
+                    </WorkspaceDetail>
+                );
+            },
+        });
+        return detailRoute;
+    }
     return createRouter({
-        routeTree: rootRoute.addChildren([indexRoute, detailRoute]),
+        routeTree: rootRoute.addChildren([
+            indexRoute,
+            workspacePage("/workspaces/$workspaceId"),
+            workspacePage("/workspaces/$workspaceId/chat"),
+            workspacePage("/workspaces/$workspaceId/slack"),
+        ]),
         defaultOnCatch: (error) => reportApplicationError(error, "workspace-route"),
         scrollRestoration: true,
     });

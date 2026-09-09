@@ -1,8 +1,9 @@
 export interface CloudBindings {
-    readonly AGENT_TRIGGER_RATE_LIMITER?: unknown;
+    readonly BOT_TRIGGER_RATE_LIMITER?: unknown;
     readonly APP_ORIGIN?: unknown;
     readonly ASSETS?: unknown;
     readonly AUTHENTICATION_BASE_URL?: unknown;
+    readonly BOT_CONNECTIONS?: unknown;
     readonly CLERK_ISSUER_URL?: unknown;
     readonly CLERK_JWT_KEY?: unknown;
     readonly CLERK_PUBLISHABLE_KEY?: unknown;

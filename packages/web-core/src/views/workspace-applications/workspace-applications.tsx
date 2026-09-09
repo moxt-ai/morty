@@ -1,3 +1,4 @@
+import { Link, useRouterState } from "@tanstack/react-router";
 import { type ComponentType, useState } from "react";
 import type { WorkspaceConnectionProps } from "../../view-models/workspaces/connections.ts";
 
@@ -9,106 +10,98 @@ export interface ChatApplicationProps<TConnection> {
     readonly connection: TConnection;
 }
 
-export interface SlackApplicationProps<TConnection> {
-    readonly connection: TConnection | undefined;
-}
-
-type WorkspaceApplicationState<TConnection> =
-    | { readonly kind: "unpaired"; readonly selected: "pair" | "slack" }
-    | {
-          readonly kind: "connected";
-          readonly connection: TConnection;
-          readonly selected: "pair" | "chat" | "slack";
-      };
-
-const tabClass = "border-b-2 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40";
-
 export function WorkspaceApplications<TConnection>({
     ChatApplication,
     PairApplication,
     SlackApplication,
+    ProjectsApplication,
     initialConnection,
     onConnected,
 }: WorkspaceConnectionProps<TConnection> & {
     readonly ChatApplication: ComponentType<ChatApplicationProps<TConnection>>;
     readonly PairApplication: ComponentType<PairApplicationProps<TConnection>>;
-    readonly SlackApplication: ComponentType<SlackApplicationProps<TConnection>>;
+    readonly SlackApplication: ComponentType;
+    readonly ProjectsApplication: ComponentType;
 }) {
-    const [state, setState] = useState<WorkspaceApplicationState<TConnection>>(() =>
-        initialConnection.kind === "connected"
-            ? { ...initialConnection, selected: "chat" }
-            : { kind: "unpaired", selected: "pair" },
-    );
+    const [connection, setConnection] = useState(initialConnection);
     const [failure, setFailure] = useState<string | null>(null);
-    const select = (selected: "pair" | "chat" | "slack"): void => {
-        setState((current) => {
-            if (current.kind === "unpaired") {
-                return selected === "chat" ? current : { ...current, selected };
-            }
-            return { ...current, selected };
-        });
-    };
-
+    const location = useRouterState({ select: (state) => state.location });
+    const selected = location.pathname.endsWith("/chat")
+        ? "chat"
+        : location.pathname.endsWith("/slack")
+          ? "slack"
+          : "overview";
+    const workspacePath =
+        selected === "overview" ? location.pathname : location.pathname.slice(0, location.pathname.lastIndexOf("/"));
+    const isApplication = selected === "chat" || selected === "slack";
     return (
         <>
             {failure !== null && <p role="alert">{failure}</p>}
-            <div aria-label="Workspace applications" className="border-b border-zinc-200" role="tablist">
-                <button
-                    aria-selected={state.selected === "pair"}
-                    className={`${tabClass} ${state.selected === "pair" ? "border-violet-700 text-violet-700" : "border-transparent text-zinc-500"}`}
-                    onClick={() => select("pair")}
-                    role="tab"
-                    type="button"
-                >
-                    Pair
-                </button>
-                <button
-                    aria-selected={state.selected === "chat"}
-                    className={`${tabClass} ${state.selected === "chat" ? "border-violet-700 text-violet-700" : "border-transparent text-zinc-500"}`}
-                    disabled={state.kind === "unpaired"}
-                    onClick={() => select("chat")}
-                    role="tab"
-                    type="button"
-                >
-                    Chat
-                </button>
-                <button
-                    aria-selected={state.selected === "slack"}
-                    className={`${tabClass} ${state.selected === "slack" ? "border-violet-700 text-violet-700" : "border-transparent text-zinc-500"}`}
-                    onClick={() => select("slack")}
-                    role="tab"
-                    type="button"
-                >
-                    Slack
-                </button>
-            </div>
-            <section
-                aria-label={state.selected === "pair" ? "Pair" : state.selected === "chat" ? "Chat" : "Slack"}
-                className="mt-6 min-h-80 rounded-2xl border border-zinc-200 bg-white p-6"
-                role="tabpanel"
-            >
-                {state.selected === "pair" && (
-                    <PairApplication
-                        onConnected={(connection) => {
-                            try {
-                                onConnected(connection);
-                                setFailure(null);
-                                setState({ kind: "connected", connection, selected: "chat" });
-                            } catch {
-                                setFailure(
-                                    "This browser could not save the machine connection. Allow site storage and try again.",
-                                );
-                            }
-                        }}
-                    />
-                )}
-                {state.kind === "connected" && state.selected === "chat" && (
-                    <ChatApplication connection={state.connection} />
-                )}
-                {state.selected === "slack" && (
-                    <SlackApplication connection={state.kind === "connected" ? state.connection : undefined} />
-                )}
-            </section>
+            {isApplication ? (
+                <section aria-label={selected === "chat" ? "Chat" : "Slack"} className="grid min-w-0 gap-5">
+                    <header className="flex items-center justify-between gap-4">
+                        <h2 className="text-xl font-semibold">{selected === "chat" ? "Chat" : "Slack"}</h2>
+                        <Link
+                            to={workspacePath}
+                            search={{}}
+                            className="text-sm font-medium text-emerald-700 hover:underline"
+                        >
+                            Back to workspace
+                        </Link>
+                    </header>
+                    {selected === "slack" ? (
+                        <SlackApplication />
+                    ) : connection.kind === "connected" ? (
+                        <ChatApplication connection={connection.connection} />
+                    ) : (
+                        <PairApplication
+                            onConnected={(paired) => {
+                                try {
+                                    onConnected(paired);
+                                    setFailure(null);
+                                    setConnection({ kind: "connected", connection: paired });
+                                } catch {
+                                    setFailure(
+                                        "This browser could not save the machine connection. Allow site storage and try again.",
+                                    );
+                                }
+                            }}
+                        />
+                    )}
+                </section>
+            ) : (
+                <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
+                    <section aria-label="Project and bot management" className="min-w-0">
+                        <ProjectsApplication />
+                    </section>
+                    <nav aria-label="Workspace applications" className="grid gap-5">
+                        <Link
+                            to={`${workspacePath}/chat`}
+                            search={{}}
+                            aria-label="Open Chat"
+                            className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition hover:border-emerald-500 hover:shadow-md focus-visible:outline-2 focus-visible:outline-emerald-600"
+                        >
+                            <h2 className="text-xl font-semibold">
+                                Chat <span aria-hidden="true">↗</span>
+                            </h2>
+                            <p className="mt-2 text-sm text-zinc-500">Open your local agent conversations.</p>
+                        </Link>
+                        <Link
+                            to={`${workspacePath}/slack`}
+                            search={{}}
+                            aria-label="Open Slack"
+                            className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition hover:border-emerald-500 hover:shadow-md focus-visible:outline-2 focus-visible:outline-emerald-600"
+                        >
+                            <h2 className="text-xl font-semibold">
+                                Slack <span aria-hidden="true">↗</span>
+                            </h2>
+                            <p className="mt-2 text-sm text-zinc-500">
+                                Manage Slack bots, installations, and bindings.
+                            </p>
+                        </Link>
+                    </nav>
+                </div>
+            )}
         </>
     );
 }

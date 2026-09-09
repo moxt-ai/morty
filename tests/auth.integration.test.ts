@@ -7,7 +7,7 @@ const issuer = new IdentityProvider();
 
 test("Given a Cloud tenant without placement claims, When it requests Slack agents, Then storage access is rejected", async () => {
     const response = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/agents`, {
+        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/bots`, {
             headers: {
                 Authorization: `Bearer ${issuer.createSession("user_alice", APP_ORIGIN, "active", "org_team", "admin")}`,
             },
@@ -52,6 +52,7 @@ class InMemoryD1Statement {
             values.map((value) => v.parse(v.union([v.string(), v.number(), v.null()]), value)),
         );
     readonly first = async () => this.#database.prepare(this.#query).get(...this.#values) ?? null;
+    readonly all = async () => ({ results: this.#database.prepare(this.#query).all(...this.#values), success: true });
     readonly run = async () => {
         const result = this.#database.prepare(this.#query).run(...this.#values);
         return { meta: { changes: Number(result.changes) } };
@@ -66,6 +67,8 @@ class InMemoryD1Database {
         for (const path of [
             "../mobius/packages/relay-cloudflare/migrations/d1/0001_schema.sql",
             "../mobius/packages/relay-cloudflare/migrations/d1/0002_browser_credentials.sql",
+            "../mobius/packages/relay-cloudflare/migrations/d1/0003_bots.sql",
+            "../mobius/packages/relay-cloudflare/migrations/d1/0004_project_runtime_pairings.sql",
             "../apps/slack/packages/worker/migrations/0001_initial.sql",
         ]) {
             this.#database.exec(readFileSync(new URL(path, import.meta.url), "utf8"));
@@ -167,7 +170,7 @@ const configuration = {
 const slackConfiguration = {
     ...configuration,
     CLERK_ISSUER_URL: "https://clerk.test",
-    AGENT_TRIGGER_RATE_LIMITER: {
+    BOT_TRIGGER_RATE_LIMITER: {
         get: () => undefined,
         idFromName: () => undefined,
     },
@@ -190,6 +193,7 @@ const slackConfiguration = {
 };
 
 const mobiusConfiguration = {
+    BOT_CONNECTIONS: { get: () => undefined, idFromName: () => undefined },
     DIRECTORY_DATABASE: {
         batch: () => Promise.resolve([]),
         prepare: () => undefined,
@@ -404,31 +408,144 @@ test("Given the combined Cloud service, When Mobius health is requested, Then th
     });
 });
 
-test("Given Slack and Mobius share one Cloud Worker, When an organization member creates a pairing, Then Slack dispatches the Mobius request internally", async () => {
+test("Given a workspace with a Slack bot, When its owner creates a Mobius bot independently and binds it, Then Cloud shows the authorized Mobius binding", async () => {
     const slackDatabase = new InMemoryD1Database();
     const directoryDatabase = new InMemoryD1Database();
-    const response = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/mobius/pairings`, {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${issuer.createSession("user_alice", APP_ORIGIN, "active", "org_team", "member", { d1ShardId: "apac-01", r2BucketId: "apac", revision: 1 })}`,
-            },
-        }),
-        {
-            ...slackConfiguration,
-            ...mobiusConfiguration,
-            CLERK_ISSUER_URL: "https://identity.clerk.accounts.dev",
-            D1_SHARD_APAC_01: slackDatabase,
-            DEPLOY_ENVIRONMENT: "production",
-            DIRECTORY_DATABASE: directoryDatabase,
-        },
+    const bindings = {
+        ...slackConfiguration,
+        ...mobiusConfiguration,
+        CLERK_ISSUER_URL: "https://identity.clerk.accounts.dev",
+        D1_SHARD_APAC_01: slackDatabase,
+        DEPLOY_ENVIRONMENT: "production",
+        DIRECTORY_DATABASE: directoryDatabase,
+    };
+    const headers = {
+        Authorization: `Bearer ${issuer.createSession("user_alice", APP_ORIGIN, "active", "org_team", "admin", { d1ShardId: "apac-01", r2BucketId: "apac", revision: 1 })}`,
+        "Content-Type": "application/json",
+    };
+    const pairingResponse = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/mobius/pairings`, { method: "POST", headers }),
+        bindings,
     );
-
-    expect(response.status).toBe(201);
-    expect(await response.json()).toMatchObject({
-        channelId: expect.stringMatching(/^chn_/),
-        pairingCode: expect.any(String),
-        expiresAt: expect.any(String),
+    expect(pairingResponse.status).toBe(201);
+    const pairing = v.parse(
+        v.object({
+            pairingCode: v.string(),
+            projectId: v.string(),
+            hostToken: v.string(),
+            pairingId: v.string(),
+            pollToken: v.string(),
+        }),
+        await pairingResponse.json(),
+    );
+    const claimed = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius/api/pairings/claim`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+                pairingCode: pairing.pairingCode,
+                agents: [
+                    {
+                        id: "codex",
+                        label: "Codex",
+                        agentPath: "/usr/local/bin/codex",
+                        agentVersion: "1.0",
+                        capabilities: {
+                            additionalDirectories: true,
+                            audioPrompt: false,
+                            closeSession: true,
+                            deleteSession: true,
+                            embeddedContextPrompt: true,
+                            imagePrompt: true,
+                            listSessions: true,
+                            loadSession: true,
+                            resumeSession: true,
+                            unstableForkSession: false,
+                        },
+                    },
+                ],
+                installableAgents: [],
+                machineName: "Machine",
+                workspaceName: "Workspace",
+            }),
+        }),
+        bindings,
+    );
+    expect(claimed.status).toBe(200);
+    const pairingStatus = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/mobius/pairings/status`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ pairingId: pairing.pairingId, pollToken: pairing.pollToken }),
+        }),
+        bindings,
+    );
+    expect(pairingStatus.status).toBe(200);
+    expect(await pairingStatus.json()).toEqual({ status: "paired" });
+    const created = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/mobius/projects/${pairing.projectId}/bots`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+                displayName: "Independent bot",
+                description: "",
+                ownerCredential: pairing.hostToken,
+            }),
+        }),
+        bindings,
+    );
+    expect(created.status).toBe(201);
+    const bot = v.parse(v.object({ botId: v.string(), lifecycle: v.literal("draft") }), await created.json());
+    const projects = await worker.fetch(new Request(`${APP_ORIGIN}/mobius/api/v1/projects`, { headers }), bindings);
+    expect(projects.status).toBe(200);
+    expect(await projects.json()).toMatchObject({
+        projects: [{ projectId: pairing.projectId, displayName: "Workspace" }],
+    });
+    const slackProjects = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/mobius/projects`, { headers }),
+        bindings,
+    );
+    expect(await slackProjects.json()).toMatchObject({
+        projects: [{ projectId: pairing.projectId, displayName: "Workspace" }],
+    });
+    const projectBots = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius/api/v1/projects/${pairing.projectId}/bots`, { headers }),
+        bindings,
+    );
+    expect(projectBots.status).toBe(200);
+    expect(await projectBots.json()).toMatchObject({
+        bots: [{ botId: bot.botId, displayName: "Independent bot", lifecycle: "draft" }],
+    });
+    const otherHeaders = {
+        Authorization: `Bearer ${issuer.createSession("user_alice", APP_ORIGIN, "active", "org_other")}`,
+    };
+    const otherProjects = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius/api/v1/projects`, { headers: otherHeaders }),
+        bindings,
+    );
+    expect(await otherProjects.json()).toEqual({ projects: [] });
+    const otherBots = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius/api/v1/projects/${pairing.projectId}/bots`, { headers: otherHeaders }),
+        bindings,
+    );
+    expect(otherBots.status).toBe(403);
+    await slackDatabase
+        .prepare(`INSERT INTO slack_app (tenant_id, slack_bot_id, slack_app_id, slack_client_id, client_secret_encrypted, signing_secret_encrypted, oauth_redirect_uri, app_name, status, created_at, updated_at)
+        VALUES ('org_team', 'slack-bot', 'A123', 'client', 'encrypted', 'encrypted', 'https://slack.test/callback', 'Slack bot', 'enabled', 0, 0)`)
+        .run();
+    const bound = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/bots/slack-bot/binding`, {
+            method: "PUT",
+            headers,
+            body: JSON.stringify({ botId: bot.botId, ownerCredential: pairing.hostToken }),
+        }),
+        bindings,
+    );
+    expect(await bound.json()).toEqual({ kind: "bound", botId: bot.botId });
+    expect(bound.status).toBe(200);
+    const list = await worker.fetch(new Request(`${APP_ORIGIN}/mobius-slack/api/slack/bots`, { headers }), bindings);
+    expect(await list.json()).toEqual({
+        bots: [{ id: "slack-bot", name: "Slack bot", binding: { kind: "bound", botId: bot.botId } }],
     });
 });
 
@@ -436,7 +553,7 @@ test("Given a tenant placed on an APAC shard, When Slack loads its agents, Then 
     const otherDatabase = new InMemoryD1Database();
     const tenantDatabase = new InMemoryD1Database();
     const response = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/agents`, {
+        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/bots`, {
             headers: {
                 Authorization: `Bearer ${issuer.createSession("user_alice", APP_ORIGIN, "active", "org_team", "admin", {
                     d1ShardId: "apac-02",
@@ -456,7 +573,7 @@ test("Given a tenant placed on an APAC shard, When Slack loads its agents, Then 
     );
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ agents: [] });
+    expect(await response.json()).toEqual({ bots: [] });
     expect(tenantDatabase.queries()).toHaveLength(1);
     expect(otherDatabase.queries()).toHaveLength(0);
 });
@@ -464,7 +581,7 @@ test("Given a tenant placed on an APAC shard, When Slack loads its agents, Then 
 test("Given incomplete placement claims, When Slack handles an authenticated tenant request, Then storage routing fails closed", async () => {
     const database = new InMemoryD1Database();
     const response = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/agents`, {
+        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/bots`, {
             headers: {
                 Authorization: `Bearer ${issuer.createSession("user_alice", APP_ORIGIN, "active", "org_team", "admin", {
                     d1ShardId: "apac-02",
