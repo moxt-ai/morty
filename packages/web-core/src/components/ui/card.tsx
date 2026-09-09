@@ -10,7 +10,7 @@ export function Card({
     return (
         <Component
             {...props}
-            className={`min-w-0 rounded-xl border border-border bg-card text-foreground shadow-sm ${className}`}
+            className={`min-w-0 rounded-xl border border-border bg-card text-foreground ${className}`}
         />
     );
 }

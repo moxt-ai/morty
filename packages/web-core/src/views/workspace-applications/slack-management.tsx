@@ -7,7 +7,7 @@ export function SlackManagement() {
     const { isLoaded, orgId, getToken } = useAuth();
     const getSlackToken = useCallback((signal: AbortSignal) => waitForClerk(() => getToken(), signal), [getToken]);
     if (!isLoaded) {
-        return <p role="status">Loading Slack integrations…</p>;
+        return <Spinner label="Loading Slack integrations" />;
     }
     if (!orgId) {
         return <p role="alert">Select this workspace to manage Slack integrations.</p>;
@@ -20,3 +20,5 @@ export function SlackManagement() {
         </MobiusSlackContext>
     );
 }
+
+import { Spinner } from "../../components/ui/spinner.tsx";

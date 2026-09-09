@@ -44,6 +44,27 @@ checks and remain in place. The recorded native project and bot requests took
 roughly 0.5–0.8 seconds in the follow-up run; this pass improves feedback during
 those requests rather than claiming a backend latency improvement.
 
+## Flat surfaces, icons, and motion
+
+The follow-up design pass replaces Cloud-owned loading-only text with Lucide
+spinners that expose accessible status labels. Pending actions keep their normal
+button text and expose `aria-busy`; refresh controls retain their dimensions.
+Lucide icons now identify project pairing, bot creation/settings, refresh,
+workspace creation/deletion, application navigation, and shared dialog/select
+controls. Decorative icons are hidden from assistive technology.
+
+Cards and primary buttons use flat surfaces, lighter separators, and no drop
+shadows. Bot rows use dividers rather than individually bordered cards. Green
+remains the primary action accent. Application and dialog entry uses a short
+160 ms opacity transition. Reduced-motion preferences disable entry animation
+and spinner rotation.
+
+The follow-up interaction recording verifies the dialog entry animation, a
+stable 123.53 px refresh-button width during loading, and the absence of spinner
+rotation under reduced motion. The workspace overview fits a 390 px viewport.
+Artifacts: `flat-interactions.webm`, `flat-interactions-trace.zip`, and
+`flat-findings.json` in the local recording directory.
+
 ## Remaining verification gaps
 
 The review browser has no locally saved project owner credential. Successful

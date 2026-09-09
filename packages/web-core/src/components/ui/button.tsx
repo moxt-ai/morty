@@ -2,10 +2,10 @@ import { Slot } from "radix-ui";
 import type { ComponentProps } from "react";
 
 const variants = {
-    primary: "border-transparent bg-primary text-primary-foreground shadow-sm hover:bg-primary/90",
+    primary: "border-transparent bg-primary text-primary-foreground hover:bg-primary/90",
     outline: "border-border bg-background text-foreground hover:bg-accent",
     ghost: "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
-    destructive: "border-transparent bg-destructive text-white shadow-sm hover:bg-destructive/90",
+    destructive: "border-transparent bg-destructive text-white hover:bg-destructive/90",
 };
 const sizes = {
     default: "min-h-9 px-3 py-1.5 text-[13px]",

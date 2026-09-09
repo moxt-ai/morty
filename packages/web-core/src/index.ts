@@ -1,4 +1,5 @@
 export { Button } from "./components/ui/button.tsx";
+export { Spinner } from "./components/ui/spinner.tsx";
 export { reportApplicationError } from "./view-models/report-error.ts";
 export {
     clerkDirectory,

@@ -1,5 +1,5 @@
 import { SignOutButton, UserButton } from "@clerk/react";
-import { Button } from "@moxt-ai/mobius-cloud-web-core";
+import { Button, Spinner } from "@moxt-ai/mobius-cloud-web-core";
 import { type AnyRouter, RouterProvider } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
@@ -75,7 +75,9 @@ export function App({ state }: { readonly state: AppState }) {
         case "loading":
             return (
                 <Page>
-                    <p role="status">Loading Mobius Cloud…</p>
+                    <div className="flex min-h-40 items-center justify-center">
+                        <Spinner label="Loading Mobius Cloud" />
+                    </div>
                 </Page>
             );
         case "failed":

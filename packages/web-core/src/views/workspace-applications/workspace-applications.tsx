@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { ArrowRight, Hash, MessageSquare } from "lucide-react";
 import { type ComponentType, useState } from "react";
 import { Button } from "../../components/ui/button.tsx";
 import { Card } from "../../components/ui/card.tsx";
@@ -30,7 +31,10 @@ export function WorkspaceApplications<TConnection>({
     return (
         <>
             {isApplication ? (
-                <section aria-label={selected === "chat" ? "Chat" : "Slack"} className="grid min-h-0 min-w-0 flex-1">
+                <section
+                    aria-label={selected === "chat" ? "Chat" : "Slack"}
+                    className="grid min-h-0 min-w-0 flex-1 motion-safe:animate-cloud-enter"
+                >
                     {selected === "slack" ? (
                         <SlackApplication />
                     ) : connection.kind === "connected" ? (
@@ -49,7 +53,7 @@ export function WorkspaceApplications<TConnection>({
                     )}
                 </section>
             ) : (
-                <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
+                <div className="grid min-w-0 items-start gap-6 motion-safe:animate-cloud-enter lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
                     <section aria-label="Project and bot management" className="min-w-0">
                         <ProjectsApplication onChannelSelected={selectChannel} />
                     </section>
@@ -59,10 +63,14 @@ export function WorkspaceApplications<TConnection>({
                                 to={`${workspacePath}/chat`}
                                 search={channelId === null ? {} : { channel: channelId }}
                                 aria-label="Open Chat"
-                                className="p-5 transition-colors hover:border-ring hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
+                                className="group p-5 transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
                             >
-                                <h2 className="text-base font-semibold">
-                                    Chat <span aria-hidden="true">↗</span>
+                                <h2 className="flex items-center gap-3 text-sm font-semibold">
+                                    <MessageSquare aria-hidden="true" className="size-5 text-primary" /> Chat{" "}
+                                    <ArrowRight
+                                        aria-hidden="true"
+                                        className="ml-auto size-4 text-muted-foreground group-hover:text-foreground"
+                                    />
                                 </h2>
                                 <p className="mt-2 text-[13px] text-muted-foreground">
                                     Open your local agent conversations.
@@ -74,10 +82,14 @@ export function WorkspaceApplications<TConnection>({
                                 to={`${workspacePath}/slack`}
                                 search={{}}
                                 aria-label="Open Slack"
-                                className="p-5 transition-colors hover:border-ring hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
+                                className="group p-5 transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
                             >
-                                <h2 className="text-base font-semibold">
-                                    Slack <span aria-hidden="true">↗</span>
+                                <h2 className="flex items-center gap-3 text-sm font-semibold">
+                                    <Hash aria-hidden="true" className="size-5 text-primary" /> Slack{" "}
+                                    <ArrowRight
+                                        aria-hidden="true"
+                                        className="ml-auto size-4 text-muted-foreground group-hover:text-foreground"
+                                    />
                                 </h2>
                                 <p className="mt-2 text-[13px] text-muted-foreground">
                                     Manage Slack bots, installations, and bindings.

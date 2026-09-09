@@ -1,10 +1,12 @@
 import { useAuth } from "@clerk/react";
+import { Bot, Check, Link2, Plus, RefreshCw, Settings2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../components/ui/button.tsx";
 import { Card } from "../../components/ui/card.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { Input } from "../../components/ui/input.tsx";
 import { Select } from "../../components/ui/select.tsx";
+import { Spinner } from "../../components/ui/spinner.tsx";
 import {
     type BotSetup,
     type BotSetupInput,
@@ -105,7 +107,7 @@ export function ProjectBotManagement({ onChannelSelected }: ProjectApplicationPr
         [requests, onChannelSelected],
     );
     if (!isLoaded) {
-        return <p role="status">Loading workspace…</p>;
+        return <Spinner label="Loading workspace" />;
     }
     if (!requests) {
         return <p role="alert">Select a workspace to manage projects and bots.</p>;
@@ -148,7 +150,9 @@ export function MobiusBots({
                     </Button>
                 </>
             ) : projects.kind === "loading" ? (
-                <p role="status">Loading projects…</p>
+                <div className="flex min-h-24 items-center justify-center">
+                    <Spinner label="Loading projects" />
+                </div>
             ) : (
                 <>
                     <div className="flex flex-wrap items-center gap-3">
@@ -164,7 +168,7 @@ export function MobiusBots({
                             />
                         </div>
                         <Button variant="outline" aria-label="Pair new project" onClick={() => setPairing(true)}>
-                            New pair
+                            <Link2 aria-hidden="true" className="size-4" /> New pair
                         </Button>
                     </div>
                     {projects.value.length === 0 ? (
@@ -208,7 +212,9 @@ function PairingDialog({
             onClose={onClose}
         >
             {pairing.kind === "loading" ? (
-                <p role="status">Creating pairing…</p>
+                <div className="flex min-h-24 items-center justify-center">
+                    <Spinner label="Creating pairing" />
+                </div>
             ) : pairing.kind === "failed" ? (
                 <p role="alert">{pairing.message}</p>
             ) : (
@@ -227,6 +233,8 @@ function PairingDialog({
                     </p>
                     <Button
                         disabled={busy || status === "expired"}
+                        aria-label="Check pairing"
+                        aria-busy={busy}
                         variant="outline"
                         onClick={() => {
                             const controller = lifetime.current;
@@ -254,7 +262,12 @@ function PairingDialog({
                                 });
                         }}
                     >
-                        {busy ? "Checking pairing…" : "Check pairing"}
+                        {busy ? (
+                            <Spinner label="Checking pairing" />
+                        ) : (
+                            <RefreshCw aria-hidden="true" className="size-4" />
+                        )}{" "}
+                        Check pairing
                     </Button>
                     {status === "paired" ? (
                         <Button onClick={() => onPaired(pairing.value.projectId)}>Use project</Button>
@@ -290,10 +303,23 @@ function ProjectBots({ projectId, requests }: { readonly projectId: string; read
                 </p>
             ) : null}
             <div className="flex justify-between gap-3">
-                <Button variant="outline" onClick={changed} disabled={resource.kind === "loading" || refreshing}>
-                    {refreshing ? "Refreshing bots…" : "Refresh bots"}
+                <Button
+                    aria-label="Refresh bots"
+                    aria-busy={refreshing}
+                    variant="ghost"
+                    size="sm"
+                    onClick={changed}
+                    disabled={resource.kind === "loading" || refreshing}
+                >
+                    {refreshing ? (
+                        <Spinner label="Refreshing bots" />
+                    ) : (
+                        <RefreshCw aria-hidden="true" className="size-4" />
+                    )}{" "}
+                    Refresh bots
                 </Button>
                 <Button aria-label="Add Mobius bot" disabled={!canManage} onClick={() => setDialog({ kind: "create" })}>
+                    <Plus aria-hidden="true" className="size-4" />
                     Add bot
                 </Button>
             </div>
@@ -302,26 +328,33 @@ function ProjectBots({ projectId, requests }: { readonly projectId: string; read
             ) : null}
             {status.kind === "failed" ? <p role="status">Runtime status unavailable</p> : null}
             {resource.kind === "loading" ? (
-                <p role="status">Loading bots…</p>
+                <div className="flex min-h-24 items-center justify-center">
+                    <Spinner label="Loading bots" />
+                </div>
             ) : resource.kind === "failed" ? (
                 <p role="alert">{resource.message}</p>
             ) : (
-                <ul className="grid gap-3">
+                <ul className="divide-y divide-border">
                     {resource.value.map((bot) => (
                         <li
                             aria-label={bot.displayName}
                             key={bot.botId}
-                            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
+                            className="flex flex-wrap items-center justify-between gap-3 py-4"
                         >
-                            <strong className="text-sm">{bot.displayName}</strong>
+                            <strong className="flex items-center gap-3 text-sm">
+                                <Bot aria-hidden="true" className="size-4 text-muted-foreground" />
+                                {bot.displayName}
+                            </strong>
                             <div className="flex flex-wrap items-center gap-3 text-xs">
-                                <span>{label(bot)}</span>
+                                <span className="rounded-md bg-muted px-2 py-1 font-medium">{label(bot)}</span>
                                 <span>
-                                    {status.kind === "ready"
-                                        ? status.value
-                                        : status.kind === "loading"
-                                          ? "Checking runtime…"
-                                          : "Status unknown"}
+                                    {status.kind === "ready" ? (
+                                        status.value
+                                    ) : status.kind === "loading" ? (
+                                        <Spinner label="Checking runtime" />
+                                    ) : (
+                                        "Status unknown"
+                                    )}
                                 </span>
                                 {bot.lifecycle !== "archived" ? (
                                     <Button
@@ -331,6 +364,7 @@ function ProjectBots({ projectId, requests }: { readonly projectId: string; read
                                         aria-label={`Set up ${bot.displayName}`}
                                         onClick={() => setDialog({ kind: "setup", bot })}
                                     >
+                                        <Settings2 aria-hidden="true" className="size-3.5" />
                                         {bot.lifecycle === "draft" ? "Set up" : "Settings"}
                                     </Button>
                                 ) : null}
@@ -425,8 +459,9 @@ function CreateBot({
                     Description
                     <Input id="native-bot-description" name="description" />
                 </label>
-                <Button type="submit" disabled={busy}>
-                    {busy ? "Creating bot…" : "Create Mobius bot"}
+                <Button type="submit" disabled={busy} aria-label="Create Mobius bot" aria-busy={busy}>
+                    {busy ? <Spinner label="Creating bot" /> : <Plus aria-hidden="true" className="size-4" />} Create
+                    Mobius bot
                 </Button>
                 {error ? <p role="alert">{error}</p> : null}
             </form>
@@ -502,13 +537,15 @@ function SetupDialog({
             ) : setup.kind === "failed" ? (
                 <p role="alert">{setup.message}</p>
             ) : (
-                <p role="status">Loading setup…</p>
+                <div className="flex min-h-24 items-center justify-center">
+                    <Spinner label="Loading setup" />
+                </div>
             )}
             {error ? <p role="alert">{error}</p> : null}
             <Button
                 className="mt-4"
                 variant="outline"
-                disabled={busy}
+                disabled={busy || setup.kind === "loading"}
                 onClick={() => {
                     refresh((r) => r + 1);
                     onChanged();
@@ -641,7 +678,13 @@ function SetupForm({
                 <p className="text-xs text-muted-foreground">
                     Model: local agent default. Setup requires validation by the local runtime.
                 </p>
-                <Button type="submit" disabled={blocked || !runtimeId || !agentRef}>
+                <Button
+                    type="submit"
+                    aria-label="Save setup"
+                    aria-busy={busy}
+                    disabled={blocked || !runtimeId || !agentRef}
+                >
+                    {busy ? <Spinner label="Saving setup" /> : <Check aria-hidden="true" className="size-4" />}
                     Save setup
                 </Button>
             </fieldset>

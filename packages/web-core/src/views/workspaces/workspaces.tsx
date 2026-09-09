@@ -1,10 +1,12 @@
 import { Link } from "@tanstack/react-router";
+import { ArrowLeft, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/button.tsx";
 import { Card } from "../../components/ui/card.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { Input } from "../../components/ui/input.tsx";
+import { Spinner } from "../../components/ui/spinner.tsx";
 import { workspacePageSize } from "../../view-models/workspaces/contracts.ts";
 import type { loadWorkspace, loadWorkspaces, MutationResult } from "../../view-models/workspaces/data.ts";
 import { workspaceErrorMessage } from "../../view-models/workspaces/data.ts";
@@ -100,10 +102,19 @@ function WorkspaceDialog({ ui, mutate }: { readonly ui: WorkspaceStore; readonly
                     </Button>
                     <Button
                         type="submit"
+                        aria-label={dialog.kind === "create" ? "Create workspace" : "Delete workspace"}
+                        aria-busy={busy}
                         disabled={busy || (dialog.kind === "create" && !dialog.name.trim())}
                         variant={dialog.kind === "create" ? "primary" : "destructive"}
                     >
-                        {busy ? "Saving…" : dialog.kind === "create" ? "Create workspace" : "Delete workspace"}
+                        {busy ? (
+                            <Spinner label="Saving workspace" />
+                        ) : dialog.kind === "create" ? (
+                            <Plus aria-hidden="true" className="size-4" />
+                        ) : (
+                            <Trash2 aria-hidden="true" className="size-4" />
+                        )}
+                        {dialog.kind === "create" ? "Create workspace" : "Delete workspace"}
                     </Button>
                 </div>
             </form>
@@ -136,11 +147,13 @@ export function WorkspaceList({
         <>
             <div className="mb-9 flex flex-wrap items-end justify-between gap-5">
                 <div>
-                    <p className="mb-2 text-xs font-medium text-primary">Mobius Cloud</p>
                     <h1 className="text-2xl font-semibold tracking-tight">Workspaces</h1>
                     <p className="mt-2 text-[13px] text-muted-foreground">A shared place for your team and agents.</p>
                 </div>
-                <Button onClick={newWorkspace}>New workspace</Button>
+                <Button onClick={newWorkspace}>
+                    <Plus aria-hidden="true" className="size-4" />
+                    New workspace
+                </Button>
             </div>
             {items.length === 0 ? (
                 <Card asChild className="border-dashed px-6 py-16 text-center">
@@ -177,7 +190,7 @@ export function WorkspaceList({
                                             onClick={() => confirmDelete(workspace)}
                                             className="hover:text-destructive"
                                         >
-                                            Delete
+                                            <Trash2 aria-hidden="true" className="size-3.5" /> Delete
                                         </Button>
                                     )}
                                 </div>
@@ -187,7 +200,19 @@ export function WorkspaceList({
                 </ul>
             )}
             <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-                <Button variant="ghost" size="sm" disabled={refreshing} onClick={runRefresh}>
+                <Button
+                    aria-label="Refresh workspaces"
+                    aria-busy={refreshing}
+                    variant="ghost"
+                    size="sm"
+                    disabled={refreshing}
+                    onClick={runRefresh}
+                >
+                    {refreshing ? (
+                        <Spinner label="Refreshing workspaces" />
+                    ) : (
+                        <RefreshCw aria-hidden="true" className="size-3.5" />
+                    )}
                     Refresh workspaces
                 </Button>
                 {totalCount > workspacePageSize && (
@@ -227,7 +252,7 @@ function AllWorkspacesLink() {
     return (
         <Button asChild variant="ghost" size="sm" className="self-start">
             <Link to="/" search={{ page: 1 }}>
-                ← All workspaces
+                <ArrowLeft aria-hidden="true" className="size-4" /> All workspaces
             </Link>
         </Button>
     );

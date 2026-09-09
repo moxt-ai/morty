@@ -194,10 +194,15 @@ test("Given visible bots, When refresh is pending or fails, Then the list stays 
     await expect.element(screen.getByRole("listitem", { name: "Support" })).toBeVisible();
     workspace.botReads = "paused";
     await screen.getByRole("button", { name: "Refresh bots", exact: true }).click();
-    await expect.element(screen.getByRole("button", { name: "Refreshing bots…", exact: true })).toBeDisabled();
+    await expect.element(screen.getByRole("button", { name: "Refresh bots", exact: true })).toBeDisabled();
+    await expect
+        .element(screen.getByRole("button", { name: "Refresh bots", exact: true }))
+        .toHaveAttribute("aria-busy", "true");
+    await expect.element(screen.getByRole("status", { name: "Refreshing bots" })).toBeVisible();
     await expect.element(screen.getByRole("listitem", { name: "Support" })).toBeVisible();
     workspace.resumeBotReads();
     await expect.element(screen.getByRole("button", { name: "Refresh bots", exact: true })).toBeEnabled();
+    await expect.element(screen.getByRole("status", { name: "Refreshing bots" })).not.toBeInTheDocument();
     workspace.botReads = "failed";
     await screen.getByRole("button", { name: "Refresh bots", exact: true }).click();
     await expect.element(screen.getByRole("alert")).toHaveTextContent("Bots temporarily unavailable");

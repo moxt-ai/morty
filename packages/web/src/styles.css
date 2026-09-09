@@ -11,7 +11,7 @@
     --primary-foreground: #ffffff;
     --muted: rgba(11, 26, 57, 0.05);
     --muted-foreground: #68707d;
-    --border: #c8cdd1;
+    --border: #e1e4e7;
     --input: #c8cdd1;
     --ring: #227b4e;
     --destructive: #b4232a;
@@ -22,6 +22,15 @@
 }
 
 @theme inline {
+    --animate-cloud-enter: cloud-enter 160ms ease-out both;
+    @keyframes cloud-enter {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
     --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
     --color-card: #ffffff;
     --color-accent: #f7f8f9;
