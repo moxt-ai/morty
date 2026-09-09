@@ -5,6 +5,38 @@ import { APP_ORIGIN, AUTH_TIME, IdentityProvider } from "./support/identity-prov
 
 const issuer = new IdentityProvider();
 
+test("Given invalid Cloud credentials, When a user requests Slack management, Then authentication is rejected", async () => {
+    const invalidTokens = [
+        "invalid",
+        new IdentityProvider().createSession("user_alice", APP_ORIGIN, "active", "org_team"),
+        issuer.createSession("user_alice", "https://other.example", "active", "org_team"),
+        issuer.createSession("user_alice", APP_ORIGIN, "pending", "org_team"),
+    ];
+    for (const token of invalidTokens) {
+        const response = await worker.fetch(
+            new Request(`${APP_ORIGIN}/mobius-slack/api/slack/agents`, {
+                headers: { Authorization: `Bearer ${token}` },
+            }),
+            { ...slackConfiguration, CLERK_ISSUER_URL: "https://identity.clerk.accounts.dev" },
+        );
+        expect(response.status).toBe(401);
+        expect(await response.json()).toMatchObject({ error: { code: "AUTHENTICATION_FAILED" } });
+    }
+});
+
+test("Given an expired Cloud session, When a user requests Slack management, Then authentication is rejected", async () => {
+    const token = issuer.createSession("user_alice", APP_ORIGIN, "active", "org_team");
+    vi.setSystemTime(new Date(AUTH_TIME.getTime() + 120_000));
+    const response = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/agents`, {
+            headers: { Authorization: `Bearer ${token}` },
+        }),
+        { ...slackConfiguration, CLERK_ISSUER_URL: "https://identity.clerk.accounts.dev" },
+    );
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: { code: "AUTHENTICATION_FAILED" } });
+});
+
 test("Given a Cloud tenant without placement claims, When it requests Slack agents, Then storage access is rejected", async () => {
     const response = await worker.fetch(
         new Request(`${APP_ORIGIN}/mobius-slack/api/slack/agents`, {

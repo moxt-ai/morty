@@ -6,7 +6,7 @@ import {
     createSlackWorker,
     DatabaseSlackAppDirectory,
 } from "@moxt-ai/app-slack-api";
-import { ClerkHumanIdentity, IdentityGateway, MobiusGateway, SlackWebApi } from "@moxt-ai/app-slack-api/gateway";
+import { IdentityGateway, MobiusGateway, SlackWebApi } from "@moxt-ai/app-slack-api/gateway";
 import { SecretCipher, type SlackQueueMessage, slackLogger } from "@moxt-ai/app-slack-api/infra";
 import * as v from "valibot";
 import { SlackQueueController } from "../../apps/slack/packages/worker/src/controller/slack-queue-controller.ts";
@@ -16,6 +16,7 @@ import { CloudflareMobiusTransport } from "../../apps/slack/packages/worker/src/
 import { CloudflareSlackQueue } from "../../apps/slack/packages/worker/src/infra/cloudflare-slack-queue.ts";
 import { D1SqlDatabase } from "../../apps/slack/packages/worker/src/storage/d1-database.ts";
 import { CloudMobiusFetchGateway } from "../gateway/cloud-mobius-fetch-gateway.ts";
+import { CloudSlackHumanIdentity } from "../gateway/cloud-slack-human-identity.ts";
 import { CloudTenantShardingDirectory } from "../gateway/cloud-tenant-sharding-directory.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 import { json } from "../infra/http.ts";
@@ -31,10 +32,8 @@ const slackBindingsSchema = v.object({
         idFromName: v.function(),
     }),
     ASSETS: v.object({ fetch: v.function() }),
-    AUTHENTICATION_BASE_URL: v.pipe(v.string(), v.url()),
     CLERK_ISSUER_URL: v.pipe(v.string(), v.url()),
     CLERK_JWT_KEY: v.string(),
-    CLERK_PUBLISHABLE_KEY: v.string(),
     EVENTS: v.object({ send: v.function() }),
     MOBIUS_BASE_URL: v.pipe(v.string(), v.url()),
     SLACK_MOBIUS_AUTH_TOKEN: v.pipe(v.string(), v.minLength(1)),
@@ -43,7 +42,10 @@ const slackBindingsSchema = v.object({
     SLACK_TOKEN_ENCRYPTION_KEY: v.pipe(v.string(), v.minLength(1)),
 });
 
-type SlackBindings = Omit<WorkerBindings, "DATABASE" | "ATTACHMENTS">;
+type SlackBindings = Omit<WorkerBindings, "DATABASE" | "ATTACHMENTS"> & {
+    readonly CLERK_JWT_KEY: string;
+    readonly CLERK_ISSUER_URL: string;
+};
 
 function hasSlackBindings(bindings: CloudBindings): bindings is CloudBindings & SlackBindings {
     return v.safeParse(slackBindingsSchema, bindings).success;
@@ -69,11 +71,9 @@ const slack = createSlackWorker<
     const clock = new ClockService();
     const config = {
         bindings,
-        clerkPublishableKey: environment.CLERK_PUBLISHABLE_KEY,
         clerkJwtKey: environment.CLERK_JWT_KEY,
         clerkIssuerUrl: environment.CLERK_ISSUER_URL,
         clerkAuthorizedParties: [new URL(environment.SLACK_SERVER_BASE_URL).origin],
-        authenticationBaseUrl: environment.AUTHENTICATION_BASE_URL,
         publicBaseUrl: environment.SLACK_SERVER_BASE_URL.replace(/\/$/u, ""),
         mobiusBaseUrl: environment.MOBIUS_BASE_URL,
         pairingAuthorization: bindings.pairingAuthorization,
@@ -103,7 +103,7 @@ const slack = createSlackWorker<
         ...infrastructure,
         gateways: {
             ...gateways,
-            clerk: new ClerkHumanIdentity(infrastructure),
+            humanIdentity: new CloudSlackHumanIdentity(infrastructure),
             mobius: new MobiusGateway(infrastructure),
             identityGateway: new IdentityGateway(infrastructure),
             slackAppDirectory: new DatabaseSlackAppDirectory(infrastructure),

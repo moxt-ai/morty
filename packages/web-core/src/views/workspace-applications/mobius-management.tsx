@@ -49,8 +49,19 @@ export function mobiusWorkspaceConnections(userId: string) {
 }
 
 export function MobiusManagement(props: WorkspaceConnectionProps<ChannelConnection>) {
+    const { getToken, orgId, isLoaded } = useAuth();
+    const getSlackToken = useCallback((signal: AbortSignal) => waitForClerk(() => getToken(), signal), [getToken]);
+    if (!isLoaded) {
+        return <p role="status">Loading workspace…</p>;
+    }
+    if (!orgId) {
+        return <p role="alert">Select a workspace to manage its applications.</p>;
+    }
     return (
-        <MobiusSlackContext context={{ mobiusUrl: window.location.origin }}>
+        <MobiusSlackContext
+            key={orgId}
+            context={{ mobiusUrl: window.location.origin, getToken: getSlackToken, tenantId: orgId }}
+        >
             <WorkspaceApplications
                 {...props}
                 ChatApplication={ChatApplication}
