@@ -65,6 +65,25 @@ rotation under reduced motion. The workspace overview fits a 390 px viewport.
 Artifacts: `flat-interactions.webm`, `flat-interactions-trace.zip`, and
 `flat-findings.json` in the local recording directory.
 
+## Click-local navigation feedback
+
+Workspace, Chat, and Slack cards expose a spinner, subdued background, and busy /
+disabled semantics while their destination loads. The state comes from router
+navigation, so it clears on completion or failure rather than relying on a local
+click flag. Repeated activation of the pending card is prevented. Browser
+scenarios hold workspace lookup pending through the production directory port
+and verify each card's visible feedback before releasing navigation.
+
+Refresh workspaces now sits beside New workspace. Workspace overview and
+application routes compose All workspaces into the shared header's navigation
+slot. The route tree declares this placement explicitly.
+
+The live `card-navigation.webm` recording confirms pending indicators on all
+three card types, the header back link, and a 390 px mobile layout without
+horizontal overflow. Embedded Mobius Chat also replaces both loading and
+preparation text with centered spinners; its real Worker/daemon integration
+scenario verifies that the loading indicator gives way to the loaded content.
+
 ## Remaining verification gaps
 
 The review browser has no locally saved project owner credential. Successful

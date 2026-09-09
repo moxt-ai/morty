@@ -3,6 +3,8 @@ import { ArrowRight, Hash, MessageSquare } from "lucide-react";
 import { type ComponentType, useState } from "react";
 import { Button } from "../../components/ui/button.tsx";
 import { Card } from "../../components/ui/card.tsx";
+import { NavigationCardLink } from "../../components/ui/navigation-card-link.tsx";
+import { Spinner } from "../../components/ui/spinner.tsx";
 import type { WorkspaceConnectionProps } from "../../view-models/workspaces/connections.ts";
 
 export interface ProjectApplicationProps {
@@ -59,42 +61,62 @@ export function WorkspaceApplications<TConnection>({
                     </section>
                     <nav aria-label="Workspace applications" className="grid gap-5">
                         <Card asChild>
-                            <Link
+                            <NavigationCardLink
                                 to={`${workspacePath}/chat`}
                                 search={channelId === null ? {} : { channel: channelId }}
-                                aria-label="Open Chat"
+                                label="Open Chat"
                                 className="group p-5 transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
                             >
-                                <h2 className="flex items-center gap-3 text-sm font-semibold">
-                                    <MessageSquare aria-hidden="true" className="size-5 text-primary" /> Chat{" "}
-                                    <ArrowRight
-                                        aria-hidden="true"
-                                        className="ml-auto size-4 text-muted-foreground group-hover:text-foreground"
-                                    />
-                                </h2>
-                                <p className="mt-2 text-[13px] text-muted-foreground">
-                                    Open your local agent conversations.
-                                </p>
-                            </Link>
+                                {(pending) => (
+                                    <>
+                                        <h2 className="flex items-center gap-3 text-sm font-semibold">
+                                            <MessageSquare aria-hidden="true" className="size-5 text-primary" /> Chat{" "}
+                                            <span className="ml-auto">
+                                                {pending ? (
+                                                    <Spinner label="Opening Chat" />
+                                                ) : (
+                                                    <ArrowRight
+                                                        aria-hidden="true"
+                                                        className="ml-auto size-4 text-muted-foreground group-hover:text-foreground"
+                                                    />
+                                                )}
+                                            </span>
+                                        </h2>
+                                        <p className="mt-2 text-[13px] text-muted-foreground">
+                                            Open your local agent conversations.
+                                        </p>
+                                    </>
+                                )}
+                            </NavigationCardLink>
                         </Card>
                         <Card asChild>
-                            <Link
+                            <NavigationCardLink
                                 to={`${workspacePath}/slack`}
                                 search={{}}
-                                aria-label="Open Slack"
+                                label="Open Slack"
                                 className="group p-5 transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
                             >
-                                <h2 className="flex items-center gap-3 text-sm font-semibold">
-                                    <Hash aria-hidden="true" className="size-5 text-primary" /> Slack{" "}
-                                    <ArrowRight
-                                        aria-hidden="true"
-                                        className="ml-auto size-4 text-muted-foreground group-hover:text-foreground"
-                                    />
-                                </h2>
-                                <p className="mt-2 text-[13px] text-muted-foreground">
-                                    Manage Slack bots, installations, and bindings.
-                                </p>
-                            </Link>
+                                {(pending) => (
+                                    <>
+                                        <h2 className="flex items-center gap-3 text-sm font-semibold">
+                                            <Hash aria-hidden="true" className="size-5 text-primary" /> Slack{" "}
+                                            <span className="ml-auto">
+                                                {pending ? (
+                                                    <Spinner label="Opening Slack" />
+                                                ) : (
+                                                    <ArrowRight
+                                                        aria-hidden="true"
+                                                        className="ml-auto size-4 text-muted-foreground group-hover:text-foreground"
+                                                    />
+                                                )}
+                                            </span>
+                                        </h2>
+                                        <p className="mt-2 text-[13px] text-muted-foreground">
+                                            Manage Slack bots, installations, and bindings.
+                                        </p>
+                                    </>
+                                )}
+                            </NavigationCardLink>
                         </Card>
                     </nav>
                 </div>

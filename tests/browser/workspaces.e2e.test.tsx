@@ -76,14 +76,49 @@ async function renderWorkspaces(directory: WorkspaceDirectory, userId = "alice")
         WorkspaceManagement,
         new BrowserWorkspaceConnections(userId, window.localStorage, machines.read),
         {
-            Standard: ({ children }: WorkspaceShellProps) => <div>{children}</div>,
-            Application: ({ children }: WorkspaceShellProps) => (
-                <main aria-label="Full application view">{children}</main>
+            Standard: ({ children, navigation }: WorkspaceShellProps) => (
+                <div>
+                    <header>{navigation}</header>
+                    {children}
+                </div>
+            ),
+            Application: ({ children, navigation }: WorkspaceShellProps) => (
+                <>
+                    <header>{navigation}</header>
+                    <main aria-label="Full application view">{children}</main>
+                </>
             ),
         },
     );
     return render(<RouterProvider router={router} />);
 }
+
+test("Given navigation is waiting, When a user opens a workspace or application card, Then that card shows busy feedback and prevents repeated activation", async () => {
+    const identity = new WorkspaceIdentityProvider();
+    identity.create("Research team", "alice");
+    const screen = await renderWorkspaces(identity.forUser("alice"));
+    identity.pauseOpening();
+    const workspace = screen.getByRole("link", { name: "Research team", exact: true });
+    await workspace.click();
+    await expect.element(workspace).toHaveAttribute("aria-busy", "true");
+    await expect.element(workspace).toHaveAttribute("aria-disabled", "true");
+    await expect.element(workspace.getByRole("status", { name: "Opening Research team" })).toBeVisible();
+    await workspace.click({ force: true });
+    identity.resumeOpening();
+    await expect.element(screen.getByRole("link", { name: "Open Chat" })).toBeVisible();
+    for (const app of ["Chat", "Slack"]) {
+        identity.pauseOpening();
+        const card = screen.getByRole("link", { name: `Open ${app}` });
+        await card.click();
+        await expect.element(card).toHaveAttribute("aria-busy", "true");
+        await expect.element(card.getByRole("status", { name: `Opening ${app}` })).toBeVisible();
+        identity.resumeOpening();
+        await expect.element(screen.getByRole("region", { name: app, exact: true })).toBeVisible();
+        await screen.getByRole("link", { name: "All workspaces" }).click();
+        await screen.getByRole("link", { name: "Research team", exact: true }).click();
+        await expect.element(screen.getByRole("link", { name: "Open Chat" })).toBeVisible();
+    }
+});
 
 test("Given a signed-in user, When they open a workspace and navigate to Chat and Slack, Then management and each application have separate page views", async () => {
     const identity = new WorkspaceIdentityProvider();

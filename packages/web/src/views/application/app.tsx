@@ -1,5 +1,5 @@
 import { SignOutButton, UserButton } from "@clerk/react";
-import { Button, Spinner } from "@moxt-ai/mobius-cloud-web-core";
+import { Button, Spinner, type WorkspaceShellProps } from "@moxt-ai/mobius-cloud-web-core";
 import { type AnyRouter, RouterProvider } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
@@ -12,7 +12,7 @@ export type AppState =
           readonly router: AnyRouter;
       };
 
-function AppHeader({ account }: { readonly account?: ReactNode }) {
+function AppHeader({ account, navigation }: { readonly account?: ReactNode; readonly navigation?: ReactNode }) {
     return (
         <header className="shrink-0 border-b border-border bg-card">
             <div className="mx-auto flex min-h-16 max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
@@ -29,16 +29,27 @@ function AppHeader({ account }: { readonly account?: ReactNode }) {
                     </span>
                     Mobius Cloud
                 </a>
-                {account ?? <span className="text-xs text-muted-foreground">Your agents. Connected.</span>}
+                <div className="flex flex-wrap items-center gap-3">
+                    {navigation}
+                    {account ?? <span className="text-xs text-muted-foreground">Your agents. Connected.</span>}
+                </div>
             </div>
         </header>
     );
 }
 
-export function Page({ children, account }: { readonly children: ReactNode; readonly account?: ReactNode }) {
+export function Page({
+    children,
+    account,
+    navigation,
+}: {
+    readonly children: ReactNode;
+    readonly account?: ReactNode;
+    readonly navigation?: ReactNode;
+}) {
     return (
         <div className="min-h-dvh bg-background font-sans text-foreground">
-            <AppHeader account={account} />
+            <AppHeader account={account} navigation={navigation} />
             <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">{children}</main>
         </div>
     );
@@ -57,14 +68,18 @@ function AccountActions() {
     );
 }
 
-export function WorkspacePage({ children }: { readonly children: ReactNode }) {
-    return <Page account={<AccountActions />}>{children}</Page>;
+export function WorkspacePage({ children, navigation }: WorkspaceShellProps) {
+    return (
+        <Page account={<AccountActions />} navigation={navigation}>
+            {children}
+        </Page>
+    );
 }
 
-export function WorkspaceApplicationPage({ children }: { readonly children: ReactNode }) {
+export function WorkspaceApplicationPage({ children, navigation }: WorkspaceShellProps) {
     return (
         <div className="flex h-dvh flex-col bg-background font-sans text-foreground">
-            <AppHeader account={<AccountActions />} />
+            <AppHeader account={<AccountActions />} navigation={navigation} />
             <main className="flex min-h-0 flex-1 flex-col overflow-auto px-4 py-3 sm:px-6">{children}</main>
         </div>
     );

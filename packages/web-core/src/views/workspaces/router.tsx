@@ -20,7 +20,13 @@ import type {
 import { type WorkspaceDirectory, workspacePageSize } from "../../view-models/workspaces/contracts.ts";
 import { loadWorkspace, loadWorkspaces, mutateWorkspace } from "../../view-models/workspaces/data.ts";
 import { createWorkspaceStore } from "../../view-models/workspaces/store.ts";
-import { WorkspaceApplicationView, WorkspaceDetail, WorkspaceFailure, WorkspaceList } from "./workspaces.tsx";
+import {
+    AllWorkspacesLink,
+    WorkspaceApplicationView,
+    WorkspaceDetail,
+    WorkspaceFailure,
+    WorkspaceList,
+} from "./workspaces.tsx";
 
 const pageSchema = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(100_000));
 
@@ -61,6 +67,7 @@ function RouteFailure({ error, reset }: { readonly error: Error; readonly reset:
 
 export interface WorkspaceShellProps {
     readonly children: ReactNode;
+    readonly navigation?: ReactNode;
 }
 
 export function createWorkspaceRouter<TConnection extends WorkspaceChannel>(
@@ -104,9 +111,18 @@ export function createWorkspaceRouter<TConnection extends WorkspaceChannel>(
         getParentRoute: () => rootRoute,
         id: "application",
         component: () => (
-            <Application>
+            <Application navigation={<AllWorkspacesLink />}>
                 <WorkspaceLayout />
             </Application>
+        ),
+    });
+    const detailLayout = createRoute({
+        getParentRoute: () => rootRoute,
+        id: "workspace",
+        component: () => (
+            <Standard navigation={<AllWorkspacesLink />}>
+                <WorkspaceLayout />
+            </Standard>
         ),
     });
     const indexRoute = createRoute({
@@ -152,7 +168,7 @@ export function createWorkspaceRouter<TConnection extends WorkspaceChannel>(
     function workspacePage(
         path: "/workspaces/$workspaceId" | "/workspaces/$workspaceId/chat" | "/workspaces/$workspaceId/slack",
         view: "overview" | "chat" | "slack",
-        parent: typeof standardLayout | typeof applicationLayout,
+        parent: typeof detailLayout | typeof applicationLayout,
     ) {
         const detailRoute = createRoute({
             getParentRoute: () => parent,
@@ -188,10 +204,8 @@ export function createWorkspaceRouter<TConnection extends WorkspaceChannel>(
     }
     return createRouter({
         routeTree: rootRoute.addChildren([
-            standardLayout.addChildren([
-                indexRoute,
-                workspacePage("/workspaces/$workspaceId", "overview", standardLayout),
-            ]),
+            standardLayout.addChildren([indexRoute]),
+            detailLayout.addChildren([workspacePage("/workspaces/$workspaceId", "overview", detailLayout)]),
             applicationLayout.addChildren([
                 workspacePage("/workspaces/$workspaceId/chat", "chat", applicationLayout),
                 workspacePage("/workspaces/$workspaceId/slack", "slack", applicationLayout),
