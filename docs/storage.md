@@ -33,8 +33,9 @@ Mobius D1 stores pairing/channel access information, session indexes, and quota
 reservations. Session Durable Objects store session state; archives use R2 in the
 observed deployment. The current default source configuration is the Lite profile,
 which stores archive chunks in Session Durable Object SQLite instead. Slack D1
-stores installations, identity bindings, session mappings, event processing, and
-prompt recovery records. Its implementation is maintained on the Slack repository's
+stores installations, identity bindings, session mappings, and compact event and
+delivery receipts. Finished event bodies are cleared; prompts and rendered context
+are sent in memory. Its implementation is maintained on the Slack repository's
 `main` branch.
 
 ## Regional R2 buckets
@@ -55,10 +56,31 @@ require another bucket. Location hints are best effort, not a specific city or
 a mainland-China placement guarantee.
 
 Use business and workspace prefixes when the new buckets are connected:
-`mobius/<workspaceId>/archives/...` and `slack/<workspaceId>/attachments/...`.
+`mobius/<workspaceId>/archives/...` and `slack-attachments/<workspaceId>/...`.
 Each business owns its object formats, versioning, and retention rules. Prefixes
 are an ownership convention, not an authorization boundary. Keep buckets private
 and authorize workspace access at the serving Worker before reading or writing.
+
+### Slack attachment retention
+
+New Slack attachment copies use
+`slack-attachments/<tenantId>/<teamId>/<fileId>/<filename>`. Each regional
+bucket has an enabled `slack-attachments-3-days` lifecycle rule scoped to
+`slack-attachments/`, expiring objects three days after upload. Overwriting an
+object restarts its age. R2 performs deletion asynchronously; three days is a
+retention target, not an exact access cutoff. Removed files return HTTP 404.
+
+Provision the same rule when adding a regional bucket:
+
+```bash
+pnpm exec wrangler r2 bucket lifecycle add <bucket-name> slack-attachments-3-days slack-attachments/ --expire-days 3
+pnpm exec wrangler r2 bucket lifecycle list <bucket-name>
+```
+
+Keep existing lifecycle rules when configuring retention. The prefix excludes
+Mobius archives and other businesses' objects. Earlier Slack copies used keys
+starting with the tenant ID; their download links remain supported, but this
+rule does not expire those existing unprefixed objects.
 
 R2 requires bucket provisioning and bindings, not SQL schema migrations. The four
 buckets are initially empty; existing archive/attachment buckets and bindings
