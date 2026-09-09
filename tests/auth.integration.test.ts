@@ -194,10 +194,6 @@ const slackConfiguration = {
 
 const mobiusConfiguration = {
     BOT_CONNECTIONS: { get: () => undefined, idFromName: () => undefined },
-    DIRECTORY_DATABASE: {
-        batch: () => Promise.resolve([]),
-        prepare: () => undefined,
-    },
     RUNTIME_RELAY: {
         get: () => undefined,
         idFromName: () => undefined,
@@ -410,14 +406,16 @@ test("Given the combined Cloud service, When Mobius health is requested, Then th
 
 test("Given a workspace with a Slack bot, When its owner creates a Mobius bot independently and binds it, Then Cloud shows the authorized Mobius binding", async () => {
     const slackDatabase = new InMemoryD1Database();
-    const directoryDatabase = new InMemoryD1Database();
+    const allocator = new InMemoryTenantAllocatorNamespace();
+    allocator.assign("org_team", mobiusPlacement);
+    allocator.assign("org_other", mobiusPlacement);
     const bindings = {
         ...slackConfiguration,
         ...mobiusConfiguration,
         CLERK_ISSUER_URL: "https://identity.clerk.accounts.dev",
         D1_SHARD_APAC_01: slackDatabase,
         DEPLOY_ENVIRONMENT: "production",
-        DIRECTORY_DATABASE: directoryDatabase,
+        TENANT_PLACEMENT_ALLOCATOR: allocator,
     };
     const headers = {
         Authorization: `Bearer ${issuer.createSession("user_alice", APP_ORIGIN, "active", "org_team", "admin", { d1ShardId: "apac-01", r2BucketId: "apac", revision: 1 })}`,
@@ -517,7 +515,7 @@ test("Given a workspace with a Slack bot, When its owner creates a Mobius bot in
         bots: [{ botId: bot.botId, displayName: "Independent bot", lifecycle: "draft" }],
     });
     const otherHeaders = {
-        Authorization: `Bearer ${issuer.createSession("user_alice", APP_ORIGIN, "active", "org_other")}`,
+        Authorization: `Bearer ${issuer.createSession("user_alice", APP_ORIGIN, "active", "org_other", "member", mobiusPlacement)}`,
     };
     const otherProjects = await worker.fetch(
         new Request(`${APP_ORIGIN}/mobius/api/v1/projects`, { headers: otherHeaders }),
@@ -629,7 +627,7 @@ test("Given a tenant placed in APAC, When Slack reads an attachment, Then the in
     expect(tenantBucket.reads()).toEqual(["org_team/T123/file-1/report.pdf"]);
     expect(otherBucket.reads()).toHaveLength(0);
 });
-test("Given a workspace without Slack placement or bindings, When its member pairs and creates a bot through the Cloud management client, Then native Mobius projects and bots remain available", async () => {
+test("Given a placed workspace without Slack bindings, When its member pairs and creates a bot through the Cloud management client, Then native Mobius projects and bots remain available", async () => {
     const { NativeMobiusRequests, ProjectOwnerCredentials } = await import(
         "../packages/web-core/src/view-models/mobius/requests.ts"
     );
@@ -648,8 +646,8 @@ test("Given a workspace without Slack placement or bindings, When its member pai
             values.set(key, value);
         },
     };
-    const bindings = { ...configuration, ...mobiusConfiguration, DIRECTORY_DATABASE: new InMemoryD1Database() };
-    const token = issuer.createSession("user_alice", APP_ORIGIN, "active", "org_team", "member");
+    const bindings = createPlacedMobiusBindings();
+    const token = issuer.createSession("user_alice", APP_ORIGIN, "active", "org_team", "member", mobiusPlacement);
     const client = new NativeMobiusRequests(
         APP_ORIGIN,
         new ProjectOwnerCredentials("org_team", storage),
@@ -707,7 +705,7 @@ test("Given a workspace without Slack placement or bindings, When its member pai
     const otherMember = new NativeMobiusRequests(
         APP_ORIGIN,
         new ProjectOwnerCredentials("org_other", storage),
-        async () => issuer.createSession("user_bob", APP_ORIGIN, "active", "org_other", "member"),
+        async () => issuer.createSession("user_bob", APP_ORIGIN, "active", "org_other", "member", mobiusPlacement),
         async (request) => await worker.fetch(request, bindings),
     );
     expect(await otherMember.listProjects(signal)).toEqual([]);
@@ -715,13 +713,13 @@ test("Given a workspace without Slack placement or bindings, When its member pai
 });
 
 test("Given a verified workspace member, When they create two Mobius pairings, Then both belong to their existing workspace with separate projects", async () => {
-    const bindings = { ...configuration, ...mobiusConfiguration, DIRECTORY_DATABASE: new InMemoryD1Database() };
+    const bindings = createPlacedMobiusBindings();
     const create = async () => {
         const response = await worker.fetch(
             new Request(`${APP_ORIGIN}/mobius/api/pairings`, {
                 method: "POST",
                 headers: {
-                    Authorization: `Bearer ${issuer.createSession("user_alice", APP_ORIGIN, "active", "org_team", "member")}`,
+                    Authorization: `Bearer ${issuer.createSession("user_alice", APP_ORIGIN, "active", "org_team", "member", mobiusPlacement)}`,
                 },
             }),
             bindings,
@@ -745,7 +743,7 @@ test("Given no verified workspace membership, When a caller supplies a tenant ID
                 },
                 body: JSON.stringify({ tenantId: "org_team" }),
             }),
-            { ...configuration, ...mobiusConfiguration, DIRECTORY_DATABASE: new InMemoryD1Database() },
+            createPlacedMobiusBindings(),
         );
         expect(response.status).toBe(token === undefined ? 401 : 403);
     }
@@ -753,3 +751,18 @@ test("Given no verified workspace membership, When a caller supplies a tenant ID
 
 import { readFileSync } from "node:fs";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+
+const mobiusPlacement = { d1ShardId: "apac-01", r2BucketId: "apac", revision: 1 };
+
+function createPlacedMobiusBindings() {
+    const allocator = new InMemoryTenantAllocatorNamespace();
+    allocator.assign("org_team", mobiusPlacement);
+    allocator.assign("org_other", mobiusPlacement);
+    return {
+        ...configuration,
+        ...mobiusConfiguration,
+        DEPLOY_ENVIRONMENT: "production",
+        D1_SHARD_APAC_01: new InMemoryD1Database(),
+        TENANT_PLACEMENT_ALLOCATOR: allocator,
+    };
+}

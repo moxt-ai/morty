@@ -53,8 +53,11 @@ APAC/WNAM D1 and R2 bindings. Initialize the local databases before verification
 ```bash
 pnpm exec wrangler d1 migrations apply D1_SHARD_APAC_01 --local
 pnpm exec wrangler d1 migrations apply D1_SHARD_WNAM_01 --local
-pnpm exec wrangler d1 migrations apply DIRECTORY_DATABASE --local
 ```
+
+Apply the Mobius SQL files in `mobius/packages/relay-cloudflare/migrations/d1`
+in filename order to both local shards with
+`pnpm exec wrangler d1 execute <binding> --local --file <migration.sql>`.
 
 For an HTTPS origin, start `cloudflared tunnel --url http://localhost:5174`.
 Set `APP_ORIGIN`, `SLACK_SERVER_BASE_URL`, `MOBIUS_BASE_URL`, and
@@ -163,8 +166,8 @@ app header, an All workspaces link, and full-width application content. Layouts 
 not infer the active view from URL strings or override embedded component styles.
 
 Cloud project/bot management uses `NativeMobiusRequests` against `/mobius/api`,
-not the Slack proxy. It requires verified workspace membership but no Slack
-placement, storage bindings, or installation. Owner credentials from pairing are
+not the Slack proxy. It requires verified workspace membership and Cloud storage
+placement but no Slack bindings or installation. Owner credentials from pairing are
 saved in Mobius's native channel-credential format with explicit owner authority
 and tenant scope; linked-device credentials cannot authorize bot management.
 Only the Slack page uses Slack's context and endpoints.

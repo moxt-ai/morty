@@ -4,10 +4,11 @@ import {
     CloudflareSessionTransport,
     sessionQuotaFromEnvironment,
 } from "@moxt-ai/mobius-relay-cloudflare/adapters";
-import { createBotApplication, createMobiusApplication, createRelayDependencies } from "@moxt-ai/mobius-relay-core";
+import { createMobiusApplication, createRelayDependencies } from "@moxt-ai/mobius-relay-core";
 import * as v from "valibot";
 import { ClerkGateway } from "../gateway/clerk-gateway.ts";
 import { MobiusPairingTenantResolver } from "../gateway/mobius-pairing-tenant-resolver.ts";
+import { createCloudBotApplication } from "../http/mobius-bot-application.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 import { json } from "../infra/http.ts";
 import { AuthenticationService } from "../service/authentication-service.ts";
@@ -39,7 +40,7 @@ export function isMobiusRequest(path: string): boolean {
 }
 
 const application = createMobiusApplication();
-const botApplication = createBotApplication();
+const botApplication = createCloudBotApplication();
 
 export async function fetchMobiusRequest(request: Request, bindings: CloudBindings): Promise<Response> {
     const host = { config: { bindings } };
