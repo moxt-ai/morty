@@ -157,6 +157,13 @@ Workspace pages use separate application paths beneath the existing app bar:
 Only the selected application view mounts. Chat connection restoration runs when
 opening Chat, so a stale chat connection does not block the workspace overview or Slack.
 
+Cloud project/bot management uses `NativeMobiusRequests` against `/mobius/api`,
+not the Slack proxy. It requires verified workspace membership but no Slack
+placement, storage bindings, or installation. Owner credentials from pairing are
+saved in Mobius's native channel-credential format with explicit owner authority
+and tenant scope; linked-device credentials cannot authorize bot management.
+Only the Slack page uses Slack's context and endpoints.
+
 Slack bots have independent identities and installations. Create a Mobius bot using
 the Mobius Bot API, then open the workspace's Slack page to set up a Slack bot and bind
 it by `botId`. Slack setup does not require a machine connection or Mobius bot.

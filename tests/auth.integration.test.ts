@@ -629,6 +629,91 @@ test("Given a tenant placed in APAC, When Slack reads an attachment, Then the in
     expect(tenantBucket.reads()).toEqual(["org_team/T123/file-1/report.pdf"]);
     expect(otherBucket.reads()).toHaveLength(0);
 });
+test("Given a workspace without Slack placement or bindings, When its member pairs and creates a bot through the Cloud management client, Then native Mobius projects and bots remain available", async () => {
+    const { NativeMobiusRequests, ProjectOwnerCredentials } = await import(
+        "../packages/web-core/src/view-models/mobius/requests.ts"
+    );
+    const values = new Map<string, string>();
+    const storage: Storage = {
+        get length() {
+            return values.size;
+        },
+        clear: () => values.clear(),
+        getItem: (key) => values.get(key) ?? null,
+        key: (index) => [...values.keys()][index] ?? null,
+        removeItem: (key) => {
+            values.delete(key);
+        },
+        setItem: (key, value) => {
+            values.set(key, value);
+        },
+    };
+    const bindings = { ...configuration, ...mobiusConfiguration, DIRECTORY_DATABASE: new InMemoryD1Database() };
+    const token = issuer.createSession("user_alice", APP_ORIGIN, "active", "org_team", "member");
+    const client = new NativeMobiusRequests(
+        APP_ORIGIN,
+        new ProjectOwnerCredentials("org_team", storage),
+        async (signal) => {
+            signal.throwIfAborted();
+            return token;
+        },
+        async (request) => await worker.fetch(request, bindings),
+    );
+    const signal = new AbortController().signal;
+    expect(await client.listProjects(signal)).toEqual([]);
+    const pairing = await client.createPairing(signal);
+    const claimed = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius/api/pairings/claim`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                pairingCode: pairing.pairingCode,
+                machineName: "Native runtime",
+                workspaceName: "Native project",
+                installableAgents: [],
+                agents: [
+                    {
+                        id: "codex",
+                        label: "Codex",
+                        agentPath: "/usr/local/bin/codex",
+                        agentVersion: "1.0",
+                        capabilities: {
+                            additionalDirectories: true,
+                            audioPrompt: false,
+                            closeSession: true,
+                            deleteSession: true,
+                            embeddedContextPrompt: true,
+                            imagePrompt: true,
+                            listSessions: true,
+                            loadSession: true,
+                            resumeSession: true,
+                            unstableForkSession: false,
+                        },
+                    },
+                ],
+            }),
+        }),
+        bindings,
+    );
+    expect(claimed.status).toBe(200);
+    expect(await client.pairingStatus(pairing, signal)).toBe("paired");
+    expect(await client.listProjects(signal)).toEqual([
+        { projectId: pairing.projectId, displayName: "Native project" },
+    ]);
+    const created = await client.createBot(pairing.projectId, { displayName: "Native bot", description: "" }, signal);
+    expect(await client.listBots(pairing.projectId, signal)).toEqual([
+        expect.objectContaining({ botId: created.botId, displayName: "Native bot", lifecycle: "draft" }),
+    ]);
+    const otherMember = new NativeMobiusRequests(
+        APP_ORIGIN,
+        new ProjectOwnerCredentials("org_other", storage),
+        async () => issuer.createSession("user_bob", APP_ORIGIN, "active", "org_other", "member"),
+        async (request) => await worker.fetch(request, bindings),
+    );
+    expect(await otherMember.listProjects(signal)).toEqual([]);
+    expect(otherMember.canManageProject(pairing.projectId)).toBe(false);
+});
+
 test("Given a verified workspace member, When they create two Mobius pairings, Then both belong to their existing workspace with separate projects", async () => {
     const bindings = { ...configuration, ...mobiusConfiguration, DIRECTORY_DATABASE: new InMemoryD1Database() };
     const create = async () => {

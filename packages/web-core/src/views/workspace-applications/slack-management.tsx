@@ -1,9 +1,9 @@
 import { useAuth } from "@clerk/react";
-import { MobiusBotsManageView, MobiusSlackContext, SlackBotManageView } from "@moxt-ai/app-slack-web-core";
+import { MobiusSlackContext, SlackBotManageView } from "@moxt-ai/app-slack-web-core";
 import { useCallback } from "react";
 import { waitForClerk } from "../../view-models/workspaces/clerk-directory.ts";
 
-function Management({ application }: { readonly application: "projects" | "slack" }) {
+export function SlackManagement() {
     const { isLoaded, orgId, getToken } = useAuth();
     const getSlackToken = useCallback((signal: AbortSignal) => waitForClerk(() => getToken(), signal), [getToken]);
     if (!isLoaded) {
@@ -15,16 +15,8 @@ function Management({ application }: { readonly application: "projects" | "slack
     return (
         <MobiusSlackContext context={{ mobiusUrl: window.location.origin, tenantId: orgId, getToken: getSlackToken }}>
             <div key={orgId} className="grid gap-8">
-                {application === "projects" ? <MobiusBotsManageView /> : <SlackBotManageView />}
+                <SlackBotManageView />
             </div>
         </MobiusSlackContext>
     );
-}
-
-export function SlackManagement() {
-    return <Management application="slack" />;
-}
-
-export function ProjectBotManagement() {
-    return <Management application="projects" />;
 }

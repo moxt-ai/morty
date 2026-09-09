@@ -1,7 +1,12 @@
-import { type BotSetup, type ManagedMobiusBot, MobiusBots, type MobiusBotsRequests } from "@moxt-ai/app-slack-web-core";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { render } from "vitest-browser-react";
-import { BrowserProjectCredentials } from "../../apps/slack/packages/web-core/src/infra/project-credentials";
+import type {
+    BotSetup,
+    ManagedMobiusBot,
+    MobiusBotsRequests,
+} from "../../packages/web-core/src/view-models/mobius/requests.ts";
+import { ProjectOwnerCredentials } from "../../packages/web-core/src/view-models/mobius/requests.ts";
+import { MobiusBots } from "../../packages/web-core/src/views/workspace-applications/project-bot-management.tsx";
 
 class MobiusWorkspace {
     readonly #setups = new Map<string, BotSetup>();
@@ -43,7 +48,7 @@ class MobiusWorkspace {
             );
         }
     };
-    readonly access = new BrowserProjectCredentials(`browser-acceptance-${crypto.randomUUID()}`);
+    readonly access = new ProjectOwnerCredentials("test", window.localStorage);
     #paired = false;
     readonly connectRuntime = () => {
         this.#paired = true;
@@ -144,6 +149,7 @@ class MobiusWorkspace {
     };
 }
 beforeEach(() => {
+    window.localStorage.clear();
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-09T00:00:00Z"));
 });

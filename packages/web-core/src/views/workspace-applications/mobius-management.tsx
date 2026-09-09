@@ -6,7 +6,8 @@ import {
     BrowserWorkspaceConnections,
     type WorkspaceConnectionProps,
 } from "../../view-models/workspaces/connections.ts";
-import { ProjectBotManagement, SlackManagement } from "./slack-management.tsx";
+import { ProjectBotManagement } from "./project-bot-management.tsx";
+import { SlackManagement } from "./slack-management.tsx";
 import {
     type ChatApplicationProps,
     type PairApplicationProps,
