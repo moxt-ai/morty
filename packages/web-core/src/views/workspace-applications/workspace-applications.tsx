@@ -1,6 +1,5 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { type ComponentType, useState } from "react";
-import { Button } from "../../components/ui/button.tsx";
 import { Card } from "../../components/ui/card.tsx";
 import type { WorkspaceConnectionProps } from "../../view-models/workspaces/connections.ts";
 
@@ -17,6 +16,8 @@ export function WorkspaceApplications<TConnection>({
     SlackApplication,
     ProjectsApplication,
     initialConnection,
+    view: selected,
+    workspacePath,
 }: WorkspaceConnectionProps<TConnection> & {
     readonly ChatApplication: ComponentType<ChatApplicationProps<TConnection>>;
     readonly SlackApplication: ComponentType;
@@ -24,27 +25,11 @@ export function WorkspaceApplications<TConnection>({
 }) {
     const connection = initialConnection;
     const [channelId, selectChannel] = useState<string | null>(null);
-    const location = useRouterState({ select: (state) => state.location });
-    const selected = location.pathname.endsWith("/chat")
-        ? "chat"
-        : location.pathname.endsWith("/slack")
-          ? "slack"
-          : "overview";
-    const workspacePath =
-        selected === "overview" ? location.pathname : location.pathname.slice(0, location.pathname.lastIndexOf("/"));
     const isApplication = selected === "chat" || selected === "slack";
     return (
         <>
             {isApplication ? (
-                <section aria-label={selected === "chat" ? "Chat" : "Slack"} className="grid min-w-0 gap-5">
-                    <header className="flex items-center justify-between gap-4">
-                        <h2 className="text-xl font-semibold">{selected === "chat" ? "Chat" : "Slack"}</h2>
-                        <Button asChild variant="outline">
-                            <Link to={workspacePath} search={{}}>
-                                Back to workspace
-                            </Link>
-                        </Button>
-                    </header>
+                <section aria-label={selected === "chat" ? "Chat" : "Slack"} className="grid min-h-0 min-w-0 flex-1">
                     {selected === "slack" ? (
                         <SlackApplication />
                     ) : connection.kind === "connected" ? (

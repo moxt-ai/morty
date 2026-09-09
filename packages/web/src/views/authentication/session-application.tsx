@@ -3,7 +3,7 @@ import { clerkDirectory, createWorkspaceRouter } from "@moxt-ai/mobius-cloud-web
 import { MobiusManagement, mobiusWorkspaceConnections } from "@moxt-ai/mobius-cloud-web-core/management";
 import { useMemo, useRef } from "react";
 import { verifySession } from "../../view-models/authentication/session.ts";
-import { App } from "../application/app.tsx";
+import { App, WorkspaceApplicationPage, WorkspacePage } from "../application/app.tsx";
 import { router as authRouter } from "./router.tsx";
 
 function SignedInApplication() {
@@ -23,6 +23,7 @@ function SignedInApplication() {
                 (signal) => verifySession(sessionId, clerk.session?.id, () => activeSession.current.getToken(), signal),
                 MobiusManagement,
                 mobiusWorkspaceConnections(userId),
+                { Standard: WorkspacePage, Application: WorkspaceApplicationPage },
             ),
         [clerk, sessionId, userId],
     );

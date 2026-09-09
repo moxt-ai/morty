@@ -7,6 +7,7 @@ import {
     type WorkspaceConnectionProps,
     type WorkspaceDirectory,
     WorkspaceError,
+    type WorkspaceShellProps,
 } from "@moxt-ai/mobius-cloud-web-core";
 import { RouterProvider } from "@tanstack/react-router";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -74,6 +75,12 @@ async function renderWorkspaces(directory: WorkspaceDirectory, userId = "alice")
         },
         WorkspaceManagement,
         new BrowserWorkspaceConnections(userId, window.localStorage, machines.read),
+        {
+            Standard: ({ children }: WorkspaceShellProps) => <div>{children}</div>,
+            Application: ({ children }: WorkspaceShellProps) => (
+                <main aria-label="Full application view">{children}</main>
+            ),
+        },
     );
     return render(<RouterProvider router={router} />);
 }
@@ -88,20 +95,27 @@ test("Given a signed-in user, When they open a workspace and navigate to Chat an
     await screen.getByRole("button", { name: "Create workspace", exact: true }).click();
     await screen.getByRole("link", { name: "Research team" }).click();
     await expect.element(screen.getByRole("heading", { name: "Project and bot management" })).toBeVisible();
+    await expect.element(screen.getByRole("main", { name: "Full application view" })).not.toBeInTheDocument();
     await expect.element(screen.getByRole("link", { name: "Open Slack" })).toBeVisible();
     await expect.element(screen.getByRole("button", { name: "Complete pairing" })).not.toBeInTheDocument();
     await screen.getByRole("button", { name: "Select paired project" }).click();
     await screen.getByRole("link", { name: "Open Chat" }).click();
     expect(window.location.pathname).toMatch(/\/workspaces\/[^/]+\/chat$/u);
+    await expect.element(screen.getByRole("main", { name: "Full application view" })).toBeVisible();
     await expect.element(screen.getByRole("heading", { name: "Project and bot management" })).not.toBeInTheDocument();
     await expect.element(screen.getByRole("button", { name: "Complete pairing" })).not.toBeInTheDocument();
     await expect.element(screen.getByText("Chat is ready for channel-1.")).toBeVisible();
-    await screen.getByRole("link", { name: "Back to workspace" }).click();
+    await expect.element(screen.getByRole("heading", { name: "Chat", exact: true })).not.toBeInTheDocument();
+    await expect.element(screen.getByText("Research team", { exact: true })).not.toBeInTheDocument();
+    await screen.getByRole("link", { name: "All workspaces" }).click();
+    await screen.getByRole("link", { name: "Research team" }).click();
     await screen.getByRole("link", { name: "Open Slack" }).click();
     expect(window.location.pathname).toMatch(/\/workspaces\/[^/]+\/slack$/u);
+    await expect.element(screen.getByRole("main", { name: "Full application view" })).toBeVisible();
     await expect.element(screen.getByText("Chat is ready for channel-1.")).not.toBeInTheDocument();
     await expect.element(screen.getByText("Slack bots are ready.")).toBeVisible();
-    await expect.element(screen.getByText("Research team", { exact: true })).toBeVisible();
+    await expect.element(screen.getByText("Research team", { exact: true })).not.toBeInTheDocument();
+    await expect.element(screen.getByRole("heading", { name: "Slack", exact: true })).not.toBeInTheDocument();
     await screen.getByRole("link", { name: "All workspaces" }).click();
     await screen.getByRole("button", { name: "Delete Research team" }).click();
     await screen.getByRole("button", { name: "Cancel" }).click();
@@ -192,7 +206,8 @@ test("Given a paired workspace, When the user reloads its page, Then Chat and Sl
     const reopened = await renderWorkspaces(identity.forUser("alice"));
     await expect.element(reopened.getByText("Chat is ready for channel-1.")).toBeVisible();
     await expect.element(reopened.getByRole("button", { name: "Complete pairing" })).not.toBeInTheDocument();
-    await reopened.getByRole("link", { name: "Back to workspace" }).click();
+    await reopened.getByRole("link", { name: "All workspaces" }).click();
+    await reopened.getByRole("link", { name: "Connected team" }).click();
     await reopened.getByRole("link", { name: "Open Slack" }).click();
     await expect.element(reopened.getByText("Slack bots are ready.")).toBeVisible();
 });

@@ -19,4 +19,4 @@ export {
     type ProjectApplicationProps,
     WorkspaceApplications,
 } from "./views/workspace-applications/workspace-applications.tsx";
-export { createWorkspaceRouter } from "./views/workspaces/router.tsx";
+export { createWorkspaceRouter, type WorkspaceShellProps } from "./views/workspaces/router.tsx";

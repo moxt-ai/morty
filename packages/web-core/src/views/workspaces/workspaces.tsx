@@ -223,6 +223,25 @@ export function WorkspaceList({
     );
 }
 
+function AllWorkspacesLink() {
+    return (
+        <Button asChild variant="ghost" size="sm" className="self-start">
+            <Link to="/" search={{ page: 1 }}>
+                ← All workspaces
+            </Link>
+        </Button>
+    );
+}
+
+export function WorkspaceApplicationView({ children }: { readonly children: ReactNode }) {
+    return (
+        <>
+            <AllWorkspacesLink />
+            <div className="mt-3 flex min-h-0 flex-1 flex-col">{children}</div>
+        </>
+    );
+}
+
 export function WorkspaceDetail({
     workspace,
     children,
@@ -232,11 +251,7 @@ export function WorkspaceDetail({
 }) {
     return (
         <>
-            <Button asChild variant="ghost" size="sm">
-                <Link to="/" search={{ page: 1 }}>
-                    ← All workspaces
-                </Link>
-            </Button>
+            <AllWorkspacesLink />
             <section className="mt-8">
                 <p className="mb-3 break-words text-sm font-medium text-primary">{workspace.name}</p>
                 <div className="mt-6">{children}</div>
@@ -256,11 +271,7 @@ export function WorkspaceFailure({
 }) {
     return (
         <>
-            <Button asChild variant="ghost" size="sm">
-                <Link to="/" search={{ page: 1 }}>
-                    ← All workspaces
-                </Link>
-            </Button>
+            <AllWorkspacesLink />
             <p role="alert" className="mt-8 rounded-xl border border-red-200 bg-white p-6 text-red-700">
                 {message ?? workspaceErrorMessage(cause)}
             </p>
