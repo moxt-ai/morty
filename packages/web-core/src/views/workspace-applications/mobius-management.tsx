@@ -1,5 +1,8 @@
+import { useAuth } from "@clerk/react";
 import { MobiusSlackContext } from "@moxt-ai/app-slack-web-core";
 import { type ChannelConnection, MobiusChat, Pair, readChannelConnection } from "@moxt-ai/mobius-web-core";
+import { useCallback } from "react";
+import { waitForClerk } from "../../view-models/workspaces/clerk-directory.ts";
 import {
     BrowserWorkspaceConnections,
     type WorkspaceConnectionProps,
@@ -13,7 +16,24 @@ import {
 } from "./workspace-applications.tsx";
 
 function PairApplication({ onConnected }: PairApplicationProps<ChannelConnection>) {
-    return <Pair onConnected={onConnected} />;
+    const { getToken, isLoaded, orgId } = useAuth();
+    const getPairingToken = useCallback(
+        async (signal: AbortSignal) => {
+            const token = await waitForClerk(() => getToken(), signal);
+            if (token === null) {
+                throw new Error("Sign in to pair a machine.");
+            }
+            return token;
+        },
+        [getToken],
+    );
+    if (!isLoaded) {
+        return <p role="status">Loading workspace…</p>;
+    }
+    if (!orgId) {
+        return <p role="alert">Select this workspace to pair a machine.</p>;
+    }
+    return <Pair key={orgId} onConnected={onConnected} getPairingToken={getPairingToken} />;
 }
 
 function ChatApplication({ connection }: ChatApplicationProps<ChannelConnection>) {

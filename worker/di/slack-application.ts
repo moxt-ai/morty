@@ -51,7 +51,7 @@ function hasSlackBindings(bindings: CloudBindings): bindings is CloudBindings & 
 
 const application = createSlackApplication();
 const slack = createSlackWorker<
-    CloudBindings & SlackBindings,
+    CloudBindings & SlackBindings & { readonly pairingAuthorization: string | null },
     ExecutionContext | undefined,
     MessageBatch<SlackQueueMessage>
 >((bindings) => {
@@ -76,6 +76,7 @@ const slack = createSlackWorker<
         authenticationBaseUrl: environment.AUTHENTICATION_BASE_URL,
         publicBaseUrl: environment.SLACK_SERVER_BASE_URL.replace(/\/$/u, ""),
         mobiusBaseUrl: environment.MOBIUS_BASE_URL,
+        pairingAuthorization: bindings.pairingAuthorization,
         serviceToken: environment.SLACK_MOBIUS_AUTH_TOKEN,
         signingKey: environment.SLACK_OAUTH_STATE_SIGNING_KEY,
     };
@@ -128,12 +129,16 @@ export const slackApplication = {
                 503,
             );
         }
-        return await slack.fetch(request, bindings, context);
+        return await slack.fetch(
+            request,
+            { ...bindings, pairingAuthorization: request.headers.get("Authorization") },
+            context,
+        );
     },
     queue: async (batch, bindings) => {
         if (!hasSlackBindings(bindings)) {
             throw new Error("Slack queue configuration is unavailable.");
         }
-        await slack.queue(batch, bindings);
+        await slack.queue(batch, { ...bindings, pairingAuthorization: null });
     },
 } satisfies ExportedHandler<CloudBindings, SlackQueueMessage>;

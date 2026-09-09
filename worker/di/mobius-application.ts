@@ -4,10 +4,14 @@ import {
     D1PairingGateway,
     sessionQuotaFromEnvironment,
 } from "@moxt-ai/mobius-relay-cloudflare/adapters";
-import { createMobiusApplication } from "@moxt-ai/mobius-relay-core";
+import { createRelayApp } from "@moxt-ai/mobius-relay-core";
 import * as v from "valibot";
+import { ClerkGateway } from "../gateway/clerk-gateway.ts";
+import { WorkspacePairingTenantResolver } from "../gateway/workspace-pairing-tenant-resolver.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 import { json } from "../infra/http.ts";
+import { AuthenticationService } from "../service/authentication-service.ts";
+import { ConfigurationStorage } from "../storage/configuration-storage.ts";
 
 interface MobiusBindings {
     readonly DIRECTORY_DATABASE: D1Database;
@@ -45,23 +49,29 @@ export async function fetchMobiusRequest(request: Request, bindings: CloudBindin
             503,
         );
     }
-    const sessions = new CloudflareSessionRuntime(
-        bindings.SESSION_RELAY,
-        bindings.DIRECTORY_DATABASE,
-        sessionQuotaFromEnvironment(bindings),
-    );
-    const injector = createMobiusApplication({
-        channelGateway: new CloudflareChannelRuntime(bindings.RUNTIME_RELAY),
-        pairingGateway: new D1PairingGateway(bindings.DIRECTORY_DATABASE),
+    const infrastructure = {
+        config: { quota: sessionQuotaFromEnvironment(bindings) },
+        gateways: {
+            sessionRelay: bindings.SESSION_RELAY,
+            directoryDatabase: bindings.DIRECTORY_DATABASE,
+            runtimeRelay: bindings.RUNTIME_RELAY,
+        },
+    };
+    const sessions = new CloudflareSessionRuntime(infrastructure);
+    const application = createRelayApp({
+        channelGateway: new CloudflareChannelRuntime(infrastructure),
+        pairingGateway: new D1PairingGateway(infrastructure),
+        pairingTenantResolver: new WorkspacePairingTenantResolver(
+            new AuthenticationService({
+                storages: { configuration: new ConfigurationStorage({ config: { bindings } }) },
+                gateways: { clerk: new ClerkGateway({ config: { bindings } }) },
+            }),
+        ),
         sessionCommands: sessions,
         sessionQueries: sessions,
         sessionTransfers: sessions,
         sessionArtifacts: sessions,
         sessionEventStreams: sessions,
-    }).create();
-    try {
-        return await injector.resolve("application").fetch(request);
-    } finally {
-        await injector.dispose();
-    }
+    });
+    return await application.fetch(request);
 }
