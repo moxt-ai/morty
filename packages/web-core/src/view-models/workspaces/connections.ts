@@ -11,7 +11,6 @@ export type WorkspaceConnection<TConnection> =
 
 export interface WorkspaceConnectionProps<TConnection> {
     readonly initialConnection: WorkspaceConnection<TConnection>;
-    readonly onConnected: (connection: TConnection) => void;
 }
 
 export class WorkspaceConnectionError extends Error {

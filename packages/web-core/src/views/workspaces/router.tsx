@@ -136,7 +136,6 @@ export function createWorkspaceRouter<TConnection extends WorkspaceChannel>(
                         <WorkspaceManagement
                             key={`${workspace.id}:${connection.kind === "connected" ? connection.connection.channelId : "unpaired"}`}
                             initialConnection={connection}
-                            onConnected={(channel) => connections.save(workspace.id, channel)}
                         />
                     </WorkspaceDetail>
                 );

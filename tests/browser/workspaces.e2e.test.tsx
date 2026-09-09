@@ -2,7 +2,7 @@ import {
     BrowserWorkspaceConnections,
     type ChatApplicationProps,
     createWorkspaceRouter,
-    type PairApplicationProps,
+    type ProjectApplicationProps,
     WorkspaceApplications,
     type WorkspaceConnectionProps,
     type WorkspaceDirectory,
@@ -47,10 +47,13 @@ class MachineDirectory {
 let machines = new MachineDirectory();
 
 async function renderWorkspaces(directory: WorkspaceDirectory, userId = "alice") {
-    const PairApplication = ({ onConnected }: PairApplicationProps<TestConnection>) => (
-        <button type="button" onClick={() => onConnected(machines.pair())}>
-            Complete pairing
-        </button>
+    const ProjectsApplication = ({ onChannelSelected }: ProjectApplicationProps) => (
+        <>
+            <h2>Project and bot management</h2>
+            <button type="button" onClick={() => onChannelSelected(machines.pair().channelId)}>
+                Select paired project
+            </button>
+        </>
     );
     const ChatApplication = ({ connection }: ChatApplicationProps<TestConnection>) => (
         <p>Chat is ready for {connection.channelId}.</p>
@@ -60,9 +63,8 @@ async function renderWorkspaces(directory: WorkspaceDirectory, userId = "alice")
         <WorkspaceApplications
             {...props}
             ChatApplication={ChatApplication}
-            PairApplication={PairApplication}
             SlackApplication={SlackApplication}
-            ProjectsApplication={() => <h2>Project and bot management</h2>}
+            ProjectsApplication={ProjectsApplication}
         />
     );
     const router = createWorkspaceRouter(
@@ -88,11 +90,11 @@ test("Given a signed-in user, When they open a workspace and navigate to Chat an
     await expect.element(screen.getByRole("heading", { name: "Project and bot management" })).toBeVisible();
     await expect.element(screen.getByRole("link", { name: "Open Slack" })).toBeVisible();
     await expect.element(screen.getByRole("button", { name: "Complete pairing" })).not.toBeInTheDocument();
+    await screen.getByRole("button", { name: "Select paired project" }).click();
     await screen.getByRole("link", { name: "Open Chat" }).click();
     expect(window.location.pathname).toMatch(/\/workspaces\/[^/]+\/chat$/u);
     await expect.element(screen.getByRole("heading", { name: "Project and bot management" })).not.toBeInTheDocument();
-    await expect.element(screen.getByRole("button", { name: "Complete pairing" })).toBeVisible();
-    await screen.getByRole("button", { name: "Complete pairing" }).click();
+    await expect.element(screen.getByRole("button", { name: "Complete pairing" })).not.toBeInTheDocument();
     await expect.element(screen.getByText("Chat is ready for channel-1.")).toBeVisible();
     await screen.getByRole("link", { name: "Back to workspace" }).click();
     await screen.getByRole("link", { name: "Open Slack" }).click();
@@ -179,9 +181,10 @@ test("Given an unavailable identity provider, When connectivity returns and the 
 test("Given a paired workspace, When the user reloads its page, Then Chat and Slack recover the existing machine without pairing again", async () => {
     const identity = new WorkspaceIdentityProvider();
     const id = identity.create("Connected team", "alice");
-    window.history.replaceState(null, "", `/workspaces/${id}/chat`);
+    window.history.replaceState(null, "", `/workspaces/${id}`);
     const screen = await renderWorkspaces(identity.forUser("alice"));
-    await screen.getByRole("button", { name: "Complete pairing" }).click();
+    await screen.getByRole("button", { name: "Select paired project" }).click();
+    await screen.getByRole("link", { name: "Open Chat" }).click();
     await expect.element(screen.getByText("Chat is ready for channel-1.")).toBeVisible();
     const path = window.location.pathname + window.location.search;
     await screen.unmount();
@@ -199,18 +202,24 @@ test("Given a paired workspace, When another workspace or another signed-in memb
     const first = identity.create("First team", "alice");
     const second = identity.create("Second team", "alice");
     identity.invite(first, "bob");
-    window.history.replaceState(null, "", `/workspaces/${first}/chat`);
+    window.history.replaceState(null, "", `/workspaces/${first}`);
     const screen = await renderWorkspaces(identity.forUser("alice"));
-    await screen.getByRole("button", { name: "Complete pairing" }).click();
+    await screen.getByRole("button", { name: "Select paired project" }).click();
+    await screen.getByRole("link", { name: "Open Chat" }).click();
     await expect.element(screen.getByText("Chat is ready for channel-1.")).toBeVisible();
     await screen.unmount();
     window.history.replaceState(null, "", `/workspaces/${second}/chat`);
     const otherWorkspace = await renderWorkspaces(identity.forUser("alice"));
-    await expect.element(otherWorkspace.getByRole("button", { name: "Complete pairing" })).toBeVisible();
+    await expect
+        .element(otherWorkspace.getByText("Select a paired project in workspace management to open Chat."))
+        .toBeVisible();
+    await expect.element(otherWorkspace.getByRole("button", { name: "Complete pairing" })).not.toBeInTheDocument();
     await otherWorkspace.unmount();
     window.history.replaceState(null, "", `/workspaces/${first}/chat`);
     const otherUser = await renderWorkspaces(identity.forUser("bob"), "bob");
-    await expect.element(otherUser.getByRole("button", { name: "Complete pairing" })).toBeVisible();
+    await expect
+        .element(otherUser.getByText("Select a paired project in workspace management to open Chat."))
+        .toBeVisible();
     await otherUser.unmount();
     const originalUser = await renderWorkspaces(identity.forUser("alice"));
     await expect.element(originalUser.getByText("Chat is ready for channel-1.")).toBeVisible();

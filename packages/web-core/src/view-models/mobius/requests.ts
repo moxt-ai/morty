@@ -105,7 +105,7 @@ export class ProjectOwnerCredentials {
             JSON.stringify(credential),
         );
     };
-    readonly read = (projectId: string): string | null => {
+    readonly #readAccess = (projectId: string): { readonly hostToken: string; readonly channelId: string } | null => {
         for (let index = 0; index < this.storage.length; index++) {
             const key = this.storage.key(index);
             if (!key?.startsWith("mobius:channel-credential:")) {
@@ -119,7 +119,10 @@ export class ProjectOwnerCredentials {
                     parsed.output.tenantId === this.tenantId &&
                     parsed.output.projectId === projectId
                 ) {
-                    return parsed.output.hostToken;
+                    return {
+                        hostToken: parsed.output.hostToken,
+                        channelId: v.parse(identifier, key.slice("mobius:channel-credential:".length)),
+                    };
                 }
             } catch {
                 /* A malformed unrelated credential must not hide valid access. */
@@ -127,6 +130,8 @@ export class ProjectOwnerCredentials {
         }
         return null;
     };
+    readonly read = (projectId: string) => this.#readAccess(projectId)?.hostToken ?? null;
+    readonly channel = (projectId: string) => this.#readAccess(projectId)?.channelId ?? null;
     readonly require = (projectId: string) => {
         const token = this.read(projectId);
         if (token === null) {

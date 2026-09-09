@@ -157,7 +157,11 @@ afterEach(() => vi.useRealTimers());
 
 test("Given a bot needing setup, When its owner selects a local agent and the runtime approves the configuration, Then the bot becomes ready with its saved instructions", async () => {
     const workspace = new MobiusWorkspace(["project-one"]);
-    const screen = await render(<MobiusBots requests={workspace.requests} />);
+    const screen = await render(
+        <StrictMode>
+            <MobiusBots requests={workspace.requests} />
+        </StrictMode>,
+    );
     await expect.element(screen.getByText("Needs setup", { exact: true })).toBeVisible();
     await screen.getByRole("button", { name: "Set up Support", exact: true }).click();
     await screen.getByLabelText("Local agent", { exact: true }).click();
@@ -180,7 +184,11 @@ test("Given a bot needing setup, When its owner selects a local agent and the ru
 
 test("Given a project is offline, When a user adds and completes a new pairing in the Mobius bots card, Then the new project is selected and shown connected", async () => {
     const workspace = new MobiusWorkspace(["project-one"]);
-    const screen = await render(<MobiusBots requests={workspace.requests} />);
+    const screen = await render(
+        <StrictMode>
+            <MobiusBots requests={workspace.requests} />
+        </StrictMode>,
+    );
     await expect
         .element(screen.getByRole("listitem", { name: "Support" }).getByText("offline", { exact: true }))
         .toBeVisible();
@@ -197,7 +205,11 @@ test("Given a project is offline, When a user adds and completes a new pairing i
         .element(screen.getByRole("listitem", { name: "New runtime bot" }).getByText("connected", { exact: true }))
         .toBeVisible();
     await screen.unmount();
-    const reopened = await render(<MobiusBots requests={workspace.requests} />);
+    const reopened = await render(
+        <StrictMode>
+            <MobiusBots requests={workspace.requests} />
+        </StrictMode>,
+    );
     await reopened.getByLabelText("Mobius project").click();
     await reopened.getByRole("option", { name: "New runtime", exact: true }).click();
     await reopened.getByRole("button", { name: "Add Mobius bot" }).click();
@@ -208,14 +220,22 @@ test("Given a project is offline, When a user adds and completes a new pairing i
 
 test("Given a workspace with one project, When Mobius bot management opens, Then that project's bots load automatically", async () => {
     const workspace = new MobiusWorkspace(["project-one"]);
-    const screen = await render(<MobiusBots requests={workspace.requests} />);
+    const screen = await render(
+        <StrictMode>
+            <MobiusBots requests={workspace.requests} />
+        </StrictMode>,
+    );
     await expect.element(screen.getByLabelText("Mobius project")).toHaveTextContent("Customer team");
     await expect.element(screen.getByText("Support", { exact: true })).toBeVisible();
 });
 
 test("Given a workspace with two projects, When a member selects a project and adds a Mobius bot, Then its persisted list contains only that project's bots", async () => {
     const workspace = new MobiusWorkspace();
-    const screen = await render(<MobiusBots requests={workspace.requests} />);
+    const screen = await render(
+        <StrictMode>
+            <MobiusBots requests={workspace.requests} />
+        </StrictMode>,
+    );
     await screen.getByLabelText("Mobius project").click();
     await screen.getByRole("option", { name: "Customer team", exact: true }).click();
     await expect.element(screen.getByText("Support", { exact: true })).toBeVisible();
@@ -232,3 +252,5 @@ test("Given a workspace with two projects, When a member selects a project and a
     await screen.getByRole("option", { name: "Customer team", exact: true }).click();
     await expect.element(screen.getByText("Operations", { exact: true })).toBeVisible();
 });
+
+import { StrictMode } from "react";

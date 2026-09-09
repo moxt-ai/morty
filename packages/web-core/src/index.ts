@@ -16,7 +16,7 @@ export {
 } from "./view-models/workspaces/contracts.ts";
 export {
     type ChatApplicationProps,
-    type PairApplicationProps,
+    type ProjectApplicationProps,
     WorkspaceApplications,
 } from "./views/workspace-applications/workspace-applications.tsx";
 export { createWorkspaceRouter } from "./views/workspaces/router.tsx";

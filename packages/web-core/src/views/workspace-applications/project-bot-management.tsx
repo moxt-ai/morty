@@ -1,5 +1,5 @@
 import { useAuth } from "@clerk/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../components/ui/button.tsx";
 import { Card } from "../../components/ui/card.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
@@ -15,11 +15,25 @@ import {
     ProjectOwnerCredentials,
 } from "../../view-models/mobius/requests.ts";
 import { waitForClerk } from "../../view-models/workspaces/clerk-directory.ts";
+import type { ProjectApplicationProps } from "./workspace-applications.tsx";
 
 type Resource<T> =
     | { readonly kind: "loading" }
     | { readonly kind: "ready"; readonly value: T }
     | { readonly kind: "failed"; readonly message: string };
+function useDialogLifetime() {
+    const lifetime = useRef<AbortController | null>(null);
+    useEffect(() => {
+        const controller = new AbortController();
+        lifetime.current = controller;
+        return () => {
+            controller.abort();
+            lifetime.current = null;
+        };
+    }, []);
+    return lifetime;
+}
+
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : "Mobius request failed. Try again.";
 }
@@ -59,7 +73,7 @@ function label(bot: { readonly lifecycle: string; readonly setupStatus?: string 
     }
     return bot.setupStatus === "unavailable" ? "Setup failed" : "Needs setup";
 }
-export function ProjectBotManagement() {
+export function ProjectBotManagement({ onChannelSelected }: ProjectApplicationProps) {
     const { orgId, getToken, isLoaded } = useAuth();
     const token = useCallback((signal: AbortSignal) => waitForClerk(() => getToken(), signal), [getToken]);
     const requests = useMemo(
@@ -73,15 +87,25 @@ export function ProjectBotManagement() {
                 : null,
         [orgId, token],
     );
+    const selectProject = useCallback(
+        (projectId: string) => onChannelSelected(requests?.credentials.channel(projectId) ?? null),
+        [requests, onChannelSelected],
+    );
     if (!isLoaded) {
         return <p role="status">Loading workspace…</p>;
     }
     if (!requests) {
         return <p role="alert">Select a workspace to manage projects and bots.</p>;
     }
-    return <MobiusBots key={orgId} requests={requests} />;
+    return <MobiusBots key={orgId} requests={requests} onProjectSelected={selectProject} />;
 }
-export function MobiusBots({ requests }: { readonly requests: MobiusBotsRequests }) {
+export function MobiusBots({
+    requests,
+    onProjectSelected,
+}: {
+    readonly requests: MobiusBotsRequests;
+    readonly onProjectSelected?: (projectId: string) => void;
+}) {
     const [revision, refresh] = useState(0);
     const projects = useResource(requests.listProjects, revision);
     const [selected, select] = useState("");
@@ -92,6 +116,9 @@ export function MobiusBots({ requests }: { readonly requests: MobiusBotsRequests
             : projects.kind === "ready" && projects.value.length === 1
               ? (projects.value[0]?.projectId ?? "")
               : "";
+    useEffect(() => {
+        onProjectSelected?.(projectId);
+    }, [projectId, onProjectSelected]);
     return (
         <Card className="grid gap-5 p-5 sm:p-6">
             <header>
@@ -160,8 +187,7 @@ function PairingDialog({
     const [status, setStatus] = useState<"pending" | "paired" | "expired">("pending");
     const [error, setError] = useState("");
     const [busy, setBusy] = useState(false);
-    const [controller] = useState(() => new AbortController());
-    useEffect(() => () => controller.abort(), [controller]);
+    const lifetime = useDialogLifetime();
     return (
         <Dialog
             title="Pair a Mobius runtime"
@@ -190,10 +216,19 @@ function PairingDialog({
                         disabled={busy || status === "expired"}
                         variant="outline"
                         onClick={() => {
+                            const controller = lifetime.current;
+                            if (controller === null || busy) {
+                                return;
+                            }
                             setBusy(true);
+                            setError("");
                             void requests
                                 .pairingStatus(pairing.value, controller.signal)
-                                .then(setStatus)
+                                .then((status) => {
+                                    if (!controller.signal.aborted) {
+                                        setStatus(status);
+                                    }
+                                })
                                 .catch((e) => {
                                     if (!controller.signal.aborted) {
                                         setError(errorMessage(e));
@@ -206,7 +241,7 @@ function PairingDialog({
                                 });
                         }}
                     >
-                        Check pairing
+                        {busy ? "Checking pairing…" : "Check pairing"}
                     </Button>
                     {status === "paired" ? (
                         <Button onClick={() => onPaired(pairing.value.projectId)}>Use project</Button>
@@ -319,8 +354,7 @@ function CreateBot({
 }) {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
-    const [controller] = useState(() => new AbortController());
-    useEffect(() => () => controller.abort(), [controller]);
+    const lifetime = useDialogLifetime();
     return (
         <Dialog
             title="Create Mobius bot"
@@ -332,6 +366,10 @@ function CreateBot({
                 className="grid gap-4"
                 onSubmit={(event) => {
                     event.preventDefault();
+                    const controller = lifetime.current;
+                    if (controller === null || busy) {
+                        return;
+                    }
                     const form = new FormData(event.currentTarget);
                     const displayName = form.get("name");
                     const description = form.get("description");
@@ -339,6 +377,7 @@ function CreateBot({
                         return;
                     }
                     setBusy(true);
+                    setError("");
                     void requests
                         .createBot(projectId, { displayName, description }, controller.signal)
                         .then(() => {
@@ -367,7 +406,7 @@ function CreateBot({
                     <Input id="native-bot-description" name="description" />
                 </label>
                 <Button type="submit" disabled={busy}>
-                    Create Mobius bot
+                    {busy ? "Creating bot…" : "Create Mobius bot"}
                 </Button>
                 {error ? <p role="alert">{error}</p> : null}
             </form>
@@ -390,8 +429,7 @@ function SetupDialog({
     const [revision, refresh] = useState(0);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
-    const [controller] = useState(() => new AbortController());
-    useEffect(() => () => controller.abort(), [controller]);
+    const lifetime = useDialogLifetime();
     const load = useCallback(
         (signal: AbortSignal) => requests.getBotSetup(projectId, bot.botId, signal),
         [requests, projectId, bot.botId],
@@ -414,6 +452,10 @@ function SetupDialog({
                         setup={setup.value}
                         busy={busy}
                         onSave={(input) => {
+                            const controller = lifetime.current;
+                            if (controller === null || busy) {
+                                return;
+                            }
                             setBusy(true);
                             setError("");
                             void requests

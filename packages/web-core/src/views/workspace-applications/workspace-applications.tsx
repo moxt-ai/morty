@@ -4,8 +4,8 @@ import { Button } from "../../components/ui/button.tsx";
 import { Card } from "../../components/ui/card.tsx";
 import type { WorkspaceConnectionProps } from "../../view-models/workspaces/connections.ts";
 
-export interface PairApplicationProps<TConnection> {
-    readonly onConnected: (connection: TConnection) => void;
+export interface ProjectApplicationProps {
+    readonly onChannelSelected: (channelId: string | null) => void;
 }
 
 export interface ChatApplicationProps<TConnection> {
@@ -14,19 +14,16 @@ export interface ChatApplicationProps<TConnection> {
 
 export function WorkspaceApplications<TConnection>({
     ChatApplication,
-    PairApplication,
     SlackApplication,
     ProjectsApplication,
     initialConnection,
-    onConnected,
 }: WorkspaceConnectionProps<TConnection> & {
     readonly ChatApplication: ComponentType<ChatApplicationProps<TConnection>>;
-    readonly PairApplication: ComponentType<PairApplicationProps<TConnection>>;
     readonly SlackApplication: ComponentType;
-    readonly ProjectsApplication: ComponentType;
+    readonly ProjectsApplication: ComponentType<ProjectApplicationProps>;
 }) {
-    const [connection, setConnection] = useState(initialConnection);
-    const [failure, setFailure] = useState<string | null>(null);
+    const connection = initialConnection;
+    const [channelId, selectChannel] = useState<string | null>(null);
     const location = useRouterState({ select: (state) => state.location });
     const selected = location.pathname.endsWith("/chat")
         ? "chat"
@@ -38,7 +35,6 @@ export function WorkspaceApplications<TConnection>({
     const isApplication = selected === "chat" || selected === "slack";
     return (
         <>
-            {failure !== null && <p role="alert">{failure}</p>}
             {isApplication ? (
                 <section aria-label={selected === "chat" ? "Chat" : "Slack"} className="grid min-w-0 gap-5">
                     <header className="flex items-center justify-between gap-4">
@@ -54,31 +50,21 @@ export function WorkspaceApplications<TConnection>({
                     ) : connection.kind === "connected" ? (
                         <ChatApplication connection={connection.connection} />
                     ) : (
-                        <PairApplication
-                            onConnected={(paired) => {
-                                try {
-                                    onConnected(paired);
-                                    setFailure(null);
-                                    setConnection({ kind: "connected", connection: paired });
-                                } catch {
-                                    setFailure(
-                                        "This browser could not save the machine connection. Allow site storage and try again.",
-                                    );
-                                }
-                            }}
-                        />
+                        <p role="status" className="text-sm text-muted-foreground">
+                            Select a paired project in workspace management to open Chat.
+                        </p>
                     )}
                 </section>
             ) : (
                 <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
                     <section aria-label="Project and bot management" className="min-w-0">
-                        <ProjectsApplication />
+                        <ProjectsApplication onChannelSelected={selectChannel} />
                     </section>
                     <nav aria-label="Workspace applications" className="grid gap-5">
                         <Card asChild>
                             <Link
                                 to={`${workspacePath}/chat`}
-                                search={{}}
+                                search={channelId === null ? {} : { channel: channelId }}
                                 aria-label="Open Chat"
                                 className="p-5 transition-colors hover:border-ring hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
                             >

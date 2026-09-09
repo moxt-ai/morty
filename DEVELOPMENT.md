@@ -151,7 +151,7 @@ web-core does not import global CSS.
 Workspace pages use separate application paths beneath the existing app bar:
 
 - `/workspaces/<workspace-id>`: project/bot management and Chat/Slack navigation cards.
-- `/workspaces/<workspace-id>/chat`: the Mobius chat view (or pairing when no connection is saved).
+- `/workspaces/<workspace-id>/chat`: the Mobius chat view using the project selected in management. No pairing page is mounted here.
 - `/workspaces/<workspace-id>/slack`: Slack bot management.
 
 Only the selected application view mounts. Chat connection restoration runs when
