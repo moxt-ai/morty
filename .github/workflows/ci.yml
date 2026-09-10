@@ -36,24 +36,23 @@ jobs:
         id: mobius
         run: echo "revision=$(git rev-parse HEAD:third-party/mobius)" >> "$GITHUB_OUTPUT"
 
-      - name: Decode Mobius deploy key
-        id: mobius-key
+      - name: Checkout Mobius
         env:
           KEY_BASE64: ${{ secrets.MOBIUS_DEPLOY_KEY_BASE64 }}
+          REVISION: ${{ steps.mobius.outputs.revision }}
         run: |
-          echo "private-key<<EOF" >> "$GITHUB_OUTPUT"
-          printf '%s' "$KEY_BASE64" | base64 --decode >> "$GITHUB_OUTPUT"
-          echo >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout Mobius
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: moxt-ai/mobius
-          ref: ${{ steps.mobius.outputs.revision }}
-          path: third-party/mobius
-          persist-credentials: false
-          ssh-key: ${{ steps.mobius-key.outputs.private-key }}
+          key_path="$RUNNER_TEMP/mobius-deploy-key"
+          known_hosts="$RUNNER_TEMP/mobius-known-hosts"
+          trap 'rm -f "$key_path" "$known_hosts"' EXIT
+          printf '%s' "$KEY_BASE64" | base64 --decode > "$key_path"
+          chmod 600 "$key_path"
+          echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$known_hosts"
+          git init third-party/mobius
+          git -C third-party/mobius remote add origin git@github.com:moxt-ai/mobius.git
+          GIT_SSH_COMMAND="ssh -i $key_path -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$known_hosts" \
+            git -C third-party/mobius fetch --depth=1 origin "$REVISION"
+          git -C third-party/mobius checkout --detach FETCH_HEAD
+          test "$(git -C third-party/mobius rev-parse HEAD)" = "$REVISION"
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
