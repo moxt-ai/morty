@@ -50,12 +50,7 @@ export function AnonymousAccountActions({
         <div className="flex items-center gap-2">
             <Popover.Root open={open} onOpenChange={setOpen}>
                 <Popover.Trigger asChild>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Use this workspace on another device"
-                        onMouseEnter={() => setOpen(true)}
-                    >
+                    <Button variant="ghost" size="icon" aria-label="Use this workspace on another device">
                         <QrCode aria-hidden="true" className="size-5" />
                     </Button>
                 </Popover.Trigger>
@@ -63,7 +58,6 @@ export function AnonymousAccountActions({
                     <Popover.Content
                         align="end"
                         sideOffset={8}
-                        onMouseLeave={() => setOpen(false)}
                         className="z-50 w-72 rounded-xl border border-border bg-card p-4 text-center shadow-lg"
                     >
                         <h2 className="text-sm font-semibold">Use on your phone</h2>
