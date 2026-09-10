@@ -32,6 +32,9 @@ class InMemoryD1Database {
     readonly #database = new DatabaseSync(":memory:");
     constructor() {
         this.#database.exec(readFileSync(new URL("../migrations/0001_initial.sql", import.meta.url), "utf8"));
+        this.#database.exec(
+            readFileSync(new URL("../migrations/0002_anonymous_identity.sql", import.meta.url), "utf8"),
+        );
         databases.push(this);
     }
     readonly close = () => this.#database.close();
@@ -87,6 +90,172 @@ function accountRequest(token?: string): Request {
     });
 }
 
+async function createAnonymousUser(
+    database: InMemoryD1Database,
+): Promise<{ readonly token: string; readonly userId: string }> {
+    const response = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/anonymous-users`, { method: "POST" }),
+        slackConfiguration(database),
+    );
+    expect(response.status).toBe(201);
+    return v.parse(v.object({ token: v.string(), userId: v.string() }), await response.json());
+}
+
+test("Given a first-time visitor, When an anonymous identity is created, Then its credential opens a persistent session", async () => {
+    const database = new InMemoryD1Database();
+    const identity = await createAnonymousUser(database);
+    const response = await worker.fetch(accountRequest(identity.token), slackConfiguration(database));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+        authentication: { kind: "anonymous" },
+        userId: identity.userId,
+    });
+    const bots = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/management/bots`, {
+            headers: { authorization: `Bearer ${identity.token}` },
+        }),
+        slackConfiguration(database),
+    );
+    expect(bots.status).toBe(200);
+    expect(await bots.json()).toEqual({ bots: [] });
+});
+
+test("Given an anonymous user, When a transfer is redeemed twice, Then only the first device receives that identity", async () => {
+    const database = new InMemoryD1Database();
+    const identity = await createAnonymousUser(database);
+    const created = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/transfers`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${identity.token}` },
+        }),
+        slackConfiguration(database),
+    );
+    expect(created.status).toBe(201);
+    const transfer = v.parse(v.object({ url: v.string(), expiresAt: v.string() }), await created.json());
+    const code = new URL(transfer.url).hash.slice("#code=".length);
+    const redeem = () =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/transfers/redeem`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ code }),
+            }),
+            slackConfiguration(database),
+        );
+
+    const first = await redeem();
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({
+        userId: identity.userId,
+        token: expect.stringMatching(/^mobius_anon_v1_/),
+    });
+    const second = await redeem();
+    expect(second.status).toBe(410);
+    expect(await second.json()).toMatchObject({ error: { code: "TRANSFER_UNAVAILABLE" } });
+});
+
+test("Given an expired anonymous transfer, When a device redeems it, Then no credential is issued", async () => {
+    const database = new InMemoryD1Database();
+    const identity = await createAnonymousUser(database);
+    const created = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/transfers`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${identity.token}` },
+        }),
+        slackConfiguration(database),
+    );
+    const transfer = v.parse(v.object({ url: v.string() }), await created.json());
+    vi.advanceTimersByTime(15 * 60 * 1_000 + 1);
+
+    const response = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/transfers/redeem`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ code: new URL(transfer.url).hash.slice("#code=".length) }),
+        }),
+        slackConfiguration(database),
+    );
+    expect(response.status).toBe(410);
+    expect(await response.json()).toMatchObject({ error: { code: "TRANSFER_UNAVAILABLE" } });
+});
+
+test("Given an unbound Clerk account, When the visitor binds their anonymous user, Then Clerk opens the same workspace", async () => {
+    const database = new InMemoryD1Database();
+    const identity = await createAnonymousUser(database);
+    const clerkToken = issuer.createSession("user_alice");
+    const status = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/clerk-binding`, {
+            headers: { authorization: `Bearer ${clerkToken}` },
+        }),
+        slackConfiguration(database),
+    );
+    expect(await status.json()).toEqual({ kind: "unbound" });
+
+    const bound = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/clerk-binding`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${clerkToken}`, "content-type": "application/json" },
+            body: JSON.stringify({ action: "bind", anonymousToken: identity.token }),
+        }),
+        slackConfiguration(database),
+    );
+    expect(bound.status).toBe(200);
+    expect(await bound.json()).toEqual({ kind: "bound", userId: identity.userId });
+
+    const session = await worker.fetch(accountRequest(clerkToken), slackConfiguration(database));
+    expect(await session.json()).toMatchObject({ authentication: { kind: "clerk" }, userId: identity.userId });
+});
+
+test("Given a Clerk account bound elsewhere, When the visitor overrides it, Then the local user becomes canonical and the old anonymous user remains usable", async () => {
+    const database = new InMemoryD1Database();
+    const first = await createAnonymousUser(database);
+    const second = await createAnonymousUser(database);
+    const clerkToken = issuer.createSession("user_alice");
+    const resolve = (anonymousToken: string, action: "bind" | "override") =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/clerk-binding`, {
+                method: "POST",
+                headers: { authorization: `Bearer ${clerkToken}`, "content-type": "application/json" },
+                body: JSON.stringify({ action, anonymousToken }),
+            }),
+            slackConfiguration(database),
+        );
+    expect((await resolve(first.token, "bind")).status).toBe(200);
+    const conflict = await resolve(second.token, "bind");
+    expect(conflict.status).toBe(409);
+    expect(await conflict.json()).toMatchObject({ error: { code: "BINDING_CONFLICT" } });
+    expect((await resolve(second.token, "override")).status).toBe(200);
+
+    const clerkSession = await worker.fetch(accountRequest(clerkToken), slackConfiguration(database));
+    expect(await clerkSession.json()).toMatchObject({ userId: second.userId });
+    const oldAnonymousSession = await worker.fetch(accountRequest(first.token), slackConfiguration(database));
+    expect(await oldAnonymousSession.json()).toMatchObject({ userId: first.userId });
+});
+
+test("Given a Clerk account bound elsewhere, When the visitor discards the local user, Then its anonymous credentials stop working", async () => {
+    const database = new InMemoryD1Database();
+    const account = await createAnonymousUser(database);
+    const local = await createAnonymousUser(database);
+    const clerkToken = issuer.createSession("user_alice");
+    const request = (anonymousToken: string, action: "bind" | "discard-local") =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/clerk-binding`, {
+                method: "POST",
+                headers: { authorization: `Bearer ${clerkToken}`, "content-type": "application/json" },
+                body: JSON.stringify({ action, anonymousToken }),
+            }),
+            slackConfiguration(database),
+        );
+    expect((await request(account.token, "bind")).status).toBe(200);
+    expect((await request(local.token, "discard-local")).status).toBe(200);
+
+    const discarded = await worker.fetch(accountRequest(local.token), slackConfiguration(database));
+    expect(discarded.status).toBe(401);
+    const clerkSession = await worker.fetch(accountRequest(clerkToken), slackConfiguration(database));
+    expect(await clerkSession.json()).toMatchObject({ userId: account.userId });
+});
+
 test("Given a visitor without a Clerk session, When account data is requested, Then access is denied", async () => {
     const response = await worker.fetch(accountRequest(), {});
     expect(response.status).toBe(401);
@@ -103,10 +272,14 @@ test("Given configured Clerk sign-in, When public configuration is loaded, Then 
 test("Given an active Clerk user, When account data is requested, Then only user and session identity are returned", async () => {
     const response = await worker.fetch(
         accountRequest(issuer.createSession("user_alice", APP_ORIGIN, "active", "org_ignored")),
-        baseConfiguration,
+        slackConfiguration(),
     );
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ userId: "user_alice", sessionId: expect.stringMatching(/^sess_/) });
+    expect(await response.json()).toEqual({
+        authentication: { kind: "clerk" },
+        userId: "user_alice",
+        sessionId: expect.stringMatching(/^sess_/),
+    });
 });
 
 test("Given a token for another origin, When account data is requested, Then access is denied", async () => {

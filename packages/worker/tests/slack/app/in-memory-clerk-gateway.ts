@@ -1,4 +1,4 @@
-import type { Session } from "../../../src/components/management/entity/authentication/session.ts";
+import type { ClerkSession } from "../../../src/components/management/entity/authentication/session.ts";
 import type { AuthenticationConfiguration } from "../../../src/components/management/storage/authentication-configuration.ts";
 
 export class InMemoryClerkGateway {
@@ -12,7 +12,7 @@ export class InMemoryClerkGateway {
         token: string,
         _configuration: AuthenticationConfiguration,
         signal: AbortSignal,
-    ): Promise<Session | null> => {
+    ): Promise<ClerkSession | null> => {
         signal.throwIfAborted();
         const userId = this.#sessions.get(token);
         return userId === undefined ? null : { sessionId: "sess_test", userId };

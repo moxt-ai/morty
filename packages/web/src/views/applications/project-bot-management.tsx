@@ -1,4 +1,3 @@
-import { useAuth } from "@clerk/react";
 import { Bot, Check, Link2, Plus, RefreshCw, Settings2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "../../components/ui/card.tsx";
@@ -8,7 +7,6 @@ import { Input } from "../../components/ui/input.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { type ManagedBot, ManagementApi } from "../../services/management/management-api.ts";
-import { waitForClerk } from "../../view-models/authentication/session.ts";
 import type {
     BotSetup,
     BotSetupInput,
@@ -16,6 +14,7 @@ import type {
     MobiusBotsRequests,
     MobiusProject,
 } from "../../view-models/mobius/requests.ts";
+import { useActiveIdentity } from "../authentication/identity-context.tsx";
 import type { ProjectApplicationProps } from "./application-navigation.tsx";
 
 type Resource<T> =
@@ -88,12 +87,9 @@ function label(bot: { readonly lifecycle: string; readonly setupStatus?: string 
     return bot.setupStatus === "unavailable" ? "Setup failed" : "Needs setup";
 }
 export function ProjectBotManagement({ onChannelSelected, userId }: ProjectApplicationProps) {
-    const { getToken, isLoaded } = useAuth();
-    const token = useCallback((signal: AbortSignal) => waitForClerk(() => getToken(), signal), [getToken]);
+    const identity = useActiveIdentity();
+    const token = useCallback((signal: AbortSignal) => identity.getToken(signal), [identity]);
     const requests = useMemo(() => new ManagementApi({ origin: window.location.origin, getToken: token }), [token]);
-    if (!isLoaded) {
-        return <Spinner label="Loading your bots" />;
-    }
     return <OwnedBotManagement key={userId} requests={requests} onBotSelected={onChannelSelected} />;
 }
 

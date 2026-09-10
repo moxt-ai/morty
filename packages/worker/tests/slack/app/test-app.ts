@@ -68,6 +68,12 @@ export async function createTestApplication(
         mobiusTransport: mobius,
         slackWebApi: slack,
         identityGateway: identity,
+        humanIdentity: {
+            resolve: async (clerkUserId: string, signal: AbortSignal) => {
+                signal.throwIfAborted();
+                return clerkUserId;
+            },
+        },
         botTriggerLimiter: limiter,
         slackAppDatabase: database,
     };

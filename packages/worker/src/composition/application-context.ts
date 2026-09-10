@@ -2,6 +2,7 @@ import pino from "pino";
 import { MobiusAppService } from "../components/chat/mobius-app-service.ts";
 import { AuthenticationService } from "../components/management/service/authentication-service.ts";
 import { ConfigurationStorage } from "../components/management/storage/configuration-storage.ts";
+import { IdentityStorage } from "../components/management/storage/identity-storage.ts";
 import { ManagedBotStorage } from "../components/management/storage/managed-bot-storage.ts";
 import { ClerkGateway } from "../gateway/clerk-gateway.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
@@ -22,6 +23,7 @@ export function createApplicationDependencies(bindings: CloudBindings) {
     };
     const storages = Object.freeze({
         configuration: new ConfigurationStorage(infrastructure),
+        identities: new IdentityStorage(bindings.DATABASE),
         managedBots: new ManagedBotStorage(bindings.DATABASE),
     });
     const cx = { ...infrastructure, storages };

@@ -35,9 +35,26 @@ class InMemoryD1Database {
     readonly #database = new DatabaseSync(":memory:");
     constructor() {
         this.#database.exec(readFileSync(new URL("../migrations/0001_initial.sql", import.meta.url), "utf8"));
+        this.#database.exec(
+            readFileSync(new URL("../migrations/0002_anonymous_identity.sql", import.meta.url), "utf8"),
+        );
     }
     readonly close = () => this.#database.close();
     readonly prepare = (query: string) => new InMemoryD1Statement(query, this.#database);
+    readonly batch = async (statements: readonly InMemoryD1Statement[]) => {
+        this.#database.exec("BEGIN");
+        try {
+            const results = [];
+            for (const statement of statements) {
+                results.push(await statement.run());
+            }
+            this.#database.exec("COMMIT");
+            return results;
+        } catch (cause) {
+            this.#database.exec("ROLLBACK");
+            throw cause;
+        }
+    };
 }
 
 interface UpstreamCall {

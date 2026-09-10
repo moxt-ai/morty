@@ -12,10 +12,15 @@ import type { ClockService } from "../service/identity/clock-service";
 import type { AttachmentStorageResolver } from "../storage/attachment-storage-resolver";
 import type { SlackAppDirectory } from "../storage/slack-app-directory";
 
+export interface HumanIdentityResolver {
+    readonly resolve: (clerkUserId: string, signal: AbortSignal) => Promise<string>;
+}
+
 interface SlackGateways {
     readonly clerk: ClerkGateway;
     readonly mobius: MobiusGateway;
     readonly identityGateway: IdentityGateway;
+    readonly humanIdentity: HumanIdentityResolver;
     readonly slackWebApi: SlackWebApi;
     readonly botTriggerLimiter: BotTriggerLimiter;
     readonly clock: ClockService;

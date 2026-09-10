@@ -2,9 +2,10 @@
 
 ## Product boundary
 
+Anonymous credentials and Clerk sessions resolve to a canonical internal user ID.
 Clerk verifies a user session only. The application does not read Clerk Organization
-claims and has no workspace creation, membership, placement, or shard logic. The
-verified Clerk user ID scopes Slack records and browser-local Mobius credentials.
+claims and has no workspace creation, membership, placement, or shard logic. Bots and
+Chat support anonymous users; Slack additionally requires a verified Clerk session.
 
 Users manage their Mobius bots on `/`, open Chat on `/chat`, and manage Slack on
 `/slack`. The web application sends Clerk bearer tokens to Cloud. Cloud forwards

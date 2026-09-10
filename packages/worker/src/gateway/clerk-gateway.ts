@@ -1,6 +1,6 @@
 import { verifyToken } from "@clerk/backend";
 import * as v from "valibot";
-import { type Session, sessionSchema } from "../components/management/entity/authentication/session.ts";
+import { type ClerkSession, clerkSessionSchema } from "../components/management/entity/authentication/session.ts";
 import type { AuthenticationConfiguration } from "../components/management/storage/authentication-configuration.ts";
 
 const claimsSchema = v.pipe(
@@ -17,7 +17,7 @@ export class ClerkGateway {
         token: string,
         configuration: AuthenticationConfiguration,
         signal: AbortSignal,
-    ): Promise<Session | null> => {
+    ): Promise<ClerkSession | null> => {
         signal.throwIfAborted();
         let verified: unknown;
         try {
@@ -34,7 +34,7 @@ export class ClerkGateway {
         if (!claims.success || claims.output.sts === "pending") {
             return null;
         }
-        return v.parse(sessionSchema, {
+        return v.parse(clerkSessionSchema, {
             userId: claims.output.sub,
             sessionId: claims.output.sid,
         });

@@ -2,6 +2,7 @@ import * as v from "valibot";
 import type { ClerkGateway } from "../../../../gateway/clerk-gateway.ts";
 import type { IdentityGateway } from "../../../../gateway/identity-gateway";
 import type { AuthenticationConfiguration } from "../../../management/storage/authentication-configuration.ts";
+import type { HumanIdentityResolver } from "../../composition/slack-infrastructure.ts";
 import type { BotPrincipal, HumanPrincipal, IdentityService } from "./identity-service";
 import { IdentityError } from "./identity-service";
 
@@ -26,9 +27,14 @@ export class ExternalIdentityService implements IdentityService {
     readonly #clerk: ClerkGateway;
     readonly #mobiusBaseUrl: string;
     readonly #gateway: IdentityGateway;
+    readonly #humanIdentity: HumanIdentityResolver;
 
     constructor(cx: {
-        readonly gateways: { readonly clerk: ClerkGateway; readonly identityGateway: IdentityGateway };
+        readonly gateways: {
+            readonly clerk: ClerkGateway;
+            readonly humanIdentity: HumanIdentityResolver;
+            readonly identityGateway: IdentityGateway;
+        };
         readonly config: {
             readonly authentication: AuthenticationConfiguration;
             readonly mobiusBaseUrl: string;
@@ -39,6 +45,7 @@ export class ExternalIdentityService implements IdentityService {
         this.#authentication = cx.config.authentication;
         this.#clerk = clerk;
         this.#gateway = gateway;
+        this.#humanIdentity = cx.gateways.humanIdentity;
         this.#mobiusBaseUrl = normalizeBaseUrl(mobiusBaseUrl);
     }
 
@@ -48,7 +55,8 @@ export class ExternalIdentityService implements IdentityService {
         if (session === null) {
             throw new IdentityError("AUTHENTICATION_FAILED", "User authentication failed");
         }
-        return { humanId: session.userId, kind: "human", tenantId: session.userId };
+        const userId = await this.#humanIdentity.resolve(session.userId, signal);
+        return { humanId: userId, kind: "human", tenantId: userId };
     };
 
     readonly authenticateBot = async (authorization: string | null, signal: AbortSignal): Promise<BotPrincipal> => {

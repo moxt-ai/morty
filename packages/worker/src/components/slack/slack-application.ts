@@ -5,6 +5,7 @@ import { FetchMobiusTransport, MobiusGateway } from "../../gateway/mobius-gatewa
 import { SlackWebApi } from "../../gateway/slack-web-gateway.ts";
 import type { CloudBindings } from "../../infra/cloud-bindings.ts";
 import { json } from "../../infra/http.ts";
+import { IdentityStorage } from "../management/storage/identity-storage.ts";
 import type { BotTriggerRateLimiter } from "./do/bot-trigger-rate-limiter.ts";
 import { CloudflareBotTriggerLimiter } from "./do/cloudflare-bot-trigger-limiter.ts";
 import {
@@ -79,6 +80,7 @@ const slack = createSlackWorker<
         throw new Error("Slack database is unavailable.");
     }
     const cipher = new SecretCipher(bindings.SLACK_TOKEN_ENCRYPTION_KEY);
+    const identities = new IdentityStorage(bindings.DATABASE);
     const config = {
         bindings,
         authentication: {
@@ -118,6 +120,10 @@ const slack = createSlackWorker<
             ...gateways,
             mobius: new MobiusGateway(infrastructure),
             identityGateway: new IdentityGateway(infrastructure),
+            humanIdentity: {
+                resolve: (clerkUserId: string, signal: AbortSignal) =>
+                    identities.resolveOrCreateClerk(clerkUserId, Date.now(), signal),
+            },
             slackAppDirectory: new DatabaseSlackAppDirectory(infrastructure),
         },
     });

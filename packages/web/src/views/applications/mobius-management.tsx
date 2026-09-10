@@ -1,23 +1,22 @@
-import { useAuth } from "@clerk/react";
 import { useEffect, useState } from "react";
 import { MobiusChat } from "../../components/chat/mobius-chat.tsx";
 import { ChatCloudApi } from "../../services/chat/chat-cloud-api.ts";
-import { waitForClerk } from "../../view-models/authentication/session.ts";
 import { type ApplicationConnectionProps, BrowserChannelConnection } from "../../view-models/channel-connection.ts";
 import { ChannelConnection } from "../../view-models/chat/channel.ts";
+import { useActiveIdentity } from "../authentication/identity-context.tsx";
 import { type ChatApplicationProps, MobiusApplications } from "./application-navigation.tsx";
 import { ProjectBotManagement } from "./project-bot-management.tsx";
 import { SlackManagement } from "./slack-management.tsx";
 
 function ChatApplication({ connection }: ChatApplicationProps<ChannelConnection>) {
-    const { getToken } = useAuth();
+    const identity = useActiveIdentity();
     const [activeConnection, setActiveConnection] = useState(connection);
     useEffect(() => {
         const controller = new AbortController();
         const chat = new ChatCloudApi({
             appId: import.meta.env.VITE_MOBIUS_APP_ID,
             origin: window.location.origin,
-            getToken: (signal) => waitForClerk(() => getToken(), signal),
+            getToken: identity.getToken,
             mobiusBaseUrl: import.meta.env.VITE_MOBIUS_BASE_URL,
         });
         let current = connection;
@@ -82,7 +81,7 @@ function ChatApplication({ connection }: ChatApplicationProps<ChannelConnection>
                 )
                 .catch(() => undefined);
         };
-    }, [connection, getToken]);
+    }, [connection, identity]);
     return <MobiusChat connection={activeConnection} />;
 }
 

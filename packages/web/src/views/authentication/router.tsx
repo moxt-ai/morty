@@ -1,6 +1,8 @@
 import { AuthenticateWithRedirectCallback, SignIn, SignUp, useUser } from "@clerk/react";
 import { createRootRoute, createRoute, createRouter, Link, Outlet } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { Button, reportApplicationError } from "../../index.ts";
+import { ANONYMOUS_CREDENTIAL_KEY, AnonymousIdentityApi } from "../../services/identity/anonymous-identity-api.ts";
 import { Page } from "../application/app.tsx";
 
 function LandingPage() {
@@ -74,6 +76,74 @@ function LoginPage({ register = false }: { readonly register?: boolean }) {
     );
 }
 
+type ContinueState =
+    | { readonly kind: "confirm"; readonly code: string }
+    | { readonly kind: "redeeming"; readonly code: string }
+    | { readonly kind: "failed"; readonly message: string }
+    | { readonly kind: "invalid" };
+
+function ContinuePage() {
+    const [state, setState] = useState<ContinueState>(() => {
+        const code = new URLSearchParams(window.location.hash.slice(1)).get("code");
+        window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+        if (code === null || code.length === 0) {
+            return { kind: "invalid" };
+        }
+        return window.localStorage.getItem(ANONYMOUS_CREDENTIAL_KEY) === null
+            ? { code, kind: "redeeming" }
+            : { code, kind: "confirm" };
+    });
+    useEffect(() => {
+        if (state.kind !== "redeeming") {
+            return;
+        }
+        const controller = new AbortController();
+        const api = new AnonymousIdentityApi({ origin: window.location.origin, storage: window.localStorage });
+        void api.redeemTransfer(state.code, controller.signal).then(
+            () => window.location.replace("/"),
+            (cause: unknown) => {
+                if (!controller.signal.aborted) {
+                    setState({
+                        kind: "failed",
+                        message: cause instanceof Error ? cause.message : "This transfer link is unavailable.",
+                    });
+                }
+            },
+        );
+        return () => controller.abort();
+    }, [state]);
+    return (
+        <Page>
+            <section className="mx-auto max-w-xl rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
+                <h1 className="text-2xl font-semibold">Use this Mobius workspace</h1>
+                {state.kind === "confirm" ? (
+                    <>
+                        <p className="mt-4 leading-7 text-muted-foreground">
+                            Continuing replaces the anonymous workspace currently stored on this device.
+                        </p>
+                        <Button className="mt-6" onClick={() => setState({ code: state.code, kind: "redeeming" })}>
+                            Replace and continue
+                        </Button>
+                    </>
+                ) : state.kind === "redeeming" ? (
+                    <p role="status" className="mt-4 text-muted-foreground">
+                        Securely transferring the workspace…
+                    </p>
+                ) : (
+                    <>
+                        <p role="alert" className="mt-4 text-red-700">
+                            {state.kind === "failed" ? state.message : "This transfer link is invalid."}
+                        </p>
+                        <Button asChild variant="ghost" className="mt-5">
+                            <Link to="/">Return to Mobius Cloud</Link>
+                        </Button>
+                    </>
+                )}
+            </section>
+        </Page>
+    );
+}
+
 const rootRoute = createRootRoute({
     component: Outlet,
     notFoundComponent: () => (
@@ -115,6 +185,11 @@ const callbackRoute = createRoute({
     path: "/sso-callback",
     component: () => <AuthenticateWithRedirectCallback signInFallbackRedirectUrl="/" signUpFallbackRedirectUrl="/" />,
 });
+const continueRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/continue",
+    component: ContinuePage,
+});
 
 export const router = createRouter({
     routeTree: rootRoute.addChildren([
@@ -124,6 +199,7 @@ export const router = createRouter({
         registerRoute,
         registerStepRoute,
         callbackRoute,
+        continueRoute,
     ]),
     defaultOnCatch: (error) => reportApplicationError(error, "authentication-route"),
     scrollRestoration: true,
