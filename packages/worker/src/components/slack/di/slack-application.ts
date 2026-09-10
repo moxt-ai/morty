@@ -1,10 +1,10 @@
 import * as v from "valibot";
+import { CloudMobiusFetchGateway } from "../../../gateway/cloud-mobius-fetch-gateway.ts";
+import { CloudSlackHumanIdentity } from "../../../gateway/cloud-slack-human-identity.ts";
+import { IdentityGateway, MobiusGateway, SlackWebApi } from "../../../gateway/index.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
 import { json } from "../../../infra/http.ts";
 import { SlackQueueController } from "../controller/slack-queue-controller.ts";
-import { CloudMobiusFetchGateway } from "../gateway/cloud-mobius-fetch-gateway.ts";
-import { CloudSlackHumanIdentity } from "../gateway/cloud-slack-human-identity.ts";
-import { IdentityGateway, MobiusGateway, SlackWebApi } from "../gateway/index.ts";
 import {
     ClockService,
     createSlackApplication,

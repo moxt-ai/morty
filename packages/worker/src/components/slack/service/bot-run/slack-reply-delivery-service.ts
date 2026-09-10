@@ -136,4 +136,4 @@ export class SlackReplyDeliveryService {
     };
 }
 
-import type { SlackWebApi } from "../../gateway/slack-web-gateway";
+import type { SlackWebApi } from "../../../../gateway/slack-web-gateway";

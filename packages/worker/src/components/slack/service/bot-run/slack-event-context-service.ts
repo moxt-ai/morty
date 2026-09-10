@@ -1,4 +1,4 @@
-import type { SlackWebApi } from "../../gateway/slack-web-gateway";
+import type { SlackWebApi } from "../../../../gateway/slack-web-gateway";
 import type { SlackEventStorage } from "../../storage/slack-event-storage";
 import type { SlackEventCallbackPayload } from "../events/events";
 import type { TenantContext } from "../identity/tenant-context";

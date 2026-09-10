@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { json } from "../../../infra/http.ts";
+import { json } from "../infra/http.ts";
 
 const forwardedHeaders = [
     "authorization",

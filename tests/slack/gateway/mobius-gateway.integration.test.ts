@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { expect, test } from "vitest";
-import { MobiusGateway } from "../../../packages/worker/src/components/slack/gateway/mobius-gateway";
 import { MobiusFetchGateway } from "../../../packages/worker/src/components/slack/infra/mobius-fetch-gateway";
+import { MobiusGateway } from "../../../packages/worker/src/gateway/mobius-gateway";
 import { InMemoryMobius } from "../app/in-memory-mobius-gateway";
 
 test("Given a Mobius Bot service on another origin, When Slack redeems a grant and sends a message, Then the authorized bot conversation returns its reply", async () => {

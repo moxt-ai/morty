@@ -163,4 +163,4 @@ export interface BotActor {
     readonly tenantId: string;
 }
 
-import type { SlackWebApi } from "../../gateway/slack-web-gateway";
+import type { SlackWebApi } from "../../../../gateway/slack-web-gateway";

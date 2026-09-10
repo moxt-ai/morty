@@ -184,4 +184,4 @@ function emptyContext(): SlackLoadedContext {
     return { contextText: "", latestTs: null, messages: [] };
 }
 
-import type { SlackWebApi } from "../../gateway/slack-web-gateway";
+import type { SlackWebApi } from "../../../../gateway/slack-web-gateway";

@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { type MobiusBinding, mobiusBindingSchema } from "../gateway/mobius-gateway";
+import { type MobiusBinding, mobiusBindingSchema } from "../../../gateway/mobius-gateway";
 import type { DatabaseResolver } from "../infra/database-resolver";
 import type { SecretCipher } from "../infra/secret-cipher";
 import type { TenantContext } from "../service/identity/tenant-context";

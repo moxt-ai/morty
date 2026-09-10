@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { MobiusGateway } from "../../../packages/worker/src/components/slack/gateway/mobius-gateway";
+import { MobiusGateway } from "../../../packages/worker/src/gateway/mobius-gateway";
 import { createTestApplication } from "./test-app";
 
 // The host gateway records user-owned pairing without live Mobius credentials.

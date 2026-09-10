@@ -1,4 +1,4 @@
-import { type MobiusBinding, type MobiusGateway, MobiusGatewayError } from "../../gateway/mobius-gateway";
+import { type MobiusBinding, type MobiusGateway, MobiusGatewayError } from "../../../../gateway/mobius-gateway";
 import type { SlackLogger } from "../../infra/logger";
 import type { SlackEventStorage } from "../../storage/slack-event-storage";
 import type { TenantContext } from "../identity/tenant-context";

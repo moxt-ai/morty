@@ -376,5 +376,5 @@ function validateAppName(name: string): void {
     }
 }
 
-import type { SlackWebApi } from "../../gateway/slack-web-gateway";
+import type { SlackWebApi } from "../../../../gateway/slack-web-gateway";
 import type { SecretCipher } from "../../infra/secret-cipher";

@@ -18,10 +18,10 @@ packages/
     src/slack/                 # Slack management UI
   worker/
     migrations/0001_initial.sql # Single Cloud D1 schema
-    src/components/chat/       # External Mobius HTTP gateway
+    src/components/chat/       # Chat request composition
+    src/components/cloud/      # Clerk user authentication
     src/components/slack/      # Slack domain, HTTP, queue, D1, R2, and DO code
-    src/components/website/    # Clerk user authentication
-    src/gateway/               # Top-level request dispatch
+    src/gateway/               # Request dispatch and all external gateways
 ```
 
 There are no Git submodules, `apps/` packages, storage shards, or standalone Slack

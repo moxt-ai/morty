@@ -1,8 +1,8 @@
-import type { BotTriggerLimiter } from "./gateway/bot-trigger-limiter";
-import type { HumanIdentity } from "./gateway/human-identity";
-import type { IdentityGateway } from "./gateway/identity-gateway";
-import type { MobiusGateway } from "./gateway/mobius-gateway";
-import type { SlackWebApi } from "./gateway/slack-web-gateway";
+import type { BotTriggerLimiter } from "../../gateway/bot-trigger-limiter";
+import type { HumanIdentity } from "../../gateway/human-identity";
+import type { IdentityGateway } from "../../gateway/identity-gateway";
+import type { MobiusGateway } from "../../gateway/mobius-gateway";
+import type { SlackWebApi } from "../../gateway/slack-web-gateway";
 import type { DatabaseResolver } from "./infra/database-resolver";
 import type { SlackLogger } from "./infra/logger";
 import type { SecretCipher } from "./infra/secret-cipher";

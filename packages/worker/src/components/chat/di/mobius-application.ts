@@ -1,5 +1,5 @@
+import { MobiusHttpGateway } from "../../../gateway/mobius-http-gateway.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
-import { MobiusHttpGateway } from "../gateway/mobius-http-gateway.ts";
 
 export function isMobiusRequest(path: string): boolean {
     return path.startsWith("/mobius/api/");

@@ -1,7 +1,7 @@
-import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
-import { ClerkGateway } from "../../cloud/gateway/clerk-gateway.ts";
-import { ConfigurationStorage } from "../../cloud/storage/configuration-storage.ts";
-import { IdentityError } from "../service/identity/identity-service.ts";
+import { ConfigurationStorage } from "../components/cloud/storage/configuration-storage.ts";
+import { IdentityError } from "../components/slack/service/identity/identity-service.ts";
+import type { CloudBindings } from "../infra/cloud-bindings.ts";
+import { ClerkGateway } from "./clerk-gateway.ts";
 import type { HumanIdentity } from "./human-identity.ts";
 
 export class CloudSlackHumanIdentity implements HumanIdentity {

@@ -6,7 +6,7 @@ import {
     configureBotSchema,
     createMobiusBotSchema,
     pairingStatusInputSchema,
-} from "../../gateway/mobius-gateway";
+} from "../../../../gateway/mobius-gateway";
 import { humanTenant, tenantContext } from "../../service/identity/tenant-context";
 import type { SlackHttpEnvironment } from "../slack-http-environment";
 

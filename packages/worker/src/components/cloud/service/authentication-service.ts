@@ -1,5 +1,5 @@
+import type { ClerkGateway } from "../../../gateway/clerk-gateway.ts";
 import type { Session } from "../entity/authentication/session.ts";
-import type { ClerkGateway } from "../gateway/clerk-gateway.ts";
 import type { ConfigurationStorage } from "../storage/configuration-storage.ts";
 
 type SessionResult =

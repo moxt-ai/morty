@@ -1,7 +1,7 @@
 import { verifyToken } from "@clerk/backend";
 import * as v from "valibot";
-import { type Session, sessionSchema } from "../entity/authentication/session.ts";
-import type { AuthenticationConfiguration } from "../storage/authentication-configuration.ts";
+import { type Session, sessionSchema } from "../components/cloud/entity/authentication/session.ts";
+import type { AuthenticationConfiguration } from "../components/cloud/storage/authentication-configuration.ts";
 
 const claimsSchema = v.pipe(
     v.object({

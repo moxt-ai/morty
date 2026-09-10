@@ -1,4 +1,4 @@
-import { type BotBindingInput, type MobiusGateway, MobiusGatewayError } from "../../gateway/mobius-gateway";
+import { type BotBindingInput, type MobiusGateway, MobiusGatewayError } from "../../../../gateway/mobius-gateway";
 import type { MobiusConnectionStorage } from "../../storage/mobius-connection-storage";
 import type { SlackEventStorage } from "../../storage/slack-event-storage";
 import type { HumanPrincipal } from "../identity/identity-service";

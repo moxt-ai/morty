@@ -1,7 +1,7 @@
-import type { ClerkGateway } from "../components/cloud/gateway/clerk-gateway.ts";
 import { AuthenticationService } from "../components/cloud/service/authentication-service.ts";
 import { ConfigurationStorage } from "../components/cloud/storage/configuration-storage.ts";
 import type { BusinessGateway } from "../gateway/business-gateway.ts";
+import type { ClerkGateway } from "../gateway/clerk-gateway.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 
 export interface CloudInfrastructure {

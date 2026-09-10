@@ -1,6 +1,6 @@
 import * as v from "valibot";
-import type { HumanIdentity } from "../../gateway/human-identity";
-import type { IdentityGateway } from "../../gateway/identity-gateway";
+import type { HumanIdentity } from "../../../../gateway/human-identity";
+import type { IdentityGateway } from "../../../../gateway/identity-gateway";
 import type { BotPrincipal, HumanPrincipal, IdentityService } from "./identity-service";
 import { IdentityError } from "./identity-service";
 

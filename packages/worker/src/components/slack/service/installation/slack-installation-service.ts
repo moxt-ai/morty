@@ -191,5 +191,5 @@ export class SlackInstallationService {
     };
 }
 
-import type { SlackWebApi } from "../../gateway/slack-web-gateway";
+import type { SlackWebApi } from "../../../../gateway/slack-web-gateway";
 import type { SecretCipher } from "../../infra/secret-cipher";

@@ -296,7 +296,7 @@ test("Given a user with one project, When Mobius bot management opens, Then that
     await expect.element(screen.getByText("Support", { exact: true })).toBeVisible();
 });
 
-test("Given a user with two projects, When they selects a project and adds a Mobius bot, Then its persisted list contains only that project's bots", async () => {
+test("Given a user with two projects, When they select a project and add a Mobius bot, Then the persisted list contains only that project's bots", async () => {
     const workspace = new InMemoryMobius();
     const screen = await render(
         <StrictMode>

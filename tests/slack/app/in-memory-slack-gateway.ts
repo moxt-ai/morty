@@ -1,5 +1,5 @@
-import { SlackWebApi } from "../../../packages/worker/src/components/slack/gateway/index";
 import type { SlackMessage } from "../../../packages/worker/src/components/slack/service/bot-tools/slack-bot-tool-service";
+import { SlackWebApi } from "../../../packages/worker/src/gateway/index";
 
 export class InMemorySlack extends SlackWebApi {
     readonly files = new Map<string, string>();

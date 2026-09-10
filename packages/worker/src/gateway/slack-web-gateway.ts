@@ -1,7 +1,7 @@
 import * as v from "valibot";
-import { urlSchema } from "../infra/url-schema";
-import type { SlackMessage } from "../service/bot-tools/slack-bot-tool-service";
-import type { SlackOAuthInstallation } from "../service/installation/slack-installation-service";
+import { urlSchema } from "../components/slack/infra/url-schema";
+import type { SlackMessage } from "../components/slack/service/bot-tools/slack-bot-tool-service";
+import type { SlackOAuthInstallation } from "../components/slack/service/installation/slack-installation-service";
 
 const API_BASE_URL = "https://slack.com/api";
 const REQUEST_TIMEOUT_MILLISECONDS = 15_000;

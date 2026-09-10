@@ -1,7 +1,7 @@
-import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
-import { json } from "../../../infra/http.ts";
-import { MobiusHttpGateway } from "../../chat/gateway/mobius-http-gateway.ts";
-import { MobiusFetchGateway } from "../infra/mobius-fetch-gateway.ts";
+import { MobiusFetchGateway } from "../components/slack/infra/mobius-fetch-gateway.ts";
+import type { CloudBindings } from "../infra/cloud-bindings.ts";
+import { json } from "../infra/http.ts";
+import { MobiusHttpGateway } from "./mobius-http-gateway.ts";
 
 export class CloudMobiusFetchGateway extends MobiusFetchGateway {
     readonly #gateway: MobiusHttpGateway;

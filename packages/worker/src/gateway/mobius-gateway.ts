@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import type { MobiusFetchGateway } from "../infra/mobius-fetch-gateway";
+import type { MobiusFetchGateway } from "../components/slack/infra/mobius-fetch-gateway";
 
 const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
 export const mobiusBindingSchema = v.pipe(

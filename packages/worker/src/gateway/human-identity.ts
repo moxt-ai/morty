@@ -1,4 +1,4 @@
-import type { HumanPrincipal } from "../service/identity/identity-service";
+import type { HumanPrincipal } from "../components/slack/service/identity/identity-service";
 
 /** The embedding host verifies a user credential and supplies that user's storage identity. */
 export interface HumanIdentity {

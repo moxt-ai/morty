@@ -1,6 +1,5 @@
 import { createSlackApplication } from "../../../packages/worker/src/components/slack/app";
 import { createSlackDependencies } from "../../../packages/worker/src/components/slack/create-dependencies";
-import { MobiusGateway } from "../../../packages/worker/src/components/slack/gateway/index";
 import { createSlackFileHandler } from "../../../packages/worker/src/components/slack/http/bot-tools/slack-file-handler";
 import { slackLogger } from "../../../packages/worker/src/components/slack/infra/logger";
 import type { SlackQueueMessage } from "../../../packages/worker/src/components/slack/infra/queue-message";
@@ -8,6 +7,7 @@ import { SecretCipher } from "../../../packages/worker/src/components/slack/infr
 import { ClockService } from "../../../packages/worker/src/components/slack/service/identity/clock-service";
 import { tenantContext } from "../../../packages/worker/src/components/slack/service/identity/tenant-context";
 import { DatabaseSlackAppDirectory } from "../../../packages/worker/src/components/slack/storage/database-slack-app-directory";
+import { MobiusGateway } from "../../../packages/worker/src/gateway/index";
 import { InMemoryAttachments } from "./in-memory-attachments";
 import { InMemoryHumanIdentity } from "./in-memory-human-identity";
 import { InMemoryIdentityGateway } from "./in-memory-identity-gateway";

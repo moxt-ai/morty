@@ -13,12 +13,14 @@ authorize the user and bot.
 
 ## Worker structure
 
-Code belonging to a feature stays below `packages/worker/src/components`:
+Feature logic stays below `packages/worker/src/components`:
 
-- `website`: Clerk configuration, token verification, and `/mobius-cloud/api`.
+- `cloud`: Clerk configuration, token verification, and `/mobius-cloud/api`.
 - `chat`: safe forwarding for `/mobius/api/*`.
 - `slack`: Slack HTTP routes, services, queue processing, D1/R2 adapters, and rate limiting.
-- `gateway`: top-level dispatch between the components.
+
+All external gateways and top-level request dispatch stay directly under
+`packages/worker/src/gateway`; components do not contain gateway directories.
 
 Slack is source code in the Worker package, not an embedded package or standalone
 deployment. Shared runtime helpers remain directly under `packages/worker/src/infra`.

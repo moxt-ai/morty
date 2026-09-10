@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { IdentityGateway } from "../../../packages/worker/src/components/slack/gateway/index";
+import { IdentityGateway } from "../../../packages/worker/src/gateway/index";
 
 export class InMemoryIdentityGateway extends IdentityGateway {
     readonly bots = new Set(["tenant-1:bot-1", "tenant-1:bot-source"]);

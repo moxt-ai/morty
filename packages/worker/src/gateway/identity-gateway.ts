@@ -1,4 +1,4 @@
-import { IdentityError } from "../service/identity/identity-service";
+import { IdentityError } from "../components/slack/service/identity/identity-service";
 
 export class IdentityGateway {
     readonly #serviceToken: string;

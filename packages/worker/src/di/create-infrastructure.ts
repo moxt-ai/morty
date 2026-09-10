@@ -1,5 +1,5 @@
-import { ClerkGateway } from "../components/cloud/gateway/clerk-gateway.ts";
 import { BusinessGateway } from "../gateway/business-gateway.ts";
+import { ClerkGateway } from "../gateway/clerk-gateway.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 import type { CloudInfrastructure } from "./create-dependencies.ts";
 
