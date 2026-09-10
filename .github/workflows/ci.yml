@@ -36,6 +36,16 @@ jobs:
         id: mobius
         run: echo "revision=$(git rev-parse HEAD:third-party/mobius)" >> "$GITHUB_OUTPUT"
 
+      - name: Decode Mobius deploy key
+        id: mobius-key
+        env:
+          KEY_BASE64: ${{ secrets.MOBIUS_DEPLOY_KEY_BASE64 }}
+        run: |
+          echo "private-key<<EOF" >> "$GITHUB_OUTPUT"
+          printf '%s' "$KEY_BASE64" | base64 --decode >> "$GITHUB_OUTPUT"
+          echo >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
       - name: Checkout Mobius
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -43,7 +53,7 @@ jobs:
           ref: ${{ steps.mobius.outputs.revision }}
           path: third-party/mobius
           persist-credentials: false
-          ssh-key: ${{ secrets.MOBIUS_DEPLOY_KEY }}
+          ssh-key: ${{ steps.mobius-key.outputs.private-key }}
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
