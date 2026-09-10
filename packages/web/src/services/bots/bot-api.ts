@@ -1,4 +1,3 @@
-import { DirectMobiusTransport } from "@/services/chat/direct-mobius-transport";
 import {
     MobiusArtifactUploadRequest,
     MobiusBotOwnerClient,
@@ -9,7 +8,8 @@ import {
     type PromptImage,
     type PromptResource,
     StaticMobiusCredentialProvider,
-} from "@/third-party/mobius-client";
+} from "@moxt-ai/mobius-sdk";
+import { DirectMobiusTransport } from "@/services/chat/direct-mobius-transport";
 import type { ChannelConnection } from "@/view-models/chat/channel";
 
 const BOT_MESSAGE_PAGE_SIZE = 100;

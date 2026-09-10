@@ -7,7 +7,7 @@ import type {
     SessionCapabilities,
     SessionElicitationRequestedEvent,
     SessionPermissionRequestedEvent,
-} from "@/third-party/mobius-client";
+} from "@moxt-ai/mobius-sdk";
 
 const IDENTIFIER_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/;
 const TOKEN_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;

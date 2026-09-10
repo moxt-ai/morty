@@ -1,6 +1,6 @@
+import type { AgentDisplayContent } from "@moxt-ai/mobius-sdk";
 import { ExternalLink, FileText, Image as ImageIcon, Terminal } from "lucide-react";
 import { AgentMarkdown } from "@/components/agents/agent-markdown";
-import type { AgentDisplayContent } from "@/third-party/mobius-client";
 
 const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/;
 

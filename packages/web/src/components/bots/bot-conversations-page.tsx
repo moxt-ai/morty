@@ -1,4 +1,17 @@
 import {
+    conversationTitleFromText,
+    MobiusApiError,
+    MobiusBotConversation,
+    type MobiusBotConversationEvent,
+    type MobiusMessage,
+    type MobiusSession,
+    type PromptImage,
+    type PromptResource,
+    type SessionConfigOption,
+    type SessionReadyEvent,
+    type WorkspaceEntry,
+} from "@moxt-ai/mobius-sdk";
+import {
     ArrowLeft,
     Bot,
     FileText,
@@ -40,19 +53,6 @@ import {
     listWorkspace,
     prepareConversationSession,
 } from "@/services/chat/mobius-transport";
-import {
-    conversationTitleFromText,
-    MobiusApiError,
-    MobiusBotConversation,
-    type MobiusBotConversationEvent,
-    type MobiusMessage,
-    type MobiusSession,
-    type PromptImage,
-    type PromptResource,
-    type SessionConfigOption,
-    type SessionReadyEvent,
-    type WorkspaceEntry,
-} from "@/third-party/mobius-client";
 
 const BOT_WORKING_ANNOUNCEMENT = "Message accepted. The approved local runtime is working.";
 const BOT_COMPOSER_MAX_HEIGHT = 180;

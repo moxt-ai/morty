@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import {
     AcceptedOutboundMessage,
     ActiveBot,
@@ -23,7 +22,8 @@ import {
     ProtocolMessageError,
     ProvisioningBotConversation,
     QueuedOutboundMessage,
-} from "../../src/third-party/mobius-protocol/index.ts";
+} from "@moxt-ai/mobius-protocol";
+import { describe, expect, it } from "vitest";
 
 describe("Bot protocol", () => {
     it("Given draft and active Bot resources, When clients inspect lifecycle state, Then each concrete class exposes only fields valid in that state", () => {

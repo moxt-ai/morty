@@ -1,4 +1,12 @@
 import {
+    MobiusExpiredRuntimePairingStatus,
+    MobiusPairedRuntimePairingStatus,
+    MobiusPendingRuntimePairingStatus,
+    MobiusRevokedRuntimePairingStatus,
+    type MobiusRuntimeDescriptor,
+    type MobiusRuntimePairing,
+} from "@moxt-ai/mobius-sdk";
+import {
     ArrowLeft,
     Check,
     CircleCheck,
@@ -26,14 +34,6 @@ import {
     readRuntimeManagementAccess,
     revokeProjectRuntime,
 } from "@/services/pairing/pairing-api";
-import {
-    MobiusExpiredRuntimePairingStatus,
-    MobiusPairedRuntimePairingStatus,
-    MobiusPendingRuntimePairingStatus,
-    MobiusRevokedRuntimePairingStatus,
-    type MobiusRuntimeDescriptor,
-    type MobiusRuntimePairing,
-} from "@/third-party/mobius-client";
 import { PairingApiError } from "@/view-models/chat/channel";
 import { useChatStore } from "@/view-models/chat-store";
 

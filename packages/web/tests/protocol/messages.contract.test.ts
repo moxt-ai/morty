@@ -1,5 +1,3 @@
-import { describe, expect, it } from "vitest";
-
 import {
     AGENT_ACTIVITY_KIND,
     type AgentActivityEvent,
@@ -37,7 +35,8 @@ import {
     type SessionCancelCommand,
     SessionEventRejectionCode,
     type SessionPromptCommand,
-} from "../../src/third-party/mobius-protocol/index.ts";
+} from "@moxt-ai/mobius-protocol";
+import { describe, expect, it } from "vitest";
 
 describe("reliable session event protocol", () => {
     it("Given a daemon event has a stable identity, When it is retransmitted and acknowledged, Then its identity and durable cursor round-trip exactly", () => {

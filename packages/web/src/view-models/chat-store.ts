@@ -1,4 +1,3 @@
-import { create } from "zustand";
 import type {
     AgentContentEvent,
     AgentInstallCancelledEvent,
@@ -18,7 +17,8 @@ import type {
     SessionReadyEvent,
     SessionUsageUpdatedEvent,
     WorkspaceEntry,
-} from "@/third-party/mobius-client";
+} from "@moxt-ai/mobius-sdk";
+import { create } from "zustand";
 import {
     type AgentInstallationViewState,
     AgentOption,

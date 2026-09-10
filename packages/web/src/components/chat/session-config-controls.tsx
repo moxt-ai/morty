@@ -1,3 +1,4 @@
+import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
 import { Check, ChevronDown, LoaderCircle, RefreshCw, Settings2, X } from "lucide-react";
 import { type CSSProperties, Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,6 @@ import {
     sessionConfigPanelMode,
 } from "@/services/chat/session-config-panel-placement";
 import { groupSessionConfigOptions, summarizeSessionConfig } from "@/services/chat/session-config-presentation";
-import type { SessionConfigOption } from "@/third-party/mobius-client";
 import { ReadySessionState, SessionPreparationFailedState } from "@/view-models/chat/chat";
 import { selectActiveConversation, useChatStore } from "@/view-models/chat-store";
 

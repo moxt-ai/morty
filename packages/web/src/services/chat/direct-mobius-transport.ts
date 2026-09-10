@@ -1,4 +1,4 @@
-import type { MobiusHttpTransport } from "../../third-party/mobius-client/index.ts";
+import type { MobiusHttpTransport } from "@moxt-ai/mobius-sdk";
 
 export class DirectMobiusTransport implements MobiusHttpTransport {
     readonly #appId: string;

@@ -1,5 +1,3 @@
-import { describe, expect, it } from "vitest";
-
 import {
     AGENT_CONTENT_KIND,
     AGENT_INSTALL_REQUEST_KIND,
@@ -41,7 +39,8 @@ import {
     type SessionUsageUpdatedEvent,
     WORKSPACE_LIST_KIND,
     type WorkspaceListCommand,
-} from "../../src/third-party/mobius-protocol/index.ts";
+} from "@moxt-ai/mobius-protocol";
+import { describe, expect, it } from "vitest";
 
 const modelOption: SessionConfigOption = {
     booleanValue: false,

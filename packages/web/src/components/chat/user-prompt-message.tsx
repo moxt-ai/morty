@@ -1,5 +1,5 @@
+import type { PromptImage, PromptResource } from "@moxt-ai/mobius-sdk";
 import { cn } from "@/lib/utils";
-import type { PromptImage, PromptResource } from "@/third-party/mobius-client";
 
 const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/;
 

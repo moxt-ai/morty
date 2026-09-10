@@ -43,9 +43,27 @@ export default defineConfig({
     ],
     build: { sourcemap: "hidden" },
     resolve: {
-        alias: {
-            "@": fileURLToPath(new URL("./packages/web/src", import.meta.url)),
-        },
+        alias: [
+            {
+                find: "@moxt-ai/mobius-sdk/channel",
+                replacement: fileURLToPath(
+                    new URL("./third-party/mobius/packages/web-sdk/src/channel.ts", import.meta.url),
+                ),
+            },
+            {
+                find: "@moxt-ai/mobius-sdk",
+                replacement: fileURLToPath(
+                    new URL("./third-party/mobius/packages/web-sdk/src/index.ts", import.meta.url),
+                ),
+            },
+            {
+                find: "@moxt-ai/mobius-protocol",
+                replacement: fileURLToPath(
+                    new URL("./third-party/mobius/packages/protocol/src/index.ts", import.meta.url),
+                ),
+            },
+            { find: "@", replacement: fileURLToPath(new URL("./packages/web/src", import.meta.url)) },
+        ],
     },
     server: {
         allowedHosts: [".trycloudflare.com"],

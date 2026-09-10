@@ -1,3 +1,4 @@
+import { MobiusApiError, type MobiusBot, type MobiusBotOwnerClient } from "@moxt-ai/mobius-sdk";
 import { LoaderCircle, MessageSquare, Plug, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { NavLink, Outlet, useParams } from "react-router";
@@ -11,7 +12,6 @@ import {
     botRoutePath,
 } from "@/services/application/app-routes";
 import { createBotOwnerClient } from "@/services/bots/bot-api";
-import { MobiusApiError, type MobiusBot, type MobiusBotOwnerClient } from "@/third-party/mobius-client";
 import type { ChannelConnection } from "@/view-models/chat/channel";
 import { isIdentifier } from "@/view-models/chat/channel";
 

@@ -1,11 +1,3 @@
-import { CheckCircle2, LoaderCircle, Pause, Play, RefreshCw, Save, ShieldCheck, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useOutletContext } from "react-router";
-import { BOT_FIELD_CLASS, BOT_TEXTAREA_CLASS, BotInlineError } from "@/components/bots/bot-page-header";
-import type { BotDetailContext } from "@/components/bots/bot-workspace";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { botConnectionsRoutePath } from "@/services/application/app-routes";
 import {
     MobiusApiError,
     type MobiusBotBehaviorRevision,
@@ -14,7 +6,15 @@ import {
     type MobiusOwnerBotDeliveryTarget,
     MobiusRequiredBotCompletionPolicy,
     MobiusUnavailableBotBindingState,
-} from "@/third-party/mobius-client";
+} from "@moxt-ai/mobius-sdk";
+import { CheckCircle2, LoaderCircle, Pause, Play, RefreshCw, Save, ShieldCheck, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useOutletContext } from "react-router";
+import { BOT_FIELD_CLASS, BOT_TEXTAREA_CLASS, BotInlineError } from "@/components/bots/bot-page-header";
+import type { BotDetailContext } from "@/components/bots/bot-workspace";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { botConnectionsRoutePath } from "@/services/application/app-routes";
 
 const BOT_ACTIVATION_REFRESH_MILLISECONDS = 250;
 

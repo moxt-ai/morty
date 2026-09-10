@@ -1,4 +1,4 @@
-import type { SessionConfigOption } from "@/third-party/mobius-client";
+import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
 
 export interface SessionConfigSummary {
     readonly accessibleLabel: string;

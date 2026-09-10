@@ -1,14 +1,12 @@
 // @vitest-environment node
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-
-import { afterEach, describe, expect, it, vi } from "vitest";
-
 import {
     createMobiusBotConnectorClient,
     redeemMobiusBotConnectionGrant,
     StaticMobiusCredentialProvider,
-} from "../../src/third-party/mobius-client/index.ts";
+} from "@moxt-ai/mobius-sdk";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 function listen(server: Server): Promise<void> {
     return new Promise((resolve, reject) => {

@@ -1,6 +1,3 @@
-import { DirectMobiusTransport } from "@/services/chat/direct-mobius-transport";
-import { readSessionConfigPreferences, saveSessionConfigPreferences } from "@/services/chat/session-config-preferences";
-import { readChannelConnection } from "@/services/pairing/pairing-api";
 import {
     decodeAgentContentEvent,
     decodeSessionElicitationRequestedEvent,
@@ -37,7 +34,7 @@ import {
     type SessionReadyEvent,
     StaticMobiusCredentialProvider,
     type WorkspaceEntriesEvent,
-} from "@/third-party/mobius-client";
+} from "@moxt-ai/mobius-sdk";
 import {
     type AgentInstallCancelRequest,
     type AgentInstallRequest,
@@ -52,7 +49,10 @@ import {
     type SessionConfigureRequest,
     type SessionPrepareRequest,
     type WorkspaceListRequest,
-} from "@/third-party/mobius-client/channel";
+} from "@moxt-ai/mobius-sdk/channel";
+import { DirectMobiusTransport } from "@/services/chat/direct-mobius-transport";
+import { readSessionConfigPreferences, saveSessionConfigPreferences } from "@/services/chat/session-config-preferences";
+import { readChannelConnection } from "@/services/pairing/pairing-api";
 import { type ChannelConnection, RecordedActivity, RequestedAgentInstallationState } from "@/view-models/chat/channel";
 import {
     DeletedSessionState,

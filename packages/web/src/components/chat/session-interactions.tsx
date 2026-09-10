@@ -1,14 +1,14 @@
+import type {
+    SessionElicitationField,
+    SessionElicitationRequestedEvent,
+    SessionPermissionRequestedEvent,
+} from "@moxt-ai/mobius-sdk";
+import type { ElicitationResponseRequest } from "@moxt-ai/mobius-sdk/channel";
 import { ExternalLink, HelpCircle, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { encodeElicitationForm, readMultiselectDefaults } from "@/services/chat/elicitation-form";
 import { respondToElicitation, respondToPermission } from "@/services/chat/mobius-transport";
-import type {
-    SessionElicitationField,
-    SessionElicitationRequestedEvent,
-    SessionPermissionRequestedEvent,
-} from "@/third-party/mobius-client";
-import type { ElicitationResponseRequest } from "@/third-party/mobius-client/channel";
 import { selectActiveConversation, useChatStore } from "@/view-models/chat-store";
 
 function safeExternalUrl(value: string): string {

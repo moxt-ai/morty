@@ -1,3 +1,4 @@
+import { MobiusApiError, type MobiusBot } from "@moxt-ai/mobius-sdk";
 import { Check, ChevronDown, LoaderCircle, RefreshCw } from "lucide-react";
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { AgentProductIcon } from "@/components/agents/agent-product-icon";
@@ -10,7 +11,6 @@ import {
     useConversationTargets,
 } from "@/components/chat/conversation-target-provider";
 import { cn } from "@/lib/utils";
-import { MobiusApiError, type MobiusBot } from "@/third-party/mobius-client";
 import { selectActiveConversation, useChatStore } from "@/view-models/chat-store";
 
 abstract class ConversationTargetTab {}

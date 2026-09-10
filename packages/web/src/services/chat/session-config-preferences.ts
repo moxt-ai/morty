@@ -1,4 +1,4 @@
-import type { SessionConfigOption } from "@/third-party/mobius-client";
+import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
 
 const SESSION_CONFIG_PREFERENCE_PREFIX = "mobius:session-config-preferences:";
 const LEGACY_SESSION_MODEL_PREFERENCE_PREFIX = "mobius:session-model-preferences:";

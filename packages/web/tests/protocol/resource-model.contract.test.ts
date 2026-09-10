@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import {
     decodeArchiveSegment,
     decodeAttempt,
@@ -8,7 +7,8 @@ import {
     decodeToolCallView,
     decodeTurn,
     transitionAttempt,
-} from "../../src/third-party/mobius-protocol/index.ts";
+} from "@moxt-ai/mobius-protocol";
+import { describe, expect, it } from "vitest";
 
 describe("Mobius resource model contract", () => {
     it("Given stable Session, binding, Turn, and Attempt resources, When their public records are decoded, Then lifecycle-specific data is accepted without infrastructure identities", () => {

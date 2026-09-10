@@ -1,6 +1,6 @@
+import { MobiusApiError, type MobiusBot, type MobiusBotOwnerClient } from "@moxt-ai/mobius-sdk";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { createBotOwnerClient } from "@/services/bots/bot-api";
-import { MobiusApiError, type MobiusBot, type MobiusBotOwnerClient } from "@/third-party/mobius-client";
 import type { ChannelConnection } from "@/view-models/chat/channel";
 
 export abstract class BotTargetDirectoryState {}

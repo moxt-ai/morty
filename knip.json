@@ -1,10 +1,6 @@
 {
     "$schema": "https://unpkg.com/knip@6/schema.json",
-    "ignore": [
-        "packages/web/src/third-party/mobius-client/**",
-        "packages/web/src/third-party/mobius-protocol/**",
-        "third-party/**"
-    ],
+    "ignore": ["third-party/**"],
     "ignoreDependencies": ["cloudflare"],
     "workspaces": {
         "packages/web": {

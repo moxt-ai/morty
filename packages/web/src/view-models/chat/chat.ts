@@ -14,8 +14,8 @@ import type {
     SessionReadyEvent,
     SessionUsageUpdatedEvent,
     WorkspaceEntry,
-} from "@/third-party/mobius-client";
-import { conversationTitleFromText } from "@/third-party/mobius-client";
+} from "@moxt-ai/mobius-sdk";
+import { conversationTitleFromText } from "@moxt-ai/mobius-sdk";
 import {
     type AgentOption,
     CompletedRecordedTurn,

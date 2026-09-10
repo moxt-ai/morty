@@ -1,9 +1,9 @@
+import type { MobiusBot } from "@moxt-ai/mobius-sdk";
 import { ArrowLeft, Bot, Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { MobiusBot } from "@/third-party/mobius-client";
 import { useChatStore } from "@/view-models/chat-store";
 
 export function BotAvatar({ bot, className }: { readonly bot: MobiusBot; readonly className?: string }) {

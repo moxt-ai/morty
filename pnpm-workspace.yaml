@@ -4,6 +4,8 @@ minimumReleaseAge: 1440
 packages:
   - packages/web
   - packages/worker
+  - third-party/mobius/packages/protocol
+  - third-party/mobius/packages/web-sdk
 
 allowBuilds:
   '@sentry/cli': true

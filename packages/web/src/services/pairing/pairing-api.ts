@@ -18,7 +18,7 @@ import {
     type SessionElicitationRequestedEvent,
     type SessionPermissionRequestedEvent,
     StaticMobiusCredentialProvider,
-} from "@/third-party/mobius-client";
+} from "@moxt-ai/mobius-sdk";
 import {
     AgentIntegrationOption,
     AgentOption,

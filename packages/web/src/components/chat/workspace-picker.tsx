@@ -1,3 +1,4 @@
+import type { WorkspaceEntriesEvent, WorkspaceEntry } from "@moxt-ai/mobius-sdk";
 import {
     Check,
     ChevronLeft,
@@ -21,7 +22,6 @@ import {
     workspacePickerPanelMode,
 } from "@/services/chat/workspace-picker-panel-placement";
 import { filterWorkspaceEntries } from "@/services/chat/workspace-picker-presentation";
-import type { WorkspaceEntriesEvent, WorkspaceEntry } from "@/third-party/mobius-client";
 import { selectActiveConversation, useChatStore } from "@/view-models/chat-store";
 
 const FOCUSABLE_CONTROL_SELECTOR = [

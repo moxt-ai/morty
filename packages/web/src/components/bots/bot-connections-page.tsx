@@ -1,3 +1,9 @@
+import {
+    MobiusApiError,
+    type MobiusBotConnectionDirectory,
+    type MobiusBotConnectionGrant,
+    type MobiusOwnerBotConnection,
+} from "@moxt-ai/mobius-sdk";
 import { Check, Copy, LoaderCircle, Plug, RefreshCw, ShieldCheck, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useOutletContext } from "react-router";
@@ -5,12 +11,6 @@ import { BOT_FIELD_CLASS, BotInlineError } from "@/components/bots/bot-page-head
 import type { BotDetailContext } from "@/components/bots/bot-workspace";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-    MobiusApiError,
-    type MobiusBotConnectionDirectory,
-    type MobiusBotConnectionGrant,
-    type MobiusOwnerBotConnection,
-} from "@/third-party/mobius-client";
 
 const CONNECTOR_SCOPES = Object.freeze([
     "conversation-events:read",

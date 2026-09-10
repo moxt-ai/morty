@@ -1,3 +1,8 @@
+import {
+    type NativeSessionHistory,
+    parseNativeHistoryText,
+    SESSION_HISTORY_PREVIEW_MESSAGE_LIMIT,
+} from "@moxt-ai/mobius-sdk";
 import { ArrowDown, MoreHorizontal } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { AgentActivityList } from "@/components/agents/agent-activity-list";
@@ -10,11 +15,6 @@ import { UserPromptMessage } from "@/components/chat/user-prompt-message";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { sendPrompt } from "@/services/chat/mobius-transport";
-import {
-    type NativeSessionHistory,
-    parseNativeHistoryText,
-    SESSION_HISTORY_PREVIEW_MESSAGE_LIMIT,
-} from "@/third-party/mobius-client";
 import { AgentChatMessage, type ChatMessage, NativeHistoryChatMessage, UserChatMessage } from "@/view-models/chat/chat";
 import { selectActiveConversation, useChatStore } from "@/view-models/chat-store";
 
