@@ -1,5 +1,8 @@
 import { expect, test } from "vitest";
-import { createTenantPlacementHandler, type OrganizationDirectory } from "../worker/service/tenant-placement.ts";
+import {
+    createTenantPlacementHandler,
+    type OrganizationDirectory,
+} from "../packages/worker/src/service/tenant-placement.ts";
 
 class InMemoryOrganizationDirectory implements OrganizationDirectory {
     readonly #organizations: {

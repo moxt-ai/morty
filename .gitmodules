@@ -1,10 +1,3 @@
-[submodule "mobius"]
-	path = mobius
-	url = https://github.com/moxt-ai/mobius.git
-[submodule "apps/slack"]
-	path = apps/slack
-	url = https://github.com/moxt-ai/mobius-slack.git
-	branch = main
 [submodule "apps/workflow"]
 	path = apps/workflow
 	url = https://github.com/moxt-ai/mobius-workflow.git

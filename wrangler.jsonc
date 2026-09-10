@@ -1,7 +1,7 @@
 {
     "$schema": "node_modules/wrangler/config-schema.json",
     "name": "mobius-cloud-local",
-    "main": "worker/index.ts",
+    "main": "packages/worker/src/index.ts",
     "compatibility_date": "2026-09-07",
     "keep_vars": true,
     "workers_dev": true,
@@ -42,18 +42,9 @@
     ],
     "durable_objects": {
         "bindings": [
-            { "name": "BOT_CONNECTIONS", "class_name": "BotConnectionActor" },
             {
                 "name": "BOT_TRIGGER_RATE_LIMITER",
                 "class_name": "BotTriggerRateLimiter"
-            },
-            {
-                "name": "RUNTIME_RELAY",
-                "class_name": "RuntimeRelay"
-            },
-            {
-                "name": "SESSION_RELAY",
-                "class_name": "SessionRelay"
             },
             {
                 "name": "TENANT_PLACEMENT_ALLOCATOR",
@@ -61,12 +52,7 @@
             }
         ]
     },
-    "vars": {
-        "DEPLOY_ENVIRONMENT": "staging",
-        "SESSION_ACTIVE_SESSIONS_PER_PROJECT": "1000",
-        "SESSION_ACTIVE_SESSIONS_PER_TENANT": "10000",
-        "SESSION_ARCHIVE_BYTES_PER_SESSION": "268435456"
-    },
+    "vars": { "DEPLOY_ENVIRONMENT": "staging" },
     "migrations": [
         {
             "tag": "slack-v1",
@@ -91,6 +77,10 @@
         {
             "tag": "slack-bot-trigger-v2",
             "renamed_classes": [{ "from": "AgentTriggerRateLimiter", "to": "BotTriggerRateLimiter" }]
+        },
+        {
+            "tag": "mobius-external-service-v1",
+            "deleted_classes": ["RuntimeRelay", "SessionRelay", "LiteSessionRelay", "BotConnectionActor"]
         }
     ],
     "env": {
@@ -111,12 +101,7 @@
                     "SLACK_TOKEN_ENCRYPTION_KEY"
                 ]
             },
-            "vars": {
-                "DEPLOY_ENVIRONMENT": "staging",
-                "SESSION_ACTIVE_SESSIONS_PER_PROJECT": "1000",
-                "SESSION_ACTIVE_SESSIONS_PER_TENANT": "10000",
-                "SESSION_ARCHIVE_BYTES_PER_SESSION": "268435456"
-            },
+            "vars": { "DEPLOY_ENVIRONMENT": "staging" },
             "routes": [
                 {
                     "pattern": "mobius.paradev.biz",
@@ -157,19 +142,10 @@
             ],
             "durable_objects": {
                 "bindings": [
-                    { "name": "BOT_CONNECTIONS", "class_name": "BotConnectionActor" },
                     { "name": "TENANT_PLACEMENT_ALLOCATOR", "class_name": "TenantPlacementAllocator" },
                     {
                         "name": "BOT_TRIGGER_RATE_LIMITER",
                         "class_name": "BotTriggerRateLimiter"
-                    },
-                    {
-                        "name": "RUNTIME_RELAY",
-                        "class_name": "RuntimeRelay"
-                    },
-                    {
-                        "name": "SESSION_RELAY",
-                        "class_name": "SessionRelay"
                     }
                 ]
             }
@@ -191,12 +167,7 @@
                     "SLACK_TOKEN_ENCRYPTION_KEY"
                 ]
             },
-            "vars": {
-                "DEPLOY_ENVIRONMENT": "production",
-                "SESSION_ACTIVE_SESSIONS_PER_PROJECT": "1000",
-                "SESSION_ACTIVE_SESSIONS_PER_TENANT": "10000",
-                "SESSION_ARCHIVE_BYTES_PER_SESSION": "268435456"
-            },
+            "vars": { "DEPLOY_ENVIRONMENT": "production" },
             "routes": [
                 {
                     "pattern": "mobius.paraflow.biz",
@@ -228,19 +199,10 @@
             ],
             "durable_objects": {
                 "bindings": [
-                    { "name": "BOT_CONNECTIONS", "class_name": "BotConnectionActor" },
                     { "name": "TENANT_PLACEMENT_ALLOCATOR", "class_name": "TenantPlacementAllocator" },
                     {
                         "name": "BOT_TRIGGER_RATE_LIMITER",
                         "class_name": "BotTriggerRateLimiter"
-                    },
-                    {
-                        "name": "RUNTIME_RELAY",
-                        "class_name": "RuntimeRelay"
-                    },
-                    {
-                        "name": "SESSION_RELAY",
-                        "class_name": "SessionRelay"
                     }
                 ]
             },

@@ -8,7 +8,7 @@
     "include": [
         "**/*.ts",
         "../scripts/**/*.ts",
-        "../worker/**/*.ts",
+        "../packages/worker/src/**/*.ts",
         "../vitest.config.ts",
         "../worker-configuration.d.ts",
         "../shared/**/*.ts",

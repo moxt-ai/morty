@@ -1,7 +1,10 @@
 import { useClerk, useSession } from "@clerk/react";
-import { clerkDirectory, createWorkspaceRouter } from "@moxt-ai/mobius-cloud-web-core";
-import { MobiusManagement, mobiusWorkspaceConnections } from "@moxt-ai/mobius-cloud-web-core/management";
 import { useMemo, useRef } from "react";
+import { clerkDirectory, createWorkspaceRouter } from "../../cloud/index.ts";
+import {
+    MobiusManagement,
+    mobiusWorkspaceConnections,
+} from "../../cloud/views/workspace-applications/mobius-management.tsx";
 import { verifySession } from "../../view-models/authentication/session.ts";
 import { App, WorkspaceApplicationPage, WorkspacePage } from "../application/app.tsx";
 import { router as authRouter } from "./router.tsx";

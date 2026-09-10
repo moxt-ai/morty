@@ -55,39 +55,39 @@ pnpm exec wrangler d1 migrations apply D1_SHARD_APAC_01 --local
 pnpm exec wrangler d1 migrations apply D1_SHARD_WNAM_01 --local
 ```
 
-Apply the Mobius SQL files in `mobius/packages/relay-cloudflare/migrations/d1`
-in filename order to both local shards with
-`pnpm exec wrangler d1 execute <binding> --local --file <migration.sql>`.
+Mobius storage belongs to the external service. Cloud applies only Slack migrations.
 
 For an HTTPS origin, start `cloudflared tunnel --url http://localhost:5174`.
-Set `APP_ORIGIN`, `SLACK_SERVER_BASE_URL`, `MOBIUS_BASE_URL`, and
+Set `APP_ORIGIN`, `SLACK_SERVER_BASE_URL`, and
 `AUTHENTICATION_BASE_URL` in `.dev.vars` to the returned HTTPS origin, then run
 `pnpm dev --port 5174`. Restart Vite after changing secrets. A new quick tunnel
 gets a new origin, so update those values when restarting the tunnel.
+Set `MOBIUS_BASE_URL` separately to the external Mobius origin, never to Cloud's
+tunnel URL. Leave it unset until that service is available; requests then return
+`MOBIUS_UNAVAILABLE` rather than entering a forwarding loop.
 
 Use the Clerk session claims described in [the storage contract](docs/storage.md)
 and create a new workspace through Cloud. Existing Organizations without placement
 cannot access Cloud tenant storage. D1/R2 and Durable Objects run locally; Clerk
 sign-in and Organization creation use the configured development Clerk instance.
 
-The root toolchain owns `cloud/` and the root development files. Business repositories keep their own checks and SQL files. Cloud CI additionally
-loads pinned Mobius and Slack sources to validate their shared-shard migrations.
-Cloud CD applies those migrations before deploying its own Worker. Existing
-standalone business deployments remain owned by their original repositories.
+The root toolchain owns `packages/web`, `packages/worker`, and the inlined Slack
+sources. CI validates Slack migrations from this checkout. Mobius is deployed and
+migrated independently of Cloud.
 
 ## Worker architecture
 
 The Cloud Worker uses the same explicit context pattern as Slack.
-`worker/application.ts` adapts Cloudflare fetch and queue events. Its Hono route
+`packages/worker/src/application.ts` adapts Cloudflare fetch and queue events. Its Hono route
 graph is constructed once; each event receives a fresh context constructed by
-`worker/di/create-dependencies.ts` from caller-supplied infrastructure.
+`packages/worker/src/di/create-dependencies.ts` from caller-supplied infrastructure.
 
 - `http/` contains inferred Hono route factories and owns request decoding,
   headers, and response status mapping.
 - `service/` owns authentication policy and validated session results.
 - `entity/<domain>/` defines shared domain schemas and inferred types, plus database row schemas when Cloud owns persistence.
 - `storage/` reads and validates deployment configuration from Worker bindings.
-- `gateway/` owns Clerk token verification and the embedded Mobius/Slack integrations.
+- `gateway/` owns Clerk token verification, Slack composition, and the external Mobius HTTP gateway.
 - `infra/` contains shared HTTP response mechanics.
 
 The plain readonly context is `cx: { services, storages, gateways, logger, config }`.
@@ -97,18 +97,17 @@ subset. Hosts provide gateway instances through `createCloudDependencies`, and
 bindings. Cloud has no container registrations or injection metadata. See
 [the architecture document](docs/architecture.md) for composition and lifetimes.
 
-Cloud has no authentication database: business persistence remains in the embedded
-Mobius and Slack storage adapters. Configuration storage exposes only validated
+Cloud has no authentication database: Slack uses local storage adapters and Mobius
+owns its persistence in the external service. Configuration storage exposes only validated
 authentication settings to the service. The public Worker entrypoint remains the
 boundary exercised by the existing authentication integration scenarios.
 
 ## Workspace UI
 
-Cloud Mobius pairing creation requires a verified Clerk session with an active
-organization. That organization ID is the pairing's tenant; no anonymous Mobius
-tenant is generated. The embedded Pair UI supplies its Clerk token for verification
-at the Mobius boundary. Missing authentication returns 401; a session without an
-active workspace returns 403. Pairing claims continue using the one-time code.
+The management UI supplies its Clerk bearer token for pairing and project requests.
+The external Mobius service must validate that credential and authorize workspace
+membership. Cloud does not synthesize tenant authority or implement Mobius's tenant
+resolver. Pairing claims continue using the one-time code.
 
 
 A workspace is a Clerk Organization. The browser uses Clerk's authenticated
@@ -124,10 +123,8 @@ without `useEffect` data fetching. Requests have deadlines and inherit route can
 The Clerk SDK does not expose HTTP cancellation, so cancellation stops waiting;
 mutations are never automatically retried because their remote result may be unknown.
 
-Cloud browser code follows the same package pattern and core stack as Slack:
-`packages/web` owns the Vite and Clerk shell, `packages/web-core` owns reusable
-workspace behavior, TanStack Router owns browser routing, and Valibot validates
-untrusted boundary data.
+`packages/web` owns the Vite/Clerk shell and all Cloud, Slack, and Mobius UI source.
+TanStack Router owns Cloud routing; Valibot validates untrusted boundary data.
 
 Workspace machine connections survive reloads in the same browser. Cloud stores
 only the channel ID under the signed-in user and workspace; Mobius continues to
@@ -144,12 +141,12 @@ to the plain workspace URL restore it. The channel ID alone grants no access.
 
 ### Slack bot bindings
 
-Cloud presentation primitives live in `packages/web-core/src/components/ui`.
+Cloud presentation primitives live in `packages/web/src/cloud/components/ui`.
 Buttons, inputs, cards, and Radix dialogs follow Slack's control sizing, green
 accent palette, focus styling, and modal behavior. Use `Button asChild` for
 navigation links and `Card asChild` for semantic card containers. Application
 styles and Tailwind source scanning remain in `packages/web/src/styles.css`;
-web-core does not import global CSS.
+Feature modules do not import global CSS.
 
 Workspace pages use separate application paths beneath the existing app bar:
 
@@ -181,8 +178,9 @@ Changing the binding keeps the Slack installation and isolates subsequent conver
 under the new connection. Connector credentials expire after Mobius's configured lifetime;
 use Change Mobius bot to establish a new connection when renewal is needed.
 
-Cloud exposes Mobius's `/mobius/api/v1/*` Bot routes and binds `BOT_CONNECTIONS` to
-`BotConnectionActor`. Apply the existing Mobius directory migrations before deployment.
+Cloud forwards `/mobius/api/*` over HTTP, including Bot routes. It does not deploy
+Mobius relay actors or database migrations. The upstream must implement the
+copied client's API contract and owns tenant and credential authorization.
 Slack's complete replacement schema is in
 `apps/slack/packages/worker/migrations/0001_initial.sql`; this release requires a fresh
 Slack database schema. The planned post-merge Slack table reset is handled operationally.
@@ -350,18 +348,11 @@ pending automatic production run is retained.
 To release manually, run the `CI` workflow on `main` and select
 `production`. This repeats all checks and uses the same environment wait.
 Manual CI runs do not trigger another automatic production release.
-Cloud CD builds Cloud, migrates both businesses across every selected shared D1
-shard, then deploys the Cloud Worker. A failed migration prevents deployment.
-It does not deploy existing standalone Mobius or Slack Workers or migrate their
-databases. Their original CI workflows, domains, and storage bindings remain in use.
-
-To update a migration version, update its business submodule commit and the
-corresponding SHA in `.github/actions/business-sources/action.yml` together. CI
-rejects a mismatch. The business repositories expose source-only internal actions
-to the organization, so GitHub can download the pinned revisions using temporary
-scoped tokens without a stored cross-repository PAT. Business CI continues to
-check and deploy its own standalone service independently; Cloud CI verifies the
-new shared-shard migration composition.
+Cloud CD builds Cloud, applies this repository's Slack migrations to the selected
+D1 shards, then deploys the Cloud Worker. A failed migration prevents deployment.
+Mobius service deployment and data migration are managed separately. Migration
+source changes are normal changes under `apps/slack`, with no source-action SHA
+or Slack submodule reference to update.
 
 For a local release, authenticate Wrangler and use `pnpm deploy:staging` or
 `pnpm deploy:production`. The account ID is already in the repository config.

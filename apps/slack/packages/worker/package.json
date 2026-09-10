@@ -1,0 +1,21 @@
+{
+    "name": "@moxt-ai/app-slack-worker",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "main": "./src/worker.ts",
+    "scripts": {
+        "build": "wrangler deploy --config wrangler.jsonc --dry-run --outdir dist",
+        "dev": "wrangler dev --config wrangler.jsonc",
+        "deploy": "wrangler deploy --config wrangler.jsonc",
+        "typecheck": "tsc --project tsconfig.json"
+    },
+    "dependencies": {
+        "@moxt-ai/app-slack-api": "workspace:*",
+        "valibot": "1.4.0"
+    },
+    "devDependencies": {
+        "@cloudflare/workers-types": "^5.20260814.1",
+        "wrangler": "^4.128.0"
+    }
+}

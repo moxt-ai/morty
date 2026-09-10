@@ -1,0 +1,15 @@
+{
+    "name": "@moxt-ai/mobius-cloud-worker",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "typecheck": "tsc --project tsconfig.json"
+    },
+    "dependencies": {
+        "@clerk/backend": "3.17.1",
+        "@moxt-ai/app-slack-api": "workspace:*",
+        "hono": "^4.13.5",
+        "valibot": "1.4.2"
+    }
+}

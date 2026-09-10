@@ -1,3 +1,6 @@
+import { RouterProvider } from "@tanstack/react-router";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { render } from "vitest-browser-react";
 import {
     BrowserWorkspaceConnections,
     type ChatApplicationProps,
@@ -8,10 +11,7 @@ import {
     type WorkspaceDirectory,
     WorkspaceError,
     type WorkspaceShellProps,
-} from "@moxt-ai/mobius-cloud-web-core";
-import { RouterProvider } from "@tanstack/react-router";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { render } from "vitest-browser-react";
+} from "../../packages/web/src/cloud/index.ts";
 import { WorkspaceIdentityProvider } from "../support/workspace-directory.ts";
 
 beforeEach(() => {

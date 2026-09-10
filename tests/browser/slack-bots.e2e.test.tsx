@@ -1,6 +1,6 @@
-import { type ManagementRequests, SlackBots } from "@moxt-ai/app-slack-web-core";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { render } from "vitest-browser-react";
+import { type ManagementRequests, SlackBots } from "../../packages/web/src/slack/index.ts";
 
 // Stateful management service at the browser's production request port; no live Slack/Clerk credentials are needed.
 class SlackManagementDirectory {

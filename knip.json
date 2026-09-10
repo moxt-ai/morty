@@ -1,16 +1,5 @@
 {
     "$schema": "https://unpkg.com/knip@6/schema.json",
-    "project": ["scripts/**/*.ts", "worker/**/*.ts", "shared/**/*.ts"],
-    "ignoreDependencies": [
-        "@moxt-ai/mobius-protocol",
-        "@moxt-ai/mobius-sdk",
-        "@radix-ui/react-select",
-        "class-variance-authority",
-        "cloudflare",
-        "clsx",
-        "lucide-react",
-        "pino",
-        "streamdown",
-        "tailwind-merge"
-    ]
+    "ignore": ["packages/web/src/mobius/client/**", "packages/web/src/mobius/protocol/**"],
+    "ignoreDependencies": ["cloudflare"]
 }

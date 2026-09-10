@@ -1,5 +1,5 @@
-import { WorkspaceError, waitForClerk } from "@moxt-ai/mobius-cloud-web-core";
 import * as v from "valibot";
+import { WorkspaceError, waitForClerk } from "../../cloud/index.ts";
 
 const sessionSchema = v.pipe(
     v.object({

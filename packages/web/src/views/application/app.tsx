@@ -1,7 +1,7 @@
 import { SignOutButton, UserButton } from "@clerk/react";
-import { Button, Spinner, type WorkspaceShellProps } from "@moxt-ai/mobius-cloud-web-core";
 import { type AnyRouter, RouterProvider } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { Button, Spinner, type WorkspaceShellProps } from "../../cloud/index.ts";
 
 export type AppState =
     | { readonly kind: "loading" }

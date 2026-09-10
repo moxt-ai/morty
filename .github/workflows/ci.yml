@@ -47,13 +47,9 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.pnpm.outputs.store-path }}
-          key: pnpm-v11-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', '.github/actions/business-sources/action.yml') }}
+          key: pnpm-v11-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: |
             pnpm-v11-${{ runner.os }}-${{ runner.arch }}-
-
-      - name: Prepare business sources
-        id: businesses
-        uses: ./.github/actions/business-sources
 
       - run: pnpm install --frozen-lockfile
 
@@ -72,17 +68,10 @@ jobs:
 
       - run: pnpm check
 
-      - name: Validate business migrations on every local shard
-        env:
-          MOBIUS_PATH: ${{ steps.businesses.outputs.mobius-path }}
-          SLACK_PATH: ${{ steps.businesses.outputs.slack-path }}
+      - name: Validate Slack migrations on every local shard
         run: |
-          mkdir -p "$RUNNER_TEMP/shared-d1" "$MOBIUS_PATH/packages/relay-cloudflare/.wrangler" "$SLACK_PATH/packages/worker/.wrangler"
-          ln -s "$RUNNER_TEMP/shared-d1" "$MOBIUS_PATH/packages/relay-cloudflare/.wrangler/shards"
-          ln -s "$RUNNER_TEMP/shared-d1" "$SLACK_PATH/packages/worker/.wrangler/shards"
           for environment in staging production; do
-            pnpm --dir "$MOBIUS_PATH" db:environment "$GITHUB_WORKSPACE/infra/d1-shards.json" "$environment" --local
-            pnpm --dir "$SLACK_PATH" db:environment "$GITHUB_WORKSPACE/infra/d1-shards.json" "$environment" --local
+            pnpm --dir apps/slack db:environment "$GITHUB_WORKSPACE/infra/d1-shards.json" "$environment" --local
           done
 
   deploy:

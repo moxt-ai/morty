@@ -15,11 +15,11 @@
         "noImplicitReturns": true,
         "moduleResolution": "bundler",
         "paths": {
-            "@/*": ["./mobius/packages/web-core/src/*"]
+            "@/*": ["./packages/web/src/mobius/*"]
         },
         "lib": ["es2024"],
         "noEmit": true,
         "skipLibCheck": true
     },
-    "include": ["worker/**/*.ts", "shared/**/*.ts", "worker-configuration.d.ts"]
+    "include": ["packages/worker/src/**/*.ts", "shared/**/*.ts", "worker-configuration.d.ts"]
 }

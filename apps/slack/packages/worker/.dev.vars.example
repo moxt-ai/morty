@@ -1,0 +1,10 @@
+# Generated local keys are filled by pnpm setup:local. Keep .dev.vars local.
+SLACK_TOKEN_ENCRYPTION_KEY="GENERATE_ENCRYPTION_KEY"
+SLACK_OAUTH_STATE_SIGNING_KEY="GENERATE_SIGNING_KEY"
+# Set this to the HTTPS URL printed by pnpm tunnel:local, then restart the Worker.
+SLACK_SERVER_BASE_URL="http://127.0.0.1:8799"
+# URLs must be reachable from the local Worker.
+MOBIUS_BASE_URL="http://localhost:8787"
+# Existing identity adapter still requires supported authorization service contracts.
+SLACK_MOBIUS_AUTH_TOKEN="REPLACE_WITH_SERVICE_TOKEN"
+# Only needed for the Slack tooling/configuration-token flow.

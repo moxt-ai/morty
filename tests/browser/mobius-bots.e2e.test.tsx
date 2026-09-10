@@ -4,9 +4,9 @@ import type {
     BotSetup,
     ManagedMobiusBot,
     MobiusBotsRequests,
-} from "../../packages/web-core/src/view-models/mobius/requests.ts";
-import { ProjectOwnerCredentials } from "../../packages/web-core/src/view-models/mobius/requests.ts";
-import { MobiusBots } from "../../packages/web-core/src/views/workspace-applications/project-bot-management.tsx";
+} from "../../packages/web/src/cloud/view-models/mobius/requests.ts";
+import { ProjectOwnerCredentials } from "../../packages/web/src/cloud/view-models/mobius/requests.ts";
+import { MobiusBots } from "../../packages/web/src/cloud/views/workspace-applications/project-bot-management.tsx";
 
 class MobiusWorkspace {
     statusAvailable = true;

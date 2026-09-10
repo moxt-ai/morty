@@ -3,7 +3,7 @@ import {
     type WorkspaceDirectory,
     WorkspaceError,
     workspacePageSize,
-} from "@moxt-ai/mobius-cloud-web-core";
+} from "../../packages/web/src/cloud/index.ts";
 
 // A stateful identity provider at the production directory port. Browser
 // scenarios exercise workspace flows without live accounts or auth automation.

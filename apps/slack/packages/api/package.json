@@ -1,0 +1,23 @@
+{
+    "name": "@moxt-ai/app-slack-api",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "exports": {
+        ".": "./src/index.ts",
+        "./gateway": "./src/gateway/index.ts",
+        "./infra": "./src/infra/index.ts",
+        "./storage": "./src/storage/index.ts"
+    },
+    "scripts": {
+        "typecheck": "tsc --project tsconfig.json"
+    },
+    "dependencies": {
+        "hono": "^4.13.5",
+        "pino": "^10.3.1",
+        "valibot": "1.4.0"
+    },
+    "devDependencies": {
+        "@types/node": "^24.13.3"
+    }
+}

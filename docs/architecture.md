@@ -3,7 +3,7 @@
 After this, a maintainer can follow a Cloud endpoint to its service, storage, and
 external gateway, and identify the dependencies belonging to the current
 request. Users receive the existing authentication, workspace creation, tenant
-placement, embedded Slack/Mobius, and queue contracts.
+placement, inlined Slack, external Mobius HTTP, and queue contracts.
 
 This is a behavior-preserving structural refactor following the explicit-context
 pattern in [Slack #22](https://github.com/moxt-ai/mobius-slack/pull/22) and the Hono
@@ -13,12 +13,12 @@ guidance in [Mobius #120](https://github.com/moxt-ai/mobius/issues/120).
 
 | Responsibility | Cloud representation |
 | --- | --- |
-| HTTP boundary | Inferred feature route factories in `worker/http/` |
+| HTTP boundary | Inferred feature route factories in `packages/worker/src/http/` |
 | Application behavior | Authentication and tenant-placement services |
 | External capabilities | Clerk, workspace allocator, embedded business, and transport gateways |
 | Storage | Configuration validation and regional Slack storage resolvers |
-| Domain values | Schemas in `worker/entity/` |
-| Composition | Plain infrastructure and dependency factories in `worker/di/` |
+| Domain values | Schemas in `packages/worker/src/entity/` |
+| Composition | Plain infrastructure and dependency factories in `packages/worker/src/di/` |
 | Runtime ownership | Worker entrypoint and Durable Object constructors |
 
 ```text
@@ -68,10 +68,11 @@ the runtime boundary.
 
 Embedded Slack also constructs its route graph once and supplies its current
 context through the API introduced in Slack #22. Cloud's regional D1/R2
-resolvers, organization placement lookup, app discovery, and in-process Mobius
-dispatch remain part of that request's infrastructure. Embedded business
-requests are dispatched directly, retaining streaming and upgrade responses.
-The pinned Mobius package continues to own its own composition and cleanup.
+resolvers, organization placement lookup, app discovery, and external Mobius
+HTTP gateway remain part of that request's infrastructure. Mobius requests go
+to the configured service origin using ordinary fetch, preserving bearer
+credentials, response status, streaming bodies, and upgrade responses. The
+service owns Mobius storage, authorization, execution, and relay lifecycles.
 
 Tenant placement stays inside its Durable Object, including its serialization
 and authoritative Clerk operations. It is not moved into Worker-global state.
