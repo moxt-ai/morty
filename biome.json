@@ -12,6 +12,7 @@
             "!!**/dist",
             "!!**/coverage",
             "!!**/.wrangler",
+            "!!third-party",
             "!!worker-configuration.d.ts",
             "!!**/test-results",
             "!!**/playwright-report"
