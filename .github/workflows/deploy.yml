@@ -44,6 +44,8 @@ jobs:
           trap 'rm -f "$key_path" "$known_hosts"' EXIT
           printf '%s' "$KEY_BASE64" | base64 --decode > "$key_path"
           chmod 600 "$key_path"
+          test "$(ssh-keygen -y -f "$key_path" | ssh-keygen -lf - | awk '{print $2}')" = \
+            "SHA256:vLEDomfKl2ZKjIquwPeP2wv3XXz/y2WWzxKrXWKzsZs"
           echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$known_hosts"
           git init third-party/mobius
           git -C third-party/mobius remote add origin git@github.com:moxt-ai/mobius.git
