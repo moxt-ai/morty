@@ -1,2 +1,2 @@
 export { queueMessageSchema } from "./queue-message";
-export { SecretCipher } from "./secret-cipher";
+export { SecretCipher } from "./util/secret-cipher";

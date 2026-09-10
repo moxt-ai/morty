@@ -1,4 +1,4 @@
-import type { SlackLogger } from "../../infra/logger";
+import type { SlackLogger } from "../../infra/util/logger";
 import type { TenantContext } from "../identity/tenant-context";
 
 export interface SlackMessageReplyContext {

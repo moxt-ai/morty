@@ -50,7 +50,7 @@ export interface SlackInstallationRecord {
     readonly tenantId: string;
 }
 
-import type { ErrorToResponse } from "../../infra/error-to-response";
+import type { ErrorToResponse } from "../../infra/util/error-to-response";
 import type { SlackEventStorage } from "../../storage/slack-event-storage";
 import type { ExternalIdentityService } from "../identity/external-identity-service";
 
@@ -192,4 +192,4 @@ export class SlackInstallationService {
 }
 
 import type { SlackWebApi } from "../../../../gateway/slack-web-gateway";
-import type { SecretCipher } from "../../infra/secret-cipher";
+import type { SecretCipher } from "../../infra/util/secret-cipher";

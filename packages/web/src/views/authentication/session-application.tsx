@@ -1,9 +1,9 @@
 import { useSession } from "@clerk/react";
 import { useMemo, useRef } from "react";
-import { createApplicationRouter } from "../../cloud/index.ts";
-import { MobiusManagement, userBotConnection } from "../../cloud/views/applications/mobius-management.tsx";
-import { verifySession } from "../../view-models/authentication/session.ts";
+import { createApplicationRouter } from "../../index.ts";
+import { verifySession, waitForClerk } from "../../view-models/authentication/session.ts";
 import { App, FullScreenApplicationPage, SignedInPage } from "../application/app.tsx";
+import { MobiusManagement, userBotConnection } from "../applications/mobius-management.tsx";
 import { router as authRouter } from "./router.tsx";
 
 function SignedInApplication() {
@@ -22,7 +22,7 @@ function SignedInApplication() {
                     verifySession(sessionId, activeSession.current.id, () => activeSession.current.getToken(), signal),
                 userId,
                 MobiusManagement,
-                userBotConnection(userId),
+                userBotConnection(userId, (signal) => waitForClerk(() => activeSession.current.getToken(), signal)),
                 { Standard: SignedInPage, Application: FullScreenApplicationPage },
             ),
         [sessionId, userId],

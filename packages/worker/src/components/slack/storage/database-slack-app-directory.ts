@@ -1,6 +1,6 @@
 import * as v from "valibot";
-import type { SecretCipher } from "../infra/secret-cipher.ts";
 import type { SqlDatabase } from "../infra/sql-database.ts";
+import type { SecretCipher } from "../infra/util/secret-cipher.ts";
 import { tenantContext } from "../service/identity/tenant-context.ts";
 import type { SlackAppDirectory } from "./slack-app-directory.ts";
 import { TenantStorageError } from "./tenant-storage-error.ts";

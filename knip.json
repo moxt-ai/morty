@@ -1,5 +1,10 @@
 {
     "$schema": "https://unpkg.com/knip@6/schema.json",
-    "ignore": ["packages/web/src/mobius/client/**", "packages/web/src/mobius/protocol/**"],
-    "ignoreDependencies": ["cloudflare"]
+    "ignore": ["packages/web/src/third-party/mobius-client/**", "packages/web/src/third-party/mobius-protocol/**"],
+    "ignoreDependencies": ["cloudflare"],
+    "workspaces": {
+        "packages/web": {
+            "entry": ["src/main.tsx", "src/views/chat/app.tsx"]
+        }
+    }
 }

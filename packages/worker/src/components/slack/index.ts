@@ -2,7 +2,7 @@ export {
     createSlackApplication,
     createSlackWorker,
 } from "./app";
-export { createSlackDependencies } from "./create-dependencies";
+export { createSlackDependencies } from "./composition/create-dependencies";
 export { createSlackFileHandler } from "./http/bot-tools/slack-file-handler";
 export type { DatabaseResolver } from "./infra/database-resolver";
 export type { SlackConversationKey } from "./service/bot-run/slack-event-processor";

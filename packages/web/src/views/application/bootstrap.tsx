@@ -1,6 +1,6 @@
 import { ClerkProvider } from "@clerk/react";
 import { useEffect, useState } from "react";
-import { reportApplicationError } from "../../cloud/index.ts";
+import { reportApplicationError } from "../../index.ts";
 import { getPublicConfig } from "../../view-models/authentication/config.ts";
 import { router as authRouter } from "../authentication/router.tsx";
 import { SessionApplication } from "../authentication/session-application.tsx";

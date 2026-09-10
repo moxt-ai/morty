@@ -28,7 +28,7 @@ const tokenEnvelopeSchema = v.pipe(
 
 export type SlackOAuthState = v.InferOutput<typeof oauthStateSchema>;
 
-import type { ErrorToResponse } from "../../infra/error-to-response";
+import type { ErrorToResponse } from "../../infra/util/error-to-response";
 
 class SlackTokenError extends Error implements ErrorToResponse {
     readonly toResponse = (): Response =>

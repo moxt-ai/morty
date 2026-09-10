@@ -15,7 +15,7 @@ export interface IdentityService {
     readonly authenticateHuman: (authorization: string | null, signal: AbortSignal) => Promise<HumanPrincipal>;
 }
 
-import type { ErrorToResponse } from "../../infra/error-to-response";
+import type { ErrorToResponse } from "../../infra/util/error-to-response";
 
 export class IdentityError extends Error implements ErrorToResponse {
     readonly code: "AUTHENTICATION_FAILED" | "AUTHORIZATION_FAILED";

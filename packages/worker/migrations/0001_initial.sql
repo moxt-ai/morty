@@ -140,3 +140,34 @@ CREATE TABLE slack_mobius_binding (
     PRIMARY KEY (tenant_id, slack_bot_id),
     FOREIGN KEY (tenant_id, slack_bot_id) REFERENCES slack_app(tenant_id, slack_bot_id)
 );
+
+CREATE TABLE managed_bot (
+    user_id TEXT NOT NULL,
+    bot_id TEXT PRIMARY KEY NOT NULL,
+    display_name TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX managed_bot_user_idx ON managed_bot(user_id, created_at);
+
+CREATE TABLE chat_session (
+    user_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    bot_id TEXT NOT NULL REFERENCES managed_bot(bot_id),
+    title TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, session_id)
+);
+
+CREATE INDEX chat_session_user_updated_idx ON chat_session(user_id, updated_at DESC);
+
+CREATE TABLE chat_access_token (
+    access_token_id TEXT PRIMARY KEY NOT NULL,
+    user_id TEXT NOT NULL,
+    bot_id TEXT NOT NULL REFERENCES managed_bot(bot_id),
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX chat_access_token_user_idx ON chat_access_token(user_id, created_at);

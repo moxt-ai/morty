@@ -1,6 +1,7 @@
 import * as v from "valibot";
-import type { HumanIdentity } from "../../../../gateway/human-identity";
+import type { ClerkGateway } from "../../../../gateway/clerk-gateway.ts";
 import type { IdentityGateway } from "../../../../gateway/identity-gateway";
+import type { AuthenticationConfiguration } from "../../../management/storage/authentication-configuration.ts";
 import type { BotPrincipal, HumanPrincipal, IdentityService } from "./identity-service";
 import { IdentityError } from "./identity-service";
 
@@ -21,23 +22,33 @@ const authorizationResponseSchema = v.pipe(
 );
 
 export class ExternalIdentityService implements IdentityService {
-    readonly #humanIdentity: HumanIdentity;
+    readonly #authentication: AuthenticationConfiguration;
+    readonly #clerk: ClerkGateway;
     readonly #mobiusBaseUrl: string;
     readonly #gateway: IdentityGateway;
 
     constructor(cx: {
-        readonly gateways: { readonly humanIdentity: HumanIdentity; readonly identityGateway: IdentityGateway };
-        readonly config: { readonly mobiusBaseUrl: string };
+        readonly gateways: { readonly clerk: ClerkGateway; readonly identityGateway: IdentityGateway };
+        readonly config: {
+            readonly authentication: AuthenticationConfiguration;
+            readonly mobiusBaseUrl: string;
+        };
     }) {
-        const { humanIdentity, identityGateway: gateway } = cx.gateways;
+        const { clerk, identityGateway: gateway } = cx.gateways;
         const { mobiusBaseUrl } = cx.config;
-        this.#humanIdentity = humanIdentity;
+        this.#authentication = cx.config.authentication;
+        this.#clerk = clerk;
         this.#gateway = gateway;
         this.#mobiusBaseUrl = normalizeBaseUrl(mobiusBaseUrl);
     }
 
     readonly authenticateHuman = async (authorization: string | null, signal: AbortSignal): Promise<HumanPrincipal> => {
-        return await this.#humanIdentity.authenticateHuman(authorization, signal);
+        const credential = requireBearer(authorization);
+        const session = await this.#clerk.verify(credential, this.#authentication, signal);
+        if (session === null) {
+            throw new IdentityError("AUTHENTICATION_FAILED", "User authentication failed");
+        }
+        return { humanId: session.userId, kind: "human", tenantId: session.userId };
     };
 
     readonly authenticateBot = async (authorization: string | null, signal: AbortSignal): Promise<BotPrincipal> => {

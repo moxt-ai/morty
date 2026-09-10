@@ -1,5 +1,5 @@
-import type { SlackLogger } from "../../infra/logger";
 import type { SlackQueueMessage } from "../../infra/queue-message";
+import type { SlackLogger } from "../../infra/util/logger";
 import type { SlackEventStorage } from "../../storage/slack-event-storage";
 import type { TenantContext } from "../identity/tenant-context";
 import type { SlackEventProcessor } from "./slack-event-processor";

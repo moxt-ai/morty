@@ -22,7 +22,7 @@ export interface SlackMessageFile {
     readonly urlPrivate: string | null;
 }
 
-import type { ErrorToResponse } from "../../infra/error-to-response";
+import type { ErrorToResponse } from "../../infra/util/error-to-response";
 import type { SlackEventStorage } from "../../storage/slack-event-storage";
 import type { ExternalIdentityService } from "../identity/external-identity-service";
 

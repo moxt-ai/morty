@@ -1,5 +1,5 @@
 import type { BotTriggerLimiter } from "../../../../gateway/bot-trigger-limiter";
-import type { SlackLogger } from "../../infra/logger";
+import type { SlackLogger } from "../../infra/util/logger";
 import type { SlackMessageFile } from "../bot-tools/slack-bot-tool-service";
 import type { SlackEventCallbackPayload } from "../events/events";
 import type { TenantContext } from "../identity/tenant-context";

@@ -16,7 +16,7 @@
     "assets": {
         "binding": "ASSETS",
         "not_found_handling": "single-page-application",
-        "run_worker_first": ["/mobius-cloud/api/*", "/mobius/api/*", "/mobius-slack/api/*"]
+        "run_worker_first": ["/mobius-cloud/api/*", "/mobius-slack/api/*"]
     },
     "queues": {
         "producers": [{ "binding": "EVENTS", "queue": "app-slack-events" }],
@@ -50,6 +50,8 @@
                     "CLERK_PUBLISHABLE_KEY",
                     "CLERK_JWT_KEY",
                     "MOBIUS_BASE_URL",
+                    "MOBIUS_APP_ID",
+                    "MOBIUS_APP_SECRET",
                     "SLACK_MOBIUS_AUTH_TOKEN",
                     "SLACK_OAUTH_STATE_SIGNING_KEY",
                     "SLACK_SERVER_BASE_URL",
@@ -105,6 +107,8 @@
                     "CLERK_PUBLISHABLE_KEY",
                     "CLERK_JWT_KEY",
                     "MOBIUS_BASE_URL",
+                    "MOBIUS_APP_ID",
+                    "MOBIUS_APP_SECRET",
                     "SLACK_MOBIUS_AUTH_TOKEN",
                     "SLACK_OAUTH_STATE_SIGNING_KEY",
                     "SLACK_SERVER_BASE_URL",

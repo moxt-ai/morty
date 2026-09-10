@@ -42,8 +42,10 @@ migrations with the matching Wrangler environment.
 
 `MOBIUS_BASE_URL` must be an HTTP loopback origin for local development or an HTTPS
 origin elsewhere. It cannot contain credentials, a path, query, fragment, or Cloud's
-own origin. Cloud allowlists request headers, forwards bearer authorization but not
-cookies, does not follow redirects, and preserves streaming and upgrade responses.
+own origin. `MOBIUS_APP_ID` and `MOBIUS_APP_SECRET` authenticate Worker operations.
+The chat API issues and revokes bot-scoped access tokens; the browser uses those tokens
+to communicate directly with Mobius. Slack's `MobiusGateway` also calls Mobius
+directly and rejects recursive configuration and redirects.
 
 ## Verification
 

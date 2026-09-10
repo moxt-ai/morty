@@ -44,7 +44,7 @@ export default defineConfig({
     build: { sourcemap: "hidden" },
     resolve: {
         alias: {
-            "@": fileURLToPath(new URL("./packages/web/src/mobius", import.meta.url)),
+            "@": fileURLToPath(new URL("./packages/web/src", import.meta.url)),
         },
     },
     server: {

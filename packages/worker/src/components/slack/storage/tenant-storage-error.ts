@@ -1,4 +1,4 @@
-import type { ErrorToResponse } from "../infra/error-to-response";
+import type { ErrorToResponse } from "../infra/util/error-to-response";
 
 export class TenantStorageError extends Error implements ErrorToResponse {
     readonly code = "SLACK_STORAGE_UNAVAILABLE";

@@ -15,7 +15,7 @@
         "noImplicitReturns": true,
         "moduleResolution": "bundler",
         "paths": {
-            "@/*": ["./packages/web/src/mobius/*"]
+            "@/*": ["./packages/web/src/*"]
         },
         "lib": ["es2024"],
         "noEmit": true,

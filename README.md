@@ -4,22 +4,19 @@ Mobius Cloud is one web application and one Cloudflare Worker. Clerk authenticat
 individual users; Clerk Organizations and Cloud workspaces are not used. A signed-in
 user can create or select a Mobius bot, chat with it, and connect it to Slack.
 
-Mobius runs as a separate HTTP service. Cloud forwards `/mobius/api/*` requests and
-their bearer credentials to `MOBIUS_BASE_URL`; the service owns bot authorization,
-execution, persistence, and relay lifecycles.
+Mobius runs as a separate HTTP service. Management records Clerk user-to-bot ownership
+in D1. Chat issues revocable, bot-scoped access tokens so the browser can communicate
+directly with Mobius, while Cloud records each user's chat-session index.
 
 ## Repository layout
 
 ```text
 packages/
-  web/                         # React application
-    src/cloud/                 # User bot management and application navigation
-    src/mobius/                # Chat UI, HTTP/event client, and protocol codecs
-    src/slack/                 # Slack management UI
+  web/                         # React application and package-owned tests
   worker/
     migrations/0001_initial.sql # Single Cloud D1 schema
-    src/components/chat/       # Chat request composition
-    src/components/cloud/      # Clerk user authentication
+    src/components/chat/       # Access-token and chat-session APIs
+    src/components/management/ # Clerk authentication and owned-bot management
     src/components/slack/      # Slack domain, HTTP, queue, D1, R2, and DO code
     src/gateway/               # Request dispatch and all external gateways
 ```
@@ -40,6 +37,7 @@ pnpm check
 ```
 
 Copy `.dev.vars.example` to `.dev.vars` and configure Clerk. Configure
-`MOBIUS_BASE_URL` with an external Mobius origin. HTTPS is required except for
-loopback development; recursive, credentialed, pathful, and redirecting targets
-are rejected. Browser cookies are never forwarded upstream.
+`MOBIUS_BASE_URL`, `MOBIUS_APP_ID`, and `MOBIUS_APP_SECRET` for the external Mobius
+service. HTTPS is required except for loopback development. Mobius must allow the web
+origin because browser chat traffic goes directly to it. Configure the same public
+values as `VITE_MOBIUS_APP_ID` and `VITE_MOBIUS_BASE_URL` in the web build.

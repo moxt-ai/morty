@@ -1,5 +1,54 @@
 import * as v from "valibot";
-import type { MobiusFetchGateway } from "../components/slack/infra/mobius-fetch-gateway";
+
+export interface MobiusTransport {
+    readonly request: (path: string, init?: RequestInit) => Promise<Response>;
+}
+
+export class FetchMobiusTransport implements MobiusTransport {
+    readonly #appId: unknown;
+    readonly #appSecret: unknown;
+    readonly #baseUrl: unknown;
+    readonly #forbiddenOrigin: unknown;
+    constructor(configuration: {
+        readonly appId: unknown;
+        readonly appSecret: unknown;
+        readonly baseUrl: unknown;
+        readonly forbiddenOrigin: unknown;
+    }) {
+        this.#appId = configuration.appId;
+        this.#appSecret = configuration.appSecret;
+        this.#baseUrl = configuration.baseUrl;
+        this.#forbiddenOrigin = configuration.forbiddenOrigin;
+    }
+
+    readonly request = async (path: string, init?: RequestInit): Promise<Response> => {
+        if (!path.startsWith("/mobius/api/") || path.startsWith("//")) {
+            throw new MobiusGatewayError("MOBIUS_REQUEST_INVALID", "The Mobius request path is invalid");
+        }
+        const baseUrl = this.#validatedBaseUrl();
+        const headers = new Headers(init?.headers);
+        headers.set("x-mobius-app-id", v.parse(v.pipe(v.string(), v.minLength(1)), this.#appId));
+        headers.set("x-mobius-app-secret", v.parse(v.pipe(v.string(), v.minLength(1)), this.#appSecret));
+        return await fetch(new Request(new URL(path, baseUrl), { ...init, headers, redirect: "manual" }));
+    };
+
+    readonly #validatedBaseUrl = (): URL => {
+        const baseUrl = new URL(v.parse(v.string(), this.#baseUrl));
+        if (
+            (baseUrl.protocol !== "https:" &&
+                !(baseUrl.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(baseUrl.hostname))) ||
+            baseUrl.username !== "" ||
+            baseUrl.password !== "" ||
+            baseUrl.pathname !== "/" ||
+            baseUrl.search !== "" ||
+            baseUrl.hash !== "" ||
+            (typeof this.#forbiddenOrigin === "string" && baseUrl.origin === new URL(this.#forbiddenOrigin).origin)
+        ) {
+            throw new MobiusGatewayError("MOBIUS_CONFIGURATION_INVALID", "The Mobius service is not configured");
+        }
+        return baseUrl;
+    };
+}
 
 const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
 export const mobiusBindingSchema = v.pipe(
@@ -103,9 +152,9 @@ export class MobiusGatewayError extends Error {
 }
 
 export class MobiusGateway {
-    readonly #fetch: MobiusFetchGateway;
-    constructor(cx: { readonly gateways: { readonly mobiusFetchGateway: MobiusFetchGateway } }) {
-        this.#fetch = cx.gateways.mobiusFetchGateway;
+    readonly #transport: MobiusTransport;
+    constructor(cx: { readonly gateways: { readonly mobiusTransport: MobiusTransport } }) {
+        this.#transport = cx.gateways.mobiusTransport;
     }
 
     readonly listProjects = async (credential: string | null, signal: AbortSignal) => {
@@ -447,7 +496,7 @@ export class MobiusGateway {
     ): Promise<unknown> => {
         return await withDeadline(signal, 20_000, async (deadline) => {
             try {
-                const response = await this.#fetch.fetch(`/mobius/api${path}`, {
+                const response = await this.#transport.request(`/mobius/api${path}`, {
                     method: body === null ? "GET" : "POST",
                     redirect: "manual",
                     signal: deadline,

@@ -71,7 +71,7 @@ export interface SlackManifest {
     };
 }
 
-import type { ErrorToResponse } from "../../infra/error-to-response";
+import type { ErrorToResponse } from "../../infra/util/error-to-response";
 import type { SlackEventStorage } from "../../storage/slack-event-storage";
 
 class SlackManagementError extends Error implements ErrorToResponse {
@@ -377,4 +377,4 @@ function validateAppName(name: string): void {
 }
 
 import type { SlackWebApi } from "../../../../gateway/slack-web-gateway";
-import type { SecretCipher } from "../../infra/secret-cipher";
+import type { SecretCipher } from "../../infra/util/secret-cipher";

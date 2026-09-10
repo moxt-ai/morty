@@ -1,5 +1,5 @@
 import { ValiError } from "valibot";
-import { hasErrorResponse } from "../infra/error-to-response";
+import { hasErrorResponse } from "../infra/util/error-to-response";
 import { ValidationErrorResponse } from "./validation-error-response";
 
 export function handleError(error: Error): Response {

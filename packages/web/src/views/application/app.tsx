@@ -1,7 +1,7 @@
 import { SignOutButton, UserButton } from "@clerk/react";
 import { type AnyRouter, RouterProvider } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { type ApplicationShellProps, Button, Spinner } from "../../cloud/index.ts";
+import { type ApplicationShellProps, Button, Spinner } from "../../index.ts";
 
 export type AppState =
     | { readonly kind: "loading" }
