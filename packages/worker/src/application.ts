@@ -1,8 +1,8 @@
-import type { SlackQueueMessage } from "@moxt-ai/app-slack-api/infra";
+import { createCloudApplication } from "./components/cloud/http/create-application.ts";
+import type { SlackQueueMessage } from "./components/slack/infra/queue-message.ts";
 import { createCloudDependencies } from "./di/create-dependencies.ts";
 import { createCloudInfrastructure } from "./di/create-infrastructure.ts";
 import type { CloudBindings } from "./gateway/business-gateway.ts";
-import { createCloudApplication } from "./http/create-application.ts";
 
 const application = createCloudApplication();
 

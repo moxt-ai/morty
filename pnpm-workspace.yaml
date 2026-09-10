@@ -4,8 +4,6 @@ minimumReleaseAge: 1440
 packages:
   - packages/web
   - packages/worker
-  - apps/slack/packages/api
-  - apps/slack/packages/worker
 
 allowBuilds:
   '@sentry/cli': true

@@ -1,23 +1,13 @@
 export { Button } from "./components/ui/button.tsx";
 export { Spinner } from "./components/ui/spinner.tsx";
+export {
+    type ApplicationConnectionProps,
+    BrowserChannelConnection,
+} from "./view-models/channel-connection.ts";
 export { reportApplicationError } from "./view-models/report-error.ts";
-export {
-    clerkDirectory,
-    waitForClerk,
-} from "./view-models/workspaces/clerk-directory.ts";
-export {
-    BrowserWorkspaceConnections,
-    type WorkspaceConnectionProps,
-} from "./view-models/workspaces/connections.ts";
-export {
-    type Workspace,
-    type WorkspaceDirectory,
-    WorkspaceError,
-    workspacePageSize,
-} from "./view-models/workspaces/contracts.ts";
+export { type ApplicationShellProps, createApplicationRouter } from "./views/application/router.tsx";
 export {
     type ChatApplicationProps,
+    MobiusApplications,
     type ProjectApplicationProps,
-    WorkspaceApplications,
-} from "./views/workspace-applications/workspace-applications.tsx";
-export { createWorkspaceRouter, type WorkspaceShellProps } from "./views/workspaces/router.tsx";
+} from "./views/applications/application-navigation.tsx";

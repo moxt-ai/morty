@@ -79,38 +79,6 @@ importers:
         specifier: 4.129.0
         version: 4.129.0(@cloudflare/workers-types@5.20260906.1)(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
-  apps/slack/packages/api:
-    dependencies:
-      hono:
-        specifier: ^4.13.5
-        version: 4.13.7
-      pino:
-        specifier: ^10.3.1
-        version: 10.3.1
-      valibot:
-        specifier: 1.4.0
-        version: 1.4.0(typescript@7.0.2)
-    devDependencies:
-      '@types/node':
-        specifier: ^24.13.3
-        version: 24.13.3
-
-  apps/slack/packages/worker:
-    dependencies:
-      '@moxt-ai/app-slack-api':
-        specifier: workspace:*
-        version: link:../api
-      valibot:
-        specifier: 1.4.0
-        version: 1.4.0(typescript@7.0.2)
-    devDependencies:
-      '@cloudflare/workers-types':
-        specifier: ^5.20260814.1
-        version: 5.20260906.1
-      wrangler:
-        specifier: ^4.128.0
-        version: 4.129.0(@cloudflare/workers-types@5.20260906.1)(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-
   packages/web:
     dependencies:
       '@clerk/react':
@@ -186,12 +154,12 @@ importers:
       '@clerk/backend':
         specifier: 3.17.1
         version: 3.17.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@moxt-ai/app-slack-api':
-        specifier: workspace:*
-        version: link:../../apps/slack/packages/api
       hono:
         specifier: ^4.13.5
         version: 4.13.7
+      pino:
+        specifier: ^10.3.1
+        version: 10.3.1
       valibot:
         specifier: 1.4.2
         version: 1.4.2(typescript@7.0.2)
@@ -3477,14 +3445,6 @@ packages:
     resolution: {integrity: sha512-q3l3P9UtEEiAHcsgsqTgf9PPjctrDWoIXW3NpOHFdRDbLvu4DLIcxHangJ4RLrWkBcKjmcs/6NkerI8T/rE4LA==}
     engines: {node: '>=6.14.2'}
 
-  valibot@1.4.0:
-    resolution: {integrity: sha512-iC/x7fVcSyOwlm/VSt7RlHnzNGLGvR9GnxdifUeWoCJo0q4ZZvrVkIHC6faTlkxG47I2Y4UrFquPuVHCrOnrLg==}
-    peerDependencies:
-      typescript: '>=5'
-    peerDependenciesMeta:
-      typescript:
-        optional: true
-
   valibot@1.4.2:
     resolution: {integrity: sha512-gjdCvJ6d3RyHAneqxMYMW9QMCwYMb3jpOO0IyHZV1bnRHFBHrX3VkIILt5XYR0WhwHiH7Mty8ovuPZ/O3gamrg==}
     peerDependencies:
@@ -3899,7 +3859,8 @@ snapshots:
   '@cloudflare/workerd-windows-64@1.20260903.1':
     optional: true
 
-  '@cloudflare/workers-types@5.20260906.1': {}
+  '@cloudflare/workers-types@5.20260906.1':
+    optional: true
 
   '@cspotcode/source-map-support@0.8.1':
     dependencies:
@@ -7067,10 +7028,6 @@ snapshots:
     dependencies:
       node-gyp-build: 4.8.4
     optional: true
-
-  valibot@1.4.0(typescript@7.0.2):
-    optionalDependencies:
-      typescript: 7.0.2
 
   valibot@1.4.2(typescript@7.0.2):
     optionalDependencies:

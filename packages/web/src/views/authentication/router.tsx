@@ -38,7 +38,7 @@ function LoginPage({ register = false }: { readonly register?: boolean }) {
                         Your team and agents, connected.
                     </h1>
                     <p className="max-w-xl text-sm leading-6 text-zinc-400 md:text-lg md:leading-7">
-                        Sign in to manage workspaces, conversations, and integrations.
+                        Sign in to manage your bots, conversations, and integrations.
                     </p>
                 </div>
             </section>
@@ -46,7 +46,7 @@ function LoginPage({ register = false }: { readonly register?: boolean }) {
                 <div className="w-full max-w-[400px]">
                     {isSignedIn ? (
                         <Button asChild>
-                            <a href="/">Continue to workspaces</a>
+                            <a href="/">Continue to your bots</a>
                         </Button>
                     ) : register ? (
                         <SignUp

@@ -68,11 +68,8 @@ jobs:
 
       - run: pnpm check
 
-      - name: Validate Slack migrations on every local shard
-        run: |
-          for environment in staging production; do
-            pnpm --dir apps/slack db:environment "$GITHUB_WORKSPACE/infra/d1-shards.json" "$environment" --local
-          done
+      - name: Validate Cloud D1 migrations
+        run: pnpm exec wrangler d1 migrations apply DATABASE --local
 
   deploy:
     needs: check

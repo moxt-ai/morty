@@ -65,7 +65,7 @@ fixed clock. No live Clerk account or credentials are required in CI.
 Clerk's hosted sign-in and sign-up flows are checked manually; this project
 does not automate those flows with Playwright. Open the app, confirm both
 account dialogs are available, and verify that an account can sign in, see its
-workspaces, and sign out when manually validating an auth change.
+bots, Chat, Slack integration, and sign out when manually validating an auth change.
 
 ## Workspace browser scenarios
 

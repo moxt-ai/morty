@@ -98,7 +98,7 @@ export class ProjectOwnerCredentials {
     }) => {
         const credential = v.parse(credentialSchema, { ...value, authority: "owner" });
         if (credential.tenantId !== this.tenantId) {
-            throw new MobiusManagementError("TENANT_MISMATCH", "Pairing belongs to another workspace.");
+            throw new MobiusManagementError("TENANT_MISMATCH", "Pairing belongs to another user.");
         }
         this.storage.setItem(
             `mobius:channel-credential:${v.parse(identifier, value.channelId)}`,

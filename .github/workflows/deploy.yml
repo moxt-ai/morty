@@ -107,14 +107,13 @@ jobs:
           console.log(`Verified ${config.name}: ${config.secrets.required.length} runtime setting names; values remain in Cloudflare.`);
           JS
 
-      - name: Apply business migrations to selected environment
+      - name: Apply Cloud D1 migrations
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
-        run: |
-          pnpm --dir apps/slack db:environment "$GITHUB_WORKSPACE/infra/d1-shards.json" "$DEPLOY_ENVIRONMENT" --remote
+        run: pnpm exec wrangler d1 migrations apply DATABASE --env "$DEPLOY_ENVIRONMENT" --remote
 
       - name: Deploy selected Cloud environment
-        run: pnpm exec wrangler deploy
+        run: pnpm exec wrangler deploy --env "${{ inputs.environment }}"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

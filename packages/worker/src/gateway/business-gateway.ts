@@ -1,6 +1,6 @@
-import type { SlackQueueMessage } from "@moxt-ai/app-slack-api/infra";
-import { fetchMobiusRequest, isMobiusRequest } from "../di/mobius-application.ts";
-import { slackApplication } from "../di/slack-application.ts";
+import { fetchMobiusRequest, isMobiusRequest } from "../components/chat/di/mobius-application.ts";
+import { slackApplication } from "../components/slack/di/slack-application.ts";
+import type { SlackQueueMessage } from "../components/slack/infra/queue-message.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 import { json } from "../infra/http.ts";
 

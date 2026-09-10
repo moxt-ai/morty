@@ -6,9 +6,9 @@ import type {
     MobiusBotsRequests,
 } from "../../packages/web/src/cloud/view-models/mobius/requests.ts";
 import { ProjectOwnerCredentials } from "../../packages/web/src/cloud/view-models/mobius/requests.ts";
-import { MobiusBots } from "../../packages/web/src/cloud/views/workspace-applications/project-bot-management.tsx";
+import { MobiusBots } from "../../packages/web/src/cloud/views/applications/project-bot-management.tsx";
 
-class MobiusWorkspace {
+class InMemoryMobius {
     statusAvailable = true;
     botReads: "available" | "paused" | "failed" = "available";
     readonly pendingBotReads = new Set<() => void>();
@@ -189,7 +189,7 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 test("Given visible bots, When refresh is pending or fails, Then the list stays visible and the user can retry", async () => {
-    const workspace = new MobiusWorkspace(["project-one"]);
+    const workspace = new InMemoryMobius(["project-one"]);
     const screen = await render(<MobiusBots requests={workspace.requests} />);
     await expect.element(screen.getByRole("listitem", { name: "Support" })).toBeVisible();
     workspace.botReads = "paused";
@@ -213,7 +213,7 @@ test("Given visible bots, When refresh is pending or fails, Then the list stays 
 });
 
 test("Given runtime status is unavailable, When a user opens a project, Then its bots remain available for setup", async () => {
-    const workspace = new MobiusWorkspace(["project-one"]);
+    const workspace = new InMemoryMobius(["project-one"]);
     workspace.statusAvailable = false;
     const screen = await render(<MobiusBots requests={workspace.requests} />);
     await expect.element(screen.getByRole("listitem", { name: "Support" })).toBeVisible();
@@ -223,7 +223,7 @@ test("Given runtime status is unavailable, When a user opens a project, Then its
 });
 
 test("Given a bot needing setup, When its owner selects a local agent and the runtime approves the configuration, Then the bot becomes ready with its saved instructions", async () => {
-    const workspace = new MobiusWorkspace(["project-one"]);
+    const workspace = new InMemoryMobius(["project-one"]);
     const screen = await render(
         <StrictMode>
             <MobiusBots requests={workspace.requests} />
@@ -250,7 +250,7 @@ test("Given a bot needing setup, When its owner selects a local agent and the ru
 });
 
 test("Given a project is offline, When a user adds and completes a new pairing in the Mobius bots card, Then the new project is selected and shown connected", async () => {
-    const workspace = new MobiusWorkspace(["project-one"]);
+    const workspace = new InMemoryMobius(["project-one"]);
     const screen = await render(
         <StrictMode>
             <MobiusBots requests={workspace.requests} />
@@ -285,8 +285,8 @@ test("Given a project is offline, When a user adds and completes a new pairing i
     await expect.element(reopened.getByText("Saved access bot", { exact: true })).toBeVisible();
 });
 
-test("Given a workspace with one project, When Mobius bot management opens, Then that project's bots load automatically", async () => {
-    const workspace = new MobiusWorkspace(["project-one"]);
+test("Given a user with one project, When Mobius bot management opens, Then that project's bots load automatically", async () => {
+    const workspace = new InMemoryMobius(["project-one"]);
     const screen = await render(
         <StrictMode>
             <MobiusBots requests={workspace.requests} />
@@ -296,8 +296,8 @@ test("Given a workspace with one project, When Mobius bot management opens, Then
     await expect.element(screen.getByText("Support", { exact: true })).toBeVisible();
 });
 
-test("Given a workspace with two projects, When a member selects a project and adds a Mobius bot, Then its persisted list contains only that project's bots", async () => {
-    const workspace = new MobiusWorkspace();
+test("Given a user with two projects, When they selects a project and adds a Mobius bot, Then its persisted list contains only that project's bots", async () => {
+    const workspace = new InMemoryMobius();
     const screen = await render(
         <StrictMode>
             <MobiusBots requests={workspace.requests} />

@@ -92,7 +92,7 @@ test("Given an installed unbound Slack bot, When its owner first binds and then 
     await expect.element(reopened.getByText("Connected to Support workspace")).toBeVisible();
 });
 
-test("Given a workspace owner, When they start configuring a new Slack bot, Then Slack setup is available before a Mobius bot is bound", async () => {
+test("Given a signed-in user, When they start configuring a new Slack bot, Then Slack setup is available before a Mobius bot is bound", async () => {
     const directory = new SlackManagementDirectory();
     const screen = await render(<SlackBots requests={directory.requests} canManage />);
     await screen.getByRole("button", { name: "Add Slack bot" }).click();

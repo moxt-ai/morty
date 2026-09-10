@@ -12,8 +12,6 @@
             "!!**/dist",
             "!!**/coverage",
             "!!**/.wrangler",
-            "!!mobius",
-            "!!apps",
             "!!worker-configuration.d.ts",
             "!!**/test-results",
             "!!**/playwright-report"

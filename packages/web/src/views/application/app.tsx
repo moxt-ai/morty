@@ -1,7 +1,7 @@
 import { SignOutButton, UserButton } from "@clerk/react";
 import { type AnyRouter, RouterProvider } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { Button, Spinner, type WorkspaceShellProps } from "../../cloud/index.ts";
+import { type ApplicationShellProps, Button, Spinner } from "../../cloud/index.ts";
 
 export type AppState =
     | { readonly kind: "loading" }
@@ -68,18 +68,14 @@ function AccountActions() {
     );
 }
 
-export function WorkspacePage({ children, navigation }: WorkspaceShellProps) {
-    return (
-        <Page account={<AccountActions />} navigation={navigation}>
-            {children}
-        </Page>
-    );
+export function SignedInPage({ children }: ApplicationShellProps) {
+    return <Page account={<AccountActions />}>{children}</Page>;
 }
 
-export function WorkspaceApplicationPage({ children, navigation }: WorkspaceShellProps) {
+export function FullScreenApplicationPage({ children }: ApplicationShellProps) {
     return (
         <div className="flex h-dvh flex-col bg-background font-sans text-foreground">
-            <AppHeader account={<AccountActions />} navigation={navigation} />
+            <AppHeader account={<AccountActions />} />
             <main className="flex min-h-0 flex-1 flex-col overflow-auto px-4 py-3 sm:px-6">{children}</main>
         </div>
     );
