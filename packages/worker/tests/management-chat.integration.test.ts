@@ -283,6 +283,33 @@ test("Given an anonymous user, When they provision a Platform Project and reload
     const bob = await createIdentity();
     const endpoint = "https://cloud.test/mobius-cloud/api/management/project";
     try {
+        const chatBotEndpoint = "https://cloud.test/mobius-cloud/api/chat/bots/bot-1";
+        const wrongMethod = await worker.fetch(
+            new Request(`${chatBotEndpoint}/access`, { headers: { authorization: `Bearer ${alice}` } }),
+            bindings,
+        );
+        expect(wrongMethod.status).toBe(405);
+        expect(wrongMethod.headers.get("allow")).toBe("POST");
+        const anotherUsersBot = await worker.fetch(
+            new Request(`${chatBotEndpoint}/access`, {
+                method: "POST",
+                headers: { authorization: `Bearer ${bob}` },
+            }),
+            bindings,
+        );
+        expect(anotherUsersBot.status).toBe(404);
+        for (const body of ["{", JSON.stringify({ runtimeId: "runtime-1", agentRef: "opencode" })]) {
+            const invalidSetup = await worker.fetch(
+                new Request(`${chatBotEndpoint}/setup`, {
+                    method: "POST",
+                    headers: { authorization: `Bearer ${alice}`, "content-type": "Application/JSON; charset=utf-8" },
+                    body,
+                }),
+                bindings,
+            );
+            expect(invalidSetup.status).toBe(400);
+            expect(await invalidSetup.json()).toMatchObject({ error: { code: "INVALID_REQUEST" } });
+        }
         const denied = await worker.fetch(
             new Request(endpoint, {
                 method: "POST",

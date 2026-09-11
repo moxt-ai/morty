@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { BotChatApi } from "../../src/services/chat/bot-chat-api.ts";
 import { ChatCloudApi } from "../../src/services/chat/chat-cloud-api.ts";
 import { ManagementApi } from "../../src/services/management/management-api.ts";
 
@@ -66,4 +67,35 @@ test("Given a signed-in web user, When they manage bots and open chat, Then mana
     expect(requests.every((request) => new URL(request.url).origin === "https://cloud.test")).toBe(true);
     expect(requests.every((request) => request.headers.get("authorization") === "Bearer clerk-token")).toBe(true);
     expect(requests.map((request) => new URL(request.url).pathname)).not.toContain("/mobius/api/v1/access-tokens");
+});
+
+test("Given an authenticated Bot owner, When Chat opens their Bot, Then the browser receives validated Conversation access from Cloud", async () => {
+    const requests: Request[] = [];
+    const credential = `mconv_${"a".repeat(22)}_${"b".repeat(43)}`;
+    const api = new BotChatApi({
+        origin: "https://cloud.test",
+        getToken: async () => "anonymous-token",
+        fetchRequest: async (request) => {
+            requests.push(request);
+            return Response.json({
+                endpoint: "https://mobius.test",
+                conversationId: "conversation-one",
+                credential,
+                expiresAt: "2026-09-11T12:15:00.000Z",
+            });
+        },
+    });
+
+    await expect(api.access("bot-one", new AbortController().signal)).resolves.toEqual({
+        endpoint: "https://mobius.test",
+        conversationId: "conversation-one",
+        credential,
+        expiresAt: "2026-09-11T12:15:00.000Z",
+    });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.method).toBe("POST");
+    expect(requests[0]?.headers.get("authorization")).toBe("Bearer anonymous-token");
+    expect(new URL(requests[0]?.url ?? "https://invalid.test").pathname).toBe(
+        "/mobius-cloud/api/chat/bots/bot-one/access",
+    );
 });

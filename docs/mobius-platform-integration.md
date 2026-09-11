@@ -145,19 +145,18 @@ routes where supported by the Platform API.
 
 Each environment's AppCredential, Platform endpoint, and App ID are installed on
 the matching Chat Worker. The Platform Workers' `MOBIUS_PLATFORM_ALLOWED_ORIGINS`
-plain-text bindings now allow `https://mobius.paradev.biz` for staging and
-`https://mobius.paraflow.biz` for production. Preserve these settings in the
-Platform deployment configuration when redeploying. The local Platform Wrangler
-environment configuration now records both Clerk providers and these origins;
-its defaults for local development remain unconfigured.
+plain-text bindings use `["*"]` for public browser access in both environments.
+Platform serves independent applications as well as Chat. CORS reflects the
+requesting origin; scoped credentials and permissions authorize each operation.
+Cookie-based credential sharing is not enabled. Preserve this policy in the
+Platform deployment configuration when redeploying.
 
 Live checks on 2026-09-11 confirmed `POST /mobius/api/pairings` returns 404 in
-both environments. After configuring the existing Platform conversation-route
-CORS middleware, `OPTIONS /mobius/api/v1/client/session`, requesting `GET` with
-the `authorization` header from each matching Cloud origin, returns 204 with
-the matching `Access-Control-Allow-Origin`. An untrusted origin receives 403
-without that header. An unauthenticated GET from an allowed origin receives 401
-with that header. These checks passed in both environments.
+both environments. The conversation-route CORS contract permits
+`OPTIONS /mobius/api/v1/client/session`, requesting `GET` with the `authorization`
+header, from any browser origin. A successful preflight does not authorize the
+actual request: an unauthenticated GET must still return 401, and a credential
+without the requested operation's permission must still be denied.
 
 The deployment workflow validates the `mobius-chat-*` Worker names configured
 in `wrangler.jsonc` before checking required remote runtime settings.

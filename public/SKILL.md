@@ -13,7 +13,7 @@ The user can optionally bind an account later.
 ## Inputs and local state
 
 - `BASE_URL`: the Cloud origin from which this skill was fetched, without
-  `/SKILL.md`, for example `https://mobius.paradev.biz`. Use that same environment
+  `/SKILL.md`, for example `https://mobius-chat.paradev.biz`. Use that same environment
   for identity creation, setup, and handoff. This is not the Platform relay URL.
 - `DOCUMENT_DIR`: the user's document directory, resolved by your host environment.
   If it is unavailable, ask the user for it rather than guessing a repository path.
@@ -141,18 +141,32 @@ configure its behavior and execution binding, and complete any Runtime approval
 required by that binding. Confirm the Bot is ready. Save returned resource IDs
 alongside the identity so a later setup can resume them.
 
-### Current implementation status
+Request the execution binding through Chat using the discovered Runtime and agent:
 
-Identity creation automatically creates the user's Bot. Runtime pairing and
-handoff endpoints exist. Bot execution binding and conversation access are still
-being migrated. Chat shows the agent-connection state until those are available.
+```http
+POST $BASE_URL/mobius-cloud/api/chat/bots/<botId>/setup
+Authorization: Bearer <user_token>
+Content-Type: application/json
 
-These are not supported anonymous setup alternatives. Until Cloud provides the
-anonymous Bot setup contract, stop this step and report the missing capability. Do
-not invent endpoints, ask the user to sign in as a workaround, acquire an
-AppCredential, or claim a working chat connection. Preserve the anonymous token
-so setup can resume after the migration. The pairing command above is the
-verified CLI contract; it still requires a real pairing issued by the service.
+{
+  "runtimeId": "<paired Runtime ID>",
+  "agentRef": "<agent ID reported by the paired Runtime>",
+  "workspaceRef": "default",
+  "agentConfigRevision": 1
+}
+```
+
+`default` selects the workspace supplied to `mobius pair`. Use the selected
+agent's current configuration revision. Do not assume an agent installed on the
+machine is advertised by this Runtime. A `202` response acknowledges the binding
+request; it does not prove that local approval or message execution succeeded.
+The local Runtime must authorize the binding before the Bot can chat.
+
+Chat opens the conversation through its server-authorized `/access` endpoint.
+The browser Mobius SDK then manages message submission, history, event streaming,
+and short-lived conversation credential refresh. Keep the AppCredential on the
+Chat server. If setup or conversation access fails, preserve the anonymous token
+and report the actual failure rather than claiming the Bot is ready.
 
 ## 4. Verify the main journey
 

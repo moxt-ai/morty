@@ -8,10 +8,10 @@ claims. Platform Project setup uses the server-held AppCredential; the Worker
 supplies a logical location hint and Platform resolves its storage placement. Bots and
 Chat support anonymous users; Slack additionally requires a verified Clerk session.
 
-Users manage their Mobius bots on `/`, open Chat on `/chat`, and manage Slack on
-`/slack`. The web application sends Clerk bearer tokens to Cloud. Cloud forwards
-Mobius API requests to the configured external service, which must independently
-authorize the user and bot.
+Users open Chat directly on `/` and automatically receive a personal Bot.
+The active web flow has no Project setup or Slack navigation. The web application
+sends its anonymous credential or Clerk bearer token to Chat for ownership checks
+and conversation access. Platform independently authorizes SDK operations.
 
 ## Worker structure
 
@@ -45,8 +45,10 @@ migrations with the matching Wrangler environment.
 `MOBIUS_BASE_URL` must be an HTTP loopback origin for local development or an HTTPS
 origin elsewhere. It cannot contain credentials, a path, query, fragment, or Cloud's
 own origin. `MOBIUS_APP_ID` and `MOBIUS_APP_SECRET` authenticate Worker operations.
-The chat API issues and revokes bot-scoped access tokens; the browser uses those tokens
-to communicate directly with Mobius. Slack's `MobiusGateway` also calls Mobius
+The active Chat API issues short-lived conversation credentials after checking Bot
+ownership. The browser uses `createMobiusConversationSession` to communicate directly
+with Mobius, including history, messages, events, and credential refresh.
+Slack's `MobiusGateway` also calls Mobius
 directly and rejects recursive configuration and redirects.
 
 ## Verification

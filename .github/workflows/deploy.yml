@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 20
     environment:
       name: ${{ inputs.environment }}
-      url: ${{ inputs.environment == 'production' && 'https://mobius.paraflow.biz' || 'https://mobius.paradev.biz' }}
+      url: ${{ inputs.environment == 'production' && 'https://mobius-chat.paraflow.biz' || 'https://mobius-chat.paradev.biz' }}
     concurrency:
       group: cloudflare-${{ inputs.environment }}
       cancel-in-progress: false

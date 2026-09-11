@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import * as v from "valibot";
 import { json } from "../../infra/http.ts";
 import { authenticatedSession } from "../management/http/authenticated-session.ts";
+import { createBotChatRoutes } from "./bot-chat-routes.ts";
 import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
 
 const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
@@ -25,6 +26,7 @@ function notFound(): Response {
 export function createChatApplication() {
     return new Hono<ChatHttpEnvironment>()
         .basePath("/mobius-cloud/api/chat")
+        .route("/", createBotChatRoutes())
         .post("/bots/:botId/access-tokens", async (context) => {
             const session = await authenticatedSession(context.env, context.req.raw);
             if (session instanceof Response) {

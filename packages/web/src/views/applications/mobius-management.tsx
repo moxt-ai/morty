@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { ManagementApi } from "../../services/management/management-api.ts";
 import { BrowserChannelConnection } from "../../view-models/channel-connection.ts";
 import { useActiveIdentity } from "../authentication/identity-context.tsx";
@@ -18,7 +19,7 @@ export function userBotConnection(userId: string, getToken: (signal: AbortSignal
 export function MobiusManagement() {
     const identity = useActiveIdentity();
     const requests = useMemo(
-        () => new ManagementApi({ origin: window.location.origin, getToken: identity.getToken }),
+        () => new BotChatApi({ origin: window.location.origin, getToken: identity.getToken }),
         [identity],
     );
     return <BotChatHome requests={requests} />;
