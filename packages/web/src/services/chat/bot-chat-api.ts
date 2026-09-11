@@ -12,6 +12,33 @@ const accessSchema = v.pipe(
     v.readonly(),
 );
 export type ChatAccess = v.InferOutput<typeof accessSchema>;
+const agentSelectionSchema = v.object({
+    runtimeId: identifier,
+    agentRef: identifier,
+    workspaceRef: v.pipe(v.string(), v.minLength(1), v.maxLength(2048)),
+    agentConfigRevision: v.pipe(v.number(), v.integer(), v.minValue(1)),
+});
+const workspaceSchema = v.object({
+    status: v.string(),
+    selected: v.nullable(agentSelectionSchema),
+    agents: v.array(
+        v.object({
+            runtimeId: identifier,
+            agentRef: identifier,
+            label: v.string(),
+            machineName: v.string(),
+            online: v.boolean(),
+        }),
+    ),
+});
+export type ChatWorkspace = v.InferOutput<typeof workspaceSchema>;
+export type ChatAgentSelection = v.InferOutput<typeof agentSelectionSchema>;
+const runtimeAccessSchema = v.object({
+    channelId: identifier,
+    projectId: identifier,
+    hostToken: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{43}$/u)),
+    endpoint: v.pipe(v.string(), v.url()),
+});
 
 export class BotChatApi {
     readonly #fetchRequest: (request: Request) => Promise<Response>;
@@ -28,7 +55,24 @@ export class BotChatApi {
         this.#getToken = options.getToken;
         this.listBots = new ManagementApi(options).listBots;
     }
-    readonly access = async (botId: string, parent: AbortSignal): Promise<ChatAccess> => {
+    readonly access = async (botId: string, parent: AbortSignal): Promise<ChatAccess> =>
+        v.parse(accessSchema, await this.#request(botId, "access", undefined, parent));
+    readonly workspace = async (botId: string, parent: AbortSignal): Promise<ChatWorkspace> =>
+        v.parse(workspaceSchema, await this.#request(botId, "workspace", undefined, parent));
+    readonly selectAgent = async (botId: string, selection: ChatAgentSelection, parent: AbortSignal): Promise<void> => {
+        await this.#request(botId, "setup", v.parse(agentSelectionSchema, selection), parent);
+    };
+    readonly runtimeAccess = async (botId: string, runtimeId: string, parent: AbortSignal) =>
+        v.parse(
+            runtimeAccessSchema,
+            await this.#request(botId, "runtime-access", { runtimeId: v.parse(identifier, runtimeId) }, parent),
+        );
+    readonly #request = async (
+        botId: string,
+        operation: string,
+        body: unknown,
+        parent: AbortSignal,
+    ): Promise<unknown> => {
         const signal = AbortSignal.any([parent, AbortSignal.timeout(45000)]);
         const requestedBotId = v.parse(identifier, botId);
         const token = await this.#getToken(signal);
@@ -37,12 +81,13 @@ export class BotChatApi {
         }
         const response = await this.#fetchRequest(
             new Request(
-                new URL(`/mobius-cloud/api/chat/bots/${encodeURIComponent(requestedBotId)}/access`, this.#origin),
+                new URL(`/mobius-cloud/api/chat/bots/${encodeURIComponent(requestedBotId)}/${operation}`, this.#origin),
                 {
                     method: "POST",
                     signal,
                     redirect: "error",
-                    headers: { authorization: `Bearer ${token}` },
+                    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                    body: body === undefined ? null : JSON.stringify(body),
                 },
             ),
         );
@@ -61,6 +106,6 @@ export class BotChatApi {
                 parsed.success ? parsed.output.error.message : "Chat is unavailable.",
             );
         }
-        return v.parse(accessSchema, value);
+        return value;
     };
 }

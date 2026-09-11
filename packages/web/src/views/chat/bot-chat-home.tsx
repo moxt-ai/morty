@@ -6,15 +6,20 @@ import {
     MobiusPageRequest,
 } from "@moxt-ai/mobius-sdk/browser";
 import { MessageSquare, Send } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
+import { CloudApiError } from "../../services/management/management-api.ts";
+import { ChatControls } from "./chat-controls.tsx";
+import { LocalSessionPane } from "./local-session-pane.tsx";
+import { LocalSessionSidebar, type OpenLocalSession } from "./local-session-sidebar.tsx";
 
 type State =
     | { readonly kind: "loading" }
+    | { readonly kind: "setup" }
     | {
           readonly kind: "ready";
           readonly bot: ManagedBot;
@@ -60,19 +65,29 @@ function attemptStatus(kind: string): string {
     }
 }
 
-export function BotChatHome({ requests }: { readonly requests: Pick<BotChatApi, "listBots" | "access"> }) {
+export function BotChatHome({
+    requests,
+}: {
+    readonly requests: Pick<BotChatApi, "listBots" | "access" | "workspace" | "selectAgent" | "runtimeAccess">;
+}) {
     const [state, setState] = useState<State>({ kind: "loading" });
     const [revision, retry] = useState(0);
     const [draft, setDraft] = useState("");
     const [sending, setSending] = useState<Sending>({ kind: "idle" });
     const lifetime = useRef<AbortController | null>(null);
+    const [conversation, setConversation] = useState<
+        { readonly kind: "bot" } | { readonly kind: "local"; readonly session: OpenLocalSession }
+    >({ kind: "bot" });
+    const showBot = useCallback(() => setConversation({ kind: "bot" }), []);
+    const reconnect = useCallback(() => retry((value) => value + 1), []);
     // biome-ignore lint/correctness/useExhaustiveDependencies: Reconnect explicitly restarts the SDK session.
     useEffect(() => {
         const controller = new AbortController();
         lifetime.current = controller;
+        setConversation({ kind: "bot" });
         let client: MobiusBrowserClient | null = null;
         let reconciliationTimer: ReturnType<typeof setTimeout> | undefined;
-        setState({ kind: "loading" });
+        setState((current) => (current.kind === "setup" ? current : { kind: "loading" }));
         setSending({ kind: "idle" });
         const open = async () => {
             const bot = (await requests.listBots(controller.signal))[0];
@@ -148,6 +163,11 @@ export function BotChatHome({ requests }: { readonly requests: Pick<BotChatApi, 
         void open().catch((cause: unknown) => {
             client?.close();
             if (!controller.signal.aborted) {
+                if (cause instanceof CloudApiError && cause.code === "AGENT_REQUIRED") {
+                    setState({ kind: "setup" });
+                    reconciliationTimer = setTimeout(() => retry((value) => value + 1), 5000);
+                    return;
+                }
                 controller.abort();
                 clearTimeout(reconciliationTimer);
                 setState({ kind: "failed", message: cause instanceof Error ? cause.message : "Chat is unavailable." });
@@ -196,92 +216,144 @@ export function BotChatHome({ requests }: { readonly requests: Pick<BotChatApi, 
     };
 
     return (
-        <main aria-label="Chat" className="flex h-dvh min-h-0 bg-background text-foreground">
-            <aside
-                aria-label="Conversations"
-                className="hidden w-60 shrink-0 border-r border-border bg-muted/30 p-4 sm:flex sm:flex-col"
-            >
-                <div className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium">
-                    <MessageSquare className="size-4" aria-hidden="true" />
-                    My Bot
-                </div>
-            </aside>
-            <section className="flex min-w-0 flex-1 flex-col">
-                <div
-                    className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-6"
-                    role="log"
-                    aria-label="Messages"
+        <main aria-label="Chat" className="flex h-dvh min-h-0 flex-col bg-background text-foreground sm:flex-row">
+            {state.kind === "ready" ? (
+                <LocalSessionSidebar
+                    botId={state.bot.botId}
+                    requests={requests}
+                    onOpen={(session) => setConversation({ kind: "local", session })}
+                    onChat={showBot}
+                />
+            ) : (
+                <aside
+                    aria-label="Conversations"
+                    className="hidden w-60 shrink-0 border-r border-border bg-muted/30 p-4 sm:flex sm:flex-col"
                 >
-                    {state.kind === "loading" ? (
-                        <div className="m-auto">
-                            <Spinner label="Connecting to your agent" />
-                        </div>
-                    ) : state.kind === "failed" ? (
-                        <div className="m-auto grid justify-items-center gap-4 text-center">
-                            <p role="alert">{state.message}</p>
-                            <Button onClick={() => retry((value) => value + 1)}>Reconnect</Button>
-                            <Button asChild variant="ghost">
-                                <a href="/SKILL.md">Agent setup instructions</a>
+                    <div className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium">
+                        <MessageSquare className="size-4" aria-hidden="true" />
+                        My Bot
+                    </div>
+                </aside>
+            )}
+            {conversation.kind === "local" && state.kind === "ready" ? (
+                <LocalSessionPane
+                    key={conversation.session.result.targetSessionId}
+                    session={conversation.session}
+                    onBack={showBot}
+                />
+            ) : (
+                <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+                    <div
+                        className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-6"
+                        role="log"
+                        aria-label="Messages"
+                    >
+                        {state.kind === "loading" ? (
+                            <div className="m-auto">
+                                <Spinner label="Connecting to your agent" />
+                            </div>
+                        ) : state.kind === "setup" ? (
+                            <section className="m-auto w-full max-w-lg animate-cloud-enter rounded-2xl border border-border bg-card p-8 shadow-sm motion-reduce:animate-none">
+                                <MessageSquare className="mb-5 size-8 text-primary" aria-hidden="true" />
+                                <h1 className="text-2xl font-semibold tracking-tight">Your Chat is ready to connect</h1>
+                                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                                    Your anonymous workspace is loaded. Paste this instruction into your local agent to
+                                    connect it to this workspace.
+                                </p>
+                                <input
+                                    aria-label="Agent setup instruction"
+                                    readOnly
+                                    value={`follow ${window.location.origin}/SKILL.md`}
+                                    onFocus={(event) => event.currentTarget.select()}
+                                    className="mt-5 w-full rounded-lg border border-border bg-muted/30 p-3 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                />
+                                <p role="status" className="mt-4 text-sm text-muted-foreground">
+                                    Waiting for agent setup. Chat will open automatically when this Bot is connected.
+                                </p>
+                                <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                                    If your agent returns a link for another saved workspace, open that link to use its
+                                    identity here.
+                                </p>
+                            </section>
+                        ) : state.kind === "failed" ? (
+                            <div className="m-auto grid justify-items-center gap-4 text-center">
+                                <p role="alert">{state.message}</p>
+                                <Button onClick={() => retry((value) => value + 1)}>Reconnect</Button>
+                                <Button asChild variant="ghost">
+                                    <a href="/SKILL.md">Agent setup instructions</a>
+                                </Button>
+                            </div>
+                        ) : state.history.turns.length === 0 ? (
+                            <div className="m-auto text-center">
+                                <h1 className="text-2xl font-semibold">{state.bot.displayName}</h1>
+                                <p className="mt-2 text-sm text-muted-foreground">Send a message to your agent.</p>
+                            </div>
+                        ) : (
+                            state.history.turns.map((turn) => (
+                                <div key={turn.commandId} className="mx-auto grid w-full max-w-3xl gap-4">
+                                    <article
+                                        className="ml-auto max-w-[85%] whitespace-pre-wrap rounded-2xl bg-accent px-4 py-3"
+                                        aria-label="Your message"
+                                    >
+                                        {turn.prompt}
+                                    </article>
+                                    {turn.response.length > 0 ? (
+                                        <article className="whitespace-pre-wrap px-4 py-3" aria-label="Agent response">
+                                            {turn.response}
+                                        </article>
+                                    ) : (
+                                        <p role="status" className="px-4 text-sm text-muted-foreground">
+                                            {attemptStatus(turn.attempt.kind)}
+                                        </p>
+                                    )}
+                                </div>
+                            ))
+                        )}
+                    </div>
+                    <form
+                        className="mx-auto mb-6 w-full max-w-3xl px-4"
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            void send();
+                        }}
+                    >
+                        {state.kind === "ready" && (
+                            <div className="mb-3">
+                                <ChatControls
+                                    botId={state.bot.botId}
+                                    client={state.client}
+                                    requests={requests}
+                                    onAgentChanged={reconnect}
+                                />
+                            </div>
+                        )}
+                        {sending.kind === "failed" && (
+                            <p role="alert" className="mb-2 text-sm text-destructive">
+                                {sending.message}
+                            </p>
+                        )}
+                        <div className="flex items-end gap-3 rounded-2xl border border-border bg-card p-4">
+                            <Textarea
+                                aria-label="Message"
+                                placeholder="Message your agent…"
+                                value={draft}
+                                onChange={(event) => setDraft(event.target.value)}
+                                disabled={state.kind !== "ready" || sending.kind === "sending"}
+                            />
+                            <Button
+                                type="submit"
+                                size="icon"
+                                aria-label="Send message"
+                                disabled={
+                                    state.kind !== "ready" || sending.kind === "sending" || draft.trim().length === 0
+                                }
+                            >
+                                <Send className="size-4" aria-hidden="true" />
                             </Button>
                         </div>
-                    ) : state.history.turns.length === 0 ? (
-                        <div className="m-auto text-center">
-                            <h1 className="text-2xl font-semibold">{state.bot.displayName}</h1>
-                            <p className="mt-2 text-sm text-muted-foreground">Send a message to your agent.</p>
-                        </div>
-                    ) : (
-                        state.history.turns.map((turn) => (
-                            <div key={turn.commandId} className="mx-auto grid w-full max-w-3xl gap-4">
-                                <article
-                                    className="ml-auto max-w-[85%] whitespace-pre-wrap rounded-2xl bg-accent px-4 py-3"
-                                    aria-label="Your message"
-                                >
-                                    {turn.prompt}
-                                </article>
-                                {turn.response.length > 0 ? (
-                                    <article className="whitespace-pre-wrap px-4 py-3" aria-label="Agent response">
-                                        {turn.response}
-                                    </article>
-                                ) : (
-                                    <p role="status" className="px-4 text-sm text-muted-foreground">
-                                        {attemptStatus(turn.attempt.kind)}
-                                    </p>
-                                )}
-                            </div>
-                        ))
-                    )}
-                </div>
-                <form
-                    className="mx-auto mb-6 w-full max-w-3xl px-4"
-                    onSubmit={(event) => {
-                        event.preventDefault();
-                        void send();
-                    }}
-                >
-                    {sending.kind === "failed" && (
-                        <p role="alert" className="mb-2 text-sm text-destructive">
-                            {sending.message}
-                        </p>
-                    )}
-                    <div className="flex items-end gap-3 rounded-2xl border border-border bg-card p-4">
-                        <Textarea
-                            aria-label="Message"
-                            placeholder="Message your agent…"
-                            value={draft}
-                            onChange={(event) => setDraft(event.target.value)}
-                            disabled={state.kind !== "ready" || sending.kind === "sending"}
-                        />
-                        <Button
-                            type="submit"
-                            size="icon"
-                            aria-label="Send message"
-                            disabled={state.kind !== "ready" || sending.kind === "sending" || draft.trim().length === 0}
-                        >
-                            <Send className="size-4" aria-hidden="true" />
-                        </Button>
-                    </div>
-                </form>
-            </section>
+                    </form>
+                </section>
+            )}
         </main>
     );
 }

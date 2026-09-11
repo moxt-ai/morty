@@ -24,7 +24,7 @@ export function createBotChatRoutes() {
         )
         .all("/bots/:botId/:operation", async (context, next) => {
             const operation = context.req.param("operation");
-            if (!["access", "setup"].includes(operation)) {
+            if (!["access", "setup", "workspace", "runtime-access"].includes(operation)) {
                 return await next();
             }
             if (context.req.method !== "POST") {
@@ -46,6 +46,12 @@ export function createBotChatRoutes() {
             const project = await context.env.storages.platformProjects.read(session.userId, origin, appId, signal);
             if (project === null) {
                 throw new PlatformProjectError("BOT_UNAVAILABLE", "Your Bot is unavailable.", 409);
+            }
+            if (operation === "workspace") {
+                const workspace = await gateway.chatWorkspace(project.projectId, botId, session.userId, signal);
+                const response = json(workspace);
+                response.headers.set("Cache-Control", "no-store");
+                return response;
             }
             if (operation === "access") {
                 const access = await gateway.openChat(project.projectId, botId, session.userId, signal);
@@ -71,6 +77,22 @@ export function createBotChatRoutes() {
             } catch (cause) {
                 signal.throwIfAborted();
                 throw new PlatformProjectError("INVALID_REQUEST", "The JSON request is invalid.", 400, { cause });
+            }
+            if (operation === "runtime-access") {
+                const input = v.parse(v.strictObject({ runtimeId: platformIdentifier }), body);
+                const access = await gateway.runtimeBrowserAccess(project.projectId, input.runtimeId, signal);
+                context.env.logger.info(
+                    {
+                        event: "runtime-browser-access-issued",
+                        userId: session.userId,
+                        botId,
+                        runtimeId: input.runtimeId,
+                    },
+                    "Chat audit event",
+                );
+                const response = json(access);
+                response.headers.set("Cache-Control", "no-store");
+                return response;
             }
             const result = await gateway.configureBot(
                 project.projectId,

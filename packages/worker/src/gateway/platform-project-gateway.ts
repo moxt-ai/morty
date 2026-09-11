@@ -6,6 +6,7 @@ import {
     MobiusTimeoutError,
 } from "@moxt-ai/mobius-sdk/platform";
 import {
+    MobiusActiveBotState,
     MobiusBotOwnerClient,
     MobiusClient,
     MobiusNoBotCompletionPolicy,
@@ -100,16 +101,27 @@ export class PlatformProjectGateway {
         signal: AbortSignal,
     ) => {
         return await this.#withBot(projectId, botId, actorReference, signal, async (client, bot) => {
-            if (bot.state.kind === "active") {
-                return { status: "active" };
-            }
-            if (bot.state.kind !== "draft") {
+            if (bot.state.kind !== "draft" && bot.state.kind !== "active") {
                 throw new PlatformProjectError("BOT_UNAVAILABLE", "Your Bot cannot be configured.", 409);
             }
             const [behaviors, bindings] = await Promise.all([
                 client.listBehaviors(botId, signal),
                 client.listBindings(botId, signal),
             ]);
+            const activeState = bot.state;
+            const activeBinding =
+                activeState instanceof MobiusActiveBotState
+                    ? bindings.executionBindings.find((binding) => binding.bindingId === activeState.activeBindingId)
+                    : undefined;
+            if (
+                activeBinding !== undefined &&
+                activeBinding.runtimeId === input.runtimeId &&
+                activeBinding.agentRef === input.agentRef &&
+                activeBinding.workspaceRef === input.workspaceRef &&
+                activeBinding.agentConfigRevision === input.agentConfigRevision
+            ) {
+                return { status: "active" };
+            }
             const pending = bindings.executionBindings.find((binding) => binding.state.kind === "requested");
             if (pending !== undefined) {
                 if (
@@ -146,6 +158,11 @@ export class PlatformProjectGateway {
                 );
             }
             const behavior =
+                (activeState instanceof MobiusActiveBotState
+                    ? behaviors.behaviorRevisions.find(
+                          (revision) => revision.behaviorRevisionId === activeState.activeBehaviorRevisionId,
+                      )
+                    : undefined) ??
                 behaviors.behaviorRevisions.find((revision) => revision.state.kind === "proposed") ??
                 (await client.createBehavior(
                     botId,
@@ -170,6 +187,54 @@ export class PlatformProjectGateway {
             );
         });
     };
+
+    readonly chatWorkspace = async (projectId: string, botId: string, userId: string, signal: AbortSignal) =>
+        await this.#withBot(projectId, botId, userId, signal, async (owner, bot) => {
+            const [runtimes, bindings] = await Promise.all([
+                this.#withProject(projectId, signal, (client) => client.runtimes.list(signal)),
+                owner.listBindings(botId, signal),
+            ]);
+            const state = bot.state;
+            const active =
+                state instanceof MobiusActiveBotState
+                    ? bindings.executionBindings.find((binding) => binding.bindingId === state.activeBindingId)
+                    : undefined;
+            return {
+                status: bot.state.kind,
+                selected:
+                    active === undefined
+                        ? null
+                        : {
+                              runtimeId: active.runtimeId,
+                              agentRef: active.agentRef,
+                              workspaceRef: active.workspaceRef,
+                              agentConfigRevision: active.agentConfigRevision,
+                          },
+                agents: runtimes.flatMap((runtime) =>
+                    runtime.agents.map((agent) => ({
+                        runtimeId: runtime.runtimeId,
+                        agentRef: agent.id,
+                        label: agent.label,
+                        machineName: runtime.machineName,
+                        online: runtime.online,
+                    })),
+                ),
+            };
+        });
+
+    readonly runtimeBrowserAccess = async (projectId: string, runtimeId: string, signal: AbortSignal) =>
+        await this.#withProject(projectId, signal, async (client) => {
+            const runtimes = await client.runtimes.list(signal);
+            const runtime = runtimes.find(
+                (candidate) => candidate.projectId === projectId && candidate.runtimeId === runtimeId,
+            );
+            if (runtime === undefined) {
+                throw new PlatformProjectError("NOT_FOUND", "Your Runtime was not found.", 404);
+            }
+            const grant = await client.runtimes.createAccessGrant(runtime.runtimeId, signal);
+            const access = await client.runtimes.redeemAccessGrant(runtime.channelId, grant, signal);
+            return { ...access, endpoint: this.configuration().origin };
+        });
 
     readonly openChat = async (projectId: string, botId: string, userId: string, signal: AbortSignal) =>
         await this.#withBot(projectId, botId, userId, signal, async (client, bot) => {
@@ -202,6 +267,7 @@ export class PlatformProjectGateway {
                 "conversation:event:read",
                 "conversation:message:create",
                 "conversation:turn:create",
+                "conversation:configure",
             ] as const;
             const access = await platform.issueConversationAccessCredential(
                 conversation.conversationId,

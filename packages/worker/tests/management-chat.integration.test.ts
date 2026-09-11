@@ -298,6 +298,17 @@ test("Given an anonymous user, When they provision a Platform Project and reload
             bindings,
         );
         expect(anotherUsersBot.status).toBe(404);
+        for (const operation of ["workspace", "runtime-access"]) {
+            const deniedInventory = await worker.fetch(
+                new Request(`${chatBotEndpoint}/${operation}`, {
+                    method: "POST",
+                    headers: { authorization: `Bearer ${bob}`, "content-type": "application/json" },
+                    body: JSON.stringify({ runtimeId: "runtime-1" }),
+                }),
+                bindings,
+            );
+            expect(deniedInventory.status).toBe(404);
+        }
         for (const body of ["{", JSON.stringify({ runtimeId: "runtime-1", agentRef: "opencode" })]) {
             const invalidSetup = await worker.fetch(
                 new Request(`${chatBotEndpoint}/setup`, {

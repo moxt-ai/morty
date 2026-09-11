@@ -38,7 +38,7 @@ export class AnonymousIdentityApi {
         this.#storage = options.storage;
     }
 
-    readonly loadOrCreate = async (requestSignal: AbortSignal): Promise<AnonymousIdentity> => {
+    readonly loadExisting = async (requestSignal: AbortSignal): Promise<AnonymousIdentity | null> => {
         const stored = v.safeParse(tokenSchema, this.#storage.getItem(ANONYMOUS_CREDENTIAL_KEY));
         if (stored.success) {
             const session = await this.#anonymousSession(stored.output, requestSignal);
@@ -46,6 +46,14 @@ export class AnonymousIdentityApi {
                 return { token: stored.output, userId: session.userId };
             }
             this.#storage.removeItem(ANONYMOUS_CREDENTIAL_KEY);
+        }
+        return null;
+    };
+
+    readonly loadOrCreate = async (requestSignal: AbortSignal): Promise<AnonymousIdentity> => {
+        const existing = await this.loadExisting(requestSignal);
+        if (existing !== null) {
+            return existing;
         }
         const created = v.parse(
             identitySchema,

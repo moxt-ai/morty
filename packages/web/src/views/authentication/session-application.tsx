@@ -12,9 +12,11 @@ import { MobiusManagement, userBotConnection } from "../applications/mobius-mana
 import { AnonymousAccountActions } from "./anonymous-account-actions.tsx";
 import { type ActiveIdentity, ActiveIdentityProvider } from "./identity-context.tsx";
 import { router as authRouter } from "./router.tsx";
+import { SetupOnboarding } from "./setup-onboarding.tsx";
 
 type IdentityState =
     | { readonly kind: "loading" }
+    | { readonly kind: "onboarding" }
     | { readonly kind: "anonymous"; readonly identity: AnonymousIdentity }
     | { readonly kind: "clerk"; readonly localIdentity: AnonymousIdentity | null; readonly userId: string }
     | { readonly kind: "conflict"; readonly identity: AnonymousIdentity }
@@ -161,8 +163,14 @@ export function SessionApplication() {
         const controller = new AbortController();
         const api = new AnonymousIdentityApi({ origin: window.location.origin, storage: window.localStorage });
         void api
-            .loadOrCreate(controller.signal)
-            .then(async (identity) => {
+            .loadExisting(controller.signal)
+            .then(async (existing) => {
+                controller.signal.throwIfAborted();
+                if (existing === null && (session === null || session === undefined)) {
+                    setState({ kind: "onboarding" });
+                    return;
+                }
+                const identity = existing ?? (await api.loadOrCreate(controller.signal));
                 if (session === null || session === undefined) {
                     setState({ identity, kind: "anonymous" });
                     return;
@@ -206,6 +214,9 @@ export function SessionApplication() {
     }
     if (state.kind === "loading") {
         return <App state={{ kind: "loading" }} />;
+    }
+    if (state.kind === "onboarding") {
+        return <SetupOnboarding />;
     }
     if (state.kind === "failed") {
         return <App state={{ kind: "failed" }} />;
