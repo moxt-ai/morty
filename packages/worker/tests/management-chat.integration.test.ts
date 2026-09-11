@@ -70,7 +70,19 @@ async function mobiusService() {
     const calls: UpstreamCall[] = [];
     let issued = 0;
     const projects = new Map<string, object>();
-    const developerToken = issuer.createSession("platform_developer");
+    const pairings = new Map<
+        string,
+        {
+            readonly pairingId: string;
+            readonly projectId: string;
+            readonly runtimeId: string;
+            readonly channelId: string;
+            readonly pairingCode: string;
+            readonly pollToken: string;
+            readonly expiresAt: string;
+        }
+    >();
+    const appCredential = `mapp_${"a".repeat(22)}_${"b".repeat(43)}`;
     const server = createServer(async (request, response) => {
         calls.push({
             authorization: request.headers.authorization,
@@ -79,10 +91,57 @@ async function mobiusService() {
             method: request.method,
             path: request.url,
         });
+        const pairingPath = request.url?.match(
+            /^\/mobius\/api\/v1\/projects\/([^/]+)\/runtime-pairings(?:\/([^/]+))?$/u,
+        );
+        if (pairingPath !== undefined && pairingPath !== null) {
+            if (request.headers.authorization !== `Bearer ${appCredential}`) {
+                response.writeHead(401, { "content-type": "application/json" });
+                response.end(JSON.stringify({ error: { code: "app_credential_invalid", message: "Unauthorized" } }));
+                return;
+            }
+            const projectId = v.parse(v.string(), pairingPath[1]);
+            if (request.method === "POST" && pairingPath[2] === undefined) {
+                let body = "";
+                for await (const chunk of request) {
+                    body += chunk;
+                }
+                const input = v.parse(v.object({ idempotencyKey: v.string() }), JSON.parse(body));
+                const key = `${projectId}:${input.idempotencyKey}`;
+                let pairing = pairings.get(key);
+                if (pairing === undefined) {
+                    pairing = {
+                        pairingId: `pair-${pairings.size + 1}`,
+                        projectId,
+                        runtimeId: `runtime-${pairings.size + 1}`,
+                        channelId: `channel-${pairings.size + 1}`,
+                        pairingCode: "ABCD-EFGH-JKLM-NPQR-STUV",
+                        pollToken: "p".repeat(43),
+                        expiresAt: new Date(AUTH_TIME.getTime() + 300000).toISOString(),
+                    };
+                    pairings.set(key, pairing);
+                }
+                response.writeHead(201, { "content-type": "application/json" });
+                response.end(JSON.stringify(pairing));
+                return;
+            }
+            const pairing = [...pairings.values()].find(
+                (value) => value.projectId === projectId && value.pairingId === pairingPath[2],
+            );
+            response.writeHead(pairing === undefined ? 404 : 200, { "content-type": "application/json" });
+            response.end(
+                JSON.stringify(
+                    pairing === undefined
+                        ? { error: { code: "not_found", message: "Not found" } }
+                        : { status: "pending", expiresAt: pairing.expiresAt },
+                ),
+            );
+            return;
+        }
         if (request.method === "POST" && request.url === "/mobius/api/v1/apps/cloud-app/projects") {
             if (
-                request.headers.authorization !== `Bearer ${developerToken}` ||
-                request.headers["x-mobius-oidc-provider"] !== "clerk"
+                request.headers.authorization !== `Bearer ${appCredential}` ||
+                request.headers["x-mobius-oidc-provider"] !== undefined
             ) {
                 response.writeHead(403, { "content-type": "application/json" });
                 response.end(JSON.stringify({ error: { code: "tenant_access_denied", message: "Not authorized" } }));
@@ -97,7 +156,7 @@ async function mobiusService() {
                     clientReference: v.string(),
                     idempotencyKey: v.string(),
                     displayName: v.string(),
-                    locationHint: v.string(),
+                    locationHint: v.literal("apac"),
                 }),
                 JSON.parse(body),
             );
@@ -150,7 +209,7 @@ async function mobiusService() {
     }
     return {
         calls,
-        developerToken,
+        appCredential,
         baseUrl: `http://127.0.0.1:${address.port}`,
         close: async () => {
             server.closeAllConnections();
@@ -171,7 +230,7 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
-test("Given a signed-in developer, When they provision a Platform Project and reload, Then Cloud retains their Project mapping and isolates it from other users", async () => {
+test("Given an anonymous user, When they provision a Platform Project and reload, Then Cloud retains their Project mapping and isolates it from other users without Clerk", async () => {
     const mobius = await mobiusService();
     const database = new InMemoryD1Database();
     databases.push(database);
@@ -181,26 +240,34 @@ test("Given a signed-in developer, When they provision a Platform Project and re
         CLERK_PUBLISHABLE_KEY: issuer.publishableKey,
         DATABASE: database,
         MOBIUS_APP_ID: "cloud-app",
+        MOBIUS_APP_SECRET: mobius.appCredential,
         MOBIUS_BASE_URL: mobius.baseUrl,
         MOBIUS_PROJECT_LOCATION_HINT: "apac",
     };
-    const alice = issuer.createSession("user_alice");
-    const bob = issuer.createSession("user_bob");
+    const createIdentity = async () => {
+        const response = await worker.fetch(
+            new Request("https://cloud.test/mobius-cloud/api/identity/anonymous-users", { method: "POST" }),
+            bindings,
+        );
+        expect(response.status).toBe(201);
+        return v.parse(v.object({ token: v.string() }), await response.json()).token;
+    };
+    const alice = await createIdentity();
+    const bob = await createIdentity();
     const endpoint = "https://cloud.test/mobius-cloud/api/management/project";
     try {
         const denied = await worker.fetch(
             new Request(endpoint, {
                 method: "POST",
                 headers: {
-                    authorization: `Bearer ${bob}`,
+                    authorization: "Bearer invalid-token",
                     "content-type": "application/json",
-                    "x-mobius-developer-token": "not-a-developer",
                 },
                 body: JSON.stringify({ displayName: "Bob" }),
             }),
             bindings,
         );
-        expect(denied.status).toBe(403);
+        expect(denied.status).toBe(401);
         for (const body of [
             "{",
             JSON.stringify({ displayName: "My Project", appId: "another-app" }),
@@ -212,7 +279,6 @@ test("Given a signed-in developer, When they provision a Platform Project and re
                     headers: {
                         authorization: `Bearer ${alice}`,
                         "content-type": "application/json",
-                        "x-mobius-developer-token": mobius.developerToken,
                     },
                     body,
                 }),
@@ -228,7 +294,6 @@ test("Given a signed-in developer, When they provision a Platform Project and re
                     headers: {
                         authorization: `Bearer ${alice}`,
                         "content-type": "application/json",
-                        "x-mobius-developer-token": mobius.developerToken,
                     },
                     body: JSON.stringify({ displayName: "My Project" }),
                 }),
@@ -247,6 +312,48 @@ test("Given a signed-in developer, When they provision a Platform Project and re
             bindings,
         );
         expect(await other.json()).toEqual({ project: null });
+        const pairingEndpoint = "https://cloud.test/mobius-cloud/api/management/runtime-pairings";
+        const pairingRequest = () =>
+            new Request(pairingEndpoint, {
+                method: "POST",
+                headers: { authorization: `Bearer ${alice}`, "content-type": "application/json" },
+                body: JSON.stringify({ idempotencyKey: "local-machine" }),
+            });
+        const pairingResponse = await worker.fetch(pairingRequest(), bindings);
+        expect(pairingResponse.status).toBe(201);
+        const pairing: unknown = await pairingResponse.json();
+        expect(pairing).toMatchObject({
+            pairingId: "pair-1",
+            runtimeId: "runtime-1",
+            projectId: "project-1",
+            relayUrl: mobius.baseUrl,
+            pairingCode: "ABCD-EFGH-JKLM-NPQR-STUV",
+        });
+        expect(await (await worker.fetch(pairingRequest(), bindings)).json()).toEqual(pairing);
+        const pending = await worker.fetch(
+            new Request(`${pairingEndpoint}/pair-1`, { headers: { authorization: `Bearer ${alice}` } }),
+            bindings,
+        );
+        expect(await pending.json()).toMatchObject({ status: "pending" });
+        const forbidden = await worker.fetch(
+            new Request(`${pairingEndpoint}/pair-1`, { headers: { authorization: `Bearer ${bob}` } }),
+            bindings,
+        );
+        expect(forbidden.status).toBe(409);
+        const bobProject = await worker.fetch(
+            new Request(endpoint, {
+                method: "POST",
+                headers: { authorization: `Bearer ${bob}`, "content-type": "application/json" },
+                body: JSON.stringify({ displayName: "Bob Project" }),
+            }),
+            bindings,
+        );
+        expect(bobProject.status).toBe(200);
+        const isolated = await worker.fetch(
+            new Request(`${pairingEndpoint}/pair-1`, { headers: { authorization: `Bearer ${bob}` } }),
+            bindings,
+        );
+        expect(isolated.status).toBe(404);
     } finally {
         await mobius.close();
     }

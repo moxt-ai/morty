@@ -38,17 +38,9 @@ export class ManagementApi {
             await this.#request("/project", "GET", undefined, signal),
         ).project;
 
-    readonly createProject = async (
-        displayName: string,
-        developerToken: string,
-        signal: AbortSignal,
-    ): Promise<ManagedProject> =>
-        v.parse(
-            v.object({ project: projectSchema }),
-            await this.#request("/project", "POST", { displayName }, signal, {
-                "x-mobius-developer-token": developerToken,
-            }),
-        ).project;
+    readonly createProject = async (displayName: string, signal: AbortSignal): Promise<ManagedProject> =>
+        v.parse(v.object({ project: projectSchema }), await this.#request("/project", "POST", { displayName }, signal))
+            .project;
 
     readonly claimBot = async (
         input: { readonly botId: string; readonly displayName: string; readonly ownerCredential: string },
@@ -60,7 +52,6 @@ export class ManagementApi {
         method: "GET" | "POST",
         body: object | undefined,
         requestSignal: AbortSignal,
-        extraHeaders: Readonly<Record<string, string>> = {},
     ): Promise<unknown> => {
         const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(15_000)]);
         const token = await this.#getToken(signal);
@@ -72,7 +63,6 @@ export class ManagementApi {
                 method,
                 signal,
                 headers: {
-                    ...extraHeaders,
                     authorization: `Bearer ${token}`,
                     ...(body === undefined ? {} : { "content-type": "application/json" }),
                 },

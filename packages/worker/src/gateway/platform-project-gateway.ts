@@ -1,9 +1,11 @@
 import {
     MobiusApiError,
+    MobiusAppCredentialProvider,
     MobiusCancellationError,
-    MobiusPlatformDeveloperClient,
+    MobiusPlatformAppClient,
     MobiusTimeoutError,
 } from "@moxt-ai/mobius-sdk/platform";
+import { MobiusClient, MobiusRuntimePairingRequest } from "@moxt-ai/mobius-sdk/server";
 import * as v from "valibot";
 import {
     PlatformProjectError,
@@ -42,7 +44,63 @@ export class PlatformProjectGateway {
         }
     };
 
-    readonly create = async (userId: string, displayName: string, token: string, signal: AbortSignal) => {
+    readonly createPairing = async (projectId: string, idempotencyKey: string, signal: AbortSignal) =>
+        await this.#withProject(projectId, signal, async (client) => {
+            const pairing = await client.runtimePairings.create(
+                new MobiusRuntimePairingRequest(idempotencyKey),
+                signal,
+            );
+            if (pairing.projectId !== projectId) {
+                throw new PlatformProjectError(
+                    "PLATFORM_INVALID_RESPONSE",
+                    "Platform returned an unexpected pairing.",
+                    502,
+                );
+            }
+            return { ...pairing, relayUrl: this.configuration().origin };
+        });
+
+    readonly readPairing = async (projectId: string, pairingId: string, signal: AbortSignal) =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) => await client.runtimePairings.read(pairingId, signal),
+        );
+
+    readonly #withProject = async <T>(
+        projectId: string,
+        signal: AbortSignal,
+        operation: (client: MobiusClient) => Promise<T>,
+    ): Promise<T> => {
+        signal.throwIfAborted();
+        const client = new MobiusClient({
+            endpoint: this.configuration().origin,
+            projectId: v.parse(platformIdentifier, projectId),
+            credentialProvider: new MobiusAppCredentialProvider(v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET)),
+            operationTimeoutMilliseconds: 15000,
+        });
+        try {
+            return await operation(client);
+        } catch (cause) {
+            signal.throwIfAborted();
+            if (cause instanceof MobiusCancellationError || cause instanceof PlatformProjectError) {
+                throw cause;
+            }
+            if (cause instanceof MobiusTimeoutError) {
+                throw new PlatformProjectError("PLATFORM_TIMEOUT", "Platform did not respond in time.", 504, { cause });
+            }
+            if (cause instanceof MobiusApiError && cause.status === 404) {
+                throw new PlatformProjectError("NOT_FOUND", "The Runtime pairing was not found.", 404, { cause });
+            }
+            throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Platform could not complete Runtime setup.", 502, {
+                cause,
+            });
+        } finally {
+            client.close();
+        }
+    };
+
+    readonly create = async (userId: string, displayName: string, signal: AbortSignal) => {
         signal.throwIfAborted();
         const configuration = this.configuration();
         let locationHint: string;
@@ -53,15 +111,9 @@ export class PlatformProjectGateway {
                 cause,
             });
         }
-        const client = new MobiusPlatformDeveloperClient({
+        const client = new MobiusPlatformAppClient({
             endpoint: configuration.origin,
-            authenticationProviderId: "clerk",
-            credentialProvider: {
-                credential: async (credentialSignal) => {
-                    credentialSignal.throwIfAborted();
-                    return token;
-                },
-            },
+            credentialProvider: new MobiusAppCredentialProvider(v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET)),
             operationTimeoutMilliseconds: 15000,
         });
         try {
@@ -97,9 +149,9 @@ export class PlatformProjectGateway {
             }
             if (cause instanceof MobiusApiError && (cause.status === 401 || cause.status === 403)) {
                 throw new PlatformProjectError(
-                    "PLATFORM_DEVELOPER_REQUIRED",
-                    "A valid Platform developer token and Tenant membership are required.",
-                    403,
+                    "PLATFORM_APP_UNAUTHORIZED",
+                    "The Chat App is not authorized to provision Projects.",
+                    502,
                     { cause },
                 );
             }

@@ -4,8 +4,8 @@
 
 Anonymous credentials and Clerk sessions resolve to a canonical internal user ID.
 Clerk verifies a user session only. The application does not read Clerk Organization
-claims. Platform Project setup uses a separate Clerk developer token; Platform
-authorizes Tenant membership and the Worker supplies configured storage placement. Bots and
+claims. Platform Project setup uses the server-held AppCredential; the Worker
+supplies a logical location hint and Platform resolves its storage placement. Bots and
 Chat support anonymous users; Slack additionally requires a verified Clerk session.
 
 Users manage their Mobius bots on `/`, open Chat on `/chat`, and manage Slack on

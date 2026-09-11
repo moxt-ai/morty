@@ -6,7 +6,6 @@ import { authenticatedSession } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
 
 const inputSchema = v.strictObject({ displayName: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)) });
-const tokenSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(4096), v.regex(/^[^\s]+$/u));
 
 export function createPlatformProjectRoutes() {
     return new Hono<ManagementHttpEnvironment>()
@@ -37,12 +36,6 @@ export function createPlatformProjectRoutes() {
             if (session instanceof Response) {
                 return session;
             }
-            if (session.authentication.kind !== "clerk") {
-                return json(
-                    { error: { code: "CLERK_REQUIRED", message: "Sign in with Clerk to provision a Project." } },
-                    403,
-                );
-            }
             if (context.req.header("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") {
                 return json({ error: { code: "INVALID_REQUEST", message: "A JSON request is required." } }, 400);
             }
@@ -57,7 +50,6 @@ export function createPlatformProjectRoutes() {
                 throw cause;
             }
             const input = v.parse(inputSchema, body);
-            const token = v.parse(tokenSchema, context.req.header("x-mobius-developer-token"));
             const { origin, appId } = context.env.gateways.platformProjects.configuration();
             const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(15000)]);
             const existing = await context.env.storages.platformProjects.read(session.userId, origin, appId, signal);
@@ -67,7 +59,6 @@ export function createPlatformProjectRoutes() {
             const project = await context.env.gateways.platformProjects.create(
                 session.userId,
                 input.displayName,
-                token,
                 signal,
             );
             await context.env.storages.platformProjects.save(session.userId, origin, appId, project, signal);

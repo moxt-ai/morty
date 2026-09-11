@@ -8,7 +8,6 @@ export type ActiveIdentity =
     | {
           readonly getToken: (signal: AbortSignal) => Promise<string | null>;
           readonly kind: "clerk";
-          readonly getPlatformToken: (signal: AbortSignal) => Promise<string | null>;
       };
 
 const IdentityContext = createContext<ActiveIdentity | null>(null);

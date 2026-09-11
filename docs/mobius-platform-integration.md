@@ -23,7 +23,7 @@ and `MOBIUS_BASE_URL` are installed as secrets on `mobius-chat-staging` and
 
 ## Remaining requirements
 
-### 1. Project provisioning and developer ownership
+### 1. App-authenticated Project provisioning
 
 Both deployed Platform Workers now trust Clerk with provider ID `clerk`, audience
 `mobius-platform`, and signing algorithm `RS256`:
@@ -45,31 +45,28 @@ in the existing staging and production Tenants. Environment-specific user and
 resource identifiers are maintained in deployment configuration and Platform
 storage rather than this document.
 
-A short-lived developer token is not a permanent Worker secret; unattended
-provisioning needs a separate token-acquisition design.
+Cloud exposes `GET` and `POST /mobius-cloud/api/management/project` to authenticated
+anonymous and account-bound users. The Worker uses `MobiusPlatformAppClient` with
+its server-held AppCredential. Users do not need Clerk to provision a Project.
+Clerk remains an optional identity binding; OIDC is for Platform developer operations.
 
-The configured developer identities can use developer APIs after obtaining a
-valid token from the Clerk template. The current implementation requires developer OIDC
-for `POST /mobius/api/v1/apps/:appId/projects`, even though the Platform hosting
-guide describes AppCredential-based provisioning. `MobiusPlatformAppClient`
-currently exposes conversation credential operations only.
-
-Cloud now exposes `GET` and `POST /mobius-cloud/api/management/project`.
-The signed-in management page requests the Clerk template token and presents a
-Project setup form. The Worker authenticates the Cloud session, requires Clerk
-for provisioning, and sends the developer token to `MobiusPlatformDeveloperClient`.
-Platform independently verifies that token and Tenant membership.
+Platform's Project creation route composes AppCredential and developer OIDC
+middleware. A standalone AppCredential authentication service verifies credentials;
+the control-plane service authorizes App scope and provisioning permissions.
+App provisioning requires an App-wide credential with the full server permission
+set. Selected-Project and limited-permission credentials cannot provision Projects.
 
 The Worker derives the client reference and idempotency key from the canonical
-Cloud user. The configured App and storage placement are server-owned. The returned
+Cloud user. The App and logical location hint are server-configured. Platform maps
+the hint to its storage resources and persists the resolved placement. The returned
 Project mapping is persisted by Cloud user, Platform origin, and App; it survives
-reloads and is isolated from other users. Developer tokens are not stored.
+reloads and is isolated from other users. AppCredentials stay server-side.
 
 Before running this flow, apply `packages/worker/migrations/0003_platform_project.sql`
 through Wrangler D1 migrations and configure `MOBIUS_PROJECT_LOCATION_HINT`.
 Staging and production use the `apac` location hint; Platform resolves storage placement. Bindings are recorded
 in `wrangler.jsonc`. The deployment workflow applies Cloud D1 migrations before
-deploying each environment. A live signed-in provisioning check is still pending.
+deploying each environment. A live anonymous provisioning check is still pending.
 Subsequent Bot operations must authorize the user's saved Project
 and Bot before calling Mobius with the AppCredential.
 
@@ -88,6 +85,13 @@ endpoint validation, cancellation, deadlines, response validation, and sanitized
 typed errors at Cloud's boundary.
 
 ### 3. Runtime and Bot management
+
+Chat now exposes `POST /mobius-cloud/api/management/runtime-pairings` with an
+`idempotencyKey` and `GET /mobius-cloud/api/management/runtime-pairings/:pairingId`.
+Both authenticate the Cloud user, resolve their persisted Project mapping, and
+call the server SDK with Chat's AppCredential. Responses include the actual
+Runtime pairing identifiers and relay URL; AppCredentials are never returned.
+An anonymous user can provision their Project and request a pairing without Clerk.
 
 `packages/worker/src/gateway/mobius-gateway.ts` still uses the legacy `/pairings`
 bootstrap, which Platform explicitly returns 404 for. Use the SDK's
@@ -151,3 +155,12 @@ credential issuance/rotation/revocation, messages, history, and event-stream
 cancellation. Existing tests exercise legacy contracts, so a passing baseline
 typecheck does not prove Platform compatibility. Run `pnpm check` after migration,
 then exercise the provisioned staging service with a real paired Runtime.
+
+### Agent setup skill
+
+`public/SKILL.md` is served by Vite/Cloudflare assets at `/SKILL.md`. It describes
+resuming `$DOCUMENT_DIR/mobius-chat/config.json`, anonymous identity creation,
+Project provisioning, Runtime pairing, the CLI command, and a final one-time
+identity-transfer URL. It marks Bot/conversation migration as incomplete until
+that path is implemented and verified. It must not instruct agents to expose
+durable user tokens or consume the final link intended for the user.

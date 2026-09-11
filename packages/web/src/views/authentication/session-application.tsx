@@ -255,11 +255,6 @@ export function SessionApplication() {
     const expectedSessionId = session.id;
     const activeIdentity: ActiveIdentity = {
         kind: "clerk",
-        getPlatformToken: (signal) =>
-            waitForClerk(
-                () => activeSession.current?.getToken({ template: "mobius-platform" }) ?? Promise.resolve(null),
-                signal,
-            ),
         getToken: (signal) => waitForClerk(() => activeSession.current?.getToken() ?? Promise.resolve(null), signal),
     };
     return (

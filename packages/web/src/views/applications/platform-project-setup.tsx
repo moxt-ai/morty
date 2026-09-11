@@ -13,10 +13,8 @@ type ProjectState =
 
 export function PlatformProjectSetup({
     requests,
-    getPlatformToken,
 }: {
     readonly requests: Pick<ManagementApi, "readProject" | "createProject">;
-    readonly getPlatformToken: (signal: AbortSignal) => Promise<string | null>;
 }) {
     const [state, setState] = useState<ProjectState>({ kind: "loading" });
     const [displayName, setDisplayName] = useState("My Project");
@@ -49,7 +47,7 @@ export function PlatformProjectSetup({
             <header>
                 <h2 className="text-xl font-semibold">Platform Project</h2>
                 <p className="mt-1 text-[13px] text-muted-foreground">
-                    Provision your Project using your Clerk developer access.
+                    Create your agent workspace. You can bind an account later.
                 </p>
             </header>
             {state.kind === "loading" ? (
@@ -70,14 +68,8 @@ export function PlatformProjectSetup({
                         const controller = lifetime.current;
                         const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]);
                         setState({ kind: "creating" });
-                        void (async () => {
-                            const token = await getPlatformToken(signal);
-                            signal.throwIfAborted();
-                            if (token === null) {
-                                throw new Error("Platform token unavailable");
-                            }
-                            return await requests.createProject(displayName, token, signal);
-                        })()
+                        void requests
+                            .createProject(displayName, signal)
                             .then((project) => {
                                 if (!controller.signal.aborted) {
                                     setState({ kind: "ready", project });
@@ -87,8 +79,7 @@ export function PlatformProjectSetup({
                                 if (!controller.signal.aborted) {
                                     setState({
                                         kind: "failed",
-                                        message:
-                                            "Could not create your Project. Check your Clerk mobius-platform template and Platform developer membership, then try again.",
+                                        message: "Could not create your Project. Please try again.",
                                     });
                                 }
                             });

@@ -93,13 +93,7 @@ export function ProjectBotManagement({ onChannelSelected, userId }: ProjectAppli
     const requests = useMemo(() => new ManagementApi({ origin: window.location.origin, getToken: token }), [token]);
     return (
         <>
-            {identity.kind === "clerk" ? (
-                <PlatformProjectSetup
-                    key={`project-${userId}`}
-                    requests={requests}
-                    getPlatformToken={identity.getPlatformToken}
-                />
-            ) : null}
+            <PlatformProjectSetup key={`project-${userId}`} requests={requests} />
             <OwnedBotManagement key={userId} requests={requests} onBotSelected={onChannelSelected} />
         </>
     );
