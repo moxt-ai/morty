@@ -85,8 +85,8 @@ importers:
         specifier: file:../../third-party/mobius/packages/protocol
         version: link:../../third-party/mobius/packages/protocol
       '@moxt-ai/mobius-sdk':
-        specifier: file:../../third-party/mobius/packages/web-sdk
-        version: file:third-party/mobius/packages/web-sdk(react@19.2.8)
+        specifier: file:../../third-party/mobius/packages/mobius-sdk
+        version: file:third-party/mobius/packages/mobius-sdk(react@19.2.8)
       '@radix-ui/react-select':
         specifier: 2.3.7
         version: 2.3.7(@types/react-dom@19.2.7(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -167,13 +167,7 @@ importers:
         specifier: 1.4.2
         version: 1.4.2(typescript@7.0.2)
 
-  third-party/mobius/packages/protocol:
-    dependencies:
-      zod:
-        specifier: ^4.5.4
-        version: 4.5.4
-
-  third-party/mobius/packages/web-sdk:
+  third-party/mobius/packages/mobius-sdk:
     dependencies:
       '@moxt-ai/mobius-protocol':
         specifier: workspace:*
@@ -188,6 +182,12 @@ importers:
       happy-dom:
         specifier: 20.14.0
         version: 20.14.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+
+  third-party/mobius/packages/protocol:
+    dependencies:
+      zod:
+        specifier: ^4.5.4
+        version: 4.5.4
 
 packages:
 
@@ -769,8 +769,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
-  '@moxt-ai/mobius-sdk@file:third-party/mobius/packages/web-sdk':
-    resolution: {directory: third-party/mobius/packages/web-sdk, type: directory}
+  '@moxt-ai/mobius-sdk@file:third-party/mobius/packages/mobius-sdk':
+    resolution: {directory: third-party/mobius/packages/mobius-sdk, type: directory}
     engines: {node: '>=20.19.0'}
 
   '@napi-rs/wasm-runtime@1.2.3':
@@ -4263,7 +4263,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@moxt-ai/mobius-sdk@file:third-party/mobius/packages/web-sdk(react@19.2.8)':
+  '@moxt-ai/mobius-sdk@file:third-party/mobius/packages/mobius-sdk(react@19.2.8)':
     dependencies:
       '@moxt-ai/mobius-protocol': link:third-party/mobius/packages/protocol
       partysocket: 1.3.0(react@19.2.8)

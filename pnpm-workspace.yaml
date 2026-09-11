@@ -5,7 +5,7 @@ packages:
   - packages/web
   - packages/worker
   - third-party/mobius/packages/protocol
-  - third-party/mobius/packages/web-sdk
+  - third-party/mobius/packages/mobius-sdk
 
 allowBuilds:
   '@sentry/cli': true
