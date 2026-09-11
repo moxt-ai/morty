@@ -1,9 +1,13 @@
 import { readFileSync } from "node:fs";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import * as v from "valibot";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, expect, test, vi } from "vitest";
 import worker from "../src/application.ts";
 import { APP_ORIGIN, AUTH_TIME, IdentityProvider } from "./support/identity-provider.ts";
+import { platformPeer } from "./support/platform-peer.ts";
+
+const platform = await platformPeer();
+afterAll(platform.close);
 
 const issuer = new IdentityProvider();
 class InMemoryD1Statement {
@@ -36,6 +40,7 @@ class InMemoryD1Database {
             readFileSync(new URL("../migrations/0002_anonymous_identity.sql", import.meta.url), "utf8"),
         );
         databases.push(this);
+        this.#database.exec(readFileSync(new URL("../migrations/0003_platform_project.sql", import.meta.url), "utf8"));
     }
     readonly close = () => this.#database.close();
     readonly prepare = (query: string) => new InMemoryD1Statement(query, this.#database);
@@ -65,9 +70,7 @@ function slackConfiguration(database = new InMemoryD1Database()) {
         AUTHENTICATION_BASE_URL: "https://identity.test",
         DATABASE: database,
         EVENTS: { send: () => Promise.resolve() },
-        MOBIUS_BASE_URL: "https://mobius.test",
-        MOBIUS_APP_ID: "cloud-app",
-        MOBIUS_APP_SECRET: "cloud-secret",
+        ...platform.bindings,
         SLACK_MOBIUS_AUTH_TOKEN: "service-token",
         SLACK_OAUTH_STATE_SIGNING_KEY: "state-signing-key",
         SLACK_SERVER_BASE_URL: APP_ORIGIN,
@@ -101,7 +104,7 @@ async function createAnonymousUser(
     return v.parse(v.object({ token: v.string(), userId: v.string() }), await response.json());
 }
 
-test("Given a first-time visitor, When an anonymous identity is created, Then its credential opens a persistent session", async () => {
+test("Given a first-time visitor, When an anonymous identity is created, Then their Bot is already available without manual setup", async () => {
     const database = new InMemoryD1Database();
     const identity = await createAnonymousUser(database);
     const response = await worker.fetch(accountRequest(identity.token), slackConfiguration(database));
@@ -118,7 +121,9 @@ test("Given a first-time visitor, When an anonymous identity is created, Then it
         slackConfiguration(database),
     );
     expect(bots.status).toBe(200);
-    expect(await bots.json()).toEqual({ bots: [] });
+    expect(await bots.json()).toEqual({
+        bots: [expect.objectContaining({ botId: expect.any(String), displayName: "My Bot" })],
+    });
 });
 
 test("Given an anonymous user, When a transfer is redeemed twice, Then only the first device receives that identity", async () => {

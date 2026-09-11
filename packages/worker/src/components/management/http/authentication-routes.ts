@@ -1,6 +1,7 @@
 import * as v from "valibot";
 import { json } from "../../../infra/http.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
+import { provisionUserBot } from "./user-bot-setup.ts";
 
 const transferInput = v.pipe(v.object({ code: v.string() }), v.readonly());
 const bindingInput = v.pipe(
@@ -49,9 +50,12 @@ export function createAuthenticationRoutes() {
                     return unavailable();
             }
         })
-        .post("/identity/anonymous-users", async (context) =>
-            json(await context.env.services.authentication.createAnonymous(context.req.raw.signal), 201),
-        )
+        .post("/identity/anonymous-users", async (context) => {
+            const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]);
+            const identity = await context.env.services.authentication.createAnonymous(signal);
+            const bot = await provisionUserBot(context.env, identity.userId, signal);
+            return json({ ...identity, bot }, 201, { "Cache-Control": "no-store" });
+        })
         .post("/identity/transfers", async (context) => {
             const transfer = await context.env.services.authentication.createTransfer(
                 bearer(context.req.raw),

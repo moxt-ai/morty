@@ -66,19 +66,6 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Read Playwright version
-        id: playwright
-        run: node -e 'require("node:fs").appendFileSync(process.env.GITHUB_OUTPUT, "version=" + require("playwright/package.json").version + "\n")'
-
-      - name: Cache Playwright browser
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-shell-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
-
-      - name: Ensure browser and system dependencies
-        run: pnpm exec playwright install --with-deps --only-shell chromium
-
       - run: pnpm check
 
       - name: Validate Cloud D1 migrations

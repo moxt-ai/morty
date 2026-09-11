@@ -70,6 +70,7 @@ async function mobiusService() {
     const calls: UpstreamCall[] = [];
     let issued = 0;
     const projects = new Map<string, object>();
+    const bots = new Map<string, object>();
     const pairings = new Map<
         string,
         {
@@ -178,6 +179,32 @@ async function mobiusService() {
             }
             response.writeHead(201, { "content-type": "application/json" });
             response.end(JSON.stringify(project));
+            return;
+        }
+        const botPath = request.url?.match(/^\/mobius\/api\/v1\/projects\/([^/]+)\/bots$/u);
+        if (request.method === "POST" && botPath !== null && botPath !== undefined) {
+            let body = "";
+            for await (const chunk of request) {
+                body += chunk;
+            }
+            const input = v.parse(
+                v.object({ displayName: v.string(), description: v.string(), avatarRef: v.string() }),
+                JSON.parse(body),
+            );
+            const bot = {
+                ...input,
+                botId: `bot-${bots.size + 1}`,
+                projectId: botPath[1],
+                lifecycle: "draft",
+                lifecycleRevision: 1,
+                profileRevision: 1,
+                currentProfileRevisionId: `profile-${bots.size + 1}`,
+                createdAt: AUTH_TIME.toISOString(),
+                updatedAt: AUTH_TIME.toISOString(),
+            };
+            bots.set(bot.botId, bot);
+            response.writeHead(201, { "content-type": "application/json" });
+            response.end(JSON.stringify(bot));
             return;
         }
         if (request.method === "POST" && request.url === "/mobius/api/v1/access-tokens") {
@@ -300,18 +327,22 @@ test("Given an anonymous user, When they provision a Platform Project and reload
                 bindings,
             );
             expect(created.status).toBe(200);
-            expect(await created.json()).toEqual({ project: { projectId: "project-1", displayName: "My Project" } });
+            expect(await created.json()).toEqual({
+                project: { projectId: "project-1", displayName: "Personal workspace" },
+            });
         }
         const reopened = await worker.fetch(
             new Request(endpoint, { headers: { authorization: `Bearer ${alice}` } }),
             bindings,
         );
-        expect(await reopened.json()).toEqual({ project: { projectId: "project-1", displayName: "My Project" } });
+        expect(await reopened.json()).toEqual({
+            project: { projectId: "project-1", displayName: "Personal workspace" },
+        });
         const other = await worker.fetch(
             new Request(endpoint, { headers: { authorization: `Bearer ${bob}` } }),
             bindings,
         );
-        expect(await other.json()).toEqual({ project: null });
+        expect(await other.json()).toEqual({ project: { projectId: "project-2", displayName: "Personal workspace" } });
         const pairingEndpoint = "https://cloud.test/mobius-cloud/api/management/runtime-pairings";
         const pairingRequest = () =>
             new Request(pairingEndpoint, {
@@ -339,7 +370,7 @@ test("Given an anonymous user, When they provision a Platform Project and reload
             new Request(`${pairingEndpoint}/pair-1`, { headers: { authorization: `Bearer ${bob}` } }),
             bindings,
         );
-        expect(forbidden.status).toBe(409);
+        expect(forbidden.status).toBe(404);
         const bobProject = await worker.fetch(
             new Request(endpoint, {
                 method: "POST",

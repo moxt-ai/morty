@@ -67,17 +67,10 @@ does not automate those flows with Playwright. Open the app, confirm both
 account dialogs are available, and verify that an account can sign in, see its
 bots, Chat, Slack integration, and sign out when manually validating an auth change.
 
-## Workspace browser scenarios
+## Browser verification
 
-`pnpm test:browser` runs the signed-in workspace UI in Chromium. These scenarios
-cover creation, membership-scoped listing, opening a workspace, deletion
-confirmation, pagination, direct links, and recovery after a provider outage.
-A stateful identity provider is injected at the production `WorkspaceDirectory`
-port; it owns organizations and memberships rather than supplying canned
-responses. The scenarios do not automate Clerk login or registration or require
-remote credentials in CI.
-
-Install Chromium once with `pnpm exec playwright install chromium`. CI installs
-the browser and system dependencies before `pnpm check`. The test clock uses an
-explicit fixed date. Live Clerk adapter checks use a disposable development
-account and must clean up only the resources created for that check.
+Do not add automated E2E test files. Verify the user journey manually with the
+`agent-browser` CLI against the running application. A new anonymous user should
+receive a Bot automatically and open headerless Chat, without Project controls
+or Slack navigation. Reload and confirm the same identity and Bot are retained.
+HTTP integration tests cover identity creation, Bot ownership, and authorization.

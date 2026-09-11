@@ -4,7 +4,12 @@
     "ignoreDependencies": ["cloudflare"],
     "workspaces": {
         "packages/web": {
-            "entry": ["src/main.tsx", "src/views/chat/app.tsx"]
+            "entry": [
+                "src/main.tsx",
+                "src/views/chat/app.tsx",
+                "src/views/applications/slack-management.tsx",
+                "src/components/ui/*.tsx"
+            ]
         }
     }
 }

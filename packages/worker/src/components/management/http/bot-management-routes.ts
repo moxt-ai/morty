@@ -3,6 +3,7 @@ import * as v from "valibot";
 import { json } from "../../../infra/http.ts";
 import { authenticatedSession } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
+import { provisionUserBot } from "./user-bot-setup.ts";
 
 const claimSchema = v.pipe(
     v.object({
@@ -19,6 +20,13 @@ export function createBotManagementRoutes() {
             const session = await authenticatedSession(context.env, context.req.raw);
             if (session instanceof Response) {
                 return session;
+            }
+            if (session.authentication.kind === "anonymous") {
+                await provisionUserBot(
+                    context.env,
+                    session.userId,
+                    AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]),
+                );
             }
             return json({
                 bots: await context.env.storages.managedBots.listBots(session.userId, context.req.raw.signal),

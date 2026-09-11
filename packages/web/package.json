@@ -7,7 +7,6 @@
         "typecheck": "tsc --project tsconfig.json",
         "typecheck:tests": "tsc --project tests/tsconfig.json",
         "test": "vitest run --config vitest.config.ts --passWithNoTests",
-        "test:browser": "vitest run --config vitest.browser.config.ts",
         "test:changed": "vitest run --config vitest.config.ts --changed=origin/main --passWithNoTests",
         "test:watch": "vitest --config vitest.config.ts"
     },

@@ -5,7 +5,7 @@ import {
     MobiusPlatformAppClient,
     MobiusTimeoutError,
 } from "@moxt-ai/mobius-sdk/platform";
-import { MobiusClient, MobiusRuntimePairingRequest } from "@moxt-ai/mobius-sdk/server";
+import { MobiusBotOwnerClient, MobiusClient, MobiusRuntimePairingRequest } from "@moxt-ai/mobius-sdk/server";
 import * as v from "valibot";
 import {
     PlatformProjectError,
@@ -59,6 +59,28 @@ export class PlatformProjectGateway {
             }
             return { ...pairing, relayUrl: this.configuration().origin };
         });
+
+    readonly createBot = async (projectId: string, signal: AbortSignal) => {
+        const client = new MobiusBotOwnerClient({
+            endpoint: this.configuration().origin,
+            projectId,
+            credentialProvider: new MobiusAppCredentialProvider(v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET)),
+            operationTimeoutMilliseconds: 15000,
+        });
+        try {
+            const bot = await client.createBot({ displayName: "My Bot", description: "", avatarRef: "" }, signal);
+            if (bot.projectId !== projectId) {
+                throw new PlatformProjectError("PLATFORM_INVALID_RESPONSE", "The Bot could not be verified.", 502);
+            }
+            return { botId: bot.botId, displayName: bot.displayName };
+        } catch (cause) {
+            signal.throwIfAborted();
+            if (cause instanceof MobiusCancellationError || cause instanceof PlatformProjectError) {
+                throw cause;
+            }
+            throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Your Bot could not be created.", 502, { cause });
+        }
+    };
 
     readonly readPairing = async (projectId: string, pairingId: string, signal: AbortSignal) =>
         await this.#withProject(

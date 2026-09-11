@@ -1,127 +1,25 @@
-import { useEffect, useState } from "react";
-import { MobiusChat } from "../../components/chat/mobius-chat.tsx";
-import { ChatCloudApi } from "../../services/chat/chat-cloud-api.ts";
-import { type ApplicationConnectionProps, BrowserChannelConnection } from "../../view-models/channel-connection.ts";
-import { ChannelConnection } from "../../view-models/chat/channel.ts";
+import { useMemo } from "react";
+import { ManagementApi } from "../../services/management/management-api.ts";
+import { BrowserChannelConnection } from "../../view-models/channel-connection.ts";
 import { useActiveIdentity } from "../authentication/identity-context.tsx";
-import { type ChatApplicationProps, MobiusApplications } from "./application-navigation.tsx";
-import { ProjectBotManagement } from "./project-bot-management.tsx";
-import { SlackManagement } from "./slack-management.tsx";
-
-function ChatApplication({ connection }: ChatApplicationProps<ChannelConnection>) {
-    const identity = useActiveIdentity();
-    const [activeConnection, setActiveConnection] = useState(connection);
-    useEffect(() => {
-        const controller = new AbortController();
-        const chat = new ChatCloudApi({
-            appId: import.meta.env.VITE_MOBIUS_APP_ID,
-            origin: window.location.origin,
-            getToken: identity.getToken,
-            mobiusBaseUrl: import.meta.env.VITE_MOBIUS_BASE_URL,
-        });
-        let current = connection;
-        let regenerating = false;
-        setActiveConnection(connection);
-        const interval = window.setInterval(
-            () => {
-                if (regenerating) {
-                    return;
-                }
-                regenerating = true;
-                void chat
-                    .regenerate(
-                        {
-                            appId: current.appId,
-                            botId: current.channelId,
-                            mobiusBaseUrl: current.mobiusBaseUrl,
-                            accessToken: current.accessToken,
-                            accessTokenId: current.accessTokenId,
-                        },
-                        controller.signal,
-                    )
-                    .then((access) => {
-                        if (!controller.signal.aborted) {
-                            current = new ChannelConnection(
-                                current.agents,
-                                current.channelId,
-                                current.machineName,
-                                current.workspaceName,
-                                access.accessToken,
-                                current.tenantId,
-                                current.projectId,
-                                current.runtimeId,
-                                current.installableAgents,
-                                current.mobiusBaseUrl,
-                                current.accessTokenId,
-                                current.appId,
-                            );
-                            setActiveConnection(current);
-                        }
-                    })
-                    .catch(() => undefined)
-                    .finally(() => {
-                        regenerating = false;
-                    });
-            },
-            5 * 60 * 1_000,
-        );
-        return () => {
-            window.clearInterval(interval);
-            controller.abort();
-            void chat
-                .revoke(
-                    {
-                        appId: current.appId,
-                        botId: current.channelId,
-                        mobiusBaseUrl: current.mobiusBaseUrl,
-                        accessToken: current.accessToken,
-                        accessTokenId: current.accessTokenId,
-                    },
-                    AbortSignal.timeout(10_000),
-                )
-                .catch(() => undefined);
-        };
-    }, [connection, identity]);
-    return <MobiusChat connection={activeConnection} />;
-}
-
-function SlackApplication({ userId }: { readonly userId: string }) {
-    return <SlackManagement userId={userId} />;
-}
+import { BotChatHome } from "../chat/bot-chat-home.tsx";
 
 export function userBotConnection(userId: string, getToken: (signal: AbortSignal) => Promise<string | null>) {
-    const chat = new ChatCloudApi({
-        appId: import.meta.env.VITE_MOBIUS_APP_ID,
-        origin: window.location.origin,
-        getToken,
-        mobiusBaseUrl: import.meta.env.VITE_MOBIUS_BASE_URL,
-    });
+    const requests = new ManagementApi({ origin: window.location.origin, getToken });
     return new BrowserChannelConnection(userId, window.localStorage, async (botId, signal) => {
-        const access = await chat.open(botId, signal);
-        return new ChannelConnection(
-            [],
-            botId,
-            "Mobius",
-            "",
-            access.accessToken,
-            userId,
-            botId,
-            botId,
-            [],
-            access.mobiusBaseUrl,
-            access.accessTokenId,
-            access.appId,
-        );
+        const bots = await requests.listBots(signal);
+        if (!bots.some((bot) => bot.botId === botId)) {
+            throw new Error("Your Bot is unavailable.");
+        }
+        return { channelId: botId };
     });
 }
 
-export function MobiusManagement(props: ApplicationConnectionProps<ChannelConnection>) {
-    return (
-        <MobiusApplications
-            {...props}
-            ChatApplication={ChatApplication}
-            SlackApplication={SlackApplication}
-            ProjectsApplication={ProjectBotManagement}
-        />
+export function MobiusManagement() {
+    const identity = useActiveIdentity();
+    const requests = useMemo(
+        () => new ManagementApi({ origin: window.location.origin, getToken: identity.getToken }),
+        [identity],
     );
+    return <BotChatHome requests={requests} />;
 }

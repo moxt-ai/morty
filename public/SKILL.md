@@ -53,7 +53,9 @@ If the file or `user_token` is absent, create an identity:
 POST $BASE_URL/mobius-cloud/api/identity/anonymous-users
 ```
 
-Expect `201` and a JSON object with `token` and `userId`. Validate the returned
+Expect `201` and a JSON object with `token`, `userId`, and `bot` containing
+`botId` and `displayName`. Chat creates the user's Bot automatically during this
+request. Validate the returned
 token, then atomically save it as `user_token` before proceeding. Preserve any
 existing configuration keys. Serialize concurrent setup attempts so they do not
 overwrite each other's identities. If saving fails, stop and report the failure;
@@ -89,17 +91,13 @@ Inspect the reported agent inventory. Choose an available, integration-ready
 agent with the user and complete that agent's own installation/authentication if
 needed. A successful CLI installation alone does not prove an agent can reply.
 
-## 3. Provision, pair, and configure
+## 3. Pair and configure the user's Bot
 
-Resolve the anonymous user's Cloud-owned Project and authorize all setup operations
-with their `user_token`. Read it with `GET /mobius-cloud/api/management/project`.
-If `project` is `null`, use `POST /mobius-cloud/api/management/project` with JSON
-`{ "displayName": "My Project" }` and the same Bearer token. Both operations return
-`{ "project": { "projectId": "...", "displayName": "..." } }` once configured.
-Chat uses its AppCredential with Platform; the agent never needs it. Chat supplies
-a logical location hint, and Platform resolves its own D1 and R2 resources.
-Reuse saved resources when they are still valid. Obtain a Project-scoped Runtime
-pairing from Chat:
+Authorize setup operations with `user_token`. Read the existing Bot with
+`GET /mobius-cloud/api/management/bots`; do not ask the user to create or claim one.
+The browser opens Chat directly. Storage placement and resource grouping are
+internal to Chat and Platform and require no user configuration.
+Obtain a Runtime pairing from Chat:
 
 ```http
 POST $BASE_URL/mobius-cloud/api/management/runtime-pairings
@@ -112,8 +110,8 @@ Content-Type: application/json
 Expect `201` with `relayUrl`, `pairingId`, `pairingCode`, `runtimeId`, `projectId`,
 `channelId`, `pollToken`, and `expiresAt`. Save the pairing attempt key before the
 request and reuse it on retries. Use a new key only for a new pairing attempt.
-Do not send a Project ID: Chat resolves ownership from the user token. A
-`PROJECT_REQUIRED` response means you must create the user's Project first.
+Chat resolves ownership from the user token. If setup reports missing internal
+resources, stop and report that failure rather than asking the user to provision them.
 
 Use the returned Platform relay origin, Runtime pairing ID, and pairing code:
 
@@ -137,19 +135,17 @@ Bearer token. The response has `status: "pending"`, `"paired"`, `"expired"`, or
 `"revoked"`; paired responses include the Runtime and its discovered agent inventory.
 Use bounded, cancellable waits until the pairing expiry; stop on expiry or revocation.
 
-After pairing, confirm through Cloud that the Runtime is online. Create or reuse
-a Bot owned by this anonymous user, select the available agent and workspace,
+After pairing, confirm through Cloud that the Runtime is online. Reuse the Bot
+created with the anonymous identity, select the available agent and workspace,
 configure its behavior and execution binding, and complete any Runtime approval
 required by that binding. Confirm the Bot is ready. Save returned resource IDs
 alongside the identity so a later setup can resume them.
 
 ### Current implementation status
 
-The identity, Project, Runtime pairing, and handoff endpoints in this skill exist in source.
-Deploy the matching AppCredential-enabled Platform version before using anonymous
-Project creation. Bot setup and conversation access are still being migrated:
-
-- Bot claims still use a legacy access-token API.
+Identity creation automatically creates the user's Bot. Runtime pairing and
+handoff endpoints exist. Bot execution binding and conversation access are still
+being migrated. Chat shows the agent-connection state until those are available.
 
 These are not supported anonymous setup alternatives. Until Cloud provides the
 anonymous Bot setup contract, stop this step and report the missing capability. Do

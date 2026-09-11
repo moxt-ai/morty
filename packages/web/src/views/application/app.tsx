@@ -68,32 +68,23 @@ export function AccountActions() {
     );
 }
 
-export function FullScreenPage({ children, account }: { readonly account?: ReactNode; readonly children: ReactNode }) {
-    return (
-        <div className="flex h-dvh flex-col bg-background font-sans text-foreground">
-            <AppHeader account={account} />
-            <main className="flex min-h-0 flex-1 flex-col overflow-auto px-4 py-3 sm:px-6">{children}</main>
-        </div>
-    );
-}
-
 export function App({ state }: { readonly state: AppState }) {
     switch (state.kind) {
         case "loading":
             return (
-                <Page>
+                <main className="grid min-h-dvh place-items-center bg-background">
                     <div className="flex min-h-40 items-center justify-center">
                         <Spinner label="Loading Mobius Cloud" />
                     </div>
-                </Page>
+                </main>
             );
         case "failed":
             return (
-                <Page>
+                <main className="grid min-h-dvh place-items-center bg-background">
                     <p role="alert" className="text-red-700">
                         Sign-in is temporarily unavailable. Please reload to try again.
                     </p>
-                </Page>
+                </main>
             );
         case "authentication":
             return <RouterProvider router={state.router} />;

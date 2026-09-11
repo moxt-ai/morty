@@ -7,7 +7,7 @@ import {
     IdentityApiError,
 } from "../../services/identity/anonymous-identity-api.ts";
 import { verifySession, waitForClerk } from "../../view-models/authentication/session.ts";
-import { AccountActions, App, FullScreenPage, Page } from "../application/app.tsx";
+import { AccountActions, App, Page } from "../application/app.tsx";
 import { MobiusManagement, userBotConnection } from "../applications/mobius-management.tsx";
 import { AnonymousAccountActions } from "./anonymous-account-actions.tsx";
 import { type ActiveIdentity, ActiveIdentityProvider } from "./identity-context.tsx";
@@ -51,16 +51,18 @@ function WorkspaceApplication(props: WorkspaceApplicationProps) {
                 </div>
             );
         }
-        const Standard = ({ children }: { readonly children: ReactNode }) => <Page account={account}>{children}</Page>;
-        const Application = ({ children }: { readonly children: ReactNode }) => (
-            <FullScreenPage account={account}>{children}</FullScreenPage>
+        const Standard = ({ children }: { readonly children: ReactNode }) => (
+            <>
+                {children}
+                <div className="fixed bottom-4 left-4 hidden items-center gap-2 sm:flex">{account}</div>
+            </>
         );
         return createApplicationRouter(
             authorize,
             userId,
             MobiusManagement,
             userBotConnection(userId, activeIdentity.getToken),
-            { Application, Standard },
+            { Application: Standard, Standard },
         );
     }, [activeIdentity, authorize, localIdentity, userId]);
     return (

@@ -45,9 +45,12 @@ in the existing staging and production Tenants. Environment-specific user and
 resource identifiers are maintained in deployment configuration and Platform
 storage rather than this document.
 
-Cloud exposes `GET` and `POST /mobius-cloud/api/management/project` to authenticated
-anonymous and account-bound users. The Worker uses `MobiusPlatformAppClient` with
-its server-held AppCredential. Users do not need Clerk to provision a Project.
+`POST /mobius-cloud/api/identity/anonymous-users` creates the identity, provisions
+its internal Project, creates a Bot through `MobiusBotOwnerClient`, and persists
+ownership before returning `{ token, userId, bot }`. The Worker uses
+`MobiusPlatformAppClient` with its server-held AppCredential. Users never configure
+Projects in the web application: the browser opens headerless Chat directly.
+Slack navigation and the manual Bot claim/Project setup screens are hidden or removed.
 Clerk remains an optional identity binding; OIDC is for Platform developer operations.
 
 Platform's Project creation route composes AppCredential and developer OIDC
@@ -66,7 +69,8 @@ Before running this flow, apply `packages/worker/migrations/0003_platform_projec
 through Wrangler D1 migrations and configure `MOBIUS_PROJECT_LOCATION_HINT`.
 Staging and production use the `apac` location hint; Platform resolves storage placement. Bindings are recorded
 in `wrangler.jsonc`. The deployment workflow applies Cloud D1 migrations before
-deploying each environment. A live anonymous provisioning check is still pending.
+deploying each environment. Staging anonymous provisioning and persistence after
+reload were verified with `agent-browser` against the deployed services.
 Subsequent Bot operations must authorize the user's saved Project
 and Bot before calling Mobius with the AppCredential.
 
@@ -91,7 +95,21 @@ Chat now exposes `POST /mobius-cloud/api/management/runtime-pairings` with an
 Both authenticate the Cloud user, resolve their persisted Project mapping, and
 call the server SDK with Chat's AppCredential. Responses include the actual
 Runtime pairing identifiers and relay URL; AppCredentials are never returned.
-An anonymous user can provision their Project and request a pairing without Clerk.
+An anonymous user receives their Bot automatically and can request pairing without Clerk.
+Staging pairing issuance was verified through the browser against the deployed
+Platform. CLI completion and the Bot/conversation journey still need verification.
+
+### Deployment repair
+
+The Platform deployment runner migrates the configured regional shards and the
+control-plane database. Existing remote shards use the `mobius_migrations` ledger;
+the Platform Wrangler configuration must use that same ledger.
+
+Chat migration `0001_management.sql` creates management tables for deployments
+whose recorded initial migration predates those tables, before identity backfill.
+The renamed staging Worker has the required runtime settings and owns the existing
+Slack queue consumer. The Chat landing view resolves its Bot from the authenticated
+backend and does not require browser build-time App configuration.
 
 `packages/worker/src/gateway/mobius-gateway.ts` still uses the legacy `/pairings`
 bootstrap, which Platform explicitly returns 404 for. Use the SDK's

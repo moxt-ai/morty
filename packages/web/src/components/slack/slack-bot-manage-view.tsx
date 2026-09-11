@@ -10,13 +10,7 @@ export function SlackBotManageView() {
     return <SlackBots requests={requests} canManage />;
 }
 
-export function SlackBots({
-    requests,
-    canManage,
-}: {
-    readonly requests: ManagementRequests;
-    readonly canManage: boolean;
-}) {
+function SlackBots({ requests, canManage }: { readonly requests: ManagementRequests; readonly canManage: boolean }) {
     const [store] = useState(() => createDashboardStore(requests));
     const management = useStore(store);
     const [draft, setDraft] = useState<{ readonly id: string; readonly name: string } | null>(null);
