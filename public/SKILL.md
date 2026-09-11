@@ -168,21 +168,9 @@ and short-lived conversation credential refresh. Keep the AppCredential on the
 Chat server. If setup or conversation access fails, preserve the anonymous token
 and report the actual failure rather than claiming the Bot is ready.
 
-## 4. Verify the main journey
+## 4. Generate the user's one-time browser URL last
 
-Before calling setup complete, verify that the Bot can receive a message and
-return an agent response, and that reopening the conversation retains history.
-Use `agent-browser` CLI in a named session when browser automation is available.
-Exercise the real Cloud endpoints and Runtime, not intercepted responses. Record
-the actual result and any blocker. Keep tokens and handoff links out of screenshots.
-
-Browser automation must use its own identity transfer. Never open, preview, or
-redeem the final handoff link intended for the user: redemption consumes it.
-
-## 5. Generate the user's one-time browser URL last
-
-Once setup and verification succeed, request a fresh transfer using the saved
-anonymous token:
+Once setup succeeds, request a fresh transfer using the saved anonymous token:
 
 ```http
 POST $BASE_URL/mobius-cloud/api/identity/transfers
@@ -193,6 +181,7 @@ Expect `201` with `url` and `expiresAt`. Check that the URL has the same origin
 as `BASE_URL`, its path is `/continue`, and its fragment contains `code`. Return
 the exact URL from the server to the user, along with the expiry. Do not construct
 a link containing `user_token`. Do not cache the transfer as the durable identity.
+Never open, preview, or redeem the final handoff link: redemption consumes it.
 
 When the user opens this link, the application redeems the code via
 `POST /mobius-cloud/api/identity/transfers/redeem` with JSON `{ "code": "..." }`,
@@ -203,4 +192,4 @@ saved token instead of creating a new anonymous user.
 
 Tell the user which Bot is ready, where the Runtime is running, that the Runtime
 must stay online, and: **Open this one-time link to chat. You can bind an account
-later if you want.** Only say the Bot is ready after actually verifying it.
+later if you want.** Only say the Bot is ready after its execution binding is approved.
