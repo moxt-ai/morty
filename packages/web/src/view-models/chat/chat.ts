@@ -37,7 +37,9 @@ const EMPTY_CAPABILITIES: SessionCapabilities = {
     imagePrompt: false,
     listSessions: false,
     loadSession: false,
+    promptQueueing: false,
     resumeSession: false,
+    steering: false,
     unstableForkSession: false,
 };
 

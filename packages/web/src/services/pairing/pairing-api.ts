@@ -1334,7 +1334,6 @@ function decodeRecordedSession(
 ): { readonly hasNativeHistory: boolean; readonly session: RecordedSession } {
     const binding = value.defaultBinding;
     if (
-        value.tenantId !== credential.tenantId ||
         value.projectId !== credential.projectId ||
         value.state.kind !== "ready" ||
         binding.sessionId !== value.sessionId ||

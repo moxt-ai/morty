@@ -35,6 +35,7 @@ import {
     type SessionCancelCommand,
     SessionEventRejectionCode,
     type SessionPromptCommand,
+    SessionPromptDisposition,
 } from "@moxt-ai/mobius-protocol";
 import { describe, expect, it } from "vitest";
 
@@ -118,6 +119,7 @@ describe("session prompt protocol", () => {
             bindingId: "workspace",
             commandId: "command-1",
             directoryId: "default",
+            disposition: SessionPromptDisposition.Reject,
             images: [
                 {
                     data: "aW1hZ2U=",
@@ -137,6 +139,7 @@ describe("session prompt protocol", () => {
                 },
             ],
             sessionId: "session-1",
+            targetCommandId: "",
         };
 
         expect(decodeSessionPromptCommand(encodeSessionPromptCommand(command))).toEqual(command);

@@ -142,7 +142,9 @@ const defaultAgent = new AgentOption("codex", "Codex", "Not reported", "Not repo
     imagePrompt: false,
     listSessions: false,
     loadSession: false,
+    promptQueueing: false,
     resumeSession: false,
+    steering: false,
     unstableForkSession: false,
 });
 const initialConversation = Conversation.create(defaultAgent);
