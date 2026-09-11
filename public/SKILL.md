@@ -75,21 +75,20 @@ request. Parse errors by `error.code`. A `404` means this deployment does not
 expose the endpoint; do not treat an HTML application page as a successful JSON
 response or fall back to Clerk registration.
 
-## 2. Install and inspect the Mobius CLI
+## 2. Inspect the Mobius CLI
 
-Use Node.js 22.13.0 or newer. If Mobius is already installed, inspect its version
-and help before changing it. Otherwise install the published CLI:
+Use Node.js 22.13.0 or newer with npm. Run the latest published CLI through
+`npx --yes`; no global Mobius installation is required:
 
 ```sh
-npm install -g @moxt-ai/mobius
-mobius --version
-mobius --help
-mobius agents --json
+npx --yes @moxt-ai/mobius@latest --version
+npx --yes @moxt-ai/mobius@latest --help
+npx --yes @moxt-ai/mobius@latest agents --json
 ```
 
 Inspect the reported agent inventory. Choose an available, integration-ready
 agent with the user and complete that agent's own installation/authentication if
-needed. A successful CLI installation alone does not prove an agent can reply.
+needed. Successfully running the CLI alone does not prove an agent can reply.
 
 ## 3. Pair and configure the user's Bot
 
@@ -116,17 +115,17 @@ resources, stop and report that failure rather than asking the user to provision
 Use the returned Platform relay origin, Runtime pairing ID, and pairing code:
 
 ```sh
-mobius pair --url "$RELAY_URL" --pairing "$RUNTIME_PAIRING_ID" --code "$PAIRING_CODE" --workspace "$WORKSPACE_DIR"
+npx --yes @moxt-ai/mobius@latest pair --url "$RELAY_URL" --pairing "$RUNTIME_PAIRING_ID" --code "$PAIRING_CODE" --workspace "$WORKSPACE_DIR"
 ```
 
 Pass arguments separately and quote paths. Never substitute the Cloud user ID,
 Bot ID, or a legacy channel pairing ID for a Runtime pairing ID. Never give the
 local CLI the user's Cloud token as its pairing code or an AppCredential.
 
-`mobius pair` saves the Runtime connection and starts its long-running daemon.
+The `pair` command saves the Runtime connection and starts its long-running daemon.
 Run it in a persistent terminal or an explicitly managed background process;
 keep it alive while the user chats. For an existing saved connection, the current
-CLI resumes it with `mobius start --channel <saved-channel-id>`. Use the saved ID
+CLI resumes it with `npx --yes @moxt-ai/mobius@latest start --channel <saved-channel-id>`. Use the saved ID
 reported by the CLI rather than inventing one.
 
 Read pairing completion with
@@ -156,7 +155,7 @@ Content-Type: application/json
 }
 ```
 
-`default` selects the workspace supplied to `mobius pair`. Use the selected
+`default` selects the workspace supplied to the `pair` command. Use the selected
 agent's current configuration revision. Do not assume an agent installed on the
 machine is advertised by this Runtime. A `202` response acknowledges the binding
 request; it does not prove that local approval or message execution succeeded.
