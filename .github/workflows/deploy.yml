@@ -99,7 +99,7 @@ jobs:
           );
           const config = v.parse(v.object({
             account_id: v.literal('95af7a3d67be8c49b1619544e3ce53c0'),
-            name: v.literal(`mobius-cloud-${environment}`),
+             name: v.literal(`mobius-chat-${environment}`),
             keep_vars: v.literal(true),
             secrets: v.object({
               required: v.pipe(v.array(v.pipe(v.string(), v.regex(/^[A-Z][A-Z0-9_]*$/))), v.minLength(1)),

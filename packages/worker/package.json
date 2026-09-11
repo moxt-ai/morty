@@ -12,6 +12,7 @@
         "test:watch": "vitest --config vitest.config.ts"
     },
     "dependencies": {
+        "@moxt-ai/mobius-sdk": "workspace:*",
         "@clerk/backend": "3.17.1",
         "hono": "^4.13.5",
         "pino": "^10.3.1",

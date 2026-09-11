@@ -12,6 +12,8 @@ export interface CloudBindings {
     readonly MOBIUS_BASE_URL?: unknown;
     readonly MOBIUS_APP_ID?: unknown;
     readonly MOBIUS_APP_SECRET?: unknown;
+    readonly MOBIUS_PROJECT_D1_SHARD_ID?: unknown;
+    readonly MOBIUS_PROJECT_R2_BUCKET_ID?: unknown;
     readonly SLACK_MOBIUS_AUTH_TOKEN?: unknown;
     readonly SLACK_OAUTH_STATE_SIGNING_KEY?: unknown;
     readonly SLACK_SERVER_BASE_URL?: unknown;

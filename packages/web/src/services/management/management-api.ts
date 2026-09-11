@@ -7,6 +7,11 @@ const botSchema = v.pipe(
 );
 
 export type ManagedBot = v.InferOutput<typeof botSchema>;
+const projectSchema = v.pipe(
+    v.object({ projectId: identifier, displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(120)) }),
+    v.readonly(),
+);
+export type ManagedProject = v.InferOutput<typeof projectSchema>;
 
 export interface ManagementApiOptions {
     readonly fetchRequest?: (request: Request) => Promise<Response>;
@@ -27,6 +32,24 @@ export class ManagementApi {
     readonly listBots = async (signal: AbortSignal): Promise<readonly ManagedBot[]> =>
         v.parse(v.object({ bots: v.array(botSchema) }), await this.#request("/bots", "GET", undefined, signal)).bots;
 
+    readonly readProject = async (signal: AbortSignal): Promise<ManagedProject | null> =>
+        v.parse(
+            v.object({ project: v.nullable(projectSchema) }),
+            await this.#request("/project", "GET", undefined, signal),
+        ).project;
+
+    readonly createProject = async (
+        displayName: string,
+        developerToken: string,
+        signal: AbortSignal,
+    ): Promise<ManagedProject> =>
+        v.parse(
+            v.object({ project: projectSchema }),
+            await this.#request("/project", "POST", { displayName }, signal, {
+                "x-mobius-developer-token": developerToken,
+            }),
+        ).project;
+
     readonly claimBot = async (
         input: { readonly botId: string; readonly displayName: string; readonly ownerCredential: string },
         signal: AbortSignal,
@@ -37,6 +60,7 @@ export class ManagementApi {
         method: "GET" | "POST",
         body: object | undefined,
         requestSignal: AbortSignal,
+        extraHeaders: Readonly<Record<string, string>> = {},
     ): Promise<unknown> => {
         const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(15_000)]);
         const token = await this.#getToken(signal);
@@ -48,6 +72,7 @@ export class ManagementApi {
                 method,
                 signal,
                 headers: {
+                    ...extraHeaders,
                     authorization: `Bearer ${token}`,
                     ...(body === undefined ? {} : { "content-type": "application/json" }),
                 },

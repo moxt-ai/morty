@@ -38,6 +38,7 @@ class InMemoryD1Database {
         this.#database.exec(
             readFileSync(new URL("../migrations/0002_anonymous_identity.sql", import.meta.url), "utf8"),
         );
+        this.#database.exec(readFileSync(new URL("../migrations/0003_platform_project.sql", import.meta.url), "utf8"));
     }
     readonly close = () => this.#database.close();
     readonly prepare = (query: string) => new InMemoryD1Statement(query, this.#database);
@@ -68,6 +69,8 @@ interface UpstreamCall {
 async function mobiusService() {
     const calls: UpstreamCall[] = [];
     let issued = 0;
+    const projects = new Map<string, object>();
+    const developerToken = issuer.createSession("platform_developer");
     const server = createServer(async (request, response) => {
         calls.push({
             authorization: request.headers.authorization,
@@ -76,6 +79,48 @@ async function mobiusService() {
             method: request.method,
             path: request.url,
         });
+        if (request.method === "POST" && request.url === "/mobius/api/v1/apps/cloud-app/projects") {
+            if (
+                request.headers.authorization !== `Bearer ${developerToken}` ||
+                request.headers["x-mobius-oidc-provider"] !== "clerk"
+            ) {
+                response.writeHead(403, { "content-type": "application/json" });
+                response.end(JSON.stringify({ error: { code: "tenant_access_denied", message: "Not authorized" } }));
+                return;
+            }
+            let body = "";
+            for await (const chunk of request) {
+                body += chunk;
+            }
+            const value = v.parse(
+                v.object({
+                    clientReference: v.string(),
+                    idempotencyKey: v.string(),
+                    displayName: v.string(),
+                    placement: v.object({ d1ShardId: v.string(), r2BucketId: v.string() }),
+                }),
+                JSON.parse(body),
+            );
+            let project = projects.get(value.idempotencyKey);
+            if (project === undefined) {
+                project = {
+                    appId: "cloud-app",
+                    tenantId: "tenant-test",
+                    projectId: `project-${projects.size + 1}`,
+                    clientReference: value.clientReference,
+                    displayName: value.displayName,
+                    lifecycle: "active",
+                    createdAt: new Date(AUTH_TIME).toISOString(),
+                    updatedAt: new Date(AUTH_TIME).toISOString(),
+                    deletedAt: "",
+                    suspendedAt: "",
+                };
+                projects.set(value.idempotencyKey, project);
+            }
+            response.writeHead(201, { "content-type": "application/json" });
+            response.end(JSON.stringify(project));
+            return;
+        }
         if (request.method === "POST" && request.url === "/mobius/api/v1/access-tokens") {
             issued += 1;
             response.writeHead(201, { "content-type": "application/json" });
@@ -105,6 +150,7 @@ async function mobiusService() {
     }
     return {
         calls,
+        developerToken,
         baseUrl: `http://127.0.0.1:${address.port}`,
         close: async () => {
             server.closeAllConnections();
@@ -123,6 +169,88 @@ afterEach(() => {
         database.close();
     }
     vi.useRealTimers();
+});
+
+test("Given a signed-in developer, When they provision a Platform Project and reload, Then Cloud retains their Project mapping and isolates it from other users", async () => {
+    const mobius = await mobiusService();
+    const database = new InMemoryD1Database();
+    databases.push(database);
+    const bindings = {
+        APP_ORIGIN,
+        CLERK_JWT_KEY: issuer.publicKey,
+        CLERK_PUBLISHABLE_KEY: issuer.publishableKey,
+        DATABASE: database,
+        MOBIUS_APP_ID: "cloud-app",
+        MOBIUS_BASE_URL: mobius.baseUrl,
+        MOBIUS_PROJECT_D1_SHARD_ID: "apac-01",
+        MOBIUS_PROJECT_R2_BUCKET_ID: "apac",
+    };
+    const alice = issuer.createSession("user_alice");
+    const bob = issuer.createSession("user_bob");
+    const endpoint = "https://cloud.test/mobius-cloud/api/management/project";
+    try {
+        const denied = await worker.fetch(
+            new Request(endpoint, {
+                method: "POST",
+                headers: {
+                    authorization: `Bearer ${bob}`,
+                    "content-type": "application/json",
+                    "x-mobius-developer-token": "not-a-developer",
+                },
+                body: JSON.stringify({ displayName: "Bob" }),
+            }),
+            bindings,
+        );
+        expect(denied.status).toBe(403);
+        for (const body of [
+            "{",
+            JSON.stringify({ displayName: "My Project", appId: "another-app" }),
+            JSON.stringify({ displayName: "My Project", userId: "another-user" }),
+        ]) {
+            const invalid = await worker.fetch(
+                new Request(endpoint, {
+                    method: "POST",
+                    headers: {
+                        authorization: `Bearer ${alice}`,
+                        "content-type": "application/json",
+                        "x-mobius-developer-token": mobius.developerToken,
+                    },
+                    body,
+                }),
+                bindings,
+            );
+            expect(invalid.status).toBe(400);
+            expect(await invalid.json()).toMatchObject({ error: { code: "INVALID_REQUEST" } });
+        }
+        for (let attempt = 0; attempt < 2; attempt++) {
+            const created = await worker.fetch(
+                new Request(endpoint, {
+                    method: "POST",
+                    headers: {
+                        authorization: `Bearer ${alice}`,
+                        "content-type": "application/json",
+                        "x-mobius-developer-token": mobius.developerToken,
+                    },
+                    body: JSON.stringify({ displayName: "My Project" }),
+                }),
+                bindings,
+            );
+            expect(created.status).toBe(200);
+            expect(await created.json()).toEqual({ project: { projectId: "project-1", displayName: "My Project" } });
+        }
+        const reopened = await worker.fetch(
+            new Request(endpoint, { headers: { authorization: `Bearer ${alice}` } }),
+            bindings,
+        );
+        expect(await reopened.json()).toEqual({ project: { projectId: "project-1", displayName: "My Project" } });
+        const other = await worker.fetch(
+            new Request(endpoint, { headers: { authorization: `Bearer ${bob}` } }),
+            bindings,
+        );
+        expect(await other.json()).toEqual({ project: null });
+    } finally {
+        await mobius.close();
+    }
 });
 
 test("Given a signed-in user with an owner credential, When they claim a bot, Then management records only their ownership and revokes the proof key", async () => {

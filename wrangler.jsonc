@@ -43,6 +43,7 @@
     "env": {
         "staging": {
             "name": "mobius-chat-staging",
+            "vars": { "MOBIUS_PROJECT_D1_SHARD_ID": "apac-01", "MOBIUS_PROJECT_R2_BUCKET_ID": "apac" },
             "secrets": {
                 "required": [
                     "APP_ORIGIN",
@@ -100,6 +101,7 @@
         },
         "production": {
             "name": "mobius-chat-production",
+            "vars": { "MOBIUS_PROJECT_D1_SHARD_ID": "apac-01", "MOBIUS_PROJECT_R2_BUCKET_ID": "apac" },
             "secrets": {
                 "required": [
                     "APP_ORIGIN",

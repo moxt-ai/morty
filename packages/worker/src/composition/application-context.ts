@@ -4,7 +4,9 @@ import { AuthenticationService } from "../components/management/service/authenti
 import { ConfigurationStorage } from "../components/management/storage/configuration-storage.ts";
 import { IdentityStorage } from "../components/management/storage/identity-storage.ts";
 import { ManagedBotStorage } from "../components/management/storage/managed-bot-storage.ts";
+import { PlatformProjectStorage } from "../components/management/storage/platform-project-storage.ts";
 import { ClerkGateway } from "../gateway/clerk-gateway.ts";
+import { PlatformProjectGateway } from "../gateway/platform-project-gateway.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 
 const logger = pino({
@@ -18,13 +20,14 @@ export type ApplicationContext = ReturnType<typeof createApplicationDependencies
 export function createApplicationDependencies(bindings: CloudBindings) {
     const infrastructure = {
         config: { bindings },
-        gateways: { clerk: new ClerkGateway() },
+        gateways: { clerk: new ClerkGateway(), platformProjects: new PlatformProjectGateway(bindings) },
         logger,
     };
     const storages = Object.freeze({
         configuration: new ConfigurationStorage(infrastructure),
         identities: new IdentityStorage(bindings.DATABASE),
         managedBots: new ManagedBotStorage(bindings.DATABASE),
+        platformProjects: new PlatformProjectStorage(bindings.DATABASE),
     });
     const cx = { ...infrastructure, storages };
     const services = Object.freeze({

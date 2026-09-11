@@ -18,6 +18,7 @@
             "@/*": ["./packages/web/src/*"],
             "@moxt-ai/mobius-protocol": ["./third-party/mobius/packages/protocol/src/index.ts"],
             "@moxt-ai/mobius-sdk": ["./third-party/mobius/packages/web-sdk/src/index.ts"],
+            "@moxt-ai/mobius-sdk/platform": ["./third-party/mobius/packages/web-sdk/src/platform.ts"],
             "@moxt-ai/mobius-sdk/channel": ["./third-party/mobius/packages/web-sdk/src/channel.ts"]
         },
         "lib": ["es2024"],

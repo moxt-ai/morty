@@ -45,6 +45,12 @@ export default defineConfig({
     resolve: {
         alias: [
             {
+                find: "@moxt-ai/mobius-sdk/platform",
+                replacement: fileURLToPath(
+                    new URL("./third-party/mobius/packages/web-sdk/src/platform.ts", import.meta.url),
+                ),
+            },
+            {
                 find: "@moxt-ai/mobius-sdk/channel",
                 replacement: fileURLToPath(
                     new URL("./third-party/mobius/packages/web-sdk/src/channel.ts", import.meta.url),
