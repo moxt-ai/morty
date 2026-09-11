@@ -27,6 +27,39 @@ type Sending =
     | { readonly kind: "sending" }
     | { readonly kind: "failed"; readonly message: string };
 
+function updateHistory(current: State, client: MobiusBrowserClient, history: MobiusBrowserHistory): State {
+    if (
+        current.kind !== "ready" ||
+        current.client !== client ||
+        BigInt(history.lastCommittedSeq) < BigInt(current.history.lastCommittedSeq)
+    ) {
+        return current;
+    }
+    return { ...current, history };
+}
+
+function attemptStatus(kind: string): string {
+    switch (kind) {
+        case "none":
+        case "dispatching":
+            return "Waiting for your agent…";
+        case "running":
+            return "Agent is thinking…";
+        case "waiting_input":
+            return "Your agent needs input. Check your local agent.";
+        case "succeeded":
+            return "Agent finished without a text response.";
+        case "cancelled":
+            return "Response cancelled.";
+        case "failed":
+            return "The agent could not complete this message.";
+        case "indeterminate":
+            return "The agent's completion status is unknown. Check your local agent.";
+        default:
+            return "Agent status is unavailable.";
+    }
+}
+
 export function BotChatHome({ requests }: { readonly requests: Pick<BotChatApi, "listBots" | "access"> }) {
     const [state, setState] = useState<State>({ kind: "loading" });
     const [revision, retry] = useState(0);
@@ -38,6 +71,7 @@ export function BotChatHome({ requests }: { readonly requests: Pick<BotChatApi, 
         const controller = new AbortController();
         lifetime.current = controller;
         let client: MobiusBrowserClient | null = null;
+        let reconciliationTimer: ReturnType<typeof setTimeout> | undefined;
         setState({ kind: "loading" });
         setSending({ kind: "idle" });
         const open = async () => {
@@ -68,34 +102,59 @@ export function BotChatHome({ requests }: { readonly requests: Pick<BotChatApi, 
             }
             const history = await session.history.read(new MobiusPageRequest(100, ""), controller.signal);
             controller.signal.throwIfAborted();
+            setState({ kind: "ready", bot, client: session, history });
+            const refresh = async () => {
+                const updated = await session.history.read(new MobiusPageRequest(100, ""), controller.signal);
+                if (!controller.signal.aborted) {
+                    setState((current) => updateHistory(current, session, updated));
+                }
+            };
+            const reconcile = async () => {
+                try {
+                    await refresh();
+                    if (!controller.signal.aborted) {
+                        reconciliationTimer = setTimeout(() => void reconcile(), 5000);
+                    }
+                } catch (cause) {
+                    if (!controller.signal.aborted) {
+                        controller.abort();
+                        session.close();
+                        setState({
+                            kind: "failed",
+                            message:
+                                cause instanceof Error
+                                    ? cause.message
+                                    : "Chat could not refresh. Reconnect to continue.",
+                        });
+                    }
+                }
+            };
+            reconciliationTimer = setTimeout(() => void reconcile(), 5000);
             const subscription = await session.events.subscribe(
                 events.cursor,
                 {
                     receive: async () => {
-                        const updated = await session.history.read(new MobiusPageRequest(100, ""), controller.signal);
-                        if (!controller.signal.aborted) {
-                            setState({ kind: "ready", bot, client: session, history: updated });
-                        }
+                        await refresh();
                         return true;
                     },
                 },
                 controller.signal,
             );
             controller.signal.throwIfAborted();
-            setState((current) =>
-                current.kind === "ready" && current.client === session
-                    ? current
-                    : { kind: "ready", bot, client: session, history },
-            );
             await subscription.completed;
+            controller.signal.throwIfAborted();
+            throw new Error("Chat updates disconnected. Reconnect to continue.");
         };
         void open().catch((cause: unknown) => {
             client?.close();
             if (!controller.signal.aborted) {
+                controller.abort();
+                clearTimeout(reconciliationTimer);
                 setState({ kind: "failed", message: cause instanceof Error ? cause.message : "Chat is unavailable." });
             }
         });
         return () => {
+            clearTimeout(reconciliationTimer);
             controller.abort();
             client?.close();
             lifetime.current = null;
@@ -122,7 +181,7 @@ export function BotChatHome({ requests }: { readonly requests: Pick<BotChatApi, 
             await state.client.messages.run(message.messageId, controller.signal);
             const history = await state.client.history.read(new MobiusPageRequest(100, ""), controller.signal);
             if (!controller.signal.aborted) {
-                setState({ ...state, history });
+                setState((current) => updateHistory(current, state.client, history));
                 setDraft("");
                 setSending({ kind: "idle" });
             }
@@ -172,7 +231,7 @@ export function BotChatHome({ requests }: { readonly requests: Pick<BotChatApi, 
                         </div>
                     ) : (
                         state.history.turns.map((turn) => (
-                            <div key={turn.messageId} className="mx-auto grid w-full max-w-3xl gap-4">
+                            <div key={turn.commandId} className="mx-auto grid w-full max-w-3xl gap-4">
                                 <article
                                     className="ml-auto max-w-[85%] whitespace-pre-wrap rounded-2xl bg-accent px-4 py-3"
                                     aria-label="Your message"
@@ -185,7 +244,7 @@ export function BotChatHome({ requests }: { readonly requests: Pick<BotChatApi, 
                                     </article>
                                 ) : (
                                     <p role="status" className="px-4 text-sm text-muted-foreground">
-                                        Agent is thinking…
+                                        {attemptStatus(turn.attempt.kind)}
                                     </p>
                                 )}
                             </div>
