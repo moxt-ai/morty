@@ -16,6 +16,7 @@ import type {
 } from "../../view-models/mobius/requests.ts";
 import { useActiveIdentity } from "../authentication/identity-context.tsx";
 import type { ProjectApplicationProps } from "./application-navigation.tsx";
+import { PlatformProjectSetup } from "./platform-project-setup.tsx";
 
 type Resource<T> =
     | { readonly kind: "loading" }
@@ -90,7 +91,18 @@ export function ProjectBotManagement({ onChannelSelected, userId }: ProjectAppli
     const identity = useActiveIdentity();
     const token = useCallback((signal: AbortSignal) => identity.getToken(signal), [identity]);
     const requests = useMemo(() => new ManagementApi({ origin: window.location.origin, getToken: token }), [token]);
-    return <OwnedBotManagement key={userId} requests={requests} onBotSelected={onChannelSelected} />;
+    return (
+        <>
+            {identity.kind === "clerk" ? (
+                <PlatformProjectSetup
+                    key={`project-${userId}`}
+                    requests={requests}
+                    getPlatformToken={identity.getPlatformToken}
+                />
+            ) : null}
+            <OwnedBotManagement key={userId} requests={requests} onBotSelected={onChannelSelected} />
+        </>
+    );
 }
 
 function OwnedBotManagement({

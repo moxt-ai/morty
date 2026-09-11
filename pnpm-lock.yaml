@@ -157,6 +157,9 @@ importers:
       '@clerk/backend':
         specifier: 3.17.1
         version: 3.17.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@moxt-ai/mobius-sdk':
+        specifier: workspace:*
+        version: link:../../third-party/mobius/packages/mobius-sdk
       hono:
         specifier: ^4.13.5
         version: 4.13.7

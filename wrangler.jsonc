@@ -43,6 +43,7 @@
     "env": {
         "staging": {
             "name": "mobius-chat-staging",
+            "vars": { "MOBIUS_PROJECT_LOCATION_HINT": "apac" },
             "secrets": {
                 "required": [
                     "APP_ORIGIN",
@@ -100,6 +101,7 @@
         },
         "production": {
             "name": "mobius-chat-production",
+            "vars": { "MOBIUS_PROJECT_LOCATION_HINT": "apac" },
             "secrets": {
                 "required": [
                     "APP_ORIGIN",

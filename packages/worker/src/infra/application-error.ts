@@ -1,5 +1,6 @@
 import { ValiError } from "valibot";
 import { MobiusAppError } from "../components/chat/mobius-app-service.ts";
+import { PlatformProjectError } from "../components/management/entity/platform-project.ts";
 import { IdentityStorageError } from "../components/management/storage/identity-storage.ts";
 import { ManagementStorageError } from "../components/management/storage/managed-bot-storage.ts";
 import { json } from "./http.ts";
@@ -9,6 +10,9 @@ interface ErrorLogger {
 }
 
 export function applicationErrorResponse(error: Error, logger: ErrorLogger): Response {
+    if (error instanceof PlatformProjectError) {
+        return json({ error: { code: error.code, message: error.message } }, error.status);
+    }
     if (error instanceof ValiError) {
         return json({ error: { code: "INVALID_REQUEST", message: "The request is invalid." } }, 400);
     }
