@@ -11,8 +11,8 @@ The credential digest was verified against the locally retained secret.
 
 | Environment | Endpoint |
 | --- | --- |
-| Staging | https://mobius-platform.paradev.biz/ |
-| Production | https://mobius-platform.paraflow.biz/ |
+| Staging | https://mobius.paradev.biz/ |
+| Production | https://mobius.paraflow.biz/ |
 
 The credentials expire one year after provisioning. Only SHA-256 digests are
 stored in D1. Developer memberships were added separately as described below;

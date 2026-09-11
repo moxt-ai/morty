@@ -200,6 +200,7 @@ describe("agent activity protocol", () => {
             output: "Tests passed",
             content: [
                 {
+                    artifactId: "",
                     data: "",
                     mimeType: "",
                     name: "",
