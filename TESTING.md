@@ -70,7 +70,8 @@ bots, Chat, Slack integration, and sign out when manually validating an auth cha
 ## Browser verification
 
 Do not add automated E2E test files. Verify the user journey manually with the
-`agent-browser` CLI against the running application. A new anonymous user should
-receive a Bot automatically and open headerless Chat, without Project controls
-or Slack navigation. Reload and confirm the same identity and Bot are retained.
+`agent-browser` CLI against the running application. A first-time visitor should
+see onboarding without an anonymous credential being created. After local-agent
+setup, the handoff opens headerless Chat without Project controls or Slack
+navigation. Reload and confirm the same identity and Bot are retained.
 HTTP integration tests cover identity creation, Bot ownership, and authorization.

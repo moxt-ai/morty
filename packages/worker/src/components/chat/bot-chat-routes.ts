@@ -24,7 +24,7 @@ export function createBotChatRoutes() {
         )
         .all("/bots/:botId/:operation", async (context, next) => {
             const operation = context.req.param("operation");
-            if (!["access", "setup", "workspace", "runtime-access"].includes(operation)) {
+            if (!["access", "setup", "workspace", "runtime-access", "session-binding"].includes(operation)) {
                 return await next();
             }
             if (context.req.method !== "POST") {
@@ -77,6 +77,13 @@ export function createBotChatRoutes() {
             } catch (cause) {
                 signal.throwIfAborted();
                 throw new PlatformProjectError("INVALID_REQUEST", "The JSON request is invalid.", 400, { cause });
+            }
+            if (operation === "session-binding") {
+                const input = v.parse(v.strictObject({ sessionId: platformIdentifier }), body);
+                const binding = await gateway.nativeSessionBinding(project.projectId, input.sessionId, signal);
+                const response = json(binding);
+                response.headers.set("Cache-Control", "no-store");
+                return response;
             }
             if (operation === "runtime-access") {
                 const input = v.parse(v.strictObject({ runtimeId: platformIdentifier }), body);

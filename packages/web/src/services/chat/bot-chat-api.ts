@@ -39,6 +39,24 @@ const runtimeAccessSchema = v.object({
     hostToken: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{43}$/u)),
     endpoint: v.pipe(v.string(), v.url()),
 });
+export function runtimeRelayUrl(access: v.InferOutput<typeof runtimeAccessSchema>): string {
+    const endpoint = new URL(access.endpoint);
+    if (
+        endpoint.username !== "" ||
+        endpoint.password !== "" ||
+        endpoint.pathname !== "/" ||
+        endpoint.search !== "" ||
+        endpoint.hash !== "" ||
+        (endpoint.protocol !== "https:" &&
+            !(endpoint.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname)))
+    ) {
+        throw new CloudApiError("INVALID_RUNTIME_ENDPOINT", "The Runtime endpoint is invalid.");
+    }
+    const url = new URL(`/mobius/api/channels/${encodeURIComponent(access.channelId)}/host`, endpoint);
+    url.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
+    url.searchParams.set("token", access.hostToken);
+    return url.href;
+}
 
 export class BotChatApi {
     readonly #fetchRequest: (request: Request) => Promise<Response>;
@@ -66,6 +84,11 @@ export class BotChatApi {
         v.parse(
             runtimeAccessSchema,
             await this.#request(botId, "runtime-access", { runtimeId: v.parse(identifier, runtimeId) }, parent),
+        );
+    readonly sessionBinding = async (botId: string, sessionId: string, parent: AbortSignal) =>
+        v.parse(
+            v.object({ bindingId: identifier, runtimeId: identifier, agentRef: identifier, workspaceRef: v.string() }),
+            await this.#request(botId, "session-binding", { sessionId: v.parse(identifier, sessionId) }, parent),
         );
     readonly #request = async (
         botId: string,

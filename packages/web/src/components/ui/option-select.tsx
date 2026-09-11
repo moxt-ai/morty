@@ -17,10 +17,12 @@ export function Select({
         <Primitive.Root value={value} onValueChange={onValueChange} disabled={disabled}>
             <Primitive.Trigger
                 aria-label={label}
-                className="flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-border bg-background px-3 text-left text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-ring/20 disabled:opacity-50"
+                className="flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-border bg-background px-3 text-left text-[13px] outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50 motion-reduce:transition-none"
             >
-                <Primitive.Value placeholder={`Select ${label.toLowerCase()}`} />
-                <Primitive.Icon>
+                <span className="min-w-0 truncate">
+                    <Primitive.Value placeholder={`Select ${label.toLowerCase()}`} />
+                </span>
+                <Primitive.Icon className="shrink-0">
                     <ChevronDown aria-hidden="true" className="size-4 text-muted-foreground" />
                 </Primitive.Icon>
             </Primitive.Trigger>
@@ -28,7 +30,7 @@ export function Select({
                 <Primitive.Content
                     position="popper"
                     sideOffset={4}
-                    className="z-[60] max-h-[var(--radix-select-content-available-height)] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-lg border border-border bg-card text-foreground shadow-lg"
+                    className="z-[60] max-h-[var(--radix-select-content-available-height)] min-w-[var(--radix-select-trigger-width)] animate-cloud-enter overflow-hidden rounded-lg border border-border bg-card text-foreground shadow-lg motion-reduce:animate-none"
                 >
                     <Primitive.ScrollUpButton className="flex justify-center">
                         <ChevronUp aria-hidden="true" className="size-4" />

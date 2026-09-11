@@ -68,18 +68,28 @@ function attemptStatus(kind: string): string {
 export function BotChatHome({
     requests,
 }: {
-    readonly requests: Pick<BotChatApi, "listBots" | "access" | "workspace" | "selectAgent" | "runtimeAccess">;
+    readonly requests: Pick<
+        BotChatApi,
+        "listBots" | "access" | "workspace" | "selectAgent" | "runtimeAccess" | "sessionBinding"
+    >;
 }) {
     const [state, setState] = useState<State>({ kind: "loading" });
     const [revision, retry] = useState(0);
     const [draft, setDraft] = useState("");
     const [sending, setSending] = useState<Sending>({ kind: "idle" });
     const lifetime = useRef<AbortController | null>(null);
+    const messageList = useRef<HTMLDivElement | null>(null);
+    const followLatest = useRef(true);
     const [conversation, setConversation] = useState<
         { readonly kind: "bot" } | { readonly kind: "local"; readonly session: OpenLocalSession }
     >({ kind: "bot" });
     const showBot = useCallback(() => setConversation({ kind: "bot" }), []);
     const reconnect = useCallback(() => retry((value) => value + 1), []);
+    useEffect(() => {
+        if (state.kind === "ready" && followLatest.current && messageList.current !== null) {
+            messageList.current.scrollTop = messageList.current.scrollHeight;
+        }
+    }, [state]);
     // biome-ignore lint/correctness/useExhaustiveDependencies: Reconnect explicitly restarts the SDK session.
     useEffect(() => {
         const controller = new AbortController();
@@ -111,10 +121,6 @@ export function BotChatHome({
                 },
             });
             client = session;
-            let events = await session.readEvents(new MobiusPageRequest(10, ""), controller.signal);
-            while (events.hasMore) {
-                events = await session.readEvents(new MobiusPageRequest(10, events.cursor), controller.signal);
-            }
             const history = await session.history.read(new MobiusPageRequest(100, ""), controller.signal);
             controller.signal.throwIfAborted();
             setState({ kind: "ready", bot, client: session, history });
@@ -145,6 +151,10 @@ export function BotChatHome({
                 }
             };
             reconciliationTimer = setTimeout(() => void reconcile(), 5000);
+            let events = await session.readEvents(new MobiusPageRequest(10, ""), controller.signal);
+            while (events.hasMore) {
+                events = await session.readEvents(new MobiusPageRequest(10, events.cursor), controller.signal);
+            }
             const subscription = await session.events.subscribe(
                 events.cursor,
                 {
@@ -187,6 +197,7 @@ export function BotChatHome({
             return;
         }
         setSending({ kind: "sending" });
+        followLatest.current = true;
         try {
             const message = await state.client.messages.create(
                 {
@@ -219,6 +230,7 @@ export function BotChatHome({
         <main aria-label="Chat" className="flex h-dvh min-h-0 flex-col bg-background text-foreground sm:flex-row">
             {state.kind === "ready" ? (
                 <LocalSessionSidebar
+                    activeEntryId={conversation.kind === "local" ? conversation.session.entry.entryId : ""}
                     botId={state.bot.botId}
                     requests={requests}
                     onOpen={(session) => setConversation({ kind: "local", session })}
@@ -237,13 +249,22 @@ export function BotChatHome({
             )}
             {conversation.kind === "local" && state.kind === "ready" ? (
                 <LocalSessionPane
-                    key={conversation.session.result.targetSessionId}
+                    key={
+                        conversation.session.result.action === "preview"
+                            ? conversation.session.result.targetSessionId
+                            : conversation.session.result.ready.sessionId
+                    }
                     session={conversation.session}
                     onBack={showBot}
                 />
             ) : (
                 <section className="flex min-h-0 min-w-0 flex-1 flex-col">
                     <div
+                        ref={messageList}
+                        onScroll={(event) => {
+                            const element = event.currentTarget;
+                            followLatest.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+                        }}
                         className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-6"
                         role="log"
                         aria-label="Messages"
@@ -289,8 +310,11 @@ export function BotChatHome({
                                 <p className="mt-2 text-sm text-muted-foreground">Send a message to your agent.</p>
                             </div>
                         ) : (
-                            state.history.turns.map((turn) => (
-                                <div key={turn.commandId} className="mx-auto grid w-full max-w-3xl gap-4">
+                            [...state.history.turns].reverse().map((turn) => (
+                                <div
+                                    key={turn.commandId}
+                                    className="mx-auto grid min-w-0 w-full max-w-3xl gap-4 [overflow-wrap:anywhere]"
+                                >
                                     <article
                                         className="ml-auto max-w-[85%] whitespace-pre-wrap rounded-2xl bg-accent px-4 py-3"
                                         aria-label="Your message"

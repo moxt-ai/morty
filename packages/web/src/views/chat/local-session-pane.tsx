@@ -40,22 +40,39 @@ export function LocalSessionPane({
     const [operation, setOperation] = useState<Operation>({ kind: "idle" });
     const lifetime = useRef(new AbortController());
     const command = useRef("");
+    const messageList = useRef<HTMLDivElement | null>(null);
+    const followLatest = useRef(true);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: Scroll after rendered message content changes, unless the user is reading older history.
+    useEffect(() => {
+        if (followLatest.current && messageList.current !== null) {
+            messageList.current.scrollTop = messageList.current.scrollHeight;
+        }
+    }, [messages]);
+    const sessionId =
+        session.result.action === "preview" ? session.result.targetSessionId : session.result.ready.sessionId;
     useEffect(() => {
         const controller = new AbortController();
         lifetime.current = controller;
         return () => {
             controller.abort();
             if (command.current !== "") {
-                session.client.cancel({ commandId: command.current, sessionId: session.result.targetSessionId });
+                try {
+                    session.client.cancel({ commandId: command.current, sessionId });
+                } catch {
+                    session.client.close();
+                }
             }
         };
-    }, [session]);
+    }, [session, sessionId]);
     const request = {
         agentId: session.agentRef,
-        sessionId: session.result.targetSessionId,
-        bindingId: "workspace",
-        directoryId: session.entry.directoryId,
-        additionalDirectoryIds: session.entry.additionalDirectories.map((directory) => directory.directoryId),
+        sessionId,
+        bindingId: session.bindingId,
+        directoryId: session.workspaceRef,
+        additionalDirectoryIds: (session.result.action === "preview"
+            ? session.entry.additionalDirectories
+            : session.result.ready.additionalDirectories
+        ).map((directory) => directory.directoryId),
     };
     const send = async () => {
         if (
@@ -69,6 +86,7 @@ export function LocalSessionPane({
         const commandId = crypto.randomUUID();
         command.current = commandId;
         const prompt = draft.trim();
+        followLatest.current = true;
         setDraft("");
         setMessages((current) => [
             ...current,
@@ -111,10 +129,11 @@ export function LocalSessionPane({
     };
     const configure = async (option: SessionConfigOption, value: string) => {
         setOperation({ kind: "configuring" });
+        const requestId = crypto.randomUUID();
         try {
             const result = await session.client.configureSession(
-                { ...request, configId: option.id, value, valueType: option.type, booleanValue: false },
-                lifetime.current.signal,
+                { ...request, requestId, configId: option.id, value, valueType: option.type, booleanValue: false },
+                AbortSignal.any([lifetime.current.signal, AbortSignal.timeout(45000)]),
             );
             if (!lifetime.current.signal.aborted) {
                 setOptions(result.configOptions);
@@ -147,6 +166,11 @@ export function LocalSessionPane({
             </div>
             <div
                 role="log"
+                ref={messageList}
+                onScroll={(event) => {
+                    const element = event.currentTarget;
+                    followLatest.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+                }}
                 aria-label="Local session messages"
                 className="min-h-0 flex-1 space-y-5 overflow-y-auto p-6"
             >
@@ -157,7 +181,7 @@ export function LocalSessionPane({
                     <article
                         key={message.id}
                         aria-label={message.role === "user" ? "Your message" : "Agent response"}
-                        className={`mx-auto max-w-3xl whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-7 ${message.role === "user" ? "bg-accent" : ""}`}
+                        className={`mx-auto w-full min-w-0 max-w-3xl whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-7 [overflow-wrap:anywhere] ${message.role === "user" ? "bg-accent" : ""}`}
                     >
                         {message.text || (operation.kind === "sending" ? "Agent is thinking…" : "No text response.")}
                     </article>

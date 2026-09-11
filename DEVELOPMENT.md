@@ -8,7 +8,9 @@ claims. Platform Project setup uses the server-held AppCredential; the Worker
 supplies a logical location hint and Platform resolves its storage placement. Bots and
 Chat support anonymous users; Slack additionally requires a verified Clerk session.
 
-Users open Chat directly on `/` and automatically receive a personal Bot.
+First-time visitors open onboarding on `/` and copy the current-origin setup
+instruction into their local agent. Setup creates their anonymous identity and
+personal Bot; returning users restore their saved identity automatically.
 The active web flow has no Project setup or Slack navigation. The web application
 sends its anonymous credential or Clerk bearer token to Chat for ownership checks
 and conversation access. Platform independently authorizes SDK operations.
@@ -48,6 +50,9 @@ own origin. `MOBIUS_APP_ID` and `MOBIUS_APP_SECRET` authenticate Worker operatio
 The active Chat API issues short-lived conversation credentials after checking Bot
 ownership. The browser uses `createMobiusConversationSession` to communicate directly
 with Mobius, including history, messages, events, and credential refresh.
+Runtime inventory and native sessions use the channel SDK with server-issued
+Runtime grants. The AppCredential needs `runtime:connect`; `session-binding` reads
+the imported session's registered binding inside the user's Project scope.
 Slack's `MobiusGateway` also calls Mobius
 directly and rejects recursive configuration and redirects.
 

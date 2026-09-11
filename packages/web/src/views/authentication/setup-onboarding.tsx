@@ -46,6 +46,10 @@ export function SetupOnboarding() {
                         <Button
                             className="min-h-11 px-5"
                             onClick={() => {
+                                if (navigator.clipboard === undefined) {
+                                    setCopy("failed");
+                                    return;
+                                }
                                 void navigator.clipboard.writeText(instruction).then(
                                     () => setCopy("copied"),
                                     () => setCopy("failed"),

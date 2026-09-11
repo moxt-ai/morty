@@ -4,13 +4,16 @@ import {
     type NativeSessionEntry,
     type NativeSessionResult,
 } from "@moxt-ai/mobius-sdk/channel";
-import { Laptop, MessageSquare, RefreshCw } from "lucide-react";
+import { ChevronDown, Laptop, MessageSquare, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
 import type { BotChatApi, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
+import { runtimeRelayUrl } from "../../services/chat/bot-chat-api.ts";
 
 export interface OpenLocalSession {
+    readonly bindingId: string;
+    readonly workspaceRef: string;
     readonly client: MobiusChannelClient;
     readonly agentRef: string;
     readonly result: Extract<NativeSessionResult, { readonly action: "import" | "fork" | "preview" }>;
@@ -21,6 +24,7 @@ type Directory =
     | { readonly kind: "empty" }
     | {
           readonly kind: "ready";
+          readonly runtimeId: string;
           readonly client: MobiusChannelClient;
           readonly agentRef: string;
           readonly entries: readonly NativeSessionEntry[];
@@ -34,19 +38,23 @@ export function LocalSessionSidebar({
     requests,
     onOpen,
     onChat,
+    activeEntryId,
 }: {
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "workspace" | "runtimeAccess">;
+    readonly requests: Pick<BotChatApi, "workspace" | "runtimeAccess" | "sessionBinding">;
     readonly onOpen: (session: OpenLocalSession) => void;
     readonly onChat: () => void;
+    readonly activeEntryId: string;
 }) {
     const [agents, setAgents] = useState<ChatWorkspace["agents"]>([]);
     const [selected, setSelected] = useState("");
-    const [_revision, refresh] = useState(0);
+    const [mobileExpanded, setMobileExpanded] = useState(false);
+    const [revision, refresh] = useState(0);
     const [directory, setDirectory] = useState<Directory>({ kind: "loading" });
     const [opening, setOpening] = useState("");
     const [error, setError] = useState("");
     const lifetime = useRef<AbortController | null>(null);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: Explicit refresh reopens the Runtime session directory.
     useEffect(() => {
         const controller = new AbortController();
         lifetime.current = controller;
@@ -64,22 +72,9 @@ export function LocalSessionSidebar({
                 return;
             }
             const access = await requests.runtimeAccess(botId, agent.runtimeId, controller.signal);
-            const endpoint = new URL(access.endpoint);
-            if (
-                endpoint.username !== "" ||
-                endpoint.password !== "" ||
-                endpoint.pathname !== "/" ||
-                endpoint.search !== "" ||
-                endpoint.hash !== "" ||
-                (endpoint.protocol !== "https:" &&
-                    !(endpoint.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname)))
-            ) {
-                throw new Error("The Runtime endpoint is invalid.");
-            }
-            const url = new URL(`/mobius/api/channels/${encodeURIComponent(access.channelId)}/host`, endpoint);
-            url.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
-            url.searchParams.set("token", access.hostToken);
-            const connected = await connectMobiusChannelClient({ relayUrl: url.href });
+            const connected = await connectMobiusChannelClient({
+                relayUrl: runtimeRelayUrl(access),
+            });
             client = connected;
             if (controller.signal.aborted) {
                 connected.close();
@@ -106,6 +101,7 @@ export function LocalSessionSidebar({
             controller.signal.throwIfAborted();
             setDirectory({
                 kind: "ready",
+                runtimeId: agent.runtimeId,
                 client: connected,
                 agentRef: agent.agentRef,
                 entries: result.entries,
@@ -126,7 +122,7 @@ export function LocalSessionSidebar({
             controller.abort();
             client?.close();
         };
-    }, [botId, requests, selected]);
+    }, [botId, requests, selected, revision]);
     const openEntry = async (entry: NativeSessionEntry) => {
         const controller = lifetime.current;
         if (directory.kind !== "ready" || opening !== "" || controller === null) {
@@ -154,7 +150,26 @@ export function LocalSessionSidebar({
                 throw new Error("The agent returned an unexpected session.");
             }
             controller.signal.throwIfAborted();
-            onOpen({ client: directory.client, agentRef: directory.agentRef, result, entry });
+            const binding =
+                result.action === "preview"
+                    ? null
+                    : await requests.sessionBinding(botId, result.ready.sessionId, controller.signal);
+            controller.signal.throwIfAborted();
+            if (
+                binding !== null &&
+                (binding.runtimeId !== directory.runtimeId || binding.agentRef !== directory.agentRef)
+            ) {
+                throw new Error("The imported session resolved to a different agent or workspace.");
+            }
+            onOpen({
+                client: directory.client,
+                agentRef: directory.agentRef,
+                result,
+                entry,
+                bindingId: binding?.bindingId ?? "",
+                workspaceRef: binding?.workspaceRef ?? entry.directoryId,
+            });
+            setMobileExpanded(false);
         } catch (cause) {
             if (!controller.signal.aborted) {
                 setError(cause instanceof Error ? cause.message : "The session could not be opened.");
@@ -210,22 +225,43 @@ export function LocalSessionSidebar({
             }
         }
     };
+    const fallbackAgent = agents.find((agent) => agent.online);
+    const agentValue =
+        selected || (fallbackAgent === undefined ? "" : `${fallbackAgent.runtimeId}:${fallbackAgent.agentRef}`);
     return (
         <aside
             aria-label="Local sessions"
             className="flex w-full shrink-0 flex-col border-b border-border bg-muted/30 p-4 sm:w-64 sm:border-r sm:border-b-0"
         >
-            <Button variant="ghost" className="mb-5 justify-start text-foreground" onClick={onChat}>
+            <Button
+                variant="ghost"
+                className={`mb-5 justify-start text-foreground ${activeEntryId === "" ? "bg-card shadow-sm" : ""}`}
+                disabled={opening !== ""}
+                onClick={onChat}
+            >
                 <MessageSquare className="size-4" /> My Bot
             </Button>
             <div className="mb-3 flex items-center justify-between">
-                <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <h2 className="hidden items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:flex">
                     <Laptop className="size-3.5" /> Local sessions
                 </h2>
                 <Button
                     variant="ghost"
+                    className="gap-2 sm:hidden"
+                    aria-expanded={mobileExpanded}
+                    aria-controls="local-session-directory"
+                    onClick={() => setMobileExpanded((value) => !value)}
+                >
+                    <Laptop className="size-3.5" /> Local sessions{" "}
+                    <ChevronDown
+                        className={`size-3.5 transition-transform motion-reduce:transition-none ${mobileExpanded ? "rotate-180" : ""}`}
+                    />
+                </Button>
+                <Button
+                    variant="ghost"
                     size="icon"
                     aria-label="Refresh local sessions"
+                    disabled={opening !== "" || directory.kind === "loading"}
                     onClick={() => {
                         onChat();
                         refresh((value) => value + 1);
@@ -234,70 +270,77 @@ export function LocalSessionSidebar({
                     <RefreshCw className="size-3.5" />
                 </Button>
             </div>
-            {agents.length > 0 && (
-                <div className="mb-3">
-                    <Select
-                        label="Session agent"
-                        value={selected}
-                        options={agents.map((agent) => ({
-                            value: `${agent.runtimeId}:${agent.agentRef}`,
-                            label: `${agent.label} · ${agent.machineName}`,
-                        }))}
-                        onValueChange={(value) => {
-                            onChat();
-                            setSelected(value);
-                        }}
-                    />
+            <div
+                id="local-session-directory"
+                className={`${mobileExpanded ? "flex" : "hidden"} min-h-0 flex-1 flex-col sm:flex`}
+            >
+                {agents.length > 0 && (
+                    <div className="mb-3">
+                        <Select
+                            label="Session agent"
+                            value={agentValue}
+                            disabled={opening !== "" || directory.kind === "loading"}
+                            options={agents.map((agent) => ({
+                                value: `${agent.runtimeId}:${agent.agentRef}`,
+                                label: `${agent.label} · ${agent.machineName}`,
+                            }))}
+                            onValueChange={(value) => {
+                                onChat();
+                                setSelected(value);
+                            }}
+                        />
+                    </div>
+                )}
+                <div className="max-h-48 min-h-0 flex-1 space-y-1 overflow-y-auto sm:max-h-none sm:pb-16">
+                    {directory.kind === "loading" && (
+                        <p role="status" className="px-2 py-3 text-xs text-muted-foreground">
+                            Discovering local sessions…
+                        </p>
+                    )}
+                    {directory.kind === "empty" && (
+                        <p className="px-2 py-3 text-xs leading-5 text-muted-foreground">
+                            Connect a local agent to see its sessions here.
+                        </p>
+                    )}
+                    {directory.kind === "failed" && (
+                        <p role="alert" className="px-2 py-3 text-xs leading-5 text-destructive">
+                            {directory.message}
+                        </p>
+                    )}
+                    {directory.kind === "ready" && directory.entries.length === 0 && (
+                        <p className="px-2 py-3 text-xs leading-5 text-muted-foreground">
+                            No saved sessions were reported by this agent.
+                        </p>
+                    )}
+                    {directory.kind === "ready" &&
+                        directory.entries.map((entry) => (
+                            <button
+                                type="button"
+                                key={entry.entryId}
+                                disabled={opening !== ""}
+                                aria-current={activeEntryId === entry.entryId ? "page" : undefined}
+                                onClick={() => void openEntry(entry)}
+                                className={`group w-full rounded-lg px-3 py-2.5 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 motion-reduce:transition-none ${activeEntryId === entry.entryId ? "bg-card shadow-sm" : ""}`}
+                            >
+                                <span className="block truncate text-sm font-medium">
+                                    {opening === entry.entryId ? "Opening…" : entry.title || "Untitled session"}
+                                </span>
+                                <span className="mt-1 block truncate text-xs text-muted-foreground">
+                                    {entry.directoryLabel}
+                                </span>
+                            </button>
+                        ))}
+                    {directory.kind === "ready" && directory.nextCursor !== null && (
+                        <Button variant="ghost" disabled={opening !== ""} onClick={() => void more()}>
+                            Load more
+                        </Button>
+                    )}
+                    {error !== "" && (
+                        <p role="alert" className="p-2 text-xs text-destructive">
+                            {error}
+                        </p>
+                    )}
                 </div>
-            )}
-            <div className="max-h-48 min-h-0 flex-1 space-y-1 overflow-y-auto sm:max-h-none sm:pb-16">
-                {directory.kind === "loading" && (
-                    <p role="status" className="px-2 py-3 text-xs text-muted-foreground">
-                        Discovering local sessions…
-                    </p>
-                )}
-                {directory.kind === "empty" && (
-                    <p className="px-2 py-3 text-xs leading-5 text-muted-foreground">
-                        Connect a local agent to see its sessions here.
-                    </p>
-                )}
-                {directory.kind === "failed" && (
-                    <p role="alert" className="px-2 py-3 text-xs leading-5 text-destructive">
-                        {directory.message}
-                    </p>
-                )}
-                {directory.kind === "ready" && directory.entries.length === 0 && (
-                    <p className="px-2 py-3 text-xs leading-5 text-muted-foreground">
-                        No saved sessions were reported by this agent.
-                    </p>
-                )}
-                {directory.kind === "ready" &&
-                    directory.entries.map((entry) => (
-                        <button
-                            type="button"
-                            key={entry.entryId}
-                            disabled={opening !== ""}
-                            onClick={() => void openEntry(entry)}
-                            className="group w-full rounded-lg px-3 py-2.5 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 motion-reduce:transition-none"
-                        >
-                            <span className="block truncate text-sm font-medium">
-                                {opening === entry.entryId ? "Opening…" : entry.title || "Untitled session"}
-                            </span>
-                            <span className="mt-1 block truncate text-xs text-muted-foreground">
-                                {entry.directoryLabel}
-                            </span>
-                        </button>
-                    ))}
-                {directory.kind === "ready" && directory.nextCursor !== null && (
-                    <Button variant="ghost" disabled={opening !== ""} onClick={() => void more()}>
-                        Load more
-                    </Button>
-                )}
-                {error !== "" && (
-                    <p role="alert" className="p-2 text-xs text-destructive">
-                        {error}
-                    </p>
-                )}
             </div>
         </aside>
     );

@@ -1,11 +1,23 @@
-import type { MobiusBrowserClient, MobiusBrowserConfiguration } from "@moxt-ai/mobius-sdk/browser";
+import type { MobiusBrowserClient } from "@moxt-ai/mobius-sdk/browser";
+import {
+    connectMobiusChannelClient,
+    type MobiusChannelClient,
+    type SessionConfigOption,
+} from "@moxt-ai/mobius-sdk/channel";
 import { useEffect, useRef, useState } from "react";
 import { Select } from "../../components/ui/option-select.tsx";
 import type { BotChatApi, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
+import { runtimeRelayUrl } from "../../services/chat/bot-chat-api.ts";
 
 type Inventory =
     | { readonly kind: "loading" }
-    | { readonly kind: "ready"; readonly workspace: ChatWorkspace; readonly configuration: MobiusBrowserConfiguration }
+    | {
+          readonly kind: "ready";
+          readonly workspace: ChatWorkspace;
+          readonly options: readonly SessionConfigOption[];
+          readonly channel: MobiusChannelClient;
+          readonly sessionId: string;
+      }
     | { readonly kind: "failed"; readonly message: string };
 type Change =
     | { readonly kind: "idle" }
@@ -21,7 +33,7 @@ export function ChatControls({
 }: {
     readonly botId: string;
     readonly client: MobiusBrowserClient;
-    readonly requests: Pick<BotChatApi, "workspace" | "selectAgent">;
+    readonly requests: Pick<BotChatApi, "workspace" | "selectAgent" | "runtimeAccess">;
     readonly onAgentChanged: () => void;
 }) {
     const [inventory, setInventory] = useState<Inventory>({ kind: "loading" });
@@ -30,14 +42,12 @@ export function ChatControls({
     useEffect(() => {
         const controller = new AbortController();
         let timer: ReturnType<typeof setTimeout> | undefined;
+        let channel: MobiusChannelClient | null = null;
         const refresh = async () => {
             try {
-                const [workspace, configuration] = await Promise.all([
-                    requests.workspace(botId, controller.signal),
-                    client.configuration.read(controller.signal),
-                ]);
+                const workspace = await requests.workspace(botId, controller.signal);
                 controller.signal.throwIfAborted();
-                setInventory({ kind: "ready", workspace, configuration });
+                setInventory((current) => (current.kind === "ready" ? { ...current, workspace } : current));
                 timer = setTimeout(() => void refresh(), 5000);
             } catch (cause) {
                 if (!controller.signal.aborted) {
@@ -48,11 +58,61 @@ export function ChatControls({
                 }
             }
         };
-        void refresh();
+        const open = async () => {
+            const [workspace, snapshot] = await Promise.all([
+                requests.workspace(botId, controller.signal),
+                client.session.read(controller.signal),
+            ]);
+            const selected = workspace.selected;
+            if (selected === null) {
+                throw new Error("Choose a connected local agent.");
+            }
+            const access = await requests.runtimeAccess(botId, selected.runtimeId, controller.signal);
+            channel = await connectMobiusChannelClient({
+                relayUrl: runtimeRelayUrl(access),
+                onConfig: (event) => {
+                    if (!controller.signal.aborted && event.sessionId === snapshot.session.sessionId) {
+                        setInventory((current) =>
+                            current.kind === "ready" ? { ...current, options: event.configOptions } : current,
+                        );
+                    }
+                },
+            });
+            controller.signal.throwIfAborted();
+            const ready = await channel.prepareSession(
+                {
+                    sessionId: snapshot.session.sessionId,
+                    agentId: selected.agentRef,
+                    bindingId: "workspace",
+                    directoryId: selected.workspaceRef,
+                    additionalDirectoryIds: [],
+                },
+                controller.signal,
+            );
+            controller.signal.throwIfAborted();
+            setInventory({
+                kind: "ready",
+                workspace,
+                options: ready.configOptions,
+                channel,
+                sessionId: snapshot.session.sessionId,
+            });
+            timer = setTimeout(() => void refresh(), 5000);
+        };
+        void open().catch((cause: unknown) => {
+            channel?.close();
+            if (!controller.signal.aborted) {
+                setInventory({
+                    kind: "failed",
+                    message: cause instanceof Error ? cause.message : "Agent settings are unavailable.",
+                });
+            }
+        });
         return () => {
             controller.abort();
             clearTimeout(timer);
             operation.current?.abort();
+            channel?.close();
         };
     }, [botId, client, requests]);
     useEffect(() => {
@@ -65,7 +125,7 @@ export function ChatControls({
                     ? inventory.workspace.selected !== null &&
                       `${inventory.workspace.selected.runtimeId}:${inventory.workspace.selected.agentRef}` ===
                           change.value
-                    : inventory.configuration.options.some(
+                    : inventory.options.some(
                           (option) => option.id === change.configId && option.currentValue === change.value,
                       );
             if (applied) {
@@ -119,17 +179,29 @@ export function ChatControls({
                     signal,
                 );
             } else {
-                await client.configuration.update(
+                const selected = inventory.workspace.selected;
+                if (selected === null) {
+                    throw new Error("Your selected agent is unavailable.");
+                }
+                const updated = await inventory.channel.configureSession(
                     {
+                        sessionId: inventory.sessionId,
+                        agentId: selected.agentRef,
+                        bindingId: "workspace",
+                        directoryId: selected.workspaceRef,
                         configId,
                         value,
                         valueType: "select",
                         booleanValue: false,
                         additionalDirectoryIds: [],
-                        idempotencyKey: crypto.randomUUID(),
                     },
                     signal,
                 );
+                if (!controller.signal.aborted) {
+                    setInventory((current) =>
+                        current.kind === "ready" ? { ...current, options: updated.configOptions } : current,
+                    );
+                }
             }
         } catch (cause) {
             if (!controller.signal.aborted) {
@@ -156,10 +228,8 @@ export function ChatControls({
     }
     const busy = change.kind === "agent" || change.kind === "configuration";
     const selected = inventory.workspace.selected;
-    const model = inventory.configuration.options.find(
-        (option) => option.category === "model" && option.type !== "boolean",
-    );
-    const variant = inventory.configuration.options.find(
+    const model = inventory.options.find((option) => option.category === "model" && option.type !== "boolean");
+    const variant = inventory.options.find(
         (option) =>
             (option.category === "thought_level" || option.category === "model_config") && option.type !== "boolean",
     );
@@ -206,6 +276,9 @@ export function ChatControls({
                     Waiting for your agent to apply the selection…
                 </p>
             )}
+            <p className="text-xs text-muted-foreground">
+                Changing the local agent starts a new Bot conversation. Earlier sessions remain in the sidebar.
+            </p>
             {model === undefined && (
                 <p className="text-xs text-muted-foreground">
                     Model choices appear when your local agent reports its session settings.

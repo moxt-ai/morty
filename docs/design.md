@@ -52,7 +52,8 @@ Empty states offer the next useful action; they never look like request failures
 - Subtle entry animation, no looping decorative movement or layout jumps.
 - Respect `prefers-reduced-motion`; disable nonessential animation/transforms.
 - Copy reports success or a selectable-text fallback on clipboard failure.
-- Preserve drafts and selected sessions through refreshes.
+- Preserve drafts and selected sessions through background inventory updates.
+  Explicit directory refresh returns to Bot Chat while reopening the connection.
 - Keyboard-visible focus, labelled controls, polite status announcements, and
   explicit error messages. Avoid announcing the entire history on each refresh.
 
@@ -65,4 +66,18 @@ Empty states offer the next useful action; they never look like request failures
 3. Given Runtime inventory, when a user chooses agent/model/variant, then the
    actual selection is applied and visible, including pending/error states.
 4. Given local sessions, when the user selects a sidebar entry, then its history
-   opens without crossing user or Runtime ownership boundaries.
+    opens without crossing user or Runtime ownership boundaries.
+5. Given an import resolves to an existing session, when the user changes settings
+   or sends a message, then Chat uses the canonical session and registered binding.
+6. Given an active Bot, when the user chooses another agent, then a new behavior
+   proposal is submitted for Runtime-local authorization and an approved binding
+   opens its own Bot conversation.
+
+## Runtime integration
+
+The Worker keeps AppCredential server-side. Bot messaging uses scoped conversation
+credentials and the Mobius conversation SDK. Native discovery and session controls
+use the channel SDK with a Project-scoped Runtime grant. The server credential must
+include `runtime:connect`. Imported sessions are resolved through a Project-scoped,
+ownership-checked binding lookup before continuation; the Runtime remains the
+authority for local execution.
