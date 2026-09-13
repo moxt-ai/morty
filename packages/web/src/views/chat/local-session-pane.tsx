@@ -1,9 +1,11 @@
 import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
+import { type MobiusClient, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
 import { ArrowLeft, Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
+import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { OpenLocalSession } from "./local-session-sidebar.tsx";
 
 interface Message {
@@ -20,9 +22,13 @@ type Operation =
 export function LocalSessionPane({
     session,
     onBack,
+    botId,
+    requests,
 }: {
     readonly session: OpenLocalSession;
     readonly onBack: () => void;
+    readonly botId: string;
+    readonly requests: Pick<BotChatApi, "connectSession">;
 }) {
     const [messages, setMessages] = useState<readonly Message[]>(() =>
         session.result.history.status === "available"
@@ -40,6 +46,12 @@ export function LocalSessionPane({
     const [operation, setOperation] = useState<Operation>({ kind: "idle" });
     const lifetime = useRef(new AbortController());
     const command = useRef("");
+    const turnId = useRef("");
+    const [connection, setConnection] = useState<
+        | { readonly kind: "loading" }
+        | { readonly kind: "ready"; readonly client: MobiusClient }
+        | { readonly kind: "failed" }
+    >({ kind: "loading" });
     const messageList = useRef<HTMLDivElement | null>(null);
     const followLatest = useRef(true);
     // biome-ignore lint/correctness/useExhaustiveDependencies: Scroll after rendered message content changes, unless the user is reading older history.
@@ -53,22 +65,105 @@ export function LocalSessionPane({
     useEffect(() => {
         const controller = new AbortController();
         lifetime.current = controller;
-        return () => {
-            controller.abort();
-            if (command.current !== "") {
-                try {
-                    session.client.cancel({ commandId: command.current, sessionId });
-                } catch {
-                    session.client.close();
-                }
+        let client: MobiusClient | null = null;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const refresh = async () => {
+            if (client === null || command.current === "") {
+                return;
+            }
+            const currentCommand = command.current;
+            const page = await client.sessions.readMessages(
+                sessionId,
+                new MobiusPageRequest(100, ""),
+                controller.signal,
+            );
+            controller.signal.throwIfAborted();
+            const message = page.messages.find((item) => item.commandId === currentCommand);
+            if (message === undefined || command.current !== currentCommand) {
+                return;
+            }
+            setMessages((current) =>
+                current.map((item) =>
+                    item.id === `${currentCommand}-reply` ? { ...item, text: message.response } : item,
+                ),
+            );
+            if (["succeeded", "failed", "cancelled"].includes(message.attempt.kind)) {
+                setOperation(
+                    message.attempt.kind === "failed"
+                        ? { kind: "failed", message: "The agent could not complete this message." }
+                        : { kind: "idle" },
+                );
+                command.current = "";
+                turnId.current = "";
             }
         };
-    }, [session, sessionId]);
+        const reconcile = async () => {
+            try {
+                await refresh();
+            } catch (cause) {
+                if (!controller.signal.aborted) {
+                    setOperation({
+                        kind: "failed",
+                        message: cause instanceof Error ? cause.message : "Session updates are unavailable.",
+                    });
+                }
+            }
+            if (!controller.signal.aborted) {
+                timer = setTimeout(() => void reconcile(), 5000);
+            }
+        };
+        const open = async () => {
+            if (session.result.action === "preview") {
+                return;
+            }
+            client = await requests.connectSession(botId, sessionId, controller.signal);
+            controller.signal.throwIfAborted();
+            setConnection({ kind: "ready", client });
+            timer = setTimeout(() => void reconcile(), 5000);
+            const subscription = await client.events.subscribe(
+                sessionId,
+                "",
+                {
+                    receive: async () => {
+                        await refresh();
+                        return true;
+                    },
+                },
+                controller.signal,
+            );
+            await subscription.completed;
+        };
+        void open().catch((cause: unknown) => {
+            client?.close();
+            if (!controller.signal.aborted) {
+                clearTimeout(timer);
+                setConnection({ kind: "failed" });
+                setOperation({
+                    kind: "failed",
+                    message: cause instanceof Error ? cause.message : "The Session could not be opened.",
+                });
+            }
+        });
+        return () => {
+            controller.abort();
+            clearTimeout(timer);
+            const currentClient = client;
+            if (currentClient !== null && turnId.current !== "") {
+                void currentClient.turns
+                    .cancel(
+                        sessionId,
+                        turnId.current,
+                        { idempotencyKey: crypto.randomUUID() },
+                        AbortSignal.timeout(15000),
+                    )
+                    .catch(() => undefined)
+                    .finally(() => currentClient.close());
+            } else {
+                currentClient?.close();
+            }
+        };
+    }, [session, sessionId, botId, requests]);
     const request = {
-        agentId: session.agentRef,
-        sessionId,
-        bindingId: session.bindingId,
-        directoryId: session.workspaceRef,
         additionalDirectoryIds: (session.result.action === "preview"
             ? session.entry.additionalDirectories
             : session.result.ready.additionalDirectories
@@ -76,6 +171,7 @@ export function LocalSessionPane({
     };
     const send = async () => {
         if (
+            connection.kind !== "ready" ||
             session.result.action === "preview" ||
             draft.trim() === "" ||
             operation.kind === "sending" ||
@@ -95,26 +191,20 @@ export function LocalSessionPane({
         ]);
         setOperation({ kind: "sending", commandId });
         try {
-            await session.client.prompt({
-                ...request,
-                commandId,
-                prompt,
-                observer: {
-                    onDelta: (delta) => {
-                        if (!lifetime.current.signal.aborted) {
-                            setMessages((current) =>
-                                current.map((message) =>
-                                    message.id === `${commandId}-reply`
-                                        ? { ...message, text: message.text + delta }
-                                        : message,
-                                ),
-                            );
-                        }
-                    },
+            const accepted = await connection.client.turns.submit(
+                sessionId,
+                {
+                    ...request,
+                    idempotencyKey: commandId,
+                    content: prompt,
+                    images: [],
+                    resources: [],
+                    artifactIds: [],
                 },
-            });
+                lifetime.current.signal,
+            );
             if (!lifetime.current.signal.aborted) {
-                setOperation({ kind: "idle" });
+                turnId.current = accepted.turnId;
             }
         } catch (cause) {
             if (!lifetime.current.signal.aborted) {
@@ -123,16 +213,17 @@ export function LocalSessionPane({
                     message: cause instanceof Error ? cause.message : "The agent could not complete the message.",
                 });
             }
-        } finally {
-            command.current = "";
         }
     };
     const configure = async (option: SessionConfigOption, value: string) => {
+        if (connection.kind !== "ready") {
+            return;
+        }
         setOperation({ kind: "configuring" });
-        const requestId = crypto.randomUUID();
         try {
-            const result = await session.client.configureSession(
-                { ...request, requestId, configId: option.id, value, valueType: option.type, booleanValue: false },
+            const result = await connection.client.sessions.updateConfiguration(
+                sessionId,
+                { configId: option.id, value, valueType: option.type, booleanValue: false },
                 AbortSignal.any([lifetime.current.signal, AbortSignal.timeout(45000)]),
             );
             if (!lifetime.current.signal.aborted) {
@@ -148,7 +239,7 @@ export function LocalSessionPane({
             }
         }
     };
-    const busy = operation.kind === "sending" || operation.kind === "configuring";
+    const busy = connection.kind !== "ready" || operation.kind === "sending" || operation.kind === "configuring";
     return (
         <section className="flex min-h-0 min-w-0 flex-1 animate-cloud-enter flex-col motion-reduce:animate-none">
             <div className="flex items-center gap-3 border-b border-border px-5 py-4">

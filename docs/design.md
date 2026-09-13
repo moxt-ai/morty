@@ -75,9 +75,9 @@ Empty states offer the next useful action; they never look like request failures
 
 ## Runtime integration
 
-The Worker keeps AppCredential server-side. Bot messaging uses scoped conversation
-credentials and the Mobius conversation SDK. Native discovery and session controls
-use the channel SDK with a Project-scoped Runtime grant. The server credential must
-include `runtime:connect`. Imported sessions are resolved through a Project-scoped,
-ownership-checked binding lookup before continuation; the Runtime remains the
-authority for local execution.
+The Worker keeps AppCredential server-side and uses the Project SDK for native
+session listing/import. After selection, it issues a short-lived credential scoped
+to the resolved Session. The browser communicates directly with Mobius for history,
+turns, configuration and events. Bot messaging keeps its existing conversation
+credentials. No Runtime-wide host credential is sent to the browser; the Runtime
+remains the authority for local execution.

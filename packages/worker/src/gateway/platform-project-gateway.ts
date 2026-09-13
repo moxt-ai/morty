@@ -226,30 +226,26 @@ export class PlatformProjectGateway {
             };
         });
 
-    readonly nativeSessionBinding = async (projectId: string, sessionId: string, signal: AbortSignal) =>
+    readonly nativeSessionAccess = async (projectId: string, sessionId: string, signal: AbortSignal) =>
         await this.#withProject(projectId, signal, async (client) => {
-            const session = await client.sessions.read(sessionId, signal);
-            return {
-                bindingId: session.defaultBinding.bindingId,
-                runtimeId: session.runtimeId,
-                agentRef: session.agentId,
-                workspaceRef: session.defaultBinding.workspaceRef,
-            };
-        });
-
-    readonly runtimeBrowserAccess = async (projectId: string, runtimeId: string, signal: AbortSignal) =>
-        await this.#withProject(projectId, signal, async (client) => {
-            const runtimes = await client.runtimes.list(signal);
-            const runtime = runtimes.find(
-                (candidate) => candidate.projectId === projectId && candidate.runtimeId === runtimeId,
-            );
-            if (runtime === undefined) {
-                throw new PlatformProjectError("NOT_FOUND", "Your Runtime was not found.", 404);
-            }
-            const grant = await client.runtimes.createAccessGrant(runtime.runtimeId, signal);
-            const access = await client.runtimes.redeemAccessGrant(runtime.channelId, grant, signal);
+            const access = await client.sessions.createAccess(sessionId, 600, signal);
             return { ...access, endpoint: this.configuration().origin };
         });
+
+    readonly nativeSessions = async (
+        projectId: string,
+        runtimeId: string,
+        request: Parameters<MobiusClient["runtimes"]["nativeSessions"]>[1],
+        signal: AbortSignal,
+    ) =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) => {
+                return await client.runtimes.nativeSessions(runtimeId, request, signal);
+            },
+            120000,
+        );
 
     readonly openChat = async (projectId: string, botId: string, userId: string, signal: AbortSignal) =>
         await this.#withBot(projectId, botId, userId, signal, async (client, bot) => {
@@ -377,13 +373,14 @@ export class PlatformProjectGateway {
         projectId: string,
         signal: AbortSignal,
         operation: (client: MobiusClient) => Promise<T>,
+        operationTimeoutMilliseconds = 15000,
     ): Promise<T> => {
         signal.throwIfAborted();
         const client = new MobiusClient({
             endpoint: this.configuration().origin,
             projectId: v.parse(platformIdentifier, projectId),
             credentialProvider: new MobiusAppCredentialProvider(v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET)),
-            operationTimeoutMilliseconds: 15000,
+            operationTimeoutMilliseconds,
         });
         try {
             return await operation(client);

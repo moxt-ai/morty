@@ -1,13 +1,8 @@
-import type { MobiusBrowserClient } from "@moxt-ai/mobius-sdk/browser";
-import {
-    connectMobiusChannelClient,
-    type MobiusChannelClient,
-    type SessionConfigOption,
-} from "@moxt-ai/mobius-sdk/channel";
+import type { SessionConfigOption } from "@moxt-ai/mobius-protocol";
+import type { MobiusBrowserClient, MobiusClient } from "@moxt-ai/mobius-sdk/browser";
 import { useEffect, useRef, useState } from "react";
 import { Select } from "../../components/ui/option-select.tsx";
 import type { BotChatApi, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
-import { runtimeRelayUrl } from "../../services/chat/bot-chat-api.ts";
 
 type Inventory =
     | { readonly kind: "loading" }
@@ -15,7 +10,7 @@ type Inventory =
           readonly kind: "ready";
           readonly workspace: ChatWorkspace;
           readonly options: readonly SessionConfigOption[];
-          readonly channel: MobiusChannelClient;
+          readonly sessionClient: MobiusClient;
           readonly sessionId: string;
       }
     | { readonly kind: "failed"; readonly message: string };
@@ -33,7 +28,7 @@ export function ChatControls({
 }: {
     readonly botId: string;
     readonly client: MobiusBrowserClient;
-    readonly requests: Pick<BotChatApi, "workspace" | "selectAgent" | "runtimeAccess">;
+    readonly requests: Pick<BotChatApi, "workspace" | "selectAgent" | "connectSession">;
     readonly onAgentChanged: () => void;
 }) {
     const [inventory, setInventory] = useState<Inventory>({ kind: "loading" });
@@ -42,7 +37,7 @@ export function ChatControls({
     useEffect(() => {
         const controller = new AbortController();
         let timer: ReturnType<typeof setTimeout> | undefined;
-        let channel: MobiusChannelClient | null = null;
+        let sessionClient: MobiusClient | null = null;
         const refresh = async () => {
             try {
                 const workspace = await requests.workspace(botId, controller.signal);
@@ -67,40 +62,21 @@ export function ChatControls({
             if (selected === null) {
                 throw new Error("Choose a connected local agent.");
             }
-            const access = await requests.runtimeAccess(botId, selected.runtimeId, controller.signal);
-            channel = await connectMobiusChannelClient({
-                relayUrl: runtimeRelayUrl(access),
-                onConfig: (event) => {
-                    if (!controller.signal.aborted && event.sessionId === snapshot.session.sessionId) {
-                        setInventory((current) =>
-                            current.kind === "ready" ? { ...current, options: event.configOptions } : current,
-                        );
-                    }
-                },
-            });
+            sessionClient = await requests.connectSession(botId, snapshot.session.sessionId, controller.signal);
             controller.signal.throwIfAborted();
-            const ready = await channel.prepareSession(
-                {
-                    sessionId: snapshot.session.sessionId,
-                    agentId: selected.agentRef,
-                    bindingId: "workspace",
-                    directoryId: selected.workspaceRef,
-                    additionalDirectoryIds: [],
-                },
-                controller.signal,
-            );
+            const ready = await sessionClient.sessions.prepare(snapshot.session.sessionId, controller.signal);
             controller.signal.throwIfAborted();
             setInventory({
                 kind: "ready",
                 workspace,
                 options: ready.configOptions,
-                channel,
+                sessionClient,
                 sessionId: snapshot.session.sessionId,
             });
             timer = setTimeout(() => void refresh(), 5000);
         };
         void open().catch((cause: unknown) => {
-            channel?.close();
+            sessionClient?.close();
             if (!controller.signal.aborted) {
                 setInventory({
                     kind: "failed",
@@ -112,7 +88,7 @@ export function ChatControls({
             controller.abort();
             clearTimeout(timer);
             operation.current?.abort();
-            channel?.close();
+            sessionClient?.close();
         };
     }, [botId, client, requests]);
     useEffect(() => {
@@ -183,17 +159,13 @@ export function ChatControls({
                 if (selected === null) {
                     throw new Error("Your selected agent is unavailable.");
                 }
-                const updated = await inventory.channel.configureSession(
+                const updated = await inventory.sessionClient.sessions.updateConfiguration(
+                    inventory.sessionId,
                     {
-                        sessionId: inventory.sessionId,
-                        agentId: selected.agentRef,
-                        bindingId: "workspace",
-                        directoryId: selected.workspaceRef,
                         configId,
                         value,
                         valueType: "select",
                         booleanValue: false,
-                        additionalDirectoryIds: [],
                     },
                     signal,
                 );

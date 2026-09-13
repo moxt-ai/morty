@@ -298,7 +298,7 @@ test("Given an anonymous user, When they provision a Platform Project and reload
             bindings,
         );
         expect(anotherUsersBot.status).toBe(404);
-        for (const operation of ["workspace", "runtime-access", "session-binding"]) {
+        for (const operation of ["workspace", "native-sessions", "session-access"]) {
             const deniedInventory = await worker.fetch(
                 new Request(`${chatBotEndpoint}/${operation}`, {
                     method: "POST",

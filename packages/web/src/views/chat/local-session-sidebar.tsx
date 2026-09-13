@@ -1,20 +1,11 @@
-import {
-    connectMobiusChannelClient,
-    type MobiusChannelClient,
-    type NativeSessionEntry,
-    type NativeSessionResult,
-} from "@moxt-ai/mobius-sdk/channel";
+import type { NativeSessionEntry, NativeSessionResult } from "@moxt-ai/mobius-sdk/channel";
 import { ChevronDown, Laptop, MessageSquare, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
 import type { BotChatApi, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
-import { runtimeRelayUrl } from "../../services/chat/bot-chat-api.ts";
 
 export interface OpenLocalSession {
-    readonly bindingId: string;
-    readonly workspaceRef: string;
-    readonly client: MobiusChannelClient;
     readonly agentRef: string;
     readonly result: Extract<NativeSessionResult, { readonly action: "import" | "fork" | "preview" }>;
     readonly entry: NativeSessionEntry;
@@ -25,11 +16,10 @@ type Directory =
     | {
           readonly kind: "ready";
           readonly runtimeId: string;
-          readonly client: MobiusChannelClient;
+          readonly discoveryId: string;
           readonly agentRef: string;
           readonly entries: readonly NativeSessionEntry[];
           readonly nextCursor: string | null;
-          readonly sourceSessionId: string;
       }
     | { readonly kind: "failed"; readonly message: string };
 
@@ -41,7 +31,7 @@ export function LocalSessionSidebar({
     activeEntryId,
 }: {
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "workspace" | "runtimeAccess" | "sessionBinding">;
+    readonly requests: Pick<BotChatApi, "workspace" | "nativeSessions">;
     readonly onOpen: (session: OpenLocalSession) => void;
     readonly onChat: () => void;
     readonly activeEntryId: string;
@@ -58,7 +48,6 @@ export function LocalSessionSidebar({
     useEffect(() => {
         const controller = new AbortController();
         lifetime.current = controller;
-        let client: MobiusChannelClient | null = null;
         const open = async () => {
             setDirectory({ kind: "loading" });
             const workspace = await requests.workspace(botId, controller.signal);
@@ -71,27 +60,16 @@ export function LocalSessionSidebar({
                 setDirectory({ kind: "empty" });
                 return;
             }
-            const access = await requests.runtimeAccess(botId, agent.runtimeId, controller.signal);
-            const connected = await connectMobiusChannelClient({
-                relayUrl: runtimeRelayUrl(access),
-            });
-            client = connected;
-            if (controller.signal.aborted) {
-                connected.close();
-                return;
-            }
-            const sourceSessionId = crypto.randomUUID();
-            const result = await connected.manageNativeSession(
+            const result = await requests.nativeSessions(
+                botId,
+                agent.runtimeId,
                 {
-                    kind: "native.session.request",
                     action: "list",
-                    requestId: crypto.randomUUID(),
-                    sessionId: sourceSessionId,
                     agentId: agent.agentRef,
-                    bindingId: "workspace",
                     directoryId: "default",
                     additionalDirectoryIds: [],
                     cursor: null,
+                    discoveryId: null,
                 },
                 controller.signal,
             );
@@ -102,15 +80,13 @@ export function LocalSessionSidebar({
             setDirectory({
                 kind: "ready",
                 runtimeId: agent.runtimeId,
-                client: connected,
+                discoveryId: result.sessionId,
                 agentRef: agent.agentRef,
                 entries: result.entries,
                 nextCursor: result.nextCursor,
-                sourceSessionId,
             });
         };
         void open().catch((cause: unknown) => {
-            client?.close();
             if (!controller.signal.aborted) {
                 setDirectory({
                     kind: "failed",
@@ -120,7 +96,6 @@ export function LocalSessionSidebar({
         });
         return () => {
             controller.abort();
-            client?.close();
         };
     }, [botId, requests, selected, revision]);
     const openEntry = async (entry: NativeSessionEntry) => {
@@ -131,15 +106,13 @@ export function LocalSessionSidebar({
         setOpening(entry.entryId);
         setError("");
         try {
-            const result = await directory.client.manageNativeSession(
+            const result = await requests.nativeSessions(
+                botId,
+                directory.runtimeId,
                 {
-                    kind: "native.session.request",
                     action: "import",
-                    requestId: crypto.randomUUID(),
-                    sessionId: directory.sourceSessionId,
-                    targetSessionId: crypto.randomUUID(),
+                    discoveryId: directory.discoveryId,
                     agentId: directory.agentRef,
-                    bindingId: "workspace",
                     directoryId: entry.directoryId,
                     additionalDirectoryIds: entry.additionalDirectories.map((item) => item.directoryId),
                     entryId: entry.entryId,
@@ -150,24 +123,10 @@ export function LocalSessionSidebar({
                 throw new Error("The agent returned an unexpected session.");
             }
             controller.signal.throwIfAborted();
-            const binding =
-                result.action === "preview"
-                    ? null
-                    : await requests.sessionBinding(botId, result.ready.sessionId, controller.signal);
-            controller.signal.throwIfAborted();
-            if (
-                binding !== null &&
-                (binding.runtimeId !== directory.runtimeId || binding.agentRef !== directory.agentRef)
-            ) {
-                throw new Error("The imported session resolved to a different agent or workspace.");
-            }
             onOpen({
-                client: directory.client,
                 agentRef: directory.agentRef,
                 result,
                 entry,
-                bindingId: binding?.bindingId ?? "",
-                workspaceRef: binding?.workspaceRef ?? entry.directoryId,
             });
             setMobileExpanded(false);
         } catch (cause) {
@@ -187,17 +146,16 @@ export function LocalSessionSidebar({
         }
         setOpening("more");
         try {
-            const result = await directory.client.manageNativeSession(
+            const result = await requests.nativeSessions(
+                botId,
+                directory.runtimeId,
                 {
-                    kind: "native.session.request",
                     action: "list",
-                    requestId: crypto.randomUUID(),
-                    sessionId: directory.sourceSessionId,
                     agentId: directory.agentRef,
-                    bindingId: "workspace",
                     directoryId: "default",
                     additionalDirectoryIds: [],
                     cursor: directory.nextCursor,
+                    discoveryId: directory.discoveryId,
                 },
                 AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]),
             );

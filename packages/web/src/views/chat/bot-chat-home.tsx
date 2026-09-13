@@ -70,7 +70,7 @@ export function BotChatHome({
 }: {
     readonly requests: Pick<
         BotChatApi,
-        "listBots" | "access" | "workspace" | "selectAgent" | "runtimeAccess" | "sessionBinding"
+        "listBots" | "access" | "workspace" | "selectAgent" | "nativeSessions" | "connectSession"
     >;
 }) {
     const [state, setState] = useState<State>({ kind: "loading" });
@@ -249,6 +249,8 @@ export function BotChatHome({
             )}
             {conversation.kind === "local" && state.kind === "ready" ? (
                 <LocalSessionPane
+                    botId={state.bot.botId}
+                    requests={requests}
                     key={
                         conversation.session.result.action === "preview"
                             ? conversation.session.result.targetSessionId

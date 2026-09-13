@@ -5,6 +5,12 @@ export default defineConfig({
     resolve: {
         alias: [
             {
+                find: "@moxt-ai/mobius-sdk/browser",
+                replacement: fileURLToPath(
+                    new URL("../../third-party/mobius/packages/mobius-sdk/src/browser.ts", import.meta.url),
+                ),
+            },
+            {
                 find: "@moxt-ai/mobius-sdk/channel",
                 replacement: fileURLToPath(
                     new URL("../../third-party/mobius/packages/mobius-sdk/src/channel.ts", import.meta.url),

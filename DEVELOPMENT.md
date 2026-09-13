@@ -50,9 +50,10 @@ own origin. `MOBIUS_APP_ID` and `MOBIUS_APP_SECRET` authenticate Worker operatio
 The active Chat API issues short-lived conversation credentials after checking Bot
 ownership. The browser uses `createMobiusConversationSession` to communicate directly
 with Mobius, including history, messages, events, and credential refresh.
-Runtime inventory and native sessions use the channel SDK with server-issued
-Runtime grants. The AppCredential needs `runtime:connect`; `session-binding` reads
-the imported session's registered binding inside the user's Project scope.
+The Worker discovers/imports native sessions through the Project SDK. Its
+`session-access` endpoint issues credentials scoped to the selected Session inside
+the user's Project. The browser uses those credentials with the Session SDK to
+communicate directly with Mobius; it receives no Runtime-wide host credential.
 Slack's `MobiusGateway` also calls Mobius
 directly and rejects recursive configuration and redirects.
 

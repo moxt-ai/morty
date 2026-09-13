@@ -1,3 +1,5 @@
+import { decodeNativeSessionResult } from "@moxt-ai/mobius-protocol";
+import { MobiusClient } from "@moxt-ai/mobius-sdk/browser";
 import * as v from "valibot";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 
@@ -33,14 +35,15 @@ const workspaceSchema = v.object({
 });
 export type ChatWorkspace = v.InferOutput<typeof workspaceSchema>;
 export type ChatAgentSelection = v.InferOutput<typeof agentSelectionSchema>;
-const runtimeAccessSchema = v.object({
-    channelId: identifier,
+const sessionAccessSchema = v.object({
+    sessionId: identifier,
     projectId: identifier,
-    hostToken: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{43}$/u)),
+    credential: v.pipe(v.string(), v.regex(/^msession_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}$/u)),
+    expiresAt: v.pipe(v.string(), v.isoTimestamp()),
     endpoint: v.pipe(v.string(), v.url()),
 });
-export function runtimeRelayUrl(access: v.InferOutput<typeof runtimeAccessSchema>): string {
-    const endpoint = new URL(access.endpoint);
+function sessionEndpoint(value: string): string {
+    const endpoint = new URL(value);
     if (
         endpoint.username !== "" ||
         endpoint.password !== "" ||
@@ -50,12 +53,9 @@ export function runtimeRelayUrl(access: v.InferOutput<typeof runtimeAccessSchema
         (endpoint.protocol !== "https:" &&
             !(endpoint.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname)))
     ) {
-        throw new CloudApiError("INVALID_RUNTIME_ENDPOINT", "The Runtime endpoint is invalid.");
+        throw new CloudApiError("INVALID_SESSION_ENDPOINT", "The Session endpoint is invalid.");
     }
-    const url = new URL(`/mobius/api/channels/${encodeURIComponent(access.channelId)}/host`, endpoint);
-    url.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
-    url.searchParams.set("token", access.hostToken);
-    return url.href;
+    return endpoint.origin;
 }
 
 export class BotChatApi {
@@ -80,23 +80,56 @@ export class BotChatApi {
     readonly selectAgent = async (botId: string, selection: ChatAgentSelection, parent: AbortSignal): Promise<void> => {
         await this.#request(botId, "setup", v.parse(agentSelectionSchema, selection), parent);
     };
-    readonly runtimeAccess = async (botId: string, runtimeId: string, parent: AbortSignal) =>
-        v.parse(
-            runtimeAccessSchema,
-            await this.#request(botId, "runtime-access", { runtimeId: v.parse(identifier, runtimeId) }, parent),
+    readonly nativeSessions = async (
+        botId: string,
+        runtimeId: string,
+        input: Parameters<MobiusClient["runtimes"]["nativeSessions"]>[1],
+        signal: AbortSignal,
+    ) =>
+        decodeNativeSessionResult(
+            JSON.stringify(await this.#request(botId, "native-sessions", { ...input, runtimeId }, signal)),
         );
-    readonly sessionBinding = async (botId: string, sessionId: string, parent: AbortSignal) =>
-        v.parse(
-            v.object({ bindingId: identifier, runtimeId: identifier, agentRef: identifier, workspaceRef: v.string() }),
-            await this.#request(botId, "session-binding", { sessionId: v.parse(identifier, sessionId) }, parent),
-        );
+
+    readonly connectSession = async (botId: string, sessionId: string, signal: AbortSignal): Promise<MobiusClient> => {
+        const readAccess = async (parent: AbortSignal) =>
+            v.parse(
+                sessionAccessSchema,
+                await this.#request(botId, "session-access", { sessionId: v.parse(identifier, sessionId) }, parent),
+            );
+        let access = await readAccess(signal);
+        const endpoint = sessionEndpoint(access.endpoint);
+        const projectId = access.projectId;
+        if (access.sessionId !== sessionId) {
+            throw new CloudApiError("INVALID_SESSION_ACCESS", "The selected Session could not be verified.");
+        }
+        return new MobiusClient({
+            endpoint,
+            projectId,
+            operationTimeoutMilliseconds: 120000,
+            credentialProvider: {
+                credential: async (parent) => {
+                    if (Date.parse(access.expiresAt) - Date.now() < 30000) {
+                        access = await readAccess(parent);
+                    }
+                    if (
+                        sessionEndpoint(access.endpoint) !== endpoint ||
+                        access.projectId !== projectId ||
+                        access.sessionId !== sessionId
+                    ) {
+                        throw new CloudApiError("INVALID_SESSION_ACCESS", "The selected Session changed.");
+                    }
+                    return access.credential;
+                },
+            },
+        });
+    };
     readonly #request = async (
         botId: string,
         operation: string,
         body: unknown,
         parent: AbortSignal,
     ): Promise<unknown> => {
-        const signal = AbortSignal.any([parent, AbortSignal.timeout(45000)]);
+        const signal = AbortSignal.any([parent, AbortSignal.timeout(operation === "native-sessions" ? 120000 : 45000)]);
         const requestedBotId = v.parse(identifier, botId);
         const token = await this.#getToken(signal);
         if (token === null) {
