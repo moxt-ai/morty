@@ -14,6 +14,7 @@ const projectSchema = v.pipe(
 export type ManagedProject = v.InferOutput<typeof projectSchema>;
 
 export interface ManagementApiOptions {
+    readonly projectId: string;
     readonly fetchRequest?: (request: Request) => Promise<Response>;
     readonly getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly origin: string;
@@ -23,10 +24,12 @@ export class ManagementApi {
     readonly #fetchRequest: (request: Request) => Promise<Response>;
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly #origin: string;
+    readonly #projectId: string;
     constructor(options: ManagementApiOptions) {
         this.#fetchRequest = options.fetchRequest ?? ((request) => fetch(request));
         this.#getToken = options.getToken;
         this.#origin = options.origin;
+        this.#projectId = v.parse(identifier, options.projectId);
     }
 
     readonly listBots = async (signal: AbortSignal): Promise<readonly ManagedBot[]> =>
@@ -64,6 +67,7 @@ export class ManagementApi {
                 signal,
                 headers: {
                     authorization: `Bearer ${token}`,
+                    "X-Mobius-Project-Id": this.#projectId,
                     ...(body === undefined ? {} : { "content-type": "application/json" }),
                 },
                 ...(body === undefined ? {} : { body: JSON.stringify(body) }),

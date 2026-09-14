@@ -93,6 +93,7 @@ export class SlackManagementService {
     readonly #manifestApi: SlackWebApi;
     readonly #nowEpochMilliseconds: () => number;
     readonly #publicBaseUrl: string;
+    readonly #projectId: string;
     readonly #secrets: SecretCipher;
     readonly #mobius: MobiusConnectionService;
     constructor(cx: {
@@ -103,7 +104,7 @@ export class SlackManagementService {
             readonly secretEncryption: SecretCipher;
             readonly nowEpochMilliseconds: () => number;
         };
-        readonly config: { readonly publicBaseUrl: string };
+        readonly config: { readonly publicBaseUrl: string; readonly projectId: string };
     }) {
         const { slackEventStorage: storage } = cx.storages;
         const { mobiusConnections: mobius } = cx.services;
@@ -116,6 +117,7 @@ export class SlackManagementService {
         this.#manifestApi = manifestApi;
         this.#nowEpochMilliseconds = nowEpochMilliseconds;
         this.#publicBaseUrl = publicBaseUrl;
+        this.#projectId = cx.config.projectId;
         this.#secrets = secrets;
     }
 
@@ -183,7 +185,7 @@ export class SlackManagementService {
                 appName: input.name,
                 clientId: input.clientId,
                 clientSecretEncrypted: await this.#secrets.encrypt(input.clientSecret, signal),
-                oauthRedirectUri: `${this.#publicBaseUrl}/mobius-slack/api/slack/oauth/callback`,
+                oauthRedirectUri: `${this.#publicBaseUrl}/mobius-slack/api/slack/oauth/callback?projectId=${encodeURIComponent(this.#projectId)}`,
                 signingSecretEncrypted: await this.#secrets.encrypt(input.signingSecret, signal),
                 slackAppId: input.slackAppId,
                 tenantId: principal.tenantId,
@@ -273,7 +275,7 @@ export class SlackManagementService {
 
     readonly manifest = (name: string): SlackManifest => {
         validateAppName(name);
-        const eventsUrl = `${this.#publicBaseUrl}/mobius-slack/api/slack/events`;
+        const eventsUrl = `${this.#publicBaseUrl}/mobius-slack/api/slack/events?projectId=${encodeURIComponent(this.#projectId)}`;
         return {
             display_information: {
                 description: "A Mobius bot in Slack",
@@ -291,7 +293,9 @@ export class SlackManagementService {
                 bot_user: { always_online: true, display_name: name },
             },
             oauth_config: {
-                redirect_urls: [`${this.#publicBaseUrl}/mobius-slack/api/slack/oauth/callback`],
+                redirect_urls: [
+                    `${this.#publicBaseUrl}/mobius-slack/api/slack/oauth/callback?projectId=${encodeURIComponent(this.#projectId)}`,
+                ],
                 scopes: {
                     bot: [
                         "app_mentions:read",

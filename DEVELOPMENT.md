@@ -39,16 +39,30 @@ deployment. Shared runtime helpers remain directly under `packages/worker/src/in
 
 ## Storage
 
-Every environment binds one D1 database as `DATABASE` and one R2 bucket as
-`ATTACHMENTS`. The Cloud-owned schema is `packages/worker/migrations/0001_initial.sql`.
-Apply it locally with:
+Every environment binds regional D1 databases as `CHAT_DATABASE_APAC` and
+`CHAT_DATABASE_WNAM`, with corresponding `CHAT_ATTACHMENTS_APAC` and
+`CHAT_ATTACHMENTS_WNAM` R2 buckets. Chat resolves the caller-supplied Project through
+Platform's public storage-placement endpoint and verifies ownership separately.
+The browser persists `{ userId, projectId }` and supplies `X-Mobius-Project-Id`.
+Only one-time pairing and transfer tickets embed Project context; anonymous
+credentials are opaque. Apply the schema locally with:
 
 ```sh
-pnpm exec wrangler d1 migrations apply DATABASE --local
+pnpm exec wrangler d1 migrations apply CHAT_DATABASE_APAC --local
+pnpm exec wrangler d1 migrations apply CHAT_DATABASE_WNAM --local
 ```
 
 Staging and production resources are named in `wrangler.jsonc`. Apply remote
 migrations with the matching Wrangler environment.
+
+Slack management requests also supply `X-Mobius-Project-Id`. Generated Slack
+event and OAuth callback URLs, and attachment links, carry a `projectId` query
+parameter. Queue deliveries contain `{ projectId, message }` so asynchronous
+processing resolves the same regional bindings. Callback routing does not replace
+Slack signature or OAuth-state validation.
+
+Clerk binding returns only the Chat user ID. Discarding a conflicting local
+workspace opens transfer-link recovery; it cannot discover the other Project.
 
 ## External Mobius
 

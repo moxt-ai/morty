@@ -1,7 +1,9 @@
+import { type AgentDisplayContent, MobiusAgentActivityEvent } from "@moxt-ai/mobius-sdk";
 import { type MobiusBrowserClient, type MobiusBrowserHistory, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
-import { MessageSquare, Send, SquarePen } from "lucide-react";
+import { MessageSquare, Send } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
+import { AgentRichContent } from "../../components/agents/agent-rich-content.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
@@ -58,12 +60,80 @@ type State =
           readonly bot: ManagedBot;
           readonly client: MobiusBrowserClient;
           readonly history: MobiusBrowserHistory;
+          readonly activityContents: ReadonlyMap<string, readonly AgentDisplayContent[]>;
       }
     | { readonly kind: "failed"; readonly message: string };
 type Sending =
     | { readonly kind: "idle" }
     | { readonly kind: "sending" }
     | { readonly kind: "failed"; readonly message: string };
+
+function BotArtifactContent({
+    botId,
+    contents,
+    requests,
+    sessionId,
+}: {
+    readonly botId: string;
+    readonly contents: readonly AgentDisplayContent[];
+    readonly requests: Pick<BotChatApi, "connectSession">;
+    readonly sessionId: string;
+}) {
+    const [client, setClient] = useState<Awaited<ReturnType<BotChatApi["connectSession"]>> | null | undefined>();
+    useEffect(() => {
+        const controller = new AbortController();
+        let connected: Awaited<ReturnType<BotChatApi["connectSession"]>> | null = null;
+        void requests
+            .connectSession(botId, sessionId, controller.signal)
+            .then((value) => {
+                if (controller.signal.aborted) {
+                    value.close();
+                    return;
+                }
+                connected = value;
+                setClient(value);
+            })
+            .catch(() => {
+                if (!controller.signal.aborted) {
+                    setClient(null);
+                }
+            });
+        return () => {
+            controller.abort();
+            connected?.close();
+        };
+    }, [botId, requests, sessionId]);
+    return client === undefined ? (
+        <p className="text-xs text-muted-foreground">Loading image…</p>
+    ) : client === null ? (
+        <p className="text-xs text-muted-foreground">Image content could not be loaded.</p>
+    ) : (
+        <AgentRichContent contents={contents} serviceClient={client} sessionId={sessionId} />
+    );
+}
+
+function BotTurnArtifacts({
+    activities,
+    activityContents,
+    botId,
+    requests,
+    sessionId,
+}: {
+    readonly activities: MobiusBrowserHistory["turns"][number]["activities"];
+    readonly activityContents: ReadonlyMap<string, readonly AgentDisplayContent[]>;
+    readonly botId: string;
+    readonly requests: Pick<BotChatApi, "connectSession">;
+    readonly sessionId: string;
+}) {
+    const contents = activities.flatMap((activity) =>
+        (activityContents.get(activity.activityId) ?? []).filter((content) => content.type === "image"),
+    );
+    return contents.length === 0 ? null : (
+        <section aria-label="Agent image output" className="min-w-0 px-4">
+            <BotArtifactContent botId={botId} contents={contents} requests={requests} sessionId={sessionId} />
+        </section>
+    );
+}
 
 function updateHistory(current: State, client: MobiusBrowserClient, history: MobiusBrowserHistory): State {
     if (
@@ -74,6 +144,19 @@ function updateHistory(current: State, client: MobiusBrowserClient, history: Mob
         return current;
     }
     return { ...current, history };
+}
+
+function updateActivityContents(
+    current: State,
+    client: MobiusBrowserClient,
+    event: { readonly payload: unknown },
+): State {
+    if (current.kind !== "ready" || current.client !== client || !(event.payload instanceof MobiusAgentActivityEvent)) {
+        return current;
+    }
+    const contents = new Map(current.activityContents);
+    contents.set(event.payload.activityId, event.payload.content);
+    return { ...current, activityContents: contents };
 }
 
 function attemptStatus(kind: string): string {
@@ -171,7 +254,7 @@ export function BotChatHome({
             client = session;
             const history = await session.history.read(new MobiusPageRequest(100, ""), controller.signal);
             controller.signal.throwIfAborted();
-            setState({ kind: "ready", bot, client: session, history });
+            setState({ activityContents: new Map(), kind: "ready", bot, client: session, history });
             const refresh = async () => {
                 const updated = await session.history.read(new MobiusPageRequest(100, ""), controller.signal);
                 if (!controller.signal.aborted) {
@@ -200,13 +283,20 @@ export function BotChatHome({
             };
             reconciliationTimer = setTimeout(() => void reconcile(), 5000);
             let events = await session.readEvents(new MobiusPageRequest(10, ""), controller.signal);
+            for (const event of events.events) {
+                setState((current) => updateActivityContents(current, session, event));
+            }
             while (events.hasMore) {
                 events = await session.readEvents(new MobiusPageRequest(10, events.cursor), controller.signal);
+                for (const event of events.events) {
+                    setState((current) => updateActivityContents(current, session, event));
+                }
             }
             const subscription = await session.events.subscribe(
                 events.cursor,
                 {
-                    receive: async () => {
+                    receive: async (event) => {
+                        setState((current) => updateActivityContents(current, session, event));
                         await refresh();
                         return true;
                     },
@@ -275,8 +365,12 @@ export function BotChatHome({
     };
 
     return (
-        <main aria-label="Chat" className="flex h-dvh min-h-0 flex-col bg-background text-foreground sm:flex-row">
-            {state.kind === "ready" ? (
+        <main
+            aria-label="Chat"
+            data-chat-state={state.kind === "ready" ? "connected" : "disconnected"}
+            className="flex h-dvh min-h-0 flex-col bg-background text-foreground sm:flex-row"
+        >
+            {state.kind === "ready" && (
                 <LocalSessionSidebar
                     activeEntryId={conversation.kind === "local" ? conversation.session.entry.entryId : ""}
                     botId={state.bot.botId}
@@ -285,16 +379,6 @@ export function BotChatHome({
                     onChat={showBot}
                     onNewConversation={newConversation}
                 />
-            ) : (
-                <aside
-                    aria-label="Conversations"
-                    className="hidden w-60 shrink-0 border-r border-border bg-muted/30 p-4 sm:flex sm:flex-col"
-                >
-                    <div className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium">
-                        <SquarePen className="size-4" aria-hidden="true" />
-                        New Conversation
-                    </div>
-                </aside>
             )}
             {conversation.kind === "local" && state.kind === "ready" ? (
                 <LocalSessionPane
@@ -376,19 +460,26 @@ export function BotChatHome({
                                             {attemptStatus(turn.attempt.kind)}
                                         </p>
                                     ) : null}
+                                    <BotTurnArtifacts
+                                        activities={turn.activities}
+                                        activityContents={state.activityContents}
+                                        botId={state.bot.botId}
+                                        requests={requests}
+                                        sessionId={turn.sessionId}
+                                    />
                                     <AttemptFailure attempt={turn.attempt} botId={state.bot.botId} />
                                 </div>
                             ))
                         )}
                     </div>
-                    <form
-                        className="mx-auto mb-6 w-full max-w-3xl px-4"
-                        onSubmit={(event) => {
-                            event.preventDefault();
-                            void send();
-                        }}
-                    >
-                        {state.kind === "ready" && (
+                    {state.kind === "ready" && (
+                        <form
+                            className="mx-auto mb-6 w-full max-w-3xl px-4"
+                            onSubmit={(event) => {
+                                event.preventDefault();
+                                void send();
+                            }}
+                        >
                             <div className="mb-3">
                                 <ChatControls
                                     botId={state.bot.botId}
@@ -397,32 +488,30 @@ export function BotChatHome({
                                     onAgentChanged={reconnect}
                                 />
                             </div>
-                        )}
-                        {sending.kind === "failed" && (
-                            <p role="alert" className="mb-2 text-sm text-destructive">
-                                {sending.message}
-                            </p>
-                        )}
-                        <div className="flex items-end gap-3 rounded-2xl border border-border bg-card p-4">
-                            <Textarea
-                                aria-label="Message"
-                                placeholder="Message your agent…"
-                                value={draft}
-                                onChange={(event) => setDraft(event.target.value)}
-                                disabled={state.kind !== "ready" || sending.kind === "sending"}
-                            />
-                            <Button
-                                type="submit"
-                                size="icon"
-                                aria-label="Send message"
-                                disabled={
-                                    state.kind !== "ready" || sending.kind === "sending" || draft.trim().length === 0
-                                }
-                            >
-                                <Send className="size-4" aria-hidden="true" />
-                            </Button>
-                        </div>
-                    </form>
+                            {sending.kind === "failed" && (
+                                <p role="alert" className="mb-2 text-sm text-destructive">
+                                    {sending.message}
+                                </p>
+                            )}
+                            <div className="flex items-end gap-3 rounded-2xl border border-border bg-card p-4">
+                                <Textarea
+                                    aria-label="Message"
+                                    placeholder="Message your agent…"
+                                    value={draft}
+                                    onChange={(event) => setDraft(event.target.value)}
+                                    disabled={sending.kind === "sending"}
+                                />
+                                <Button
+                                    type="submit"
+                                    size="icon"
+                                    aria-label="Send message"
+                                    disabled={sending.kind === "sending" || draft.trim().length === 0}
+                                >
+                                    <Send className="size-4" aria-hidden="true" />
+                                </Button>
+                            </div>
+                        </form>
+                    )}
                 </section>
             )}
         </main>

@@ -22,16 +22,19 @@ export class AuthenticationService {
     private readonly clerk: ClerkGateway;
     private readonly identities: IdentityStorage;
     private readonly logger: AuditLogger;
+    private readonly projectId: string | undefined;
 
     constructor(cx: {
         readonly storages: { readonly configuration: ConfigurationStorage; readonly identities: IdentityStorage };
         readonly gateways: { readonly clerk: ClerkGateway };
         readonly logger: AuditLogger;
+        readonly config: { readonly bindings: { readonly CHAT_PROJECT_ID?: string } };
     }) {
         this.configuration = cx.storages.configuration;
         this.clerk = cx.gateways.clerk;
         this.identities = cx.storages.identities;
         this.logger = cx.logger;
+        this.projectId = cx.config.bindings.CHAT_PROJECT_ID;
     }
 
     readonly publicConfiguration = (): { readonly publishableKey: string } | null => {
@@ -43,7 +46,7 @@ export class AuthenticationService {
         if (token === undefined) {
             return { kind: "unauthenticated" };
         }
-        if (token.startsWith("mobius_anon_v1_")) {
+        if (token.startsWith("mobius_anon_")) {
             const userId = await this.identities.authenticateAnonymous(token, signal);
             return userId === null
                 ? { kind: "unauthenticated" }
@@ -57,18 +60,26 @@ export class AuthenticationService {
         if (session === null) {
             return { kind: "unauthenticated" };
         }
+        const userId = await this.identities.resolveOrCreateClerk(session.userId, Date.now(), signal);
+        if (this.projectId !== undefined && !(await this.identities.ownsProject(userId, this.projectId, signal))) {
+            return { kind: "unauthenticated" };
+        }
         return {
             kind: "authenticated",
             session: {
                 authentication: { kind: "clerk" },
                 sessionId: session.sessionId,
-                userId: await this.identities.resolveOrCreateClerk(session.userId, Date.now(), signal),
+                userId,
             },
         };
     };
 
-    readonly createAnonymous = async (signal: AbortSignal): Promise<AnonymousIdentity> => {
-        const identity = await this.identities.createAnonymous(Date.now(), signal);
+    readonly createAnonymous = async (
+        userId: string,
+        projectId: string,
+        signal: AbortSignal,
+    ): Promise<AnonymousIdentity> => {
+        const identity = await this.identities.createAnonymous(userId, projectId, Date.now(), signal);
         this.logger.info({ event: "anonymous-user-created", userId: identity.userId }, "Identity audit event");
         return identity;
     };
@@ -160,7 +171,7 @@ export class AuthenticationService {
     };
 
     readonly #verifyClerk = async (token: string | undefined, signal: AbortSignal) => {
-        if (token === undefined || token.startsWith("mobius_anon_v1_")) {
+        if (token === undefined || token.startsWith("mobius_anon_")) {
             return null;
         }
         const configuration = this.configuration.read();

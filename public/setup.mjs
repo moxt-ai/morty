@@ -36,7 +36,7 @@ function text(value, pattern = /^.+$/u) {
 }
 
 const identifier = (value) => text(value, /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u);
-const credential = (value) => text(value, /^mobius_anon_v1_[A-Za-z0-9_-]{43}$/u);
+const credential = (value) => text(value, /^mobius_anon_v2_[A-Za-z0-9_-]{43}$/u);
 
 function origin(value) {
     const url = new URL(text(value));
@@ -207,7 +207,9 @@ async function loadConfiguration(directory, base) {
         config.base_url !== undefined && config.base_url !== base
             ? {}
             : Object.fromEntries(
-                  Object.entries(config).filter(([key]) => ["user_token", "user_id", "bot_id"].includes(key)),
+                  Object.entries(config).filter(([key]) =>
+                      ["user_token", "user_id", "project_id", "bot_id"].includes(key),
+                  ),
               );
     return { directory, base, config: identity };
 }
@@ -243,6 +245,7 @@ async function request(context, route, body, authenticated = true) {
     const headers = { "content-type": "application/json" };
     if (authenticated) {
         headers.authorization = `Bearer ${credential(context.config.user_token)}`;
+        headers["X-Mobius-Project-Id"] = identifier(context.config.project_id);
     }
     const response = await fetch(new URL(`/mobius-cloud/api${route}`, context.base), {
         method: body === undefined ? "GET" : "POST",
@@ -278,7 +281,12 @@ function readOptions() {
         if (values.token === undefined) {
             fail("PAIRING_TICKET_REQUIRED");
         }
-        return { mode: "pair", base, harness, token: text(values.token, /^[A-Za-z0-9_-]{43}$/u) };
+        return {
+            mode: "pair",
+            base,
+            harness,
+            token: text(values.token, /^mobius_pair_v2\.[A-Za-z0-9_-]{1,128}\.[A-Za-z0-9_-]{43}$/u),
+        };
     }
     if (values.token !== undefined) {
         fail("INVALID_ARGUMENTS");
@@ -313,6 +321,7 @@ async function prepareIdentity(context, options) {
         user_token: credential(identity.token),
         user_id: identifier(identity.userId),
         bot_id: identifier(object(identity.bot).botId),
+        project_id: identifier(identity.projectId),
         entry: "setup",
     });
 }

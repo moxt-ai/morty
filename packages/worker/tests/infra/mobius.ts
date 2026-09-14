@@ -124,6 +124,7 @@ export async function createMobiusPlatformFixture() {
         }
         return {
             app,
+            attachments: bindings.R2_BUCKET_APAC,
             appId: application.appId,
             appCredential: application.defaultCredential.credential,
             baseUrl: `http://127.0.0.1:${address.port}`,

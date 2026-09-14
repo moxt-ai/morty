@@ -61,14 +61,17 @@ function sessionEndpoint(value: string): string {
 export class BotChatApi {
     readonly #fetchRequest: (request: Request) => Promise<Response>;
     readonly #origin: string;
+    readonly #projectId: string;
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly listBots: ManagementApi["listBots"];
     constructor(options: {
         readonly fetchRequest?: (request: Request) => Promise<Response>;
         readonly origin: string;
+        readonly projectId: string;
         readonly getToken: (signal: AbortSignal) => Promise<string | null>;
     }) {
         this.#origin = v.parse(v.pipe(v.string(), v.url()), options.origin);
+        this.#projectId = v.parse(identifier, options.projectId);
         this.#fetchRequest = options.fetchRequest ?? ((request) => fetch(request));
         this.#getToken = options.getToken;
         this.listBots = new ManagementApi(options).listBots;
@@ -91,7 +94,7 @@ export class BotChatApi {
         if (
             url.origin !== new URL(this.#origin).origin ||
             url.pathname !== "/pair.md" ||
-            !/^[A-Za-z0-9_-]{43}$/u.test(url.searchParams.get("token") ?? "")
+            !/^mobius_pair_v2\.[A-Za-z0-9_-]{1,128}\.[A-Za-z0-9_-]{43}$/u.test(url.searchParams.get("token") ?? "")
         ) {
             throw new CloudApiError("INVALID_PAIRING_INSTRUCTION", "Pairing instruction is invalid.");
         }
@@ -191,7 +194,11 @@ export class BotChatApi {
                     method: "POST",
                     signal,
                     redirect: "error",
-                    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                    headers: {
+                        authorization: `Bearer ${token}`,
+                        "content-type": "application/json",
+                        "X-Mobius-Project-Id": this.#projectId,
+                    },
                     body: body === undefined ? null : JSON.stringify(body),
                 },
             ),

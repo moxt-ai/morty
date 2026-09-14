@@ -33,6 +33,7 @@ export async function verifySession(
     activeSessionId: string | undefined,
     getToken: () => Promise<string | null>,
     requestSignal: AbortSignal,
+    projectId: string,
 ): Promise<void> {
     const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(10_000)]);
     if (activeSessionId !== expectedSessionId) {
@@ -43,7 +44,7 @@ export async function verifySession(
         throw new SessionError("FORBIDDEN");
     }
     const result = await fetch("/mobius-cloud/api/session", {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}`, "X-Mobius-Project-Id": projectId },
         signal,
     });
     if (!result.ok) {

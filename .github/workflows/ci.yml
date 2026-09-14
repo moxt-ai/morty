@@ -71,7 +71,9 @@ jobs:
       - run: pnpm check
 
       - name: Validate Cloud D1 migrations
-        run: pnpm exec wrangler d1 migrations apply DATABASE --local
+        run: |
+          pnpm exec wrangler d1 migrations apply CHAT_DATABASE_APAC --local
+          pnpm exec wrangler d1 migrations apply CHAT_DATABASE_WNAM --local
 
   deploy:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')

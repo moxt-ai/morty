@@ -14,6 +14,26 @@ async function oauthUrl(app: Awaited<ReturnType<typeof createTestApplication>>) 
     return new URL(v.parse(v.object({ url: v.string() }), await response.json()).url);
 }
 describe("Slack management journeys", () => {
+    it("Given a Project workspace, When its Slack manifest is requested, Then events and OAuth callbacks retain the Project context", async () => {
+        const app = await createTestApplication();
+        const response = await app.request("/mobius-slack/api/slack/manifest?name=Project%20bot", {
+            headers: await authorization(app),
+        });
+        expect(response.status).toBe(200);
+        const manifest = v.parse(
+            v.object({
+                oauth_config: v.object({ redirect_urls: v.array(v.string()) }),
+                settings: v.object({ event_subscriptions: v.object({ request_url: v.string() }) }),
+            }),
+            await response.json(),
+        );
+        for (const target of [
+            ...manifest.oauth_config.redirect_urls,
+            manifest.settings.event_subscriptions.request_url,
+        ]) {
+            expect(new URL(target).searchParams.get("projectId")).toBe(`prj_a01_${"a".repeat(24)}`);
+        }
+    });
     it("Given an authenticated user, When they list bots and complete OAuth, Then their configured bots and connection are visible", async () => {
         const app = await createTestApplication();
         const headers = { authorization: `Bearer ${await app.humanToken("tenant-1")}` };

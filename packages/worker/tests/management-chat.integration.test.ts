@@ -35,16 +35,25 @@ async function fixture() {
         CLERK_JWT_KEY: issuer.publicKey,
         CLERK_PUBLISHABLE_KEY: issuer.publishableKey,
         DATABASE: database,
+        CHAT_DATABASE_APAC: database,
+        CHAT_DATABASE_WNAM: database,
+        CHAT_ATTACHMENTS_APAC: mobius.attachments,
+        CHAT_ATTACHMENTS_WNAM: mobius.attachments,
         MOBIUS_APP_ID: mobius.appId,
         MOBIUS_APP_SECRET: mobius.appCredential,
         MOBIUS_BASE_URL: mobius.baseUrl,
         MOBIUS_PROJECT_LOCATION_HINT: "apac",
     };
     const app = new Hono().all("*", (context) => worker.fetch(context.req.raw, bindings));
+    const projects = new Map<string, string>();
     const request = (path: string, token: string, method = "GET", body?: object) =>
         app.request(`https://cloud.test/mobius-cloud/api/${path}`, {
             method,
-            headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+            headers: {
+                authorization: `Bearer ${token}`,
+                "content-type": "application/json",
+                ...(projects.has(token) ? { "X-Mobius-Project-Id": projects.get(token) ?? "" } : {}),
+            },
             ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         });
     const anonymous = async () => {
@@ -52,7 +61,9 @@ async function fixture() {
             method: "POST",
         });
         expect(response.status).toBe(201);
-        return v.parse(v.object({ token: v.string() }), await response.json()).token;
+        const identity = v.parse(v.object({ token: v.string(), projectId: v.string() }), await response.json());
+        projects.set(identity.token, identity.projectId);
+        return identity.token;
     };
     return { app, mobius, request, anonymous };
 }
@@ -157,6 +168,7 @@ test("Given a user-owned Platform Bot, When session records are managed, Then ch
 test("Given a workspace, When unauthenticated or malformed setup requests arrive, Then the HTTP boundary rejects them", async () => {
     const { request, app, anonymous } = await fixture();
     const alice = await anonymous();
+    const { project } = v.parse(projectSchema, await (await request("management/project", alice)).json());
     expect((await request("management/project", "invalid-token", "POST", { displayName: "Project" })).status).toBe(401);
     for (const body of [
         "{",
@@ -165,7 +177,11 @@ test("Given a workspace, When unauthenticated or malformed setup requests arrive
     ]) {
         const invalid = await app.request("https://cloud.test/mobius-cloud/api/management/project", {
             method: "POST",
-            headers: { authorization: `Bearer ${alice}`, "content-type": "application/json" },
+            headers: {
+                authorization: `Bearer ${alice}`,
+                "content-type": "application/json",
+                "X-Mobius-Project-Id": project.projectId,
+            },
             body,
         });
         expect(invalid.status).toBe(400);

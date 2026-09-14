@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import { projectBindings } from "../../composition/chat-shards.ts";
 import { ClerkGateway } from "../../gateway/clerk-gateway.ts";
 import { IdentityGateway } from "../../gateway/identity-gateway.ts";
 import { FetchMobiusTransport, MobiusGateway } from "../../gateway/mobius-gateway.ts";
@@ -17,7 +18,7 @@ import {
     DatabaseSlackAppDirectory,
 } from "./index.ts";
 import { CloudflareSlackQueue } from "./infra/cloudflare-slack-queue.ts";
-import type { SlackQueueMessage } from "./infra/queue-message.ts";
+import { type ProjectQueueMessage, projectQueueMessageSchema, type SlackQueueMessage } from "./infra/queue-message.ts";
 import { slackLogger } from "./infra/util/logger.ts";
 import { SecretCipher } from "./infra/util/secret-cipher.ts";
 import { SlackQueueHandler } from "./queue/slack-queue-handler.ts";
@@ -29,6 +30,7 @@ import {
 } from "./storage/slack-storage-resolvers.ts";
 
 const slackBindingsSchema = v.object({
+    CHAT_PROJECT_ID: v.string(),
     ATTACHMENTS: v.object({ get: v.function(), put: v.function() }),
     DATABASE: v.object({ batch: v.function(), prepare: v.function() }),
     BOT_TRIGGER_RATE_LIMITER: v.object({ get: v.function(), idFromName: v.function() }),
@@ -47,12 +49,13 @@ const slackBindingsSchema = v.object({
     SLACK_TOKEN_ENCRYPTION_KEY: v.pipe(v.string(), v.minLength(1)),
 });
 interface SlackBindings {
+    readonly CHAT_PROJECT_ID: string;
     readonly ATTACHMENTS: R2Bucket;
     readonly DATABASE: D1Database;
     readonly BOT_TRIGGER_RATE_LIMITER: DurableObjectNamespace<BotTriggerRateLimiter>;
     readonly ASSETS: Fetcher;
     readonly APP_ORIGIN: string;
-    readonly EVENTS: Queue<SlackQueueMessage>;
+    readonly EVENTS: Queue<ProjectQueueMessage>;
     readonly AUTHENTICATION_BASE_URL: string;
     readonly CLERK_JWT_KEY: string;
     readonly CLERK_PUBLISHABLE_KEY: string;
@@ -90,6 +93,7 @@ const slack = createSlackWorker<
         },
         authenticationBaseUrl: bindings.AUTHENTICATION_BASE_URL,
         publicBaseUrl: bindings.SLACK_SERVER_BASE_URL.replace(/\/$/u, ""),
+        projectId: bindings.CHAT_PROJECT_ID,
         mobiusBaseUrl: bindings.MOBIUS_BASE_URL,
         serviceToken: bindings.SLACK_MOBIUS_AUTH_TOKEN,
         signingKey: bindings.SLACK_OAUTH_STATE_SIGNING_KEY,
@@ -99,7 +103,7 @@ const slack = createSlackWorker<
         createNonce: () => crypto.randomUUID(),
         nowEpochMilliseconds: () => Date.now(),
         secretEncryption: cipher,
-        queue: new CloudflareSlackQueue(bindings.EVENTS),
+        queue: new CloudflareSlackQueue(bindings.EVENTS, bindings.CHAT_PROJECT_ID),
         databaseResolver: new CloudDatabaseResolver(host),
         attachmentStorageResolver: new CloudAttachmentStorageResolver(host),
         clerk: new ClerkGateway(),
@@ -145,9 +149,40 @@ export const slackApplication = {
         return await slack.fetch(request, bindings, context);
     },
     queue: async (batch, bindings) => {
-        if (!hasSlackBindings(bindings)) {
-            throw new Error("Slack queue configuration is unavailable.");
+        for (const message of batch.messages) {
+            const parsed = v.safeParse(projectQueueMessageSchema, message.body);
+            if (!parsed.success) {
+                message.ack();
+                continue;
+            }
+            try {
+                const regional = await projectBindings(bindings, parsed.output.projectId, AbortSignal.timeout(20000));
+                if (!hasSlackBindings(regional)) {
+                    message.retry();
+                    continue;
+                }
+                await slack.queue(
+                    {
+                        metadata: batch.metadata,
+                        queue: batch.queue,
+                        messages: [
+                            {
+                                id: message.id,
+                                timestamp: message.timestamp,
+                                attempts: message.attempts,
+                                body: parsed.output.message,
+                                ack: () => message.ack(),
+                                retry: (options) => message.retry(options),
+                            },
+                        ],
+                        ackAll: () => message.ack(),
+                        retryAll: (options) => message.retry(options),
+                    },
+                    regional,
+                );
+            } catch {
+                message.retry();
+            }
         }
-        await slack.queue(batch, bindings);
     },
-} satisfies ExportedHandler<CloudBindings, SlackQueueMessage>;
+} satisfies ExportedHandler<CloudBindings, unknown>;
