@@ -1,4 +1,9 @@
-import { type AgentDisplayContent, MobiusAgentActivityEvent } from "@moxt-ai/mobius-sdk";
+import {
+    type AgentDisplayContent,
+    MobiusAgentActivityEvent,
+    MobiusAgentMessageEvent,
+    type MobiusSessionEvent,
+} from "@moxt-ai/mobius-sdk";
 import { type MobiusBrowserClient, type MobiusBrowserHistory, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
 import { MessageSquare, Send } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -17,6 +22,11 @@ import { LocalSessionSidebar, type OpenLocalSession } from "./local-session-side
 import { PairingInstruction } from "./pairing-instruction.tsx";
 
 type SetupReason = "unconfigured" | "inactive" | "no-selection" | "agent-missing" | "agent-offline" | "agent-required";
+
+interface ActivityContent {
+    readonly commandId: string;
+    readonly contents: readonly AgentDisplayContent[];
+}
 
 function setupReason(workspace: ChatWorkspace): SetupReason | null {
     if (workspace.status !== "active") {
@@ -60,7 +70,7 @@ type State =
           readonly bot: ManagedBot;
           readonly client: MobiusBrowserClient;
           readonly history: MobiusBrowserHistory;
-          readonly activityContents: ReadonlyMap<string, readonly AgentDisplayContent[]>;
+          readonly activityContents: ReadonlyMap<string, ActivityContent>;
       }
     | { readonly kind: "failed"; readonly message: string };
 type Sending =
@@ -113,20 +123,20 @@ function BotArtifactContent({
 }
 
 function BotTurnArtifacts({
-    activities,
+    commandId,
     activityContents,
     botId,
     requests,
     sessionId,
 }: {
-    readonly activities: MobiusBrowserHistory["turns"][number]["activities"];
-    readonly activityContents: ReadonlyMap<string, readonly AgentDisplayContent[]>;
+    readonly commandId: string;
+    readonly activityContents: ReadonlyMap<string, ActivityContent>;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession">;
     readonly sessionId: string;
 }) {
-    const contents = activities.flatMap((activity) =>
-        (activityContents.get(activity.activityId) ?? []).filter((content) => content.type === "image"),
+    const contents = [...activityContents.values()].flatMap((activity) =>
+        activity.commandId === commandId ? activity.contents.filter((content) => content.type === "image") : [],
     );
     return contents.length === 0 ? null : (
         <section aria-label="Agent image output" className="min-w-0 px-4">
@@ -155,8 +165,34 @@ function updateActivityContents(
         return current;
     }
     const contents = new Map(current.activityContents);
-    contents.set(event.payload.activityId, event.payload.content);
+    contents.set(event.payload.activityId, { commandId: event.payload.commandId, contents: event.payload.content });
     return { ...current, activityContents: contents };
+}
+
+function updateStreamedHistory(current: State, client: MobiusBrowserClient, event: MobiusSessionEvent): State {
+    if (
+        current.kind !== "ready" ||
+        current.client !== client ||
+        BigInt(event.sequence) <= BigInt(current.history.lastCommittedSeq)
+    ) {
+        return current;
+    }
+    const payload = event.payload;
+    if (!(payload instanceof MobiusAgentMessageEvent)) {
+        return current;
+    }
+    return {
+        ...current,
+        history: {
+            ...current.history,
+            lastCommittedSeq: event.sequence,
+            turns: current.history.turns.map((turn) =>
+                turn.commandId === payload.commandId && turn.sessionId === payload.sessionId
+                    ? { ...turn, response: turn.response + payload.text }
+                    : turn,
+            ),
+        },
+    };
 }
 
 function attemptStatus(kind: string): string {
@@ -253,56 +289,39 @@ export function BotChatHome({
             const session = await requests.connectConversation(bot.botId, controller.signal, conversationKey);
             client = session;
             const history = await session.history.read(new MobiusPageRequest(100, ""), controller.signal);
+            let snapshotSequence = BigInt(history.lastCommittedSeq);
             controller.signal.throwIfAborted();
             setState({ activityContents: new Map(), kind: "ready", bot, client: session, history });
             const refresh = async () => {
                 const updated = await session.history.read(new MobiusPageRequest(100, ""), controller.signal);
                 if (!controller.signal.aborted) {
+                    snapshotSequence = BigInt(updated.lastCommittedSeq);
                     setState((current) => updateHistory(current, session, updated));
                 }
             };
-            const reconcile = async () => {
-                try {
+            const receive = async (event: MobiusSessionEvent) => {
+                setState((current) => updateActivityContents(current, session, event));
+                if (event.payload instanceof MobiusAgentMessageEvent) {
+                    setState((current) => updateStreamedHistory(current, session, event));
+                } else if (
+                    !(event.payload instanceof MobiusAgentActivityEvent) &&
+                    BigInt(event.sequence) > snapshotSequence
+                ) {
                     await refresh();
-                    if (!controller.signal.aborted) {
-                        reconciliationTimer = setTimeout(() => void reconcile(), 5000);
-                    }
-                } catch (cause) {
-                    if (!controller.signal.aborted) {
-                        controller.abort();
-                        session.close();
-                        setState({
-                            kind: "failed",
-                            message:
-                                cause instanceof Error
-                                    ? cause.message
-                                    : "Chat could not refresh. Reconnect to continue.",
-                        });
-                    }
                 }
+                return true;
             };
-            reconciliationTimer = setTimeout(() => void reconcile(), 5000);
             let events = await session.readEvents(new MobiusPageRequest(10, ""), controller.signal);
             for (const event of events.events) {
-                setState((current) => updateActivityContents(current, session, event));
+                await receive(event);
             }
             while (events.hasMore) {
                 events = await session.readEvents(new MobiusPageRequest(10, events.cursor), controller.signal);
                 for (const event of events.events) {
-                    setState((current) => updateActivityContents(current, session, event));
+                    await receive(event);
                 }
             }
-            const subscription = await session.events.subscribe(
-                events.cursor,
-                {
-                    receive: async (event) => {
-                        setState((current) => updateActivityContents(current, session, event));
-                        await refresh();
-                        return true;
-                    },
-                },
-                controller.signal,
-            );
+            const subscription = await session.events.subscribe(events.cursor, { receive }, controller.signal);
             controller.signal.throwIfAborted();
             await subscription.completed;
             controller.signal.throwIfAborted();
@@ -461,7 +480,7 @@ export function BotChatHome({
                                         </p>
                                     ) : null}
                                     <BotTurnArtifacts
-                                        activities={turn.activities}
+                                        commandId={turn.commandId}
                                         activityContents={state.activityContents}
                                         botId={state.bot.botId}
                                         requests={requests}

@@ -1,4 +1,12 @@
-import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
+import {
+    MobiusAgentMessageEvent,
+    MobiusControlEvent,
+    MobiusRunningAttemptSummary,
+    MobiusTurnCompletedEvent,
+    MobiusTurnFailedEvent,
+    MobiusTurnStartedEvent,
+    type SessionConfigOption,
+} from "@moxt-ai/mobius-sdk";
 import { type MobiusClient, type MobiusMessagePage, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
 import { ArrowLeft, Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -70,7 +78,7 @@ export function LocalSessionPane({
         const controller = new AbortController();
         lifetime.current = controller;
         let client: MobiusClient | null = null;
-        let timer: ReturnType<typeof setTimeout> | undefined;
+        let lastSequence = 0n;
         const refresh = async () => {
             if (client === null || command.current === "") {
                 return;
@@ -82,6 +90,7 @@ export function LocalSessionPane({
                 controller.signal,
             );
             controller.signal.throwIfAborted();
+            lastSequence = BigInt(page.lastCommittedSequence);
             const message = page.messages.find((item) => item.commandId === currentCommand);
             if (message === undefined || command.current !== currentCommand) {
                 return;
@@ -93,25 +102,10 @@ export function LocalSessionPane({
                         : item,
                 ),
             );
-            if (["succeeded", "failed", "cancelled"].includes(message.attempt.kind)) {
+            if (["succeeded", "failed", "cancelled", "indeterminate"].includes(message.attempt.kind)) {
                 setOperation({ kind: "idle" });
                 command.current = "";
                 turnId.current = "";
-            }
-        };
-        const reconcile = async () => {
-            try {
-                await refresh();
-            } catch (cause) {
-                if (!controller.signal.aborted) {
-                    setOperation({
-                        kind: "failed",
-                        message: cause instanceof Error ? cause.message : "Session updates are unavailable.",
-                    });
-                }
-            }
-            if (!controller.signal.aborted) {
-                timer = setTimeout(() => void reconcile(), 5000);
             }
         };
         const open = async () => {
@@ -120,25 +114,78 @@ export function LocalSessionPane({
             }
             client = await requests.connectSession(botId, sessionId, controller.signal);
             controller.signal.throwIfAborted();
-            setConnection({ kind: "ready", client });
-            timer = setTimeout(() => void reconcile(), 5000);
             const subscription = await client.events.subscribe(
                 sessionId,
                 "",
                 {
-                    receive: async () => {
-                        await refresh();
+                    receive: async (event) => {
+                        const payload = event.payload;
+                        if (
+                            command.current !== "" &&
+                            payload instanceof MobiusControlEvent &&
+                            [
+                                "session.permission.requested",
+                                "session.permission.resolved",
+                                "session.elicitation.requested",
+                                "session.elicitation.resolved",
+                            ].includes(payload.kind) &&
+                            BigInt(event.sequence) > lastSequence
+                        ) {
+                            await refresh();
+                            return true;
+                        }
+                        if (
+                            command.current === "" ||
+                            !("commandId" in payload) ||
+                            payload.commandId !== command.current
+                        ) {
+                            return true;
+                        }
+                        if (BigInt(event.sequence) <= lastSequence) {
+                            return true;
+                        }
+                        lastSequence = BigInt(event.sequence);
+                        const replyId = `${command.current}-reply`;
+                        if (payload instanceof MobiusAgentMessageEvent) {
+                            setMessages((current) =>
+                                current.map((item) =>
+                                    item.id === replyId ? { ...item, text: item.text + payload.text } : item,
+                                ),
+                            );
+                        } else if (payload instanceof MobiusTurnStartedEvent) {
+                            setMessages((current) =>
+                                current.map((item) =>
+                                    item.id === replyId
+                                        ? {
+                                              ...item,
+                                              attempt: new MobiusRunningAttemptSummary(
+                                                  payload.attemptId,
+                                                  event.recordedAt,
+                                              ),
+                                          }
+                                        : item,
+                                ),
+                            );
+                        } else if (
+                            payload instanceof MobiusTurnCompletedEvent ||
+                            payload instanceof MobiusTurnFailedEvent
+                        ) {
+                            await refresh();
+                        }
                         return true;
                     },
                 },
                 controller.signal,
             );
+            controller.signal.throwIfAborted();
+            setConnection({ kind: "ready", client });
             await subscription.completed;
+            controller.signal.throwIfAborted();
+            throw new Error("Session updates disconnected. Reopen the Session to continue.");
         };
         void open().catch((cause: unknown) => {
             client?.close();
             if (!controller.signal.aborted) {
-                clearTimeout(timer);
                 setConnection({ kind: "failed" });
                 setOperation({
                     kind: "failed",
@@ -148,7 +195,6 @@ export function LocalSessionPane({
         });
         return () => {
             controller.abort();
-            clearTimeout(timer);
             const currentClient = client;
             if (currentClient !== null && turnId.current !== "") {
                 void currentClient.turns
@@ -205,7 +251,7 @@ export function LocalSessionPane({
                 },
                 lifetime.current.signal,
             );
-            if (!lifetime.current.signal.aborted) {
+            if (!lifetime.current.signal.aborted && command.current === commandId) {
                 turnId.current = accepted.turnId;
             }
         } catch (cause) {
