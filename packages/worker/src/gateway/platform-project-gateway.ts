@@ -429,18 +429,27 @@ export class PlatformProjectGateway {
                 ),
                 {
                     signal,
-                    redirect: "error",
+                    redirect: "manual",
                 },
             );
-            const value: unknown = await response.json();
             signal.throwIfAborted();
             if (!response.ok) {
+                await response.body?.cancel();
                 throw new PlatformProjectError(
                     "PROJECT_PLACEMENT_UNAVAILABLE",
                     "Project placement is unavailable.",
                     503,
+                    {
+                        cause: new PlatformProjectError(
+                            "PLACEMENT_HTTP_ERROR",
+                            "Placement endpoint rejected the request.",
+                            response.status,
+                        ),
+                    },
                 );
             }
+            const value: unknown = await response.json();
+            signal.throwIfAborted();
             const placement = v.parse(
                 v.strictObject({
                     projectId: platformIdentifier,
