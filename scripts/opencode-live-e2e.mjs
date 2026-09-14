@@ -103,13 +103,16 @@ async function waitFor(url, description, validate = (response) => response.ok) {
     throw new Error(`Timed out waiting for ${description}`, { cause: lastError });
 }
 
-async function jsonRequest(origin, path, { body, token, provider } = {}) {
+async function jsonRequest(origin, path, { body, project, token, provider } = {}) {
     const headers = { "content-type": "application/json" };
     if (token !== undefined) {
         headers.authorization = `Bearer ${token}`;
     }
     if (provider !== undefined) {
         headers["x-mobius-oidc-provider"] = provider;
+    }
+    if (project !== undefined) {
+        headers["x-mobius-project-id"] = project;
     }
     const response = await fetch(new URL(path, origin), {
         method: body === undefined ? "GET" : "POST",
@@ -220,12 +223,12 @@ async function platformApplication(platformOrigin) {
     };
 }
 
-async function waitForOpenCode(chatOrigin, token, pairingId) {
+async function waitForOpenCode(chatOrigin, token, project, pairingId) {
     while (!deadline.aborted) {
         const status = await jsonRequest(
             chatOrigin,
             `/mobius-cloud/api/management/runtime-pairings/${encodeURIComponent(pairingId)}`,
-            { token },
+            { project, token },
         );
         if (
             status.status === "paired" &&
@@ -239,12 +242,12 @@ async function waitForOpenCode(chatOrigin, token, pairingId) {
     throw new Error("Timed out waiting for the local Mobius daemon and OpenCode");
 }
 
-async function waitForBinding(chatOrigin, token, botId) {
+async function waitForBinding(chatOrigin, token, project, botId) {
     while (!deadline.aborted) {
         const workspace = await jsonRequest(
             chatOrigin,
             `/mobius-cloud/api/chat/bots/${encodeURIComponent(botId)}/workspace`,
-            { body: {}, token },
+            { body: {}, project, token },
         );
         if (
             workspace.status === "active" &&
@@ -306,7 +309,7 @@ async function main() {
     await waitFor(`${platformOrigin}/mobius/api/health`, "mobius-platform");
     const application = await platformApplication(platformOrigin);
 
-    await migrate(chatConfiguration, "DATABASE", chatState);
+    await migrate(chatConfiguration, "CHAT_DATABASE_APAC", chatState);
     const { publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const chatVariables = {
         APP_ORIGIN: chatOrigin,
@@ -352,11 +355,18 @@ async function main() {
         { timeout: timeoutMilliseconds },
     );
     await page.goto(chatOrigin, { waitUntil: "domcontentloaded", timeout: timeoutMilliseconds });
-    const identity = object(await (await identityResponse).json(), "anonymous identity");
+    const response = await identityResponse;
+    const identityBody = await response.text();
+    if (!response.ok()) {
+        throw new Error(`Anonymous identity creation failed (${response.status()}): ${identityBody.slice(0, 1_000)}`);
+    }
+    const identity = object(JSON.parse(identityBody), "anonymous identity");
     const token = text(identity.token, "anonymous token");
+    const project = text(identity.projectId, "projectId");
     const botId = text(object(identity.bot, "bot").botId, "botId");
     const pairing = await jsonRequest(chatOrigin, "/mobius-cloud/api/management/runtime-pairings", {
         body: { idempotencyKey: crypto.randomUUID() },
+        project,
         token,
     });
     const daemon = await start(
@@ -392,7 +402,7 @@ async function main() {
         }
     });
 
-    const paired = await waitForOpenCode(chatOrigin, token, text(pairing.pairingId, "pairingId"));
+    const paired = await waitForOpenCode(chatOrigin, token, project, text(pairing.pairingId, "pairingId"));
     await jsonRequest(chatOrigin, `/mobius-cloud/api/chat/bots/${encodeURIComponent(botId)}/setup`, {
         body: {
             runtimeId: text(paired.runtimeId, "runtimeId"),
@@ -400,9 +410,10 @@ async function main() {
             workspaceRef: "default",
             agentConfigRevision: 1,
         },
+        project,
         token,
     });
-    await waitForBinding(chatOrigin, token, botId);
+    await waitForBinding(chatOrigin, token, project, botId);
 
     const messageBox = page.getByLabel("Message", { exact: true });
     await messageBox.waitFor({ state: "visible", timeout: timeoutMilliseconds });
