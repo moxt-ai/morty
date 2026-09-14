@@ -17,7 +17,6 @@ The user can optionally bind an account later.
   for identity creation, setup, and handoff. This is not the Platform relay URL.
 - `DOCUMENT_DIR`: the user's document directory, resolved by your host environment.
   If it is unavailable, ask the user for it rather than guessing a repository path.
-- `WORKSPACE_DIR`: the local project directory the user wants the agent to work in.
 - Configuration: `$DOCUMENT_DIR/mobius-chat/config.json`.
 
 Read the configuration first. It is a JSON object containing `user_token` when
@@ -115,14 +114,16 @@ resources, stop and report that failure rather than asking the user to provision
 Use the returned Platform relay origin, Runtime pairing ID, and pairing code:
 
 ```sh
-npx --yes @moxt-ai/mobius@latest pair --url "$RELAY_URL" --pairing "$RUNTIME_PAIRING_ID" --code "$PAIRING_CODE" --workspace "$WORKSPACE_DIR"
+npx --yes @moxt-ai/mobius@latest pair --url "$RELAY_URL" --pairing "$RUNTIME_PAIRING_ID" --code "$PAIRING_CODE"
 ```
 
 Pass arguments separately and quote paths. Never substitute the Cloud user ID,
 Bot ID, or a legacy channel pairing ID for a Runtime pairing ID. Never give the
 local CLI the user's Cloud token as its pairing code or an AppCredential.
 
-The `pair` command saves the Runtime connection and starts its long-running daemon.
+The `pair` command prepares the default workspace at `~/.mobius/workspace`, saves
+the Runtime connection, and starts its long-running daemon. No project directory
+is required for setup.
 Run it in a persistent terminal or an explicitly managed background process;
 keep it alive while the user chats. For an existing saved connection, the current
 CLI resumes it with `npx --yes @moxt-ai/mobius@latest start --channel <saved-channel-id>`. Use the saved ID
@@ -135,7 +136,7 @@ Bearer token. The response has `status: "pending"`, `"paired"`, `"expired"`, or
 Use bounded, cancellable waits until the pairing expiry; stop on expiry or revocation.
 
 After pairing, confirm through Cloud that the Runtime is online. Reuse the Bot
-created with the anonymous identity, select the available agent and workspace,
+created with the anonymous identity, select the available agent and use the default workspace,
 configure its behavior and execution binding, and complete any Runtime approval
 required by that binding. Confirm the Bot is ready. Save returned resource IDs
 alongside the identity so a later setup can resume them.
@@ -155,7 +156,7 @@ Content-Type: application/json
 }
 ```
 
-`default` selects the workspace supplied to the `pair` command. Use the selected
+`default` selects the Runtime's default workspace at `~/.mobius/workspace`. Use the selected
 agent's current configuration revision. Do not assume an agent installed on the
 machine is advertised by this Runtime. A `202` response acknowledges the binding
 request; it does not prove that local approval or message execution succeeded.
