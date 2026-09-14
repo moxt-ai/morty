@@ -78,7 +78,29 @@ export function createBotChatRoutes() {
                 return response;
             }
             if (operation === "access") {
-                const access = await gateway.openChat(project.projectId, botId, session.userId, signal);
+                const text = await context.req.text();
+                let body: unknown = {};
+                if (text !== "") {
+                    try {
+                        body = JSON.parse(text);
+                    } catch (cause) {
+                        signal.throwIfAborted();
+                        throw new PlatformProjectError("INVALID_REQUEST", "The JSON request is invalid.", 400, {
+                            cause,
+                        });
+                    }
+                }
+                const input = v.parse(
+                    v.strictObject({ conversationKey: v.optional(platformIdentifier, "personal-chat") }),
+                    body,
+                );
+                const access = await gateway.openChat(
+                    project.projectId,
+                    botId,
+                    session.userId,
+                    signal,
+                    input.conversationKey,
+                );
                 context.env.logger.info(
                     {
                         event: "bot-chat-access-issued",

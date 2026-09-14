@@ -247,17 +247,27 @@ export class PlatformProjectGateway {
             120000,
         );
 
-    readonly openChat = async (projectId: string, botId: string, userId: string, signal: AbortSignal) =>
+    readonly openChat = async (
+        projectId: string,
+        botId: string,
+        userId: string,
+        signal: AbortSignal,
+        conversationKey = "personal-chat",
+    ) =>
         await this.#withBot(projectId, botId, userId, signal, async (client, bot) => {
             if (!(bot.state instanceof MobiusActiveBotState)) {
                 throw new PlatformProjectError("AGENT_REQUIRED", "Connect your local agent to start chatting.", 409);
             }
-            let clientConversationKey = "personal-chat";
+            let clientConversationKey = v.parse(platformIdentifier, conversationKey);
             let conversation = await client.createConversation(botId, { clientConversationKey }, signal);
             if (conversation.bindingId !== bot.state.activeBindingId) {
                 const digest = await crypto.subtle.digest(
                     "SHA-256",
-                    new TextEncoder().encode(bot.state.activeBindingId),
+                    new TextEncoder().encode(
+                        conversationKey === "personal-chat"
+                            ? bot.state.activeBindingId
+                            : `${bot.state.activeBindingId}:${conversationKey}`,
+                    ),
                 );
                 signal.throwIfAborted();
                 clientConversationKey = `chat-${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;

@@ -56,7 +56,9 @@ function WorkspaceApplication(props: WorkspaceApplicationProps) {
         const Standard = ({ children }: { readonly children: ReactNode }) => (
             <>
                 {children}
-                <div className="fixed bottom-4 left-4 hidden items-center gap-2 sm:flex">{account}</div>
+                <footer className="fixed bottom-0 left-0 z-10 hidden h-16 w-64 items-center gap-2 border-t border-border bg-background px-4 sm:flex">
+                    {account}
+                </footer>
             </>
         );
         return createApplicationRouter(

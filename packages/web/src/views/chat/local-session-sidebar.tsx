@@ -1,5 +1,5 @@
 import type { NativeSessionEntry, NativeSessionResult } from "@moxt-ai/mobius-sdk/channel";
-import { ChevronDown, Laptop, MessageSquare, RefreshCw } from "lucide-react";
+import { ChevronDown, Laptop, RefreshCw, SquarePen } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
@@ -28,12 +28,14 @@ export function LocalSessionSidebar({
     requests,
     onOpen,
     onChat,
+    onNewConversation,
     activeEntryId,
 }: {
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "workspace" | "nativeSessions">;
     readonly onOpen: (session: OpenLocalSession) => void;
     readonly onChat: () => void;
+    readonly onNewConversation: () => void;
     readonly activeEntryId: string;
 }) {
     const [agents, setAgents] = useState<ChatWorkspace["agents"]>([]);
@@ -189,15 +191,15 @@ export function LocalSessionSidebar({
     return (
         <aside
             aria-label="Local sessions"
-            className="flex w-full shrink-0 flex-col border-b border-border bg-muted/30 p-4 sm:w-64 sm:border-r sm:border-b-0"
+            className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-b border-border bg-muted/30 p-4 sm:w-64 sm:border-r sm:border-b-0 sm:pb-20"
         >
             <Button
                 variant="ghost"
                 className={`mb-5 justify-start text-foreground ${activeEntryId === "" ? "bg-card shadow-sm" : ""}`}
                 disabled={opening !== ""}
-                onClick={onChat}
+                onClick={onNewConversation}
             >
-                <MessageSquare className="size-4" /> My Bot
+                <SquarePen className="size-4" aria-hidden="true" /> New Conversation
             </Button>
             <div className="mb-3 flex items-center justify-between">
                 <h2 className="hidden items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:flex">
@@ -249,7 +251,7 @@ export function LocalSessionSidebar({
                         />
                     </div>
                 )}
-                <div className="max-h-48 min-h-0 flex-1 space-y-1 overflow-y-auto sm:max-h-none sm:pb-16">
+                <div className="max-h-48 min-h-0 flex-1 space-y-1 overflow-y-auto sm:max-h-none">
                     {directory.kind === "loading" && (
                         <p role="status" className="px-2 py-3 text-xs text-muted-foreground">
                             Discovering local sessions…
