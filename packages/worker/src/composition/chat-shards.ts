@@ -10,8 +10,8 @@ export async function projectBindings(
     signal: AbortSignal,
 ): Promise<CloudBindings> {
     const placement = await new PlatformProjectGateway(bindings).storagePlacement(projectId, signal);
-    const database = placement.r2BucketId === "apac" ? bindings.CHAT_DATABASE_APAC : bindings.CHAT_DATABASE_WNAM;
-    const bucket = placement.r2BucketId === "apac" ? bindings.CHAT_ATTACHMENTS_APAC : bindings.CHAT_ATTACHMENTS_WNAM;
+    const database = placement.location === "apac" ? bindings.CHAT_DATABASE_APAC : bindings.CHAT_DATABASE_WNAM;
+    const bucket = placement.location === "apac" ? bindings.CHAT_ATTACHMENTS_APAC : bindings.CHAT_ATTACHMENTS_WNAM;
     if (
         typeof database !== "object" ||
         database === null ||

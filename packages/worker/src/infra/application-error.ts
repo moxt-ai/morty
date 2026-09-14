@@ -11,6 +11,17 @@ interface ErrorLogger {
 
 export function applicationErrorResponse(error: Error, logger: ErrorLogger): Response {
     if (error instanceof PlatformProjectError) {
+        logger.error(
+            {
+                event: "platform-request-failed",
+                code: error.code,
+                status: error.status,
+                causeName: error.cause instanceof Error ? error.cause.name : undefined,
+                causeCode: error.cause instanceof PlatformProjectError ? error.cause.code : undefined,
+                causeStatus: error.cause instanceof PlatformProjectError ? error.cause.status : undefined,
+            },
+            "Platform request failed",
+        );
         return json({ error: { code: error.code, message: error.message } }, error.status);
     }
     if (error instanceof ValiError) {

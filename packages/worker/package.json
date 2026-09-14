@@ -14,12 +14,12 @@
     "devDependencies": {
         "@cloudflare/vitest-plugin": "^1.1.4",
         "@moxt-ai/mobius-test": "workspace:*",
-        "esbuild": "^0.28.1",
+        "esbuild": "0.25.12",
         "miniflare": "5.20260903.0-alpha"
     },
     "dependencies": {
-        "@moxt-ai/mobius-sdk": "workspace:*",
         "@clerk/backend": "3.17.1",
+        "@moxt-ai/mobius-sdk": "workspace:*",
         "hono": "^4.13.5",
         "pino": "^10.3.1",
         "valibot": "1.4.2"

@@ -6,8 +6,10 @@ import { AUTH_TIME } from "./identity-provider.ts";
 // suitable for deterministic tests. Projects and Bots are retained by this peer.
 export async function platformPeer({
     pairingLifetimeMilliseconds = 300000,
+    redirectPlacement = false,
 }: {
     readonly pairingLifetimeMilliseconds?: number;
+    readonly redirectPlacement?: boolean;
 } = {}) {
     const projects = new Map<string, object>();
     const bots = new Map<string, { readonly botId: string; readonly projectId: string }>();
@@ -27,15 +29,17 @@ export async function platformPeer({
     const server = createServer(async (request, response) => {
         response.setHeader("content-type", "application/json");
         const placementPath = request.url?.match(
-            /^\/mobius\/api\/v1\/projects\/(prj_([aw])0[12]_[A-Za-z0-9_-]{24})\/storage-placement$/u,
+            /^\/mobius\/api\/v1\/projects\/(prj_([aw])0[12]_[A-Za-z0-9_-]{24})\/storage-placement(?:\?resolved)?$/u,
         );
         if (request.method === "GET" && placementPath !== null && placementPath !== undefined) {
+            if (redirectPlacement && !request.url?.endsWith("?resolved")) {
+                response.writeHead(302, { location: `${request.url}?resolved` }).end();
+                return;
+            }
             const region = placementPath[2] === "a" ? "apac" : "wnam";
             response.writeHead(200).end(
                 JSON.stringify({
-                    projectId: placementPath[1],
-                    d1ShardId: `${region}-${placementPath[1]?.slice(5, 7)}`,
-                    r2BucketId: region,
+                    location: region,
                 }),
             );
             return;

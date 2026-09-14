@@ -429,33 +429,33 @@ export class PlatformProjectGateway {
                 ),
                 {
                     signal,
-                    redirect: "error",
+                    redirect: "manual",
                 },
             );
-            const value: unknown = await response.json();
             signal.throwIfAborted();
             if (!response.ok) {
+                await response.body?.cancel();
                 throw new PlatformProjectError(
                     "PROJECT_PLACEMENT_UNAVAILABLE",
                     "Project placement is unavailable.",
                     503,
+                    {
+                        cause: new PlatformProjectError(
+                            "PLACEMENT_HTTP_ERROR",
+                            "Placement endpoint rejected the request.",
+                            response.status,
+                        ),
+                    },
                 );
             }
+            const value: unknown = await response.json();
+            signal.throwIfAborted();
             const placement = v.parse(
                 v.strictObject({
-                    projectId: platformIdentifier,
-                    d1ShardId: v.pipe(v.string(), v.regex(/^(apac|wnam)-[0-9]{2}$/u)),
-                    r2BucketId: v.picklist(["apac", "wnam"]),
+                    location: v.picklist(["apac", "wnam"]),
                 }),
                 value,
             );
-            if (placement.projectId !== projectId || !placement.d1ShardId.startsWith(`${placement.r2BucketId}-`)) {
-                throw new PlatformProjectError(
-                    "PLATFORM_INVALID_RESPONSE",
-                    "Platform returned inconsistent placement.",
-                    502,
-                );
-            }
             return placement;
         } catch (cause) {
             parent.throwIfAborted();
