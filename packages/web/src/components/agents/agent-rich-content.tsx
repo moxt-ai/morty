@@ -1,6 +1,9 @@
-import type { AgentDisplayContent } from "@moxt-ai/mobius-sdk";
+import type { AgentDisplayContent, MobiusClient } from "@moxt-ai/mobius-sdk";
+import type { MobiusBrowserClient } from "@moxt-ai/mobius-sdk/browser";
 import { ExternalLink, FileText, Image as ImageIcon, Terminal } from "lucide-react";
+import { useEffect, useState } from "react";
 import { AgentMarkdown } from "@/components/agents/agent-markdown";
+import { readSessionArtifactBytes } from "@/services/pairing/pairing-api";
 
 const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/;
 
@@ -32,8 +35,111 @@ function ContentHeader({ content }: { readonly content: AgentDisplayContent }) {
     );
 }
 
-function AgentRichContentItem({ content }: { readonly content: AgentDisplayContent }) {
+function ArtifactImage({
+    browserClient,
+    channelId,
+    content,
+    serviceClient,
+    sessionId,
+}: {
+    readonly browserClient?: Pick<MobiusBrowserClient, "artifacts"> | undefined;
+    readonly channelId: string;
+    readonly content: AgentDisplayContent;
+    readonly serviceClient?: Pick<MobiusClient, "artifacts"> | undefined;
+    readonly sessionId: string;
+}) {
+    const [source, setSource] = useState<string | null>(null);
+    useEffect(() => {
+        const controller = new AbortController();
+        let objectUrl = "";
+        const download = serviceClient
+            ? serviceClient.artifacts
+                  .download(sessionId, content.artifactId, controller.signal)
+                  .then((artifact) => ({ bytes: artifact.bytes, mimeType: artifact.artifact.mediaType }))
+            : browserClient === undefined
+              ? readSessionArtifactBytes(channelId, sessionId, content.artifactId, controller.signal)
+              : browserClient.artifacts
+                    .download(content.artifactId, controller.signal)
+                    .then((artifact) => ({ bytes: artifact.bytes, mimeType: artifact.artifact.mediaType }));
+        void download
+            .then((artifact) => {
+                if (controller.signal.aborted || !SAFE_IMAGE_MIME.test(artifact.mimeType)) {
+                    return;
+                }
+                objectUrl = URL.createObjectURL(
+                    new Blob([Uint8Array.from(artifact.bytes)], { type: artifact.mimeType }),
+                );
+                setSource(objectUrl);
+            })
+            .catch(() => {
+                if (!controller.signal.aborted) {
+                    setSource("");
+                }
+            });
+        return () => {
+            controller.abort();
+            if (objectUrl.length > 0) {
+                URL.revokeObjectURL(objectUrl);
+            }
+        };
+    }, [browserClient, channelId, content.artifactId, serviceClient, sessionId]);
+    if (source === null) {
+        return (
+            <div className="rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
+                Loading image…
+            </div>
+        );
+    }
+    if (source.length === 0) {
+        return (
+            <div className="rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
+                Image content could not be loaded.
+            </div>
+        );
+    }
+    return (
+        <figure className="m-0 overflow-hidden rounded-xl border-[0.5px] border-black/9 bg-white p-2">
+            <ContentHeader content={content} />
+            <img
+                alt={content.name.length > 0 ? content.name : "Agent-provided image"}
+                className="max-h-[480px] w-auto max-w-full rounded-lg object-contain"
+                loading="lazy"
+                src={source}
+            />
+        </figure>
+    );
+}
+
+function AgentRichContentItem({
+    browserClient,
+    channelId,
+    content,
+    serviceClient,
+    sessionId,
+}: {
+    readonly browserClient?: Pick<MobiusBrowserClient, "artifacts"> | undefined;
+    readonly channelId?: string | undefined;
+    readonly content: AgentDisplayContent;
+    readonly serviceClient?: Pick<MobiusClient, "artifacts"> | undefined;
+    readonly sessionId?: string | undefined;
+}) {
     if (content.type === "image") {
+        if (
+            content.artifactId.length > 0 &&
+            (browserClient !== undefined ||
+                serviceClient !== undefined ||
+                (channelId !== undefined && sessionId !== undefined))
+        ) {
+            return (
+                <ArtifactImage
+                    browserClient={browserClient}
+                    channelId={channelId ?? ""}
+                    content={content}
+                    serviceClient={serviceClient}
+                    sessionId={sessionId ?? ""}
+                />
+            );
+        }
         if (!SAFE_IMAGE_MIME.test(content.mimeType) || content.data.length === 0) {
             return (
                 <div className="rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
@@ -121,7 +227,19 @@ function AgentRichContentItem({ content }: { readonly content: AgentDisplayConte
     );
 }
 
-export function AgentRichContent({ contents }: { readonly contents: readonly AgentDisplayContent[] }) {
+export function AgentRichContent({
+    browserClient,
+    channelId,
+    contents,
+    serviceClient,
+    sessionId,
+}: {
+    readonly browserClient?: Pick<MobiusBrowserClient, "artifacts"> | undefined;
+    readonly channelId?: string | undefined;
+    readonly contents: readonly AgentDisplayContent[];
+    readonly serviceClient?: Pick<MobiusClient, "artifacts"> | undefined;
+    readonly sessionId?: string | undefined;
+}) {
     if (contents.length === 0) {
         return null;
     }
@@ -129,8 +247,12 @@ export function AgentRichContent({ contents }: { readonly contents: readonly Age
         <div className="mt-2 grid gap-2">
             {contents.map((content, index) => (
                 <AgentRichContentItem
+                    browserClient={browserClient}
+                    channelId={channelId}
                     content={content}
-                    key={`${content.type}:${content.name}:${content.uri}:${index.toString()}`}
+                    key={`${content.type}:${content.name}:${content.uri}:${content.artifactId}:${index.toString()}`}
+                    serviceClient={serviceClient}
+                    sessionId={sessionId}
                 />
             ))}
         </div>
