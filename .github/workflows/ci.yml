@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
   workflow_dispatch:
     inputs:
       environment:
@@ -25,6 +26,7 @@ concurrency:
 jobs:
   check:
     name: check
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -72,7 +74,6 @@ jobs:
         run: pnpm exec wrangler d1 migrations apply DATABASE --local
 
   deploy:
-    needs: check
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     uses: ./.github/workflows/deploy.yml
     secrets: inherit
