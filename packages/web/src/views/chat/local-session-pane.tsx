@@ -291,7 +291,7 @@ export function LocalSessionPane({
                                   ? "Agent is thinking…"
                                   : "No text response.")
                         )}
-                        {message.attempt !== null && <AttemptFailure attempt={message.attempt} />}
+                        {message.attempt !== null && <AttemptFailure attempt={message.attempt} botId={botId} />}
                     </article>
                 ))}
             </div>

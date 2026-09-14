@@ -343,7 +343,7 @@ export function BotChatHome({
                                             {attemptStatus(turn.attempt.kind)}
                                         </p>
                                     ) : null}
-                                    <AttemptFailure attempt={turn.attempt} />
+                                    <AttemptFailure attempt={turn.attempt} botId={state.bot.botId} />
                                 </div>
                             ))
                         )}
