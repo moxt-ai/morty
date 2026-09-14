@@ -69,8 +69,20 @@ bots, Chat, Slack integration, and sign out when manually validating an auth cha
 
 ## Browser verification
 
-Do not add automated E2E test files. Verify the user journey manually with the
-`agent-browser` CLI against the running application. A first-time visitor should
+Given an open Bot conversation or continued local Session, When an agent streams
+a reply, Then text appears incrementally without a message/history snapshot GET
+for each text or activity event. When the turn finishes, Then its final response
+and status match the saved history. When the conversation is idle, Then no
+five-second message/history polling continues. Inspect Fetch/XHR in DevTools;
+the persistent `events` request is the SDK's SSE connection.
+Given an interrupted event connection, When the SDK reconnects and replays events,
+Then the reply contains each text delta once. Given exhausted stream recovery,
+Then Chat shows a connection failure instead of silently remaining live.
+
+Run `pnpm test:e2e:opencode` for the live OpenCode browser journey. It is excluded
+from `pnpm check` and runs nightly in GitHub Actions. Verify other visual details
+manually with the `agent-browser` CLI against the running application. A first-time
+visitor should
 receive a browser-held anonymous identity and Bot, then see a current-origin
 `follow .../pair.md?token=...` instruction. After local-agent pairing, the same page
 opens headerless Chat without Project controls or Slack navigation. Reload and
