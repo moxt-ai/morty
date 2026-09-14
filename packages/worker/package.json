@@ -11,6 +11,12 @@
         "test:coverage": "vitest run --config vitest.config.ts --coverage --passWithNoTests",
         "test:watch": "vitest --config vitest.config.ts"
     },
+    "devDependencies": {
+        "@cloudflare/vitest-plugin": "^1.1.4",
+        "@moxt-ai/mobius-test": "workspace:*",
+        "esbuild": "^0.28.1",
+        "miniflare": "5.20260903.0-alpha"
+    },
     "dependencies": {
         "@moxt-ai/mobius-sdk": "workspace:*",
         "@clerk/backend": "3.17.1",
