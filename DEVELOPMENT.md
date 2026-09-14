@@ -42,7 +42,9 @@ deployment. Shared runtime helpers remain directly under `packages/worker/src/in
 Every environment binds regional D1 databases as `CHAT_DATABASE_APAC` and
 `CHAT_DATABASE_WNAM`, with corresponding `CHAT_ATTACHMENTS_APAC` and
 `CHAT_ATTACHMENTS_WNAM` R2 buckets. Chat resolves the caller-supplied Project through
-Platform's public storage-placement endpoint and verifies ownership separately.
+Platform's public storage-placement endpoint, which returns only `{ location: string }`,
+and verifies ownership separately. Chat accepts `apac` or `wnam` and selects its own
+regional database and attachment bucket from that location.
 The browser persists `{ userId, projectId }` and supplies `X-Mobius-Project-Id`.
 Only one-time pairing and transfer tickets embed Project context; anonymous
 credentials are opaque. Apply the schema locally with:

@@ -179,7 +179,7 @@ test.each([
     },
 );
 
-test("Given separate APAC and WNAM Chat stores, When users reopen and transfer their workspaces, Then Project context routes them to their own identities and rejects another Project", async () => {
+test("Given separate APAC and WNAM Chat stores and location-only Platform placement, When users reopen and transfer their workspaces, Then Project context routes them to their own identities and rejects another Project", async () => {
     const environment = {
         ...slackConfiguration(),
         DATABASE: undefined,
