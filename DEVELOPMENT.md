@@ -83,9 +83,3 @@ directly and rejects recursive configuration and redirects.
 
 Run `pnpm check`. Product behavior is covered at HTTP and browser boundaries; tests
 use deterministic time and stateful fakes rather than request mocks.
-
-Run `pnpm test:e2e:opencode` for the opt-in live system check. It creates isolated
-temporary state, starts the submodule's local mobius-platform and Mobius daemon plus
-the local mobius-chat Worker, selects a currently advertised free OpenCode model,
-sends a unique message through a headless Chrome session, and verifies the rendered
-OpenCode response.

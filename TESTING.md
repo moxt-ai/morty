@@ -69,18 +69,10 @@ bots, Chat, Slack integration, and sign out when manually validating an auth cha
 
 ## Browser verification
 
-The opt-in `pnpm test:e2e:opencode` live scenario verifies the complete local
-mobius-chat, mobius-platform, Mobius daemon, and OpenCode path with a current free
-OpenCode model. It uses the public Chat and conversation APIs exercised by the
-browser through a real headless Chrome session, requires network access, and is
-intentionally excluded from `pnpm check`.
-The `OpenCode nightly E2E` GitHub workflow runs this scenario at 02:00 Asia/Shanghai
-and on manual dispatch. Scheduled runs use the latest `main`, the Mobius revision
-pinned by its submodule, the latest `opencode-ai` release, and the first currently
-advertised `opencode/*-free` model.
-
-Verify visual details outside this live Chat path manually with the `agent-browser`
-CLI against the running application. A first-time visitor should
+Run `pnpm test:e2e:opencode` for the live OpenCode browser journey. It is excluded
+from `pnpm check` and runs nightly in GitHub Actions. Verify other visual details
+manually with the `agent-browser` CLI against the running application. A first-time
+visitor should
 receive a browser-held anonymous identity and Bot, then see a current-origin
 `follow .../pair.md?token=...` instruction. After local-agent pairing, the same page
 opens headerless Chat without Project controls or Slack navigation. Reload and
