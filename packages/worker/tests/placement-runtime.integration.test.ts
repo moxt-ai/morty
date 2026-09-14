@@ -36,7 +36,7 @@ test.each([false, true])(
             expect(await response.json()).toEqual(
                 redirectPlacement
                     ? { error: { code: "PROJECT_PLACEMENT_UNAVAILABLE", message: "Project placement is unavailable." } }
-                    : { projectId, d1ShardId: "apac-01", r2BucketId: "apac" },
+                    : { location: "apac" },
             );
         } finally {
             await runtime?.dispose();
