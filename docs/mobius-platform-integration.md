@@ -14,7 +14,30 @@ The credential digest was verified against the locally retained secret.
 | Staging | https://mobius.paradev.biz/ |
 | Production | https://mobius.paraflow.biz/ |
 
-The credentials expire one year after provisioning. Only SHA-256 digests are
+### Chat runtime configuration
+
+Both Chat environments connect to the production Platform origin,
+`https://mobius.paraflow.biz`. Chat staging and production use separate Apps and
+AppCredentials within that Platform environment; Chat staging does not connect
+to the staging Platform endpoint listed above.
+
+| Chat Worker | `MOBIUS_BASE_URL` |
+| --- | --- |
+| `mobius-chat-staging` | `https://mobius.paraflow.biz` |
+| `mobius-chat-production` | `https://mobius.paraflow.biz` |
+
+On 2026-09-14, each AppCredential was authenticated and authorized for its App's
+Project provisioning endpoint before updating `MOBIUS_BASE_URL`, `MOBIUS_APP_ID`,
+and `MOBIUS_APP_SECRET` together on the corresponding Chat Worker. Verification
+used an unavailable storage location and created no Project. Cloudflare confirmed
+all three secret updates for each Worker.
+
+These values are maintained as Cloudflare Worker secrets. `MOBIUS_APP_SECRET`
+must contain the full `mapp_…` AppCredential returned when a key is created,
+not its public Key ID. A credential must belong to an App in the configured
+Platform environment.
+
+AppCredentials do not expire. Only SHA-256 digests are
 stored in D1. Developer memberships were added separately as described below;
 no Project has been created. Plaintext
 credentials are held outside the repository. `MOBIUS_APP_ID`, `MOBIUS_APP_SECRET`,
