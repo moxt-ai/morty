@@ -175,9 +175,23 @@ then exercise the provisioned staging service with a real paired Runtime.
 
 ### Agent setup skill
 
-`public/SKILL.md` is served by Vite/Cloudflare assets at `/SKILL.md`. It describes
-resuming `$DOCUMENT_DIR/mobius-chat/config.json`, anonymous identity creation,
-Project provisioning, Runtime pairing, the CLI command, and a final one-time
-identity-transfer URL. It marks Bot/conversation migration as incomplete until
-that path is implemented and verified. It must not instruct agents to expose
-durable user tokens or consume the final link intended for the user.
+`public/setup.md` is the standalone entry point for testing and external sharing
+(such as Twitter), not a web UI instruction: resume the local identity or create
+an anonymous user and Bot, pair a Runtime, and return a one-time browser handoff.
+`public/pair.md?token=...` is copied from every web workspace. First-time visitors
+receive a browser-held identity and Bot before the instruction is shown. Its opaque,
+24-hour ticket is issued for the authenticated anonymous or Clerk user and target
+Bot. Explicit POST redemption atomically consumes it and issues a separate local
+credential for that user. It never creates another Bot. Reading the document does
+not consume the ticket. Pairing tickets and browser transfers have separate stores
+and redemption endpoints.
+
+Both documents use `public/setup.mjs` through just two commands:
+`pair --token <one-time-ticket> --harness <agent-id>` and `setup --harness <agent-id>`.
+They handle private configuration persistence, identity validation, resumable
+Runtime pairing, detached Runtime launch, binding, and readiness, with timestamped
+JSON progress. Dependencies and agent authentication are
+handled by the calling agent. The pair flow returns the existing Chat page; only
+standalone setup issues a browser transfer, also valid for 24 hours. Never expose durable credentials or
+consume the user's final browser link. Configure edge access-log exports to redact
+the `token` query parameter on `/pair.md`; application audit events contain IDs only.

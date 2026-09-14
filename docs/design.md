@@ -7,11 +7,18 @@ agent and see how to return to their connected Chat. A returning user can open
 their saved identity, choose a local agent, model and variant, and browse their
 local sessions without a manual reconnect step.
 
-- No identity: show onboarding, not an automatically created empty workspace.
-- Setup instruction: `follow <current Chat origin>/SKILL.md`. Copy the exact
-  current environment. The local agent returns the one-time browser handoff.
+- No identity: create a browser-held anonymous identity and personal Bot before
+  showing the pairing instruction. No sign-in is required.
+- Every web workspace: `follow <current Chat origin>/pair.md?token=...`.
+  The one-time ticket connects the existing user and Bot; the agent directs the user
+  back to the same web page after the Runtime's execution binding is approved.
+- External sharing and testing: `follow <current Chat origin>/setup.md`.
+  This standalone flow returns a one-time browser handoff and is not shown in the web UI.
 - Saved identity: validate and restore automatically. Loading, unconfigured Bot,
   offline Runtime, and failed requests are distinct states.
+- On entry, show the pairing instruction whenever the Bot has no active binding
+  or its selected Runtime/agent is offline. Recheck connection status and open Chat
+  automatically when that binding becomes active and online.
 - Local sessions belong in the left rail. Selection opens the corresponding
   session; do not substitute fabricated sessions or models for missing inventory.
 - Agent, model and variant choices come from the Runtime and SDK. A configuration

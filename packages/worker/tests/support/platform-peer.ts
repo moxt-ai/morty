@@ -4,9 +4,25 @@ import { AUTH_TIME } from "./identity-provider.ts";
 
 // Stateful HTTP peer for identity scenarios; live Platform credentials are not
 // suitable for deterministic tests. Projects and Bots are retained by this peer.
-export async function platformPeer() {
+export async function platformPeer({
+    pairingLifetimeMilliseconds = 300000,
+}: {
+    readonly pairingLifetimeMilliseconds?: number;
+} = {}) {
     const projects = new Map<string, object>();
     const bots = new Map<string, object>();
+    const pairings = new Map<
+        string,
+        {
+            readonly pairingId: string;
+            readonly projectId: string;
+            readonly runtimeId: string;
+            readonly channelId: string;
+            readonly pairingCode: string;
+            readonly pollToken: string;
+            readonly expiresAt: string;
+        }
+    >();
     const credential = `mapp_${"a".repeat(22)}_${"b".repeat(43)}`;
     const server = createServer(async (request, response) => {
         response.setHeader("content-type", "application/json");
@@ -19,6 +35,46 @@ export async function platformPeer() {
             body += chunk;
         }
         const timestamp = AUTH_TIME.toISOString();
+        const pairingPath = request.url?.match(
+            /^\/mobius\/api\/v1\/projects\/([^/]+)\/runtime-pairings(?:\/([^/]+))?$/u,
+        );
+        if (pairingPath !== undefined && pairingPath !== null) {
+            const projectId = v.parse(v.string(), pairingPath[1]);
+            if (request.method === "POST" && pairingPath[2] === undefined) {
+                const input = v.parse(v.object({ idempotencyKey: v.string() }), JSON.parse(body));
+                const key = `${projectId}:${input.idempotencyKey}`;
+                let pairing = pairings.get(key);
+                if (pairing === undefined) {
+                    pairing = {
+                        pairingId: `pair-${pairings.size + 1}`,
+                        projectId,
+                        runtimeId: `runtime-${pairings.size + 1}`,
+                        channelId: `channel-${pairings.size + 1}`,
+                        pairingCode: "ABCD-EFGH-JKLM-NPQR-STUV",
+                        pollToken: "p".repeat(43),
+                        expiresAt: new Date(AUTH_TIME.getTime() + pairingLifetimeMilliseconds).toISOString(),
+                    };
+                    pairings.set(key, pairing);
+                }
+                response.writeHead(201).end(JSON.stringify(pairing));
+                return;
+            }
+            const pairing = [...pairings.values()].find(
+                (value) => value.projectId === projectId && value.pairingId === pairingPath[2],
+            );
+            if (pairing !== undefined) {
+                response
+                    .writeHead(200)
+                    .end(
+                        JSON.stringify(
+                            Date.parse(pairing.expiresAt) <= Date.now()
+                                ? { status: "expired" }
+                                : { status: "pending", expiresAt: pairing.expiresAt },
+                        ),
+                    );
+                return;
+            }
+        }
         if (request.method === "POST" && request.url === "/mobius/api/v1/apps/cloud-app/projects") {
             const input = v.parse(
                 v.object({

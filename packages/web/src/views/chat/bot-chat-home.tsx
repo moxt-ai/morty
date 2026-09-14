@@ -12,6 +12,7 @@ import { AttemptFailure } from "./attempt-failure.tsx";
 import { ChatControls } from "./chat-controls.tsx";
 import { LocalSessionPane } from "./local-session-pane.tsx";
 import { LocalSessionSidebar, type OpenLocalSession } from "./local-session-sidebar.tsx";
+import { PairingInstruction } from "./pairing-instruction.tsx";
 
 type State =
     | { readonly kind: "loading" }
@@ -66,7 +67,13 @@ export function BotChatHome({
 }: {
     readonly requests: Pick<
         BotChatApi,
-        "listBots" | "connectConversation" | "workspace" | "selectAgent" | "nativeSessions" | "connectSession"
+        | "listBots"
+        | "connectConversation"
+        | "workspace"
+        | "selectAgent"
+        | "nativeSessions"
+        | "connectSession"
+        | "createPairingInstruction"
     >;
 }) {
     const [state, setState] = useState<State>({ kind: "loading" });
@@ -115,6 +122,21 @@ export function BotChatHome({
             const bot = (await requests.listBots(controller.signal))[0];
             if (bot === undefined) {
                 throw new Error("Your Bot is unavailable.");
+            }
+            const workspace = await requests.workspace(bot.botId, controller.signal);
+            controller.signal.throwIfAborted();
+            const selected = workspace.selected;
+            if (
+                workspace.status !== "active" ||
+                selected === null ||
+                !workspace.agents.some(
+                    (agent) =>
+                        agent.runtimeId === selected.runtimeId && agent.agentRef === selected.agentRef && agent.online,
+                )
+            ) {
+                setState({ kind: "setup" });
+                reconciliationTimer = setTimeout(() => retry((value) => value + 1), 5000);
+                return;
             }
             const session = await requests.connectConversation(bot.botId, controller.signal, conversationKey);
             client = session;
@@ -278,31 +300,19 @@ export function BotChatHome({
                                 <MessageSquare className="mb-5 size-8 text-primary" aria-hidden="true" />
                                 <h1 className="text-2xl font-semibold tracking-tight">Your Chat is ready to connect</h1>
                                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                                    Your anonymous workspace is loaded. Paste this instruction into your local agent to
-                                    connect it to this workspace.
+                                    Your workspace is loaded. Paste this instruction into your local agent to connect it
+                                    to this workspace.
                                 </p>
-                                <input
-                                    aria-label="Agent setup instruction"
-                                    readOnly
-                                    value={`follow ${window.location.origin}/SKILL.md`}
-                                    onFocus={(event) => event.currentTarget.select()}
-                                    className="mt-5 w-full rounded-lg border border-border bg-muted/30 p-3 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                />
+                                <PairingInstruction requests={requests} />
                                 <p role="status" className="mt-4 text-sm text-muted-foreground">
                                     Waiting for agent setup. Chat will open automatically when this Bot is connected.
-                                </p>
-                                <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                                    If your agent returns a link for another saved workspace, open that link to use its
-                                    identity here.
                                 </p>
                             </section>
                         ) : state.kind === "failed" ? (
                             <div className="m-auto grid justify-items-center gap-4 text-center">
                                 <p role="alert">{state.message}</p>
                                 <Button onClick={() => retry((value) => value + 1)}>Reconnect</Button>
-                                <Button asChild variant="ghost">
-                                    <a href="/SKILL.md">Agent setup instructions</a>
-                                </Button>
+                                <PairingInstruction requests={requests} />
                             </div>
                         ) : state.history.turns.length === 0 ? (
                             <div className="m-auto text-center">

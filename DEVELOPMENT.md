@@ -8,9 +8,12 @@ claims. Platform Project setup uses the server-held AppCredential; the Worker
 supplies a logical location hint and Platform resolves its storage placement. Bots and
 Chat support anonymous users; Slack additionally requires a verified Clerk session.
 
-First-time visitors open onboarding on `/` and copy the current-origin setup
-instruction into their local agent. Setup creates their anonymous identity and
-personal Bot; returning users restore their saved identity automatically.
+First-time visitors to `/` receive a browser-held anonymous identity and personal
+Bot; returning visitors restore their saved identity automatically. Every web
+workspace copies `/pair.md?token=...`, a one-time ticket that connects the local
+Runtime to its current user and Bot and directs the user back to Chat.
+`/setup.md` is reserved for standalone testing and external sharing, including
+social posts. That flow creates or reuses a local identity and returns a browser handoff.
 The active web flow has no Project setup or Slack navigation. The web application
 sends its anonymous credential or Clerk bearer token to Chat for ownership checks
 and conversation access. Platform independently authorizes SDK operations.

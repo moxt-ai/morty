@@ -73,6 +73,26 @@ export class AuthenticationService {
         return identity;
     };
 
+    readonly createPairing = async (userId: string, botId: string, signal: AbortSignal) => {
+        const ticket = await this.identities.createPairing(userId, botId, Date.now(), signal);
+        this.logger.info({ event: "agent-pairing-issued", userId, botId }, "Identity audit event");
+        return ticket;
+    };
+
+    readonly redeemPairing = async (token: string, signal: AbortSignal) => {
+        const identity = await this.identities.redeemPairing(token, Date.now(), signal);
+        this.logger.info(
+            {
+                event: "agent-pairing-redeemed",
+                outcome: identity === null ? "rejected" : "accepted",
+                userId: identity?.userId,
+                botId: identity?.botId,
+            },
+            "Identity audit event",
+        );
+        return identity;
+    };
+
     readonly createTransfer = async (
         token: string | undefined,
         signal: AbortSignal,

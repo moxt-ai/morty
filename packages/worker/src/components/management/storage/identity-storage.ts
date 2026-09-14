@@ -3,6 +3,7 @@ import * as v from "valibot";
 const anonymousToken = v.pipe(v.string(), v.regex(/^mobius_anon_v1_[A-Za-z0-9_-]{43}$/u));
 const transferCode = v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{43}$/u));
 const userRow = v.pipe(v.object({ userId: v.string() }), v.readonly());
+const oneTimeCredentialLifetime = 24 * 60 * 60 * 1000;
 
 interface Database {
     readonly batch: (statements: readonly D1PreparedStatement[]) => Promise<readonly D1Result[]>;
@@ -98,7 +99,7 @@ export class IdentityStorage {
     readonly createTransfer = async (userId: string, now: number, signal: AbortSignal): Promise<IdentityTransfer> => {
         signal.throwIfAborted();
         const code = randomSecret();
-        const expiresAt = now + 15 * 60 * 1_000;
+        const expiresAt = now + oneTimeCredentialLifetime;
         await this.#requireDatabase()
             .prepare(
                 "INSERT INTO identity_transfer (id, code_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",
@@ -127,7 +128,7 @@ export class IdentityStorage {
         const results = await database.batch([
             database
                 .prepare(
-                    "UPDATE identity_transfer SET consumed_at = ?, claim_nonce = ? WHERE code_hash = ? AND consumed_at IS NULL AND expires_at >= ?",
+                    "UPDATE identity_transfer SET consumed_at = ?, claim_nonce = ? WHERE code_hash = ? AND consumed_at IS NULL AND expires_at > ?",
                 )
                 .bind(now, claimNonce, codeHash, now),
             database
@@ -157,6 +158,65 @@ export class IdentityStorage {
         signal.throwIfAborted();
         const parsed = v.safeParse(userRow, row);
         return parsed.success ? parsed.output.userId : null;
+    };
+
+    readonly createPairing = async (
+        userId: string,
+        botId: string,
+        now: number,
+        signal: AbortSignal,
+    ): Promise<IdentityTransfer> => {
+        signal.throwIfAborted();
+        const code = randomSecret();
+        const expiresAt = now + oneTimeCredentialLifetime;
+        await this.#requireDatabase()
+            .prepare("INSERT INTO agent_pairing_ticket (code_hash, user_id, bot_id, expires_at) VALUES (?, ?, ?, ?)")
+            .bind(await digest(code), userId, botId, expiresAt)
+            .run();
+        signal.throwIfAborted();
+        return { code, expiresAt };
+    };
+
+    readonly redeemPairing = async (
+        code: string,
+        now: number,
+        signal: AbortSignal,
+    ): Promise<(AnonymousIdentity & { readonly botId: string }) | null> => {
+        if (!v.safeParse(transferCode, code).success) {
+            return null;
+        }
+        signal.throwIfAborted();
+        const database = this.#requireDatabase();
+        const hash = await digest(code);
+        const nonce = crypto.randomUUID();
+        const token = `mobius_anon_v1_${randomSecret()}`;
+        const results = await database.batch([
+            database
+                .prepare(
+                    "UPDATE agent_pairing_ticket SET consumed_at = ?, claim_nonce = ? WHERE code_hash = ? AND consumed_at IS NULL AND expires_at > ? AND EXISTS (SELECT 1 FROM managed_bot WHERE managed_bot.bot_id = agent_pairing_ticket.bot_id AND managed_bot.user_id = agent_pairing_ticket.user_id)",
+                )
+                .bind(now, nonce, hash, now),
+            database
+                .prepare(
+                    "INSERT INTO anonymous_credential (id, user_id, token_hash, status, created_at) SELECT ?, user_id, ?, 'active', ? FROM agent_pairing_ticket WHERE code_hash = ? AND claim_nonce = ?",
+                )
+                .bind(`cred_${crypto.randomUUID()}`, await digest(token), now, hash, nonce),
+        ]);
+        signal.throwIfAborted();
+        if (results[0]?.meta.changes !== 1) {
+            return null;
+        }
+        const row = v.parse(
+            v.object({ userId: v.string(), botId: v.string() }),
+            await database
+                .prepare(
+                    "SELECT user_id AS userId, bot_id AS botId FROM agent_pairing_ticket WHERE code_hash = ? AND claim_nonce = ?",
+                )
+                .bind(hash, nonce)
+                .first(),
+        );
+        signal.throwIfAborted();
+        return { ...row, token };
     };
 
     readonly resolveOrCreateClerk = async (clerkUserId: string, now: number, signal: AbortSignal): Promise<string> => {
@@ -227,6 +287,7 @@ export class IdentityStorage {
             return { kind: "invalid-local-user" };
         }
         await database.batch([
+            database.prepare("DELETE FROM agent_pairing_ticket WHERE user_id = ?").bind(localUserId),
             database.prepare("DELETE FROM identity_transfer WHERE user_id = ?").bind(localUserId),
             database.prepare("DELETE FROM anonymous_credential WHERE user_id = ?").bind(localUserId),
             database.prepare("DELETE FROM chat_access_token WHERE user_id = ?").bind(localUserId),
