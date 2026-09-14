@@ -133,6 +133,29 @@ test("Given a first-time visitor, When an anonymous identity is created, Then th
     });
 });
 
+test("Given a user with a Bot on a Project-scoped Platform, When setup checks the Bot workspace, Then the draft Bot and available agents are returned", async () => {
+    const database = new InMemoryD1Database();
+    const environment = slackConfiguration(database);
+    const identity = await createAnonymousUser(database);
+    const listed = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/management/bots`, {
+            headers: { authorization: `Bearer ${identity.token}` },
+        }),
+        environment,
+    );
+    const { bots } = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await listed.json());
+    const response = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/chat/bots/${bots[0]?.botId}/workspace`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+            body: "{}",
+        }),
+        environment,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ status: "draft", selected: null, agents: [] });
+});
+
 test("Given an anonymous user, When a transfer is redeemed twice, Then only the first device receives that identity", async () => {
     const database = new InMemoryD1Database();
     const identity = await createAnonymousUser(database);

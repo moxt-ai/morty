@@ -10,7 +10,7 @@ export async function platformPeer({
     readonly pairingLifetimeMilliseconds?: number;
 } = {}) {
     const projects = new Map<string, object>();
-    const bots = new Map<string, object>();
+    const bots = new Map<string, { readonly botId: string; readonly projectId: string }>();
     const pairings = new Map<
         string,
         {
@@ -113,7 +113,7 @@ export async function platformPeer({
             const bot = {
                 ...input,
                 botId: `bot-${bots.size + 1}`,
-                projectId: match[1],
+                projectId: v.parse(v.string(), match[1]),
                 createdAt: timestamp,
                 updatedAt: timestamp,
                 currentProfileRevisionId: `profile-${bots.size + 1}`,
@@ -123,6 +123,26 @@ export async function platformPeer({
             };
             bots.set(bot.botId, bot);
             response.writeHead(201).end(JSON.stringify(bot));
+            return;
+        }
+        const botPath = request.url?.match(
+            /^\/mobius\/api\/v1\/projects\/([^/]+)\/bots\/([^/]+)(?:\/(execution-bindings))?$/u,
+        );
+        if (request.method === "GET" && botPath !== undefined && botPath !== null) {
+            const bot = bots.get(v.parse(v.string(), botPath[2]));
+            if (bot !== undefined && bot.projectId === botPath[1]) {
+                response.writeHead(200).end(JSON.stringify(botPath[3] === undefined ? bot : { executionBindings: [] }));
+                return;
+            }
+        }
+        const runtimePath = request.url?.match(/^\/mobius\/api\/v1\/projects\/([^/]+)\/runtimes$/u);
+        if (
+            request.method === "GET" &&
+            runtimePath !== undefined &&
+            runtimePath !== null &&
+            [...bots.values()].some((bot) => bot.projectId === runtimePath[1])
+        ) {
+            response.writeHead(200).end(JSON.stringify({ runtimes: [] }));
             return;
         }
         response.writeHead(404).end(JSON.stringify({ error: { code: "not_found", message: "Not found" } }));
