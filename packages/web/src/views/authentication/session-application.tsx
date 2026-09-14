@@ -52,12 +52,12 @@ function WorkspaceApplication(props: WorkspaceApplicationProps) {
             );
         }
         const Standard = ({ children }: { readonly children: ReactNode }) => (
-            <>
+            <div className="contents [&:has([data-chat-state=disconnected])>footer]:hidden">
                 {children}
                 <footer className="fixed bottom-0 left-0 z-10 hidden h-16 w-64 items-center gap-2 border-t border-border bg-background px-4 sm:flex">
                     {account}
                 </footer>
-            </>
+            </div>
         );
         return createApplicationRouter(
             authorize,
