@@ -1,11 +1,5 @@
-import {
-    createMobiusConversationSession,
-    MobiusBrowserAccessToken,
-    type MobiusBrowserClient,
-    type MobiusBrowserHistory,
-    MobiusPageRequest,
-} from "@moxt-ai/mobius-sdk/browser";
-import { MessageSquare, Send } from "lucide-react";
+import { type MobiusBrowserClient, type MobiusBrowserHistory, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
+import { MessageSquare, Send, SquarePen } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
@@ -13,6 +7,7 @@ import { Textarea } from "../../components/ui/textarea.tsx";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
+import { AttemptFailure } from "./attempt-failure.tsx";
 import { ChatControls } from "./chat-controls.tsx";
 import { LocalSessionPane } from "./local-session-pane.tsx";
 import { LocalSessionSidebar, type OpenLocalSession } from "./local-session-sidebar.tsx";
@@ -70,12 +65,16 @@ export function BotChatHome({
 }: {
     readonly requests: Pick<
         BotChatApi,
-        "listBots" | "access" | "workspace" | "selectAgent" | "nativeSessions" | "connectSession"
+        "listBots" | "connectConversation" | "workspace" | "selectAgent" | "nativeSessions" | "connectSession"
     >;
 }) {
     const [state, setState] = useState<State>({ kind: "loading" });
     const [revision, retry] = useState(0);
     const [draft, setDraft] = useState("");
+    const [conversationKey, setConversationKey] = useState(() => {
+        const key = new URL(window.location.href).searchParams.get("conversation");
+        return key !== null && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(key) ? key : "personal-chat";
+    });
     const [sending, setSending] = useState<Sending>({ kind: "idle" });
     const lifetime = useRef<AbortController | null>(null);
     const messageList = useRef<HTMLDivElement | null>(null);
@@ -84,6 +83,18 @@ export function BotChatHome({
         { readonly kind: "bot" } | { readonly kind: "local"; readonly session: OpenLocalSession }
     >({ kind: "bot" });
     const showBot = useCallback(() => setConversation({ kind: "bot" }), []);
+    const newConversation = useCallback(() => {
+        lifetime.current?.abort();
+        setDraft("");
+        setSending({ kind: "idle" });
+        setConversation({ kind: "bot" });
+        followLatest.current = true;
+        const key = crypto.randomUUID();
+        const url = new URL(window.location.href);
+        url.searchParams.set("conversation", key);
+        window.history.replaceState(window.history.state, "", url);
+        setConversationKey(key);
+    }, []);
     const reconnect = useCallback(() => retry((value) => value + 1), []);
     useEffect(() => {
         if (state.kind === "ready" && followLatest.current && messageList.current !== null) {
@@ -104,22 +115,7 @@ export function BotChatHome({
             if (bot === undefined) {
                 throw new Error("Your Bot is unavailable.");
             }
-            const access = await requests.access(bot.botId, controller.signal);
-            let initial = true;
-            const session = createMobiusConversationSession({
-                endpoint: access.endpoint,
-                streamConnectionTimeoutMilliseconds: 45000,
-                accessTokenProvider: {
-                    accessToken: async (signal) => {
-                        const token = initial ? access : await requests.access(bot.botId, signal);
-                        initial = false;
-                        if (token.endpoint !== access.endpoint || token.conversationId !== access.conversationId) {
-                            throw new Error("The conversation identity changed. Reconnect to continue.");
-                        }
-                        return new MobiusBrowserAccessToken(token.credential, token.expiresAt);
-                    },
-                },
-            });
+            const session = await requests.connectConversation(bot.botId, controller.signal, conversationKey);
             client = session;
             const history = await session.history.read(new MobiusPageRequest(100, ""), controller.signal);
             controller.signal.throwIfAborted();
@@ -189,7 +185,7 @@ export function BotChatHome({
             client?.close();
             lifetime.current = null;
         };
-    }, [requests, revision]);
+    }, [requests, revision, conversationKey]);
 
     const send = async () => {
         const controller = lifetime.current;
@@ -235,6 +231,7 @@ export function BotChatHome({
                     requests={requests}
                     onOpen={(session) => setConversation({ kind: "local", session })}
                     onChat={showBot}
+                    onNewConversation={newConversation}
                 />
             ) : (
                 <aside
@@ -242,8 +239,8 @@ export function BotChatHome({
                     className="hidden w-60 shrink-0 border-r border-border bg-muted/30 p-4 sm:flex sm:flex-col"
                 >
                     <div className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium">
-                        <MessageSquare className="size-4" aria-hidden="true" />
-                        My Bot
+                        <SquarePen className="size-4" aria-hidden="true" />
+                        New Conversation
                     </div>
                 </aside>
             )}
@@ -327,11 +324,12 @@ export function BotChatHome({
                                         <article className="whitespace-pre-wrap px-4 py-3" aria-label="Agent response">
                                             {turn.response}
                                         </article>
-                                    ) : (
+                                    ) : turn.attempt.kind !== "failed" ? (
                                         <p role="status" className="px-4 text-sm text-muted-foreground">
                                             {attemptStatus(turn.attempt.kind)}
                                         </p>
-                                    )}
+                                    ) : null}
+                                    <AttemptFailure attempt={turn.attempt} />
                                 </div>
                             ))
                         )}

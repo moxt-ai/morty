@@ -1,5 +1,5 @@
 import { decodeNativeSessionResult } from "@moxt-ai/mobius-protocol";
-import { MobiusClient } from "@moxt-ai/mobius-sdk/browser";
+import { createMobiusConversationSession, MobiusBrowserAccessToken, MobiusClient } from "@moxt-ai/mobius-sdk/browser";
 import * as v from "valibot";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 
@@ -73,8 +73,37 @@ export class BotChatApi {
         this.#getToken = options.getToken;
         this.listBots = new ManagementApi(options).listBots;
     }
-    readonly access = async (botId: string, parent: AbortSignal): Promise<ChatAccess> =>
-        v.parse(accessSchema, await this.#request(botId, "access", undefined, parent));
+    readonly access = async (
+        botId: string,
+        parent: AbortSignal,
+        conversationKey = "personal-chat",
+    ): Promise<ChatAccess> =>
+        v.parse(
+            accessSchema,
+            await this.#request(botId, "access", { conversationKey: v.parse(identifier, conversationKey) }, parent),
+        );
+    readonly connectConversation = async (botId: string, signal: AbortSignal, conversationKey = "personal-chat") => {
+        const access = await this.access(botId, signal, conversationKey);
+        signal.throwIfAborted();
+        let initial = true;
+        return createMobiusConversationSession({
+            endpoint: access.endpoint,
+            streamConnectionTimeoutMilliseconds: 45000,
+            accessTokenProvider: {
+                accessToken: async (parent) => {
+                    const token = initial ? access : await this.access(botId, parent, conversationKey);
+                    initial = false;
+                    if (token.endpoint !== access.endpoint || token.conversationId !== access.conversationId) {
+                        throw new CloudApiError(
+                            "CONVERSATION_CHANGED",
+                            "The conversation identity changed. Reconnect to continue.",
+                        );
+                    }
+                    return new MobiusBrowserAccessToken(token.credential, token.expiresAt);
+                },
+            },
+        });
+    };
     readonly workspace = async (botId: string, parent: AbortSignal): Promise<ChatWorkspace> =>
         v.parse(workspaceSchema, await this.#request(botId, "workspace", undefined, parent));
     readonly selectAgent = async (botId: string, selection: ChatAgentSelection, parent: AbortSignal): Promise<void> => {

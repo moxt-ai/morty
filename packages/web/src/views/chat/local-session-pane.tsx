@@ -1,17 +1,19 @@
 import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
-import { type MobiusClient, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
+import { type MobiusClient, type MobiusMessagePage, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
 import { ArrowLeft, Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import { AttemptFailure } from "./attempt-failure.tsx";
 import type { OpenLocalSession } from "./local-session-sidebar.tsx";
 
 interface Message {
     readonly id: string;
     readonly role: "user" | "assistant";
     readonly text: string;
+    readonly attempt: MobiusMessagePage["messages"][number]["attempt"] | null;
 }
 type Operation =
     | { readonly kind: "idle" }
@@ -36,6 +38,7 @@ export function LocalSessionPane({
                   id: `history-${index}`,
                   role: message.role,
                   text: message.text,
+                  attempt: null,
               }))
             : [],
     );
@@ -84,15 +87,13 @@ export function LocalSessionPane({
             }
             setMessages((current) =>
                 current.map((item) =>
-                    item.id === `${currentCommand}-reply` ? { ...item, text: message.response } : item,
+                    item.id === `${currentCommand}-reply`
+                        ? { ...item, text: message.response, attempt: message.attempt }
+                        : item,
                 ),
             );
             if (["succeeded", "failed", "cancelled"].includes(message.attempt.kind)) {
-                setOperation(
-                    message.attempt.kind === "failed"
-                        ? { kind: "failed", message: "The agent could not complete this message." }
-                        : { kind: "idle" },
-                );
+                setOperation({ kind: "idle" });
                 command.current = "";
                 turnId.current = "";
             }
@@ -186,8 +187,8 @@ export function LocalSessionPane({
         setDraft("");
         setMessages((current) => [
             ...current,
-            { id: commandId, role: "user", text: prompt },
-            { id: `${commandId}-reply`, role: "assistant", text: "" },
+            { id: commandId, role: "user", text: prompt, attempt: null },
+            { id: `${commandId}-reply`, role: "assistant", text: "", attempt: null },
         ]);
         setOperation({ kind: "sending", commandId });
         try {
@@ -274,7 +275,13 @@ export function LocalSessionPane({
                         aria-label={message.role === "user" ? "Your message" : "Agent response"}
                         className={`mx-auto w-full min-w-0 max-w-3xl whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-7 [overflow-wrap:anywhere] ${message.role === "user" ? "bg-accent" : ""}`}
                     >
-                        {message.text || (operation.kind === "sending" ? "Agent is thinking…" : "No text response.")}
+                        {message.text ||
+                            (message.attempt?.kind === "failed"
+                                ? ""
+                                : operation.kind === "sending"
+                                  ? "Agent is thinking…"
+                                  : "No text response.")}
+                        {message.attempt !== null && <AttemptFailure attempt={message.attempt} />}
                     </article>
                 ))}
             </div>
