@@ -1,6 +1,7 @@
 import { type MobiusBrowserClient, type MobiusBrowserHistory, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
 import { MessageSquare, Send, SquarePen } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
@@ -321,8 +322,11 @@ export function BotChatHome({
                                         {turn.prompt}
                                     </article>
                                     {turn.response.length > 0 ? (
-                                        <article className="whitespace-pre-wrap px-4 py-3" aria-label="Agent response">
-                                            {turn.response}
+                                        <article className="min-w-0 px-4 py-3" aria-label="Agent response">
+                                            <AgentMarkdown
+                                                markdown={turn.response}
+                                                streaming={turn.attempt.kind === "running"}
+                                            />
                                         </article>
                                     ) : turn.attempt.kind !== "failed" ? (
                                         <p role="status" className="px-4 text-sm text-muted-foreground">

@@ -2,6 +2,7 @@ import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
 import { type MobiusClient, type MobiusMessagePage, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
 import { ArrowLeft, Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
@@ -273,14 +274,23 @@ export function LocalSessionPane({
                     <article
                         key={message.id}
                         aria-label={message.role === "user" ? "Your message" : "Agent response"}
-                        className={`mx-auto w-full min-w-0 max-w-3xl whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-7 [overflow-wrap:anywhere] ${message.role === "user" ? "bg-accent" : ""}`}
+                        className={`mx-auto w-full min-w-0 max-w-3xl rounded-2xl px-4 py-3 text-sm leading-7 [overflow-wrap:anywhere] ${message.role === "user" ? "whitespace-pre-wrap bg-accent" : ""}`}
                     >
-                        {message.text ||
+                        {message.role === "assistant" && message.text.length > 0 ? (
+                            <AgentMarkdown
+                                markdown={message.text}
+                                streaming={
+                                    operation.kind === "sending" && message.id === `${operation.commandId}-reply`
+                                }
+                            />
+                        ) : (
+                            message.text ||
                             (message.attempt?.kind === "failed"
                                 ? ""
                                 : operation.kind === "sending"
                                   ? "Agent is thinking…"
-                                  : "No text response.")}
+                                  : "No text response.")
+                        )}
                         {message.attempt !== null && <AttemptFailure attempt={message.attempt} />}
                     </article>
                 ))}
