@@ -1,8 +1,7 @@
 import { execFile, spawn } from "node:child_process";
-import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { constants } from "node:fs";
-import { chmod, lstat, mkdir, open, readFile, realpath, rename, rm } from "node:fs/promises";
+import { chmod, copyFile, lstat, mkdir, open, readFile, realpath, rename, rm } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs, promisify } from "node:util";
@@ -201,11 +200,31 @@ async function loadConfiguration(directory, base) {
         if (cause.code !== "ENOENT") {
             throw cause;
         }
+        return { directory, base, config };
     }
-    if (config.base_url !== undefined && config.base_url !== base) {
-        fail("ENVIRONMENT_CONFLICT");
+    // Preserve identity and Bot selection, never old credentials or connection state.
+    const identity =
+        config.base_url !== undefined && config.base_url !== base
+            ? {}
+            : Object.fromEntries(
+                  Object.entries(config).filter(([key]) => ["user_token", "user_id", "bot_id"].includes(key)),
+              );
+    return { directory, base, config: identity };
+}
+
+async function backupConfiguration(directory) {
+    const path = join(directory, "config.json");
+    try {
+        await privatePath(path, false);
+    } catch (cause) {
+        if (cause.code === "ENOENT") {
+            return;
+        }
+        throw cause;
     }
-    return { directory, base, config };
+    const backupPath = join(directory, `config-backup-${crypto.randomUUID()}.json`);
+    await copyFile(path, backupPath, constants.COPYFILE_EXCL);
+    emit({ status: "configuration_backed_up", backupPath });
 }
 
 async function saveConfiguration(context, updates) {
@@ -242,7 +261,7 @@ async function request(context, route, body, authenticated = true) {
 function readOptions() {
     const { values, positionals } = parseArgs({
         allowPositionals: true,
-        options: { token: { type: "string" }, harness: { type: "string" } },
+        options: { token: { type: "string" }, harness: { type: "string" }, "base-url": { type: "string" } },
     });
     if (positionals.length !== 1 || !["pair", "setup"].includes(positionals[0])) {
         fail("INVALID_ARGUMENTS");
@@ -250,72 +269,34 @@ function readOptions() {
     if (values.harness === undefined) {
         fail("HARNESS_REQUIRED");
     }
+    if (values["base-url"] === undefined) {
+        fail("BASE_URL_REQUIRED");
+    }
+    const base = origin(values["base-url"]);
     const harness = identifier(values.harness);
     if (positionals[0] === "pair") {
         if (values.token === undefined) {
             fail("PAIRING_TICKET_REQUIRED");
         }
-        return { mode: "pair", harness, token: text(values.token, /^[A-Za-z0-9_-]{43}$/u) };
+        return { mode: "pair", base, harness, token: text(values.token, /^[A-Za-z0-9_-]{43}$/u) };
     }
     if (values.token !== undefined) {
         fail("INVALID_ARGUMENTS");
     }
-    return { mode: "setup", harness };
-}
-
-async function recoverOrRedeemTicket(context, ticket, ticketHash) {
-    const recovery = join(context.directory, "pairing-recovery.json");
-    try {
-        const saved = await readPrivateJson(recovery);
-        if (saved.base_url !== context.base) {
-            fail("ENVIRONMENT_CONFLICT");
-        }
-        if (saved.ticket_hash !== ticketHash) {
-            fail("PAIRING_RECOVERY_CONFLICT");
-        }
-        return object(saved.identity);
-    } catch (cause) {
-        if (cause.code !== "ENOENT") {
-            throw cause;
-        }
-    }
-    const identity = await request(context, "/identity/pairings/redeem", { token: ticket }, false);
-    credential(identity.token);
-    identifier(identity.botId);
-    identifier(identity.userId);
-    identifier(identity.projectId);
-    // Preserve the redeemed credential before checking compatibility with local state.
-    await writePrivateJson(recovery, { base_url: context.base, ticket_hash: ticketHash, identity });
-    return identity;
+    return { mode: "setup", base, harness };
 }
 
 async function preparePairIdentity(context, ticket) {
-    const ticketHash = createHash("sha256").update(ticket).digest("hex");
-    if (context.config.pair_ticket_hash === ticketHash) {
-        progress("identity", "Resuming the saved web identity and Bot.");
-        return context;
-    }
     progress("identity", "Exchanging the one-time ticket for the existing user, Bot, and Project.");
-    const identity = await recoverOrRedeemTicket(context, ticket, ticketHash);
-    if (context.config.user_token !== undefined) {
-        const current = await request(context, "/session");
-        if (
-            current.userId !== identity.userId ||
-            (context.config.bot_id !== undefined && context.config.bot_id !== identity.botId)
-        ) {
-            fail("IDENTITY_CONFLICT");
-        }
-    }
-    const saved = await saveConfiguration(context, {
+    const identity = await request(context, "/identity/pairings/redeem", { token: ticket }, false);
+    const updates = {
         user_token: credential(identity.token),
         user_id: identifier(identity.userId),
         bot_id: identifier(identity.botId),
         project_id: identifier(identity.projectId),
         entry: "pair",
-        pair_ticket_hash: ticketHash,
-    });
-    await rm(join(context.directory, "pairing-recovery.json"));
-    return saved;
+    };
+    return await saveConfiguration(context, updates);
 }
 
 async function prepareIdentity(context, options) {
@@ -578,11 +559,13 @@ async function finishSetup(context, mode) {
 
 async function main() {
     const options = readOptions();
-    const base = origin(process.env.BASE_URL);
+    const base = options.base;
     const directory = await prepareDirectory(process.env.DOCUMENT_DIR);
     const lock = await acquireLock(directory);
     try {
-        let context = await loadConfiguration(directory, base);
+        let context =
+            options.mode === "setup" ? await loadConfiguration(directory, base) : { directory, base, config: {} };
+        await backupConfiguration(directory);
         progress("shutdown", "Stopping existing local Mobius Runtime processes.");
         await stopLocalRuntimes();
         context = await prepareIdentity(context, options);

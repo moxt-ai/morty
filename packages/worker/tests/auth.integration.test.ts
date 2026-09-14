@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -290,9 +290,15 @@ test("Given another user's Bot and an expired ticket, When pairing is requested,
     expect(await expired.json()).toMatchObject({ error: { code: "PAIRING_TICKET_UNAVAILABLE" } });
 });
 
-test.each(["pair", "setup"])(
-    "Given %s instructions and a Runtime pairing that expires before connection, When the command starts and resumes, Then the old Runtime stops and the same user and Bot are preserved",
-    async (mode) => {
+test.each([
+    { mode: "pair", conflict: false, invalidConfig: false },
+    { mode: "setup", conflict: false, invalidConfig: false },
+    { mode: "pair", conflict: true, invalidConfig: false },
+    { mode: "pair", conflict: true, invalidConfig: true },
+    { mode: "setup", conflict: true, invalidConfig: false },
+])(
+    "Given $mode instructions with local conflict=$conflict and invalid configuration=$invalidConfig, When the command connects and setup reconnects, Then the selected identity is saved and reused with fresh Runtime credentials",
+    async ({ mode, conflict, invalidConfig }) => {
         const database = new InMemoryD1Database();
         const environment = slackConfiguration(database);
         const identity = await createAnonymousUser(database);
@@ -352,6 +358,26 @@ test.each(["pair", "setup"])(
         }
         const base = `http://127.0.0.1:${address.port}`;
         const directory = await mkdtemp(join(tmpdir(), "mobius-setup-"));
+        const previous = await createAnonymousUser(database);
+        const previousConfig = {
+            base_url: base,
+            user_token: mode === "setup" ? identity.token : previous.token,
+            user_id: mode === "setup" ? identity.userId : previous.userId,
+            bot_id: mode === "setup" ? owned[0]?.botId : "previous-bot",
+            project_id: "previous-project",
+            pairing_key: "previous-key",
+            pairing: { pairingId: "previous-pairing" },
+            runtime_process: { pid: 123, log_path: "previous.log" },
+            agent_ref: "previous-agent",
+            agent_config_revision: 99,
+        };
+        const previousContents = invalidConfig ? "invalid old configuration" : JSON.stringify(previousConfig);
+        if (conflict) {
+            await mkdir(join(directory, "mobius-chat"), { mode: 0o700 });
+            await writeFile(join(directory, "mobius-chat", "config.json"), previousContents, {
+                mode: 0o600,
+            });
+        }
         // Stateful local Runtime process through the production OS process boundary.
         // A real connected Runtime would require interactive local agent credentials.
         const runtimePackage = join(directory, "node_modules", "@moxt-ai", "mobius");
@@ -383,19 +409,21 @@ process.send('ready');
             oldRuntime.once("message", () => resolve());
             oldRuntime.once("error", reject);
         });
-        const run = () =>
+        const run = (command = mode) =>
             new Promise<{ readonly code: number | null; readonly output: string }>((resolve, reject) => {
                 const child = spawn(
                     process.execPath,
                     [
                         fileURLToPath(new URL("../../../public/setup.mjs", import.meta.url)),
-                        mode,
+                        command,
+                        "--base-url",
+                        base,
                         "--harness",
                         "codex",
-                        ...(mode === "pair" ? ["--token", ticket] : []),
+                        ...(command === "pair" ? [`--token=${ticket}`] : []),
                     ],
                     {
-                        env: { ...process.env, DOCUMENT_DIR: directory, BASE_URL: base },
+                        env: { ...process.env, DOCUMENT_DIR: directory },
                         signal: AbortSignal.timeout(15000),
                         stdio: ["pipe", "pipe", "pipe"],
                     },
@@ -424,13 +452,45 @@ process.send('ready');
             );
             expect((await stat(path)).mode & 0o777).toBe(0o600);
             expect(prepared.output).not.toContain(config.user_token);
+            if (conflict) {
+                const backups = (await readdir(join(directory, "mobius-chat"))).filter((name) =>
+                    name.startsWith("config-backup-"),
+                );
+                expect(backups).toHaveLength(1);
+                const backup = join(directory, "mobius-chat", backups[0] ?? "missing-backup");
+                expect(await readFile(backup, "utf8")).toBe(previousContents);
+                expect((await stat(backup)).mode & 0o777).toBe(0o600);
+                expect(prepared.output).toContain('"status":"configuration_backed_up"');
+                expect(prepared.output).not.toContain(previous.token);
+                expect(config.user_id).toBe(identity.userId);
+                if (mode === "setup") {
+                    expect(config.user_token).toBe(identity.token);
+                }
+                expect(config.pairing_key).not.toBe(previousConfig.pairing_key);
+                const replacement = JSON.parse(await readFile(path, "utf8"));
+                expect(replacement.runtime_process).toBeUndefined();
+                expect(replacement.agent_ref).toBeUndefined();
+                expect(replacement.agent_config_revision).toBeUndefined();
+            }
             if (mode === "pair") {
                 expect(config).toMatchObject({ user_id: identity.userId, bot_id: owned[0]?.botId });
             }
-            const resumed = await run();
+            if (mode === "pair") {
+                const consumed = await run();
+                expect(consumed.code).toBe(1);
+                expect(consumed.output).toContain('"code":"PAIRING_TICKET_UNAVAILABLE"');
+                expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject(config);
+            }
+            const resumed = await run("setup");
             expect(resumed.code, resumed.output).toBe(1);
             expect(resumed.output).toContain('"code":"RUNTIME_PAIRING_UNAVAILABLE"');
-            expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject(config);
+            const restarted = JSON.parse(await readFile(path, "utf8"));
+            expect(restarted).toMatchObject({
+                user_token: config.user_token,
+                user_id: config.user_id,
+                bot_id: config.bot_id,
+            });
+            expect(restarted.pairing_key).not.toBe(config.pairing_key);
             await expect(stat(join(directory, "mobius-chat", ".setup-lock"))).rejects.toMatchObject({ code: "ENOENT" });
         } finally {
             oldRuntime.kill("SIGTERM");
