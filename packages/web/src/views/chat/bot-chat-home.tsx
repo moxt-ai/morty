@@ -5,7 +5,7 @@ import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
-import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import type { BotChatApi, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
 import { AttemptFailure } from "./attempt-failure.tsx";
@@ -14,9 +14,45 @@ import { LocalSessionPane } from "./local-session-pane.tsx";
 import { LocalSessionSidebar, type OpenLocalSession } from "./local-session-sidebar.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
 
+type SetupReason = "unconfigured" | "inactive" | "no-selection" | "agent-missing" | "agent-offline" | "agent-required";
+
+function setupReason(workspace: ChatWorkspace): SetupReason | null {
+    if (workspace.status !== "active") {
+        return workspace.status === "draft" ? "unconfigured" : "inactive";
+    }
+    const selected = workspace.selected;
+    if (selected === null) {
+        return "no-selection";
+    }
+    const agent = workspace.agents.find(
+        (agent) => agent.runtimeId === selected.runtimeId && agent.agentRef === selected.agentRef,
+    );
+    if (agent === undefined) {
+        return "agent-missing";
+    }
+    return agent.online ? null : "agent-offline";
+}
+
+function setupDescription(reason: SetupReason): string {
+    switch (reason) {
+        case "unconfigured":
+            return "Your workspace is loaded. Paste this instruction into your local agent to connect it to this workspace.";
+        case "inactive":
+            return "Your workspace is loaded, but this Bot is not active, so Chat cannot reconnect. Use the instruction below to connect your local agent and activate Chat.";
+        case "no-selection":
+            return "Your workspace is loaded, but no agent is selected for this Bot. Use the instruction below to connect an agent to this workspace.";
+        case "agent-missing":
+            return "Your workspace is loaded, but the previously selected agent is no longer available in its agent list. Start the previously paired local agent, or use the instruction below to pair an agent again.";
+        case "agent-offline":
+            return "Your workspace is loaded, but your selected local agent is offline. Start the previously paired agent and check its internet connection. If you need to pair it again, use the instruction below.";
+        case "agent-required":
+            return "Your workspace is loaded, but the server could not connect Chat to an available agent. Check that your local agent is running, or use the instruction below to pair it again.";
+    }
+}
+
 type State =
     | { readonly kind: "loading" }
-    | { readonly kind: "setup" }
+    | { readonly kind: "setup"; readonly reason: SetupReason }
     | {
           readonly kind: "ready";
           readonly bot: ManagedBot;
@@ -125,16 +161,9 @@ export function BotChatHome({
             }
             const workspace = await requests.workspace(bot.botId, controller.signal);
             controller.signal.throwIfAborted();
-            const selected = workspace.selected;
-            if (
-                workspace.status !== "active" ||
-                selected === null ||
-                !workspace.agents.some(
-                    (agent) =>
-                        agent.runtimeId === selected.runtimeId && agent.agentRef === selected.agentRef && agent.online,
-                )
-            ) {
-                setState({ kind: "setup" });
+            const reason = setupReason(workspace);
+            if (reason !== null) {
+                setState({ kind: "setup", reason });
                 reconciliationTimer = setTimeout(() => retry((value) => value + 1), 5000);
                 return;
             }
@@ -193,7 +222,7 @@ export function BotChatHome({
             client?.close();
             if (!controller.signal.aborted) {
                 if (cause instanceof CloudApiError && cause.code === "AGENT_REQUIRED") {
-                    setState({ kind: "setup" });
+                    setState({ kind: "setup", reason: "agent-required" });
                     reconciliationTimer = setTimeout(() => retry((value) => value + 1), 5000);
                     return;
                 }
@@ -298,14 +327,18 @@ export function BotChatHome({
                         ) : state.kind === "setup" ? (
                             <section className="m-auto w-full max-w-lg animate-cloud-enter rounded-2xl border border-border bg-card p-8 shadow-sm motion-reduce:animate-none">
                                 <MessageSquare className="mb-5 size-8 text-primary" aria-hidden="true" />
-                                <h1 className="text-2xl font-semibold tracking-tight">Your Chat is ready to connect</h1>
+                                <h1 className="text-2xl font-semibold tracking-tight">
+                                    {state.reason === "unconfigured"
+                                        ? "Your Chat is ready to connect"
+                                        : "Chat is waiting to reconnect"}
+                                </h1>
                                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                                    Your workspace is loaded. Paste this instruction into your local agent to connect it
-                                    to this workspace.
+                                    {setupDescription(state.reason)}
                                 </p>
                                 <PairingInstruction requests={requests} />
                                 <p role="status" className="mt-4 text-sm text-muted-foreground">
-                                    Waiting for agent setup. Chat will open automatically when this Bot is connected.
+                                    Checking automatically every 5 seconds. Chat will open when this Bot is active and
+                                    its selected agent is online.
                                 </p>
                             </section>
                         ) : state.kind === "failed" ? (

@@ -76,6 +76,12 @@ receive a browser-held anonymous identity and Bot, then see a current-origin
 opens headerless Chat without Project controls or Slack navigation. Reload and
 confirm the same identity and Bot are retained. No web instruction points to
 `setup.md`; verify its browser handoff separately as the externally shared flow.
-Revisit with the selected Runtime offline and confirm the pairing instruction is
-shown directly; reconnect it and confirm the same page opens Chat automatically.
+Given a previously paired workspace whose selected Runtime is offline, When the
+user revisits Chat with their saved identity, Then the page explains that the
+selected agent is offline, asks them to restart it, and says it checks automatically
+every five seconds. The pairing instruction remains available for recovery.
+Given a workspace whose selected agent is no longer available, When the user
+revisits Chat, Then the page explains that the selected agent is unavailable and
+offers pairing instructions. If the Bot is inactive, the page explains that instead.
+Reconnect the selected Runtime and confirm the same page opens Chat automatically.
 HTTP integration tests cover identity creation, Bot ownership, and authorization.
