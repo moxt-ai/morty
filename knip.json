@@ -4,7 +4,7 @@
     "ignoreDependencies": ["cloudflare"],
     "workspaces": {
         ".": {
-            "entry": ["public/setup.mjs"]
+            "entry": ["public/setup.mjs", "scripts/fixtures/local-platform-e2e-worker.ts"]
         },
         "packages/web": {
             "entry": [
