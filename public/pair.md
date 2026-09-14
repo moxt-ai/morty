@@ -1,0 +1,69 @@
+---
+name: mobius-chat-pair
+description: Connect this agent to the existing user and Bot from a Mobius Chat web page.
+---
+
+# Pair Mobius Chat
+
+The user supplied `follow <origin>/pair.md?token=...`. That token is a one-use
+ticket, valid for **24 hours**, for their existing user, Bot, and Project.
+Fetching this document does not consume it. Do not create another user or Bot.
+Pairing takes its identity and Bot only from the supplied ticket. It does not load
+the saved local configuration. The previous file is backed up, then the redeemed
+identity and new Runtime connection state are saved to `config.json`, replacing the
+previous configuration. Do not ask for an additional replacement confirmation.
+
+## Run
+
+1. Set `BASE_URL` to this document's URL origin:
+   `https://mobius-chat.paradev.biz` for staging or
+   `https://mobius-chat.paraflow.biz` for production. For other deployments, use
+   their document origin. The script calls the Chat API at `/mobius-cloud/api/*`.
+   The server supplies the Runtime URL separately as `pairing.relayUrl`
+   (`https://mobius.paradev.biz` in staging; `https://mobius.paraflow.biz` in production).
+
+   Use `DOCUMENT_DIR` from the environment if provided; otherwise resolve the user's
+   absolute document directory. Ask if unavailable; do not use a repository directory
+   as a substitute.
+2. Ensure Node.js 22.13.0 or newer, npm, and npx are available. Check their versions
+   and install or repair missing dependencies using the host's normal tools.
+3. Download `/setup.mjs` from this document's origin to a private local directory, with a
+   finite timeout and no redirects. Inspect it before running.
+4. Set `TOKEN` from the supplied URL. Set `HARNESS` to **your own harness ID**:
+   `codex` when running in Codex, `claude` in Claude Code, or `opencode` in OpenCode.
+   Honor an explicit user choice instead. Do not ask the user to choose when your
+   own harness is available. Complete its installation/authentication if needed.
+
+```sh
+node "$SCRIPT_DIR/setup.mjs" pair --base-url "$BASE_URL" --token="$TOKEN" --harness "$HARNESS"
+```
+
+This single command stops existing Mobius Runtime processes owned by the current
+OS user, exchanges the ticket, saves private credentials, launches a detached
+Runtime, waits for the requested harness, requests its Bot binding, and checks
+readiness. The Runtime remains running after your agent session ends.
+
+## Observe and finish
+
+The script streams timestamped JSON progress, including its Runtime PID and private
+log path. It waits at most five minutes. Complete local Runtime approval if needed.
+`runtime_started` or `binding_requested` is progress; only `status: "ready"` confirms
+an active binding and online Runtime. A successful chat reply is a separate check.
+
+When ready, tell the user: **Your Bot is connected. Return to your Mobius Chat page
+to start chatting. Keep the Runtime online.** Include the returned URL and Bot ID.
+
+On failure, use `error.code` and the private Runtime log to resolve the problem,
+then reconnect using `node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --harness "$HARNESS"` if
+`identity_ready` was emitted. Setup loads the saved user and Bot and starts Runtime
+pairing fresh; its ready result includes a browser handoff as described in `/setup.md`.
+`HARNESS_UNAVAILABLE` reports the advertised alternatives; repair authentication or
+ask the user before selecting a different harness. Pair always redeems its ticket;
+an expired or consumed ticket requires a fresh web instruction to run pair again.
+Previous configuration is preserved in `config-backup-<id>.json`.
+Backup progress reports paths, never credentials. Report the backup path when a
+replacement occurs.
+
+Durable credentials belong only in private files under `$DOCUMENT_DIR/mobius-chat`, not
+command arguments, URLs, chat output, or logs. The CLI `--token` accepts only the
+one-time ticket. Never generate a browser identity-transfer link in this flow.

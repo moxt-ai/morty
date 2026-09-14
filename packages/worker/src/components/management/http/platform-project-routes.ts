@@ -4,6 +4,7 @@ import * as v from "valibot";
 import { json } from "../../../infra/http.ts";
 import { authenticatedSession } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
+import { projectLocationHint } from "./project-location.ts";
 
 const inputSchema = v.strictObject({ displayName: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)) });
 
@@ -60,6 +61,7 @@ export function createPlatformProjectRoutes() {
                 session.userId,
                 input.displayName,
                 signal,
+                projectLocationHint(context.req.raw),
             );
             await context.env.storages.platformProjects.save(session.userId, origin, appId, project, signal);
             context.env.logger.info(

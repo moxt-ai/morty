@@ -82,6 +82,21 @@ export class BotChatApi {
             accessSchema,
             await this.#request(botId, "access", { conversationKey: v.parse(identifier, conversationKey) }, parent),
         );
+    readonly createPairingInstruction = async (botId: string, signal: AbortSignal) => {
+        const ticket = v.parse(
+            v.object({ url: v.pipe(v.string(), v.url()), expiresAt: v.pipe(v.string(), v.isoTimestamp()) }),
+            await this.#request(botId, "pairing-instruction", { botId }, signal),
+        );
+        const url = new URL(ticket.url);
+        if (
+            url.origin !== new URL(this.#origin).origin ||
+            url.pathname !== "/pair.md" ||
+            !/^[A-Za-z0-9_-]{43}$/u.test(url.searchParams.get("token") ?? "")
+        ) {
+            throw new CloudApiError("INVALID_PAIRING_INSTRUCTION", "Pairing instruction is invalid.");
+        }
+        return ticket;
+    };
     readonly connectConversation = async (botId: string, signal: AbortSignal, conversationKey = "personal-chat") => {
         const access = await this.access(botId, signal, conversationKey);
         signal.throwIfAborted();
@@ -166,7 +181,12 @@ export class BotChatApi {
         }
         const response = await this.#fetchRequest(
             new Request(
-                new URL(`/mobius-cloud/api/chat/bots/${encodeURIComponent(requestedBotId)}/${operation}`, this.#origin),
+                new URL(
+                    operation === "pairing-instruction"
+                        ? "/mobius-cloud/api/identity/pairings"
+                        : `/mobius-cloud/api/chat/bots/${encodeURIComponent(requestedBotId)}/${operation}`,
+                    this.#origin,
+                ),
                 {
                     method: "POST",
                     signal,

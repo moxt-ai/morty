@@ -12,11 +12,9 @@ import { MobiusManagement, userBotConnection } from "../applications/mobius-mana
 import { AnonymousAccountActions } from "./anonymous-account-actions.tsx";
 import { type ActiveIdentity, ActiveIdentityProvider } from "./identity-context.tsx";
 import { router as authRouter } from "./router.tsx";
-import { SetupOnboarding } from "./setup-onboarding.tsx";
 
 type IdentityState =
     | { readonly kind: "loading" }
-    | { readonly kind: "onboarding" }
     | { readonly kind: "anonymous"; readonly identity: AnonymousIdentity }
     | { readonly kind: "clerk"; readonly localIdentity: AnonymousIdentity | null; readonly userId: string }
     | { readonly kind: "conflict"; readonly identity: AnonymousIdentity }
@@ -54,12 +52,12 @@ function WorkspaceApplication(props: WorkspaceApplicationProps) {
             );
         }
         const Standard = ({ children }: { readonly children: ReactNode }) => (
-            <>
+            <div className="contents [&:has([data-chat-state=disconnected])>footer]:hidden">
                 {children}
                 <footer className="fixed bottom-0 left-0 z-10 hidden h-16 w-64 items-center gap-2 border-t border-border bg-background px-4 sm:flex">
                     {account}
                 </footer>
-            </>
+            </div>
         );
         return createApplicationRouter(
             authorize,
@@ -168,10 +166,6 @@ export function SessionApplication() {
             .loadExisting(controller.signal)
             .then(async (existing) => {
                 controller.signal.throwIfAborted();
-                if (existing === null && (session === null || session === undefined)) {
-                    setState({ kind: "onboarding" });
-                    return;
-                }
                 const identity = existing ?? (await api.loadOrCreate(controller.signal));
                 if (session === null || session === undefined) {
                     setState({ identity, kind: "anonymous" });
@@ -216,9 +210,6 @@ export function SessionApplication() {
     }
     if (state.kind === "loading") {
         return <App state={{ kind: "loading" }} />;
-    }
-    if (state.kind === "onboarding") {
-        return <SetupOnboarding />;
     }
     if (state.kind === "failed") {
         return <App state={{ kind: "failed" }} />;

@@ -1,23 +1,60 @@
 import { type AgentDisplayContent, MobiusAgentActivityEvent } from "@moxt-ai/mobius-sdk";
 import { type MobiusBrowserClient, type MobiusBrowserHistory, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
-import { MessageSquare, Send, SquarePen } from "lucide-react";
+import { MessageSquare, Send } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
 import { AgentRichContent } from "../../components/agents/agent-rich-content.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
-import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import type { BotChatApi, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
 import { AttemptFailure } from "./attempt-failure.tsx";
 import { ChatControls } from "./chat-controls.tsx";
 import { LocalSessionPane } from "./local-session-pane.tsx";
 import { LocalSessionSidebar, type OpenLocalSession } from "./local-session-sidebar.tsx";
+import { PairingInstruction } from "./pairing-instruction.tsx";
+
+type SetupReason = "unconfigured" | "inactive" | "no-selection" | "agent-missing" | "agent-offline" | "agent-required";
+
+function setupReason(workspace: ChatWorkspace): SetupReason | null {
+    if (workspace.status !== "active") {
+        return workspace.status === "draft" ? "unconfigured" : "inactive";
+    }
+    const selected = workspace.selected;
+    if (selected === null) {
+        return "no-selection";
+    }
+    const agent = workspace.agents.find(
+        (agent) => agent.runtimeId === selected.runtimeId && agent.agentRef === selected.agentRef,
+    );
+    if (agent === undefined) {
+        return "agent-missing";
+    }
+    return agent.online ? null : "agent-offline";
+}
+
+function setupDescription(reason: SetupReason): string {
+    switch (reason) {
+        case "unconfigured":
+            return "Your workspace is loaded. Paste this instruction into your local agent to connect it to this workspace.";
+        case "inactive":
+            return "Your workspace is loaded, but this Bot is not active, so Chat cannot reconnect. Use the instruction below to connect your local agent and activate Chat.";
+        case "no-selection":
+            return "Your workspace is loaded, but no agent is selected for this Bot. Use the instruction below to connect an agent to this workspace.";
+        case "agent-missing":
+            return "Your workspace is loaded, but the previously selected agent is no longer available in its agent list. Start the previously paired local agent, or use the instruction below to pair an agent again.";
+        case "agent-offline":
+            return "Your workspace is loaded, but your selected local agent is offline. Start the previously paired agent and check its internet connection. If you need to pair it again, use the instruction below.";
+        case "agent-required":
+            return "Your workspace is loaded, but the server could not connect Chat to an available agent. Check that your local agent is running, or use the instruction below to pair it again.";
+    }
+}
 
 type State =
     | { readonly kind: "loading" }
-    | { readonly kind: "setup" }
+    | { readonly kind: "setup"; readonly reason: SetupReason }
     | {
           readonly kind: "ready";
           readonly bot: ManagedBot;
@@ -149,7 +186,13 @@ export function BotChatHome({
 }: {
     readonly requests: Pick<
         BotChatApi,
-        "listBots" | "connectConversation" | "workspace" | "selectAgent" | "nativeSessions" | "connectSession"
+        | "listBots"
+        | "connectConversation"
+        | "workspace"
+        | "selectAgent"
+        | "nativeSessions"
+        | "connectSession"
+        | "createPairingInstruction"
     >;
 }) {
     const [state, setState] = useState<State>({ kind: "loading" });
@@ -198,6 +241,14 @@ export function BotChatHome({
             const bot = (await requests.listBots(controller.signal))[0];
             if (bot === undefined) {
                 throw new Error("Your Bot is unavailable.");
+            }
+            const workspace = await requests.workspace(bot.botId, controller.signal);
+            controller.signal.throwIfAborted();
+            const reason = setupReason(workspace);
+            if (reason !== null) {
+                setState({ kind: "setup", reason });
+                reconciliationTimer = setTimeout(() => retry((value) => value + 1), 5000);
+                return;
             }
             const session = await requests.connectConversation(bot.botId, controller.signal, conversationKey);
             client = session;
@@ -261,7 +312,7 @@ export function BotChatHome({
             client?.close();
             if (!controller.signal.aborted) {
                 if (cause instanceof CloudApiError && cause.code === "AGENT_REQUIRED") {
-                    setState({ kind: "setup" });
+                    setState({ kind: "setup", reason: "agent-required" });
                     reconciliationTimer = setTimeout(() => retry((value) => value + 1), 5000);
                     return;
                 }
@@ -314,8 +365,12 @@ export function BotChatHome({
     };
 
     return (
-        <main aria-label="Chat" className="flex h-dvh min-h-0 flex-col bg-background text-foreground sm:flex-row">
-            {state.kind === "ready" ? (
+        <main
+            aria-label="Chat"
+            data-chat-state={state.kind === "ready" ? "connected" : "disconnected"}
+            className="flex h-dvh min-h-0 flex-col bg-background text-foreground sm:flex-row"
+        >
+            {state.kind === "ready" && (
                 <LocalSessionSidebar
                     activeEntryId={conversation.kind === "local" ? conversation.session.entry.entryId : ""}
                     botId={state.bot.botId}
@@ -324,16 +379,6 @@ export function BotChatHome({
                     onChat={showBot}
                     onNewConversation={newConversation}
                 />
-            ) : (
-                <aside
-                    aria-label="Conversations"
-                    className="hidden w-60 shrink-0 border-r border-border bg-muted/30 p-4 sm:flex sm:flex-col"
-                >
-                    <div className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium">
-                        <SquarePen className="size-4" aria-hidden="true" />
-                        New Conversation
-                    </div>
-                </aside>
             )}
             {conversation.kind === "local" && state.kind === "ready" ? (
                 <LocalSessionPane
@@ -366,33 +411,25 @@ export function BotChatHome({
                         ) : state.kind === "setup" ? (
                             <section className="m-auto w-full max-w-lg animate-cloud-enter rounded-2xl border border-border bg-card p-8 shadow-sm motion-reduce:animate-none">
                                 <MessageSquare className="mb-5 size-8 text-primary" aria-hidden="true" />
-                                <h1 className="text-2xl font-semibold tracking-tight">Your Chat is ready to connect</h1>
+                                <h1 className="text-2xl font-semibold tracking-tight">
+                                    {state.reason === "unconfigured"
+                                        ? "Your Chat is ready to connect"
+                                        : "Chat is waiting to reconnect"}
+                                </h1>
                                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                                    Your anonymous workspace is loaded. Paste this instruction into your local agent to
-                                    connect it to this workspace.
+                                    {setupDescription(state.reason)}
                                 </p>
-                                <input
-                                    aria-label="Agent setup instruction"
-                                    readOnly
-                                    value={`follow ${window.location.origin}/SKILL.md`}
-                                    onFocus={(event) => event.currentTarget.select()}
-                                    className="mt-5 w-full rounded-lg border border-border bg-muted/30 p-3 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                />
+                                <PairingInstruction requests={requests} />
                                 <p role="status" className="mt-4 text-sm text-muted-foreground">
-                                    Waiting for agent setup. Chat will open automatically when this Bot is connected.
-                                </p>
-                                <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                                    If your agent returns a link for another saved workspace, open that link to use its
-                                    identity here.
+                                    Checking automatically every 5 seconds. Chat will open when this Bot is active and
+                                    its selected agent is online.
                                 </p>
                             </section>
                         ) : state.kind === "failed" ? (
                             <div className="m-auto grid justify-items-center gap-4 text-center">
                                 <p role="alert">{state.message}</p>
                                 <Button onClick={() => retry((value) => value + 1)}>Reconnect</Button>
-                                <Button asChild variant="ghost">
-                                    <a href="/SKILL.md">Agent setup instructions</a>
-                                </Button>
+                                <PairingInstruction requests={requests} />
                             </div>
                         ) : state.history.turns.length === 0 ? (
                             <div className="m-auto text-center">
@@ -435,14 +472,14 @@ export function BotChatHome({
                             ))
                         )}
                     </div>
-                    <form
-                        className="mx-auto mb-6 w-full max-w-3xl px-4"
-                        onSubmit={(event) => {
-                            event.preventDefault();
-                            void send();
-                        }}
-                    >
-                        {state.kind === "ready" && (
+                    {state.kind === "ready" && (
+                        <form
+                            className="mx-auto mb-6 w-full max-w-3xl px-4"
+                            onSubmit={(event) => {
+                                event.preventDefault();
+                                void send();
+                            }}
+                        >
                             <div className="mb-3">
                                 <ChatControls
                                     botId={state.bot.botId}
@@ -451,32 +488,30 @@ export function BotChatHome({
                                     onAgentChanged={reconnect}
                                 />
                             </div>
-                        )}
-                        {sending.kind === "failed" && (
-                            <p role="alert" className="mb-2 text-sm text-destructive">
-                                {sending.message}
-                            </p>
-                        )}
-                        <div className="flex items-end gap-3 rounded-2xl border border-border bg-card p-4">
-                            <Textarea
-                                aria-label="Message"
-                                placeholder="Message your agent…"
-                                value={draft}
-                                onChange={(event) => setDraft(event.target.value)}
-                                disabled={state.kind !== "ready" || sending.kind === "sending"}
-                            />
-                            <Button
-                                type="submit"
-                                size="icon"
-                                aria-label="Send message"
-                                disabled={
-                                    state.kind !== "ready" || sending.kind === "sending" || draft.trim().length === 0
-                                }
-                            >
-                                <Send className="size-4" aria-hidden="true" />
-                            </Button>
-                        </div>
-                    </form>
+                            {sending.kind === "failed" && (
+                                <p role="alert" className="mb-2 text-sm text-destructive">
+                                    {sending.message}
+                                </p>
+                            )}
+                            <div className="flex items-end gap-3 rounded-2xl border border-border bg-card p-4">
+                                <Textarea
+                                    aria-label="Message"
+                                    placeholder="Message your agent…"
+                                    value={draft}
+                                    onChange={(event) => setDraft(event.target.value)}
+                                    disabled={sending.kind === "sending"}
+                                />
+                                <Button
+                                    type="submit"
+                                    size="icon"
+                                    aria-label="Send message"
+                                    disabled={sending.kind === "sending" || draft.trim().length === 0}
+                                >
+                                    <Send className="size-4" aria-hidden="true" />
+                                </Button>
+                            </div>
+                        </form>
+                    )}
                 </section>
             )}
         </main>

@@ -26,6 +26,7 @@ export function createBotManagementRoutes() {
                     context.env,
                     session.userId,
                     AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]),
+                    context.req.raw,
                 );
             }
             return json({

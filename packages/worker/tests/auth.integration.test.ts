@@ -1,12 +1,18 @@
+import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { fileURLToPath } from "node:url";
 import * as v from "valibot";
 import { afterAll, afterEach, beforeEach, expect, test, vi } from "vitest";
 import worker from "../src/application.ts";
 import { APP_ORIGIN, AUTH_TIME, IdentityProvider } from "./support/identity-provider.ts";
 import { platformPeer } from "./support/platform-peer.ts";
 
-const platform = await platformPeer();
+const platform = await platformPeer({ pairingLifetimeMilliseconds: 0 });
 afterAll(platform.close);
 
 const issuer = new IdentityProvider();
@@ -41,6 +47,7 @@ class InMemoryD1Database {
         );
         databases.push(this);
         this.#database.exec(readFileSync(new URL("../migrations/0003_platform_project.sql", import.meta.url), "utf8"));
+        this.#database.exec(readFileSync(new URL("../migrations/0005_agent_pairing.sql", import.meta.url), "utf8"));
     }
     readonly close = () => this.#database.close();
     readonly prepare = (query: string) => new InMemoryD1Statement(query, this.#database);
@@ -104,6 +111,63 @@ async function createAnonymousUser(
     return v.parse(v.object({ token: v.string(), userId: v.string() }), await response.json());
 }
 
+test.each([
+    ["AS", "apac"],
+    ["OC", "apac"],
+    ["NA", "wnam"],
+    ["SA", "wnam"],
+    ["EU", "wnam"],
+    ["AF", "wnam"],
+    ["AN", "wnam"],
+    ["unknown", "apac"],
+])(
+    "Given a visitor geolocated to %s, When Chat provisions their workspace, Then Platform places it in %s and retains it when they travel",
+    async (continent, region) => {
+        // Cloudflare supplies cf metadata on incoming Requests; Node does not.
+        class GeolocatedRequest extends Request {
+            override readonly cf: { readonly continent: string };
+            constructor(request: Request, continent: string) {
+                super(request);
+                this.cf = { continent };
+            }
+        }
+        const environment = slackConfiguration();
+        const created = await worker.fetch(
+            new GeolocatedRequest(
+                new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/anonymous-users`, {
+                    method: "POST",
+                    headers: { "cf-ipcountry": "US" },
+                }),
+                continent,
+            ),
+            environment,
+        );
+        expect(created.status).toBe(201);
+        const identity = v.parse(v.object({ token: v.string() }), await created.json());
+        const projectRequest = () =>
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/management/project`, {
+                headers: { authorization: `Bearer ${identity.token}` },
+            });
+        const response = await worker.fetch(projectRequest(), environment);
+        expect(response.status).toBe(200);
+        const initial = v.parse(v.object({ project: v.object({ projectId: v.string() }) }), await response.json());
+        expect(initial.project.projectId).toMatch(new RegExp(`^${region}-project-`));
+        const revisited = await worker.fetch(
+            new GeolocatedRequest(
+                new Request(projectRequest(), {
+                    method: "POST",
+                    headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+                    body: JSON.stringify({ displayName: "Personal workspace" }),
+                }),
+                region === "apac" ? "NA" : "AS",
+            ),
+            environment,
+        );
+        expect(revisited.status).toBe(200);
+        expect(await revisited.json()).toMatchObject(initial);
+    },
+);
+
 test("Given a first-time visitor, When an anonymous identity is created, Then their Bot is already available without manual setup", async () => {
     const database = new InMemoryD1Database();
     const identity = await createAnonymousUser(database);
@@ -126,6 +190,29 @@ test("Given a first-time visitor, When an anonymous identity is created, Then th
     });
 });
 
+test("Given a user with a Bot on a Project-scoped Platform, When setup checks the Bot workspace, Then the draft Bot and available agents are returned", async () => {
+    const database = new InMemoryD1Database();
+    const environment = slackConfiguration(database);
+    const identity = await createAnonymousUser(database);
+    const listed = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/management/bots`, {
+            headers: { authorization: `Bearer ${identity.token}` },
+        }),
+        environment,
+    );
+    const { bots } = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await listed.json());
+    const response = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/chat/bots/${bots[0]?.botId}/workspace`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+            body: "{}",
+        }),
+        environment,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ status: "draft", selected: null, agents: [] });
+});
+
 test("Given an anonymous user, When a transfer is redeemed twice, Then only the first device receives that identity", async () => {
     const database = new InMemoryD1Database();
     const identity = await createAnonymousUser(database);
@@ -138,6 +225,7 @@ test("Given an anonymous user, When a transfer is redeemed twice, Then only the 
     );
     expect(created.status).toBe(201);
     const transfer = v.parse(v.object({ url: v.string(), expiresAt: v.string() }), await created.json());
+    expect(transfer.expiresAt).toBe(new Date(AUTH_TIME.getTime() + 24 * 60 * 60 * 1000).toISOString());
     const code = new URL(transfer.url).hash.slice("#code=".length);
     const redeem = () =>
         worker.fetch(
@@ -149,6 +237,7 @@ test("Given an anonymous user, When a transfer is redeemed twice, Then only the 
             slackConfiguration(database),
         );
 
+    vi.advanceTimersByTime(23 * 60 * 60 * 1000);
     const first = await redeem();
     expect(first.status).toBe(200);
     expect(await first.json()).toMatchObject({
@@ -159,6 +248,339 @@ test("Given an anonymous user, When a transfer is redeemed twice, Then only the 
     expect(second.status).toBe(410);
     expect(await second.json()).toMatchObject({ error: { code: "TRANSFER_UNAVAILABLE" } });
 });
+
+test.each(["anonymous", "clerk"])(
+    "Given a %s web user with a Bot, When their pairing ticket is redeemed, Then the local agent receives the same user and Bot exactly once",
+    async (kind) => {
+        const database = new InMemoryD1Database();
+        const anonymous = await createAnonymousUser(database);
+        const token = kind === "anonymous" ? anonymous.token : issuer.createSession("user_pair");
+        const environment = slackConfiguration(database);
+        if (kind === "clerk") {
+            const bound = await worker.fetch(
+                new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/clerk-binding`, {
+                    method: "POST",
+                    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                    body: JSON.stringify({ action: "bind", anonymousToken: anonymous.token }),
+                }),
+                environment,
+            );
+            expect(bound.status).toBe(200);
+        }
+        const session = await worker.fetch(accountRequest(token), environment);
+        const { userId } = v.parse(v.object({ userId: v.string() }), await session.json());
+        const bots = await worker.fetch(
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/management/bots`, {
+                headers: { authorization: `Bearer ${token}` },
+            }),
+            environment,
+        );
+        const { bots: owned } = v.parse(
+            v.object({ bots: v.array(v.object({ botId: v.string() })) }),
+            await bots.json(),
+        );
+        const botId = owned[0]?.botId;
+        expect(botId).toBeDefined();
+        const created = await worker.fetch(
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/pairings`, {
+                method: "POST",
+                headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                body: JSON.stringify({ botId }),
+            }),
+            environment,
+        );
+        expect(created.status).toBe(201);
+        const ticket = v.parse(v.object({ url: v.string(), expiresAt: v.string() }), await created.json());
+        expect(ticket.expiresAt).toBe(new Date(AUTH_TIME.getTime() + 24 * 60 * 60 * 1000).toISOString());
+        const url = new URL(ticket.url);
+        expect(url.pathname).toBe("/pair.md");
+        const redeem = () =>
+            worker.fetch(
+                new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/pairings/redeem`, {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ token: url.searchParams.get("token") }),
+                }),
+                environment,
+            );
+        vi.advanceTimersByTime(23 * 60 * 60 * 1000);
+        const response = await redeem();
+        expect(response.status).toBe(200);
+        const identity = v.parse(
+            v.object({
+                token: v.string(),
+                userId: v.string(),
+                botId: v.string(),
+                projectId: v.pipe(v.string(), v.minLength(1)),
+            }),
+            await response.json(),
+        );
+        expect(identity).toMatchObject({ userId, botId });
+        const local = await worker.fetch(accountRequest(identity.token), environment);
+        expect(await local.json()).toMatchObject({ userId });
+        expect((await redeem()).status).toBe(410);
+    },
+);
+
+test("Given another user's Bot and an expired ticket, When pairing is requested, Then ownership and expiry prevent issuing a local credential", async () => {
+    const database = new InMemoryD1Database();
+    const owner = await createAnonymousUser(database);
+    const other = await createAnonymousUser(database);
+    const environment = slackConfiguration(database);
+    const bots = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/management/bots`, {
+            headers: { authorization: `Bearer ${owner.token}` },
+        }),
+        environment,
+    );
+    const { bots: owned } = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await bots.json());
+    const issue = (token: string) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/pairings`, {
+                method: "POST",
+                headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                body: JSON.stringify({ botId: owned[0]?.botId }),
+            }),
+            environment,
+        );
+    expect((await issue(other.token)).status).toBe(404);
+    expect((await issue("invalid")).status).toBe(401);
+    const issued = await issue(owner.token);
+    const { url } = v.parse(v.object({ url: v.string() }), await issued.json());
+    const token = new URL(url).searchParams.get("token");
+    const browserRedemption = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/transfers/redeem`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ code: token }),
+        }),
+        environment,
+    );
+    expect(browserRedemption.status).toBe(410);
+    vi.advanceTimersByTime(24 * 60 * 60 * 1000);
+    const expired = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/pairings/redeem`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ token }),
+        }),
+        environment,
+    );
+    expect(expired.status).toBe(410);
+    expect(await expired.json()).toMatchObject({ error: { code: "PAIRING_TICKET_UNAVAILABLE" } });
+});
+
+test.each([
+    { mode: "pair", conflict: false, invalidConfig: false },
+    { mode: "setup", conflict: false, invalidConfig: false },
+    { mode: "pair", conflict: true, invalidConfig: false },
+    { mode: "pair", conflict: true, invalidConfig: true },
+    { mode: "setup", conflict: true, invalidConfig: false },
+])(
+    "Given $mode instructions with local conflict=$conflict and invalid configuration=$invalidConfig, When the command connects and setup reconnects, Then the selected identity is saved and reused with fresh Runtime credentials",
+    async ({ mode, conflict, invalidConfig }) => {
+        const database = new InMemoryD1Database();
+        const environment = slackConfiguration(database);
+        const identity = await createAnonymousUser(database);
+        const bots = await worker.fetch(
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/management/bots`, {
+                headers: { authorization: `Bearer ${identity.token}` },
+            }),
+            environment,
+        );
+        const { bots: owned } = v.parse(
+            v.object({ bots: v.array(v.object({ botId: v.string() })) }),
+            await bots.json(),
+        );
+        const issued = await worker.fetch(
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/pairings`, {
+                method: "POST",
+                headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+                body: JSON.stringify({ botId: owned[0]?.botId }),
+            }),
+            environment,
+        );
+        const { url } = v.parse(v.object({ url: v.string() }), await issued.json());
+        const ticket = new URL(url).searchParams.get("token") ?? "";
+        // Real HTTP bridge to the production Worker; Platform uses the suite's stateful peer.
+        const server = createServer(async (incoming, outgoing) => {
+            try {
+                let body = "";
+                for await (const chunk of incoming) {
+                    body += chunk;
+                }
+                const headers = new Headers();
+                for (const [key, value] of Object.entries(incoming.headers)) {
+                    if (typeof value === "string") {
+                        headers.set(key, value);
+                    }
+                }
+                const response = await worker.fetch(
+                    new Request(new URL(incoming.url ?? "/", APP_ORIGIN), {
+                        method: incoming.method ?? "GET",
+                        headers,
+                        ...(body === "" ? {} : { body }),
+                        signal: AbortSignal.timeout(15000),
+                    }),
+                    environment,
+                );
+                outgoing.writeHead(response.status, Object.fromEntries(response.headers));
+                outgoing.end(await response.text());
+            } catch {
+                outgoing.writeHead(500, { "content-type": "application/json" });
+                outgoing.end(JSON.stringify({ error: { code: "TEST_BRIDGE_FAILED" } }));
+            }
+        });
+        await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+        const address = server.address();
+        if (address === null || typeof address === "string") {
+            throw new Error("HTTP bridge unavailable");
+        }
+        const base = `http://127.0.0.1:${address.port}`;
+        const directory = await mkdtemp(join(tmpdir(), "mobius-setup-"));
+        const previous = await createAnonymousUser(database);
+        const previousConfig = {
+            base_url: base,
+            user_token: mode === "setup" ? identity.token : previous.token,
+            user_id: mode === "setup" ? identity.userId : previous.userId,
+            bot_id: mode === "setup" ? owned[0]?.botId : "previous-bot",
+            project_id: "previous-project",
+            pairing_key: "previous-key",
+            pairing: { pairingId: "previous-pairing" },
+            runtime_process: { pid: 123, log_path: "previous.log" },
+            agent_ref: "previous-agent",
+            agent_config_revision: 99,
+        };
+        const previousContents = invalidConfig ? "invalid old configuration" : JSON.stringify(previousConfig);
+        if (conflict) {
+            await mkdir(join(directory, "mobius-chat"), { mode: 0o700 });
+            await writeFile(join(directory, "mobius-chat", "config.json"), previousContents, {
+                mode: 0o600,
+            });
+        }
+        // Stateful local Runtime process through the production OS process boundary.
+        // A real connected Runtime would require interactive local agent credentials.
+        const runtimePackage = join(directory, "node_modules", "@moxt-ai", "mobius");
+        await mkdir(join(runtimePackage, "dist"), { recursive: true });
+        await writeFile(
+            join(runtimePackage, "package.json"),
+            JSON.stringify({ name: "@moxt-ai/mobius", bin: { mobius: "dist/cli.js" }, type: "module" }),
+        );
+        const stopped = join(directory, "runtime-stopped");
+        await writeFile(
+            join(runtimePackage, "dist", "cli.js"),
+            `import { writeFileSync } from 'node:fs';
+process.on('SIGTERM', () => { writeFileSync(process.env.STOPPED_FILE, 'stopped'); process.exit(0); });
+process.on('message', () => {});
+process.send('ready');
+`,
+        );
+        const oldRuntime = spawn(
+            process.execPath,
+            [join(runtimePackage, "dist", "cli.js"), "start", "--channel", "saved-channel"],
+            {
+                env: { ...process.env, STOPPED_FILE: stopped },
+                stdio: ["ignore", "ignore", "ignore", "ipc"],
+                signal: AbortSignal.timeout(15000),
+            },
+        );
+        const runtimeClosed = new Promise<void>((resolve) => oldRuntime.once("close", () => resolve()));
+        await new Promise<void>((resolve, reject) => {
+            oldRuntime.once("message", () => resolve());
+            oldRuntime.once("error", reject);
+        });
+        const run = (command = mode) =>
+            new Promise<{ readonly code: number | null; readonly output: string }>((resolve, reject) => {
+                const child = spawn(
+                    process.execPath,
+                    [
+                        fileURLToPath(new URL("../../../public/setup.mjs", import.meta.url)),
+                        command,
+                        "--base-url",
+                        base,
+                        "--harness",
+                        "codex",
+                        ...(command === "pair" ? [`--token=${ticket}`] : []),
+                    ],
+                    {
+                        env: { ...process.env, DOCUMENT_DIR: directory },
+                        signal: AbortSignal.timeout(15000),
+                        stdio: ["pipe", "pipe", "pipe"],
+                    },
+                );
+                let output = "";
+                child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+                    output += chunk;
+                });
+                child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
+                    output += chunk;
+                });
+                child.once("error", reject);
+                child.once("close", (code) => resolve({ code, output }));
+                child.stdin.end();
+            });
+        try {
+            const prepared = await run();
+            expect(prepared.code, prepared.output).toBe(1);
+            expect(prepared.output).toContain('"code":"RUNTIME_PAIRING_UNAVAILABLE"');
+            expect(prepared.output).toContain('"status":"prepared"');
+            expect(await readFile(stopped, "utf8")).toBe("stopped");
+            const path = join(directory, "mobius-chat", "config.json");
+            const config = v.parse(
+                v.object({ user_token: v.string(), user_id: v.string(), bot_id: v.string(), pairing_key: v.string() }),
+                JSON.parse(await readFile(path, "utf8")),
+            );
+            expect((await stat(path)).mode & 0o777).toBe(0o600);
+            expect(prepared.output).not.toContain(config.user_token);
+            if (conflict) {
+                const backups = (await readdir(join(directory, "mobius-chat"))).filter((name) =>
+                    name.startsWith("config-backup-"),
+                );
+                expect(backups).toHaveLength(1);
+                const backup = join(directory, "mobius-chat", backups[0] ?? "missing-backup");
+                expect(await readFile(backup, "utf8")).toBe(previousContents);
+                expect((await stat(backup)).mode & 0o777).toBe(0o600);
+                expect(prepared.output).toContain('"status":"configuration_backed_up"');
+                expect(prepared.output).not.toContain(previous.token);
+                expect(config.user_id).toBe(identity.userId);
+                if (mode === "setup") {
+                    expect(config.user_token).toBe(identity.token);
+                }
+                expect(config.pairing_key).not.toBe(previousConfig.pairing_key);
+                const replacement = JSON.parse(await readFile(path, "utf8"));
+                expect(replacement.runtime_process).toBeUndefined();
+                expect(replacement.agent_ref).toBeUndefined();
+                expect(replacement.agent_config_revision).toBeUndefined();
+            }
+            if (mode === "pair") {
+                expect(config).toMatchObject({ user_id: identity.userId, bot_id: owned[0]?.botId });
+            }
+            if (mode === "pair") {
+                const consumed = await run();
+                expect(consumed.code).toBe(1);
+                expect(consumed.output).toContain('"code":"PAIRING_TICKET_UNAVAILABLE"');
+                expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject(config);
+            }
+            const resumed = await run("setup");
+            expect(resumed.code, resumed.output).toBe(1);
+            expect(resumed.output).toContain('"code":"RUNTIME_PAIRING_UNAVAILABLE"');
+            const restarted = JSON.parse(await readFile(path, "utf8"));
+            expect(restarted).toMatchObject({
+                user_token: config.user_token,
+                user_id: config.user_id,
+                bot_id: config.bot_id,
+            });
+            expect(restarted.pairing_key).not.toBe(config.pairing_key);
+            await expect(stat(join(directory, "mobius-chat", ".setup-lock"))).rejects.toMatchObject({ code: "ENOENT" });
+        } finally {
+            oldRuntime.kill("SIGTERM");
+            await runtimeClosed;
+            await rm(directory, { recursive: true, force: true });
+            server.closeAllConnections();
+            await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+        }
+    },
+);
 
 test("Given an expired anonymous transfer, When a device redeems it, Then no credential is issued", async () => {
     const database = new InMemoryD1Database();
@@ -171,7 +593,7 @@ test("Given an expired anonymous transfer, When a device redeems it, Then no cre
         slackConfiguration(database),
     );
     const transfer = v.parse(v.object({ url: v.string() }), await created.json());
-    vi.advanceTimersByTime(15 * 60 * 1_000 + 1);
+    vi.advanceTimersByTime(24 * 60 * 60 * 1000);
 
     const response = await worker.fetch(
         new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/transfers/redeem`, {

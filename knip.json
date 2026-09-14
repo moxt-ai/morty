@@ -3,6 +3,9 @@
     "ignore": ["third-party/**"],
     "ignoreDependencies": ["cloudflare"],
     "workspaces": {
+        ".": {
+            "entry": ["public/setup.mjs"]
+        },
         "packages/web": {
             "entry": [
                 "src/main.tsx",
