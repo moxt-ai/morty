@@ -1,11 +1,11 @@
 import {
     createPlatformWorker,
     PlatformAuthenticationConfiguration,
-} from "../../third-party/mobius/packages/relay-cloudflare-platform/src/worker.ts";
+} from "../../../third-party/mobius/packages/relay-cloudflare-platform/src/worker.ts";
 import {
     ProjectAuthenticationError,
     VerifiedExternalIdentity,
-} from "../../third-party/mobius/packages/relay-core/src/index.ts";
+} from "../../../third-party/mobius/packages/relay-core/src/index.ts";
 
 const E2E_DEVELOPER_SUBJECT = "mobius-chat-e2e";
 
@@ -37,4 +37,4 @@ export {
     BotConnectionActor,
     PlatformSessionRelay,
     RuntimeRelay,
-} from "../../third-party/mobius/packages/relay-cloudflare-platform/src/durable-objects.ts";
+} from "../../../third-party/mobius/packages/relay-cloudflare-platform/src/durable-objects.ts";
