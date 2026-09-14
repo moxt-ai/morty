@@ -39,9 +39,7 @@ export async function platformPeer({
             const region = placementPath[2] === "a" ? "apac" : "wnam";
             response.writeHead(200).end(
                 JSON.stringify({
-                    projectId: placementPath[1],
-                    d1ShardId: `${region}-${placementPath[1]?.slice(5, 7)}`,
-                    r2BucketId: region,
+                    location: region,
                 }),
             );
             return;

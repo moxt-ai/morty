@@ -89,9 +89,7 @@ async function mobiusService() {
             /^\/mobius\/api\/v1\/projects\/(prj_a01_[A-Za-z0-9_-]{24})\/storage-placement$/u,
         );
         if (placement !== undefined && placement !== null && request.method === "GET") {
-            response
-                .writeHead(200, { "content-type": "application/json" })
-                .end(JSON.stringify({ projectId: placement[1], d1ShardId: "apac-01", r2BucketId: "apac" }));
+            response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ location: "apac" }));
             return;
         }
         calls.push({
