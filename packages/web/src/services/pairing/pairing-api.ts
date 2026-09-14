@@ -1132,6 +1132,23 @@ interface RestoredChannelSession {
     readonly turns: RecordedTurn[];
 }
 
+export async function readSessionArtifactBytes(
+    channelId: string,
+    sessionId: string,
+    artifactId: string,
+    cancellationSignal: AbortSignal,
+): Promise<{ readonly bytes: Uint8Array; readonly mimeType: string }> {
+    const client = publicServiceClient(readChannelCredential(channelId));
+    try {
+        const download = await client.artifacts.download(sessionId, artifactId, requestSignal(cancellationSignal));
+        return { bytes: download.bytes, mimeType: download.artifact.mediaType };
+    } catch (error) {
+        return throwPublicApiFailure(error);
+    } finally {
+        client.close();
+    }
+}
+
 function isConcurrentSessionRemoval(error: unknown): boolean {
     return (
         (error instanceof PairingApiError || error instanceof MobiusApiError) &&
