@@ -1,6 +1,9 @@
 import * as v from "valibot";
+import { createApplicationDependencies } from "../../../composition/application-context.ts";
+import { projectBindings } from "../../../composition/chat-shards.ts";
 import { json } from "../../../infra/http.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
+import { projectLocationHint } from "./project-location.ts";
 import { provisionUserBot } from "./user-bot-setup.ts";
 
 const transferInput = v.pipe(v.object({ code: v.string() }), v.readonly());
@@ -52,8 +55,21 @@ export function createAuthenticationRoutes() {
         })
         .post("/identity/anonymous-users", async (context) => {
             const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]);
-            const identity = await context.env.services.authentication.createAnonymous(signal);
-            const bot = await provisionUserBot(context.env, identity.userId, signal, context.req.raw);
+            const userId = `usr_${crypto.randomUUID()}`;
+            const gateway = context.env.gateways.platformProjects;
+            const project = await gateway.create(
+                userId,
+                "Personal workspace",
+                signal,
+                projectLocationHint(context.req.raw),
+            );
+            const scoped = createApplicationDependencies(
+                await projectBindings(context.env.config.bindings, project.projectId, signal),
+            );
+            const identity = await scoped.services.authentication.createAnonymous(userId, project.projectId, signal);
+            const { origin, appId } = gateway.configuration();
+            await scoped.storages.platformProjects.save(userId, origin, appId, project, signal);
+            const bot = await provisionUserBot(scoped, identity.userId, signal, context.req.raw);
             return json({ ...identity, bot }, 201, { "Cache-Control": "no-store" });
         })
         .post("/identity/transfers", async (context) => {

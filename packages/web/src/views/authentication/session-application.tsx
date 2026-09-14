@@ -16,8 +16,14 @@ import { router as authRouter } from "./router.tsx";
 type IdentityState =
     | { readonly kind: "loading" }
     | { readonly kind: "anonymous"; readonly identity: AnonymousIdentity }
-    | { readonly kind: "clerk"; readonly localIdentity: AnonymousIdentity | null; readonly userId: string }
+    | {
+          readonly kind: "clerk";
+          readonly localIdentity: AnonymousIdentity | null;
+          readonly userId: string;
+          readonly projectId: string;
+      }
     | { readonly kind: "conflict"; readonly identity: AnonymousIdentity }
+    | { readonly kind: "recovery" }
     | { readonly kind: "failed" };
 
 type WorkspaceApplicationProps = {
@@ -63,7 +69,7 @@ function WorkspaceApplication(props: WorkspaceApplicationProps) {
             authorize,
             userId,
             MobiusManagement,
-            userBotConnection(userId, activeIdentity.getToken),
+            userBotConnection(userId, activeIdentity.projectId, activeIdentity.getToken),
             { Application: Standard, Standard },
         );
     }, [activeIdentity, authorize, localIdentity, userId]);
@@ -166,6 +172,10 @@ export function SessionApplication() {
             .loadExisting(controller.signal)
             .then(async (existing) => {
                 controller.signal.throwIfAborted();
+                if (existing === null && api.needsRecovery()) {
+                    setState({ kind: "recovery" });
+                    return;
+                }
                 const identity = existing ?? (await api.loadOrCreate(controller.signal));
                 if (session === null || session === undefined) {
                     setState({ identity, kind: "anonymous" });
@@ -179,14 +189,24 @@ export function SessionApplication() {
                 if (binding.kind === "bound") {
                     setState(
                         binding.userId === identity.userId
-                            ? { kind: "clerk", localIdentity: identity, userId: binding.userId }
+                            ? {
+                                  kind: "clerk",
+                                  localIdentity: identity,
+                                  userId: binding.userId,
+                                  projectId: identity.projectId,
+                              }
                             : { identity, kind: "conflict" },
                     );
                     return;
                 }
                 try {
                     const created = await api.bindClerk(clerkToken, identity.token, "bind", controller.signal);
-                    setState({ kind: "clerk", localIdentity: identity, userId: created.userId });
+                    setState({
+                        kind: "clerk",
+                        localIdentity: identity,
+                        userId: created.userId,
+                        projectId: identity.projectId,
+                    });
                 } catch (cause) {
                     if (cause instanceof IdentityApiError && cause.code === "BINDING_CONFLICT") {
                         setState({ identity, kind: "conflict" });
@@ -214,6 +234,19 @@ export function SessionApplication() {
     if (state.kind === "failed") {
         return <App state={{ kind: "failed" }} />;
     }
+    if (state.kind === "recovery") {
+        return (
+            <Page>
+                <section className="mx-auto max-w-xl rounded-xl border border-border bg-card p-6 shadow-sm">
+                    <h1 className="text-xl font-semibold">Recover your workspace</h1>
+                    <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                        This device’s local workspace has been discarded. On your other device, open your workspace and
+                        create a transfer link. Open that link here to restore the same workspace.
+                    </p>
+                </section>
+            </Page>
+        );
+    }
     if (state.kind === "conflict") {
         if (session === null || session === undefined) {
             return <App state={{ kind: "failed" }} />;
@@ -223,11 +256,16 @@ export function SessionApplication() {
                 identity={state.identity}
                 session={session}
                 onResolved={(action, userId) =>
-                    setState({
-                        kind: "clerk",
-                        localIdentity: action === "discard-local" ? null : state.identity,
-                        userId,
-                    })
+                    setState(
+                        action === "discard-local"
+                            ? { kind: "recovery" }
+                            : {
+                                  kind: "clerk",
+                                  localIdentity: state.identity,
+                                  userId,
+                                  projectId: state.identity.projectId,
+                              },
+                    )
                 }
             />
         );
@@ -240,6 +278,7 @@ export function SessionApplication() {
                 return state.identity.token;
             },
             kind: "anonymous",
+            projectId: state.identity.projectId,
         };
         return (
             <WorkspaceApplication
@@ -261,6 +300,7 @@ export function SessionApplication() {
     const expectedSessionId = session.id;
     const activeIdentity: ActiveIdentity = {
         kind: "clerk",
+        projectId: state.projectId,
         getToken: (signal) => waitForClerk(() => activeSession.current?.getToken() ?? Promise.resolve(null), signal),
     };
     return (
@@ -274,6 +314,7 @@ export function SessionApplication() {
                     activeSession.current?.id,
                     () => activeSession.current?.getToken() ?? Promise.resolve(null),
                     signal,
+                    state.projectId,
                 )
             }
         />

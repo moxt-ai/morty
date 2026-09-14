@@ -25,7 +25,7 @@ export function createApplicationDependencies(bindings: CloudBindings) {
     };
     const storages = Object.freeze({
         configuration: new ConfigurationStorage(infrastructure),
-        identities: new IdentityStorage(bindings.DATABASE),
+        identities: new IdentityStorage(bindings.DATABASE, bindings.CHAT_PROJECT_ID ?? null),
         managedBots: new ManagedBotStorage(bindings.DATABASE),
         platformProjects: new PlatformProjectStorage(bindings.DATABASE),
     });

@@ -34,7 +34,12 @@ test("Given a signed-in web user, When they manage bots and open chat, Then mana
         }
         return new Response(null, { status: 204 });
     };
-    const options = { origin: "https://cloud.test", getToken: async () => "clerk-token", fetchRequest };
+    const options = {
+        origin: "https://cloud.test",
+        projectId: `prj_a01_${"a".repeat(24)}`,
+        getToken: async () => "clerk-token",
+        fetchRequest,
+    };
     const management = new ManagementApi(options);
     const chat = new ChatCloudApi({
         ...options,
@@ -73,6 +78,7 @@ test("Given an authenticated Bot owner, When Chat opens their Bot, Then the brow
     const requests: Request[] = [];
     const credential = `mconv_${"a".repeat(22)}_${"b".repeat(43)}`;
     const api = new BotChatApi({
+        projectId: `prj_a01_${"a".repeat(24)}`,
         origin: "https://cloud.test",
         getToken: async () => "anonymous-token",
         fetchRequest: async (request) => {

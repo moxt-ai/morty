@@ -22,12 +22,21 @@
         "producers": [{ "binding": "EVENTS", "queue": "app-slack-events" }],
         "consumers": [{ "queue": "app-slack-events", "max_batch_size": 1, "max_retries": 5 }]
     },
-    "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "mobius-cloud-local-attachments" }],
+    "r2_buckets": [
+        { "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "mobius-chat-local-apac-attachments" },
+        { "binding": "CHAT_ATTACHMENTS_WNAM", "bucket_name": "mobius-chat-local-wnam-attachments" }
+    ],
     "d1_databases": [
         {
-            "binding": "DATABASE",
-            "database_name": "mobius-cloud-local",
-            "database_id": "00000000-0000-0000-0000-000000000001",
+            "binding": "CHAT_DATABASE_APAC",
+            "database_name": "mobius-chat-local-apac",
+            "database_id": "00000000-0000-0000-0000-000000000002",
+            "migrations_dir": "packages/worker/migrations"
+        },
+        {
+            "binding": "CHAT_DATABASE_WNAM",
+            "database_name": "mobius-chat-local-wnam",
+            "database_id": "00000000-0000-0000-0000-000000000003",
             "migrations_dir": "packages/worker/migrations"
         }
     ],
@@ -81,12 +90,21 @@
                     }
                 ]
             },
-            "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "mobius-cloud-staging-attachments" }],
+            "r2_buckets": [
+                { "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "mobius-chat-staging-apac-attachments" },
+                { "binding": "CHAT_ATTACHMENTS_WNAM", "bucket_name": "mobius-chat-staging-wnam-attachments" }
+            ],
             "d1_databases": [
                 {
-                    "binding": "DATABASE",
-                    "database_name": "mobius-cloud-staging",
-                    "database_id": "b36b010b-1a7e-4d44-8b56-094f4865cbf4",
+                    "binding": "CHAT_DATABASE_APAC",
+                    "database_name": "mobius-chat-staging-apac",
+                    "database_id": "ccbf7137-7983-4a7d-b205-04fb82a6019a",
+                    "migrations_dir": "packages/worker/migrations"
+                },
+                {
+                    "binding": "CHAT_DATABASE_WNAM",
+                    "database_name": "mobius-chat-staging-wnam",
+                    "database_id": "51e83fb8-70ef-4c68-98b2-5a6481fc0fc9",
                     "migrations_dir": "packages/worker/migrations"
                 }
             ],
@@ -126,9 +144,15 @@
             "workers_dev": false,
             "d1_databases": [
                 {
-                    "binding": "DATABASE",
-                    "database_name": "mobius-cloud-production",
-                    "database_id": "51fc8c40-468b-4347-ab5c-3064a11f927e",
+                    "binding": "CHAT_DATABASE_APAC",
+                    "database_name": "mobius-chat-production-apac",
+                    "database_id": "698bd441-3709-43fc-994f-107e84fe74f7",
+                    "migrations_dir": "packages/worker/migrations"
+                },
+                {
+                    "binding": "CHAT_DATABASE_WNAM",
+                    "database_name": "mobius-chat-production-wnam",
+                    "database_id": "a614d890-971c-4b97-aaee-8e71c289c57e",
                     "migrations_dir": "packages/worker/migrations"
                 }
             ],
@@ -155,7 +179,10 @@
                     }
                 ]
             },
-            "r2_buckets": [{ "binding": "ATTACHMENTS", "bucket_name": "mobius-cloud-production-attachments" }]
+            "r2_buckets": [
+                { "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "mobius-chat-production-apac-attachments" },
+                { "binding": "CHAT_ATTACHMENTS_WNAM", "bucket_name": "mobius-chat-production-wnam-attachments" }
+            ]
         }
     },
     "account_id": "95af7a3d67be8c49b1619544e3ce53c0"

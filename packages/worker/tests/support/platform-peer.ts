@@ -26,6 +26,20 @@ export async function platformPeer({
     const credential = `mapp_${"a".repeat(22)}_${"b".repeat(43)}`;
     const server = createServer(async (request, response) => {
         response.setHeader("content-type", "application/json");
+        const placementPath = request.url?.match(
+            /^\/mobius\/api\/v1\/projects\/(prj_([aw])0[12]_[A-Za-z0-9_-]{24})\/storage-placement$/u,
+        );
+        if (request.method === "GET" && placementPath !== null && placementPath !== undefined) {
+            const region = placementPath[2] === "a" ? "apac" : "wnam";
+            response.writeHead(200).end(
+                JSON.stringify({
+                    projectId: placementPath[1],
+                    d1ShardId: `${region}-${placementPath[1]?.slice(5, 7)}`,
+                    r2BucketId: region,
+                }),
+            );
+            return;
+        }
         if (request.headers.authorization !== `Bearer ${credential}`) {
             response.writeHead(401).end(JSON.stringify({ error: { code: "unauthorized", message: "Unauthorized" } }));
             return;
@@ -88,7 +102,7 @@ export async function platformPeer({
             let project = projects.get(input.idempotencyKey);
             if (project === undefined) {
                 project = {
-                    projectId: `${input.locationHint}-project-${projects.size + 1}`,
+                    projectId: `prj_${input.locationHint === "apac" ? "a01" : "w01"}_${String(projects.size + 1).padStart(24, "0")}`,
                     appId: "cloud-app",
                     tenantId: "tenant-test",
                     clientReference: input.clientReference,

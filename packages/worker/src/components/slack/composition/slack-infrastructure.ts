@@ -36,6 +36,7 @@ interface SlackGateways {
 interface SlackConfig {
     readonly authentication: AuthenticationConfiguration;
     readonly publicBaseUrl: string;
+    readonly projectId: string;
     readonly mobiusBaseUrl: string;
     readonly signingKey: string;
 }

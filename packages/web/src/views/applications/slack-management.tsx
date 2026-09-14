@@ -25,7 +25,14 @@ export function SlackManagement({ userId }: { readonly userId: string }) {
         );
     }
     return (
-        <MobiusSlackContext context={{ mobiusUrl: window.location.origin, tenantId: userId, getToken: getSlackToken }}>
+        <MobiusSlackContext
+            context={{
+                mobiusUrl: window.location.origin,
+                tenantId: userId,
+                projectId: identity.projectId,
+                getToken: getSlackToken,
+            }}
+        >
             <div key={userId} className="grid gap-8">
                 <SlackBotManageView />
             </div>

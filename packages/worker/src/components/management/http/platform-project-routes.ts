@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
+import { createApplicationDependencies } from "../../../composition/application-context.ts";
+import { projectBindings } from "../../../composition/chat-shards.ts";
 import { json } from "../../../infra/http.ts";
 import { authenticatedSession } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
@@ -63,13 +65,16 @@ export function createPlatformProjectRoutes() {
                 signal,
                 projectLocationHint(context.req.raw),
             );
-            await context.env.storages.platformProjects.save(session.userId, origin, appId, project, signal);
+            const scoped = createApplicationDependencies(
+                await projectBindings(context.env.config.bindings, project.projectId, signal),
+            );
+            await scoped.storages.platformProjects.save(session.userId, origin, appId, project, signal);
             context.env.logger.info(
                 { event: "platform-project-provisioned", userId: session.userId, projectId: project.projectId },
                 "Project audit event",
             );
             return json({
-                project: await context.env.storages.platformProjects.read(session.userId, origin, appId, signal),
+                project: await scoped.storages.platformProjects.read(session.userId, origin, appId, signal),
             });
         });
 }

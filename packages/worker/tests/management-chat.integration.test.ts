@@ -85,6 +85,15 @@ async function mobiusService() {
     >();
     const appCredential = `mapp_${"a".repeat(22)}_${"b".repeat(43)}`;
     const server = createServer(async (request, response) => {
+        const placement = request.url?.match(
+            /^\/mobius\/api\/v1\/projects\/(prj_a01_[A-Za-z0-9_-]{24})\/storage-placement$/u,
+        );
+        if (placement !== undefined && placement !== null && request.method === "GET") {
+            response
+                .writeHead(200, { "content-type": "application/json" })
+                .end(JSON.stringify({ projectId: placement[1], d1ShardId: "apac-01", r2BucketId: "apac" }));
+            return;
+        }
         calls.push({
             authorization: request.headers.authorization,
             appId: request.headers["x-mobius-app-id"] as string | undefined,
@@ -166,7 +175,7 @@ async function mobiusService() {
                 project = {
                     appId: "cloud-app",
                     tenantId: "tenant-test",
-                    projectId: `project-${projects.size + 1}`,
+                    projectId: `prj_a01_${String(projects.size + 1).padStart(24, "0")}`,
                     clientReference: value.clientReference,
                     displayName: value.displayName,
                     lifecycle: "active",
@@ -266,6 +275,10 @@ test("Given an anonymous user, When they provision a Platform Project and reload
         CLERK_JWT_KEY: issuer.publicKey,
         CLERK_PUBLISHABLE_KEY: issuer.publishableKey,
         DATABASE: database,
+        CHAT_DATABASE_APAC: database,
+        CHAT_DATABASE_WNAM: database,
+        CHAT_ATTACHMENTS_APAC: { get: () => Promise.resolve(null) },
+        CHAT_ATTACHMENTS_WNAM: { get: () => Promise.resolve(null) },
         MOBIUS_APP_ID: "cloud-app",
         MOBIUS_APP_SECRET: mobius.appCredential,
         MOBIUS_BASE_URL: mobius.baseUrl,
@@ -277,15 +290,17 @@ test("Given an anonymous user, When they provision a Platform Project and reload
             bindings,
         );
         expect(response.status).toBe(201);
-        return v.parse(v.object({ token: v.string() }), await response.json()).token;
+        return v.parse(v.object({ token: v.string(), projectId: v.string() }), await response.json());
     };
     const alice = await createIdentity();
     const bob = await createIdentity();
+    const aliceHeaders = { authorization: `Bearer ${alice.token}`, "X-Mobius-Project-Id": alice.projectId };
+    const bobHeaders = { authorization: `Bearer ${bob.token}`, "X-Mobius-Project-Id": bob.projectId };
     const endpoint = "https://cloud.test/mobius-cloud/api/management/project";
     try {
         const chatBotEndpoint = "https://cloud.test/mobius-cloud/api/chat/bots/bot-1";
         const wrongMethod = await worker.fetch(
-            new Request(`${chatBotEndpoint}/access`, { headers: { authorization: `Bearer ${alice}` } }),
+            new Request(`${chatBotEndpoint}/access`, { headers: aliceHeaders }),
             bindings,
         );
         expect(wrongMethod.status).toBe(405);
@@ -293,7 +308,7 @@ test("Given an anonymous user, When they provision a Platform Project and reload
         const anotherUsersBot = await worker.fetch(
             new Request(`${chatBotEndpoint}/access`, {
                 method: "POST",
-                headers: { authorization: `Bearer ${bob}` },
+                headers: bobHeaders,
             }),
             bindings,
         );
@@ -302,7 +317,7 @@ test("Given an anonymous user, When they provision a Platform Project and reload
             const deniedInventory = await worker.fetch(
                 new Request(`${chatBotEndpoint}/${operation}`, {
                     method: "POST",
-                    headers: { authorization: `Bearer ${bob}`, "content-type": "application/json" },
+                    headers: { ...bobHeaders, "content-type": "application/json" },
                     body: JSON.stringify({ runtimeId: "runtime-1" }),
                 }),
                 bindings,
@@ -313,7 +328,7 @@ test("Given an anonymous user, When they provision a Platform Project and reload
             const invalidSetup = await worker.fetch(
                 new Request(`${chatBotEndpoint}/setup`, {
                     method: "POST",
-                    headers: { authorization: `Bearer ${alice}`, "content-type": "Application/JSON; charset=utf-8" },
+                    headers: { ...aliceHeaders, "content-type": "Application/JSON; charset=utf-8" },
                     body,
                 }),
                 bindings,
@@ -342,7 +357,7 @@ test("Given an anonymous user, When they provision a Platform Project and reload
                 new Request(endpoint, {
                     method: "POST",
                     headers: {
-                        authorization: `Bearer ${alice}`,
+                        ...aliceHeaders,
                         "content-type": "application/json",
                     },
                     body,
@@ -357,7 +372,7 @@ test("Given an anonymous user, When they provision a Platform Project and reload
                 new Request(endpoint, {
                     method: "POST",
                     headers: {
-                        authorization: `Bearer ${alice}`,
+                        ...aliceHeaders,
                         "content-type": "application/json",
                     },
                     body: JSON.stringify({ displayName: "My Project" }),
@@ -366,26 +381,22 @@ test("Given an anonymous user, When they provision a Platform Project and reload
             );
             expect(created.status).toBe(200);
             expect(await created.json()).toEqual({
-                project: { projectId: "project-1", displayName: "Personal workspace" },
+                project: { projectId: alice.projectId, displayName: "Personal workspace" },
             });
         }
-        const reopened = await worker.fetch(
-            new Request(endpoint, { headers: { authorization: `Bearer ${alice}` } }),
-            bindings,
-        );
+        const reopened = await worker.fetch(new Request(endpoint, { headers: aliceHeaders }), bindings);
         expect(await reopened.json()).toEqual({
-            project: { projectId: "project-1", displayName: "Personal workspace" },
+            project: { projectId: alice.projectId, displayName: "Personal workspace" },
         });
-        const other = await worker.fetch(
-            new Request(endpoint, { headers: { authorization: `Bearer ${bob}` } }),
-            bindings,
-        );
-        expect(await other.json()).toEqual({ project: { projectId: "project-2", displayName: "Personal workspace" } });
+        const other = await worker.fetch(new Request(endpoint, { headers: bobHeaders }), bindings);
+        expect(await other.json()).toEqual({
+            project: { projectId: bob.projectId, displayName: "Personal workspace" },
+        });
         const pairingEndpoint = "https://cloud.test/mobius-cloud/api/management/runtime-pairings";
         const pairingRequest = () =>
             new Request(pairingEndpoint, {
                 method: "POST",
-                headers: { authorization: `Bearer ${alice}`, "content-type": "application/json" },
+                headers: { ...aliceHeaders, "content-type": "application/json" },
                 body: JSON.stringify({ idempotencyKey: "local-machine" }),
             });
         const pairingResponse = await worker.fetch(pairingRequest(), bindings);
@@ -394,32 +405,32 @@ test("Given an anonymous user, When they provision a Platform Project and reload
         expect(pairing).toMatchObject({
             pairingId: "pair-1",
             runtimeId: "runtime-1",
-            projectId: "project-1",
+            projectId: alice.projectId,
             relayUrl: mobius.baseUrl,
             pairingCode: "ABCD-EFGH-JKLM-NPQR-STUV",
         });
         expect(await (await worker.fetch(pairingRequest(), bindings)).json()).toEqual(pairing);
         const pending = await worker.fetch(
-            new Request(`${pairingEndpoint}/pair-1`, { headers: { authorization: `Bearer ${alice}` } }),
+            new Request(`${pairingEndpoint}/pair-1`, { headers: aliceHeaders }),
             bindings,
         );
         expect(await pending.json()).toMatchObject({ status: "pending" });
         const forbidden = await worker.fetch(
-            new Request(`${pairingEndpoint}/pair-1`, { headers: { authorization: `Bearer ${bob}` } }),
+            new Request(`${pairingEndpoint}/pair-1`, { headers: bobHeaders }),
             bindings,
         );
         expect(forbidden.status).toBe(404);
         const bobProject = await worker.fetch(
             new Request(endpoint, {
                 method: "POST",
-                headers: { authorization: `Bearer ${bob}`, "content-type": "application/json" },
+                headers: { ...bobHeaders, "content-type": "application/json" },
                 body: JSON.stringify({ displayName: "Bob Project" }),
             }),
             bindings,
         );
         expect(bobProject.status).toBe(200);
         const isolated = await worker.fetch(
-            new Request(`${pairingEndpoint}/pair-1`, { headers: { authorization: `Bearer ${bob}` } }),
+            new Request(`${pairingEndpoint}/pair-1`, { headers: bobHeaders }),
             bindings,
         );
         expect(isolated.status).toBe(404);

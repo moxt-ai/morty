@@ -124,7 +124,9 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
-        run: pnpm exec wrangler d1 migrations apply DATABASE --env "$DEPLOY_ENVIRONMENT" --remote
+        run: |
+          pnpm exec wrangler d1 migrations apply CHAT_DATABASE_APAC --env "$DEPLOY_ENVIRONMENT" --remote
+          pnpm exec wrangler d1 migrations apply CHAT_DATABASE_WNAM --env "$DEPLOY_ENVIRONMENT" --remote
 
       - name: Deploy selected Cloud environment
         run: pnpm exec wrangler deploy --env "${{ inputs.environment }}"

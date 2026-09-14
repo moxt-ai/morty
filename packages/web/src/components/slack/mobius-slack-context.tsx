@@ -5,6 +5,7 @@ export interface MobiusSlackContextValue {
     readonly mobiusUrl: string;
     readonly getToken: GetToken;
     readonly tenantId: string;
+    readonly projectId: string;
 }
 
 type MobiusSlackUrlResolver = (path: string) => string;
@@ -21,8 +22,12 @@ export function MobiusSlackContext({
         if ((base.protocol !== "http:" && base.protocol !== "https:") || base.username !== "" || base.password !== "") {
             throw new Error("Mobius Slack URL must be an HTTP origin");
         }
-        return (path) => new URL(path, base.origin).toString();
-    }, [context.mobiusUrl]);
+        return (path) => {
+            const url = new URL(path, base.origin);
+            url.searchParams.set("projectId", context.projectId);
+            return url.toString();
+        };
+    }, [context.mobiusUrl, context.projectId]);
     return (
         <Context value={resolve}>
             <IdentityContext value={context}>{children}</IdentityContext>

@@ -8,18 +8,20 @@ export class SlackMessageRenderer {
     private readonly slack: SlackWebApi;
     private readonly attachments: AttachmentStorageResolver;
     private readonly publicBaseUrl: string;
+    private readonly projectId: string;
     constructor(cx: {
         readonly gateways: {
             readonly slackWebApi: SlackWebApi;
             readonly attachmentStorageResolver: AttachmentStorageResolver;
         };
-        readonly config: { readonly publicBaseUrl: string };
+        readonly config: { readonly publicBaseUrl: string; readonly projectId: string };
     }) {
         const { slackWebApi: slack, attachmentStorageResolver: attachments } = cx.gateways;
         const { publicBaseUrl } = cx.config;
         this.slack = slack;
         this.attachments = attachments;
         this.publicBaseUrl = publicBaseUrl;
+        this.projectId = cx.config.projectId;
     }
 
     readonly render = async (
@@ -56,7 +58,7 @@ export class SlackMessageRenderer {
             const key = `slack-attachments/${target.tenantId}/${target.slackTeamId}/${file.id}/${name}`;
             await this.attachments.resolve().put(key, response, file.mimetype ?? "application/octet-stream", signal);
             rendered.push(
-                `[file: ${file.name ?? file.id}](${this.publicBaseUrl}/mobius-slack/api/files/${encodeURIComponent(key)})`,
+                `[file: ${file.name ?? file.id}](${this.publicBaseUrl}/mobius-slack/api/files/${encodeURIComponent(key)}?projectId=${encodeURIComponent(this.projectId)})`,
             );
         }
         return rendered.join(" ");
