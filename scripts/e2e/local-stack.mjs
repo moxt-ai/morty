@@ -3,7 +3,6 @@ import { mkdir } from "node:fs/promises";
 import { createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { installAcpProxy } from "./acp-proxy.mjs";
 import { jsonRequest, text } from "./chat-api.mjs";
 
 export const repository = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -11,6 +10,7 @@ const mobiusRepository = join(repository, "third-party", "mobius");
 const fixtureDirectory = join(repository, "scripts", "e2e", "fixtures");
 const platformConfiguration = join(fixtureDirectory, "wrangler.platform.jsonc");
 const chatConfiguration = join(fixtureDirectory, "wrangler.chat.jsonc");
+const acpProxy = fileURLToPath(new URL("./acp-proxy.mjs", import.meta.url));
 
 async function freePort() {
     const server = createServer();
@@ -177,7 +177,6 @@ export class LocalStack {
     }
 
     async startMobius(pairing) {
-        const proxy = await installAcpProxy(this.harness.workDirectory);
         return await this.harness.start(
             "mobius",
             process.execPath,
@@ -197,7 +196,7 @@ export class LocalStack {
                 env: {
                     MOBIUS_E2E_ACP_TRACE_DIRECTORY: join(this.harness.artifactDirectory, "acp"),
                     MOBIUS_E2E_OPENCODE_REAL_BIN: this.openCode.binary,
-                    MOBIUS_OPENCODE_PATH: proxy,
+                    MOBIUS_OPENCODE_PATH: acpProxy,
                     MOBIUS_STATE_DIRECTORY: this.directories.runtime,
                     OPENCODE_DISABLE_AUTOUPDATE: "1",
                     XDG_CACHE_HOME: this.directories["xdg-cache"],
