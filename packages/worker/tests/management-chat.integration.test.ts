@@ -11,6 +11,9 @@ const cleanup: Array<() => void | Promise<void>> = [];
 const projectSchema = v.object({ project: v.object({ projectId: v.string(), displayName: v.string() }) });
 const botsSchema = v.object({ bots: v.array(v.object({ botId: v.string(), displayName: v.string() })) });
 
+// These scenarios include a real local Platform runtime startup and D1 migrations.
+vi.setConfig({ testTimeout: 15_000 });
+
 beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(AUTH_TIME);
