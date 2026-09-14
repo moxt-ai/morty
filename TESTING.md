@@ -69,8 +69,19 @@ bots, Chat, Slack integration, and sign out when manually validating an auth cha
 
 ## Browser verification
 
-Do not add automated E2E test files. Verify the user journey manually with the
-`agent-browser` CLI against the running application. A first-time visitor should
+The opt-in `pnpm test:e2e:opencode` live scenario verifies the complete local
+mobius-chat, mobius-platform, Mobius daemon, and OpenCode path with a current free
+OpenCode model. It uses the public Chat and conversation APIs exercised by the
+browser through a real headless Chrome session, requires network access, and is
+intentionally excluded from `pnpm check`.
+Set `OPENCODE_BIN` when OpenCode is not on `PATH`; set `OPENCODE_E2E_MODEL` to
+override the dynamically selected `opencode/*-free` model. Chrome is required;
+`MOBIUS_E2E_BROWSER_CHANNEL` can select another installed Chromium channel. The
+real Clerk browser bootstrap also requires a valid public key in `.dev.vars` or
+`MOBIUS_E2E_CLERK_PUBLISHABLE_KEY`; the scenario remains anonymous and does not sign in.
+
+Verify visual details outside this live Chat path manually with the `agent-browser`
+CLI against the running application. A first-time visitor should
 receive a browser-held anonymous identity and Bot, then see a current-origin
 `follow .../pair.md?token=...` instruction. After local-agent pairing, the same page
 opens headerless Chat without Project controls or Slack navigation. Reload and

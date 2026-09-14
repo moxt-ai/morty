@@ -1,0 +1,38 @@
+{
+    "$schema": "../../third-party/mobius/node_modules/wrangler/config-schema.json",
+    "name": "mobius-platform-local-e2e",
+    "main": "local-platform-e2e-worker.ts",
+    "compatibility_date": "2026-09-03",
+    "durable_objects": {
+        "bindings": [
+            { "name": "RUNTIME_RELAY", "class_name": "RuntimeRelay" },
+            { "name": "SESSION_RELAY", "class_name": "PlatformSessionRelay" },
+            { "name": "BOT_CONNECTIONS", "class_name": "BotConnectionActor" }
+        ]
+    },
+    "migrations": [
+        {
+            "tag": "platform-initial",
+            "new_sqlite_classes": ["RuntimeRelay", "PlatformSessionRelay", "BotConnectionActor"]
+        }
+    ],
+    "d1_databases": [
+        {
+            "binding": "D1_SHARD_APAC_01",
+            "database_name": "mobius-platform-e2e-shard",
+            "database_id": "00000000-0000-0000-0000-000000000101",
+            "migrations_dir": "../../third-party/mobius/packages/relay-core/migrations/d1"
+        },
+        {
+            "binding": "PLATFORM_DIRECTORY_DATABASE",
+            "database_name": "mobius-platform-e2e-directory",
+            "database_id": "00000000-0000-0000-0000-000000000102",
+            "migrations_dir": "../../third-party/mobius/packages/relay-cloudflare-platform/migrations/d1"
+        }
+    ],
+    "r2_buckets": [{ "binding": "R2_BUCKET_APAC", "bucket_name": "mobius-platform-local-e2e-objects" }],
+    "vars": {
+        "SESSION_ACTIVE_SESSIONS_PER_PROJECT": "1000",
+        "SESSION_ARCHIVE_BYTES_PER_SESSION": "268435456"
+    }
+}
