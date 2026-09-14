@@ -74,16 +74,10 @@ mobius-chat, mobius-platform, Mobius daemon, and OpenCode path with a current fr
 OpenCode model. It uses the public Chat and conversation APIs exercised by the
 browser through a real headless Chrome session, requires network access, and is
 intentionally excluded from `pnpm check`.
-Set `OPENCODE_BIN` when OpenCode is not on `PATH`; set `OPENCODE_E2E_MODEL` to
-override the dynamically selected `opencode/*-free` model. Chrome is required;
-`MOBIUS_E2E_BROWSER_CHANNEL` can select another installed Chromium channel. The
-real Clerk browser bootstrap also requires a valid public key in `.dev.vars` or
-`MOBIUS_E2E_CLERK_PUBLISHABLE_KEY`; the scenario remains anonymous and does not sign in.
 The `OpenCode nightly E2E` GitHub workflow runs this scenario at 02:00 Asia/Shanghai
 and on manual dispatch. Scheduled runs use the latest `main`, the Mobius revision
 pinned by its submodule, the latest `opencode-ai` release, and the first currently
-advertised `opencode/*-free` model. Configure the public Clerk browser key as the
-`CLERK_PUBLISHABLE_KEY` Actions repository variable.
+advertised `opencode/*-free` model.
 
 Verify visual details outside this live Chat path manually with the `agent-browser`
 CLI against the running application. A first-time visitor should

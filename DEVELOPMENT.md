@@ -88,6 +88,4 @@ Run `pnpm test:e2e:opencode` for the opt-in live system check. It creates isolat
 temporary state, starts the submodule's local mobius-platform and Mobius daemon plus
 the local mobius-chat Worker, selects a currently advertised free OpenCode model,
 sends a unique message through a headless Chrome session, and verifies the rendered
-OpenCode response. OpenCode must be on `PATH`, or supplied with `OPENCODE_BIN`.
-The browser bootstrap reads the Clerk publishable key from `.dev.vars` by default,
-but the scenario remains anonymous and does not use a Clerk account.
+OpenCode response.
