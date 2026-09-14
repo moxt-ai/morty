@@ -21,14 +21,12 @@ export function createBotManagementRoutes() {
             if (session instanceof Response) {
                 return session;
             }
-            if (session.authentication.kind === "anonymous") {
-                await provisionUserBot(
-                    context.env,
-                    session.userId,
-                    AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]),
-                    context.req.raw,
-                );
-            }
+            await provisionUserBot(
+                context.env,
+                session.userId,
+                AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]),
+                context.req.raw,
+            );
             return json({
                 bots: await context.env.storages.managedBots.listBots(session.userId, context.req.raw.signal),
             });
