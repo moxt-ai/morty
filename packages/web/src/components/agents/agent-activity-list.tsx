@@ -128,10 +128,14 @@ function ActivityText({
 
 function ToolDetails({
     activity,
+    channelId,
     detail,
+    sessionId,
 }: {
     readonly activity: RecordedActivity;
+    readonly channelId: string;
     readonly detail: ActivityDetailResult | null;
+    readonly sessionId: string;
 }) {
     const available = detail?.kind === "available" ? detail : null;
     const input = available?.input ?? activity.input;
@@ -169,18 +173,22 @@ function ToolDetails({
                     <ActivityText unwrapToolOutput>{output}</ActivityText>
                 </div>
             )}
-            <AgentRichContent contents={content} />
+            <AgentRichContent channelId={channelId} contents={content} sessionId={sessionId} />
         </div>
     );
 }
 
 function NarrativeDetails({
     activity,
+    channelId,
     detail,
+    sessionId,
     streaming,
 }: {
     readonly activity: RecordedActivity;
+    readonly channelId: string;
     readonly detail: ActivityDetailResult | null;
+    readonly sessionId: string;
     readonly streaming: boolean;
 }) {
     const available = detail?.kind === "available" ? detail : null;
@@ -192,7 +200,7 @@ function NarrativeDetails({
     return (
         <div className="agent-step-narrative mt-1 ml-[7px] min-w-0 max-w-full border-l-[0.5px] border-black/10 pt-1 pb-2 pl-[22px]">
             {output.length > 0 && <AgentMarkdown markdown={output} streaming={streaming} />}
-            <AgentRichContent contents={content} />
+            <AgentRichContent channelId={channelId} contents={content} sessionId={sessionId} />
         </div>
     );
 }
@@ -369,11 +377,13 @@ function ActivityLine({
                 <ChevronRight className="size-3 shrink-0 text-copy-tertiary transition-transform duration-150 motion-reduce:transition-none group-open/activity:rotate-90" />
             </summary>
             {activity.activityType === "tool" ? (
-                <ToolDetails activity={activity} detail={loadedDetail} />
+                <ToolDetails activity={activity} channelId={channelId} detail={loadedDetail} sessionId={sessionId} />
             ) : (
                 <NarrativeDetails
                     activity={activity}
+                    channelId={channelId}
                     detail={loadedDetail}
+                    sessionId={sessionId}
                     streaming={streaming && (activity.status === "pending" || activity.status === "running")}
                 />
             )}
@@ -384,9 +394,13 @@ function ActivityLine({
 
 function ProgressUpdates({
     activities,
+    channelId,
+    sessionId,
     streaming,
 }: {
     readonly activities: readonly RecordedActivity[];
+    readonly channelId: string;
+    readonly sessionId: string;
     readonly streaming: boolean;
 }) {
     if (activities.length === 0) {
@@ -404,7 +418,7 @@ function ProgressUpdates({
                         key={activity.activityId}
                     >
                         {activity.output.length > 0 && <AgentMarkdown markdown={activity.output} streaming={active} />}
-                        <AgentRichContent contents={activity.content} />
+                        <AgentRichContent channelId={channelId} contents={activity.content} sessionId={sessionId} />
                     </section>
                 );
             })}
@@ -443,7 +457,12 @@ export function AgentActivityList({
 
     return (
         <>
-            <ProgressUpdates activities={progressActivities} streaming={streaming} />
+            <ProgressUpdates
+                activities={progressActivities}
+                channelId={channelId}
+                sessionId={sessionId}
+                streaming={streaming}
+            />
             {workActivities.length > 0 && (
                 <details
                     className="group/work mb-3 min-w-0 max-w-full"

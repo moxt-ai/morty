@@ -1,7 +1,9 @@
+import { type AgentDisplayContent, MobiusAgentActivityEvent } from "@moxt-ai/mobius-sdk";
 import { type MobiusBrowserClient, type MobiusBrowserHistory, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
 import { MessageSquare, Send } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
+import { AgentRichContent } from "../../components/agents/agent-rich-content.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
@@ -58,12 +60,80 @@ type State =
           readonly bot: ManagedBot;
           readonly client: MobiusBrowserClient;
           readonly history: MobiusBrowserHistory;
+          readonly activityContents: ReadonlyMap<string, readonly AgentDisplayContent[]>;
       }
     | { readonly kind: "failed"; readonly message: string };
 type Sending =
     | { readonly kind: "idle" }
     | { readonly kind: "sending" }
     | { readonly kind: "failed"; readonly message: string };
+
+function BotArtifactContent({
+    botId,
+    contents,
+    requests,
+    sessionId,
+}: {
+    readonly botId: string;
+    readonly contents: readonly AgentDisplayContent[];
+    readonly requests: Pick<BotChatApi, "connectSession">;
+    readonly sessionId: string;
+}) {
+    const [client, setClient] = useState<Awaited<ReturnType<BotChatApi["connectSession"]>> | null | undefined>();
+    useEffect(() => {
+        const controller = new AbortController();
+        let connected: Awaited<ReturnType<BotChatApi["connectSession"]>> | null = null;
+        void requests
+            .connectSession(botId, sessionId, controller.signal)
+            .then((value) => {
+                if (controller.signal.aborted) {
+                    value.close();
+                    return;
+                }
+                connected = value;
+                setClient(value);
+            })
+            .catch(() => {
+                if (!controller.signal.aborted) {
+                    setClient(null);
+                }
+            });
+        return () => {
+            controller.abort();
+            connected?.close();
+        };
+    }, [botId, requests, sessionId]);
+    return client === undefined ? (
+        <p className="text-xs text-muted-foreground">Loading image…</p>
+    ) : client === null ? (
+        <p className="text-xs text-muted-foreground">Image content could not be loaded.</p>
+    ) : (
+        <AgentRichContent contents={contents} serviceClient={client} sessionId={sessionId} />
+    );
+}
+
+function BotTurnArtifacts({
+    activities,
+    activityContents,
+    botId,
+    requests,
+    sessionId,
+}: {
+    readonly activities: MobiusBrowserHistory["turns"][number]["activities"];
+    readonly activityContents: ReadonlyMap<string, readonly AgentDisplayContent[]>;
+    readonly botId: string;
+    readonly requests: Pick<BotChatApi, "connectSession">;
+    readonly sessionId: string;
+}) {
+    const contents = activities.flatMap((activity) =>
+        (activityContents.get(activity.activityId) ?? []).filter((content) => content.type === "image"),
+    );
+    return contents.length === 0 ? null : (
+        <section aria-label="Agent image output" className="min-w-0 px-4">
+            <BotArtifactContent botId={botId} contents={contents} requests={requests} sessionId={sessionId} />
+        </section>
+    );
+}
 
 function updateHistory(current: State, client: MobiusBrowserClient, history: MobiusBrowserHistory): State {
     if (
@@ -74,6 +144,19 @@ function updateHistory(current: State, client: MobiusBrowserClient, history: Mob
         return current;
     }
     return { ...current, history };
+}
+
+function updateActivityContents(
+    current: State,
+    client: MobiusBrowserClient,
+    event: { readonly payload: unknown },
+): State {
+    if (current.kind !== "ready" || current.client !== client || !(event.payload instanceof MobiusAgentActivityEvent)) {
+        return current;
+    }
+    const contents = new Map(current.activityContents);
+    contents.set(event.payload.activityId, event.payload.content);
+    return { ...current, activityContents: contents };
 }
 
 function attemptStatus(kind: string): string {
@@ -171,7 +254,7 @@ export function BotChatHome({
             client = session;
             const history = await session.history.read(new MobiusPageRequest(100, ""), controller.signal);
             controller.signal.throwIfAborted();
-            setState({ kind: "ready", bot, client: session, history });
+            setState({ activityContents: new Map(), kind: "ready", bot, client: session, history });
             const refresh = async () => {
                 const updated = await session.history.read(new MobiusPageRequest(100, ""), controller.signal);
                 if (!controller.signal.aborted) {
@@ -200,13 +283,20 @@ export function BotChatHome({
             };
             reconciliationTimer = setTimeout(() => void reconcile(), 5000);
             let events = await session.readEvents(new MobiusPageRequest(10, ""), controller.signal);
+            for (const event of events.events) {
+                setState((current) => updateActivityContents(current, session, event));
+            }
             while (events.hasMore) {
                 events = await session.readEvents(new MobiusPageRequest(10, events.cursor), controller.signal);
+                for (const event of events.events) {
+                    setState((current) => updateActivityContents(current, session, event));
+                }
             }
             const subscription = await session.events.subscribe(
                 events.cursor,
                 {
-                    receive: async () => {
+                    receive: async (event) => {
+                        setState((current) => updateActivityContents(current, session, event));
                         await refresh();
                         return true;
                     },
@@ -370,6 +460,13 @@ export function BotChatHome({
                                             {attemptStatus(turn.attempt.kind)}
                                         </p>
                                     ) : null}
+                                    <BotTurnArtifacts
+                                        activities={turn.activities}
+                                        activityContents={state.activityContents}
+                                        botId={state.bot.botId}
+                                        requests={requests}
+                                        sessionId={turn.sessionId}
+                                    />
                                     <AttemptFailure attempt={turn.attempt} botId={state.bot.botId} />
                                 </div>
                             ))

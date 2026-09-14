@@ -121,7 +121,11 @@ function AgentMessage({
                 {message.text.length === 0 && message.state.isStreaming && message.activities.length === 0 && (
                     <ThinkingIndicator />
                 )}
-                <AgentRichContent contents={message.contents.map((entry) => entry.content)} />
+                <AgentRichContent
+                    channelId={channelId}
+                    contents={message.contents.map((entry) => entry.content)}
+                    sessionId={sessionId}
+                />
                 <div className="mt-3 flex min-h-8 items-center gap-1.5">
                     {message.state.appearance !== "completed" && (
                         <span
