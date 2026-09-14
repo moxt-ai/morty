@@ -418,12 +418,20 @@ export class PlatformProjectGateway {
         }
     };
 
-    readonly create = async (userId: string, displayName: string, signal: AbortSignal) => {
+    readonly create = async (
+        userId: string,
+        displayName: string,
+        signal: AbortSignal,
+        requestedLocationHint?: "apac" | "wnam",
+    ) => {
         signal.throwIfAborted();
         const configuration = this.configuration();
         let locationHint: string;
         try {
-            locationHint = v.parse(platformIdentifier, this.#bindings.MOBIUS_PROJECT_LOCATION_HINT);
+            locationHint = v.parse(
+                v.picklist(["apac", "wnam"]),
+                requestedLocationHint ?? this.#bindings.MOBIUS_PROJECT_LOCATION_HINT,
+            );
         } catch (cause) {
             throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Project placement is not configured.", 503, {
                 cause,

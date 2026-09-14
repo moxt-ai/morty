@@ -81,14 +81,14 @@ export async function platformPeer({
                     idempotencyKey: v.string(),
                     clientReference: v.string(),
                     displayName: v.string(),
-                    locationHint: v.literal("apac"),
+                    locationHint: v.picklist(["apac", "wnam"]),
                 }),
                 JSON.parse(body),
             );
             let project = projects.get(input.idempotencyKey);
             if (project === undefined) {
                 project = {
-                    projectId: `project-${projects.size + 1}`,
+                    projectId: `${input.locationHint}-project-${projects.size + 1}`,
                     appId: "cloud-app",
                     tenantId: "tenant-test",
                     clientReference: input.clientReference,

@@ -111,6 +111,63 @@ async function createAnonymousUser(
     return v.parse(v.object({ token: v.string(), userId: v.string() }), await response.json());
 }
 
+test.each([
+    ["AS", "apac"],
+    ["OC", "apac"],
+    ["NA", "wnam"],
+    ["SA", "wnam"],
+    ["EU", "wnam"],
+    ["AF", "wnam"],
+    ["AN", "wnam"],
+    ["unknown", "apac"],
+])(
+    "Given a visitor geolocated to %s, When Chat provisions their workspace, Then Platform places it in %s and retains it when they travel",
+    async (continent, region) => {
+        // Cloudflare supplies cf metadata on incoming Requests; Node does not.
+        class GeolocatedRequest extends Request {
+            override readonly cf: { readonly continent: string };
+            constructor(request: Request, continent: string) {
+                super(request);
+                this.cf = { continent };
+            }
+        }
+        const environment = slackConfiguration();
+        const created = await worker.fetch(
+            new GeolocatedRequest(
+                new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/anonymous-users`, {
+                    method: "POST",
+                    headers: { "cf-ipcountry": "US" },
+                }),
+                continent,
+            ),
+            environment,
+        );
+        expect(created.status).toBe(201);
+        const identity = v.parse(v.object({ token: v.string() }), await created.json());
+        const projectRequest = () =>
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/management/project`, {
+                headers: { authorization: `Bearer ${identity.token}` },
+            });
+        const response = await worker.fetch(projectRequest(), environment);
+        expect(response.status).toBe(200);
+        const initial = v.parse(v.object({ project: v.object({ projectId: v.string() }) }), await response.json());
+        expect(initial.project.projectId).toMatch(new RegExp(`^${region}-project-`));
+        const revisited = await worker.fetch(
+            new GeolocatedRequest(
+                new Request(projectRequest(), {
+                    method: "POST",
+                    headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+                    body: JSON.stringify({ displayName: "Personal workspace" }),
+                }),
+                region === "apac" ? "NA" : "AS",
+            ),
+            environment,
+        );
+        expect(revisited.status).toBe(200);
+        expect(await revisited.json()).toMatchObject(initial);
+    },
+);
+
 test("Given a first-time visitor, When an anonymous identity is created, Then their Bot is already available without manual setup", async () => {
     const database = new InMemoryD1Database();
     const identity = await createAnonymousUser(database);

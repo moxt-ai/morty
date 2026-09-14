@@ -7,6 +7,11 @@ Clerk verifies a user session only. The application does not read Clerk Organiza
 claims. Platform Project setup uses the server-held AppCredential; the Worker
 supplies a logical location hint and Platform resolves its storage placement. Bots and
 Chat support anonymous users; Slack additionally requires a verified Clerk session.
+Chat derives new Project placement from Cloudflare's server-provided `request.cf.continent`:
+Asia/Oceania use `apac`; other recognized continents use `wnam`, the other supported region.
+Missing or unrecognized metadata falls back to `MOBIUS_PROJECT_LOCATION_HINT`.
+Client headers and request bodies do not control this selection. Existing Projects retain
+their recorded placement when the user changes location.
 
 First-time visitors to `/` receive a browser-held anonymous identity and personal
 Bot; returning visitors restore their saved identity automatically. Every web

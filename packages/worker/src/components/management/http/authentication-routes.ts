@@ -53,7 +53,7 @@ export function createAuthenticationRoutes() {
         .post("/identity/anonymous-users", async (context) => {
             const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]);
             const identity = await context.env.services.authentication.createAnonymous(signal);
-            const bot = await provisionUserBot(context.env, identity.userId, signal);
+            const bot = await provisionUserBot(context.env, identity.userId, signal, context.req.raw);
             return json({ ...identity, bot }, 201, { "Cache-Control": "no-store" });
         })
         .post("/identity/transfers", async (context) => {
