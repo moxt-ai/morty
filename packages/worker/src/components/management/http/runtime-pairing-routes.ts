@@ -20,13 +20,11 @@ export function createRuntimePairingRoutes() {
                 maxSize: 4096,
                 onError: () => json({ error: { code: "INVALID_REQUEST", message: "The request is too large." } }, 413),
             }),
+            authenticatedSession,
             async (context) => {
-                const session = await authenticatedSession(context.env, context.req.raw);
-                if (session instanceof Response) {
-                    return session;
-                }
+                const session = context.get("session");
                 const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(15000)]);
-                if (context.req.header("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") {
+                if (context.get("mediaType") !== "application/json") {
                     throw new PlatformProjectError("INVALID_REQUEST", "A JSON request is required.", 400);
                 }
                 let body: unknown;
@@ -69,11 +67,8 @@ export function createRuntimePairingRoutes() {
                 return json(pairing, 201);
             },
         )
-        .get("/runtime-pairings/:pairingId", async (context) => {
-            const session = await authenticatedSession(context.env, context.req.raw);
-            if (session instanceof Response) {
-                return session;
-            }
+        .get("/runtime-pairings/:pairingId", authenticatedSession, async (context) => {
+            const session = context.get("session");
             const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(15000)]);
             const pairingId = v.parse(platformIdentifier, context.req.param("pairingId"));
             const { origin, appId } = context.env.gateways.platformProjects.configuration();
