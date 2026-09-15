@@ -198,10 +198,10 @@ then exercise the provisioned staging service with a real paired Runtime.
 
 ### Agent setup skill
 
-`public/setup.md` is the standalone entry point for testing and external sharing
+`/setup.md` is the standalone entry point for testing and external sharing
 (such as Twitter), not a web UI instruction: resume the local identity or create
 an anonymous user and Bot, pair a Runtime, and return a one-time browser handoff.
-`public/pair.md?token=...` is copied from every web workspace. First-time visitors
+`/pair.md?token=...` is copied from every web workspace. First-time visitors
 receive a browser-held identity and Bot before the instruction is shown. Its opaque,
 24-hour ticket is issued for the authenticated anonymous or Clerk user and target
 Bot. Explicit POST redemption atomically consumes it and issues a separate local
@@ -209,6 +209,8 @@ credential for that user. It never creates another Bot. Reading the document doe
 not consume the ticket. Pairing tickets and browser transfers have separate stores
 and redemption endpoints.
 
+The Worker renders both documents from `templates/`, substituting `APP_ORIGIN`
+or the request origin before serving them. Template placeholders are not public assets.
 Both documents use `public/setup.mjs` through just two commands:
 `pair --token <one-time-ticket> --harness <agent-id>` and `setup --harness <agent-id>`.
 They handle private configuration persistence, identity validation, resumable

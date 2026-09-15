@@ -15,19 +15,16 @@ previous configuration. Do not ask for an additional replacement confirmation.
 
 ## Run
 
-1. Set `BASE_URL` to this document's URL origin:
-   `https://mobius-chat.paradev.biz` for staging or
-   `https://mobius-chat.paraflow.biz` for production. For other deployments, use
-   their document origin. The script calls the Chat API at `/mobius-cloud/api/*`.
-   The server supplies the Runtime URL separately as `pairing.relayUrl`
-   (`https://mobius.moxt.ws` in staging; `https://mobius.moxt.ai` in production).
+1. Use the server-provided Chat origin exactly: `BASE_URL="{{BASE_URL}}"`.
+   The script calls the Chat API at `{{BASE_URL}}/mobius-cloud/api/*`.
+   The server supplies the Runtime URL separately as `pairing.relayUrl`.
 
    Use `DOCUMENT_DIR` from the environment if provided; otherwise resolve the user's
    absolute document directory. Ask if unavailable; do not use a repository directory
    as a substitute.
 2. Ensure Node.js 22.13.0 or newer, npm, and npx are available. Check their versions
    and install or repair missing dependencies using the host's normal tools.
-3. Download `/setup.mjs` from this document's origin to a private local directory, with a
+3. Download `{{BASE_URL}}/setup.mjs` to a private local directory, with a
    finite timeout and no redirects. Inspect it before running.
 4. Set `TOKEN` from the supplied URL. Set `HARNESS` to **your own harness ID**:
    `codex` when running in Codex, `claude` in Claude Code, or `opencode` in OpenCode.

@@ -19,6 +19,16 @@ workspace copies `/pair.md?token=...`, a one-time ticket that connects the local
 Runtime to its current user and Bot and directs the user back to Chat.
 `/setup.md` is reserved for standalone testing and external sharing, including
 social posts. That flow creates or reuses a local identity and returns a browser handoff.
+Both instruction documents are Markdown templates in `templates/`, outside the
+static public assets. The Worker renders them at `/setup.md` and `/pair.md` at
+request time. `{{BASE_URL}}` uses `APP_ORIGIN` when set, otherwise the
+request URL's origin (including the port for local development). Set `APP_ORIGIN`
+to a canonical HTTP(S) origin without a trailing slash, path, credentials, query,
+or fragment. Invalid configuration returns `INVALID_INSTRUCTION_ORIGIN` rather
+than instructions. The Worker stores rendered documents in Cloudflare's edge cache
+for five minutes (`Cache-Control: public, max-age=0, s-maxage=300`). Cache keys include
+the request origin, document path, and resolved Chat origin, but exclude ticket tokens
+and other request query parameters. `X-Instruction-Cache` reports `HIT` or `MISS`.
 The active web flow has no Project setup or Slack navigation. The web application
 sends its anonymous credential or Clerk bearer token to Chat for ownership checks
 and conversation access. Platform independently authorizes SDK operations.

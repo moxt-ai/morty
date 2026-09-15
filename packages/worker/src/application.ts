@@ -4,6 +4,7 @@ import { createChatApplication } from "./components/chat/chat-routes.ts";
 import { createManagementApplication } from "./components/management/http/create-application.ts";
 import { slackApplication } from "./components/slack/slack-application.ts";
 import { type ApplicationContext, createApplicationDependencies } from "./composition/application-context.ts";
+import { instructionDocuments } from "./gateway/instruction-documents.ts";
 import { applicationErrorResponse } from "./infra/application-error.ts";
 import type { CloudBindings } from "./infra/cloud-bindings.ts";
 import { json } from "./infra/http.ts";
@@ -41,6 +42,7 @@ const application = new Hono<{ readonly Bindings: CloudBindings }>()
     .onError((error, context) => applicationErrorResponse(error, createApplicationDependencies(context.env).logger))
     .all("/mobius-cloud/api", notFound)
     .all("/mobius-slack/api", notFound)
+    .route("/", instructionDocuments)
     .route("/mobius-cloud/api", cloudRoutes)
     .route("/mobius-slack/api", slackRoutes)
     .notFound(notFound);
