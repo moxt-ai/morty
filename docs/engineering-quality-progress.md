@@ -15,8 +15,9 @@ Both repositories use branch `refactor/moxt-alignment`.
 - Shared Slack contracts moved below services; Mobius hosting storage uses the
   lower-level Relay contracts entrypoint. Authentication composition is explicitly
   owned by the hosting composition directory.
-- Codecov configurations, GitHub OIDC uploads, main/PR/merge-group reporting, and
-  measured-coverage badges. Chat deployment now depends on `check`.
+- Informational Codecov configurations and combined coverage artifacts on
+  main/PR/merge-group runs. GitHub-owned artifact uploads respect the Actions
+  allowlist and are non-blocking. Chat deployment now depends on `check`.
 - Repaired stale Platform tenant provisioning, Runtime credential fixtures,
   Runtime WebSocket authentication, pairing-response decoding, and deterministic
   process-deadline synchronization in existing acceptance scenarios.
@@ -49,7 +50,7 @@ These findings are a baseline, not completion of the quality requirements.
    Keep all source in the denominator while those collectors are missing.
 2. Add user-visible acceptance scenarios for uncovered behavior until both targets
    are achieved. Chat's existing web-package tests exercise almost none of its UI.
-3. Verify the organization's Codecov activation and an actual OIDC upload.
+3. Enable Codecov uploads if the organization's Actions allowlist permits them.
 4. Obtain green `pnpm check` results before coordinated delivery.
 
 GitHub inspection found existing required `check` and `title` statuses in both
