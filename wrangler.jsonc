@@ -53,7 +53,12 @@
     "env": {
         "staging": {
             "name": "mobius-chat-staging",
-            "vars": { "MOBIUS_PROJECT_LOCATION_HINT": "apac" },
+            "placement": { "mode": "off" },
+            "services": [
+                { "binding": "MOBIUS_REGIONAL_APAC", "service": "mobius-chat-staging-apac" },
+                { "binding": "MOBIUS_REGIONAL_WNAM", "service": "mobius-chat-staging-wnam" }
+            ],
+            "vars": { "MOBIUS_PROJECT_LOCATION_HINT": "apac", "MOBIUS_WORKER_REGION": "edge" },
             "secrets": {
                 "required": [
                     "APP_ORIGIN",
@@ -120,7 +125,12 @@
         },
         "production": {
             "name": "mobius-chat-production",
-            "vars": { "MOBIUS_PROJECT_LOCATION_HINT": "apac" },
+            "placement": { "mode": "off" },
+            "services": [
+                { "binding": "MOBIUS_REGIONAL_APAC", "service": "mobius-chat-production-apac" },
+                { "binding": "MOBIUS_REGIONAL_WNAM", "service": "mobius-chat-production-wnam" }
+            ],
+            "vars": { "MOBIUS_PROJECT_LOCATION_HINT": "apac", "MOBIUS_WORKER_REGION": "edge" },
             "secrets": {
                 "required": [
                     "APP_ORIGIN",

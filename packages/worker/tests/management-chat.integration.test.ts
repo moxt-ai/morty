@@ -28,7 +28,7 @@ afterEach(async () => {
     }
 });
 
-async function fixture() {
+async function fixture(location = "apac") {
     const mobius = await createMobiusPlatformFixture();
     cleanup.push(mobius.close);
     const database = new InMemoryD1Database();
@@ -45,7 +45,7 @@ async function fixture() {
         MOBIUS_APP_ID: mobius.appId,
         MOBIUS_APP_SECRET: mobius.appCredential,
         MOBIUS_BASE_URL: mobius.baseUrl,
-        MOBIUS_PROJECT_LOCATION_HINT: "apac",
+        MOBIUS_PROJECT_LOCATION_HINT: location,
     };
     const app = new Hono().all("*", (context) => worker.fetch(context.req.raw, bindings));
     const projects = new Map<string, string>();
@@ -68,7 +68,56 @@ async function fixture() {
         projects.set(identity.token, identity.projectId);
         return identity.token;
     };
-    return { app, mobius, request, anonymous };
+    return { app, mobius, request, anonymous, bindings };
+}
+
+test.each(["apac", "wnam"])(
+    "Given a Project routed through regional Chat Workers in %s, When its session is read at the edge, Then the regional backend authenticates it without edge storage",
+    async (region) => {
+        const fixture = await fixtureForRegionalRouting(region);
+        const empty = new InMemoryD1Database();
+        cleanup.push(empty.close);
+        const regional = (region: string) => ({
+            fetch: (request: Request) => worker.fetch(request, { ...fixture.bindings, MOBIUS_WORKER_REGION: region }),
+        });
+        const edge = {
+            ...fixture.bindings,
+            DATABASE: empty,
+            CHAT_DATABASE_APAC: empty,
+            CHAT_DATABASE_WNAM: empty,
+            MOBIUS_WORKER_REGION: "edge",
+            MOBIUS_REGIONAL_APAC: regional("apac"),
+            MOBIUS_REGIONAL_WNAM: regional("wnam"),
+        };
+        const request = (token: string) =>
+            new Request("https://cloud.test/mobius-cloud/api/session", {
+                headers: { authorization: `Bearer ${token}`, "X-Mobius-Project-Id": fixture.projectId },
+            });
+        expect((await worker.fetch(request(fixture.token), edge)).status).toBe(200);
+        expect((await worker.fetch(request("mobius_anon_invalid"), edge)).status).toBe(401);
+        expect((await regional(region === "apac" ? "wnam" : "apac").fetch(request(fixture.token))).status).toBe(421);
+        const created = await worker.fetch(
+            new Request("https://cloud.test/mobius-cloud/api/identity/anonymous-users", { method: "POST" }),
+            edge,
+        );
+        expect(created.status).toBe(201);
+        const identity = v.parse(v.object({ token: v.string(), projectId: v.string() }), await created.json());
+        expect(identity.projectId.startsWith(region === "apac" ? "prj_a" : "prj_w")).toBe(true);
+        const session = await worker.fetch(
+            new Request("https://cloud.test/mobius-cloud/api/session", {
+                headers: { authorization: `Bearer ${identity.token}`, "X-Mobius-Project-Id": identity.projectId },
+            }),
+            edge,
+        );
+        expect(session.status).toBe(200);
+    },
+);
+
+async function fixtureForRegionalRouting(region: string) {
+    const value = await fixture(region);
+    const token = await value.anonymous();
+    const { project } = v.parse(projectSchema, await (await value.request("management/project", token)).json());
+    return { ...value, token, projectId: project.projectId };
 }
 
 test("Given an anonymous user, When they provision a Platform Project and reload, Then their Project and Bot persist and are isolated from other users", async () => {

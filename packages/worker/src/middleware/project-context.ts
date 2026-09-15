@@ -3,6 +3,7 @@ import * as v from "valibot";
 import { readProjectCredential } from "../components/management/entity/project-credential.ts";
 import { type ApplicationContext, createApplicationDependencies } from "../composition/application-context.ts";
 import { projectBindings } from "../composition/chat-shards.ts";
+import { routeRegionalChat } from "../gateway/regional-chat-routing.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 import { json } from "../infra/http.ts";
 
@@ -13,9 +14,13 @@ export const cloudProjectContext = createMiddleware<{
     const request = context.req.raw;
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(20000)]);
     const projectId = await cloudProjectId(request);
+    const routed = await routeRegionalChat(request, context.env, projectId);
+    if (routed !== null) {
+        return routed;
+    }
     const bindings = projectId === null ? context.env : await projectBindings(context.env, projectId, signal);
     context.set("dependencies", createApplicationDependencies(bindings));
-    await next();
+    return await next();
 });
 
 export const slackProjectContext = createMiddleware<{
@@ -25,6 +30,10 @@ export const slackProjectContext = createMiddleware<{
     const projectId = context.req.header("X-Mobius-Project-Id") ?? context.req.query("projectId");
     if (projectId === undefined) {
         return json({ error: { code: "PROJECT_REQUIRED", message: "Project context is required." } }, 400);
+    }
+    const routed = await routeRegionalChat(context.req.raw, context.env, projectId);
+    if (routed !== null) {
+        return routed;
     }
     const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(20000)]);
     context.set("projectBindings", await projectBindings(context.env, projectId, signal));
