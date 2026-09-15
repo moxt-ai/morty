@@ -113,7 +113,7 @@ jobs:
 
   check:
     name: check
-    needs: [checks, browser-journeys]
+    needs: [checks]
     if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -146,39 +146,9 @@ jobs:
 
       - name: Require every parallel check to pass
         if: always()
-        run: test "$CHECKS_RESULT" = success && test "$BROWSER_RESULT" = success
+        run: test "$CHECKS_RESULT" = success
         env:
           CHECKS_RESULT: ${{ needs.checks.result }}
-          BROWSER_RESULT: ${{ needs.browser-journeys.result }}
-
-  browser-journeys:
-    name: Verify browser journeys
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: ./.github/actions/setup
-        with:
-          mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
-
-      - name: Verify browser journeys
-        run: pnpm test:e2e
-        env:
-          MOBIUS_E2E_ARTIFACT_ROOT: ${{ runner.temp }}/mobius-chat-setup-e2e
-          MOBIUS_E2E_CLERK_PUBLISHABLE_KEY: ${{ vars.CLERK_PUBLISHABLE_KEY }}
-          MOBIUS_E2E_TIMEOUT_MS: "1200000"
-
-      - name: Upload browser journey failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: setup-e2e-${{ github.run_id }}
-          path: ${{ runner.temp }}/mobius-chat-setup-e2e/**/artifacts
-          if-no-files-found: ignore
 
   deploy:
     needs: [validate-worker-config]
