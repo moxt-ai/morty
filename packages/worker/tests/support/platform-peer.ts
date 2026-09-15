@@ -254,12 +254,12 @@ export async function platformPeer({
             }
         }
         const accessUrl = new URL(request.url ?? "/", "http://platform.test");
-        const accessPath = accessUrl.pathname.match(/^\/mobius\/api\/v1\/conversations\/([^/]+)\/access-credentials$/u);
+        const accessPath = accessUrl.pathname.match(
+            /^\/mobius\/api\/v1\/projects\/([^/]+)\/conversations\/([^/]+)\/access-credentials$/u,
+        );
         if (request.method === "POST" && accessPath !== undefined && accessPath !== null) {
             const conversation = [...conversations.values()].find(
-                (item) =>
-                    item.conversationId === accessPath[1] &&
-                    item.projectId === accessUrl.searchParams.get("project_id"),
+                (item) => item.projectId === accessPath[1] && item.conversationId === accessPath[2],
             );
             if (conversation !== undefined) {
                 const input = v.parse(
