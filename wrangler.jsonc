@@ -4,7 +4,7 @@
     "placement": { "mode": "smart" },
     "main": "packages/worker/src/index.ts",
     "compatibility_date": "2026-09-07",
-    "keep_vars": true,
+    "keep_vars": false,
     "workers_dev": true,
     "preview_urls": false,
     "observability": {
@@ -58,19 +58,12 @@
                 { "binding": "MOBIUS_REGIONAL_APAC", "service": "mobius-chat-staging-apac" },
                 { "binding": "MOBIUS_REGIONAL_WNAM", "service": "mobius-chat-staging-wnam" }
             ],
-            "vars": { "MOBIUS_PROJECT_LOCATION_HINT": "apac", "MOBIUS_WORKER_REGION": "edge" },
+            "vars": { "MOBIUS_WORKER_REGION": "edge" },
             "secrets": {
                 "required": [
-                    "APP_ORIGIN",
-                    "AUTHENTICATION_BASE_URL",
-                    "CLERK_PUBLISHABLE_KEY",
-                    "CLERK_JWT_KEY",
-                    "MOBIUS_BASE_URL",
-                    "MOBIUS_APP_ID",
                     "MOBIUS_APP_SECRET",
                     "SLACK_MOBIUS_AUTH_TOKEN",
                     "SLACK_OAUTH_STATE_SIGNING_KEY",
-                    "SLACK_SERVER_BASE_URL",
                     "SLACK_TOKEN_ENCRYPTION_KEY"
                 ]
             },
@@ -130,19 +123,12 @@
                 { "binding": "MOBIUS_REGIONAL_APAC", "service": "mobius-chat-production-apac" },
                 { "binding": "MOBIUS_REGIONAL_WNAM", "service": "mobius-chat-production-wnam" }
             ],
-            "vars": { "MOBIUS_PROJECT_LOCATION_HINT": "apac", "MOBIUS_WORKER_REGION": "edge" },
+            "vars": { "MOBIUS_WORKER_REGION": "edge" },
             "secrets": {
                 "required": [
-                    "APP_ORIGIN",
-                    "AUTHENTICATION_BASE_URL",
-                    "CLERK_PUBLISHABLE_KEY",
-                    "CLERK_JWT_KEY",
-                    "MOBIUS_BASE_URL",
-                    "MOBIUS_APP_ID",
                     "MOBIUS_APP_SECRET",
                     "SLACK_MOBIUS_AUTH_TOKEN",
                     "SLACK_OAUTH_STATE_SIGNING_KEY",
-                    "SLACK_SERVER_BASE_URL",
                     "SLACK_TOKEN_ENCRYPTION_KEY"
                 ]
             },

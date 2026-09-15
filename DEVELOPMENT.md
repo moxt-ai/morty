@@ -9,7 +9,7 @@ supplies a logical location hint and Platform resolves its storage placement. Bo
 Chat support anonymous users; Slack additionally requires a verified Clerk session.
 Chat derives new Project placement from Cloudflare's server-provided `request.cf.continent`:
 Asia/Oceania use `apac`; other recognized continents use `wnam`, the other supported region.
-Missing or unrecognized metadata falls back to `MOBIUS_PROJECT_LOCATION_HINT`.
+Missing or unrecognized metadata falls back to `apac`, defined in code.
 Client headers and request bodies do not control this selection. Existing Projects retain
 their recorded placement when the user changes location.
 

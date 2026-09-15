@@ -24,11 +24,42 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  validate-worker-config:
+    name: Validate Worker config (${{ matrix.environment }})
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [staging, production]
+    environment: ${{ matrix.environment }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Validate GitHub runtime configuration
+        run: node scripts/validate-worker-config.ts
+        env:
+          APP_ORIGIN: ${{ vars.APP_ORIGIN }}
+          AUTHENTICATION_BASE_URL: ${{ vars.AUTHENTICATION_BASE_URL }}
+          CLERK_PUBLISHABLE_KEY: ${{ vars.CLERK_PUBLISHABLE_KEY }}
+          CLERK_JWT_KEY: ${{ vars.CLERK_JWT_KEY }}
+          MOBIUS_BASE_URL: ${{ vars.MOBIUS_BASE_URL }}
+          MOBIUS_APP_ID: ${{ vars.MOBIUS_APP_ID }}
+          SLACK_SERVER_BASE_URL: ${{ vars.SLACK_SERVER_BASE_URL }}
+          MOBIUS_APP_SECRET: ${{ secrets.MOBIUS_APP_SECRET }}
+          SLACK_MOBIUS_AUTH_TOKEN: ${{ secrets.SLACK_MOBIUS_AUTH_TOKEN }}
+          SLACK_OAUTH_STATE_SIGNING_KEY: ${{ secrets.SLACK_OAUTH_STATE_SIGNING_KEY }}
+          SLACK_TOKEN_ENCRYPTION_KEY: ${{ secrets.SLACK_TOKEN_ENCRYPTION_KEY }}
+
   check:
     name: check
-    permissions:
-      contents: read
-      id-token: write
     if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -88,7 +119,7 @@ jobs:
           pnpm exec wrangler d1 migrations apply CHAT_DATABASE_WNAM --local
 
   deploy:
-    needs: check
+    needs: [check, validate-worker-config]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     uses: ./.github/workflows/deploy.yml
     secrets: inherit

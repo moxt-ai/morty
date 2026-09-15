@@ -431,7 +431,6 @@ export async function platformPeer({
             MOBIUS_APP_ID: "cloud-app",
             MOBIUS_APP_SECRET: credential,
             MOBIUS_BASE_URL: `http://localhost:${address.port}`,
-            MOBIUS_PROJECT_LOCATION_HINT: "apac",
         },
         close: async () => {
             server.closeAllConnections();
