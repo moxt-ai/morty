@@ -1,7 +1,7 @@
 import { chromium } from "playwright-core";
-import { ChatApi, text } from "./chat-api.mjs";
-import { runE2E } from "./harness.mjs";
-import { LocalStack, repository } from "./local-stack.mjs";
+import { ChatApi, text } from "../../packages/e2e/infra/chat-api.ts";
+import { runE2E } from "../../packages/e2e/infra/harness.ts";
+import { LocalStack, repository } from "../../packages/e2e/infra/local-stack.ts";
 import { prepareOpenCode } from "./opencode.mjs";
 
 await runE2E("opencode-e2e", async (harness) => {
@@ -27,7 +27,10 @@ await runE2E("opencode-e2e", async (harness) => {
             (response) => new URL(response.url()).pathname === "/mobius-cloud/api/identity/anonymous-users",
             { timeout: harness.timeoutMilliseconds },
         );
-        await page.goto(stack.chatOrigin, { waitUntil: "domcontentloaded", timeout: harness.timeoutMilliseconds });
+        await page.goto(stack.chatOrigin, {
+            waitUntil: "domcontentloaded",
+            timeout: harness.timeoutMilliseconds,
+        });
         await chat.readBrowserIdentity(await identityResponse);
     });
 

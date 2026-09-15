@@ -1,19 +1,40 @@
-function object(value, name) {
+import type { Response as BrowserResponse } from "playwright-core";
+import type { E2EHarness } from "./harness.ts";
+
+interface RequestOptions {
+    readonly body?: unknown;
+    readonly project?: string;
+    readonly token?: string;
+    readonly provider?: string;
+    readonly signal: AbortSignal;
+}
+
+interface BrowserIdentity {
+    readonly botId: string;
+    readonly projectId: string;
+    readonly token: string;
+}
+
+export function object(value: unknown, name: string): Record<string, unknown> {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
         throw new Error(`Expected ${name} to be an object`);
     }
-    return value;
+    return Object.fromEntries(Object.entries(value));
 }
 
-export function text(value, name) {
+export function text(value: unknown, name: string): string {
     if (typeof value !== "string" || value.length === 0) {
         throw new Error(`Expected ${name}`);
     }
     return value;
 }
 
-export async function jsonRequest(origin, path, { body, project, token, provider, signal } = {}) {
-    const headers = { "content-type": "application/json" };
+export async function jsonRequest(
+    origin: string,
+    path: string,
+    { body, project, token, provider, signal }: RequestOptions,
+) {
+    const headers: Record<string, string> = { "content-type": "application/json" };
     if (token !== undefined) {
         headers.authorization = `Bearer ${token}`;
     }
@@ -30,7 +51,7 @@ export async function jsonRequest(origin, path, { body, project, token, provider
         signal,
     });
     const raw = await response.text();
-    let value;
+    let value: unknown;
     try {
         value = JSON.parse(raw);
     } catch {
@@ -43,12 +64,16 @@ export async function jsonRequest(origin, path, { body, project, token, provider
 }
 
 export class ChatApi {
-    constructor(origin, signal) {
+    readonly origin: string;
+    readonly signal: AbortSignal;
+    identity: BrowserIdentity | undefined;
+
+    constructor(origin: string, signal: AbortSignal) {
         this.origin = origin;
         this.signal = signal;
     }
 
-    async readBrowserIdentity(response) {
+    async readBrowserIdentity(response: BrowserResponse) {
         const raw = await response.text();
         if (!response.ok()) {
             throw new Error(`Anonymous identity creation failed (${response.status()}): ${raw.slice(0, 1_000)}`);
@@ -68,8 +93,8 @@ export class ChatApi {
         });
     }
 
-    async waitForOpenCode(harness, pairingId) {
-        return await harness.waitFor(
+    async waitForOpenCode(harness: E2EHarness, pairingId: string) {
+        const paired = await harness.waitFor(
             "Mobius pairing with OpenCode",
             () => this.#request(`/mobius-cloud/api/management/runtime-pairings/${encodeURIComponent(pairingId)}`),
             (status) =>
@@ -77,19 +102,22 @@ export class ChatApi {
                 Array.isArray(status.agents) &&
                 status.agents.some((agent) => object(agent, "agent").id === "opencode"),
         );
+        return { runtimeId: text(paired.runtimeId, "runtimeId") };
     }
 
-    async bindOpenCode(runtimeId) {
-        await this.#request(`/mobius-cloud/api/chat/bots/${encodeURIComponent(this.identity.botId)}/setup`, {
+    async bindOpenCode(runtimeId: string) {
+        const identity = this.#requireIdentity();
+        await this.#request(`/mobius-cloud/api/chat/bots/${encodeURIComponent(identity.botId)}/setup`, {
             body: { runtimeId, agentRef: "opencode", workspaceRef: "default", agentConfigRevision: 1 },
         });
     }
 
-    async waitForBinding(harness) {
+    async waitForBinding(harness: E2EHarness) {
+        const identity = this.#requireIdentity();
         await harness.waitFor(
             "OpenCode Bot binding",
             () =>
-                this.#request(`/mobius-cloud/api/chat/bots/${encodeURIComponent(this.identity.botId)}/workspace`, {
+                this.#request(`/mobius-cloud/api/chat/bots/${encodeURIComponent(identity.botId)}/workspace`, {
                     body: {},
                 }),
             (workspace) =>
@@ -99,14 +127,19 @@ export class ChatApi {
         );
     }
 
-    async #request(path, options = {}) {
+    #requireIdentity() {
         if (this.identity === undefined) {
             throw new Error("The browser identity has not been created");
         }
+        return this.identity;
+    }
+
+    async #request(path: string, options: { readonly body?: unknown } = {}) {
+        const identity = this.#requireIdentity();
         return await jsonRequest(this.origin, path, {
             ...options,
-            project: this.identity.projectId,
-            token: this.identity.token,
+            project: identity.projectId,
+            token: identity.token,
             signal: this.signal,
         });
     }
