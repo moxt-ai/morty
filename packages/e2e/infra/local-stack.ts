@@ -124,6 +124,27 @@ export class LocalStack {
                 this.directories.platform,
                 mobiusRepository,
             );
+            const shardingConfiguration = join(this.directories.platform, "sharding-migrations.json");
+            await this.harness.run(
+                "node",
+                [
+                    "packages/relay-cloudflare-platform/scripts/sharding-migrations.ts",
+                    "--config",
+                    platformConfiguration,
+                    "--output",
+                    shardingConfiguration,
+                ],
+                { cwd: mobiusRepository },
+            );
+            for (const binding of ["D1_SHARD_WNAM_01", "D1_SHARD_APAC_01"]) {
+                await migrate(
+                    this.harness,
+                    shardingConfiguration,
+                    binding,
+                    this.directories.platform,
+                    mobiusRepository,
+                );
+            }
             await migrate(
                 this.harness,
                 platformConfiguration,
