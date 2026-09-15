@@ -19,10 +19,7 @@ export async function routeRegionalChat(
     if (projectId === null && !creating) {
         return null;
     }
-    const destination =
-        projectId === null
-            ? (projectLocationHint(request) ?? bindings.MOBIUS_PROJECT_LOCATION_HINT)
-            : projectRegion(projectId);
+    const destination = projectId === null ? (projectLocationHint(request) ?? "apac") : projectRegion(projectId);
     if (destination !== "apac" && destination !== "wnam") {
         throw new PlatformProjectError("REGIONAL_CONFIGURATION_INVALID", "Regional routing is unavailable.", 503);
     }

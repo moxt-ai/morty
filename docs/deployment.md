@@ -75,4 +75,5 @@ application dependency and GitHub configuration. Resource bindings, routes, and
 migrations are defined in Wrangler configuration.
 
 The Mobius workflow changes are published in a separate Mobius PR. Its CD runs
-from Mobius main; Chat's SDK submodule revision is independent of that deployment.
+from Mobius main. Chat pins the same revision for the regional configuration
+generator, which supports GitHub-owned variables on edge and regional Workers.

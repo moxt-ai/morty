@@ -28,7 +28,7 @@ afterEach(async () => {
     }
 });
 
-async function fixture(location = "apac") {
+async function fixture(location?: string) {
     const mobius = await createMobiusPlatformFixture();
     cleanup.push(mobius.close);
     const database = new InMemoryD1Database();
@@ -47,7 +47,9 @@ async function fixture(location = "apac") {
         MOBIUS_BASE_URL: mobius.baseUrl,
     };
     const app = new Hono().all("*", (context) => {
-        Object.defineProperty(context.req.raw, "cf", { value: { continent: location === "wnam" ? "NA" : "AS" } });
+        if (location !== undefined) {
+            Object.defineProperty(context.req.raw, "cf", { value: { continent: location === "wnam" ? "NA" : "AS" } });
+        }
         return worker.fetch(context.req.raw, bindings);
     });
     const projects = new Map<string, string>();
