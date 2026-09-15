@@ -1,4 +1,4 @@
-import type { SlackMessage } from "../../../src/components/slack/entity/slack-message";
+import type { SlackMessage } from "../../../src/components/slack/service/bot-tools/slack-bot-tool-service";
 import { SlackWebApi } from "../../../src/gateway/slack-web-gateway";
 
 export class InMemorySlack extends SlackWebApi {

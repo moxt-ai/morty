@@ -57,9 +57,6 @@ pnpm exec wrangler d1 migrations apply CHAT_DATABASE_WNAM --local
 Staging and production resources are named in `wrangler.jsonc`. Apply remote
 migrations with the matching Wrangler environment.
 
-Legacy `/mobius-slack/api/bot/slack/*` tool endpoints are retired. Slack no longer
-uses a separate service token for the removed internal identity endpoints.
-
 Slack management requests also supply `X-Mobius-Project-Id`. Generated Slack
 event and OAuth callback URLs, and attachment links, carry a `projectId` query
 parameter. Queue deliveries contain `{ projectId, message }` so asynchronous

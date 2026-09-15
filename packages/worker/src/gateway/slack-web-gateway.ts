@@ -1,6 +1,6 @@
 import * as v from "valibot";
-import type { SlackMessage } from "../components/slack/entity/slack-message";
 import { urlSchema } from "../components/slack/infra/util/url-schema";
+import type { SlackMessage } from "../components/slack/service/bot-tools/slack-bot-tool-service";
 import type { SlackOAuthInstallation } from "../components/slack/service/installation/slack-installation-service";
 
 const API_BASE_URL = "https://slack.com/api";

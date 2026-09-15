@@ -6,6 +6,7 @@ import { SlackMessageRenderer } from "../service/bot-run/slack-message-renderer"
 import { SlackQueueConsumer } from "../service/bot-run/slack-queue-consumer";
 import { SlackReplyDeliveryService } from "../service/bot-run/slack-reply-delivery-service";
 import { TenantQueueConsumer } from "../service/bot-run/tenant-queue-consumer";
+import { SlackBotToolService } from "../service/bot-tools/slack-bot-tool-service";
 import { SlackFileService } from "../service/bot-tools/slack-file-service";
 import { SlackEventIntakeService } from "../service/events/slack-event-intake-service";
 import { SlackEventsService } from "../service/events/slack-events-service";
@@ -29,6 +30,7 @@ export function createSlackDependencies(infrastructure: SlackInfrastructure) {
     const intake = new SlackEventIntakeService(cx);
     const mobiusConnections = new MobiusConnectionService(cx);
     const installations = new SlackInstallationService({ ...cx, services: { identities, slackTokens } });
+    const botTools = new SlackBotToolService({ ...cx, services: { identities } });
     const management = new SlackManagementService({ ...cx, services: { mobiusConnections } });
     const replies = new SlackReplyDeliveryService(cx);
     const slackMessageRenderer = new SlackMessageRenderer(cx);
@@ -50,6 +52,7 @@ export function createSlackDependencies(infrastructure: SlackInfrastructure) {
         intake,
         mobiusConnections,
         installations,
+        botTools,
         management,
         replies,
         slackMessageRenderer,

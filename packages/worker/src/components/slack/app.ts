@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { createSlackBotToolRoutes } from "./http/bot-tools/slack-bot-tool-routes";
 import { handleError } from "./http/error-handler";
 import { createSlackEventsRoutes } from "./http/events/slack-events-routes";
 import { createHealthRoutes } from "./http/health/health-routes";
@@ -42,5 +43,6 @@ export function createSlackApplication() {
         .onError(handleError)
         .route("/", createHealthRoutes())
         .route("/slack", createSlackEventsRoutes())
-        .route("/slack", createSlackManagementRoutes());
+        .route("/slack", createSlackManagementRoutes())
+        .route("/bot/slack", createSlackBotToolRoutes());
 }

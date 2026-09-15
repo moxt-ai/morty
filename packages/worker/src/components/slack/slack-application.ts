@@ -1,6 +1,7 @@
 import * as v from "valibot";
 import { projectBindings } from "../../composition/chat-shards.ts";
 import { ClerkGateway } from "../../gateway/clerk-gateway.ts";
+import { IdentityGateway } from "../../gateway/identity-gateway.ts";
 import { FetchMobiusTransport, MobiusGateway } from "../../gateway/mobius-gateway.ts";
 import { SlackWebApi } from "../../gateway/slack-web-gateway.ts";
 import type { CloudBindings } from "../../infra/cloud-bindings.ts";
@@ -42,6 +43,7 @@ const slackBindingsSchema = v.object({
     MOBIUS_APP_ID: v.pipe(v.string(), v.minLength(1)),
     MOBIUS_APP_SECRET: v.pipe(v.string(), v.minLength(1)),
     MOBIUS_BASE_URL: v.pipe(v.string(), v.url()),
+    SLACK_MOBIUS_AUTH_TOKEN: v.pipe(v.string(), v.minLength(1)),
     SLACK_OAUTH_STATE_SIGNING_KEY: v.pipe(v.string(), v.minLength(1)),
     SLACK_SERVER_BASE_URL: v.pipe(v.string(), v.url()),
     SLACK_TOKEN_ENCRYPTION_KEY: v.pipe(v.string(), v.minLength(1)),
@@ -60,6 +62,7 @@ interface SlackBindings {
     readonly MOBIUS_APP_ID: string;
     readonly MOBIUS_APP_SECRET: string;
     readonly MOBIUS_BASE_URL: string;
+    readonly SLACK_MOBIUS_AUTH_TOKEN: string;
     readonly SLACK_OAUTH_STATE_SIGNING_KEY: string;
     readonly SLACK_SERVER_BASE_URL: string;
     readonly SLACK_TOKEN_ENCRYPTION_KEY: string;
@@ -92,6 +95,7 @@ const slack = createSlackWorker<
         publicBaseUrl: bindings.SLACK_SERVER_BASE_URL.replace(/\/$/u, ""),
         projectId: bindings.CHAT_PROJECT_ID,
         mobiusBaseUrl: bindings.MOBIUS_BASE_URL,
+        serviceToken: bindings.SLACK_MOBIUS_AUTH_TOKEN,
         signingKey: bindings.SLACK_OAUTH_STATE_SIGNING_KEY,
     };
     const gateways = {
@@ -119,6 +123,7 @@ const slack = createSlackWorker<
         gateways: {
             ...gateways,
             mobius: new MobiusGateway(infrastructure),
+            identityGateway: new IdentityGateway(infrastructure),
             humanIdentity: {
                 resolve: (clerkUserId: string, signal: AbortSignal) =>
                     identities.resolveOrCreateClerk(clerkUserId, Date.now(), signal),

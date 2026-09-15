@@ -82,6 +82,7 @@ function slackConfiguration(database = new InMemoryD1Database()) {
         CHAT_ATTACHMENTS_WNAM: { get: () => Promise.resolve(null), put: () => Promise.resolve() },
         EVENTS: { send: () => Promise.resolve() },
         ...platform.bindings,
+        SLACK_MOBIUS_AUTH_TOKEN: "service-token",
         SLACK_OAUTH_STATE_SIGNING_KEY: "state-signing-key",
         SLACK_SERVER_BASE_URL: APP_ORIGIN,
         SLACK_TOKEN_ENCRYPTION_KEY: btoa("a".repeat(32)),

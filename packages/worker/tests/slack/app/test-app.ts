@@ -10,6 +10,7 @@ import { DatabaseSlackAppDirectory } from "../../../src/components/slack/storage
 import { MobiusGateway } from "../../../src/gateway/mobius-gateway";
 import { InMemoryAttachments } from "./in-memory-attachments";
 import { InMemoryClerkGateway } from "./in-memory-clerk-gateway";
+import { InMemoryIdentityGateway } from "./in-memory-identity-gateway";
 import { InMemoryMobius } from "./in-memory-mobius-gateway";
 import { InMemorySlack } from "./in-memory-slack-gateway";
 import { createSignedRequest } from "./signed-request";
@@ -24,6 +25,7 @@ export async function createTestApplication(
     const cipher = new SecretCipher(btoa("a".repeat(32)));
     const slack = new InMemorySlack();
     const mobius = new InMemoryMobius();
+    const identity = new InMemoryIdentityGateway();
     const attachments = new InMemoryAttachments();
     const pending: SlackQueueMessage[] = [];
     const clerk = new InMemoryClerkGateway();
@@ -66,6 +68,7 @@ export async function createTestApplication(
         clerk,
         mobiusTransport: mobius,
         slackWebApi: slack,
+        identityGateway: identity,
         humanIdentity: {
             resolve: async (clerkUserId: string, signal: AbortSignal) => {
                 signal.throwIfAborted();
@@ -149,6 +152,7 @@ export async function createTestApplication(
         humanToken,
         slack,
         mobius,
+        identity,
         limiter,
         attachments,
         queueErrors,

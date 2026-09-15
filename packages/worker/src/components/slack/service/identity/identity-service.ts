@@ -4,7 +4,14 @@ export interface HumanPrincipal {
     readonly tenantId: string;
 }
 
+export interface BotPrincipal {
+    readonly botId: string;
+    readonly kind: "bot";
+    readonly tenantId: string;
+}
+
 export interface IdentityService {
+    readonly authenticateBot: (authorization: string | null, signal: AbortSignal) => Promise<BotPrincipal>;
     readonly authenticateHuman: (authorization: string | null, signal: AbortSignal) => Promise<HumanPrincipal>;
 }
 
