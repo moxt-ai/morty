@@ -135,6 +135,8 @@ agent; a temporary Project Session prepares that agent's model options and is de
 after preparation. First Send creates a canonical Project Conversation with the selected
 model and approved Bot binding. Existing conversations reopen by Conversation ID,
 including credential refresh, and keep their harness fixed.
+First Send keeps the created connection and transitions the draft in place; it
+updates the saved URL without removing the sidebar or composer to reconnect.
 The Worker discovers/imports native sessions through the Project SDK. Its
 `session-access` endpoint issues credentials scoped to the selected Session inside
 the user's Project. The browser uses those credentials with the Session SDK to

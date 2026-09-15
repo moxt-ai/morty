@@ -238,7 +238,7 @@ export function BotChatHome({
     const [state, setState] = useState<State>({ kind: "loading" });
     const [revision, retry] = useState(0);
     const [draft, setDraft] = useState("");
-    const [target, setTarget] = useState<
+    const [initialTarget] = useState<
         | { readonly kind: "draft"; readonly key: string }
         | { readonly kind: "existing"; readonly conversationId: string }
     >(() => {
@@ -247,10 +247,14 @@ export function BotChatHome({
             ? { kind: "existing", conversationId }
             : { kind: "draft", key: crypto.randomUUID() };
     });
+    const target = useRef(initialTarget);
     const [draftSettings, setDraftSettings] = useState<ChatDraftConfiguration | null>(null);
     const messageAttempt = useRef<{ readonly content: string; readonly key: string } | null>(null);
     const [sending, setSending] = useState<Sending>({ kind: "idle" });
-    const lifetime = useRef<AbortController | null>(null);
+    const lifetime = useRef<{
+        readonly controller: AbortController;
+        readonly adopt: (bot: ManagedBot, client: MobiusBrowserClient, history: MobiusBrowserHistory) => void;
+    } | null>(null);
     const messageList = useRef<HTMLDivElement | null>(null);
     const followLatest = useRef(true);
     const [conversation, setConversation] = useState<
@@ -258,7 +262,7 @@ export function BotChatHome({
     >({ kind: "bot" });
     const showBot = useCallback(() => setConversation({ kind: "bot" }), []);
     const newConversation = useCallback(() => {
-        lifetime.current?.abort();
+        lifetime.current?.controller.abort();
         setDraft("");
         setSending({ kind: "idle" });
         setDraftSettings(null);
@@ -270,7 +274,8 @@ export function BotChatHome({
         url.searchParams.delete("conversation");
         url.searchParams.delete("conversationId");
         window.history.replaceState(window.history.state, "", url);
-        setTarget({ kind: "draft", key });
+        target.current = { kind: "draft", key };
+        retry((value) => value + 1);
     }, []);
     useEffect(() => {
         if (state.kind === "ready" && followLatest.current && messageList.current !== null) {
@@ -280,7 +285,6 @@ export function BotChatHome({
     // biome-ignore lint/correctness/useExhaustiveDependencies: Reconnect explicitly restarts the SDK session.
     useEffect(() => {
         const controller = new AbortController();
-        lifetime.current = controller;
         setConversation({ kind: "bot" });
         let client: MobiusBrowserClient | null = null;
         let reconciliationTimer: ReturnType<typeof setTimeout> | undefined;
@@ -292,19 +296,27 @@ export function BotChatHome({
             }
             const workspace = await requests.workspace(bot.botId, controller.signal);
             controller.signal.throwIfAborted();
-            const reason = target.kind === "draft" ? setupReason(workspace) : null;
+            const reason = target.current.kind === "draft" ? setupReason(workspace) : null;
             if (reason !== null) {
                 setState({ kind: "setup", reason });
                 reconciliationTimer = setTimeout(() => retry((value) => value + 1), 5000);
                 return;
             }
-            if (target.kind === "draft") {
+            if (target.current.kind === "draft") {
                 setState({ kind: "draft", bot });
                 return;
             }
-            const session = await requests.connectConversation(bot.botId, controller.signal, target.conversationId);
+            const session = await requests.connectConversation(
+                bot.botId,
+                controller.signal,
+                target.current.conversationId,
+            );
             client = session;
             const history = await session.history.read(new MobiusPageRequest(100, ""), controller.signal);
+            await observe(bot, session, history);
+        };
+        const observe = async (bot: ManagedBot, session: MobiusBrowserClient, history: MobiusBrowserHistory) => {
+            client = session;
             let snapshotSequence = BigInt(history.lastCommittedSeq);
             controller.signal.throwIfAborted();
             setState({ activityContents: new Map(), kind: "ready", bot, client: session, history });
@@ -343,7 +355,7 @@ export function BotChatHome({
             controller.signal.throwIfAborted();
             throw new Error("Chat updates disconnected. Reconnect to continue.");
         };
-        void open().catch((cause: unknown) => {
+        const fail = (cause: unknown) => {
             client?.close();
             if (!controller.signal.aborted) {
                 if (cause instanceof CloudApiError && cause.code === "AGENT_REQUIRED") {
@@ -355,26 +367,34 @@ export function BotChatHome({
                 clearTimeout(reconciliationTimer);
                 setState({ kind: "failed", message: cause instanceof Error ? cause.message : "Chat is unavailable." });
             }
-        });
+        };
+        lifetime.current = {
+            controller,
+            adopt: (bot, session, history) => {
+                void observe(bot, session, history).catch(fail);
+            },
+        };
+        void open().catch(fail);
         return () => {
             clearTimeout(reconciliationTimer);
             controller.abort();
             client?.close();
             lifetime.current = null;
         };
-    }, [requests, revision, target]);
+    }, [requests, revision]);
 
     const send = async () => {
-        const controller = lifetime.current;
+        const connection = lifetime.current;
         if (
             (state.kind !== "ready" && state.kind !== "draft") ||
-            controller === null ||
+            connection === null ||
             sending.kind === "sending" ||
             draft.trim().length === 0
         ) {
             return;
         }
-        if (state.kind === "draft" && (target.kind !== "draft" || draftSettings === null)) {
+        const controller = connection.controller;
+        if (state.kind === "draft" && (target.current.kind !== "draft" || draftSettings === null)) {
             return;
         }
         setSending({ kind: "sending" });
@@ -389,12 +409,12 @@ export function BotChatHome({
             messageAttempt.current = attempt;
             let client: MobiusBrowserClient;
             if (state.kind === "draft") {
-                if (target.kind !== "draft" || draftSettings === null) {
+                if (target.current.kind !== "draft" || draftSettings === null) {
                     return;
                 }
                 const access = await requests.createConversation(
                     state.bot.botId,
-                    target.key,
+                    target.current.key,
                     draftSettings,
                     controller.signal,
                 );
@@ -450,7 +470,17 @@ export function BotChatHome({
             await client.messages.run(message.messageId, controller.signal);
             const history = await client.history.read(new MobiusPageRequest(100, ""), controller.signal);
             if (!controller.signal.aborted) {
-                setState((current) => updateHistory(current, client, history));
+                if (createdId !== null) {
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete("conversation");
+                    url.searchParams.set("conversationId", createdId);
+                    window.history.replaceState(window.history.state, "", url);
+                    target.current = { kind: "existing", conversationId: createdId };
+                    connection.adopt(state.bot, client, history);
+                    createdClient = null;
+                } else {
+                    setState((current) => updateHistory(current, client, history));
+                }
                 setDraft("");
                 messageAttempt.current = null;
                 setSending({ kind: "idle" });
@@ -464,13 +494,6 @@ export function BotChatHome({
             }
         } finally {
             createdClient?.close();
-            if (createdId !== null && !controller.signal.aborted) {
-                const url = new URL(window.location.href);
-                url.searchParams.delete("conversation");
-                url.searchParams.set("conversationId", createdId);
-                window.history.replaceState(window.history.state, "", url);
-                setTarget({ kind: "existing", conversationId: createdId });
-            }
         }
     };
 
@@ -593,7 +616,7 @@ export function BotChatHome({
                             <div className="mb-3">
                                 {state.kind === "draft" ? (
                                     <DraftChatControls
-                                        key={target.kind === "draft" ? target.key : "existing"}
+                                        key={target.current.kind === "draft" ? target.current.key : "existing"}
                                         botId={state.bot.botId}
                                         requests={requests}
                                         disabled={sending.kind === "sending"}

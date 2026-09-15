@@ -111,3 +111,9 @@ submitted. Harness becomes disabled while Model remains editable. Reload the
 resulting URL and confirm the same Conversation and history reopen. Click New
 Conversation again and confirm Harness is editable and the next send creates a
 distinct Conversation. Verify with `agent-browser` and the browser network log.
+
+Run `pnpm test:e2e:conversation` for the browser regression against local Chat,
+Platform and Runtime with the stateful ACP test agent. First Send must retain the
+page and composer while the draft becomes a conversation and the reply appears.
+The scenario also creates a distinct second conversation, sends a follow-up and
+reloads its saved URL to verify history.
