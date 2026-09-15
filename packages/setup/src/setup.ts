@@ -1,13 +1,12 @@
-import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { once } from "node:events";
 import { constants } from "node:fs";
 import { chmod, copyFile, lstat, mkdir, open, readFile, realpath, rename, rm } from "node:fs/promises";
-import { dirname, isAbsolute, join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { parseArgs, promisify } from "node:util";
+import { parseArgs } from "node:util";
 
 export interface SetupRuntime {
-    readonly stop: (signal: AbortSignal) => Promise<number>;
     readonly start: (
         directory: string,
         args: readonly string[],
@@ -39,12 +38,6 @@ type Options =
     | { readonly mode: "pair"; readonly base: string; readonly harness: string; readonly token: string }
     | { readonly mode: "setup"; readonly base: string; readonly harness: string };
 
-interface LocalProcess {
-    readonly pid: number;
-    readonly uid: number;
-    readonly command: string;
-}
-
 function errorCode(cause: unknown): unknown {
     return cause !== null && typeof cause === "object" && "code" in cause ? cause.code : undefined;
 }
@@ -58,7 +51,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         },
     };
     const emit = (value: Readonly<Record<string, unknown>>) => host.emit({ time: clock.now().toISOString(), ...value });
-    const executeFile = promisify(execFile);
 
     function progress(stage: string, message: string) {
         emit({ status: "progress", stage, message });
@@ -135,101 +127,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             throw cause;
         }
         return lock;
-    }
-
-    async function listLocalProcesses(parent: AbortSignal): Promise<LocalProcess[]> {
-        const { stdout } = await executeFile("ps", ["-ww", "-axo", "pid=,uid=,stat=,args="], {
-            signal: parent,
-            timeout: 2000,
-            maxBuffer: 4 * 1024 * 1024,
-        }).catch((cause) => {
-            parent.throwIfAborted();
-            throw Object.assign(new Error("PROCESS_SCAN_FAILED", { cause }), { code: "PROCESS_SCAN_FAILED" });
-        });
-        return stdout.split("\n").flatMap((line) => {
-            const match = line.match(/^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.+)$/u);
-            if (match === null) {
-                return [];
-            }
-            const pid = Number(match[1]);
-            const uid = Number(match[2]);
-            return Number.isSafeInteger(pid) &&
-                pid > 1 &&
-                pid !== process.pid &&
-                process.getuid !== undefined &&
-                uid === process.getuid() &&
-                !match[3].includes("Z")
-                ? [{ pid, uid, command: match[4] }]
-                : [];
-        });
-    }
-
-    async function isMobiusRuntime(processInfo: LocalProcess, parent: AbortSignal) {
-        const match = processInfo.command.match(
-            /^(?:\S*\/)?(?:node|bun)\s+(?:--\S+\s+)*(.+?)\s+(?:pair|start)(?:\s|$)/u,
-        );
-        if (match === null || !isAbsolute(match[1])) {
-            return false;
-        }
-        try {
-            const script = await realpath(match[1]);
-            const packageRoot = dirname(dirname(script));
-            const metadata = object(
-                JSON.parse(await readFile(join(packageRoot, "package.json"), { encoding: "utf8", signal: parent })),
-            );
-            return (
-                metadata.name === "@moxt-ai/mobius" &&
-                object(metadata.bin).mobius === "dist/cli.js" &&
-                (script === join(packageRoot, "dist", "cli.js") || script === join(packageRoot, "src", "cli.ts"))
-            );
-        } catch {
-            parent.throwIfAborted();
-            // Only a resolved, identifiable CLI entry point authorizes signalling this PID.
-            return false;
-        }
-    }
-
-    async function stopLocalRuntimes() {
-        if (host.runtime !== undefined) {
-            emit({ status: "runtimes_stopped", count: await host.runtime.stop(signal) });
-            return;
-        }
-        const deadline = AbortSignal.any([signal, AbortSignal.timeout(15000)]);
-        const candidates = await listLocalProcesses(deadline);
-        const targets = [];
-        for (const candidate of candidates) {
-            if (await isMobiusRuntime(candidate, deadline)) {
-                targets.push(candidate);
-            }
-        }
-        const current = await listLocalProcesses(deadline);
-        for (const target of targets) {
-            deadline.throwIfAborted();
-            if (!current.some((item) => item.pid === target.pid && item.command === target.command)) {
-                continue;
-            }
-            try {
-                process.kill(target.pid, "SIGTERM");
-            } catch (cause) {
-                if (errorCode(cause) !== "ESRCH") {
-                    throw Object.assign(new Error("RUNTIME_STOP_FAILED", { cause }), { code: "RUNTIME_STOP_FAILED" });
-                }
-            }
-        }
-        // Bound process-table reconciliation by both attempts and an overall deadline.
-        // Process discovery is asynchronous; no fixed sleeps delay graceful shutdown.
-        for (let attempt = 0; attempt < 1000; attempt += 1) {
-            const remaining = await listLocalProcesses(deadline);
-            if (
-                !targets.some((target) =>
-                    remaining.some((item) => item.pid === target.pid && item.command === target.command),
-                )
-            ) {
-                emit({ status: "runtimes_stopped", count: targets.length });
-                return;
-            }
-        }
-        fail("RUNTIME_STOP_TIMEOUT");
     }
 
     async function readPrivateJson(path: string) {
@@ -481,7 +378,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         let child: ChildProcess | undefined;
         try {
             child = spawn("npx", ["--yes", "@moxt-ai/mobius@latest", ...args], {
-                detached: true,
                 stdio: ["ignore", log.fd, log.fd],
             });
             await once(child, "spawn", { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) });
@@ -490,14 +386,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             }
             const saved = await saveConfiguration(context, { runtime_process: { pid: child.pid, log_path: logPath } });
             signal.throwIfAborted();
-            // Ownership transfers to the saved process record. No agent terminal is needed.
-            child.unref();
+            // The Runtime stays attached to this process. It exits with the agent
+            // conversation instead of surviving as a background daemon.
             emit({ status: "runtime_started", pid: child.pid, logPath });
             return saved;
         } catch (cause) {
             if (child?.pid !== undefined) {
                 try {
-                    process.kill(-child.pid, "SIGTERM");
+                    process.kill(child.pid, "SIGTERM");
                 } catch (cleanup) {
                     if (errorCode(cleanup) !== "ESRCH") {
                         throw new AggregateError([cause, cleanup], "Runtime startup cleanup failed");
@@ -660,8 +556,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             let context: Context =
                 options.mode === "setup" ? await loadConfiguration(directory, base) : { directory, base, config: {} };
             await backupConfiguration(directory);
-            progress("shutdown", "Stopping existing local Mobius Runtime processes.");
-            await stopLocalRuntimes();
             context = await prepareIdentity(context, options);
             context = await verifyIdentityAndBot(context, options.mode);
             emit({ status: "identity_ready", userId: context.config.user_id, botId: context.config.bot_id });

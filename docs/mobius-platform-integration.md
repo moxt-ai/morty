@@ -217,8 +217,8 @@ Both documents download `/setup.mjs`, bundled from `packages/setup` and served b
 the Worker from the existing R2 bucket, through just two commands:
 `pair --token <one-time-ticket> --harness <agent-id>` and `setup --harness <agent-id>`.
 They handle private configuration persistence, identity validation, resumable
-Runtime pairing, detached Runtime launch, binding, and readiness, with timestamped
-JSON progress. Dependencies and agent authentication are
+Runtime pairing, Runtime launch attached to the calling agent session, binding, and
+readiness, with timestamped JSON progress. Dependencies and agent authentication are
 handled by the calling agent. The pair flow returns the existing Chat page; only
 standalone setup issues a browser transfer, also valid for 24 hours. Never expose durable credentials or
 consume the user's final browser link. Configure edge access-log exports to redact

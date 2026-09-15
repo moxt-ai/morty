@@ -1,5 +1,4 @@
 import { generateKeyPairSync } from "node:crypto";
-import { once } from "node:events";
 import { mkdir } from "node:fs/promises";
 import { createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
@@ -257,21 +256,10 @@ export class LocalStack {
     }
 
     setupRuntime(): SetupRuntime {
-        let child: ChildProcess | undefined;
         return {
-            stop: async (signal) => {
-                signal.throwIfAborted();
-                if (child === undefined || child.pid === undefined || child.exitCode !== null) {
-                    return 0;
-                }
-                const exited = once(child, "exit", { signal });
-                process.kill(-child.pid, "SIGTERM");
-                await exited;
-                return 1;
-            },
             start: async (_directory, args, signal) => {
                 signal.throwIfAborted();
-                child = await this.startRuntime(args);
+                const child = await this.startRuntime(args);
                 if (child.pid === undefined) {
                     throw new Error("Runtime process did not start");
                 }
@@ -306,5 +294,3 @@ export class LocalStack {
         );
     }
 }
-
-import type { ChildProcess } from "node:child_process";
