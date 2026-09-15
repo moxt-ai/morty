@@ -17,8 +17,18 @@ runner; its source remains in the denominator until instrumented coverage exists
 
 CI saves the combined report as a `coverage-report` artifact for 14 days using
 the permitted GitHub-owned artifact action. Upload failures are non-blocking.
-The required `check` status keeps test failures blocking. If Codecov uploads
+On pull requests and merge-queue events, CI runs type checking, build, lint/architecture,
+web tests, Worker tests, unused-code checks, browser E2E, live OpenCode E2E, and D1
+migration validation as independent parallel jobs. Web and Worker tests each upload
+coverage execution maps; the `check` job merges them into the combined report using
+`pnpm test:coverage:merge`. Run the suites separately with `pnpm test:web` and
+`pnpm test:worker`. All jobs
+finish even if another fails. The required `check` status succeeds only when every
+parallel job succeeds, keeping failures and cancellations blocking. If Codecov uploads
 are enabled later, project and patch statuses are configured as informational.
+
+Main pushes and manual deployments skip these checks and deploy after Worker
+configuration validation; checks are not repeated after merging.
 
 ## Architecture enforcement
 
@@ -128,7 +138,8 @@ waits use explicitly advanced fake timers with a fixed system time.
 These tests require Chrome and the checked-out Mobius submodule. They share the
 local-stack runner and diagnostics used by the conversation scenarios. CI runs
 the individual scenarios across three isolated shard runners in parallel with
-`pnpm check`, retaining one Playwright worker per runner to serialize shared builds.
+the `pnpm check` components in PR/merge-queue CI, retaining one Playwright worker
+per runner to serialize shared builds.
 The required `check` status waits for quality checks and every browser shard;
 failed shards upload separately named diagnostics. Locally, `pnpm test:e2e` remains
 serial. HTTP integration
@@ -146,7 +157,9 @@ Then the reply contains each text delta once. Given exhausted stream recovery,
 Then Chat shows a connection failure instead of silently remaining live.
 
 Run `pnpm test:e2e:opencode` for the live OpenCode browser journey. It is excluded
-from `pnpm check` and runs nightly in GitHub Actions. Verify other visual details
+from local `pnpm check` and runs in parallel PR/merge-queue CI as well as nightly
+in GitHub Actions. It uses the latest OpenCode release and an available free model.
+Verify other visual details
 manually with the `agent-browser` CLI against the running application. A first-time
 visitor should
 receive a browser-held anonymous identity and Bot, then see a current-origin

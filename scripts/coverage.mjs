@@ -9,6 +9,7 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const vitest = fileURLToPath(new URL("vitest.mjs", import.meta.resolve("vitest/package.json")));
 const { createCoverageMap } = coverageLibrary;
 const { createContext } = reportLibrary;
+const mergeOnly = process.argv.includes("--merge-only");
 const suites = [
     ["worker", "packages/worker"],
     ["web", "packages/web"],
@@ -18,9 +19,11 @@ const interrupt = () => cancellation.abort();
 process.once("SIGINT", interrupt);
 process.once("SIGTERM", interrupt);
 try {
-    await rm(new URL("../coverage/", import.meta.url), { recursive: true, force: true });
+    if (!mergeOnly) {
+        await rm(new URL("../coverage/", import.meta.url), { recursive: true, force: true });
+    }
     let failed = false;
-    for (const [, directory] of suites) {
+    for (const [, directory] of mergeOnly ? [] : suites) {
         const signal = AbortSignal.any([cancellation.signal, AbortSignal.timeout(20 * 60 * 1000)]);
         const status = await new Promise((resolve, reject) => {
             const child = spawn(process.execPath, [vitest, "run", "--coverage"], {
