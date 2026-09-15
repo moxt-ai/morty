@@ -19,11 +19,8 @@ export function createPlatformProjectRoutes() {
                 onError: () => json({ error: { code: "INVALID_REQUEST", message: "The request is too large." } }, 413),
             }),
         )
-        .get("/project", async (context) => {
-            const session = await authenticatedSession(context.env, context.req.raw);
-            if (session instanceof Response) {
-                return session;
-            }
+        .get("/project", authenticatedSession, async (context) => {
+            const session = context.get("session");
             const { origin, appId } = context.env.gateways.platformProjects.configuration();
             return json({
                 project: await context.env.storages.platformProjects.read(
@@ -34,12 +31,9 @@ export function createPlatformProjectRoutes() {
                 ),
             });
         })
-        .post("/project", async (context) => {
-            const session = await authenticatedSession(context.env, context.req.raw);
-            if (session instanceof Response) {
-                return session;
-            }
-            if (context.req.header("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") {
+        .post("/project", authenticatedSession, async (context) => {
+            const session = context.get("session");
+            if (context.get("mediaType") !== "application/json") {
                 return json({ error: { code: "INVALID_REQUEST", message: "A JSON request is required." } }, 400);
             }
             let body: unknown;

@@ -20,7 +20,7 @@ previous configuration. Do not ask for an additional replacement confirmation.
    `https://mobius-chat.paraflow.biz` for production. For other deployments, use
    their document origin. The script calls the Chat API at `/mobius-cloud/api/*`.
    The server supplies the Runtime URL separately as `pairing.relayUrl`
-   (`https://mobius.paradev.biz` in staging; `https://mobius.paraflow.biz` in production).
+   (`https://mobius.moxt.ws` in staging; `https://mobius.moxt.ai` in production).
 
    Use `DOCUMENT_DIR` from the environment if provided; otherwise resolve the user's
    absolute document directory. Ask if unavailable; do not use a repository directory

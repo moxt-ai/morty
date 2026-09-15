@@ -16,11 +16,8 @@ const claimSchema = v.pipe(
 
 export function createBotManagementRoutes() {
     return new Hono<ManagementHttpEnvironment>()
-        .get("/bots", async (context) => {
-            const session = await authenticatedSession(context.env, context.req.raw);
-            if (session instanceof Response) {
-                return session;
-            }
+        .get("/bots", authenticatedSession, async (context) => {
+            const session = context.get("session");
             await provisionUserBot(
                 context.env,
                 session.userId,
@@ -31,11 +28,8 @@ export function createBotManagementRoutes() {
                 bots: await context.env.storages.managedBots.listBots(session.userId, context.req.raw.signal),
             });
         })
-        .post("/bots/claims", async (context) => {
-            const session = await authenticatedSession(context.env, context.req.raw);
-            if (session instanceof Response) {
-                return session;
-            }
+        .post("/bots/claims", authenticatedSession, async (context) => {
+            const session = context.get("session");
             const input = v.parse(claimSchema, await context.req.json());
             const accessToken = await context.env.services.mobiusApp.issueAccessToken(
                 input.botId,
@@ -58,11 +52,8 @@ export function createBotManagementRoutes() {
             }
             return json({ botId: input.botId, displayName: input.displayName }, 201);
         })
-        .post("/access-tokens/:accessTokenId/regenerate", async (context) => {
-            const session = await authenticatedSession(context.env, context.req.raw);
-            if (session instanceof Response) {
-                return session;
-            }
+        .post("/access-tokens/:accessTokenId/regenerate", authenticatedSession, async (context) => {
+            const session = context.get("session");
             const accessTokenId = context.req.param("accessTokenId");
             const botId = await context.env.storages.managedBots.accessTokenBot(
                 session.userId,

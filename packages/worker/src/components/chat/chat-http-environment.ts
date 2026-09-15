@@ -1,3 +1,3 @@
-import type { ApplicationContext } from "../../composition/application-context.ts";
+import type { ManagementHttpEnvironment } from "../management/http/management-http-environment.ts";
 
-export type ChatHttpEnvironment = { Bindings: ApplicationContext };
+export type ChatHttpEnvironment = ManagementHttpEnvironment;

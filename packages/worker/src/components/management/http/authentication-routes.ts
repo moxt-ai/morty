@@ -15,10 +15,6 @@ const bindingInput = v.pipe(
     v.readonly(),
 );
 
-function bearer(request: Request): string | undefined {
-    return request.headers.get("Authorization")?.match(/^Bearer ([^\s]+)$/iu)?.[1];
-}
-
 function unavailable(): Response {
     return json({ error: { code: "AUTH_UNAVAILABLE", message: "Sign-in is temporarily unavailable." } }, 503);
 }
@@ -42,7 +38,7 @@ export function createAuthenticationRoutes() {
                     Allow: "GET",
                 });
             }
-            const token = bearer(request);
+            const token = context.get("bearerToken");
             const result = await context.env.services.authentication.session(token, request.signal);
             switch (result.kind) {
                 case "authenticated":
@@ -74,7 +70,7 @@ export function createAuthenticationRoutes() {
         })
         .post("/identity/transfers", async (context) => {
             const transfer = await context.env.services.authentication.createTransfer(
-                bearer(context.req.raw),
+                context.get("bearerToken"),
                 context.req.raw.signal,
             );
             if (transfer === null) {
@@ -93,7 +89,7 @@ export function createAuthenticationRoutes() {
                 v.object({ botId: v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u)) }),
                 await context.req.json(),
             );
-            const session = await context.env.services.authentication.session(bearer(context.req.raw), signal);
+            const session = await context.env.services.authentication.session(context.get("bearerToken"), signal);
             if (session.kind === "unavailable") {
                 return unavailable();
             }
@@ -165,7 +161,7 @@ export function createAuthenticationRoutes() {
         })
         .get("/identity/clerk-binding", async (context) => {
             const result = await context.env.services.authentication.clerkBinding(
-                bearer(context.req.raw),
+                context.get("bearerToken"),
                 context.req.raw.signal,
             );
             return result === null
@@ -175,7 +171,7 @@ export function createAuthenticationRoutes() {
         .post("/identity/clerk-binding", async (context) => {
             const input = v.parse(bindingInput, await context.req.json());
             const result = await context.env.services.authentication.bindClerk(
-                bearer(context.req.raw),
+                context.get("bearerToken"),
                 input.anonymousToken,
                 input.action,
                 context.req.raw.signal,

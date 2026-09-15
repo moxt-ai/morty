@@ -11,20 +11,20 @@ The credential digest was verified against the locally retained secret.
 
 | Environment | Endpoint |
 | --- | --- |
-| Staging | https://mobius.paradev.biz/ |
-| Production | https://mobius.paraflow.biz/ |
+| Staging | https://mobius.moxt.ws/ |
+| Production | https://mobius.moxt.ai/ |
 
 ### Chat runtime configuration
 
 Both Chat environments connect to the production Platform origin,
-`https://mobius.paraflow.biz`. Chat staging and production use separate Apps and
+`https://mobius.moxt.ai`. Chat staging and production use separate Apps and
 AppCredentials within that Platform environment; Chat staging does not connect
 to the staging Platform endpoint listed above.
 
 | Chat Worker | `MOBIUS_BASE_URL` |
 | --- | --- |
-| `mobius-chat-staging` | `https://mobius.paraflow.biz` |
-| `mobius-chat-production` | `https://mobius.paraflow.biz` |
+| `mobius-chat-staging` | `https://mobius.moxt.ai` |
+| `mobius-chat-production` | `https://mobius.moxt.ai` |
 
 On 2026-09-14, each AppCredential was authenticated and authorized for its App's
 Project provisioning endpoint before updating `MOBIUS_BASE_URL`, `MOBIUS_APP_ID`,

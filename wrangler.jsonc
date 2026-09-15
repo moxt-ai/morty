@@ -1,6 +1,7 @@
 {
     "$schema": "node_modules/wrangler/config-schema.json",
     "name": "mobius-cloud-local",
+    "placement": { "mode": "smart" },
     "main": "packages/worker/src/index.ts",
     "compatibility_date": "2026-09-07",
     "keep_vars": true,

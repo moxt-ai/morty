@@ -43,147 +43,149 @@ export function createBotChatRoutes() {
                 onError: () => json({ error: { code: "INVALID_REQUEST", message: "The message is too large." } }, 413),
             }),
         )
-        .all("/bots/:botId/:operation", async (context, next) => {
-            const operation = context.req.param("operation");
-            if (
-                !["access", "setup", "workspace", "native-sessions", "session-access", "draft-settings"].includes(
-                    operation,
-                )
-            ) {
-                return await next();
-            }
-            if (context.req.method !== "POST") {
-                const response = json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed." } }, 405);
-                response.headers.set("Allow", "POST");
-                return response;
-            }
-            const session = await authenticatedSession(context.env, context.req.raw);
-            if (session instanceof Response) {
-                return session;
-            }
-            const signal = AbortSignal.any([
-                context.req.raw.signal,
-                AbortSignal.timeout(operation === "native-sessions" || operation === "draft-settings" ? 120000 : 45000),
-            ]);
-            const botId = v.parse(platformIdentifier, context.req.param("botId"));
-            if (!(await context.env.storages.managedBots.ownsBot(session.userId, botId, signal))) {
-                throw new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);
-            }
-            const gateway = context.env.gateways.platformProjects;
-            const { origin, appId } = gateway.configuration();
-            const project = await context.env.storages.platformProjects.read(session.userId, origin, appId, signal);
-            if (project === null) {
-                throw new PlatformProjectError("BOT_UNAVAILABLE", "Your Bot is unavailable.", 409);
-            }
-            if (operation === "workspace") {
-                const workspace = await gateway.chatWorkspace(project.projectId, botId, session.userId, signal);
-                const response = json(workspace);
-                response.headers.set("Cache-Control", "no-store");
-                return response;
-            }
-            if (operation === "draft-settings") {
-                const settings = await gateway.draftSettings(project.projectId, botId, session.userId, signal);
-                context.env.logger.info(
-                    { event: "chat-settings-prepared", userId: session.userId, botId },
-                    "Chat audit event",
-                );
-                const response = json(settings);
-                response.headers.set("Cache-Control", "no-store");
-                return response;
-            }
-            if (operation === "access") {
-                const text = await context.req.text();
-                let body: unknown = {};
-                if (text !== "") {
-                    try {
-                        body = JSON.parse(text);
-                    } catch (cause) {
-                        signal.throwIfAborted();
-                        throw new PlatformProjectError("INVALID_REQUEST", "The JSON request is invalid.", 400, {
-                            cause,
-                        });
-                    }
+        .all(
+            "/bots/:botId/:operation{access|setup|workspace|native-sessions|session-access|draft-settings}",
+            async (context, next) => {
+                if (context.req.method !== "POST") {
+                    const response = json(
+                        { error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed." } },
+                        405,
+                    );
+                    response.headers.set("Allow", "POST");
+                    return response;
                 }
-                const input = v.parse(
-                    v.union([
-                        v.strictObject({ conversationId: platformIdentifier }),
-                        v.strictObject({
-                            conversationKey: platformIdentifier,
-                            bindingId: platformIdentifier,
-                            configuration: v.strictObject({
-                                additionalDirectoryIds: v.pipe(v.array(nativeDirectoryId), v.maxLength(16)),
-                                booleanValue: v.boolean(),
-                                configId: platformIdentifier,
-                                value: v.pipe(v.string(), v.maxLength(500)),
-                                valueType: v.picklist(["select", "boolean"]),
+                return await next();
+            },
+            authenticatedSession,
+            async (context) => {
+                const operation = context.req.param("operation");
+                const session = context.get("session");
+                const signal = AbortSignal.any([
+                    context.req.raw.signal,
+                    AbortSignal.timeout(
+                        operation === "native-sessions" || operation === "draft-settings" ? 120000 : 45000,
+                    ),
+                ]);
+                const botId = v.parse(platformIdentifier, context.req.param("botId"));
+                if (!(await context.env.storages.managedBots.ownsBot(session.userId, botId, signal))) {
+                    throw new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);
+                }
+                const gateway = context.env.gateways.platformProjects;
+                const { origin, appId } = gateway.configuration();
+                const project = await context.env.storages.platformProjects.read(session.userId, origin, appId, signal);
+                if (project === null) {
+                    throw new PlatformProjectError("BOT_UNAVAILABLE", "Your Bot is unavailable.", 409);
+                }
+                if (operation === "workspace") {
+                    const workspace = await gateway.chatWorkspace(project.projectId, botId, session.userId, signal);
+                    const response = json(workspace);
+                    response.headers.set("Cache-Control", "no-store");
+                    return response;
+                }
+                if (operation === "draft-settings") {
+                    const settings = await gateway.draftSettings(project.projectId, botId, session.userId, signal);
+                    context.env.logger.info(
+                        { event: "chat-settings-prepared", userId: session.userId, botId },
+                        "Chat audit event",
+                    );
+                    const response = json(settings);
+                    response.headers.set("Cache-Control", "no-store");
+                    return response;
+                }
+                if (operation === "access") {
+                    const text = await context.req.text();
+                    let body: unknown = {};
+                    if (text !== "") {
+                        try {
+                            body = JSON.parse(text);
+                        } catch (cause) {
+                            signal.throwIfAborted();
+                            throw new PlatformProjectError("INVALID_REQUEST", "The JSON request is invalid.", 400, {
+                                cause,
+                            });
+                        }
+                    }
+                    const input = v.parse(
+                        v.union([
+                            v.strictObject({ conversationId: platformIdentifier }),
+                            v.strictObject({
+                                conversationKey: platformIdentifier,
+                                bindingId: platformIdentifier,
+                                configuration: v.strictObject({
+                                    additionalDirectoryIds: v.pipe(v.array(nativeDirectoryId), v.maxLength(16)),
+                                    booleanValue: v.boolean(),
+                                    configId: platformIdentifier,
+                                    value: v.pipe(v.string(), v.maxLength(500)),
+                                    valueType: v.picklist(["select", "boolean"]),
+                                }),
                             }),
-                        }),
-                    ]),
-                    body,
+                        ]),
+                        body,
+                    );
+                    const access = await gateway.openChat(project.projectId, botId, session.userId, signal, input);
+                    context.env.logger.info(
+                        {
+                            event: "bot-chat-access-issued",
+                            userId: session.userId,
+                            botId,
+                            conversationId: access.conversationId,
+                        },
+                        "Chat audit event",
+                    );
+                    const response = json(access);
+                    response.headers.set("Cache-Control", "no-store");
+                    return response;
+                }
+                if (context.get("mediaType") !== "application/json") {
+                    throw new PlatformProjectError("INVALID_REQUEST", "A JSON request is required.", 400);
+                }
+                let body: unknown;
+                try {
+                    body = await context.req.json();
+                } catch (cause) {
+                    signal.throwIfAborted();
+                    throw new PlatformProjectError("INVALID_REQUEST", "The JSON request is invalid.", 400, { cause });
+                }
+                if (operation === "session-access") {
+                    const input = v.parse(v.strictObject({ sessionId: platformIdentifier }), body);
+                    const access = await gateway.nativeSessionAccess(project.projectId, input.sessionId, signal);
+                    context.env.logger.info(
+                        { event: "session-access-issued", userId: session.userId, botId, sessionId: input.sessionId },
+                        "Chat audit event",
+                    );
+                    const response = json(access);
+                    response.headers.set("Cache-Control", "no-store");
+                    return response;
+                }
+                if (operation === "native-sessions") {
+                    const { runtimeId, ...input } = v.parse(nativeInput, body);
+                    const result = await gateway.nativeSessions(project.projectId, runtimeId, input, signal);
+                    context.env.logger.info(
+                        {
+                            event: "native-session-operation",
+                            userId: session.userId,
+                            botId,
+                            runtimeId,
+                            action: input.action,
+                        },
+                        "Chat audit event",
+                    );
+                    const response = json(result);
+                    response.headers.set("Cache-Control", "no-store");
+                    return response;
+                }
+                const result = await gateway.configureBot(
+                    project.projectId,
+                    botId,
+                    session.userId,
+                    v.parse(setupInput, body),
+                    signal,
                 );
-                const access = await gateway.openChat(project.projectId, botId, session.userId, signal, input);
                 context.env.logger.info(
-                    {
-                        event: "bot-chat-access-issued",
-                        userId: session.userId,
-                        botId,
-                        conversationId: access.conversationId,
-                    },
-                    "Chat audit event",
+                    { event: "bot-setup-requested", userId: session.userId, projectId: project.projectId, botId },
+                    "Bot audit event",
                 );
-                const response = json(access);
-                response.headers.set("Cache-Control", "no-store");
-                return response;
-            }
-            if (context.req.header("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") {
-                throw new PlatformProjectError("INVALID_REQUEST", "A JSON request is required.", 400);
-            }
-            let body: unknown;
-            try {
-                body = await context.req.json();
-            } catch (cause) {
-                signal.throwIfAborted();
-                throw new PlatformProjectError("INVALID_REQUEST", "The JSON request is invalid.", 400, { cause });
-            }
-            if (operation === "session-access") {
-                const input = v.parse(v.strictObject({ sessionId: platformIdentifier }), body);
-                const access = await gateway.nativeSessionAccess(project.projectId, input.sessionId, signal);
-                context.env.logger.info(
-                    { event: "session-access-issued", userId: session.userId, botId, sessionId: input.sessionId },
-                    "Chat audit event",
-                );
-                const response = json(access);
-                response.headers.set("Cache-Control", "no-store");
-                return response;
-            }
-            if (operation === "native-sessions") {
-                const { runtimeId, ...input } = v.parse(nativeInput, body);
-                const result = await gateway.nativeSessions(project.projectId, runtimeId, input, signal);
-                context.env.logger.info(
-                    {
-                        event: "native-session-operation",
-                        userId: session.userId,
-                        botId,
-                        runtimeId,
-                        action: input.action,
-                    },
-                    "Chat audit event",
-                );
-                const response = json(result);
-                response.headers.set("Cache-Control", "no-store");
-                return response;
-            }
-            const result = await gateway.configureBot(
-                project.projectId,
-                botId,
-                session.userId,
-                v.parse(setupInput, body),
-                signal,
-            );
-            context.env.logger.info(
-                { event: "bot-setup-requested", userId: session.userId, projectId: project.projectId, botId },
-                "Bot audit event",
-            );
-            return json(result, 202);
-        });
+                return json(result, 202);
+            },
+        );
 }

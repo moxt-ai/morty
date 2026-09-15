@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import * as v from "valibot";
 import { json } from "../../infra/http.ts";
+import { requestHeaders } from "../../middleware/request-headers.ts";
 import { authenticatedSession } from "../management/http/authenticated-session.ts";
 import { createBotChatRoutes } from "./bot-chat-routes.ts";
 import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
@@ -26,12 +27,10 @@ function notFound(): Response {
 export function createChatApplication() {
     return new Hono<ChatHttpEnvironment>()
         .basePath("/mobius-cloud/api/chat")
+        .use("*", requestHeaders)
         .route("/", createBotChatRoutes())
-        .post("/bots/:botId/access-tokens", async (context) => {
-            const session = await authenticatedSession(context.env, context.req.raw);
-            if (session instanceof Response) {
-                return session;
-            }
+        .post("/bots/:botId/access-tokens", authenticatedSession, async (context) => {
+            const session = context.get("session");
             const botId = v.parse(identifier, context.req.param("botId"));
             if (!(await context.env.storages.managedBots.ownsBot(session.userId, botId, context.req.raw.signal))) {
                 return notFound();
@@ -59,11 +58,8 @@ export function createChatApplication() {
             }
             return json(accessToken, 201);
         })
-        .delete("/access-tokens/:accessTokenId", async (context) => {
-            const session = await authenticatedSession(context.env, context.req.raw);
-            if (session instanceof Response) {
-                return session;
-            }
+        .delete("/access-tokens/:accessTokenId", authenticatedSession, async (context) => {
+            const session = context.get("session");
             const accessTokenId = v.parse(identifier, context.req.param("accessTokenId"));
             if (
                 !(await context.env.storages.managedBots.ownsAccessToken(
@@ -82,20 +78,14 @@ export function createChatApplication() {
             );
             return new Response(null, { status: 204 });
         })
-        .get("/sessions", async (context) => {
-            const session = await authenticatedSession(context.env, context.req.raw);
-            if (session instanceof Response) {
-                return session;
-            }
+        .get("/sessions", authenticatedSession, async (context) => {
+            const session = context.get("session");
             return json({
                 sessions: await context.env.storages.managedBots.listSessions(session.userId, context.req.raw.signal),
             });
         })
-        .post("/sessions", async (context) => {
-            const session = await authenticatedSession(context.env, context.req.raw);
-            if (session instanceof Response) {
-                return session;
-            }
+        .post("/sessions", authenticatedSession, async (context) => {
+            const session = context.get("session");
             const input = v.parse(sessionInput, await context.req.json());
             const saved = await context.env.storages.managedBots.saveSession(
                 session.userId,
@@ -105,11 +95,8 @@ export function createChatApplication() {
             );
             return saved ? json(input, 201) : notFound();
         })
-        .patch("/sessions/:sessionId", async (context) => {
-            const session = await authenticatedSession(context.env, context.req.raw);
-            if (session instanceof Response) {
-                return session;
-            }
+        .patch("/sessions/:sessionId", authenticatedSession, async (context) => {
+            const session = context.get("session");
             const input = v.parse(renameInput, await context.req.json());
             const renamed = await context.env.storages.managedBots.renameSession(
                 session.userId,
@@ -120,11 +107,8 @@ export function createChatApplication() {
             );
             return renamed ? json({ sessionId: context.req.param("sessionId"), title: input.title }) : notFound();
         })
-        .delete("/sessions/:sessionId", async (context) => {
-            const session = await authenticatedSession(context.env, context.req.raw);
-            if (session instanceof Response) {
-                return session;
-            }
+        .delete("/sessions/:sessionId", authenticatedSession, async (context) => {
+            const session = context.get("session");
             const deleted = await context.env.storages.managedBots.deleteSession(
                 session.userId,
                 context.req.param("sessionId"),
