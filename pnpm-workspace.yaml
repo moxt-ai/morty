@@ -2,6 +2,8 @@ engineStrict: true
 minimumReleaseAge: 1440
 
 packages:
+  - packages/e2e
+  - packages/setup
   - packages/web
   - packages/worker
   - third-party/mobius/packages/protocol

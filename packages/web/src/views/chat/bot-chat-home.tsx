@@ -12,6 +12,7 @@ import { AgentRichContent } from "../../components/agents/agent-rich-content.tsx
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
+import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi, ChatDraftConfiguration, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
@@ -578,11 +579,16 @@ export function BotChatHome({
                                     <article
                                         className="ml-auto max-w-[85%] whitespace-pre-wrap rounded-2xl bg-accent px-4 py-3"
                                         aria-label="Your message"
+                                        data-testid={dataTestId.userMessage}
                                     >
                                         {turn.prompt}
                                     </article>
                                     {turn.response.length > 0 ? (
-                                        <article className="min-w-0 px-4 py-3" aria-label="Agent response">
+                                        <article
+                                            className="min-w-0 px-4 py-3"
+                                            aria-label="Agent response"
+                                            data-testid={dataTestId.agentResponse}
+                                        >
                                             <AgentMarkdown
                                                 markdown={turn.response}
                                                 streaming={turn.attempt.kind === "running"}
@@ -634,6 +640,7 @@ export function BotChatHome({
                             <div className="flex items-end gap-3 rounded-2xl border border-border bg-card p-4">
                                 <Textarea
                                     aria-label="Message"
+                                    data-testid={dataTestId.messageComposer}
                                     placeholder="Message your agent…"
                                     value={draft}
                                     onChange={(event) => setDraft(event.target.value)}
@@ -643,6 +650,7 @@ export function BotChatHome({
                                     type="submit"
                                     size="icon"
                                     aria-label="Send message"
+                                    data-testid={dataTestId.sendMessage}
                                     disabled={
                                         sending.kind === "sending" ||
                                         draft.trim().length === 0 ||

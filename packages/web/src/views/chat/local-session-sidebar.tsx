@@ -3,6 +3,7 @@ import { ChevronDown, Laptop, RefreshCw, SquarePen } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
+import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
 
 export interface OpenLocalSession {
@@ -198,6 +199,7 @@ export function LocalSessionSidebar({
                 className={`mb-5 justify-start text-foreground ${activeEntryId === "" ? "bg-card shadow-sm" : ""}`}
                 disabled={opening !== ""}
                 onClick={onNewConversation}
+                data-testid={dataTestId.newConversation}
             >
                 <SquarePen className="size-4" aria-hidden="true" /> New Conversation
             </Button>

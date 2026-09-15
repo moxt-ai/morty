@@ -26,14 +26,17 @@ child.stdout.pipe(output);
 child.stdout.pipe(process.stdout);
 child.stderr.pipe(errors);
 child.stderr.pipe(process.stderr);
-for (const signal of ["SIGINT", "SIGTERM"]) {
+const signals: readonly NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
+for (const signal of signals) {
     process.on(signal, () => child.kill(signal));
 }
 
-const result = await new Promise((resolve, reject) => {
-    child.once("error", reject);
-    child.once("exit", (code, signal) => resolve({ code, signal }));
-});
+const result = await new Promise<{ readonly code: number | null; readonly signal: NodeJS.Signals | null }>(
+    (resolve, reject) => {
+        child.once("error", reject);
+        child.once("exit", (code, signal) => resolve({ code, signal }));
+    },
+);
 input.end();
 output.end();
 errors.end();

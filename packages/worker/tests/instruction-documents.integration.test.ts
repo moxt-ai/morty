@@ -4,6 +4,46 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { expect, test } from "vitest";
 import worker from "../src/application.ts";
 
+test("Given a published setup artifact, When a user downloads the original setup URL, Then the Worker serves the R2 JavaScript and reports an unavailable release explicitly", async () => {
+    const bundle = await build({
+        entryPoints: [fileURLToPath(new URL("../src/index.ts", import.meta.url))],
+        bundle: true,
+        write: false,
+        format: "esm",
+        platform: "browser",
+        target: "es2022",
+        external: ["node:*", "cloudflare:*"],
+        loader: { ".md": "text" },
+    });
+    const output = bundle.outputFiles[0];
+    if (output === undefined) {
+        throw new Error("Missing Worker bundle");
+    }
+    const runtime = new Miniflare(
+        convertV4MiniflareOptions({
+            modules: true,
+            script: output.text,
+            compatibilityDate: "2026-09-07",
+            compatibilityFlags: ["nodejs_compat"],
+            r2Buckets: ["CHAT_ATTACHMENTS_APAC"],
+        }),
+    );
+    try {
+        const missing = await runtime.dispatchFetch("https://chat.example/setup.mjs");
+        expect(missing.status).toBe(503);
+        expect(await missing.json()).toMatchObject({ error: { code: "SETUP_ARTIFACT_UNAVAILABLE" } });
+        const bucket = await runtime.getR2Bucket("CHAT_ATTACHMENTS_APAC");
+        const artifact = "console.log('published setup');\n";
+        await bucket.put("artifacts/setup.mjs", artifact);
+        const response = await runtime.dispatchFetch("https://chat.example/setup.mjs?token=ignored");
+        expect(response.status).toBe(200);
+        expect(response.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+        expect(await response.text()).toBe(artifact);
+    } finally {
+        await runtime.dispose();
+    }
+});
+
 test.each(["setup", "pair"])(
     "Given a configured Chat origin, When a user fetches %s instructions on another host, Then the instructions contain the configured URLs",
     async (name) => {

@@ -69,6 +69,33 @@ bots, Chat, Slack integration, and sign out when manually validating an auth cha
 
 ## Browser verification
 
+Chat browser E2E tests and their shared fixtures live in `packages/e2e`. Run
+`pnpm test:e2e` to execute all of them with Playwright Test and real Chrome.
+The TypeScript scenarios receive a `runtime` fixture from `infra/test.ts`.
+`createTestRuntime` owns agent setup, the local stack, browser startup, instruction
+execution and deterministic setup timers; the fixture owns diagnostics and cleanup.
+Scenarios describe user actions and assert visible results. The package's strict
+TypeScript check is included in `pnpm check`.
+The setup scenarios cover both
+instruction journeys. After this, a user can follow `pair.md` or `setup.md`, enter
+the paired Bot's Chat view, send a prompt, and see the agent reply and saved history.
+The scenarios fetch the rendered document and generated bundle from the local
+Worker/R2 boundary, then execute the bundle's `runSetup` entrypoint with a real,
+isolated Runtime subprocess. Pair preserves the browser's original Bot and Project;
+standalone setup opens its one-time browser handoff. Both reload the connected Chat
+view without re-pairing, send a prompt, reload its saved conversation, and send a
+follow-up that receives a fresh reply in the same conversation.
+Agent inference uses the stateful ACP test agent; Platform provisioning uses the
+shared local developer-authentication fixture. The browser still loads Clerk's
+hosted SDK, so the suite requires internet access but no Clerk login. Setup
+waits use explicitly advanced fake timers with a fixed system time.
+
+These tests require Chrome and the checked-out Mobius submodule. They share the
+local-stack runner and diagnostics used by the conversation scenarios and run after
+`pnpm check` in PR/merge-queue CI. HTTP integration
+coverage additionally runs the TypeScript CLI as a subprocess to verify identity
+reuse, ticket consumption, private configuration, and Runtime replacement failures.
+
 Given an open Bot conversation or continued local Session, When an agent streams
 a reply, Then text appears incrementally without a message/history snapshot GET
 for each text or activity event. When the turn finishes, Then its final response
@@ -112,7 +139,7 @@ resulting URL and confirm the same Conversation and history reopen. Click New
 Conversation again and confirm Harness is editable and the next send creates a
 distinct Conversation. Verify with `agent-browser` and the browser network log.
 
-Run `pnpm test:e2e:conversation` for the browser regression against local Chat,
+`pnpm test:e2e` also covers the conversation browser regression against local Chat,
 Platform and Runtime with the stateful ACP test agent. First Send must retain the
 page and composer while the draft becomes a conversation and the reply appears.
 The scenario also creates a distinct second conversation, sends a follow-up and

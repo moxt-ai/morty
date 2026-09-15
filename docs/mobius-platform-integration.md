@@ -211,7 +211,8 @@ and redemption endpoints.
 
 The Worker renders both documents from `templates/`, substituting `APP_ORIGIN`
 or the request origin before serving them. Template placeholders are not public assets.
-Both documents use `public/setup.mjs` through just two commands:
+Both documents download `/setup.mjs`, bundled from `packages/setup` and served by
+the Worker from the existing R2 bucket, through just two commands:
 `pair --token <one-time-ticket> --harness <agent-id>` and `setup --harness <agent-id>`.
 They handle private configuration persistence, identity validation, resumable
 Runtime pairing, detached Runtime launch, binding, and readiness, with timestamped

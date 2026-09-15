@@ -1,20 +1,29 @@
 import { generateKeyPairSync } from "node:crypto";
+import { once } from "node:events";
 import { mkdir } from "node:fs/promises";
 import { createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { jsonRequest, text } from "./chat-api.mjs";
+import type { SetupRuntime } from "../../setup/src/setup.ts";
+import { jsonRequest, object, text } from "./chat-api.ts";
+import type { E2EHarness } from "./harness.ts";
 
-export const repository = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+interface AgentConfiguration {
+    readonly binary: string;
+    readonly xdgConfigHome: string;
+    readonly publishableKey: string;
+}
+
+export const repository = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const mobiusRepository = join(repository, "third-party", "mobius");
-const fixtureDirectory = join(repository, "scripts", "e2e", "fixtures");
+const fixtureDirectory = fileURLToPath(new URL("../fixtures", import.meta.url));
 const platformConfiguration = join(fixtureDirectory, "wrangler.platform.jsonc");
 const chatConfiguration = join(fixtureDirectory, "wrangler.chat.jsonc");
-const acpProxy = fileURLToPath(new URL("./acp-proxy.mjs", import.meta.url));
+const acpProxy = fileURLToPath(new URL("./acp-proxy.ts", import.meta.url));
 
 async function freePort() {
     const server = createServer();
-    await new Promise((resolveListen, reject) => {
+    await new Promise<void>((resolveListen, reject) => {
         server.once("error", reject);
         server.listen(0, "127.0.0.1", resolveListen);
     });
@@ -22,11 +31,19 @@ async function freePort() {
     if (address === null || typeof address === "string") {
         throw new Error("Could not allocate a local port");
     }
-    await new Promise((resolveClose, reject) => server.close((error) => (error ? reject(error) : resolveClose())));
+    await new Promise<void>((resolveClose, reject) =>
+        server.close((error) => (error ? reject(error) : resolveClose())),
+    );
     return address.port;
 }
 
-async function migrate(harness, configuration, binding, persistence, cwd = repository) {
+async function migrate(
+    harness: E2EHarness,
+    configuration: string,
+    binding: string,
+    persistence: string,
+    cwd = repository,
+) {
     await harness.run(
         "pnpm",
         [
@@ -47,7 +64,15 @@ async function migrate(harness, configuration, binding, persistence, cwd = repos
 }
 
 export class LocalStack {
-    static async create(harness, openCode) {
+    readonly harness: E2EHarness;
+    readonly openCode: AgentConfiguration;
+    readonly directories: Readonly<Record<string, string>>;
+    readonly platformOrigin: string;
+    readonly chatOrigin: string;
+    readonly platformPort: number;
+    readonly chatPort: number;
+
+    static async create(harness: E2EHarness, openCode: AgentConfiguration) {
         const platformPort = await freePort();
         const chatPort = await freePort();
         const directories = Object.fromEntries(
@@ -60,7 +85,13 @@ export class LocalStack {
         return new LocalStack(harness, openCode, directories, platformPort, chatPort);
     }
 
-    constructor(harness, openCode, directories, platformPort, chatPort) {
+    constructor(
+        harness: E2EHarness,
+        openCode: AgentConfiguration,
+        directories: Readonly<Record<string, string>>,
+        platformPort: number,
+        chatPort: number,
+    ) {
         this.harness = harness;
         this.openCode = openCode;
         this.directories = directories;
@@ -79,6 +110,13 @@ export class LocalStack {
             this.harness.run("pnpm", ["--filter", "@moxt-ai/mobius", "build"], { cwd: mobiusRepository }),
         );
         await this.harness.stage("migrate-platform", async () => {
+            await migrate(
+                this.harness,
+                platformConfiguration,
+                "D1_SHARD_WNAM_01",
+                this.directories.platform,
+                mobiusRepository,
+            );
             await migrate(
                 this.harness,
                 platformConfiguration,
@@ -117,22 +155,21 @@ export class LocalStack {
         });
         return await this.harness.stage("provision-platform-application", async () => {
             const authentication = { provider: "e2e", token: "mobius-chat-local-e2e", signal: this.harness.signal };
-            const tenant = await jsonRequest(this.platformOrigin, "/mobius/api/v1/platform/tenants", {
-                ...authentication,
-                body: { displayName: "Mobius Chat live E2E" },
-            });
+            const inventory = await jsonRequest(this.platformOrigin, "/mobius/api/v1/platform/tenants", authentication);
+            const tenant = object(Array.isArray(inventory.tenants) ? inventory.tenants[0] : undefined, "tenant");
             const application = await jsonRequest(this.platformOrigin, "/mobius/api/v1/apps", {
                 ...authentication,
                 body: { displayName: "Mobius Chat live E2E", tenantId: text(tenant.tenantId, "tenantId") },
             });
             return {
                 appId: text(application.appId, "appId"),
-                appSecret: text(application.defaultCredential?.credential, "credential"),
+                appSecret: text(object(application.defaultCredential, "defaultCredential").credential, "credential"),
             };
         });
     }
 
-    async startChat(application) {
+    async startChat(application: { readonly appId: string; readonly appSecret: string }) {
+        await migrate(this.harness, chatConfiguration, "CHAT_DATABASE_WNAM", this.directories.chat);
         await this.harness.stage("migrate-chat", () =>
             migrate(this.harness, chatConfiguration, "CHAT_DATABASE_APAC", this.directories.chat),
         );
@@ -154,8 +191,23 @@ export class LocalStack {
             VITE_MOBIUS_BASE_URL: this.platformOrigin,
         };
         await this.harness.stage("build-chat", () =>
-            this.harness.run("pnpm", ["build", "--mode", "e2e"], { env: variables }),
+            this.harness.run("pnpm", ["build", "--mode", "e2e"], { env: { ...variables, NODE_ENV: "production" } }),
         );
+        await this.harness.run("pnpm", [
+            "exec",
+            "wrangler",
+            "r2",
+            "object",
+            "put",
+            "mobius-chat-local-e2e-attachments/artifacts/setup.mjs",
+            "--file",
+            join(repository, "packages/setup/dist/setup.mjs"),
+            "--local",
+            "--persist-to",
+            this.directories.chat,
+            "--config",
+            chatConfiguration,
+        ]);
         await this.harness.stage("start-chat", async () => {
             const variableArguments = Object.entries(variables).flatMap(([key, value]) => ["--var", `${key}:${value}`]);
             await this.harness.start("mobius-chat", "pnpm", [
@@ -176,19 +228,49 @@ export class LocalStack {
         });
     }
 
-    async startMobius(pairing) {
+    async startMobius(pairing: Readonly<Record<string, unknown>>) {
+        return await this.startRuntime([
+            "pair",
+            "--url",
+            text(pairing.relayUrl, "relayUrl"),
+            "--pairing",
+            text(pairing.pairingId, "pairingId"),
+            "--code",
+            text(pairing.pairingCode, "pairingCode"),
+        ]);
+    }
+
+    setupRuntime(): SetupRuntime {
+        let child: ChildProcess | undefined;
+        return {
+            stop: async (signal) => {
+                signal.throwIfAborted();
+                if (child === undefined || child.pid === undefined || child.exitCode !== null) {
+                    return 0;
+                }
+                const exited = once(child, "exit", { signal });
+                process.kill(-child.pid, "SIGTERM");
+                await exited;
+                return 1;
+            },
+            start: async (_directory, args, signal) => {
+                signal.throwIfAborted();
+                child = await this.startRuntime(args);
+                if (child.pid === undefined) {
+                    throw new Error("Runtime process did not start");
+                }
+                return { pid: child.pid, logPath: join(this.harness.artifactDirectory, "mobius.log") };
+            },
+        };
+    }
+
+    async startRuntime(args: readonly string[]) {
         return await this.harness.start(
             "mobius",
             process.execPath,
             [
                 join(mobiusRepository, "packages", "cli", "dist", "cli.js"),
-                "pair",
-                "--url",
-                text(pairing.relayUrl, "relayUrl"),
-                "--pairing",
-                text(pairing.pairingId, "pairingId"),
-                "--code",
-                text(pairing.pairingCode, "pairingCode"),
+                ...args,
                 "--workspace",
                 this.directories.workspace,
             ],
@@ -208,3 +290,5 @@ export class LocalStack {
         );
     }
 }
+
+import type { ChildProcess } from "node:child_process";

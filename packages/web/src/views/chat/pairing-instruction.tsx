@@ -1,6 +1,7 @@
 import { Check, Copy } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
+import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 
 type State =
@@ -51,6 +52,7 @@ export function PairingInstruction({
                 {state.kind === "ready" ? (
                     <input
                         aria-label="Agent pairing instruction"
+                        data-testid={dataTestId.pairingInstruction}
                         readOnly
                         value={`follow ${state.url}`}
                         onFocus={(event) => event.currentTarget.select()}

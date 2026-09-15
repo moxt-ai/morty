@@ -1,0 +1,11 @@
+{
+    "name": "@moxt-ai/mobius-chat-setup",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "exports": "./src/setup.ts",
+    "scripts": {
+        "build": "vite build",
+        "typecheck": "tsc --project tsconfig.json"
+    }
+}
