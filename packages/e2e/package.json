@@ -1,0 +1,13 @@
+{
+    "name": "@moxt-ai/mobius-chat-e2e",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "test": "playwright test",
+        "typecheck": "tsc --project tsconfig.json"
+    },
+    "devDependencies": {
+        "@playwright/test": "1.63.0"
+    }
+}

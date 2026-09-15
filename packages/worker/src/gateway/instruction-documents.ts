@@ -3,7 +3,7 @@ import * as v from "valibot";
 import pairTemplate from "../../../../templates/pair.md?raw";
 import setupTemplate from "../../../../templates/setup.md?raw";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
-import { json } from "../infra/http.ts";
+import { RequestError } from "../infra/request-error.ts";
 
 export const instructionOriginSchema = v.pipe(
     v.string(),
@@ -21,10 +21,7 @@ export const instructionDocuments = new Hono<{ readonly Bindings: CloudBindings 
             context.env.APP_ORIGIN === undefined ? new URL(context.req.url).origin : context.env.APP_ORIGIN,
         );
         if (!origin.success) {
-            return json(
-                { error: { code: "INVALID_INSTRUCTION_ORIGIN", message: "The instruction origin is invalid." } },
-                500,
-            );
+            throw new RequestError("INVALID_INSTRUCTION_ORIGIN", "The instruction origin is invalid.", 500);
         }
         const template = context.req.path === "/setup.md" ? setupTemplate : pairTemplate;
         return new Response(template.replaceAll("{{BASE_URL}}", origin.output), {

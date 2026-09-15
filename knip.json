@@ -3,8 +3,8 @@
     "ignore": ["third-party/**"],
     "ignoreDependencies": ["cloudflare"],
     "workspaces": {
-        ".": {
-            "entry": ["public/setup.mjs", "scripts/e2e/fixtures/local-platform-worker.ts"]
+        "packages/e2e": {
+            "entry": ["*.e2e.test.ts", "fixtures/local-platform-worker.ts", "infra/acp-proxy.ts"]
         },
         "packages/web": {
             "entry": [

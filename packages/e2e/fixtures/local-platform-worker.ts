@@ -19,12 +19,13 @@ const authenticator = {
             throw new ProjectAuthenticationError("external_identity_invalid", "The local E2E identity is invalid");
         }
         return new VerifiedExternalIdentity(
-            "e2e",
+            "clerk",
             "https://mobius-chat-e2e.invalid",
             E2E_DEVELOPER_SUBJECT,
             new Map(),
             Date.now(),
             Date.now() + 60 * 60 * 1_000,
+            { kind: "organization", id: "org_mobiuschate2e", role: "org:admin" },
         );
     },
 };

@@ -1,13 +1,45 @@
-import { execFile, spawn } from "node:child_process";
+import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { closeSync, openSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import type { Browser, BrowserContext, Page } from "playwright-core";
+
+interface ErrorRecord {
+    readonly message: string;
+    readonly name?: string;
+    readonly cause?: ErrorRecord;
+}
+interface ProcessOptions {
+    readonly cwd?: string;
+    readonly env?: Readonly<Record<string, string>>;
+    readonly label?: string;
+}
+interface ProcessRecord {
+    readonly child: ChildProcess;
+    readonly name: string;
+    readonly logPath: string;
+    readonly output: number;
+}
+type Stage = { readonly name: string; readonly startedAt: string } & (
+    | { readonly status: "running" }
+    | { readonly status: "passed"; readonly durationMilliseconds: number }
+    | { readonly status: "failed"; readonly durationMilliseconds: number; readonly error: ErrorRecord }
+);
+type BrowserState =
+    | { readonly kind: "none" }
+    | {
+          readonly kind: "recording" | "stopped";
+          readonly browser: Browser;
+          readonly context: BrowserContext;
+          readonly page: Page;
+      };
 
 const execute = promisify(execFile);
 
-function errorRecord(error) {
+function errorRecord(error: unknown): ErrorRecord {
     if (!(error instanceof Error)) {
         return { message: String(error) };
     }
@@ -18,7 +50,7 @@ function errorRecord(error) {
     };
 }
 
-function observation(value) {
+function observation(value: unknown): unknown {
     if (value instanceof Error) {
         return errorRecord(value);
     }
@@ -29,8 +61,30 @@ function observation(value) {
     }
 }
 
-class E2EHarness {
-    static async create(name) {
+export class E2EHarness {
+    readonly name: string;
+    readonly rootDirectory: string;
+    readonly artifactDirectory: string;
+    readonly workDirectory: string;
+    readonly preserveArtifacts: boolean;
+    readonly timeoutMilliseconds: number;
+    readonly signal: AbortSignal;
+    readonly startedAt: number;
+    readonly children: ProcessRecord[];
+    readonly stages: Stage[];
+    readonly metadata: Record<string, unknown>;
+    readonly browserEvents: unknown[];
+    browserState: BrowserState = { kind: "none" };
+    result:
+        | { readonly kind: "running" }
+        | { readonly kind: "finished"; readonly success: boolean; readonly finishedAt: number } = { kind: "running" };
+    failure: ErrorRecord | undefined;
+
+    get page() {
+        return this.browserState.kind === "none" ? undefined : this.browserState.page;
+    }
+
+    static async create(name: string) {
         const configuredRoot = process.env.MOBIUS_E2E_ARTIFACT_ROOT;
         const parent = configuredRoot === undefined ? tmpdir() : resolve(configuredRoot);
         await mkdir(parent, { recursive: true });
@@ -41,7 +95,13 @@ class E2EHarness {
         return new E2EHarness(name, rootDirectory, artifactDirectory, workDirectory, configuredRoot !== undefined);
     }
 
-    constructor(name, rootDirectory, artifactDirectory, workDirectory, preserveArtifacts) {
+    constructor(
+        name: string,
+        rootDirectory: string,
+        artifactDirectory: string,
+        workDirectory: string,
+        preserveArtifacts: boolean,
+    ) {
         this.name = name;
         this.rootDirectory = rootDirectory;
         this.artifactDirectory = artifactDirectory;
@@ -54,59 +114,63 @@ class E2EHarness {
         this.stages = [];
         this.metadata = {};
         this.browserEvents = [];
-        this.traceStarted = false;
     }
 
-    log(message) {
+    log(message: string) {
         process.stdout.write(`[${this.name}] ${message}\n`);
     }
 
-    record(name, value) {
+    record(name: string, value: unknown) {
         this.metadata[name] = value;
     }
 
-    async stage(name, action) {
-        const stage = { name, startedAt: new Date().toISOString(), startedMilliseconds: Date.now() };
-        this.stages.push(stage);
+    async stage<T>(name: string, action: () => Promise<T>): Promise<T> {
+        const stage = { name, startedAt: new Date().toISOString() };
+        const startedMilliseconds = Date.now();
+        const index = this.stages.push({ ...stage, status: "running" }) - 1;
         this.log(`START ${name}`);
         try {
             const result = await action();
-            stage.status = "passed";
+            this.stages[index] = { ...stage, status: "passed", durationMilliseconds: Date.now() - startedMilliseconds };
             return result;
         } catch (error) {
-            stage.status = "failed";
-            stage.error = errorRecord(error);
+            this.stages[index] = {
+                ...stage,
+                status: "failed",
+                error: errorRecord(error),
+                durationMilliseconds: Date.now() - startedMilliseconds,
+            };
             throw new Error(`[${name}] ${error instanceof Error ? error.message : String(error)}`, { cause: error });
         } finally {
-            stage.durationMilliseconds = Date.now() - stage.startedMilliseconds;
-            delete stage.startedMilliseconds;
-            this.log(`${stage.status === "passed" ? "PASS" : "FAIL"} ${name} (${stage.durationMilliseconds}ms)`);
+            this.log(
+                `${this.stages[index]?.status === "passed" ? "PASS" : "FAIL"} ${name} (${Date.now() - startedMilliseconds}ms)`,
+            );
             await this.#writeRunRecord();
         }
     }
 
-    async run(command, args, options = {}) {
+    async run(command: string, args: readonly string[], options: ProcessOptions = {}) {
         this.log(`RUN ${options.label ?? `${command} ${args.join(" ")}`}`);
         return await execute(command, args, {
-            cwd: options.cwd,
+            cwd: options.cwd ?? fileURLToPath(new URL("../../..", import.meta.url)),
             env: { ...process.env, ...options.env },
             maxBuffer: 16 * 1024 * 1024,
             signal: this.signal,
         });
     }
 
-    async start(name, command, args, options = {}) {
+    async start(name: string, command: string, args: readonly string[], options: ProcessOptions = {}) {
         const logPath = join(this.artifactDirectory, `${name}.log`);
         const output = openSync(logPath, "a", 0o600);
         const child = spawn(command, args, {
-            cwd: options.cwd,
+            cwd: options.cwd ?? fileURLToPath(new URL("../../..", import.meta.url)),
             detached: true,
             env: { ...process.env, ...options.env },
             stdio: ["ignore", output, output],
         });
         const processRecord = { child, logPath, name, output };
         this.children.push(processRecord);
-        await new Promise((resolveSpawn, reject) => {
+        await new Promise<void>((resolveSpawn, reject) => {
             child.once("error", reject);
             child.once("spawn", resolveSpawn);
         });
@@ -114,15 +178,21 @@ class E2EHarness {
         return child;
     }
 
-    async waitFor(description, probe, accept, options = {}) {
+    async waitFor<T>(
+        description: string,
+        probe: () => Promise<T>,
+        accept: (value: T) => boolean,
+        options: { readonly timeoutMilliseconds?: number; readonly intervalMilliseconds?: number } = {},
+    ): Promise<T> {
         const timeout = AbortSignal.timeout(options.timeoutMilliseconds ?? 90_000);
-        let lastObservation;
+        let lastObservation: unknown;
         while (!this.signal.aborted && !timeout.aborted) {
             await this.#assertProcessesRunning();
             try {
-                lastObservation = await probe();
-                if (accept(lastObservation)) {
-                    return lastObservation;
+                const value = await probe();
+                lastObservation = value;
+                if (accept(value)) {
+                    return value;
                 }
             } catch (error) {
                 lastObservation = error;
@@ -134,7 +204,11 @@ class E2EHarness {
         );
     }
 
-    async waitForHttp(url, description, accept = (response) => response.ok) {
+    async waitForHttp(
+        url: string,
+        description: string,
+        accept: (response: Response) => boolean | Promise<boolean> = (response) => response.ok,
+    ) {
         return await this.waitFor(
             description,
             async () => {
@@ -146,10 +220,8 @@ class E2EHarness {
         );
     }
 
-    async attachBrowser(browser, context, page) {
-        this.browser = browser;
-        this.browserContext = context;
-        this.page = page;
+    async attachBrowser(browser: Browser, context: BrowserContext, page: Page) {
+        this.browserState = { kind: "stopped", browser, context, page };
         page.on("console", (message) =>
             this.browserEvents.push({ type: "console", level: message.type(), text: message.text() }),
         );
@@ -163,12 +235,12 @@ class E2EHarness {
             }),
         );
         await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
-        this.traceStarted = true;
+        this.browserState = { kind: "recording", browser, context, page };
     }
 
-    async diagnose(error) {
+    async diagnose(error: unknown) {
         this.failure = errorRecord(error);
-        const captures = [
+        const captures: readonly (readonly [string, () => Promise<unknown> | undefined])[] = [
             [
                 "browser-events.json",
                 () =>
@@ -188,11 +260,11 @@ class E2EHarness {
             [
                 "playwright-trace.zip",
                 async () => {
-                    if (this.traceStarted) {
-                        await this.browserContext.tracing.stop({
+                    if (this.browserState.kind === "recording") {
+                        await this.browserState.context.tracing.stop({
                             path: join(this.artifactDirectory, "playwright-trace.zip"),
                         });
-                        this.traceStarted = false;
+                        this.browserState = { ...this.browserState, kind: "stopped" };
                     }
                 },
             ],
@@ -216,25 +288,26 @@ class E2EHarness {
         this.log(`diagnostics: ${this.artifactDirectory}`);
     }
 
-    async close(success) {
-        if (this.traceStarted) {
+    async close(success: boolean) {
+        if (this.browserState.kind === "recording") {
             try {
-                await this.browserContext.tracing.stop();
+                await this.browserState.context.tracing.stop();
             } catch (error) {
                 this.log(`Could not stop browser tracing: ${errorRecord(error).message}`);
             }
-            this.traceStarted = false;
+            this.browserState = { ...this.browserState, kind: "stopped" };
         }
         try {
-            await this.browser?.close();
+            if (this.browserState.kind !== "none") {
+                await this.browserState.browser.close();
+            }
         } catch (error) {
             this.log(`Could not close browser: ${errorRecord(error).message}`);
         }
         for (const processRecord of this.children.toReversed()) {
             await this.#stopProcess(processRecord);
         }
-        this.finishedAt = Date.now();
-        this.success = success;
+        this.result = { kind: "finished", finishedAt: Date.now(), success };
         await this.#writeRunRecord();
         if (success && !this.preserveArtifacts) {
             await rm(this.rootDirectory, { recursive: true, force: true });
@@ -254,7 +327,7 @@ class E2EHarness {
         );
     }
 
-    async #stopProcess({ child, name, output }) {
+    async #stopProcess({ child, name, output }: ProcessRecord) {
         try {
             if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) {
                 process.kill(-child.pid, "SIGTERM");
@@ -267,7 +340,7 @@ class E2EHarness {
                 }
             }
         } catch (error) {
-            if (error.code !== "ESRCH") {
+            if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) {
                 this.log(`Could not stop ${name}: ${errorRecord(error).message}`);
             }
         } finally {
@@ -281,12 +354,19 @@ class E2EHarness {
             `${JSON.stringify(
                 {
                     name: this.name,
-                    status: this.failure === undefined ? (this.success === true ? "passed" : "running") : "failed",
+                    status:
+                        this.failure === undefined
+                            ? this.result.kind === "finished" && this.result.success
+                                ? "passed"
+                                : "running"
+                            : "failed",
                     startedAt: new Date(this.startedAt).toISOString(),
-                    ...(this.finishedAt === undefined ? {} : { finishedAt: new Date(this.finishedAt).toISOString() }),
-                    ...(this.finishedAt === undefined
+                    ...(this.result.kind === "running"
                         ? {}
-                        : { durationMilliseconds: this.finishedAt - this.startedAt }),
+                        : { finishedAt: new Date(this.result.finishedAt).toISOString() }),
+                    ...(this.result.kind === "running"
+                        ? {}
+                        : { durationMilliseconds: this.result.finishedAt - this.startedAt }),
                     metadata: this.metadata,
                     stages: this.stages,
                     ...(this.failure === undefined ? {} : { failure: this.failure }),
@@ -298,7 +378,7 @@ class E2EHarness {
     }
 }
 
-export async function runE2E(name, scenario) {
+export async function runE2E(name: string, scenario: (harness: E2EHarness) => Promise<void>) {
     const harness = await E2EHarness.create(name);
     try {
         await scenario(harness);

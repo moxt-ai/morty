@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import type { HttpError } from "../../../infra/http-error.ts";
 
 export const platformIdentifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
 export const platformProjectSchema = v.pipe(
@@ -7,7 +8,7 @@ export const platformProjectSchema = v.pipe(
 );
 export type PlatformProject = v.InferOutput<typeof platformProjectSchema>;
 
-export class PlatformProjectError extends Error {
+export class PlatformProjectError extends Error implements HttpError {
     readonly code: string;
     readonly status: number;
     constructor(code: string, message: string, status: number, options?: ErrorOptions) {
@@ -16,4 +17,9 @@ export class PlatformProjectError extends Error {
         this.code = code;
         this.status = status;
     }
+
+    readonly toHttpJson: HttpError["toHttpJson"] = () => ({
+        body: { error: { code: this.code, message: this.message } },
+        status: this.status,
+    });
 }

@@ -2,6 +2,7 @@ import * as v from "valibot";
 import { createApplicationDependencies } from "../../../composition/application-context.ts";
 import { projectBindings } from "../../../composition/chat-shards.ts";
 import { json } from "../../../infra/http.ts";
+import { ManagementError } from "../entity/management-error.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
 import { projectLocationHint } from "./project-location.ts";
 import { provisionUserBot } from "./user-bot-setup.ts";
@@ -15,8 +16,8 @@ const bindingInput = v.pipe(
     v.readonly(),
 );
 
-function unavailable(): Response {
-    return json({ error: { code: "AUTH_UNAVAILABLE", message: "Sign-in is temporarily unavailable." } }, 503);
+function unavailable(): never {
+    throw new ManagementError("AUTH_UNAVAILABLE", "Sign-in is temporarily unavailable.", 503);
 }
 
 export function createAuthenticationRoutes() {
@@ -24,7 +25,7 @@ export function createAuthenticationRoutes() {
         .all("/config", (context) => {
             const request = context.req.raw;
             if (request.method !== "GET") {
-                return json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed." } }, 405, {
+                throw new ManagementError("METHOD_NOT_ALLOWED", "Method not allowed.", 405, {
                     Allow: "GET",
                 });
             }
@@ -34,7 +35,7 @@ export function createAuthenticationRoutes() {
         .all("/session", async (context) => {
             const request = context.req.raw;
             if (request.method !== "GET") {
-                return json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed." } }, 405, {
+                throw new ManagementError("METHOD_NOT_ALLOWED", "Method not allowed.", 405, {
                     Allow: "GET",
                 });
             }
@@ -44,7 +45,7 @@ export function createAuthenticationRoutes() {
                 case "authenticated":
                     return json(result.session);
                 case "unauthenticated":
-                    return json({ error: { code: "UNAUTHENTICATED", message: "Sign in to continue." } }, 401);
+                    throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
                 case "unavailable":
                     return unavailable();
             }
@@ -77,7 +78,7 @@ export function createAuthenticationRoutes() {
                 context.req.raw.signal,
             );
             if (transfer === null) {
-                return json({ error: { code: "UNAUTHENTICATED", message: "Anonymous identity is required." } }, 401);
+                throw new ManagementError("UNAUTHENTICATED", "Anonymous identity is required.", 401);
             }
             const url = new URL(
                 "/continue",
@@ -97,11 +98,11 @@ export function createAuthenticationRoutes() {
                 return unavailable();
             }
             if (session.kind === "unauthenticated") {
-                return json({ error: { code: "UNAUTHENTICATED", message: "Sign in to continue." } }, 401);
+                throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
             }
             const bots = await context.env.storages.managedBots.listBots(session.session.userId, signal);
             if (!bots.some((bot) => bot.botId === input.botId)) {
-                return json({ error: { code: "BOT_NOT_FOUND", message: "Bot is unavailable." } }, 404);
+                throw new ManagementError("BOT_NOT_FOUND", "Bot is unavailable.", 404);
             }
             const ticket = await context.env.services.authentication.createPairing(
                 session.session.userId,
@@ -122,25 +123,16 @@ export function createAuthenticationRoutes() {
             const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(15000)]);
             const identity = await context.env.services.authentication.redeemPairing(input.token, signal);
             if (identity === null) {
-                return json(
-                    {
-                        error: {
-                            code: "PAIRING_TICKET_UNAVAILABLE",
-                            message: "Copy a fresh pairing instruction from your Chat page.",
-                        },
-                    },
+                throw new ManagementError(
+                    "PAIRING_TICKET_UNAVAILABLE",
+                    "Copy a fresh pairing instruction from your Chat page.",
                     410,
-                    { "Cache-Control": "no-store" },
                 );
             }
             const { origin, appId } = context.env.gateways.platformProjects.configuration();
             const project = await context.env.storages.platformProjects.read(identity.userId, origin, appId, signal);
             if (project === null) {
-                return json(
-                    { error: { code: "PROJECT_REQUIRED", message: "The Bot's Project is unavailable." } },
-                    409,
-                    { "Cache-Control": "no-store" },
-                );
+                throw new ManagementError("PROJECT_REQUIRED", "The Bot's Project is unavailable.", 409);
             }
             return json({ ...identity, projectId: project.projectId }, 200, { "Cache-Control": "no-store" });
         })
@@ -150,26 +142,24 @@ export function createAuthenticationRoutes() {
                 input.code,
                 context.req.raw.signal,
             );
-            return identity === null
-                ? json(
-                      {
-                          error: {
-                              code: "TRANSFER_UNAVAILABLE",
-                              message: "This transfer link has expired or has already been used.",
-                          },
-                      },
-                      410,
-                  )
-                : json(identity);
+            if (identity === null) {
+                throw new ManagementError(
+                    "TRANSFER_UNAVAILABLE",
+                    "This transfer link has expired or has already been used.",
+                    410,
+                );
+            }
+            return json(identity);
         })
         .get("/identity/clerk-binding", async (context) => {
             const result = await context.env.services.authentication.clerkBinding(
                 context.get("bearerToken"),
                 context.req.raw.signal,
             );
-            return result === null
-                ? json({ error: { code: "UNAUTHENTICATED", message: "Sign in to continue." } }, 401)
-                : json(result);
+            if (result === null) {
+                throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
+            }
+            return json(result);
         })
         .post("/identity/clerk-binding", async (context) => {
             const input = v.parse(bindingInput, await context.req.json());
@@ -183,22 +173,15 @@ export function createAuthenticationRoutes() {
                 case "bound":
                     return json(result);
                 case "conflict":
-                    return json(
-                        {
-                            error: {
-                                code: "BINDING_CONFLICT",
-                                message: "This account is already connected to another local user.",
-                            },
-                        },
+                    throw new ManagementError(
+                        "BINDING_CONFLICT",
+                        "This account is already connected to another local user.",
                         409,
                     );
                 case "invalid-local-user":
-                    return json(
-                        { error: { code: "INVALID_LOCAL_USER", message: "The local user cannot be connected." } },
-                        409,
-                    );
+                    throw new ManagementError("INVALID_LOCAL_USER", "The local user cannot be connected.", 409);
                 case "unauthenticated":
-                    return json({ error: { code: "UNAUTHENTICATED", message: "Sign in to continue." } }, 401);
+                    throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
             }
         });
 }

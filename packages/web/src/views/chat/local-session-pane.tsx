@@ -11,6 +11,8 @@ import { type MobiusClient, type MobiusMessagePage, MobiusPageRequest } from "@m
 import { ArrowLeft, Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
+import { ComposerSurface } from "../../components/chat/composer-surface.tsx";
+import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
@@ -290,7 +292,7 @@ export function LocalSessionPane({
     const busy = connection.kind !== "ready" || operation.kind === "sending" || operation.kind === "configuring";
     return (
         <section className="flex min-h-0 min-w-0 flex-1 animate-cloud-enter flex-col motion-reduce:animate-none">
-            <div className="flex items-center gap-3 border-b border-border px-5 py-4">
+            <div className="flex items-center gap-3 border-b border-border bg-card/80 px-5 py-4 backdrop-blur-sm">
                 <Button variant="ghost" size="icon" onClick={onBack} aria-label="Back to Bot chat">
                     <ArrowLeft className="size-4" />
                 </Button>
@@ -311,34 +313,32 @@ export function LocalSessionPane({
                     followLatest.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
                 }}
                 aria-label="Local session messages"
-                className="min-h-0 flex-1 space-y-5 overflow-y-auto p-6"
+                className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10"
             >
                 {session.result.history.status === "unavailable" && (
                     <p className="text-sm text-muted-foreground">This agent does not expose saved message history.</p>
                 )}
                 {messages.map((message) => (
-                    <article
-                        key={message.id}
-                        aria-label={message.role === "user" ? "Your message" : "Agent response"}
-                        className={`mx-auto w-full min-w-0 max-w-3xl rounded-2xl px-4 py-3 text-sm leading-7 [overflow-wrap:anywhere] ${message.role === "user" ? "whitespace-pre-wrap bg-accent" : ""}`}
-                    >
-                        {message.role === "assistant" && message.text.length > 0 ? (
-                            <AgentMarkdown
-                                markdown={message.text}
-                                streaming={
-                                    operation.kind === "sending" && message.id === `${operation.commandId}-reply`
-                                }
-                            />
-                        ) : (
-                            message.text ||
-                            (message.attempt?.kind === "failed"
-                                ? ""
-                                : operation.kind === "sending"
-                                  ? "Agent is thinking…"
-                                  : "No text response.")
-                        )}
-                        {message.attempt !== null && <AttemptFailure attempt={message.attempt} botId={botId} />}
-                    </article>
+                    <div key={message.id} className="mx-auto w-full min-w-0 max-w-3xl">
+                        <MessageBubble speaker={message.role}>
+                            {message.role === "assistant" && message.text.length > 0 ? (
+                                <AgentMarkdown
+                                    markdown={message.text}
+                                    streaming={
+                                        operation.kind === "sending" && message.id === `${operation.commandId}-reply`
+                                    }
+                                />
+                            ) : (
+                                message.text ||
+                                (message.attempt?.kind === "failed"
+                                    ? ""
+                                    : operation.kind === "sending"
+                                      ? "Agent is thinking…"
+                                      : "No text response.")
+                            )}
+                            {message.attempt !== null && <AttemptFailure attempt={message.attempt} botId={botId} />}
+                        </MessageBubble>
+                    </div>
                 ))}
             </div>
             <form
@@ -382,7 +382,7 @@ export function LocalSessionPane({
                         This agent provides a history preview but does not support continuing this session.
                     </p>
                 ) : (
-                    <div className="flex items-end gap-3 rounded-2xl border border-border bg-card p-3 shadow-sm">
+                    <ComposerSurface>
                         <Textarea
                             aria-label="Message local session"
                             placeholder="Continue this conversation…"
@@ -398,7 +398,7 @@ export function LocalSessionPane({
                         >
                             <Send className="size-4" />
                         </Button>
-                    </div>
+                    </ComposerSurface>
                 )}
             </form>
         </section>
