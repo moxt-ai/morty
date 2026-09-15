@@ -140,9 +140,10 @@ local-stack runner and diagnostics used by the conversation scenarios. Playwrigh
 global setup builds Mobius, Chat, and the setup bundle once before three workers
 run individual journeys in parallel, including scenarios in the same file. Each
 journey owns temporary storage, Runtime state, dynamic HTTP and inspector ports,
-and its browser. Both local `pnpm test:e2e` and the single browser CI job use this
-execution model. The required `check` status waits for quality checks and browser
-journeys; failed journeys retain their own diagnostics directories. HTTP integration
+and its browser. Run these journeys locally with `pnpm test:e2e`; failed journeys
+retain their own diagnostics directories. The `Verify browser journeys` job is no
+longer scheduled in CI, and the required `check` status waits for the parallel
+quality-check matrix. HTTP integration
 coverage additionally runs the TypeScript CLI as a subprocess to verify identity
 reuse, ticket consumption, private configuration, and Runtime replacement failures.
 
