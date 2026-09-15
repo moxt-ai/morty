@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { mock } from "node:test";
 import { pathToFileURL } from "node:url";
@@ -17,10 +17,11 @@ export async function createTestRuntime(harness: E2EHarness) {
     // The stateful ACP agent implements sessions and replies without requiring
     // model-provider credentials. Chat, Platform and Runtime are real processes.
     const binary = join(harness.workDirectory, "agent.sh");
+    await mkdir(join(harness.workDirectory, "agent-state"), { recursive: true });
     const agent = join(repository, "third-party/mobius/e2e/fixtures/fake-acp-agent/src/cli.ts");
     await writeFile(
         binary,
-        `#!/bin/sh\nif [ "$1" = "--version" ]; then echo '1.2.0'; exit 0; fi\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(agent)} --agent-name OpenCode "$@"\n`,
+        `#!/bin/sh\nif [ "$1" = "--version" ]; then echo '1.2.0'; exit 0; fi\nexport MOBIUS_FAKE_ACP_STATE_DIRECTORY=${JSON.stringify(join(harness.workDirectory, "agent-state"))}\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(agent)} --agent-name OpenCode "$@"\n`,
     );
     await chmod(binary, 0o700);
     const stack = await LocalStack.create(harness, {
@@ -49,6 +50,7 @@ export async function createTestRuntime(harness: E2EHarness) {
             page,
             origin: stack.chatOrigin,
             openChat,
+            cancelSessionTurn: (sessionId: string, turnId: string) => chat.cancelSessionTurn(sessionId, turnId),
             openPairedChat: async () => {
                 await openChat();
                 const pairing = await chat.createPairing();

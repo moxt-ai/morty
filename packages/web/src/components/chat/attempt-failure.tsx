@@ -1,7 +1,7 @@
 import type { MobiusMessagePage } from "@moxt-ai/mobius-sdk/browser";
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
-import { Button } from "../../components/ui/cloud-button.tsx";
+import { Button } from "../ui/cloud-button.tsx";
 
 export function AttemptFailure({
     attempt,

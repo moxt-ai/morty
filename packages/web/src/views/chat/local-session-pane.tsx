@@ -1,4 +1,5 @@
 import {
+    MobiusAgentActivityEvent,
     MobiusAgentMessageEvent,
     MobiusControlEvent,
     MobiusRunningAttemptSummary,
@@ -7,25 +8,18 @@ import {
     MobiusTurnStartedEvent,
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
-import { type MobiusClient, type MobiusMessagePage, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
+import { type MobiusClient, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
 import { ArrowLeft, Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
 import { ComposerSurface } from "../../components/chat/composer-surface.tsx";
-import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
+import { type RecordedAgentActivity, recordAgentActivity } from "../../services/chat/agent-activities.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
-import { AttemptFailure } from "./attempt-failure.tsx";
+import { type LocalMessage, LocalSessionMessage } from "./local-session-message.tsx";
 import type { OpenLocalSession } from "./local-session-sidebar.tsx";
 
-interface Message {
-    readonly id: string;
-    readonly role: "user" | "assistant";
-    readonly text: string;
-    readonly attempt: MobiusMessagePage["messages"][number]["attempt"] | null;
-}
 type Operation =
     | { readonly kind: "idle" }
     | { readonly kind: "sending"; readonly commandId: string }
@@ -43,20 +37,21 @@ export function LocalSessionPane({
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession">;
 }) {
-    const [messages, setMessages] = useState<readonly Message[]>(() =>
+    const [messages, setMessages] = useState<readonly LocalMessage[]>(() =>
         session.result.history.status === "available"
-            ? session.result.history.messages.map((message, index) => ({
-                  id: `history-${index}`,
-                  role: message.role,
-                  text: message.text,
-                  attempt: null,
-              }))
+            ? session.result.history.messages.map((message, index): LocalMessage => {
+                  const id = `history-${index}`;
+                  return message.role === "user"
+                      ? { id, role: "user", text: message.text }
+                      : { id, role: "assistant", text: message.text, attempt: null, commandId: null };
+              })
             : [],
     );
     const [options, setOptions] = useState<readonly SessionConfigOption[]>(
         session.result.action === "preview" ? [] : session.result.ready.configOptions,
     );
     const [draft, setDraft] = useState("");
+    const [activities, setActivities] = useState<ReadonlyMap<string, RecordedAgentActivity>>(new Map());
     const [operation, setOperation] = useState<Operation>({ kind: "idle" });
     const lifetime = useRef(new AbortController());
     const command = useRef("");
@@ -99,7 +94,7 @@ export function LocalSessionPane({
             }
             setMessages((current) =>
                 current.map((item) =>
-                    item.id === `${currentCommand}-reply`
+                    item.role === "assistant" && item.commandId === currentCommand
                         ? { ...item, text: message.response, attempt: message.attempt }
                         : item,
                 ),
@@ -122,6 +117,10 @@ export function LocalSessionPane({
                 {
                     receive: async (event) => {
                         const payload = event.payload;
+                        if (payload instanceof MobiusAgentActivityEvent) {
+                            setActivities((current) => recordAgentActivity(current, event));
+                            return true;
+                        }
                         if (
                             command.current !== "" &&
                             payload instanceof MobiusControlEvent &&
@@ -151,13 +150,15 @@ export function LocalSessionPane({
                         if (payload instanceof MobiusAgentMessageEvent) {
                             setMessages((current) =>
                                 current.map((item) =>
-                                    item.id === replyId ? { ...item, text: item.text + payload.text } : item,
+                                    item.role === "assistant" && item.id === replyId
+                                        ? { ...item, text: item.text + payload.text }
+                                        : item,
                                 ),
                             );
                         } else if (payload instanceof MobiusTurnStartedEvent) {
                             setMessages((current) =>
                                 current.map((item) =>
-                                    item.id === replyId
+                                    item.role === "assistant" && item.id === replyId
                                         ? {
                                               ...item,
                                               attempt: new MobiusRunningAttemptSummary(
@@ -236,8 +237,8 @@ export function LocalSessionPane({
         setDraft("");
         setMessages((current) => [
             ...current,
-            { id: commandId, role: "user", text: prompt, attempt: null },
-            { id: `${commandId}-reply`, role: "assistant", text: "", attempt: null },
+            { id: commandId, role: "user", text: prompt },
+            { id: `${commandId}-reply`, role: "assistant", text: "", attempt: null, commandId },
         ]);
         setOperation({ kind: "sending", commandId });
         try {
@@ -290,6 +291,7 @@ export function LocalSessionPane({
         }
     };
     const busy = connection.kind !== "ready" || operation.kind === "sending" || operation.kind === "configuring";
+    const activeCommandId = connection.kind === "ready" && operation.kind === "sending" ? operation.commandId : null;
     return (
         <section className="flex min-h-0 min-w-0 flex-1 animate-cloud-enter flex-col motion-reduce:animate-none">
             <div className="flex items-center gap-3 border-b border-border bg-card/80 px-5 py-4 backdrop-blur-sm">
@@ -320,24 +322,13 @@ export function LocalSessionPane({
                 )}
                 {messages.map((message) => (
                     <div key={message.id} className="mx-auto w-full min-w-0 max-w-3xl">
-                        <MessageBubble speaker={message.role}>
-                            {message.role === "assistant" && message.text.length > 0 ? (
-                                <AgentMarkdown
-                                    markdown={message.text}
-                                    streaming={
-                                        operation.kind === "sending" && message.id === `${operation.commandId}-reply`
-                                    }
-                                />
-                            ) : (
-                                message.text ||
-                                (message.attempt?.kind === "failed"
-                                    ? ""
-                                    : operation.kind === "sending"
-                                      ? "Agent is thinking…"
-                                      : "No text response.")
-                            )}
-                            {message.attempt !== null && <AttemptFailure attempt={message.attempt} botId={botId} />}
-                        </MessageBubble>
+                        <LocalSessionMessage
+                            message={message}
+                            activities={activities}
+                            activeCommandId={activeCommandId}
+                            sessionId={sessionId}
+                            botId={botId}
+                        />
                     </div>
                 ))}
             </div>

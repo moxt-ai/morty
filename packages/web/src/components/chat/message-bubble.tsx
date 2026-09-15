@@ -8,7 +8,7 @@ export function MessageBubble({
 }: {
     readonly speaker: "user" | "assistant";
     readonly children: ReactNode;
-    readonly "data-testid"?: string;
+    readonly "data-testid"?: string | undefined;
 }) {
     return (
         <article
