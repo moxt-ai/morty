@@ -53,7 +53,8 @@ Configure these **GitHub Environment variables** individually:
 - `CLOUDFLARE_ACCOUNT_ID` — deployment account.
 
 Set the **GitHub Environment secret** `CLOUDFLARE_API_TOKEN` for deployment.
-Platform currently requires no runtime secrets. See
+Set the individual GitHub secret `CLERK_SECRET_KEY` when enabling organization
+invite links. CD syncs it to the edge and regional Workers when supplied. See
 `third-party/mobius/docs/platform-hosting.md` for authentication formats.
 
 Platform previously used `mobius-relay-production` for both environments. Copy
@@ -73,5 +74,5 @@ Explicitly delete retired secret bindings in Cloudflare after removing their
 application dependency and GitHub configuration. Resource bindings, routes, and
 migrations are defined in Wrangler configuration.
 
-The Mobius changes are in a Git submodule: publish them in the Mobius repository
-and update this repository's submodule revision for delivery.
+The Mobius workflow changes are published in a separate Mobius PR. Its CD runs
+from Mobius main; Chat's SDK submodule revision is independent of that deployment.
