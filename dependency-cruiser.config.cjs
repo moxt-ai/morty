@@ -1,0 +1,38 @@
+module.exports = {
+    forbidden: [
+        {
+            name: "storage-does-not-depend-on-upper-layers",
+            severity: "error",
+            from: {
+                path: [
+                    "^packages/worker/src/(storage|entity|infra)/",
+                    "^packages/worker/src/components/[^/]+/(storage|entity|infra)/",
+                ],
+            },
+            to: {
+                reachable: true,
+                path: [
+                    "^packages/worker/src/(service|http|composition|gateway|do)/",
+                    "^packages/worker/src/components/[^/]+/(service|http|composition|gateway|do)/",
+                ],
+            },
+        },
+        {
+            name: "browser-does-not-import-worker-implementation",
+            severity: "error",
+            from: { path: "^packages/web/src/" },
+            to: { path: "^packages/worker/" },
+        },
+        {
+            name: "worker-does-not-import-browser-implementation",
+            severity: "error",
+            from: { path: "^packages/worker/src/" },
+            to: { path: "^packages/web/" },
+        },
+    ],
+    options: {
+        doNotFollow: { path: "node_modules|third-party" },
+        tsPreCompilationDeps: true,
+        enhancedResolveOptions: { exportsFields: ["exports"], conditionNames: ["import", "types", "default"] },
+    },
+};

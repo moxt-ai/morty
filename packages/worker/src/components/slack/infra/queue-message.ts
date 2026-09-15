@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { slackEventCallbackPayloadSchema } from "../service/events/events";
+import { slackEventCallbackPayloadSchema } from "../entity/events";
 
 const slackMessageFileSchema = v.pipe(
     v.object({

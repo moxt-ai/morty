@@ -69,11 +69,16 @@ export async function createMobiusPlatformFixture() {
             "content-type": "application/json",
         };
         const tenantResponse = await app.request("/mobius/api/v1/platform/tenants", {
-            method: "POST",
             headers,
-            body: JSON.stringify({ displayName: "Cloud test tenant" }),
         });
-        const tenant = v.parse(v.object({ tenantId: v.string() }), await tenantResponse.json());
+        const { tenants } = v.parse(
+            v.object({ tenants: v.array(v.object({ tenantId: v.string() })) }),
+            await tenantResponse.json(),
+        );
+        const tenant = tenants[0];
+        if (tenant === undefined) {
+            throw new Error("Expected the developer's active organization");
+        }
         const applicationResponse = await app.request("/mobius/api/v1/apps", {
             method: "POST",
             headers,

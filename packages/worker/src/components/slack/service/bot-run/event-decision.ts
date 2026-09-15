@@ -4,27 +4,9 @@ type EventLocation = "DM_TOP" | "DM_THREAD" | "CHANNEL_TOP" | "CHANNEL_THREAD";
 
 type SessionState = "NO_SESSION" | "HAS_SESSION";
 
-export type ContextLoadType =
-    | "CHANNEL_FULL"
-    | "CHANNEL_INCREMENTAL"
-    | "THREAD_FULL_WITH_CHANNEL"
-    | "THREAD_INCREMENTAL";
+import type { BotSender, ContextLoadType, Sender, UserSender } from "../../entity/conversation";
 
-type UserSender = {
-    readonly kind: "user";
-    readonly slackTeamId: string;
-    readonly slackUserId: string;
-};
-
-type BotSender = {
-    readonly kind: "bot";
-    readonly botId: string;
-    readonly slackBotId: string;
-    readonly slackTeamId: string;
-    readonly targetAccess: "allowed" | "denied";
-};
-
-export type Sender = UserSender | BotSender;
+export type { ContextLoadType, Sender } from "../../entity/conversation";
 
 export interface DecisionInput {
     readonly botInitiatedThread:

@@ -1,8 +1,9 @@
 import * as v from "valibot";
-import type { AttachmentStorageResolver, DatabaseResolver } from "../index.ts";
-import { TenantStorageError } from "../index.ts";
+import type { DatabaseResolver } from "../infra/database-resolver.ts";
+import type { AttachmentStorageResolver } from "./attachment-storage-resolver.ts";
 import { D1SqlDatabase } from "./d1-database.ts";
 import { R2SlackAttachmentStorage } from "./r2-slack-attachment-storage.ts";
+import { TenantStorageError } from "./tenant-storage-error.ts";
 
 export interface CloudSlackStorageBindings {
     readonly DATABASE?: unknown;

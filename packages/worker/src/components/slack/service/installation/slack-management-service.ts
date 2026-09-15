@@ -23,22 +23,6 @@ export type SlackConnectionStatus =
           readonly slackAppId: string;
       };
 
-export interface ManagedSlackApp {
-    readonly botId: string;
-    readonly appName: string;
-    readonly clientId: string;
-    readonly id: number;
-    readonly slackAppId: string;
-    readonly status: "disabled" | "enabled";
-    readonly tenantId: string;
-}
-
-export interface ManagedSlackInstallation {
-    readonly slackTeamId: string;
-    readonly slackTeamName: string | null;
-    readonly status: "connected" | "error" | "token_revoked" | "uninstalled";
-}
-
 export interface SlackManifest {
     readonly display_information: {
         readonly description: string;

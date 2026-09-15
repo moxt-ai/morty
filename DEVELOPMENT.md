@@ -100,3 +100,10 @@ directly and rejects recursive configuration and redirects.
 
 Run `pnpm check`. Product behavior is covered at HTTP and browser boundaries; tests
 use deterministic time and stateful fakes rather than request mocks.
+
+The check includes combined production TS/TSX coverage and executable dependency
+boundaries. `pnpm check:architecture` follows type imports and re-exports. Slack
+storage consumes shared records from `components/slack/entity` and execution ports
+from `infra`, with no dependency on services, gateways, or composition. Biome's
+`useLiteralKeys` rule is disabled because TypeScript's index-signature access rules
+require bracket notation for untrusted records. See `TESTING.md` for report scope.

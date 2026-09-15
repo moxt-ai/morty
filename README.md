@@ -1,5 +1,13 @@
 # Mobius Cloud
 
+[![CI](https://github.com/moxt-ai/mobius-chat/actions/workflows/ci.yml/badge.svg)](https://github.com/moxt-ai/mobius-chat/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/moxt-ai/mobius-chat/branch/main/graph/badge.svg)](https://codecov.io/gh/moxt-ai/mobius-chat)
+
+The engineering-quality target is 95% across lines, statements, functions, and
+branches. `pnpm check` enforces the target over combined web and Worker production
+TS/TSX coverage, together with architecture constraints. The coverage badge shows
+the measured result, not the target. See [Testing](TESTING.md) for scope and commands.
+
 Mobius Cloud is one web application and one Cloudflare Worker. Clerk authenticates
 individual users; Clerk Organizations and Cloud workspaces are not used. A signed-in
 user can create or select a Mobius bot, chat with it, and connect it to Slack.

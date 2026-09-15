@@ -1,4 +1,7 @@
 import * as v from "valibot";
+import { type MobiusBinding, mobiusBindingSchema } from "../components/slack/entity/mobius-binding";
+
+export type { MobiusBinding } from "../components/slack/entity/mobius-binding";
 
 export interface MobiusTransport {
     readonly request: (path: string, init?: RequestInit) => Promise<Response>;
@@ -51,18 +54,6 @@ export class FetchMobiusTransport implements MobiusTransport {
 }
 
 const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
-export const mobiusBindingSchema = v.pipe(
-    v.object({
-        tenantId: identifier,
-        slackBotId: identifier,
-        botId: identifier,
-        connectionId: identifier,
-        deliveryTargetId: identifier,
-        credential: v.pipe(v.string(), v.minLength(32)),
-    }),
-    v.readonly(),
-);
-export type MobiusBinding = v.InferOutput<typeof mobiusBindingSchema>;
 export const botBindingInputSchema = v.pipe(
     v.object({
         botId: identifier,

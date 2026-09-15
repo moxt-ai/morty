@@ -26,7 +26,10 @@ concurrency:
 jobs:
   check:
     name: check
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    permissions:
+      contents: read
+      id-token: write
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -70,12 +73,22 @@ jobs:
 
       - run: pnpm check
 
+      - name: Upload complete coverage
+        if: ${{ !cancelled() && hashFiles('coverage/lcov.info') != '' }}
+        uses: codecov/codecov-action@04b047e8bb82a0c002c8312c1c880fbc6a999d45 # v5
+        with:
+          use_oidc: true
+          files: coverage/lcov.info
+          disable_search: true
+          fail_ci_if_error: true
+
       - name: Validate Cloud D1 migrations
         run: |
           pnpm exec wrangler d1 migrations apply CHAT_DATABASE_APAC --local
           pnpm exec wrangler d1 migrations apply CHAT_DATABASE_WNAM --local
 
   deploy:
+    needs: check
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     uses: ./.github/workflows/deploy.yml
     secrets: inherit

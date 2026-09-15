@@ -1,4 +1,4 @@
-import type { TenantContext } from "../service/identity/tenant-context";
+import type { TenantContext } from "../entity/tenant-context";
 
 export interface SlackAppDirectory {
     readonly find: (

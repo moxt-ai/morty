@@ -1,13 +1,8 @@
+import type { TenantContext } from "../../entity/tenant-context";
 import type { HumanPrincipal } from "./identity-service.ts";
 
-export interface TenantContext {
-    readonly tenantId: string;
-}
+export { type TenantContext, tenantContext } from "../../entity/tenant-context";
 
 export function humanTenant(principal: HumanPrincipal): TenantContext {
     return { tenantId: principal.tenantId };
-}
-
-export function tenantContext(tenantId: string): TenantContext {
-    return { tenantId };
 }
