@@ -54,8 +54,8 @@ jobs:
           SLACK_OAUTH_STATE_SIGNING_KEY: ${{ secrets.SLACK_OAUTH_STATE_SIGNING_KEY }}
           SLACK_TOKEN_ENCRYPTION_KEY: ${{ secrets.SLACK_TOKEN_ENCRYPTION_KEY }}
 
-  check:
-    name: check
+  quality:
+    name: Quality checks
     if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -100,19 +100,6 @@ jobs:
 
       - run: pnpm check
 
-      - name: Verify browser journeys
-        run: pnpm test:e2e
-        env:
-          MOBIUS_E2E_ARTIFACT_ROOT: ${{ runner.temp }}/mobius-chat-setup-e2e
-
-      - name: Upload setup journey failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: setup-e2e-${{ github.run_id }}
-          path: ${{ runner.temp }}/mobius-chat-setup-e2e/**/artifacts
-          if-no-files-found: ignore
-
       - name: Save coverage report
         continue-on-error: true
         if: ${{ !cancelled() && hashFiles('coverage/lcov.info') != '' }}
@@ -126,6 +113,81 @@ jobs:
         run: |
           pnpm exec wrangler d1 migrations apply CHAT_DATABASE_APAC --local
           pnpm exec wrangler d1 migrations apply CHAT_DATABASE_WNAM --local
+
+  browser-journeys:
+    name: Verify browser journeys (${{ matrix.shard }}/3)
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read Mobius revision
+        id: mobius
+        run: echo "revision=$(git rev-parse HEAD:third-party/mobius)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout Mobius
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: moxt-ai/mobius
+          ref: ${{ steps.mobius.outputs.revision }}
+          path: third-party/mobius
+          persist-credentials: false
+          token: ${{ secrets.MOBIUS_READ_TOKEN }}
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Enable pnpm
+        id: pnpm
+        shell: bash
+        run: |
+          corepack enable
+          pnpm --version
+          echo "store-path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pnpm.outputs.store-path }}
+          key: pnpm-v11-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-v11-${{ runner.os }}-${{ runner.arch }}-
+
+      - run: pnpm install --frozen-lockfile
+
+      # Shard individual scenarios while keeping shared builds serial per runner.
+      - name: Verify browser journeys
+        run: pnpm test:e2e --fully-parallel --workers=1 --shard=${{ matrix.shard }}/3
+        env:
+          MOBIUS_E2E_ARTIFACT_ROOT: ${{ runner.temp }}/mobius-chat-setup-e2e
+
+      - name: Upload browser journey failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: setup-e2e-${{ github.run_id }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/mobius-chat-setup-e2e/**/artifacts
+          if-no-files-found: ignore
+
+  check:
+    name: check
+    needs: [quality, browser-journeys]
+    if: always() && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require quality checks and all browser shards
+        run: test "$QUALITY_RESULT" = success && test "$BROWSER_RESULT" = success
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          BROWSER_RESULT: ${{ needs.browser-journeys.result }}
 
   deploy:
     needs: [check, validate-worker-config]

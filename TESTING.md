@@ -126,8 +126,12 @@ hosted SDK, so the suite requires internet access but no Clerk login. Setup
 waits use explicitly advanced fake timers with a fixed system time.
 
 These tests require Chrome and the checked-out Mobius submodule. They share the
-local-stack runner and diagnostics used by the conversation scenarios and run after
-`pnpm check` in PR/merge-queue CI. HTTP integration
+local-stack runner and diagnostics used by the conversation scenarios. CI runs
+the individual scenarios across three isolated shard runners in parallel with
+`pnpm check`, retaining one Playwright worker per runner to serialize shared builds.
+The required `check` status waits for quality checks and every browser shard;
+failed shards upload separately named diagnostics. Locally, `pnpm test:e2e` remains
+serial. HTTP integration
 coverage additionally runs the TypeScript CLI as a subprocess to verify identity
 reuse, ticket consumption, private configuration, and Runtime replacement failures.
 
