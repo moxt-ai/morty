@@ -1,4 +1,5 @@
 import type { Response as BrowserResponse } from "playwright-core";
+import { MobiusClient } from "../../../third-party/mobius/packages/mobius-sdk/src/browser.ts";
 import type { E2EHarness } from "./harness.ts";
 
 interface RequestOptions {
@@ -92,6 +93,31 @@ export class ChatApi {
             body: { idempotencyKey: crypto.randomUUID() },
         });
     }
+
+    readonly cancelSessionTurn = async (sessionId: string, turnId: string) => {
+        const identity = this.#requireIdentity();
+        const access = await this.#request(
+            `/mobius-cloud/api/chat/bots/${encodeURIComponent(identity.botId)}/session-access`,
+            {
+                body: { sessionId },
+            },
+        );
+        const client = new MobiusClient({
+            endpoint: text(access.endpoint, "session endpoint"),
+            projectId: text(access.projectId, "project ID"),
+            credentialProvider: {
+                credential: async (signal) => {
+                    signal.throwIfAborted();
+                    return text(access.credential, "credential");
+                },
+            },
+        });
+        try {
+            await client.turns.cancel(sessionId, turnId, { idempotencyKey: crypto.randomUUID() }, this.signal);
+        } finally {
+            client.close();
+        }
+    };
 
     async waitForOpenCode(harness: E2EHarness, pairingId: string) {
         const paired = await harness.waitFor(

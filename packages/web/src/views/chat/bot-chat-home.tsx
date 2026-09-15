@@ -1,24 +1,17 @@
-import {
-    type AgentDisplayContent,
-    MobiusAgentActivityEvent,
-    MobiusAgentMessageEvent,
-    type MobiusSessionEvent,
-} from "@moxt-ai/mobius-sdk";
+import { MobiusAgentActivityEvent, MobiusAgentMessageEvent, type MobiusSessionEvent } from "@moxt-ai/mobius-sdk";
 import { type MobiusBrowserClient, type MobiusBrowserHistory, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
 import { MessageSquare, Send } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
-import { AgentRichContent } from "../../components/agents/agent-rich-content.tsx";
 import { ComposerSurface } from "../../components/chat/composer-surface.tsx";
-import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
 import { dataTestId } from "../../data-testid.ts";
+import { type RecordedAgentActivity, recordAgentActivity } from "../../services/chat/agent-activities.ts";
 import type { BotChatApi, ChatDraftConfiguration, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
-import { AttemptFailure } from "./attempt-failure.tsx";
+import { BotConversationTurn } from "./bot-conversation-turn.tsx";
 import { ChatControls } from "./chat-controls.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
 import { LocalSessionPane } from "./local-session-pane.tsx";
@@ -26,11 +19,6 @@ import { LocalSessionSidebar, type OpenLocalSession } from "./local-session-side
 import { PairingInstruction } from "./pairing-instruction.tsx";
 
 type SetupReason = "unconfigured" | "inactive" | "no-selection" | "agent-missing" | "agent-offline" | "agent-required";
-
-interface ActivityContent {
-    readonly commandId: string;
-    readonly contents: readonly AgentDisplayContent[];
-}
 
 function setupReason(workspace: ChatWorkspace): SetupReason | null {
     if (workspace.status !== "active") {
@@ -75,80 +63,13 @@ type State =
           readonly bot: ManagedBot;
           readonly client: MobiusBrowserClient;
           readonly history: MobiusBrowserHistory;
-          readonly activityContents: ReadonlyMap<string, ActivityContent>;
+          readonly activities: ReadonlyMap<string, RecordedAgentActivity>;
       }
     | { readonly kind: "failed"; readonly message: string };
 type Sending =
     | { readonly kind: "idle" }
     | { readonly kind: "sending" }
     | { readonly kind: "failed"; readonly message: string };
-
-function BotArtifactContent({
-    botId,
-    contents,
-    requests,
-    sessionId,
-}: {
-    readonly botId: string;
-    readonly contents: readonly AgentDisplayContent[];
-    readonly requests: Pick<BotChatApi, "connectSession">;
-    readonly sessionId: string;
-}) {
-    const [client, setClient] = useState<Awaited<ReturnType<BotChatApi["connectSession"]>> | null | undefined>();
-    useEffect(() => {
-        const controller = new AbortController();
-        let connected: Awaited<ReturnType<BotChatApi["connectSession"]>> | null = null;
-        void requests
-            .connectSession(botId, sessionId, controller.signal)
-            .then((value) => {
-                if (controller.signal.aborted) {
-                    value.close();
-                    return;
-                }
-                connected = value;
-                setClient(value);
-            })
-            .catch(() => {
-                if (!controller.signal.aborted) {
-                    setClient(null);
-                }
-            });
-        return () => {
-            controller.abort();
-            connected?.close();
-        };
-    }, [botId, requests, sessionId]);
-    return client === undefined ? (
-        <p className="text-xs text-muted-foreground">Loading image…</p>
-    ) : client === null ? (
-        <p className="text-xs text-muted-foreground">Image content could not be loaded.</p>
-    ) : (
-        <AgentRichContent contents={contents} serviceClient={client} sessionId={sessionId} />
-    );
-}
-
-function BotTurnArtifacts({
-    commandId,
-    activityContents,
-    botId,
-    requests,
-    sessionId,
-}: {
-    readonly commandId: string;
-    readonly activityContents: ReadonlyMap<string, ActivityContent>;
-    readonly botId: string;
-    readonly requests: Pick<BotChatApi, "connectSession">;
-    readonly sessionId: string;
-}) {
-    const contents = [...activityContents.values()].flatMap((activity) =>
-        activity.commandId === commandId ? activity.contents.filter((content) => content.type === "image") : [],
-    );
-    return contents.length === 0 ? null : (
-        <section aria-label="Agent image output" className="min-w-0 px-4">
-            <BotArtifactContent botId={botId} contents={contents} requests={requests} sessionId={sessionId} />
-        </section>
-    );
-}
 
 function updateHistory(current: State, client: MobiusBrowserClient, history: MobiusBrowserHistory): State {
     if (
@@ -161,17 +82,12 @@ function updateHistory(current: State, client: MobiusBrowserClient, history: Mob
     return { ...current, history };
 }
 
-function updateActivityContents(
-    current: State,
-    client: MobiusBrowserClient,
-    event: { readonly payload: unknown },
-): State {
+function updateActivities(current: State, client: MobiusBrowserClient, event: MobiusSessionEvent): State {
     if (current.kind !== "ready" || current.client !== client || !(event.payload instanceof MobiusAgentActivityEvent)) {
         return current;
     }
-    const contents = new Map(current.activityContents);
-    contents.set(event.payload.activityId, { commandId: event.payload.commandId, contents: event.payload.content });
-    return { ...current, activityContents: contents };
+    const activities = recordAgentActivity(current.activities, event);
+    return { ...current, activities };
 }
 
 function updateStreamedHistory(current: State, client: MobiusBrowserClient, event: MobiusSessionEvent): State {
@@ -198,28 +114,6 @@ function updateStreamedHistory(current: State, client: MobiusBrowserClient, even
             ),
         },
     };
-}
-
-function attemptStatus(kind: string): string {
-    switch (kind) {
-        case "none":
-        case "dispatching":
-            return "Waiting for your agent…";
-        case "running":
-            return "Agent is thinking…";
-        case "waiting_input":
-            return "Your agent needs input. Check your local agent.";
-        case "succeeded":
-            return "Agent finished without a text response.";
-        case "cancelled":
-            return "Response cancelled.";
-        case "failed":
-            return "The agent could not complete this message.";
-        case "indeterminate":
-            return "The agent's completion status is unknown. Check your local agent.";
-        default:
-            return "Agent status is unavailable.";
-    }
 }
 
 export function BotChatHome({
@@ -322,7 +216,7 @@ export function BotChatHome({
             client = session;
             let snapshotSequence = BigInt(history.lastCommittedSeq);
             controller.signal.throwIfAborted();
-            setState({ activityContents: new Map(), kind: "ready", bot, client: session, history });
+            setState({ activities: new Map(), kind: "ready", bot, client: session, history });
             const refresh = async () => {
                 const updated = await session.history.read(new MobiusPageRequest(100, ""), controller.signal);
                 if (!controller.signal.aborted) {
@@ -331,7 +225,7 @@ export function BotChatHome({
                 }
             };
             const receive = async (event: MobiusSessionEvent) => {
-                setState((current) => updateActivityContents(current, session, event));
+                setState((current) => updateActivities(current, session, event));
                 if (event.payload instanceof MobiusAgentMessageEvent) {
                     setState((current) => updateStreamedHistory(current, session, event));
                 } else if (
@@ -576,36 +470,17 @@ export function BotChatHome({
                                 <p className="mt-2 text-sm text-muted-foreground">Send a message to your agent.</p>
                             </div>
                         ) : (
-                            [...state.history.turns].reverse().map((turn) => (
-                                <div
-                                    key={turn.commandId}
-                                    className="mx-auto grid min-w-0 w-full max-w-3xl gap-6 [overflow-wrap:anywhere]"
-                                >
-                                    <MessageBubble speaker="user" data-testid={dataTestId.userMessage}>
-                                        {turn.prompt}
-                                    </MessageBubble>
-                                    {turn.response.length > 0 ? (
-                                        <MessageBubble speaker="assistant" data-testid={dataTestId.agentResponse}>
-                                            <AgentMarkdown
-                                                markdown={turn.response}
-                                                streaming={turn.attempt.kind === "running"}
-                                            />
-                                        </MessageBubble>
-                                    ) : turn.attempt.kind !== "failed" ? (
-                                        <p role="status" className="px-4 text-sm text-muted-foreground">
-                                            {attemptStatus(turn.attempt.kind)}
-                                        </p>
-                                    ) : null}
-                                    <BotTurnArtifacts
-                                        commandId={turn.commandId}
-                                        activityContents={state.activityContents}
+                            [...state.history.turns]
+                                .reverse()
+                                .map((turn) => (
+                                    <BotConversationTurn
+                                        key={`${turn.sessionId}:${turn.commandId}`}
+                                        turn={turn}
+                                        activities={state.activities}
                                         botId={state.bot.botId}
                                         requests={requests}
-                                        sessionId={turn.sessionId}
                                     />
-                                    <AttemptFailure attempt={turn.attempt} botId={state.bot.botId} />
-                                </div>
-                            ))
+                                ))
                         )}
                     </div>
                     {(state.kind === "ready" || state.kind === "draft") && (
