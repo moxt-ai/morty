@@ -1,4 +1,5 @@
 import { chromium } from "playwright-core";
+import { buildLocalStack } from "../../packages/e2e/infra/build.ts";
 import { ChatApi, text } from "../../packages/e2e/infra/chat-api.ts";
 import { runE2E } from "../../packages/e2e/infra/harness.ts";
 import { LocalStack, repository } from "../../packages/e2e/infra/local-stack.ts";
@@ -9,6 +10,7 @@ await runE2E("opencode-e2e", async (harness) => {
     harness.record("mobiusChatRevision", revision);
 
     const openCode = await harness.stage("prepare-opencode", () => prepareOpenCode(harness, repository));
+    await buildLocalStack(harness);
     const stack = await LocalStack.create(harness, openCode);
     const application = await stack.startPlatform();
     await stack.startChat(application);

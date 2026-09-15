@@ -106,9 +106,6 @@ export class LocalStack {
             await this.harness.run("git", ["rev-parse", "HEAD"], { cwd: mobiusRepository })
         ).stdout.trim();
         this.harness.record("mobiusRevision", revision);
-        await this.harness.stage("build-mobius", () =>
-            this.harness.run("pnpm", ["--filter", "@moxt-ai/mobius", "build"], { cwd: mobiusRepository }),
-        );
         await this.harness.stage("migrate-platform", async () => {
             await migrate(
                 this.harness,
@@ -167,6 +164,8 @@ export class LocalStack {
                     "127.0.0.1",
                     "--port",
                     String(this.platformPort),
+                    "--inspector-port",
+                    "0",
                     "--persist-to",
                     this.directories.platform,
                 ],
@@ -207,12 +206,7 @@ export class LocalStack {
             SLACK_OAUTH_STATE_SIGNING_KEY: "unused-in-opencode-e2e",
             SLACK_SERVER_BASE_URL: this.chatOrigin,
             SLACK_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
-            VITE_MOBIUS_APP_ID: application.appId,
-            VITE_MOBIUS_BASE_URL: this.platformOrigin,
         };
-        await this.harness.stage("build-chat", () =>
-            this.harness.run("pnpm", ["build", "--mode", "e2e"], { env: { ...variables, NODE_ENV: "production" } }),
-        );
         await this.harness.run("pnpm", [
             "exec",
             "wrangler",
@@ -240,6 +234,8 @@ export class LocalStack {
                 "127.0.0.1",
                 "--port",
                 String(this.chatPort),
+                "--inspector-port",
+                "0",
                 "--persist-to",
                 this.directories.chat,
                 ...variableArguments,
