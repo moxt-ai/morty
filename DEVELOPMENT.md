@@ -64,11 +64,16 @@ and other common settings are inherited from the existing configuration.
 The renderer JSON-encodes `<%% name %%>` substitutions and rejects missing or
 unresolved placeholders before writing valid JSON. Deployment renders configurations from the Vite-built Worker using
 `third-party/mobius/packages/relay-cloudflare-platform/scripts/regional-workers.ts`.
-Both regional backends deploy before the public router. Before the first regional
-deployment, provision the same required runtime secrets on
-`mobius-chat-<environment>-apac` and `mobius-chat-<environment>-wnam` as on the
-public Worker. Secret values are not readable or automatically copied from the
-public Worker; CI verifies all three secret-name inventories before deploying.
+Both regional backends deploy before the public router. Configure the runtime
+variables and secrets in the corresponding GitHub Environment. Deployment validates
+them with `scripts/validate-worker-config.ts`, then supplies them to both regional
+Workers and the public Worker using Wrangler's `--var` and `--secrets-file` options.
+Existing Worker secret values are not read or copied.
+
+CI validates staging configuration for pull requests, merge groups, and ordinary
+main pushes. A manual deployment validates its selected environment. Production
+configuration is also validated inside the production deployment job after its
+environment approval; it must not gate a staging deployment.
 
 To generate configs for inspection after `pnpm build:staging`:
 
