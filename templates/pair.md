@@ -31,14 +31,17 @@ previous configuration. Do not ask for an additional replacement confirmation.
    Honor an explicit user choice instead. Do not ask the user to choose when your
    own harness is available. Complete its installation/authentication if needed.
 
+Run this command in the background so it keeps running after this reply. Closing
+this conversation stops the Runtime it started.
+
 ```sh
 node "$SCRIPT_DIR/setup.mjs" pair --base-url "$BASE_URL" --token="$TOKEN" --harness "$HARNESS"
 ```
 
-This single command stops existing Mobius Runtime processes owned by the current
-OS user, exchanges the ticket, saves private credentials, launches a detached
-Runtime, waits for the requested harness, requests its Bot binding, and checks
-readiness. The Runtime remains running after your agent session ends.
+This single command exchanges the ticket, saves private credentials, launches the
+Runtime attached to this agent session, waits for the requested harness, requests
+its Bot binding, and checks readiness. It does not stop any other local Mobius
+Runtime process. The Runtime exits when your agent session ends.
 
 ## Observe and finish
 

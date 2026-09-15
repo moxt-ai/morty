@@ -573,37 +573,6 @@ test.each([
                 mode: 0o600,
             });
         }
-        // Stateful local Runtime process through the production OS process boundary.
-        // A real connected Runtime would require interactive local agent credentials.
-        const runtimePackage = join(directory, "node_modules", "@moxt-ai", "mobius");
-        await mkdir(join(runtimePackage, "dist"), { recursive: true });
-        await writeFile(
-            join(runtimePackage, "package.json"),
-            JSON.stringify({ name: "@moxt-ai/mobius", bin: { mobius: "dist/cli.js" }, type: "module" }),
-        );
-        const stopped = join(directory, "runtime-stopped");
-        await writeFile(
-            join(runtimePackage, "dist", "cli.js"),
-            `import { writeFileSync } from 'node:fs';
-process.on('SIGTERM', () => { writeFileSync(process.env.STOPPED_FILE, 'stopped'); process.exit(0); });
-process.on('message', () => {});
-process.send('ready');
-`,
-        );
-        const oldRuntime = spawn(
-            process.execPath,
-            [join(runtimePackage, "dist", "cli.js"), "start", "--channel", "saved-channel"],
-            {
-                env: { ...process.env, STOPPED_FILE: stopped },
-                stdio: ["ignore", "ignore", "ignore", "ipc"],
-                signal: AbortSignal.timeout(15000),
-            },
-        );
-        const runtimeClosed = new Promise<void>((resolve) => oldRuntime.once("close", () => resolve()));
-        await new Promise<void>((resolve, reject) => {
-            oldRuntime.once("message", () => resolve());
-            oldRuntime.once("error", reject);
-        });
         const run = (command = mode) =>
             new Promise<{ readonly code: number | null; readonly output: string }>((resolve, reject) => {
                 const child = spawn(
@@ -639,7 +608,6 @@ process.send('ready');
             expect(prepared.code, prepared.output).toBe(1);
             expect(prepared.output).toContain('"code":"RUNTIME_PAIRING_UNAVAILABLE"');
             expect(prepared.output).toContain('"status":"prepared"');
-            expect(await readFile(stopped, "utf8")).toBe("stopped");
             const path = join(directory, "mobius-chat", "config.json");
             const config = v.parse(
                 v.object({ user_token: v.string(), user_id: v.string(), bot_id: v.string(), pairing_key: v.string() }),
@@ -688,8 +656,6 @@ process.send('ready');
             expect(restarted.pairing_key).not.toBe(config.pairing_key);
             await expect(stat(join(directory, "mobius-chat", ".setup-lock"))).rejects.toMatchObject({ code: "ENOENT" });
         } finally {
-            oldRuntime.kill("SIGTERM");
-            await runtimeClosed;
             await rm(directory, { recursive: true, force: true });
             server.closeAllConnections();
             await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));

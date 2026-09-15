@@ -31,14 +31,17 @@ Do not ask for an additional replacement confirmation.
    explicit user choice instead. Complete that harness's installation/authentication
    if needed; do not ask the user to choose when your own harness is available.
 
+Run this command in the background so it keeps running after this reply. Closing
+this conversation stops the Runtime it started.
+
 ```sh
 node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --harness "$HARNESS"
 ```
 
-The command handles identity, Runtime pairing, detached Runtime launch, Bot binding,
-and readiness. It first sends SIGTERM to existing Mobius Runtime processes owned by
-the current OS user. The new Runtime uses `~/.mobius/workspace` and survives your
-agent session ending. No separate prepare, bind, or finish commands are needed.
+The command handles identity, Runtime pairing, Runtime launch, Bot binding, and
+readiness. The new Runtime uses `~/.mobius/workspace` and stays attached to this
+agent session; it exits when your session ends. It does not stop any other local
+Mobius Runtime process. No separate prepare, bind, or finish commands are needed.
 
 ## Observe and finish
 
