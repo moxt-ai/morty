@@ -63,7 +63,6 @@
                     "MOBIUS_BASE_URL",
                     "MOBIUS_APP_ID",
                     "MOBIUS_APP_SECRET",
-                    "SLACK_MOBIUS_AUTH_TOKEN",
                     "SLACK_OAUTH_STATE_SIGNING_KEY",
                     "SLACK_SERVER_BASE_URL",
                     "SLACK_TOKEN_ENCRYPTION_KEY"
@@ -130,7 +129,6 @@
                     "MOBIUS_BASE_URL",
                     "MOBIUS_APP_ID",
                     "MOBIUS_APP_SECRET",
-                    "SLACK_MOBIUS_AUTH_TOKEN",
                     "SLACK_OAUTH_STATE_SIGNING_KEY",
                     "SLACK_SERVER_BASE_URL",
                     "SLACK_TOKEN_ENCRYPTION_KEY"

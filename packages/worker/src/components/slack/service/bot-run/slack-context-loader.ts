@@ -1,5 +1,5 @@
+import type { SlackMessage } from "../../entity/slack-message";
 import type { StoredSlackEventTarget } from "../../storage/slack-event-records";
-import type { SlackMessage } from "../bot-tools/slack-bot-tool-service";
 import type { TenantContext } from "../identity/tenant-context";
 import type { ContextLoadType } from "./event-decision";
 import type { SlackMessageRenderer } from "./slack-message-renderer";

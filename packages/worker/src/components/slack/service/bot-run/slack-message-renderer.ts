@@ -1,7 +1,7 @@
 import type { SlackWebApi } from "../../../../gateway/slack-web-gateway";
+import type { SlackMessage, SlackMessageFile } from "../../entity/slack-message";
 import type { AttachmentStorageResolver } from "../../storage/attachment-storage-resolver";
 import type { StoredSlackEventTarget } from "../../storage/slack-event-records";
-import type { SlackMessage, SlackMessageFile } from "../bot-tools/slack-bot-tool-service";
 import type { TenantContext } from "../identity/tenant-context";
 
 export class SlackMessageRenderer {

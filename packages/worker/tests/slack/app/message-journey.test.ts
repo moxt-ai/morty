@@ -185,7 +185,6 @@ describe("Slack message journeys", () => {
             }),
         });
         expect(response.status).toBe(201);
-        app.identity.bots.delete("tenant-1:bot-1");
         await send(app);
         expect(app.slack.ephemeral).toEqual([]);
         expect(app.slack.messages[0]?.text).toBe("Investigation complete");
@@ -352,7 +351,7 @@ describe("Slack message journeys", () => {
         await send(app);
         expect(app.slack.messages).toHaveLength(1);
     });
-    it("Given an authenticated bot, When it sends a thread message through its tool URL, Then its installation token delivers the message", async () => {
+    it("Given a retired bot-tool URL, When a caller submits a legacy bot credential, Then the endpoint is unavailable and no Slack message is sent", async () => {
         const app = await createTestApplication();
         const response = await app.request("/mobius-slack/api/bot/slack/messages", {
             method: "POST",
@@ -367,14 +366,7 @@ describe("Slack message journeys", () => {
                 tenantId: "tenant-2",
             }),
         });
-        expect(response.status).toBe(200);
-        expect(app.slack.messages).toEqual([
-            {
-                channelId: "C123",
-                text: "Done",
-                threadTs: "100.0",
-                token: "xoxb-token",
-            },
-        ]);
+        expect(response.status).toBe(404);
+        expect(app.slack.messages).toEqual([]);
     });
 });
