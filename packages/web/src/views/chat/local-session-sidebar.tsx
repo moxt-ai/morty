@@ -192,11 +192,10 @@ export function LocalSessionSidebar({
     return (
         <aside
             aria-label="Local sessions"
-            className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-b border-border bg-muted/30 p-4 sm:w-64 sm:border-r sm:border-b-0 sm:pb-20"
+            className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-b border-border bg-[#edf2ef] p-4 sm:w-64 sm:border-r sm:border-b-0 sm:pb-20"
         >
             <Button
-                variant="ghost"
-                className={`mb-5 justify-start text-foreground ${activeEntryId === "" ? "bg-card shadow-sm" : ""}`}
+                className="mb-6 justify-start shadow-sm"
                 disabled={opening !== ""}
                 onClick={onNewConversation}
                 data-testid={dataTestId.newConversation}
@@ -282,7 +281,7 @@ export function LocalSessionSidebar({
                                 disabled={opening !== ""}
                                 aria-current={activeEntryId === entry.entryId ? "page" : undefined}
                                 onClick={() => void openEntry(entry)}
-                                className={`group w-full rounded-lg px-3 py-2.5 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 motion-reduce:transition-none ${activeEntryId === entry.entryId ? "bg-card shadow-sm" : ""}`}
+                                className={`group w-full rounded-xl border px-3 py-3 text-left outline-none transition-colors hover:bg-white/70 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 motion-reduce:transition-none ${activeEntryId === entry.entryId ? "border-primary/15 bg-white text-primary shadow-sm" : "border-transparent text-copy-secondary"}`}
                             >
                                 <span className="block truncate text-sm font-medium">
                                     {opening === entry.entryId ? "Opening…" : entry.title || "Untitled session"}
