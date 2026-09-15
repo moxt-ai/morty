@@ -1,10 +1,12 @@
 import { Hono } from "hono";
 import * as v from "valibot";
 import { json } from "../../infra/http.ts";
+import { errorMiddleware, rethrowHttpError } from "../../middleware/error-middleware.ts";
 import { requestHeaders } from "../../middleware/request-headers.ts";
 import { authenticatedSession } from "../management/http/authenticated-session.ts";
 import { createBotChatRoutes } from "./bot-chat-routes.ts";
 import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
+import { MobiusAppError } from "./mobius-app-service.ts";
 
 const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
 const sessionInput = v.pipe(
@@ -20,13 +22,18 @@ const renameInput = v.pipe(
     v.readonly(),
 );
 
-function notFound(): Response {
-    return json({ error: { code: "NOT_FOUND", message: "Not found." } }, 404);
+function notFound(): never {
+    throw new MobiusAppError("NOT_FOUND", "Not found.", 404);
 }
 
 export function createChatApplication() {
     return new Hono<ChatHttpEnvironment>()
         .basePath("/mobius-cloud/api/chat")
+        .onError(rethrowHttpError)
+        .use(
+            "*",
+            errorMiddleware<ChatHttpEnvironment>((context) => context.env.logger),
+        )
         .use("*", requestHeaders)
         .route("/", createBotChatRoutes())
         .post("/bots/:botId/access-tokens", authenticatedSession, async (context) => {

@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import type { HttpError } from "../../infra/http-error.ts";
 
 const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
 const credential = v.pipe(v.string(), v.minLength(1), v.maxLength(4096));
@@ -157,13 +158,27 @@ export class MobiusAppService {
     };
 }
 
-export class MobiusAppError extends Error {
+export class MobiusAppError extends Error implements HttpError {
     readonly code: string;
     readonly status: number;
-    constructor(code: string, message: string, status: number, options?: ErrorOptions) {
+    readonly headers: Readonly<Record<string, string>>;
+    constructor(
+        code: string,
+        message: string,
+        status: number,
+        options?: ErrorOptions,
+        headers: Readonly<Record<string, string>> = {},
+    ) {
         super(message, options);
         this.code = code;
         this.status = status;
+        this.headers = headers;
         this.name = "MobiusAppError";
     }
+
+    readonly toHttpJson: HttpError["toHttpJson"] = () => ({
+        body: { error: { code: this.code, message: this.message } },
+        status: this.status,
+        headers: this.headers,
+    });
 }

@@ -1,6 +1,6 @@
 import { createMiddleware } from "hono/factory";
-import { json } from "../../../infra/http.ts";
 import type { Session } from "../entity/authentication/session.ts";
+import { ManagementError } from "../entity/management-error.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
 
 export const authenticatedSession = createMiddleware<
@@ -16,8 +16,8 @@ export const authenticatedSession = createMiddleware<
             await next();
             return;
         case "unauthenticated":
-            return json({ error: { code: "UNAUTHENTICATED", message: "Sign in to continue." } }, 401);
+            throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
         case "unavailable":
-            return json({ error: { code: "AUTH_UNAVAILABLE", message: "Sign-in is temporarily unavailable." } }, 503);
+            throw new ManagementError("AUTH_UNAVAILABLE", "Sign-in is temporarily unavailable.", 503);
     }
 });

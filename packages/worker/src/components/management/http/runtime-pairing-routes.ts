@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
 import { json } from "../../../infra/http.ts";
+import { ManagementError } from "../entity/management-error.ts";
 import { PlatformProjectError, platformIdentifier } from "../entity/platform-project.ts";
 import { authenticatedSession } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
@@ -18,7 +19,9 @@ export function createRuntimePairingRoutes() {
             "/runtime-pairings",
             bodyLimit({
                 maxSize: 4096,
-                onError: () => json({ error: { code: "INVALID_REQUEST", message: "The request is too large." } }, 413),
+                onError: () => {
+                    throw new ManagementError("INVALID_REQUEST", "The request is too large.", 413);
+                },
             }),
             authenticatedSession,
             async (context) => {
