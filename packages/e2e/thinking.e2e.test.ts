@@ -74,8 +74,13 @@ test("Given a saved local session, When a user continues it and opens thinking, 
     await page.getByTestId(dataTestId.messageComposer).fill("Local thinking example");
     await page.getByTestId(dataTestId.sendMessage).click();
     await expect(page.getByTestId(dataTestId.agentResponse)).toContainText("Local thinking example");
-    await page.getByRole("button", { name: "Refresh local sessions" }).click();
-    await page.getByRole("button", { name: "Local thinking example", exact: false }).click();
+    await page.getByRole("button", { name: "Open Local Session", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Open Local Session", exact: true });
+    await dialog.getByRole("button", { name: "Local thinking example", exact: true }).click();
+    await expect(dialog.getByRole("region", { name: "Selected session preview" })).toContainText(
+        "Local thinking example",
+    );
+    await dialog.getByRole("button", { name: "Fork", exact: true }).click();
     await page.getByRole("textbox", { name: "Message local session" }).fill("Continue explaining");
     await page.getByRole("button", { name: "Send to local session" }).click();
     const messages = page.getByRole("log", { name: "Local session messages" });
