@@ -45,9 +45,11 @@ async function fixture(location = "apac") {
         MOBIUS_APP_ID: mobius.appId,
         MOBIUS_APP_SECRET: mobius.appCredential,
         MOBIUS_BASE_URL: mobius.baseUrl,
-        MOBIUS_PROJECT_LOCATION_HINT: location,
     };
-    const app = new Hono().all("*", (context) => worker.fetch(context.req.raw, bindings));
+    const app = new Hono().all("*", (context) => {
+        Object.defineProperty(context.req.raw, "cf", { value: { continent: location === "wnam" ? "NA" : "AS" } });
+        return worker.fetch(context.req.raw, bindings);
+    });
     const projects = new Map<string, string>();
     const request = (path: string, token: string, method = "GET", body?: object) =>
         app.request(`https://cloud.test/mobius-cloud/api/${path}`, {

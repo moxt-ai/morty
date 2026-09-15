@@ -551,17 +551,7 @@ export class PlatformProjectGateway {
     ) => {
         signal.throwIfAborted();
         const configuration = this.configuration();
-        let locationHint: string;
-        try {
-            locationHint = v.parse(
-                v.picklist(["apac", "wnam"]),
-                requestedLocationHint ?? this.#bindings.MOBIUS_PROJECT_LOCATION_HINT,
-            );
-        } catch (cause) {
-            throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Project placement is not configured.", 503, {
-                cause,
-            });
-        }
+        const locationHint = requestedLocationHint ?? "apac";
         const client = new MobiusPlatformAppClient({
             endpoint: configuration.origin,
             credentialProvider: new MobiusAppCredentialProvider(v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET)),
