@@ -52,7 +52,9 @@ export async function createMobiusPlatformFixture() {
         for (const [database, directory] of [
             [bindings.D1_SHARD_APAC_01, new URL("../relay-core/migrations/d1", platformDirectory)],
             [bindings.D1_SHARD_WNAM_01, new URL("../relay-core/migrations/d1", platformDirectory)],
-            [bindings.PLATFORM_DIRECTORY_DATABASE, new URL("migrations/d1", platformDirectory)],
+            [bindings.D1_SHARD_APAC_01, new URL("migrations/sharding", platformDirectory)],
+            [bindings.D1_SHARD_WNAM_01, new URL("migrations/sharding", platformDirectory)],
+            [bindings.PLATFORM_DIRECTORY_DATABASE, new URL("migrations/dashboard", platformDirectory)],
         ] as const) {
             for (const migration of await readD1Migrations(fileURLToPath(directory))) {
                 await database.batch(migration.queries.map((query) => database.prepare(query)));
