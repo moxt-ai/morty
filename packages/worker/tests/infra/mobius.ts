@@ -34,8 +34,9 @@ export async function createMobiusPlatformFixture() {
             modules: true,
             script: output.text,
             compatibilityDate: "2026-09-03",
-            d1Databases: ["D1_SHARD_APAC_01", "PLATFORM_DIRECTORY_DATABASE"],
-            r2Buckets: ["R2_BUCKET_APAC"],
+            d1Databases: ["D1_SHARD_APAC_01", "D1_SHARD_WNAM_01", "PLATFORM_DIRECTORY_DATABASE"],
+            kvNamespaces: ["APP_CREDENTIAL_CACHE"],
+            r2Buckets: ["R2_BUCKET_APAC", "R2_BUCKET_WNAM"],
             durableObjects: {
                 RUNTIME_RELAY: { className: "RuntimeRelay", useSQLite: true },
                 SESSION_RELAY: { className: "PlatformSessionRelay", useSQLite: true },
@@ -45,9 +46,12 @@ export async function createMobiusPlatformFixture() {
     );
     try {
         await platform.ready;
-        const bindings = await platform.getBindings<PlatformRelayBindings>();
+        const bindings = await platform.getBindings<
+            PlatformRelayBindings & { readonly D1_SHARD_WNAM_01: D1Database }
+        >();
         for (const [database, directory] of [
             [bindings.D1_SHARD_APAC_01, new URL("../relay-core/migrations/d1", platformDirectory)],
+            [bindings.D1_SHARD_WNAM_01, new URL("../relay-core/migrations/d1", platformDirectory)],
             [bindings.PLATFORM_DIRECTORY_DATABASE, new URL("migrations/d1", platformDirectory)],
         ] as const) {
             for (const migration of await readD1Migrations(fileURLToPath(directory))) {

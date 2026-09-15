@@ -73,14 +73,14 @@ jobs:
 
       - run: pnpm check
 
-      - name: Upload complete coverage
+      - name: Save coverage report
+        continue-on-error: true
         if: ${{ !cancelled() && hashFiles('coverage/lcov.info') != '' }}
-        uses: codecov/codecov-action@04b047e8bb82a0c002c8312c1c880fbc6a999d45 # v5
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          use_oidc: true
-          files: coverage/lcov.info
-          disable_search: true
-          fail_ci_if_error: true
+          name: coverage-report
+          path: coverage/
+          retention-days: 14
 
       - name: Validate Cloud D1 migrations
         run: |

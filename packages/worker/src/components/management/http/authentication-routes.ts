@@ -57,7 +57,10 @@ export function createAuthenticationRoutes() {
                 userId,
                 "Personal workspace",
                 signal,
-                projectLocationHint(context.req.raw),
+                context.env.config.bindings.MOBIUS_WORKER_REGION === "apac" ||
+                    context.env.config.bindings.MOBIUS_WORKER_REGION === "wnam"
+                    ? context.env.config.bindings.MOBIUS_WORKER_REGION
+                    : projectLocationHint(context.req.raw),
             );
             const scoped = createApplicationDependencies(
                 await projectBindings(context.env.config.bindings, project.projectId, signal),

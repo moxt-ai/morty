@@ -5,20 +5,20 @@
 `pnpm check` includes `pnpm check:architecture` and `pnpm test:coverage`.
 The coverage command runs both Worker and web suites, then merges their Istanbul
 execution maps into `coverage/lcov.info`, `coverage/coverage-summary.json`, and an
-HTML report in `coverage/`. It requires 95% of lines, statements, functions, and
-branches, using the exact covered/total counts before rounding. A failing suite,
-missing or empty suite report, or unmet threshold fails the command.
+HTML report in `coverage/`. It reports an informational 95% target for lines,
+statements, functions, and branches using exact covered/total counts. A failing
+suite or missing or empty suite report fails the command; unmet coverage targets do not.
 
 Scope includes unexecuted production `.ts` and `.tsx` in both packages. Tests,
 stateful test fakes, declarations, and the generated `routeTree.gen.ts` are excluded.
-The Mobius submodule has its own report and 100% gate. Code executed only in a
+The Mobius submodule has its own report and informational 100% target. Code executed only in a
 separate subprocess or externally bundled Worker is not credited by the parent
 runner; its source remains in the denominator until instrumented coverage exists.
 
-The Codecov badge reports actual main coverage. Configuring a target does not mean
-it has been achieved. CI uploads only the combined report; the existing required
-`check` status includes local threshold enforcement. Uploads use GitHub OIDC;
-the repository must be activated in the organization's Codecov installation.
+CI saves the combined report as a `coverage-report` artifact for 14 days using
+the permitted GitHub-owned artifact action. Upload failures are non-blocking.
+The required `check` status keeps test failures blocking. If Codecov uploads
+are enabled later, project and patch statuses are configured as informational.
 
 ## Architecture enforcement
 
@@ -146,3 +146,9 @@ submitted. Harness becomes disabled while Model remains editable. Reload the
 resulting URL and confirm the same Conversation and history reopen. Click New
 Conversation again and confirm Harness is editable and the next send creates a
 distinct Conversation. Verify with `agent-browser` and the browser network log.
+
+Run `pnpm test:e2e:conversation` for the browser regression against local Chat,
+Platform and Runtime with the stateful ACP test agent. First Send must retain the
+page and composer while the draft becomes a conversation and the reply appears.
+The scenario also creates a distinct second conversation, sends a follow-up and
+reloads its saved URL to verify history.

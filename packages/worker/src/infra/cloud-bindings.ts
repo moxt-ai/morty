@@ -1,4 +1,7 @@
 export interface CloudBindings {
+    readonly MOBIUS_WORKER_REGION?: unknown;
+    readonly MOBIUS_REGIONAL_APAC?: unknown;
+    readonly MOBIUS_REGIONAL_WNAM?: unknown;
     readonly ATTACHMENTS?: unknown;
     readonly BOT_TRIGGER_RATE_LIMITER?: unknown;
     readonly APP_ORIGIN?: unknown;

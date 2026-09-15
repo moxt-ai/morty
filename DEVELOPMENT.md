@@ -35,6 +35,52 @@ and conversation access. Platform independently authorizes SDK operations.
 
 ## Worker structure
 
+### Project-ID regional routing
+
+After this, a user can reload a Project workspace through the same Chat origin
+and have its request authenticated by the corresponding regional Chat Worker.
+The public Worker routes Project-scoped requests using the validated Project ID;
+pairing/transfer redemption uses the Project encoded in its existing ticket.
+Anonymous creation chooses a region from Cloudflare request metadata, with the
+configured location hint as fallback. Client-provided region headers have no
+authority. Regional backends still authenticate the user and check ownership.
+
+Regional backends decode Project placement locally rather than calling Platform's
+storage-placement endpoint. They call Platform's public API, whose own router
+selects the regional Platform backend. A mismatched Project sent directly to a
+Chat backend returns HTTP 421. Requests without Project context otherwise retain
+their existing entrypoint, as do queue consumers.
+
+`regional-placement.json` controls explicit placement hints for each backend.
+The public Worker has placement disabled; regional Workers use service-binding
+`fetch()` and explicit cloud-region hints. Hints are not exact-city guarantees.
+Existing D1/R2 resources, queue producers, and the public Worker's Durable Object
+namespace are shared. Regional Workers do not own queue consumers.
+
+Each product owns a small `wrangler.regional.template.json` containing only
+regional overrides: Worker name, entrypoint, placement hint, logical region, and
+deployment flags. Shared D1/R2/KV bindings, compatibility settings, variables,
+and other common settings are inherited from the existing configuration.
+The renderer JSON-encodes `<%% name %%>` substitutions and rejects missing or
+unresolved placeholders before writing valid JSON. Deployment renders configurations from the Vite-built Worker using
+`third-party/mobius/packages/relay-cloudflare-platform/scripts/regional-workers.ts`.
+Both regional backends deploy before the public router. Before the first regional
+deployment, provision the same required runtime secrets on
+`mobius-chat-<environment>-apac` and `mobius-chat-<environment>-wnam` as on the
+public Worker. Secret values are not readable or automatically copied from the
+public Worker; CI verifies all three secret-name inventories before deploying.
+
+To generate configs for inspection after `pnpm build:staging`:
+
+```bash
+node third-party/mobius/packages/relay-cloudflare-platform/scripts/regional-workers.ts \
+  --config wrangler.jsonc --built --env staging \
+  --template wrangler.regional.template.json \
+  --placement regional-placement.json --output .wrangler/regional/staging
+pnpm exec wrangler deploy --config .wrangler/regional/staging/apac.json --dry-run
+pnpm exec wrangler deploy --config .wrangler/regional/staging/wnam.json --dry-run
+```
+
 Feature logic stays below `packages/worker/src/components`:
 
 - `cloud`: Clerk configuration, token verification, and `/mobius-cloud/api`.
@@ -89,6 +135,8 @@ agent; a temporary Project Session prepares that agent's model options and is de
 after preparation. First Send creates a canonical Project Conversation with the selected
 model and approved Bot binding. Existing conversations reopen by Conversation ID,
 including credential refresh, and keep their harness fixed.
+First Send keeps the created connection and transitions the draft in place; it
+updates the saved URL without removing the sidebar or composer to reconnect.
 The Worker discovers/imports native sessions through the Project SDK. Its
 `session-access` endpoint issues credentials scoped to the selected Session inside
 the user's Project. The browser uses those credentials with the Session SDK to

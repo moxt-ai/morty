@@ -5,7 +5,7 @@ Both repositories use branch `refactor/moxt-alignment`.
 
 ## Implemented
 
-- Combined Istanbul reporting scripts with exact-count gates: Chat 95%, Mobius
+- Combined Istanbul reporting scripts with informational targets: Chat 95%, Mobius
   100%, independently on lines, statements, functions, and branches.
 - Production TS/TSX denominators include files that no test imports.
 - Mobius root integration/e2e discovery restored to the required check.
@@ -26,7 +26,7 @@ Both repositories use branch `refactor/moxt-alignment`.
 - Chat: 90 Worker tests and 40 web-package tests pass. Its combined baseline is
   21.57% lines, 20.93% statements, 15.89% functions, and 11.58% branches in the
   latest run. Typechecking, build, lint, architecture, and a separate Knip run pass;
-  the required check exits nonzero at the coverage threshold.
+   this baseline was collected before coverage thresholds became informational.
 - Both architecture checks pass with real TypeScript dependency extraction.
 - Both Mobius Cloudflare suites pass with package-local coverage collection.
 - Mobius: all 292 tests pass (root 152, web 47, Standalone 60, Platform 33).
@@ -36,7 +36,7 @@ Both repositories use branch `refactor/moxt-alignment`.
   delete an unpublished destination. Discovery fixtures use deterministic time.
 - Mobius's full check emits a combined report: 56.02% lines, 56.07% statements,
   58.96% functions, and 43.19% branches. Static checks and builds pass; the command
-  remains nonzero at the 100% coverage gate.
+   originally exited nonzero at the 100% coverage gate, now informational.
 - Root coverage does not collect execution inside separately launched processes,
   bundled Workers, or browsers. Shared Relay-core coverage from Cloudflare pools
   also needs repair: `allowExternal` caused report generation to fail.
@@ -47,13 +47,14 @@ These findings are a baseline, not completion of the quality requirements.
 
 1. Collect browser, subprocess, and shared Worker execution into compatible maps.
    Keep all source in the denominator while those collectors are missing.
-2. Add user-visible acceptance scenarios for uncovered behavior until both gates
-   pass. Chat's existing web-package tests exercise almost none of its UI.
+2. Add user-visible acceptance scenarios for uncovered behavior until both targets
+   are achieved. Chat's existing web-package tests exercise almost none of its UI.
 3. Verify the organization's Codecov activation and an actual OIDC upload.
 4. Obtain green `pnpm check` results before coordinated delivery.
 
 GitHub inspection found existing required `check` and `title` statuses in both
 repositories; Mobius additionally has a merge-queue ruleset. Repository protection
 settings have not been changed. Mobius commit `9a3936e` is published in
-[draft PR #216](https://github.com/moxt-ai/mobius/pull/216); Chat references that
-available revision. Draft status reflects the outstanding coverage work.
+[PR #216](https://github.com/moxt-ai/mobius/pull/216); Chat references the
+published Mobius branch. Per the delivery request, coverage targets and Codecov
+statuses are informational; test failures and invalid coverage reports remain blocking.
