@@ -128,6 +128,7 @@ export class BotChatApi {
         signal.throwIfAborted();
         let initial = true;
         return createMobiusConversationSession({
+            projectId: this.#projectId,
             endpoint: access.endpoint,
             streamConnectionTimeoutMilliseconds: 45000,
             accessTokenProvider: {

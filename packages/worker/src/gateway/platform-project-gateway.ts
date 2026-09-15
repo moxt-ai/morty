@@ -319,6 +319,7 @@ export class PlatformProjectGateway {
                 "conversation:configure",
             ] as const;
             const access = await platform.issueConversationAccessCredential(
+                projectId,
                 conversation.conversationId,
                 {
                     actorRef: userId,

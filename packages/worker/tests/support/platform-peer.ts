@@ -253,9 +253,14 @@ export async function platformPeer({
                 return;
             }
         }
-        const accessPath = request.url?.match(/^\/mobius\/api\/v1\/conversations\/([^/]+)\/access-credentials$/u);
+        const accessUrl = new URL(request.url ?? "/", "http://platform.test");
+        const accessPath = accessUrl.pathname.match(/^\/mobius\/api\/v1\/conversations\/([^/]+)\/access-credentials$/u);
         if (request.method === "POST" && accessPath !== undefined && accessPath !== null) {
-            const conversation = [...conversations.values()].find((item) => item.conversationId === accessPath[1]);
+            const conversation = [...conversations.values()].find(
+                (item) =>
+                    item.conversationId === accessPath[1] &&
+                    item.projectId === accessUrl.searchParams.get("project_id"),
+            );
             if (conversation !== undefined) {
                 const input = v.parse(
                     v.object({ actorRef: v.string(), expiresInSeconds: v.number(), permissions: v.array(v.string()) }),
