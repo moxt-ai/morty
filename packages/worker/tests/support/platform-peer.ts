@@ -7,12 +7,34 @@ import { AUTH_TIME } from "./identity-provider.ts";
 export async function platformPeer({
     pairingLifetimeMilliseconds = 300000,
     redirectPlacement = false,
+    activeBots = false,
+    settingsAvailable = true,
 }: {
     readonly pairingLifetimeMilliseconds?: number;
     readonly redirectPlacement?: boolean;
+    readonly activeBots?: boolean;
+    readonly settingsAvailable?: boolean;
 } = {}) {
     const projects = new Map<string, object>();
     const bots = new Map<string, { readonly botId: string; readonly projectId: string }>();
+    const sessions = new Map<string, object>();
+    const conversations = new Map<
+        string,
+        {
+            readonly projectId: string;
+            readonly botId: string;
+            readonly conversationId: string;
+            readonly sessionId: string;
+            readonly clientReference: string;
+            readonly idempotencyKey: string;
+            readonly bindingId: string;
+            readonly bindingRevision: number;
+            readonly behaviorRevisionId: string;
+            readonly title: string;
+            readonly lifecycle: string;
+            readonly createdAt: string;
+        }
+    >();
     const pairings = new Map<
         string,
         {
@@ -53,6 +75,210 @@ export async function platformPeer({
             body += chunk;
         }
         const timestamp = AUTH_TIME.toISOString();
+        const sessionPath = request.url?.match(
+            /^\/mobius\/api\/v1\/projects\/([^/]+)\/sessions(?:\/([^/?]+)(?:\/(prepare))?)?(?:\?.*)?$/u,
+        );
+        if (sessionPath !== undefined && sessionPath !== null) {
+            const projectId = v.parse(v.string(), sessionPath[1]);
+            const sessionId = sessionPath[2];
+            if (sessionId === undefined && request.method === "POST") {
+                const input = v.parse(
+                    v.object({
+                        sessionId: v.string(),
+                        agentId: v.string(),
+                        runtimeId: v.string(),
+                        bindingId: v.string(),
+                        directoryId: v.string(),
+                        title: v.string(),
+                        policy: v.unknown(),
+                    }),
+                    JSON.parse(body),
+                );
+                const session = {
+                    ...input,
+                    projectId,
+                    createdAt: timestamp,
+                    updatedAt: timestamp,
+                    createdBy: "owner",
+                    hasNativeHistory: false,
+                    lastCommittedSeq: "0",
+                    lifecycle: { kind: "ready" },
+                    defaultBinding: {
+                        agentRef: input.agentId,
+                        bindingId: input.bindingId,
+                        configRevision: 1,
+                        createdAt: timestamp,
+                        runtimeId: input.runtimeId,
+                        sessionId: input.sessionId,
+                        workspaceRef: input.directoryId,
+                    },
+                };
+                sessions.set(`${projectId}:${input.sessionId}`, session);
+                response.writeHead(201).end(JSON.stringify(session));
+                return;
+            }
+            if (sessionId === undefined && request.method === "GET") {
+                response.writeHead(200).end(
+                    JSON.stringify({
+                        sessions: [...sessions.entries()]
+                            .filter(([key]) => key.startsWith(`${projectId}:`))
+                            .map(([, value]) => value),
+                        nextCursor: null,
+                    }),
+                );
+                return;
+            }
+            const key = `${projectId}:${sessionId}`;
+            if (sessions.has(key) && request.method === "POST" && sessionPath[3] === "prepare") {
+                response.writeHead(settingsAvailable ? 200 : 409).end(
+                    JSON.stringify(
+                        settingsAvailable
+                            ? {
+                                  kind: "session.ready",
+                                  sessionId,
+                                  requestId: "prepare-settings",
+                                  agentId: "agent-one",
+                                  agentName: "Agent One",
+                                  agentVersion: "1",
+                                  restored: false,
+                                  directoryId: "default",
+                                  directoryLabel: "Workspace",
+                                  additionalDirectories: [],
+                                  commands: [],
+                                  capabilities: {
+                                      additionalDirectories: false,
+                                      audioPrompt: false,
+                                      closeSession: true,
+                                      deleteSession: true,
+                                      embeddedContextPrompt: true,
+                                      imagePrompt: false,
+                                      listSessions: true,
+                                      loadSession: true,
+                                      promptQueueing: false,
+                                      resumeSession: true,
+                                      steering: false,
+                                      unstableForkSession: false,
+                                  },
+                                  configOptions: [
+                                      {
+                                          id: "model",
+                                          name: "Model",
+                                          description: "Session model",
+                                          booleanValue: false,
+                                          category: "model",
+                                          type: "select",
+                                          currentValue: "model-one",
+                                          values: [
+                                              {
+                                                  name: "Model One",
+                                                  value: "model-one",
+                                                  description: "",
+                                                  groupId: "",
+                                                  groupName: "",
+                                              },
+                                              {
+                                                  name: "Model Two",
+                                                  value: "model-two",
+                                                  description: "",
+                                                  groupId: "",
+                                                  groupName: "",
+                                              },
+                                          ],
+                                      },
+                                  ],
+                              }
+                            : { error: { code: "agent_unavailable", message: "The settings agent is unavailable" } },
+                    ),
+                );
+                return;
+            }
+            if (request.method === "DELETE" && sessions.delete(key)) {
+                response.writeHead(200).end(JSON.stringify({ kind: "deleted", completedAt: timestamp }));
+                return;
+            }
+        }
+        const conversationPath = request.url?.match(
+            /^\/mobius\/api\/v1\/projects\/([^/]+)\/conversations(?:\/([^/]+))?$/u,
+        );
+        if (conversationPath !== undefined && conversationPath !== null) {
+            const projectId = v.parse(v.string(), conversationPath[1]);
+            if (request.method === "POST" && conversationPath[2] === undefined) {
+                const input = v.parse(
+                    v.strictObject({
+                        botId: v.string(),
+                        clientReference: v.string(),
+                        idempotencyKey: v.string(),
+                        title: v.string(),
+                        configuration: v.strictObject({
+                            additionalDirectoryIds: v.array(v.string()),
+                            booleanValue: v.boolean(),
+                            configId: v.string(),
+                            value: v.string(),
+                            valueType: v.string(),
+                        }),
+                    }),
+                    JSON.parse(body),
+                );
+                if (bots.get(input.botId)?.projectId !== projectId) {
+                    response.writeHead(404).end();
+                    return;
+                }
+                const key = `${projectId}:${input.botId}:${input.idempotencyKey}`;
+                let conversation = conversations.get(key);
+                if (conversation === undefined) {
+                    conversation = {
+                        projectId,
+                        botId: input.botId,
+                        clientReference: input.clientReference,
+                        idempotencyKey: input.idempotencyKey,
+                        conversationId: `conversation-${conversations.size + 1}`,
+                        sessionId: `session-${conversations.size + 1}`,
+                        bindingId: "binding-1",
+                        bindingRevision: 1,
+                        behaviorRevisionId: "behavior-1",
+                        title: input.title,
+                        lifecycle: "active",
+                        createdAt: timestamp,
+                    };
+                    conversations.set(key, conversation);
+                }
+                response.writeHead(201).end(JSON.stringify(conversation));
+                return;
+            }
+            const conversation = [...conversations.values()].find(
+                (item) => item.projectId === projectId && item.conversationId === conversationPath[2],
+            );
+            if (request.method === "GET" && conversation !== undefined) {
+                response.writeHead(200).end(JSON.stringify(conversation));
+                return;
+            }
+        }
+        const accessPath = request.url?.match(/^\/mobius\/api\/v1\/conversations\/([^/]+)\/access-credentials$/u);
+        if (request.method === "POST" && accessPath !== undefined && accessPath !== null) {
+            const conversation = [...conversations.values()].find((item) => item.conversationId === accessPath[1]);
+            if (conversation !== undefined) {
+                const input = v.parse(
+                    v.object({ actorRef: v.string(), expiresInSeconds: v.number(), permissions: v.array(v.string()) }),
+                    JSON.parse(body),
+                );
+                response.writeHead(201).end(
+                    JSON.stringify({
+                        actorRef: input.actorRef,
+                        appId: "cloud-app",
+                        tenantId: "tenant-test",
+                        projectId: conversation.projectId,
+                        conversationId: conversation.conversationId,
+                        sessionId: conversation.sessionId,
+                        permissions: input.permissions,
+                        credentialId: "credential-1",
+                        credential: `mconv_${"a".repeat(22)}_${"b".repeat(43)}`,
+                        issuedAt: timestamp,
+                        expiresAt: new Date(AUTH_TIME.getTime() + input.expiresInSeconds * 1000).toISOString(),
+                    }),
+                );
+                return;
+            }
+        }
         const pairingPath = request.url?.match(
             /^\/mobius\/api\/v1\/projects\/([^/]+)\/runtime-pairings(?:\/([^/]+))?$/u,
         );
@@ -135,7 +361,8 @@ export async function platformPeer({
                 createdAt: timestamp,
                 updatedAt: timestamp,
                 currentProfileRevisionId: `profile-${bots.size + 1}`,
-                lifecycle: "draft",
+                lifecycle: activeBots ? "active" : "draft",
+                ...(activeBots ? { activeBindingId: "binding-1", activeBehaviorRevisionId: "behavior-1" } : {}),
                 lifecycleRevision: 1,
                 profileRevision: 1,
             };
@@ -149,7 +376,33 @@ export async function platformPeer({
         if (request.method === "GET" && botPath !== undefined && botPath !== null) {
             const bot = bots.get(v.parse(v.string(), botPath[2]));
             if (bot !== undefined && bot.projectId === botPath[1]) {
-                response.writeHead(200).end(JSON.stringify(botPath[3] === undefined ? bot : { executionBindings: [] }));
+                response.writeHead(200).end(
+                    JSON.stringify(
+                        botPath[3] === undefined
+                            ? bot
+                            : {
+                                  executionBindings: activeBots
+                                      ? [
+                                            {
+                                                agentConfigRevision: 1,
+                                                agentRef: "agent-one",
+                                                allowedDeliveryTargetIds: [],
+                                                behaviorRevisionId: "behavior-1",
+                                                bindingId: "binding-1",
+                                                bindingRevision: 1,
+                                                botId: bot.botId,
+                                                completionPolicy: { kind: "none" },
+                                                createdAt: timestamp,
+                                                approvedAt: timestamp,
+                                                lifecycle: "approved",
+                                                runtimeId: "runtime-1",
+                                                workspaceRef: "default",
+                                            },
+                                        ]
+                                      : [],
+                              },
+                    ),
+                );
                 return;
             }
         }

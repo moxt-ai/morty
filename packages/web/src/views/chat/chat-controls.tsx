@@ -12,11 +12,11 @@ type Inventory =
           readonly options: readonly SessionConfigOption[];
           readonly sessionClient: MobiusClient;
           readonly sessionId: string;
+          readonly harness: string;
       }
     | { readonly kind: "failed"; readonly message: string };
 type Change =
     | { readonly kind: "idle" }
-    | { readonly kind: "agent"; readonly value: string }
     | { readonly kind: "configuration"; readonly configId: string; readonly value: string }
     | { readonly kind: "failed"; readonly message: string };
 
@@ -24,12 +24,10 @@ export function ChatControls({
     botId,
     client,
     requests,
-    onAgentChanged,
 }: {
     readonly botId: string;
     readonly client: MobiusBrowserClient;
-    readonly requests: Pick<BotChatApi, "workspace" | "selectAgent" | "connectSession">;
-    readonly onAgentChanged: () => void;
+    readonly requests: Pick<BotChatApi, "workspace" | "connectSession">;
 }) {
     const [inventory, setInventory] = useState<Inventory>({ kind: "loading" });
     const [change, setChange] = useState<Change>({ kind: "idle" });
@@ -58,10 +56,6 @@ export function ChatControls({
                 requests.workspace(botId, controller.signal),
                 client.session.read(controller.signal),
             ]);
-            const selected = workspace.selected;
-            if (selected === null) {
-                throw new Error("Choose a connected local agent.");
-            }
             sessionClient = await requests.connectSession(botId, snapshot.session.sessionId, controller.signal);
             controller.signal.throwIfAborted();
             const ready = await sessionClient.sessions.prepare(snapshot.session.sessionId, controller.signal);
@@ -72,6 +66,7 @@ export function ChatControls({
                 options: ready.configOptions,
                 sessionClient,
                 sessionId: snapshot.session.sessionId,
+                harness: `${snapshot.session.defaultBinding.runtimeId}:${snapshot.session.defaultBinding.agentRef}`,
             });
             timer = setTimeout(() => void refresh(), 5000);
         };
@@ -92,29 +87,21 @@ export function ChatControls({
         };
     }, [botId, client, requests]);
     useEffect(() => {
-        if (change.kind !== "agent" && change.kind !== "configuration") {
+        if (change.kind !== "configuration") {
             return;
         }
         if (inventory.kind === "ready") {
-            const applied =
-                change.kind === "agent"
-                    ? inventory.workspace.selected !== null &&
-                      `${inventory.workspace.selected.runtimeId}:${inventory.workspace.selected.agentRef}` ===
-                          change.value
-                    : inventory.options.some(
-                          (option) => option.id === change.configId && option.currentValue === change.value,
-                      );
+            const applied = inventory.options.some(
+                (option) => option.id === change.configId && option.currentValue === change.value,
+            );
             if (applied) {
                 setChange({ kind: "idle" });
-                if (change.kind === "agent") {
-                    onAgentChanged();
-                }
                 return;
             }
         }
-    }, [change, inventory, onAgentChanged]);
+    }, [change, inventory]);
     useEffect(() => {
-        if (change.kind !== "agent" && change.kind !== "configuration") {
+        if (change.kind !== "configuration") {
             return;
         }
         const timeout = setTimeout(
@@ -127,7 +114,7 @@ export function ChatControls({
         );
         return () => clearTimeout(timeout);
     }, [change]);
-    const select = async (kind: "agent" | "configuration", value: string, configId = "") => {
+    const select = async (value: string, configId: string) => {
         if (inventory.kind !== "ready") {
             return;
         }
@@ -135,45 +122,22 @@ export function ChatControls({
         const controller = new AbortController();
         operation.current = controller;
         const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(45000)]);
-        setChange(kind === "agent" ? { kind, value } : { kind, value, configId });
+        setChange({ kind: "configuration", value, configId });
         try {
-            if (kind === "agent") {
-                const agent = inventory.workspace.agents.find(
-                    (candidate) => `${candidate.runtimeId}:${candidate.agentRef}` === value && candidate.online,
+            const updated = await inventory.sessionClient.sessions.updateConfiguration(
+                inventory.sessionId,
+                {
+                    configId,
+                    value,
+                    valueType: "select",
+                    booleanValue: false,
+                },
+                signal,
+            );
+            if (!controller.signal.aborted) {
+                setInventory((current) =>
+                    current.kind === "ready" ? { ...current, options: updated.configOptions } : current,
                 );
-                if (agent === undefined) {
-                    throw new Error("Select a connected local agent.");
-                }
-                await requests.selectAgent(
-                    botId,
-                    {
-                        runtimeId: agent.runtimeId,
-                        agentRef: agent.agentRef,
-                        workspaceRef: "default",
-                        agentConfigRevision: 1,
-                    },
-                    signal,
-                );
-            } else {
-                const selected = inventory.workspace.selected;
-                if (selected === null) {
-                    throw new Error("Your selected agent is unavailable.");
-                }
-                const updated = await inventory.sessionClient.sessions.updateConfiguration(
-                    inventory.sessionId,
-                    {
-                        configId,
-                        value,
-                        valueType: "select",
-                        booleanValue: false,
-                    },
-                    signal,
-                );
-                if (!controller.signal.aborted) {
-                    setInventory((current) =>
-                        current.kind === "ready" ? { ...current, options: updated.configOptions } : current,
-                    );
-                }
             }
         } catch (cause) {
             if (!controller.signal.aborted) {
@@ -198,8 +162,7 @@ export function ChatControls({
             </p>
         );
     }
-    const busy = change.kind === "agent" || change.kind === "configuration";
-    const selected = inventory.workspace.selected;
+    const busy = change.kind === "configuration";
     const model = inventory.options.find((option) => option.category === "model" && option.type !== "boolean");
     const variant = inventory.options.find(
         (option) =>
@@ -209,16 +172,14 @@ export function ChatControls({
         <div className="space-y-2">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <Select
-                    label="Local agent"
-                    value={selected === null ? "" : `${selected.runtimeId}:${selected.agentRef}`}
-                    disabled={busy}
-                    options={inventory.workspace.agents
-                        .filter((agent) => agent.online)
-                        .map((agent) => ({
-                            value: `${agent.runtimeId}:${agent.agentRef}`,
-                            label: `${agent.label} · ${agent.machineName}`,
-                        }))}
-                    onValueChange={(value) => void select("agent", value)}
+                    label="Harness"
+                    value={inventory.harness}
+                    disabled
+                    options={inventory.workspace.agents.map((agent) => ({
+                        value: `${agent.runtimeId}:${agent.agentRef}`,
+                        label: `${agent.label} · ${agent.machineName}`,
+                    }))}
+                    onValueChange={() => {}}
                 />
                 <Select
                     label="Model"
@@ -227,7 +188,7 @@ export function ChatControls({
                     options={model?.values.map((value) => ({ value: value.value, label: value.name })) ?? []}
                     onValueChange={(value) => {
                         if (model !== undefined) {
-                            void select("configuration", value, model.id);
+                            void select(value, model.id);
                         }
                     }}
                 />
@@ -238,7 +199,7 @@ export function ChatControls({
                     options={variant?.values.map((value) => ({ value: value.value, label: value.name })) ?? []}
                     onValueChange={(value) => {
                         if (variant !== undefined) {
-                            void select("configuration", value, variant.id);
+                            void select(value, variant.id);
                         }
                     }}
                 />
@@ -249,7 +210,7 @@ export function ChatControls({
                 </p>
             )}
             <p className="text-xs text-muted-foreground">
-                Changing the local agent starts a new Bot conversation. Earlier sessions remain in the sidebar.
+                The harness is fixed for this conversation. Start a new conversation to choose another harness.
             </p>
             {model === undefined && (
                 <p className="text-xs text-muted-foreground">

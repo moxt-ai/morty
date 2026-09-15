@@ -12,11 +12,12 @@ import { AgentRichContent } from "../../components/agents/agent-rich-content.tsx
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
-import type { BotChatApi, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
+import type { BotChatApi, ChatDraftConfiguration, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
 import { AttemptFailure } from "./attempt-failure.tsx";
 import { ChatControls } from "./chat-controls.tsx";
+import { DraftChatControls } from "./draft-chat-controls.tsx";
 import { LocalSessionPane } from "./local-session-pane.tsx";
 import { LocalSessionSidebar, type OpenLocalSession } from "./local-session-sidebar.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
@@ -64,6 +65,7 @@ function setupDescription(reason: SetupReason): string {
 
 type State =
     | { readonly kind: "loading" }
+    | { readonly kind: "draft"; readonly bot: ManagedBot }
     | { readonly kind: "setup"; readonly reason: SetupReason }
     | {
           readonly kind: "ready";
@@ -229,15 +231,24 @@ export function BotChatHome({
         | "nativeSessions"
         | "connectSession"
         | "createPairingInstruction"
+        | "createConversation"
+        | "draftSettings"
     >;
 }) {
     const [state, setState] = useState<State>({ kind: "loading" });
     const [revision, retry] = useState(0);
     const [draft, setDraft] = useState("");
-    const [conversationKey, setConversationKey] = useState(() => {
-        const key = new URL(window.location.href).searchParams.get("conversation");
-        return key !== null && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(key) ? key : "personal-chat";
+    const [target, setTarget] = useState<
+        | { readonly kind: "draft"; readonly key: string }
+        | { readonly kind: "existing"; readonly conversationId: string }
+    >(() => {
+        const conversationId = new URL(window.location.href).searchParams.get("conversationId");
+        return conversationId !== null && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(conversationId)
+            ? { kind: "existing", conversationId }
+            : { kind: "draft", key: crypto.randomUUID() };
     });
+    const [draftSettings, setDraftSettings] = useState<ChatDraftConfiguration | null>(null);
+    const messageAttempt = useRef<{ readonly content: string; readonly key: string } | null>(null);
     const [sending, setSending] = useState<Sending>({ kind: "idle" });
     const lifetime = useRef<AbortController | null>(null);
     const messageList = useRef<HTMLDivElement | null>(null);
@@ -250,15 +261,17 @@ export function BotChatHome({
         lifetime.current?.abort();
         setDraft("");
         setSending({ kind: "idle" });
+        setDraftSettings(null);
+        messageAttempt.current = null;
         setConversation({ kind: "bot" });
         followLatest.current = true;
         const key = crypto.randomUUID();
         const url = new URL(window.location.href);
-        url.searchParams.set("conversation", key);
+        url.searchParams.delete("conversation");
+        url.searchParams.delete("conversationId");
         window.history.replaceState(window.history.state, "", url);
-        setConversationKey(key);
+        setTarget({ kind: "draft", key });
     }, []);
-    const reconnect = useCallback(() => retry((value) => value + 1), []);
     useEffect(() => {
         if (state.kind === "ready" && followLatest.current && messageList.current !== null) {
             messageList.current.scrollTop = messageList.current.scrollHeight;
@@ -272,7 +285,6 @@ export function BotChatHome({
         let client: MobiusBrowserClient | null = null;
         let reconciliationTimer: ReturnType<typeof setTimeout> | undefined;
         setState((current) => (current.kind === "setup" ? current : { kind: "loading" }));
-        setSending({ kind: "idle" });
         const open = async () => {
             const bot = (await requests.listBots(controller.signal))[0];
             if (bot === undefined) {
@@ -280,13 +292,17 @@ export function BotChatHome({
             }
             const workspace = await requests.workspace(bot.botId, controller.signal);
             controller.signal.throwIfAborted();
-            const reason = setupReason(workspace);
+            const reason = target.kind === "draft" ? setupReason(workspace) : null;
             if (reason !== null) {
                 setState({ kind: "setup", reason });
                 reconciliationTimer = setTimeout(() => retry((value) => value + 1), 5000);
                 return;
             }
-            const session = await requests.connectConversation(bot.botId, controller.signal, conversationKey);
+            if (target.kind === "draft") {
+                setState({ kind: "draft", bot });
+                return;
+            }
+            const session = await requests.connectConversation(bot.botId, controller.signal, target.conversationId);
             client = session;
             const history = await session.history.read(new MobiusPageRequest(100, ""), controller.signal);
             let snapshotSequence = BigInt(history.lastCommittedSeq);
@@ -346,31 +362,97 @@ export function BotChatHome({
             client?.close();
             lifetime.current = null;
         };
-    }, [requests, revision, conversationKey]);
+    }, [requests, revision, target]);
 
     const send = async () => {
         const controller = lifetime.current;
-        if (state.kind !== "ready" || controller === null || sending.kind === "sending" || draft.trim().length === 0) {
+        if (
+            (state.kind !== "ready" && state.kind !== "draft") ||
+            controller === null ||
+            sending.kind === "sending" ||
+            draft.trim().length === 0
+        ) {
+            return;
+        }
+        if (state.kind === "draft" && (target.kind !== "draft" || draftSettings === null)) {
             return;
         }
         setSending({ kind: "sending" });
         followLatest.current = true;
+        let createdClient: MobiusBrowserClient | null = null;
+        let createdId: string | null = null;
         try {
-            const message = await state.client.messages.create(
+            const attempt =
+                messageAttempt.current?.content === draft.trim()
+                    ? messageAttempt.current
+                    : { content: draft.trim(), key: crypto.randomUUID() };
+            messageAttempt.current = attempt;
+            let client: MobiusBrowserClient;
+            if (state.kind === "draft") {
+                if (target.kind !== "draft" || draftSettings === null) {
+                    return;
+                }
+                const access = await requests.createConversation(
+                    state.bot.botId,
+                    target.key,
+                    draftSettings,
+                    controller.signal,
+                );
+                controller.signal.throwIfAborted();
+                createdId = access.conversationId;
+                createdClient = await requests.connectConversation(state.bot.botId, controller.signal, createdId);
+                client = createdClient;
+                const snapshot = await client.session.read(controller.signal);
+                const sessionClient = await requests.connectSession(
+                    state.bot.botId,
+                    snapshot.session.sessionId,
+                    controller.signal,
+                );
+                try {
+                    await sessionClient.sessions.prepare(snapshot.session.sessionId, controller.signal);
+                    const configuration = draftSettings.configuration;
+                    const updated = await sessionClient.sessions.updateConfiguration(
+                        snapshot.session.sessionId,
+                        {
+                            configId: configuration.configId,
+                            value: configuration.value,
+                            valueType: configuration.valueType,
+                            booleanValue: configuration.booleanValue,
+                        },
+                        controller.signal,
+                    );
+                    if (
+                        !updated.configOptions.some(
+                            (option) =>
+                                option.id === configuration.configId && option.currentValue === configuration.value,
+                        )
+                    ) {
+                        throw new Error(
+                            "The harness did not confirm the selected model. Choose a model before retrying your message.",
+                        );
+                    }
+                } finally {
+                    sessionClient.close();
+                }
+            } else {
+                client = state.client;
+            }
+            const message = await client.messages.create(
                 {
-                    content: draft.trim(),
-                    idempotencyKey: crypto.randomUUID(),
+                    content: attempt.content,
+                    idempotencyKey: attempt.key,
                     artifactIds: [],
                     images: [],
                     resources: [],
                 },
                 controller.signal,
             );
-            await state.client.messages.run(message.messageId, controller.signal);
-            const history = await state.client.history.read(new MobiusPageRequest(100, ""), controller.signal);
+            await client.messages.run(message.messageId, controller.signal);
+            const history = await client.history.read(new MobiusPageRequest(100, ""), controller.signal);
             if (!controller.signal.aborted) {
-                setState((current) => updateHistory(current, state.client, history));
+                setState((current) => updateHistory(current, client, history));
                 setDraft("");
+                messageAttempt.current = null;
                 setSending({ kind: "idle" });
             }
         } catch (cause) {
@@ -379,6 +461,15 @@ export function BotChatHome({
                     kind: "failed",
                     message: cause instanceof Error ? cause.message : "The message could not be sent.",
                 });
+            }
+        } finally {
+            createdClient?.close();
+            if (createdId !== null && !controller.signal.aborted) {
+                const url = new URL(window.location.href);
+                url.searchParams.delete("conversation");
+                url.searchParams.set("conversationId", createdId);
+                window.history.replaceState(window.history.state, "", url);
+                setTarget({ kind: "existing", conversationId: createdId });
             }
         }
     };
@@ -389,7 +480,7 @@ export function BotChatHome({
             data-chat-state={state.kind === "ready" ? "connected" : "disconnected"}
             className="flex h-dvh min-h-0 flex-col bg-background text-foreground sm:flex-row"
         >
-            {state.kind === "ready" && (
+            {(state.kind === "ready" || state.kind === "draft") && (
                 <LocalSessionSidebar
                     activeEntryId={conversation.kind === "local" ? conversation.session.entry.entryId : ""}
                     botId={state.bot.botId}
@@ -399,7 +490,7 @@ export function BotChatHome({
                     onNewConversation={newConversation}
                 />
             )}
-            {conversation.kind === "local" && state.kind === "ready" ? (
+            {conversation.kind === "local" && (state.kind === "ready" || state.kind === "draft") ? (
                 <LocalSessionPane
                     botId={state.bot.botId}
                     requests={requests}
@@ -450,7 +541,7 @@ export function BotChatHome({
                                 <Button onClick={() => retry((value) => value + 1)}>Reconnect</Button>
                                 <PairingInstruction requests={requests} />
                             </div>
-                        ) : state.history.turns.length === 0 ? (
+                        ) : state.kind === "draft" || state.history.turns.length === 0 ? (
                             <div className="m-auto text-center">
                                 <h1 className="text-2xl font-semibold">{state.bot.displayName}</h1>
                                 <p className="mt-2 text-sm text-muted-foreground">Send a message to your agent.</p>
@@ -491,7 +582,7 @@ export function BotChatHome({
                             ))
                         )}
                     </div>
-                    {state.kind === "ready" && (
+                    {(state.kind === "ready" || state.kind === "draft") && (
                         <form
                             className="mx-auto mb-6 w-full max-w-3xl px-4"
                             onSubmit={(event) => {
@@ -500,12 +591,17 @@ export function BotChatHome({
                             }}
                         >
                             <div className="mb-3">
-                                <ChatControls
-                                    botId={state.bot.botId}
-                                    client={state.client}
-                                    requests={requests}
-                                    onAgentChanged={reconnect}
-                                />
+                                {state.kind === "draft" ? (
+                                    <DraftChatControls
+                                        key={target.kind === "draft" ? target.key : "existing"}
+                                        botId={state.bot.botId}
+                                        requests={requests}
+                                        disabled={sending.kind === "sending"}
+                                        onSettings={setDraftSettings}
+                                    />
+                                ) : (
+                                    <ChatControls botId={state.bot.botId} client={state.client} requests={requests} />
+                                )}
                             </div>
                             {sending.kind === "failed" && (
                                 <p role="alert" className="mb-2 text-sm text-destructive">
@@ -524,7 +620,11 @@ export function BotChatHome({
                                     type="submit"
                                     size="icon"
                                     aria-label="Send message"
-                                    disabled={sending.kind === "sending" || draft.trim().length === 0}
+                                    disabled={
+                                        sending.kind === "sending" ||
+                                        draft.trim().length === 0 ||
+                                        (state.kind === "draft" && draftSettings === null)
+                                    }
                                 >
                                     <Send className="size-4" aria-hidden="true" />
                                 </Button>

@@ -97,3 +97,17 @@ revisits Chat, Then the page explains that the selected agent is unavailable and
 offers pairing instructions. If the Bot is inactive, the page explains that instead.
 Reconnect the selected Runtime and confirm the same page opens Chat automatically.
 HTTP integration tests cover identity creation, Bot ownership, and authorization.
+
+### New conversation drafts
+
+Given a paired workspace, When the user opens Chat or clicks New Conversation,
+Then the composer opens a local draft with Harness to the left of Model. Loading
+the model inventory may prepare a temporary settings Session, which is deleted
+after preparation; it must not create a Conversation or issue Conversation access.
+
+Given a draft with a selected harness, model, and prompt, When the user sends,
+Then a new Conversation is created with that configuration and the prompt is
+submitted. Harness becomes disabled while Model remains editable. Reload the
+resulting URL and confirm the same Conversation and history reopen. Click New
+Conversation again and confirm Harness is editable and the next send creates a
+distinct Conversation. Verify with `agent-browser` and the browser network log.

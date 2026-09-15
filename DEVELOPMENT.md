@@ -74,6 +74,11 @@ own origin. `MOBIUS_APP_ID` and `MOBIUS_APP_SECRET` authenticate Worker operatio
 The active Chat API issues short-lived conversation credentials after checking Bot
 ownership. The browser uses `createMobiusConversationSession` to communicate directly
 with Mobius, including history, messages, events, and credential refresh.
+New Conversation opens a browser-local draft. Its Harness selector chooses a paired
+agent; a temporary Project Session prepares that agent's model options and is deleted
+after preparation. First Send creates a canonical Project Conversation with the selected
+model and approved Bot binding. Existing conversations reopen by Conversation ID,
+including credential refresh, and keep their harness fixed.
 The Worker discovers/imports native sessions through the Project SDK. Its
 `session-access` endpoint issues credentials scoped to the selected Session inside
 the user's Project. The browser uses those credentials with the Session SDK to

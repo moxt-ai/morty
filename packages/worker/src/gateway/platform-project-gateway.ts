@@ -10,6 +10,7 @@ import {
     MobiusBotOwnerClient,
     MobiusClient,
     MobiusNoBotCompletionPolicy,
+    MobiusRecordingPolicy,
     MobiusRuntimePairingRequest,
 } from "@moxt-ai/mobius-sdk/server";
 import * as v from "valibot";
@@ -19,6 +20,14 @@ import {
     platformProjectSchema,
 } from "../components/management/entity/platform-project.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
+
+export type ChatConversationInput =
+    | { readonly conversationId: string }
+    | {
+          readonly conversationKey: string;
+          readonly bindingId: string;
+          readonly configuration: Parameters<MobiusBotOwnerClient["createProjectConversation"]>[0]["configuration"];
+      };
 
 export class PlatformProjectGateway {
     readonly #bindings: CloudBindings;
@@ -252,32 +261,41 @@ export class PlatformProjectGateway {
         botId: string,
         userId: string,
         signal: AbortSignal,
-        conversationKey = "personal-chat",
+        input: ChatConversationInput,
     ) =>
         await this.#withBot(projectId, botId, userId, signal, async (client, bot) => {
             if (!(bot.state instanceof MobiusActiveBotState)) {
                 throw new PlatformProjectError("AGENT_REQUIRED", "Connect your local agent to start chatting.", 409);
             }
-            let clientConversationKey = v.parse(platformIdentifier, conversationKey);
-            let conversation = await client.createConversation(botId, { clientConversationKey }, signal);
-            if (conversation.bindingId !== bot.state.activeBindingId) {
-                const digest = await crypto.subtle.digest(
-                    "SHA-256",
-                    new TextEncoder().encode(
-                        conversationKey === "personal-chat"
-                            ? bot.state.activeBindingId
-                            : `${bot.state.activeBindingId}:${conversationKey}`,
-                    ),
+            if ("conversationKey" in input && input.bindingId !== bot.state.activeBindingId) {
+                throw new PlatformProjectError(
+                    "AGENT_CHANGED",
+                    "Your selected harness changed. Reload its settings before sending.",
+                    409,
                 );
-                signal.throwIfAborted();
-                clientConversationKey = `chat-${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
-                conversation = await client.createConversation(botId, { clientConversationKey }, signal);
             }
+            const conversation =
+                "conversationId" in input
+                    ? await client.readProjectConversation(input.conversationId, signal)
+                    : await client.createProjectConversation(
+                          {
+                              botId,
+                              clientReference: input.conversationKey,
+                              idempotencyKey: input.conversationKey,
+                              title: "New chat",
+                              configuration: input.configuration,
+                          },
+                          signal,
+                      );
             if (
                 conversation.botId !== botId ||
-                conversation.bindingId !== bot.state.activeBindingId ||
-                conversation.clientConversationKey !== clientConversationKey ||
-                conversation.state.kind === "closed"
+                conversation.projectId !== projectId ||
+                ("conversationKey" in input &&
+                    (conversation.bindingId !== input.bindingId ||
+                        conversation.clientReference !== input.conversationKey ||
+                        conversation.idempotencyKey !== input.conversationKey)) ||
+                ("conversationId" in input && conversation.conversationId !== input.conversationId) ||
+                conversation.lifecycle !== "active"
             ) {
                 throw new PlatformProjectError(
                     "PLATFORM_INVALID_RESPONSE",
@@ -329,6 +347,58 @@ export class PlatformProjectGateway {
                 credential: access.credential,
                 expiresAt: access.expiresAt,
             };
+        });
+
+    readonly draftSettings = async (projectId: string, botId: string, userId: string, signal: AbortSignal) =>
+        await this.#withBot(projectId, botId, userId, signal, async (owner, bot) => {
+            const state = bot.state;
+            if (!(state instanceof MobiusActiveBotState)) {
+                throw new PlatformProjectError("AGENT_REQUIRED", "Choose a connected harness.", 409);
+            }
+            const bindings = await owner.listBindings(botId, signal);
+            const binding = bindings.executionBindings.find((item) => item.bindingId === state.activeBindingId);
+            if (binding === undefined) {
+                throw new PlatformProjectError("AGENT_REQUIRED", "Choose a connected harness.", 409);
+            }
+            return await this.#withProject(
+                projectId,
+                signal,
+                async (client) => {
+                    const sessionId = `settings-${crypto.randomUUID()}`;
+                    try {
+                        await client.sessions.create(
+                            {
+                                sessionId,
+                                runtimeId: binding.runtimeId,
+                                agentId: binding.agentRef,
+                                directoryId: binding.workspaceRef,
+                                bindingId: binding.bindingId,
+                                title: "Chat settings",
+                                policy: new MobiusRecordingPolicy("summary", 60000, 10, 1024),
+                            },
+                            signal,
+                        );
+                        const ready = await client.sessions.prepare(sessionId, signal);
+                        if (ready.sessionId !== sessionId || ready.agentId !== binding.agentRef) {
+                            throw new PlatformProjectError(
+                                "PLATFORM_INVALID_RESPONSE",
+                                "Platform returned unexpected harness settings.",
+                                502,
+                            );
+                        }
+                        return { bindingId: binding.bindingId, ready };
+                    } finally {
+                        // Cleanup must also run after the caller cancels preparation.
+                        await client.sessions.delete(sessionId, AbortSignal.timeout(15000)).catch((cause: unknown) => {
+                            signal.throwIfAborted();
+                            if (!(cause instanceof MobiusApiError && cause.status === 404)) {
+                                throw cause;
+                            }
+                        });
+                    }
+                },
+                120000,
+            );
         });
 
     readonly #withBot = async <T>(

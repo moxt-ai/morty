@@ -1,4 +1,4 @@
-import { decodeNativeSessionResult } from "@moxt-ai/mobius-protocol";
+import { decodeNativeSessionResult, decodeSessionReadyEvent } from "@moxt-ai/mobius-protocol";
 import { createMobiusConversationSession, MobiusBrowserAccessToken, MobiusClient } from "@moxt-ai/mobius-sdk/browser";
 import * as v from "valibot";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
@@ -35,6 +35,16 @@ const workspaceSchema = v.object({
 });
 export type ChatWorkspace = v.InferOutput<typeof workspaceSchema>;
 export type ChatAgentSelection = v.InferOutput<typeof agentSelectionSchema>;
+export interface ChatDraftConfiguration {
+    readonly bindingId: string;
+    readonly configuration: {
+        readonly additionalDirectoryIds: readonly string[];
+        readonly booleanValue: boolean;
+        readonly configId: string;
+        readonly value: string;
+        readonly valueType: "select" | "boolean";
+    };
+}
 const sessionAccessSchema = v.object({
     sessionId: identifier,
     projectId: identifier,
@@ -76,15 +86,28 @@ export class BotChatApi {
         this.#getToken = options.getToken;
         this.listBots = new ManagementApi(options).listBots;
     }
-    readonly access = async (
-        botId: string,
-        parent: AbortSignal,
-        conversationKey = "personal-chat",
-    ): Promise<ChatAccess> =>
+    readonly access = async (botId: string, parent: AbortSignal, conversationId: string): Promise<ChatAccess> =>
         v.parse(
             accessSchema,
-            await this.#request(botId, "access", { conversationKey: v.parse(identifier, conversationKey) }, parent),
+            await this.#request(botId, "access", { conversationId: v.parse(identifier, conversationId) }, parent),
         );
+    readonly createConversation = async (
+        botId: string,
+        conversationKey: string,
+        settings: ChatDraftConfiguration,
+        signal: AbortSignal,
+    ): Promise<ChatAccess> =>
+        v.parse(accessSchema, await this.#request(botId, "access", { conversationKey, ...settings }, signal));
+    readonly draftSettings = async (botId: string, signal: AbortSignal) => {
+        const result = v.parse(
+            v.object({ bindingId: identifier, ready: v.unknown() }),
+            await this.#request(botId, "draft-settings", {}, signal),
+        );
+        return {
+            bindingId: result.bindingId,
+            options: decodeSessionReadyEvent(JSON.stringify(result.ready)).configOptions,
+        };
+    };
     readonly createPairingInstruction = async (botId: string, signal: AbortSignal) => {
         const ticket = v.parse(
             v.object({ url: v.pipe(v.string(), v.url()), expiresAt: v.pipe(v.string(), v.isoTimestamp()) }),
@@ -100,8 +123,8 @@ export class BotChatApi {
         }
         return ticket;
     };
-    readonly connectConversation = async (botId: string, signal: AbortSignal, conversationKey = "personal-chat") => {
-        const access = await this.access(botId, signal, conversationKey);
+    readonly connectConversation = async (botId: string, signal: AbortSignal, conversationId: string) => {
+        const access = await this.access(botId, signal, conversationId);
         signal.throwIfAborted();
         let initial = true;
         return createMobiusConversationSession({
@@ -109,7 +132,7 @@ export class BotChatApi {
             streamConnectionTimeoutMilliseconds: 45000,
             accessTokenProvider: {
                 accessToken: async (parent) => {
-                    const token = initial ? access : await this.access(botId, parent, conversationKey);
+                    const token = initial ? access : await this.access(botId, parent, conversationId);
                     initial = false;
                     if (token.endpoint !== access.endpoint || token.conversationId !== access.conversationId) {
                         throw new CloudApiError(
@@ -176,7 +199,10 @@ export class BotChatApi {
         body: unknown,
         parent: AbortSignal,
     ): Promise<unknown> => {
-        const signal = AbortSignal.any([parent, AbortSignal.timeout(operation === "native-sessions" ? 120000 : 45000)]);
+        const signal = AbortSignal.any([
+            parent,
+            AbortSignal.timeout(operation === "native-sessions" || operation === "draft-settings" ? 120000 : 45000),
+        ]);
         const requestedBotId = v.parse(identifier, botId);
         const token = await this.#getToken(signal);
         if (token === null) {

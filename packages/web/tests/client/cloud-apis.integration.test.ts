@@ -92,7 +92,7 @@ test("Given an authenticated Bot owner, When Chat opens their Bot, Then the brow
         },
     });
 
-    await expect(api.access("bot-one", new AbortController().signal)).resolves.toEqual({
+    await expect(api.access("bot-one", new AbortController().signal, "conversation-one")).resolves.toEqual({
         endpoint: "https://mobius.test",
         conversationId: "conversation-one",
         credential,

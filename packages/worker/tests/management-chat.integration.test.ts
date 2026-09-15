@@ -165,7 +165,7 @@ test("Given a user-owned Platform Bot, When session records are managed, Then ch
             (await request(`chat/bots/${bot.botId}/${operation}`, bob, "POST", { runtimeId: "runtime-1" })).status,
         ).toBe(404);
     }
-    expect((await request(`chat/bots/${bot.botId}/access`, alice, "POST")).status).toBe(409);
+    expect((await request(`chat/bots/${bot.botId}/access`, alice, "POST")).status).toBe(400);
 });
 
 test("Given a workspace, When unauthenticated or malformed setup requests arrive, Then the HTTP boundary rejects them", async () => {
