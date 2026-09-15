@@ -117,6 +117,14 @@ bots, Chat, Slack integration, and sign out when manually validating an auth cha
 Chat browser E2E tests and their shared fixtures live in `packages/e2e`. Run
 `pnpm test:e2e` to execute all of them with Playwright Test and real Chrome.
 The TypeScript scenarios receive a `runtime` fixture from `infra/test.ts`.
+Playwright global setup builds Mobius and Chat once and owns one local Platform
+and application for the suite. The journeys run fully parallel with two workers,
+including the two setup scenarios in the same file. Each journey provisions its
+own Project and owns separate Chat D1/R2 storage, Runtime state, workspace, Chrome
+and diagnostics. Worker HTTP and inspector ports are allocated dynamically.
+Override concurrency with `pnpm test:e2e --workers=1` for serial diagnosis or
+`pnpm test:e2e --workers=3` when measuring a larger runner. Shared build outputs
+must not be rebuilt by another command while the suite is running.
 `createTestRuntime` owns agent setup, the local stack, browser startup, instruction
 execution and deterministic setup timers; the fixture owns diagnostics and cleanup.
 Scenarios describe user actions and assert visible results. The package's strict

@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { chromium } from "playwright-core";
 import type { runSetup as setup } from "../../setup/src/setup.ts";
 import { ChatApi, object, text } from "./chat-api.ts";
+import { preparedPlatform, publishableKey } from "./global-setup.ts";
 import type { E2EHarness } from "./harness.ts";
 import { LocalStack, repository } from "./local-stack.ts";
 
@@ -23,12 +24,13 @@ export async function createTestRuntime(harness: E2EHarness) {
         `#!/bin/sh\nif [ "$1" = "--version" ]; then echo '1.2.0'; exit 0; fi\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(agent)} --agent-name OpenCode "$@"\n`,
     );
     await chmod(binary, 0o700);
-    const stack = await LocalStack.create(harness, {
-        binary,
-        xdgConfigHome: harness.workDirectory,
-        publishableKey: "pk_test_c21hc2hpbmctc3BpZGVyLTg1NzQuY2xlcmsuYWNjb3VudHMuZGV2JA",
-    });
-    await stack.startChat(await stack.startPlatform());
+    const platform = preparedPlatform();
+    const stack = await LocalStack.create(
+        harness,
+        { binary, xdgConfigHome: harness.workDirectory, publishableKey },
+        platform.port,
+    );
+    await stack.startChat(platform, "reuse");
     const browser = await chromium.launch({ channel: "chrome", headless: true });
     try {
         const context = await browser.newContext();

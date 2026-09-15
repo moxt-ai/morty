@@ -72,8 +72,8 @@ export class LocalStack {
     readonly platformPort: number;
     readonly chatPort: number;
 
-    static async create(harness: E2EHarness, openCode: AgentConfiguration) {
-        const platformPort = await freePort();
+    static async create(harness: E2EHarness, openCode: AgentConfiguration, sharedPlatformPort?: number) {
+        const platformPort = sharedPlatformPort ?? (await freePort());
         const chatPort = await freePort();
         const directories = Object.fromEntries(
             ["platform", "chat", "runtime", "workspace", "xdg-cache", "xdg-data", "xdg-state"].map((name) => [
@@ -167,6 +167,8 @@ export class LocalStack {
                     "127.0.0.1",
                     "--port",
                     String(this.platformPort),
+                    "--inspector-port",
+                    "0",
                     "--persist-to",
                     this.directories.platform,
                 ],
@@ -189,13 +191,17 @@ export class LocalStack {
         });
     }
 
-    async startChat(application: { readonly appId: string; readonly appSecret: string }) {
-        await migrate(this.harness, chatConfiguration, "CHAT_DATABASE_WNAM", this.directories.chat);
-        await this.harness.stage("migrate-chat", () =>
-            migrate(this.harness, chatConfiguration, "CHAT_DATABASE_APAC", this.directories.chat),
+    async buildChat(application: { readonly appId: string; readonly appSecret: string }) {
+        await this.harness.stage("build-chat", () =>
+            this.harness.run("pnpm", ["build", "--mode", "e2e"], {
+                env: { ...this.chatVariables(application), NODE_ENV: "production" },
+            }),
         );
+    }
+
+    private chatVariables(application: { readonly appId: string; readonly appSecret: string }) {
         const { publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-        const variables = {
+        return {
             APP_ORIGIN: this.chatOrigin,
             AUTHENTICATION_BASE_URL: this.chatOrigin,
             CLERK_JWT_KEY: publicKey.export({ format: "pem", type: "spki" }).toString(),
@@ -210,9 +216,20 @@ export class LocalStack {
             VITE_MOBIUS_APP_ID: application.appId,
             VITE_MOBIUS_BASE_URL: this.platformOrigin,
         };
-        await this.harness.stage("build-chat", () =>
-            this.harness.run("pnpm", ["build", "--mode", "e2e"], { env: { ...variables, NODE_ENV: "production" } }),
+    }
+
+    async startChat(
+        application: { readonly appId: string; readonly appSecret: string },
+        build: "build" | "reuse" = "build",
+    ) {
+        await migrate(this.harness, chatConfiguration, "CHAT_DATABASE_WNAM", this.directories.chat);
+        await this.harness.stage("migrate-chat", () =>
+            migrate(this.harness, chatConfiguration, "CHAT_DATABASE_APAC", this.directories.chat),
         );
+        const variables = this.chatVariables(application);
+        if (build === "build") {
+            await this.buildChat(application);
+        }
         await this.harness.run("pnpm", [
             "exec",
             "wrangler",
@@ -240,6 +257,8 @@ export class LocalStack {
                 "127.0.0.1",
                 "--port",
                 String(this.chatPort),
+                "--inspector-port",
+                "0",
                 "--persist-to",
                 this.directories.chat,
                 ...variableArguments,
