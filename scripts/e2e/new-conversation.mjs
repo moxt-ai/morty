@@ -79,4 +79,36 @@ await runE2E("new-conversation-e2e", async (harness) => {
             ]);
         },
     );
+    await harness.stage(
+        "Given a saved conversation, When a user reads it on desktop or mobile, Then opposing message silhouettes distinguish the speakers without labels",
+        async () => {
+            for (const viewport of [
+                { width: 1440, height: 900 },
+                { width: 390, height: 844 },
+            ]) {
+                await page.setViewportSize(viewport);
+                const user = page.getByLabel("Your message").last();
+                const agent = page.getByLabel("Agent response").last();
+                const userStyle = await user.evaluate((element) => ({
+                    background: getComputedStyle(element).backgroundColor,
+                    left: element.getBoundingClientRect().left,
+                    right: element.getBoundingClientRect().right,
+                }));
+                const agentStyle = await agent.evaluate((element) => ({
+                    background: getComputedStyle(element).backgroundColor,
+                    left: element.getBoundingClientRect().left,
+                }));
+                assert.notEqual(userStyle.background, agentStyle.background);
+                assert.ok(userStyle.left > agentStyle.left);
+                assert.ok(userStyle.right <= viewport.width);
+                assert.equal(
+                    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+                    true,
+                );
+            }
+            await page.screenshot({ path: join(harness.workDirectory, "chat-mobile.png"), fullPage: true });
+            await page.setViewportSize({ width: 1440, height: 900 });
+            await page.screenshot({ path: join(harness.workDirectory, "chat-desktop.png"), fullPage: true });
+        },
+    );
 });

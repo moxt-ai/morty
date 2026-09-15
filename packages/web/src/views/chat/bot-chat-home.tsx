@@ -9,6 +9,8 @@ import { MessageSquare, Send } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
 import { AgentRichContent } from "../../components/agents/agent-rich-content.tsx";
+import { ComposerSurface } from "../../components/chat/composer-surface.tsx";
+import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
@@ -501,7 +503,7 @@ export function BotChatHome({
         <main
             aria-label="Chat"
             data-chat-state={state.kind === "ready" ? "connected" : "disconnected"}
-            className="flex h-dvh min-h-0 flex-col bg-background text-foreground sm:flex-row"
+            className="flex h-dvh min-h-0 flex-col bg-[#f7f9f8] text-foreground sm:flex-row"
         >
             {(state.kind === "ready" || state.kind === "draft") && (
                 <LocalSessionSidebar
@@ -533,7 +535,7 @@ export function BotChatHome({
                             const element = event.currentTarget;
                             followLatest.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
                         }}
-                        className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-6"
+                        className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10"
                         role="log"
                         aria-label="Messages"
                     >
@@ -565,29 +567,27 @@ export function BotChatHome({
                                 <PairingInstruction requests={requests} />
                             </div>
                         ) : state.kind === "draft" || state.history.turns.length === 0 ? (
-                            <div className="m-auto text-center">
-                                <h1 className="text-2xl font-semibold">{state.bot.displayName}</h1>
+                            <div className="m-auto max-w-lg text-center">
+                                <span className="mx-auto mb-6 flex size-16 items-center justify-center rounded-3xl bg-primary/10 text-primary shadow-[inset_0_0_0_1px_rgba(34,123,78,0.12)]">
+                                    <MessageSquare className="size-7" aria-hidden="true" />
+                                </span>
+                                <h1 className="text-3xl font-semibold tracking-tight">{state.bot.displayName}</h1>
                                 <p className="mt-2 text-sm text-muted-foreground">Send a message to your agent.</p>
                             </div>
                         ) : (
                             [...state.history.turns].reverse().map((turn) => (
                                 <div
                                     key={turn.commandId}
-                                    className="mx-auto grid min-w-0 w-full max-w-3xl gap-4 [overflow-wrap:anywhere]"
+                                    className="mx-auto grid min-w-0 w-full max-w-3xl gap-6 [overflow-wrap:anywhere]"
                                 >
-                                    <article
-                                        className="ml-auto max-w-[85%] whitespace-pre-wrap rounded-2xl bg-accent px-4 py-3"
-                                        aria-label="Your message"
-                                    >
-                                        {turn.prompt}
-                                    </article>
+                                    <MessageBubble speaker="user">{turn.prompt}</MessageBubble>
                                     {turn.response.length > 0 ? (
-                                        <article className="min-w-0 px-4 py-3" aria-label="Agent response">
+                                        <MessageBubble speaker="assistant">
                                             <AgentMarkdown
                                                 markdown={turn.response}
                                                 streaming={turn.attempt.kind === "running"}
                                             />
-                                        </article>
+                                        </MessageBubble>
                                     ) : turn.attempt.kind !== "failed" ? (
                                         <p role="status" className="px-4 text-sm text-muted-foreground">
                                             {attemptStatus(turn.attempt.kind)}
@@ -631,7 +631,7 @@ export function BotChatHome({
                                     {sending.message}
                                 </p>
                             )}
-                            <div className="flex items-end gap-3 rounded-2xl border border-border bg-card p-4">
+                            <ComposerSurface>
                                 <Textarea
                                     aria-label="Message"
                                     placeholder="Message your agent…"
@@ -651,7 +651,7 @@ export function BotChatHome({
                                 >
                                     <Send className="size-4" aria-hidden="true" />
                                 </Button>
-                            </div>
+                            </ComposerSurface>
                         </form>
                     )}
                 </section>
