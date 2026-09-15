@@ -54,9 +54,67 @@ jobs:
           SLACK_OAUTH_STATE_SIGNING_KEY: ${{ secrets.SLACK_OAUTH_STATE_SIGNING_KEY }}
           SLACK_TOKEN_ENCRYPTION_KEY: ${{ secrets.SLACK_TOKEN_ENCRYPTION_KEY }}
 
+  checks:
+    name: ${{ matrix.check }}
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [typecheck, build, lint, test:web, test:worker, knip, test:e2e, test:e2e:opencode, migrations]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+        with:
+          mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
+
+      - name: Install latest OpenCode
+        if: matrix.check == 'test:e2e:opencode'
+        run: |
+          npm install --global opencode-ai@latest
+          opencode --version
+
+      - name: Run ${{ matrix.check }}
+        if: matrix.check != 'migrations'
+        run: pnpm "$CHECK_SCRIPT"
+        env:
+          CHECK_SCRIPT: ${{ matrix.check }}
+          MOBIUS_E2E_ARTIFACT_ROOT: ${{ runner.temp }}/mobius-chat-setup-e2e
+          MOBIUS_E2E_CLERK_PUBLISHABLE_KEY: ${{ vars.CLERK_PUBLISHABLE_KEY }}
+          MOBIUS_E2E_TIMEOUT_MS: "1200000"
+          OPENCODE_DISABLE_AUTOUPDATE: "1"
+
+      - name: Upload browser journey failure diagnostics
+        if: failure() && (matrix.check == 'test:e2e' || matrix.check == 'test:e2e:opencode')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ matrix.check == 'test:e2e' && 'setup' || 'opencode' }}-e2e-${{ github.run_id }}
+          path: ${{ runner.temp }}/mobius-chat-setup-e2e/**/artifacts
+          if-no-files-found: ignore
+
+      - name: Save suite coverage for merging
+        if: ${{ !cancelled() && (matrix.check == 'test:web' || matrix.check == 'test:worker') }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-suite-${{ matrix.check == 'test:web' && 'web' || 'worker' }}
+          path: coverage/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Validate Cloud D1 migrations
+        if: matrix.check == 'migrations'
+        run: |
+          pnpm exec wrangler d1 migrations apply CHAT_DATABASE_APAC --local
+          pnpm exec wrangler d1 migrations apply CHAT_DATABASE_WNAM --local
+
   check:
     name: check
-    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    needs: [checks]
+    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -64,71 +122,36 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Read Mobius revision
-        id: mobius
-        run: echo "revision=$(git rev-parse HEAD:third-party/mobius)" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout Mobius
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
         with:
-          repository: moxt-ai/mobius
-          ref: ${{ steps.mobius.outputs.revision }}
-          path: third-party/mobius
-          persist-credentials: false
-          token: ${{ secrets.MOBIUS_READ_TOKEN }}
+          mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - name: Download suite coverage
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          node-version-file: .nvmrc
+          pattern: coverage-suite-*
+          merge-multiple: true
+          path: coverage/
 
-      - name: Enable pnpm
-        id: pnpm
-        shell: bash
-        run: |
-          corepack enable
-          pnpm --version
-          echo "store-path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Merge web and Worker coverage
+        run: pnpm test:coverage:merge
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ steps.pnpm.outputs.store-path }}
-          key: pnpm-v11-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            pnpm-v11-${{ runner.os }}-${{ runner.arch }}-
-
-      - run: pnpm install --frozen-lockfile
-
-      - run: pnpm check
-
-      - name: Verify browser journeys
-        run: pnpm test:e2e
-        env:
-          MOBIUS_E2E_ARTIFACT_ROOT: ${{ runner.temp }}/mobius-chat-setup-e2e
-
-      - name: Upload setup journey failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: setup-e2e-${{ github.run_id }}
-          path: ${{ runner.temp }}/mobius-chat-setup-e2e/**/artifacts
-          if-no-files-found: ignore
-
-      - name: Save coverage report
+      - name: Save combined coverage report
         continue-on-error: true
-        if: ${{ !cancelled() && hashFiles('coverage/lcov.info') != '' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: coverage-report
           path: coverage/
           retention-days: 14
 
-      - name: Validate Cloud D1 migrations
-        run: |
-          pnpm exec wrangler d1 migrations apply CHAT_DATABASE_APAC --local
-          pnpm exec wrangler d1 migrations apply CHAT_DATABASE_WNAM --local
+      - name: Require every parallel check to pass
+        if: always()
+        run: test "$CHECKS_RESULT" = success
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
 
   deploy:
-    needs: [check, validate-worker-config]
+    needs: [validate-worker-config]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     uses: ./.github/workflows/deploy.yml
     secrets: inherit
