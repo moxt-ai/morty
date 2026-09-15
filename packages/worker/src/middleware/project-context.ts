@@ -1,11 +1,11 @@
 import { createMiddleware } from "hono/factory";
 import * as v from "valibot";
+import { ManagementError } from "../components/management/entity/management-error.ts";
 import { readProjectCredential } from "../components/management/entity/project-credential.ts";
 import { type ApplicationContext, createApplicationDependencies } from "../composition/application-context.ts";
 import { projectBindings } from "../composition/chat-shards.ts";
 import { routeRegionalChat } from "../gateway/regional-chat-routing.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
-import { json } from "../infra/http.ts";
 
 export const cloudProjectContext = createMiddleware<{
     readonly Bindings: CloudBindings;
@@ -29,7 +29,7 @@ export const slackProjectContext = createMiddleware<{
 }>(async (context, next) => {
     const projectId = context.req.header("X-Mobius-Project-Id") ?? context.req.query("projectId");
     if (projectId === undefined) {
-        return json({ error: { code: "PROJECT_REQUIRED", message: "Project context is required." } }, 400);
+        throw new ManagementError("PROJECT_REQUIRED", "Project context is required.", 400);
     }
     const routed = await routeRegionalChat(context.req.raw, context.env, projectId);
     if (routed !== null) {

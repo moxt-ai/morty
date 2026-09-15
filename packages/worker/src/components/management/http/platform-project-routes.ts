@@ -4,6 +4,7 @@ import * as v from "valibot";
 import { createApplicationDependencies } from "../../../composition/application-context.ts";
 import { projectBindings } from "../../../composition/chat-shards.ts";
 import { json } from "../../../infra/http.ts";
+import { ManagementError } from "../entity/management-error.ts";
 import { authenticatedSession } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
 import { projectLocationHint } from "./project-location.ts";
@@ -16,7 +17,9 @@ export function createPlatformProjectRoutes() {
             "/project",
             bodyLimit({
                 maxSize: 4096,
-                onError: () => json({ error: { code: "INVALID_REQUEST", message: "The request is too large." } }, 413),
+                onError: () => {
+                    throw new ManagementError("INVALID_REQUEST", "The request is too large.", 413);
+                },
             }),
         )
         .get("/project", authenticatedSession, async (context) => {
@@ -34,7 +37,7 @@ export function createPlatformProjectRoutes() {
         .post("/project", authenticatedSession, async (context) => {
             const session = context.get("session");
             if (context.get("mediaType") !== "application/json") {
-                return json({ error: { code: "INVALID_REQUEST", message: "A JSON request is required." } }, 400);
+                throw new ManagementError("INVALID_REQUEST", "A JSON request is required.", 400);
             }
             let body: unknown;
             try {
@@ -42,7 +45,7 @@ export function createPlatformProjectRoutes() {
             } catch (cause) {
                 context.req.raw.signal.throwIfAborted();
                 if (cause instanceof SyntaxError) {
-                    return json({ error: { code: "INVALID_REQUEST", message: "The JSON request is invalid." } }, 400);
+                    throw new ManagementError("INVALID_REQUEST", "The JSON request is invalid.", 400);
                 }
                 throw cause;
             }

@@ -5,6 +5,7 @@ import { json } from "../../infra/http.ts";
 import { PlatformProjectError, platformIdentifier } from "../management/entity/platform-project.ts";
 import { authenticatedSession } from "../management/http/authenticated-session.ts";
 import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
+import { MobiusAppError } from "./mobius-app-service.ts";
 
 const setupInput = v.strictObject({
     runtimeId: platformIdentifier,
@@ -40,19 +41,18 @@ export function createBotChatRoutes() {
             "*",
             bodyLimit({
                 maxSize: 110000,
-                onError: () => json({ error: { code: "INVALID_REQUEST", message: "The message is too large." } }, 413),
+                onError: () => {
+                    throw new MobiusAppError("INVALID_REQUEST", "The message is too large.", 413);
+                },
             }),
         )
         .all(
             "/bots/:botId/:operation{access|setup|workspace|native-sessions|session-access|draft-settings}",
             async (context, next) => {
                 if (context.req.method !== "POST") {
-                    const response = json(
-                        { error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed." } },
-                        405,
-                    );
-                    response.headers.set("Allow", "POST");
-                    return response;
+                    throw new MobiusAppError("METHOD_NOT_ALLOWED", "Method not allowed.", 405, undefined, {
+                        Allow: "POST",
+                    });
                 }
                 return await next();
             },

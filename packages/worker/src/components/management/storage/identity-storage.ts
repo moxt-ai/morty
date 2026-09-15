@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import type { HttpError } from "../../../infra/http-error.ts";
 import { createProjectCredential, readProjectCredential } from "../entity/project-credential.ts";
 
 const anonymousToken = v.pipe(v.string(), v.regex(/^mobius_anon_v2_[A-Za-z0-9_-]{43}$/u));
@@ -320,11 +321,16 @@ export class IdentityStorage {
     };
 }
 
-export class IdentityStorageError extends Error {
+class IdentityStorageError extends Error implements HttpError {
     readonly code: "IDENTITY_UNAVAILABLE";
     constructor(code: "IDENTITY_UNAVAILABLE", message: string) {
         super(message);
         this.code = code;
         this.name = "IdentityStorageError";
     }
+
+    readonly toHttpJson: HttpError["toHttpJson"] = () => ({
+        body: { error: { code: this.code, message: this.message } },
+        status: 503,
+    });
 }
