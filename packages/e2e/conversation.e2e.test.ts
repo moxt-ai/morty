@@ -40,6 +40,47 @@ test("Given a paired workspace, When a user creates and reloads conversations, T
     await expect(page.getByTestId(dataTestId.agentResponse).nth(1)).toContainText(followUp);
     expect(page.url()).toBe(savedUrl);
     await expect(page.getByTestId(dataTestId.userMessage)).toHaveText(["Second conversation", followUp]);
+    await test.step("Given Chat-created conversations, When the user opens the sidebar, Then only managed conversations appear and a local session can be previewed and forked", async () => {
+        const sidebar = page.getByRole("complementary", { name: "Conversations", exact: true });
+        await expect(sidebar.getByRole("button", { name: "First conversation", exact: true })).toBeVisible();
+        await sidebar.getByRole("button", { name: "First conversation", exact: true }).click();
+        await expect(page.getByTestId(dataTestId.userMessage)).toHaveText(["First conversation"]);
+        await page.getByRole("button", { name: "Open Local Session", exact: true }).click();
+        const dialog = page.getByRole("dialog", { name: "Open Local Session", exact: true });
+        await expect(dialog.getByRole("button", { name: "Fork", exact: true })).toBeDisabled();
+        await dialog.getByRole("button", { name: "First conversation", exact: true }).click();
+        await expect(dialog.getByRole("region", { name: "Selected session preview" })).toContainText(
+            "First conversation",
+        );
+        await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+        await expect(dialog).toHaveCount(0);
+        await expect(sidebar.getByRole("button", { name: "First conversation", exact: true })).toHaveCount(1);
+        await page.getByRole("button", { name: "Open Local Session", exact: true }).click();
+        await dialog.getByRole("button", { name: "First conversation", exact: true }).click();
+        await dialog.getByRole("button", { name: "Fork", exact: true }).click();
+        await expect(dialog).toHaveCount(0);
+        await expect(page.getByRole("textbox", { name: "Message local session", exact: true })).toBeEnabled();
+        await expect(sidebar.getByRole("button", { name: "First conversation", exact: true })).toHaveCount(2);
+        await page.getByRole("textbox", { name: "Message local session", exact: true }).fill("Continue only the fork");
+        await page.getByRole("button", { name: "Send to local session", exact: true }).click();
+        await expect(page.getByRole("log", { name: "Local session messages", exact: true })).toContainText(
+            /OpenCode turn \d+: Continue only the fork/u,
+        );
+        await page.reload();
+        await expect(page.getByRole("log", { name: "Local session messages", exact: true })).toContainText(
+            "First conversation",
+        );
+        await expect(page.getByRole("log", { name: "Local session messages", exact: true })).toContainText(
+            /OpenCode turn \d+: Continue only the fork/u,
+        );
+        await sidebar
+            .getByRole("button", { name: "First conversation", exact: true })
+            .and(page.locator(':not([aria-current="page"])'))
+            .click();
+        await expect(page.getByTestId(dataTestId.userMessage)).toHaveText(["First conversation"]);
+        await page.goto(savedUrl);
+        await expect(page.getByTestId(dataTestId.userMessage)).toHaveText(["Second conversation", followUp]);
+    });
     await test.step("Given a saved conversation, When read on desktop or mobile, Then opposing message silhouettes distinguish the speakers without labels", async () => {
         for (const viewport of [
             { width: 1440, height: 900 },

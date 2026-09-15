@@ -43,8 +43,8 @@ export async function verifySession(
     if (!token) {
         throw new SessionError("FORBIDDEN");
     }
-    const result = await fetch("/mobius-cloud/api/session", {
-        headers: { Authorization: `Bearer ${token}`, "X-Mobius-Project-Id": projectId },
+    const result = await fetch(`/mobius-cloud/api/projects/${encodeURIComponent(projectId)}/session`, {
+        headers: { Authorization: `Bearer ${token}` },
         signal,
     });
     if (!result.ok) {

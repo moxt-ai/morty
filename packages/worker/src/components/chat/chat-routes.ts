@@ -28,7 +28,7 @@ function notFound(): never {
 
 export function createChatApplication() {
     return new Hono<ChatHttpEnvironment>()
-        .basePath("/mobius-cloud/api/chat")
+        .basePath("/mobius-cloud/api/chat/projects/:projectId")
         .onError(rethrowHttpError)
         .use(
             "*",

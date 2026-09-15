@@ -12,6 +12,7 @@ import { errorMiddleware, rethrowHttpError } from "./middleware/error-middleware
 import { cloudProjectContext, slackProjectContext } from "./middleware/project-context.ts";
 
 const managementApplication = createManagementApplication();
+const projectManagementApplication = createManagementApplication("/mobius-cloud/api/projects/:projectId");
 const chatApplication = createChatApplication();
 
 type CloudHttpEnvironment = {
@@ -21,6 +22,9 @@ type CloudHttpEnvironment = {
 
 const cloudRoutes = new Hono<CloudHttpEnvironment>()
     .use("*", cloudProjectContext)
+    .all("/projects/:projectId/*", (context) =>
+        projectManagementApplication.fetch(context.req.raw, context.var.dependencies),
+    )
     .all("/chat", (context) => managementApplication.fetch(context.req.raw, context.var.dependencies))
     .route(
         "/chat",

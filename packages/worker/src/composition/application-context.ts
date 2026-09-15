@@ -1,4 +1,5 @@
 import pino from "pino";
+import { ManagedSessionStorage } from "../components/chat/managed-session-storage.ts";
 import { MobiusAppService } from "../components/chat/mobius-app-service.ts";
 import { AuthenticationService } from "../components/management/service/authentication-service.ts";
 import { ConfigurationStorage } from "../components/management/storage/configuration-storage.ts";
@@ -27,6 +28,7 @@ export function createApplicationDependencies(bindings: CloudBindings) {
         configuration: new ConfigurationStorage(infrastructure),
         identities: new IdentityStorage(bindings.DATABASE, bindings.CHAT_PROJECT_ID ?? null),
         managedBots: new ManagedBotStorage(bindings.DATABASE),
+        chatSessions: new ManagedSessionStorage(bindings.DATABASE),
         platformProjects: new PlatformProjectStorage(bindings.DATABASE),
     });
     const cx = { ...infrastructure, storages };

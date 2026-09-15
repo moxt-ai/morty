@@ -178,12 +178,11 @@ export class AnonymousIdentityApi {
             return v.parse(
                 anonymousSessionSchema,
                 await this.#request(
-                    "/session",
+                    `/projects/${encodeURIComponent(identity.projectId)}/session`,
                     {
                         method: "GET",
                         headers: {
                             authorization: `Bearer ${identity.token}`,
-                            "X-Mobius-Project-Id": identity.projectId,
                         },
                     },
                     requestSignal,
@@ -201,11 +200,14 @@ export class AnonymousIdentityApi {
         const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(15_000)]);
         const headers = new Headers(init.headers);
         const workspace = readStoredWorkspace(this.#storage);
-        if (!headers.has("X-Mobius-Project-Id") && workspace !== null) {
-            headers.set("X-Mobius-Project-Id", workspace.projectId);
-        }
+        const scopedPath =
+            workspace !== null &&
+            !path.startsWith("/projects/") &&
+            !["/identity/anonymous-users", "/identity/transfers/redeem", "/identity/pairings/redeem"].includes(path)
+                ? `/projects/${encodeURIComponent(workspace.projectId)}${path}`
+                : path;
         const response = await this.#fetchRequest(
-            new Request(new URL(`/mobius-cloud/api${path}`, this.#origin), { ...init, headers, signal }),
+            new Request(new URL(`/mobius-cloud/api${scopedPath}`, this.#origin), { ...init, headers, signal }),
         );
         const value: unknown = await response.json();
         signal.throwIfAborted();

@@ -17,8 +17,8 @@ import { Select } from "../../components/ui/option-select.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
 import { type RecordedAgentActivity, recordAgentActivity } from "../../services/chat/agent-activities.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import type { OpenLocalSession } from "./local-session-dialog.tsx";
 import { type LocalMessage, LocalSessionMessage } from "./local-session-message.tsx";
-import type { OpenLocalSession } from "./local-session-sidebar.tsx";
 
 type Operation =
     | { readonly kind: "idle" }
@@ -47,9 +47,7 @@ export function LocalSessionPane({
               })
             : [],
     );
-    const [options, setOptions] = useState<readonly SessionConfigOption[]>(
-        session.result.action === "preview" ? [] : session.result.ready.configOptions,
-    );
+    const [options, setOptions] = useState<readonly SessionConfigOption[]>(session.result.ready.configOptions);
     const [draft, setDraft] = useState("");
     const [activities, setActivities] = useState<ReadonlyMap<string, RecordedAgentActivity>>(new Map());
     const [operation, setOperation] = useState<Operation>({ kind: "idle" });
@@ -69,8 +67,7 @@ export function LocalSessionPane({
             messageList.current.scrollTop = messageList.current.scrollHeight;
         }
     }, [messages]);
-    const sessionId =
-        session.result.action === "preview" ? session.result.targetSessionId : session.result.ready.sessionId;
+    const sessionId = session.result.ready.sessionId;
     useEffect(() => {
         const controller = new AbortController();
         lifetime.current = controller;
@@ -106,11 +103,49 @@ export function LocalSessionPane({
             }
         };
         const open = async () => {
-            if (session.result.action === "preview") {
-                return;
-            }
             client = await requests.connectSession(botId, sessionId, controller.signal);
+            const saved = await client.sessions.readMessages(
+                sessionId,
+                new MobiusPageRequest(100, ""),
+                controller.signal,
+            );
             controller.signal.throwIfAborted();
+            lastSequence = BigInt(saved.lastCommittedSequence);
+            const history = session.result.history;
+            const initial: readonly LocalMessage[] =
+                history.status === "available"
+                    ? history.messages.map(
+                          (message, index): LocalMessage =>
+                              message.role === "user"
+                                  ? { id: `history-${index}`, role: "user", text: message.text }
+                                  : {
+                                        id: `history-${index}`,
+                                        role: "assistant",
+                                        text: message.text,
+                                        attempt: null,
+                                        commandId: null,
+                                    },
+                      )
+                    : [];
+            setMessages([
+                ...initial,
+                ...[...saved.messages]
+                    .reverse()
+                    .filter(
+                        (message) =>
+                            history.status !== "available" || !history.coveredCommandIds.includes(message.commandId),
+                    )
+                    .flatMap((message): readonly LocalMessage[] => [
+                        { id: `${message.commandId}-user`, role: "user", text: message.prompt },
+                        {
+                            id: `${message.commandId}-reply`,
+                            role: "assistant",
+                            text: message.response,
+                            attempt: message.attempt,
+                            commandId: message.commandId,
+                        },
+                    ]),
+            ]);
             const subscription = await client.events.subscribe(
                 sessionId,
                 "",
@@ -215,15 +250,11 @@ export function LocalSessionPane({
         };
     }, [session, sessionId, botId, requests]);
     const request = {
-        additionalDirectoryIds: (session.result.action === "preview"
-            ? session.entry.additionalDirectories
-            : session.result.ready.additionalDirectories
-        ).map((directory) => directory.directoryId),
+        additionalDirectoryIds: session.result.ready.additionalDirectories.map((directory) => directory.directoryId),
     };
     const send = async () => {
         if (
             connection.kind !== "ready" ||
-            session.result.action === "preview" ||
             draft.trim() === "" ||
             operation.kind === "sending" ||
             operation.kind === "configuring"
@@ -368,29 +399,23 @@ export function LocalSessionPane({
                         Applying agent settings…
                     </p>
                 )}
-                {session.result.action === "preview" ? (
-                    <p className="text-sm text-muted-foreground">
-                        This agent provides a history preview but does not support continuing this session.
-                    </p>
-                ) : (
-                    <ComposerSurface>
-                        <Textarea
-                            aria-label="Message local session"
-                            placeholder="Continue this conversation…"
-                            value={draft}
-                            onChange={(event) => setDraft(event.target.value)}
-                            disabled={busy}
-                        />
-                        <Button
-                            type="submit"
-                            size="icon"
-                            aria-label="Send to local session"
-                            disabled={busy || draft.trim() === ""}
-                        >
-                            <Send className="size-4" />
-                        </Button>
-                    </ComposerSurface>
-                )}
+                <ComposerSurface>
+                    <Textarea
+                        aria-label="Message local session"
+                        placeholder="Continue this conversation…"
+                        value={draft}
+                        onChange={(event) => setDraft(event.target.value)}
+                        disabled={busy}
+                    />
+                    <Button
+                        type="submit"
+                        size="icon"
+                        aria-label="Send to local session"
+                        disabled={busy || draft.trim() === ""}
+                    >
+                        <Send className="size-4" />
+                    </Button>
+                </ComposerSurface>
             </form>
         </section>
     );

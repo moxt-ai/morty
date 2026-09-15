@@ -27,7 +27,12 @@ class InMemoryD1Statement {
 export class InMemoryD1Database {
     readonly #database = new DatabaseSync(":memory:");
     constructor() {
-        for (const migration of ["0001_initial.sql", "0002_anonymous_identity.sql", "0003_platform_project.sql"]) {
+        for (const migration of [
+            "0001_initial.sql",
+            "0002_anonymous_identity.sql",
+            "0003_platform_project.sql",
+            "0006_chat_managed_session.sql",
+        ]) {
             this.#database.exec(readFileSync(new URL(`../../migrations/${migration}`, import.meta.url), "utf8"));
         }
     }

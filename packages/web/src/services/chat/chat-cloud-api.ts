@@ -29,6 +29,7 @@ export class ChatCloudApi {
     readonly #fetchRequest: (request: Request) => Promise<Response>;
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly #origin: string;
+    readonly #projectId: string;
     readonly #appId: string;
     readonly #mobiusBaseUrl: string;
     constructor(options: {
@@ -37,12 +38,14 @@ export class ChatCloudApi {
         readonly getToken: (signal: AbortSignal) => Promise<string | null>;
         readonly mobiusBaseUrl: string;
         readonly origin: string;
+        readonly projectId: string;
     }) {
         this.#appId = v.parse(v.pipe(v.string(), v.minLength(1)), options.appId);
         this.#fetchRequest = options.fetchRequest ?? ((request) => fetch(request));
         this.#getToken = options.getToken;
         this.#mobiusBaseUrl = v.parse(v.pipe(v.string(), v.url()), options.mobiusBaseUrl);
         this.#origin = options.origin;
+        this.#projectId = v.parse(identifier, options.projectId);
     }
 
     readonly open = async (botId: string, signal: AbortSignal): Promise<MobiusChatAccess> => ({
@@ -105,15 +108,21 @@ export class ChatCloudApi {
             throw new CloudApiError("UNAUTHENTICATED", "Sign in to continue.");
         }
         const response = await this.#fetchRequest(
-            new Request(new URL(`/mobius-cloud/api/${component}${path}`, this.#origin), {
-                method,
-                signal,
-                headers: {
-                    authorization: `Bearer ${token}`,
-                    ...(body === undefined ? {} : { "content-type": "application/json" }),
+            new Request(
+                new URL(
+                    `/mobius-cloud/api/${component === "chat" ? `chat/projects/${encodeURIComponent(this.#projectId)}` : `projects/${encodeURIComponent(this.#projectId)}/management`}${path}`,
+                    this.#origin,
+                ),
+                {
+                    method,
+                    signal,
+                    headers: {
+                        authorization: `Bearer ${token}`,
+                        ...(body === undefined ? {} : { "content-type": "application/json" }),
+                    },
+                    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
                 },
-                ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-            }),
+            ),
         );
         if (response.status === 204) {
             return null;

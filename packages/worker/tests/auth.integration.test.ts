@@ -99,12 +99,14 @@ afterEach(() => {
     vi.useRealTimers();
 });
 function accountRequest(token?: string, projectId?: string): Request {
-    return new Request(`${APP_ORIGIN}/mobius-cloud/api/session`, {
-        headers: {
-            ...(token === undefined ? {} : { Authorization: `Bearer ${token}` }),
-            ...(projectId === undefined ? {} : { "X-Mobius-Project-Id": projectId }),
+    return new Request(
+        `${APP_ORIGIN}/mobius-cloud/api${projectId === undefined ? "" : `/projects/${projectId}`}/session`,
+        {
+            headers: {
+                ...(token === undefined ? {} : { Authorization: `Bearer ${token}` }),
+            },
         },
-    });
+    );
 }
 
 async function createAnonymousUser(
@@ -152,8 +154,8 @@ test.each([
         expect(created.status).toBe(201);
         const identity = v.parse(v.object({ token: v.string(), projectId: v.string() }), await created.json());
         const projectRequest = () =>
-            new Request(`${APP_ORIGIN}/mobius-cloud/api/management/project`, {
-                headers: { authorization: `Bearer ${identity.token}`, "X-Mobius-Project-Id": identity.projectId },
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/project`, {
+                headers: { authorization: `Bearer ${identity.token}` },
             });
         const response = await worker.fetch(projectRequest(), environment);
         expect(response.status).toBe(200);
@@ -166,7 +168,6 @@ test.each([
                     headers: {
                         authorization: `Bearer ${identity.token}`,
                         "content-type": "application/json",
-                        "X-Mobius-Project-Id": identity.projectId,
                     },
                     body: JSON.stringify({ displayName: "Personal workspace" }),
                 }),
@@ -217,9 +218,9 @@ test("Given separate APAC and WNAM Chat stores and location-only Platform placem
         expect(await session.json()).toMatchObject({ userId: identity.userId });
         expect((await worker.fetch(accountRequest(identity.token, other.projectId), environment)).status).toBe(401);
         const transfer = await worker.fetch(
-            new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/transfers`, {
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/identity/transfers`, {
                 method: "POST",
-                headers: { authorization: `Bearer ${identity.token}`, "X-Mobius-Project-Id": identity.projectId },
+                headers: { authorization: `Bearer ${identity.token}` },
             }),
             environment,
         );
@@ -256,8 +257,8 @@ test("Given a first-time visitor, When an anonymous identity is created, Then th
         userId: identity.userId,
     });
     const bots = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-cloud/api/management/bots`, {
-            headers: { authorization: `Bearer ${identity.token}`, "X-Mobius-Project-Id": identity.projectId },
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/bots`, {
+            headers: { authorization: `Bearer ${identity.token}` },
         }),
         slackConfiguration(database),
     );
@@ -266,8 +267,8 @@ test("Given a first-time visitor, When an anonymous identity is created, Then th
         bots: [expect.objectContaining({ botId: expect.any(String), displayName: "My Bot" })],
     });
     const projectResponse = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-cloud/api/management/project`, {
-            headers: { authorization: `Bearer ${identity.token}`, "X-Mobius-Project-Id": identity.projectId },
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/project`, {
+            headers: { authorization: `Bearer ${identity.token}` },
         }),
         slackConfiguration(database),
     );
@@ -288,22 +289,24 @@ test("Given a user with a Bot on a Project-scoped Platform, When setup checks th
     const environment = slackConfiguration(database);
     const identity = await createAnonymousUser(database);
     const listed = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-cloud/api/management/bots`, {
-            headers: { authorization: `Bearer ${identity.token}`, "X-Mobius-Project-Id": identity.projectId },
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/bots`, {
+            headers: { authorization: `Bearer ${identity.token}` },
         }),
         environment,
     );
     const { bots } = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await listed.json());
     const response = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-cloud/api/chat/bots/${bots[0]?.botId}/workspace`, {
-            method: "POST",
-            headers: {
-                authorization: `Bearer ${identity.token}`,
-                "content-type": "application/json",
-                "X-Mobius-Project-Id": identity.projectId,
+        new Request(
+            `${APP_ORIGIN}/mobius-cloud/api/chat/projects/${identity.projectId}/bots/${bots[0]?.botId}/workspace`,
+            {
+                method: "POST",
+                headers: {
+                    authorization: `Bearer ${identity.token}`,
+                    "content-type": "application/json",
+                },
+                body: "{}",
             },
-            body: "{}",
-        }),
+        ),
         environment,
     );
     expect(response.status).toBe(200);
@@ -314,9 +317,9 @@ test("Given an anonymous user, When a transfer is redeemed twice, Then only the 
     const database = new InMemoryD1Database();
     const identity = await createAnonymousUser(database);
     const created = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/transfers`, {
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/identity/transfers`, {
             method: "POST",
-            headers: { authorization: `Bearer ${identity.token}`, "X-Mobius-Project-Id": identity.projectId },
+            headers: { authorization: `Bearer ${identity.token}` },
         }),
         slackConfiguration(database),
     );
@@ -355,12 +358,11 @@ test.each(["anonymous", "clerk"])(
         const environment = slackConfiguration(database);
         if (kind === "clerk") {
             const bound = await worker.fetch(
-                new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/clerk-binding`, {
+                new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${anonymous.projectId}/identity/clerk-binding`, {
                     method: "POST",
                     headers: {
                         authorization: `Bearer ${token}`,
                         "content-type": "application/json",
-                        "X-Mobius-Project-Id": anonymous.projectId,
                     },
                     body: JSON.stringify({ action: "bind", anonymousToken: anonymous.token }),
                 }),
@@ -371,8 +373,8 @@ test.each(["anonymous", "clerk"])(
         const session = await worker.fetch(accountRequest(token, anonymous.projectId), environment);
         const { userId } = v.parse(v.object({ userId: v.string() }), await session.json());
         const bots = await worker.fetch(
-            new Request(`${APP_ORIGIN}/mobius-cloud/api/management/bots`, {
-                headers: { authorization: `Bearer ${token}`, "X-Mobius-Project-Id": anonymous.projectId },
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${anonymous.projectId}/management/bots`, {
+                headers: { authorization: `Bearer ${token}` },
             }),
             environment,
         );
@@ -383,12 +385,11 @@ test.each(["anonymous", "clerk"])(
         const botId = owned[0]?.botId;
         expect(botId).toBeDefined();
         const created = await worker.fetch(
-            new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/pairings`, {
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${anonymous.projectId}/identity/pairings`, {
                 method: "POST",
                 headers: {
                     authorization: `Bearer ${token}`,
                     "content-type": "application/json",
-                    "X-Mobius-Project-Id": anonymous.projectId,
                 },
                 body: JSON.stringify({ botId }),
             }),
@@ -433,23 +434,25 @@ test("Given another user's Bot and an expired ticket, When pairing is requested,
     const other = await createAnonymousUser(database);
     const environment = slackConfiguration(database);
     const bots = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-cloud/api/management/bots`, {
-            headers: { authorization: `Bearer ${owner.token}`, "X-Mobius-Project-Id": owner.projectId },
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${owner.projectId}/management/bots`, {
+            headers: { authorization: `Bearer ${owner.token}` },
         }),
         environment,
     );
     const { bots: owned } = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await bots.json());
     const issue = (token: string) =>
         worker.fetch(
-            new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/pairings`, {
-                method: "POST",
-                headers: {
-                    authorization: `Bearer ${token}`,
-                    "content-type": "application/json",
-                    "X-Mobius-Project-Id": token === other.token ? other.projectId : owner.projectId,
+            new Request(
+                `${APP_ORIGIN}/mobius-cloud/api/projects/${token === other.token ? other.projectId : owner.projectId}/identity/pairings`,
+                {
+                    method: "POST",
+                    headers: {
+                        authorization: `Bearer ${token}`,
+                        "content-type": "application/json",
+                    },
+                    body: JSON.stringify({ botId: owned[0]?.botId }),
                 },
-                body: JSON.stringify({ botId: owned[0]?.botId }),
-            }),
+            ),
             environment,
         );
     expect((await issue(other.token)).status).toBe(404);
@@ -492,8 +495,8 @@ test.each([
         const environment = slackConfiguration(database);
         const identity = await createAnonymousUser(database);
         const bots = await worker.fetch(
-            new Request(`${APP_ORIGIN}/mobius-cloud/api/management/bots`, {
-                headers: { authorization: `Bearer ${identity.token}`, "X-Mobius-Project-Id": identity.projectId },
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/bots`, {
+                headers: { authorization: `Bearer ${identity.token}` },
             }),
             environment,
         );
@@ -502,12 +505,11 @@ test.each([
             await bots.json(),
         );
         const issued = await worker.fetch(
-            new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/pairings`, {
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/identity/pairings`, {
                 method: "POST",
                 headers: {
                     authorization: `Bearer ${identity.token}`,
                     "content-type": "application/json",
-                    "X-Mobius-Project-Id": identity.projectId,
                 },
                 body: JSON.stringify({ botId: owned[0]?.botId }),
             }),
@@ -699,9 +701,9 @@ test("Given an expired anonymous transfer, When a device redeems it, Then no cre
     const database = new InMemoryD1Database();
     const identity = await createAnonymousUser(database);
     const created = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/transfers`, {
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/identity/transfers`, {
             method: "POST",
-            headers: { authorization: `Bearer ${identity.token}`, "X-Mobius-Project-Id": identity.projectId },
+            headers: { authorization: `Bearer ${identity.token}` },
         }),
         slackConfiguration(database),
     );
@@ -725,20 +727,19 @@ test("Given an unbound Clerk account, When the visitor binds their anonymous use
     const identity = await createAnonymousUser(database);
     const clerkToken = issuer.createSession("user_alice");
     const status = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/clerk-binding`, {
-            headers: { authorization: `Bearer ${clerkToken}`, "X-Mobius-Project-Id": identity.projectId },
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/identity/clerk-binding`, {
+            headers: { authorization: `Bearer ${clerkToken}` },
         }),
         slackConfiguration(database),
     );
     expect(await status.json()).toEqual({ kind: "unbound" });
 
     const bound = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/clerk-binding`, {
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/identity/clerk-binding`, {
             method: "POST",
             headers: {
                 authorization: `Bearer ${clerkToken}`,
                 "content-type": "application/json",
-                "X-Mobius-Project-Id": identity.projectId,
             },
             body: JSON.stringify({ action: "bind", anonymousToken: identity.token }),
         }),
@@ -758,15 +759,17 @@ test("Given a Clerk account bound elsewhere, When the visitor overrides it, Then
     const clerkToken = issuer.createSession("user_alice");
     const resolve = (anonymousToken: string, action: "bind" | "override") =>
         worker.fetch(
-            new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/clerk-binding`, {
-                method: "POST",
-                headers: {
-                    authorization: `Bearer ${clerkToken}`,
-                    "content-type": "application/json",
-                    "X-Mobius-Project-Id": anonymousToken === first.token ? first.projectId : second.projectId,
+            new Request(
+                `${APP_ORIGIN}/mobius-cloud/api/projects/${anonymousToken === first.token ? first.projectId : second.projectId}/identity/clerk-binding`,
+                {
+                    method: "POST",
+                    headers: {
+                        authorization: `Bearer ${clerkToken}`,
+                        "content-type": "application/json",
+                    },
+                    body: JSON.stringify({ action, anonymousToken }),
                 },
-                body: JSON.stringify({ action, anonymousToken }),
-            }),
+            ),
             slackConfiguration(database),
         );
     expect((await resolve(first.token, "bind")).status).toBe(200);
@@ -791,15 +794,17 @@ test("Given a Clerk account bound elsewhere, When the visitor discards the local
     const clerkToken = issuer.createSession("user_alice");
     const request = (anonymousToken: string, action: "bind" | "discard-local") =>
         worker.fetch(
-            new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/clerk-binding`, {
-                method: "POST",
-                headers: {
-                    authorization: `Bearer ${clerkToken}`,
-                    "content-type": "application/json",
-                    "X-Mobius-Project-Id": anonymousToken === account.token ? account.projectId : local.projectId,
+            new Request(
+                `${APP_ORIGIN}/mobius-cloud/api/projects/${anonymousToken === account.token ? account.projectId : local.projectId}/identity/clerk-binding`,
+                {
+                    method: "POST",
+                    headers: {
+                        authorization: `Bearer ${clerkToken}`,
+                        "content-type": "application/json",
+                    },
+                    body: JSON.stringify({ action, anonymousToken }),
                 },
-                body: JSON.stringify({ action, anonymousToken }),
-            }),
+            ),
             slackConfiguration(database),
         );
     expect((await request(account.token, "bind")).status).toBe(200);
@@ -858,10 +863,9 @@ test("Given a pending Clerk session, When account data is requested, Then access
 
 test("Given regional storage, When an authenticated user lists Slack bots, Then the user ID scopes the empty result", async () => {
     const response = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/bots`, {
+        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/bots?projectId=prj_a01_${"a".repeat(24)}`, {
             headers: {
                 Authorization: `Bearer ${issuer.createSession("user_alice")}`,
-                "X-Mobius-Project-Id": `prj_a01_${"a".repeat(24)}`,
             },
         }),
         slackConfiguration(),
@@ -873,10 +877,9 @@ test("Given regional storage, When an authenticated user lists Slack bots, Then 
 test("Given a missing regional database, When an authenticated user lists Slack bots, Then storage fails closed", async () => {
     const configuration = { ...slackConfiguration(), CHAT_DATABASE_APAC: undefined };
     const response = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/bots`, {
+        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/bots?projectId=prj_a01_${"a".repeat(24)}`, {
             headers: {
                 Authorization: `Bearer ${issuer.createSession("user_alice")}`,
-                "X-Mobius-Project-Id": `prj_a01_${"a".repeat(24)}`,
             },
         }),
         configuration,

@@ -7,12 +7,14 @@ export function Dialog({
     description,
     onClose,
     busy = false,
+    wide = false,
     children,
 }: {
     readonly title: string;
     readonly description: string;
     readonly onClose: () => void;
     readonly busy?: boolean;
+    readonly wide?: boolean;
     readonly children: ReactNode;
 }) {
     const [returnFocus] = useState(() =>
@@ -36,7 +38,7 @@ export function Dialog({
                         event.preventDefault();
                         returnFocus?.focus();
                     }}
-                    className="fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-border bg-card p-6 text-[13px] leading-5 text-foreground shadow-lg outline-none motion-safe:animate-cloud-enter"
+                    className={`fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] ${wide ? "max-w-5xl" : "max-w-lg"} -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-border bg-card p-6 text-[13px] leading-5 text-foreground shadow-lg outline-none motion-safe:animate-cloud-enter`}
                 >
                     <header className="mb-5 pr-7">
                         <Primitive.Title className="text-base font-semibold tracking-tight">{title}</Primitive.Title>

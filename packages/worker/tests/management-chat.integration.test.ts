@@ -54,15 +54,17 @@ async function fixture(location?: string) {
     });
     const projects = new Map<string, string>();
     const request = (path: string, token: string, method = "GET", body?: object) =>
-        app.request(`https://cloud.test/mobius-cloud/api/${path}`, {
-            method,
-            headers: {
-                authorization: `Bearer ${token}`,
-                "content-type": "application/json",
-                ...(projects.has(token) ? { "X-Mobius-Project-Id": projects.get(token) ?? "" } : {}),
+        app.request(
+            `https://cloud.test/mobius-cloud/api/${path.startsWith("chat/") ? path.replace("chat/", `chat/projects/${projects.get(token) ?? "missing"}/`) : projects.has(token) ? `projects/${projects.get(token)}/${path}` : path}`,
+            {
+                method,
+                headers: {
+                    authorization: `Bearer ${token}`,
+                    "content-type": "application/json",
+                },
+                ...(body === undefined ? {} : { body: JSON.stringify(body) }),
             },
-            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        });
+        );
     const anonymous = async () => {
         const response = await app.request("https://cloud.test/mobius-cloud/api/identity/anonymous-users", {
             method: "POST",
@@ -97,8 +99,8 @@ test.each(["apac", "wnam"])(
             MOBIUS_REGIONAL_WNAM: regional("wnam"),
         };
         const request = (token: string) =>
-            new Request("https://cloud.test/mobius-cloud/api/session", {
-                headers: { authorization: `Bearer ${token}`, "X-Mobius-Project-Id": fixture.projectId },
+            new Request(`https://cloud.test/mobius-cloud/api/projects/${fixture.projectId}/session`, {
+                headers: { authorization: `Bearer ${token}` },
             });
         expect((await worker.fetch(request(fixture.token), edge)).status).toBe(200);
         expect((await worker.fetch(request("mobius_anon_invalid"), edge)).status).toBe(401);
@@ -112,8 +114,8 @@ test.each(["apac", "wnam"])(
         const identity = v.parse(v.object({ token: v.string(), projectId: v.string() }), await created.json());
         expect(identity.projectId.startsWith(region === "apac" ? "prj_a" : "prj_w")).toBe(true);
         const session = await worker.fetch(
-            new Request("https://cloud.test/mobius-cloud/api/session", {
-                headers: { authorization: `Bearer ${identity.token}`, "X-Mobius-Project-Id": identity.projectId },
+            new Request(`https://cloud.test/mobius-cloud/api/projects/${identity.projectId}/session`, {
+                headers: { authorization: `Bearer ${identity.token}` },
             }),
             edge,
         );
@@ -235,15 +237,17 @@ test("Given a workspace, When unauthenticated or malformed setup requests arrive
         JSON.stringify({ displayName: "My Project", appId: "another-app" }),
         JSON.stringify({ displayName: "My Project", userId: "another-user" }),
     ]) {
-        const invalid = await app.request("https://cloud.test/mobius-cloud/api/management/project", {
-            method: "POST",
-            headers: {
-                authorization: `Bearer ${alice}`,
-                "content-type": "application/json",
-                "X-Mobius-Project-Id": project.projectId,
+        const invalid = await app.request(
+            `https://cloud.test/mobius-cloud/api/projects/${project.projectId}/management/project`,
+            {
+                method: "POST",
+                headers: {
+                    authorization: `Bearer ${alice}`,
+                    "content-type": "application/json",
+                },
+                body,
             },
-            body,
-        });
+        );
         expect(invalid.status).toBe(400);
         expect(await invalid.json()).toMatchObject({ error: { code: "INVALID_REQUEST" } });
     }

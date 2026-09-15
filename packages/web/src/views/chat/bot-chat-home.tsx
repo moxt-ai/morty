@@ -13,9 +13,10 @@ import type { ManagedBot } from "../../services/management/management-api.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
 import { BotConversationTurn } from "./bot-conversation-turn.tsx";
 import { ChatControls } from "./chat-controls.tsx";
+import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
+import type { OpenLocalSession } from "./local-session-dialog.tsx";
 import { LocalSessionPane } from "./local-session-pane.tsx";
-import { LocalSessionSidebar, type OpenLocalSession } from "./local-session-sidebar.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
 
 type SetupReason = "unconfigured" | "inactive" | "no-selection" | "agent-missing" | "agent-offline" | "agent-required";
@@ -126,6 +127,9 @@ export function BotChatHome({
         | "workspace"
         | "selectAgent"
         | "nativeSessions"
+        | "nativeSession"
+        | "managedSessions"
+        | "managedSession"
         | "connectSession"
         | "createPairingInstruction"
         | "createConversation"
@@ -138,7 +142,12 @@ export function BotChatHome({
     const [initialTarget] = useState<
         | { readonly kind: "draft"; readonly key: string }
         | { readonly kind: "existing"; readonly conversationId: string }
+        | { readonly kind: "fork"; readonly sessionId: string }
     >(() => {
+        const sessionId = new URL(window.location.href).searchParams.get("sessionId");
+        if (sessionId !== null && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(sessionId)) {
+            return { kind: "fork", sessionId };
+        }
         const conversationId = new URL(window.location.href).searchParams.get("conversationId");
         return conversationId !== null && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(conversationId)
             ? { kind: "existing", conversationId }
@@ -170,10 +179,27 @@ export function BotChatHome({
         const url = new URL(window.location.href);
         url.searchParams.delete("conversation");
         url.searchParams.delete("conversationId");
+        url.searchParams.delete("sessionId");
         window.history.replaceState(window.history.state, "", url);
         target.current = { kind: "draft", key };
         retry((value) => value + 1);
     }, []);
+    const openManaged = (kind: "conversation" | "fork", id: string) => {
+        lifetime.current?.controller.abort();
+        setDraft("");
+        setSending({ kind: "idle" });
+        setDraftSettings(null);
+        messageAttempt.current = null;
+        followLatest.current = true;
+        const url = new URL(window.location.href);
+        url.searchParams.delete("conversationId");
+        url.searchParams.delete("sessionId");
+        url.searchParams.set(kind === "conversation" ? "conversationId" : "sessionId", id);
+        window.history.replaceState(window.history.state, "", url);
+        target.current =
+            kind === "conversation" ? { kind: "existing", conversationId: id } : { kind: "fork", sessionId: id };
+        retry((value) => value + 1);
+    };
     useEffect(() => {
         if (state.kind === "ready" && followLatest.current && messageList.current !== null) {
             messageList.current.scrollTop = messageList.current.scrollHeight;
@@ -193,6 +219,13 @@ export function BotChatHome({
             }
             const workspace = await requests.workspace(bot.botId, controller.signal);
             controller.signal.throwIfAborted();
+            if (target.current.kind === "fork") {
+                const session = await requests.managedSession(bot.botId, target.current.sessionId, controller.signal);
+                controller.signal.throwIfAborted();
+                setState({ kind: "draft", bot });
+                setConversation({ kind: "local", session });
+                return;
+            }
             const reason = target.current.kind === "draft" ? setupReason(workspace) : null;
             if (reason !== null) {
                 setState({ kind: "setup", reason });
@@ -314,6 +347,7 @@ export function BotChatHome({
                     target.current.key,
                     draftSettings,
                     controller.signal,
+                    draft.trim().slice(0, 500),
                 );
                 controller.signal.throwIfAborted();
                 createdId = access.conversationId;
@@ -401,12 +435,22 @@ export function BotChatHome({
             className="flex h-dvh min-h-0 flex-col bg-[#f7f9f8] text-foreground sm:flex-row"
         >
             {(state.kind === "ready" || state.kind === "draft") && (
-                <LocalSessionSidebar
-                    activeEntryId={conversation.kind === "local" ? conversation.session.entry.entryId : ""}
+                <ConversationSidebar
+                    activeId={
+                        target.current.kind === "existing"
+                            ? target.current.conversationId
+                            : target.current.kind === "fork"
+                              ? target.current.sessionId
+                              : ""
+                    }
                     botId={state.bot.botId}
                     requests={requests}
-                    onOpen={(session) => setConversation({ kind: "local", session })}
-                    onChat={showBot}
+                    onOpen={(session) => openManaged(session.kind, session.id)}
+                    onFork={(session) => {
+                        if (session.result.action === "fork") {
+                            openManaged("fork", session.result.ready.sessionId);
+                        }
+                    }}
                     onNewConversation={newConversation}
                 />
             )}
@@ -414,11 +458,7 @@ export function BotChatHome({
                 <LocalSessionPane
                     botId={state.bot.botId}
                     requests={requests}
-                    key={
-                        conversation.session.result.action === "preview"
-                            ? conversation.session.result.targetSessionId
-                            : conversation.session.result.ready.sessionId
-                    }
+                    key={conversation.session.result.ready.sessionId}
                     session={conversation.session}
                     onBack={showBot}
                 />

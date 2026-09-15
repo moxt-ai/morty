@@ -42,10 +42,13 @@ export async function jsonRequest(
     if (provider !== undefined) {
         headers["x-mobius-oidc-provider"] = provider;
     }
-    if (project !== undefined) {
-        headers["x-mobius-project-id"] = project;
-    }
-    const response = await fetch(new URL(path, origin), {
+    const scopedPath =
+        project !== undefined &&
+        path.startsWith("/mobius-cloud/api/") &&
+        !path.startsWith("/mobius-cloud/api/chat/projects/")
+            ? path.replace("/mobius-cloud/api/", `/mobius-cloud/api/projects/${encodeURIComponent(project)}/`)
+            : path;
+    const response = await fetch(new URL(scopedPath, origin), {
         method: body === undefined ? "GET" : "POST",
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -97,7 +100,7 @@ export class ChatApi {
     readonly cancelSessionTurn = async (sessionId: string, turnId: string) => {
         const identity = this.#requireIdentity();
         const access = await this.#request(
-            `/mobius-cloud/api/chat/bots/${encodeURIComponent(identity.botId)}/session-access`,
+            `/mobius-cloud/api/chat/projects/${encodeURIComponent(identity.projectId)}/bots/${encodeURIComponent(identity.botId)}/session-access`,
             {
                 body: { sessionId },
             },
@@ -133,9 +136,12 @@ export class ChatApi {
 
     async bindOpenCode(runtimeId: string) {
         const identity = this.#requireIdentity();
-        await this.#request(`/mobius-cloud/api/chat/bots/${encodeURIComponent(identity.botId)}/setup`, {
-            body: { runtimeId, agentRef: "opencode", workspaceRef: "default", agentConfigRevision: 1 },
-        });
+        await this.#request(
+            `/mobius-cloud/api/chat/projects/${encodeURIComponent(identity.projectId)}/bots/${encodeURIComponent(identity.botId)}/setup`,
+            {
+                body: { runtimeId, agentRef: "opencode", workspaceRef: "default", agentConfigRevision: 1 },
+            },
+        );
     }
 
     async waitForBinding(harness: E2EHarness) {
@@ -143,9 +149,12 @@ export class ChatApi {
         await harness.waitFor(
             "OpenCode Bot binding",
             () =>
-                this.#request(`/mobius-cloud/api/chat/bots/${encodeURIComponent(identity.botId)}/workspace`, {
-                    body: {},
-                }),
+                this.#request(
+                    `/mobius-cloud/api/chat/projects/${encodeURIComponent(identity.projectId)}/bots/${encodeURIComponent(identity.botId)}/workspace`,
+                    {
+                        body: {},
+                    },
+                ),
             (workspace) =>
                 workspace.status === "active" &&
                 workspace.selected !== null &&

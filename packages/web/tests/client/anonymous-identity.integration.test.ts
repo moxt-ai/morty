@@ -36,7 +36,7 @@ test("Given a browser without an identity, When Mobius starts twice, Then one ge
                 creations += 1;
                 return Response.json(identity, { status: 201 });
             }
-            expect(request.headers.get("X-Mobius-Project-Id")).toBe(identity.projectId);
+            expect(new URL(request.url).pathname).toBe(`/mobius-cloud/api/projects/${identity.projectId}/session`);
             return Response.json({ authentication: { kind: "anonymous" }, userId: "usr_local" });
         },
     });

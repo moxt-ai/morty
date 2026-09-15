@@ -129,7 +129,11 @@ Every environment binds regional D1 databases as `CHAT_DATABASE_APAC` and
 Platform's public storage-placement endpoint, which returns only `{ location: string }`,
 and verifies ownership separately. Chat accepts `apac` or `wnam` and selects its own
 regional database and attachment bucket from that location.
-The browser persists `{ userId, projectId }` and supplies `X-Mobius-Project-Id`.
+The browser persists `{ userId, projectId }`. Chat requests use
+`/mobius-cloud/api/chat/projects/:projectId/...`; project-scoped identity and
+management requests use `/mobius-cloud/api/projects/:projectId/...`.
+The path selects regional storage before authentication; ownership is checked
+independently inside the selected Project. Project headers are not used.
 Only one-time pairing and transfer tickets embed Project context; anonymous
 credentials are opaque. Apply the schema locally with:
 
@@ -141,7 +145,7 @@ pnpm exec wrangler d1 migrations apply CHAT_DATABASE_WNAM --local
 Staging and production resources are named in `wrangler.jsonc`. Apply remote
 migrations with the matching Wrangler environment.
 
-Slack management requests also supply `X-Mobius-Project-Id`. Generated Slack
+Slack management requests supply a `projectId` query parameter. Generated Slack
 event and OAuth callback URLs, and attachment links, carry a `projectId` query
 parameter. Queue deliveries contain `{ projectId, message }` so asynchronous
 processing resolves the same regional bindings. Callback routing does not replace
@@ -165,7 +169,16 @@ model and approved Bot binding. Existing conversations reopen by Conversation ID
 including credential refresh, and keep their harness fixed.
 First Send keeps the created connection and transitions the draft in place; it
 updates the saved URL without removing the sidebar or composer to reconnect.
-The Worker discovers/imports native sessions through the Project SDK. Its
+Chat records created Conversations and forked Sessions in `chat_managed_session`,
+keyed and indexed by Project ID, user ID, Bot ID, resource kind and resource ID.
+The sidebar lists these managed records. New Conversation records the first prompt
+as its title. Open Local Session opens a two-column directory and preview dialog;
+the directory returns metadata only, selecting an entry fetches its history from
+`native-session/:id`, and `native-session/:id/fork` creates and records a separate Session.
+Cancelling the dialog creates no Chat-managed record. Forked Sessions reopen by
+`sessionId` in the saved page URL. Apply migration `0006_chat_managed_session.sql`
+to both regional Chat databases before deployment.
+The Worker discovers and forks native sessions through the Project SDK. Its
 `session-access` endpoint issues credentials scoped to the selected Session inside
 the user's Project. The browser uses those credentials with the Session SDK to
 communicate directly with Mobius; it receives no Runtime-wide host credential.

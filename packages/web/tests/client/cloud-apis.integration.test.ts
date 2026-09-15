@@ -8,13 +8,16 @@ test("Given a signed-in web user, When they manage bots and open chat, Then mana
     const fetchRequest = async (request: Request): Promise<Response> => {
         requests.push(request);
         const path = new URL(request.url).pathname;
-        if (path === "/mobius-cloud/api/management/bots" && request.method === "GET") {
+        if (
+            path === `/mobius-cloud/api/projects/prj_a01_${"a".repeat(24)}/management/bots` &&
+            request.method === "GET"
+        ) {
             return Response.json({ bots: [{ botId: "bot-one", displayName: "Research" }] });
         }
-        if (path === "/mobius-cloud/api/management/bots/claims") {
+        if (path === `/mobius-cloud/api/projects/prj_a01_${"a".repeat(24)}/management/bots/claims`) {
             return Response.json({ botId: "bot-two", displayName: "Support" }, { status: 201 });
         }
-        if (path === "/mobius-cloud/api/chat/bots/bot-one/access-tokens") {
+        if (path === `/mobius-cloud/api/chat/projects/prj_a01_${"a".repeat(24)}/bots/bot-one/access-tokens`) {
             return Response.json(
                 {
                     accessTokenId: "key-one",
@@ -23,13 +26,18 @@ test("Given a signed-in web user, When they manage bots and open chat, Then mana
                 { status: 201 },
             );
         }
-        if (path === "/mobius-cloud/api/management/access-tokens/key-one/regenerate") {
+        if (
+            path === `/mobius-cloud/api/projects/prj_a01_${"a".repeat(24)}/management/access-tokens/key-one/regenerate`
+        ) {
             return Response.json({
                 accessToken: "r".repeat(32),
                 accessTokenId: "key-one",
             });
         }
-        if (path === "/mobius-cloud/api/chat/sessions" && request.method === "POST") {
+        if (
+            path === `/mobius-cloud/api/chat/projects/prj_a01_${"a".repeat(24)}/sessions` &&
+            request.method === "POST"
+        ) {
             return Response.json({ botId: "bot-one", sessionId: "session-one", title: "Planning" }, { status: 201 });
         }
         return new Response(null, { status: 204 });
@@ -102,6 +110,6 @@ test("Given an authenticated Bot owner, When Chat opens their Bot, Then the brow
     expect(requests[0]?.method).toBe("POST");
     expect(requests[0]?.headers.get("authorization")).toBe("Bearer anonymous-token");
     expect(new URL(requests[0]?.url ?? "https://invalid.test").pathname).toBe(
-        "/mobius-cloud/api/chat/bots/bot-one/access",
+        `/mobius-cloud/api/chat/projects/prj_a01_${"a".repeat(24)}/bots/bot-one/access`,
     );
 });

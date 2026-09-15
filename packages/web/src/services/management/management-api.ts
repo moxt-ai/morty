@@ -62,16 +62,21 @@ export class ManagementApi {
             throw new CloudApiError("UNAUTHENTICATED", "Sign in to continue.");
         }
         const response = await this.#fetchRequest(
-            new Request(new URL(`/mobius-cloud/api/management${path}`, this.#origin), {
-                method,
-                signal,
-                headers: {
-                    authorization: `Bearer ${token}`,
-                    "X-Mobius-Project-Id": this.#projectId,
-                    ...(body === undefined ? {} : { "content-type": "application/json" }),
+            new Request(
+                new URL(
+                    `/mobius-cloud/api/projects/${encodeURIComponent(this.#projectId)}/management${path}`,
+                    this.#origin,
+                ),
+                {
+                    method,
+                    signal,
+                    headers: {
+                        authorization: `Bearer ${token}`,
+                        ...(body === undefined ? {} : { "content-type": "application/json" }),
+                    },
+                    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
                 },
-                ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-            }),
+            ),
         );
         const value: unknown = await response.json();
         signal.throwIfAborted();

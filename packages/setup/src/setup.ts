@@ -304,9 +304,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const headers: Record<string, string> = { "content-type": "application/json" };
         if (authenticated) {
             headers.authorization = `Bearer ${credential(context.config.user_token)}`;
-            headers["X-Mobius-Project-Id"] = identifier(context.config.project_id);
         }
-        const response = await fetch(new URL(`/mobius-cloud/api${route}`, context.base), {
+        const path =
+            authenticated && !route.startsWith("/chat/projects/")
+                ? `/projects/${identifier(context.config.project_id)}${route}`
+                : route;
+        const response = await fetch(new URL(`/mobius-cloud/api${path}`, context.base), {
             method: body === undefined ? "GET" : "POST",
             headers,
             redirect: "error",
@@ -536,7 +539,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     });
                     fail("HARNESS_UNAVAILABLE");
                 }
-                const workspace = await request(context, `/chat/bots/${context.config.bot_id}/workspace`, {});
+                const workspace = await request(
+                    context,
+                    `/chat/projects/${context.config.project_id}/bots/${context.config.bot_id}/workspace`,
+                    {},
+                );
                 if (
                     Array.isArray(workspace.agents) &&
                     workspace.agents.some(
@@ -562,7 +569,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 1) {
             fail("AGENT_REVISION_REQUIRED");
         }
-        await request(context, `/chat/bots/${context.config.bot_id}/setup`, {
+        await request(context, `/chat/projects/${context.config.project_id}/bots/${context.config.bot_id}/setup`, {
             runtimeId,
             agentRef,
             workspaceRef: "default",
@@ -602,7 +609,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         let attempts = 0;
         while (true) {
             signal.throwIfAborted();
-            const workspace = await request(context, `/chat/bots/${context.config.bot_id}/workspace`, {});
+            const workspace = await request(
+                context,
+                `/chat/projects/${context.config.project_id}/bots/${context.config.bot_id}/workspace`,
+                {},
+            );
             if (hasReadyBinding(context, workspace)) {
                 return;
             }

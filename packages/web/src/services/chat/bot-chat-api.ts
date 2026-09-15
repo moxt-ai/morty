@@ -1,4 +1,8 @@
-import { decodeNativeSessionResult, decodeSessionReadyEvent } from "@moxt-ai/mobius-protocol";
+import {
+    decodeNativeSessionHistory,
+    decodeNativeSessionResult,
+    decodeSessionReadyEvent,
+} from "@moxt-ai/mobius-protocol";
 import { createMobiusConversationSession, MobiusBrowserAccessToken, MobiusClient } from "@moxt-ai/mobius-sdk/browser";
 import * as v from "valibot";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
@@ -14,6 +18,17 @@ const accessSchema = v.pipe(
     v.readonly(),
 );
 export type ChatAccess = v.InferOutput<typeof accessSchema>;
+const managedSessionSchema = v.pipe(
+    v.object({
+        kind: v.picklist(["conversation", "fork"]),
+        id: identifier,
+        title: v.string(),
+        projectId: identifier,
+        userId: identifier,
+    }),
+    v.readonly(),
+);
+export type ManagedChatSession = v.InferOutput<typeof managedSessionSchema>;
 const agentSelectionSchema = v.object({
     runtimeId: identifier,
     agentRef: identifier,
@@ -96,8 +111,37 @@ export class BotChatApi {
         conversationKey: string,
         settings: ChatDraftConfiguration,
         signal: AbortSignal,
+        title = "New chat",
     ): Promise<ChatAccess> =>
-        v.parse(accessSchema, await this.#request(botId, "access", { conversationKey, ...settings }, signal));
+        v.parse(accessSchema, await this.#request(botId, "access", { conversationKey, ...settings, title }, signal));
+    readonly managedSessions = async (botId: string, signal: AbortSignal) =>
+        v.parse(
+            v.object({ sessions: v.array(managedSessionSchema) }),
+            await this.#request(botId, "managed-sessions", {}, signal),
+        ).sessions;
+    readonly managedSession = async (botId: string, sessionId: string, signal: AbortSignal) => {
+        const stored = v.parse(
+            v.object({
+                agentRef: identifier,
+                result: v.unknown(),
+                entry: v.object({
+                    entryId: identifier,
+                    title: v.string(),
+                    directoryId: v.string(),
+                    directoryLabel: v.string(),
+                    additionalDirectories: v.array(v.object({ directoryId: v.string(), name: v.string() })),
+                    updatedAt: v.nullable(v.string()),
+                }),
+            }),
+            await this.#request(botId, "managed-session", { sessionId }, signal),
+        );
+        const result = decodeNativeSessionResult(JSON.stringify(stored.result));
+        if (result.action !== "fork" || result.ready.sessionId !== sessionId) {
+            throw new CloudApiError("INVALID_SESSION", "The saved Chat session is invalid.");
+        }
+        const action: "fork" = result.action;
+        return { ...stored, result: { ...result, action } };
+    };
     readonly draftSettings = async (botId: string, signal: AbortSignal) => {
         const result = v.parse(
             v.object({ bindingId: identifier, ready: v.unknown() }),
@@ -156,10 +200,51 @@ export class BotChatApi {
         runtimeId: string,
         input: Parameters<MobiusClient["runtimes"]["nativeSessions"]>[1],
         signal: AbortSignal,
-    ) =>
-        decodeNativeSessionResult(
-            JSON.stringify(await this.#request(botId, "native-sessions", { ...input, runtimeId }, signal)),
+    ) => {
+        if (input.action === "list") {
+            return decodeNativeSessionResult(
+                JSON.stringify(await this.#request(botId, "native-sessions", { ...input, runtimeId }, signal)),
+            );
+        }
+        if (input.action !== "fork") {
+            throw new CloudApiError("INVALID_REQUEST", "Use the session preview endpoint to read local history.");
+        }
+        const { entryId, action: _action, ...identity } = input;
+        return decodeNativeSessionResult(
+            JSON.stringify(
+                await this.#request(
+                    botId,
+                    `native-session/${encodeURIComponent(v.parse(identifier, entryId))}/fork`,
+                    { ...identity, runtimeId },
+                    signal,
+                ),
+            ),
         );
+    };
+    readonly nativeSession = async (
+        botId: string,
+        runtimeId: string,
+        input: {
+            readonly entryId: string;
+            readonly discoveryId: string;
+            readonly agentId: string;
+            readonly directoryId: string;
+            readonly additionalDirectoryIds: readonly string[];
+        },
+        signal: AbortSignal,
+    ) => {
+        const { entryId, ...identity } = input;
+        const result = v.parse(
+            v.object({ title: v.string(), history: v.unknown() }),
+            await this.#request(
+                botId,
+                `native-session/${encodeURIComponent(v.parse(identifier, entryId))}`,
+                { ...identity, runtimeId },
+                signal,
+            ),
+        );
+        return { title: result.title, history: decodeNativeSessionHistory(result.history) };
+    };
 
     readonly connectSession = async (botId: string, sessionId: string, signal: AbortSignal): Promise<MobiusClient> => {
         const readAccess = async (parent: AbortSignal) =>
@@ -202,7 +287,9 @@ export class BotChatApi {
     ): Promise<unknown> => {
         const signal = AbortSignal.any([
             parent,
-            AbortSignal.timeout(operation === "native-sessions" || operation === "draft-settings" ? 120000 : 45000),
+            AbortSignal.timeout(
+                operation.startsWith("native-session") || operation === "draft-settings" ? 120000 : 45000,
+            ),
         ]);
         const requestedBotId = v.parse(identifier, botId);
         const token = await this.#getToken(signal);
@@ -213,8 +300,8 @@ export class BotChatApi {
             new Request(
                 new URL(
                     operation === "pairing-instruction"
-                        ? "/mobius-cloud/api/identity/pairings"
-                        : `/mobius-cloud/api/chat/bots/${encodeURIComponent(requestedBotId)}/${operation}`,
+                        ? `/mobius-cloud/api/projects/${encodeURIComponent(this.#projectId)}/identity/pairings`
+                        : `/mobius-cloud/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(requestedBotId)}/${operation}`,
                     this.#origin,
                 ),
                 {
@@ -224,7 +311,6 @@ export class BotChatApi {
                     headers: {
                         authorization: `Bearer ${token}`,
                         "content-type": "application/json",
-                        "X-Mobius-Project-Id": this.#projectId,
                     },
                     body: body === undefined ? null : JSON.stringify(body),
                 },

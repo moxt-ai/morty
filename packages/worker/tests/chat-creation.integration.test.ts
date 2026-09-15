@@ -50,15 +50,17 @@ test.each([true, false])(
                 ).json(),
             );
             const request = (path: string, body?: object) =>
-                app.request(`https://cloud.test/mobius-cloud/api/${path}`, {
-                    method: body === undefined ? "GET" : "POST",
-                    headers: {
-                        authorization: `Bearer ${identity.token}`,
-                        "X-Mobius-Project-Id": identity.projectId,
-                        "content-type": "application/json",
+                app.request(
+                    `https://cloud.test/mobius-cloud/api/${path.startsWith("chat/") ? path.replace("chat/", `chat/projects/${identity.projectId}/`) : `projects/${identity.projectId}/${path}`}`,
+                    {
+                        method: body === undefined ? "GET" : "POST",
+                        headers: {
+                            authorization: `Bearer ${identity.token}`,
+                            "content-type": "application/json",
+                        },
+                        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
                     },
-                    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-                });
+                );
             const { bots } = v.parse(
                 v.object({ bots: v.array(v.object({ botId: v.string() })) }),
                 await (await request("management/bots")).json(),
@@ -67,6 +69,9 @@ test.each([true, false])(
             if (bot === undefined) {
                 throw new Error("Expected a Bot");
             }
+            expect(await (await request(`chat/bots/${bot.botId}/managed-sessions`, {})).json()).toEqual({
+                sessions: [],
+            });
             const prepared = await request(`chat/bots/${bot.botId}/draft-settings`, {});
             expect(prepared.status).toBe(settingsAvailable ? 200 : 409);
             if (settingsAvailable) {
@@ -117,6 +122,51 @@ test.each([true, false])(
             expect(
                 await (await request(`chat/bots/${bot.botId}/access`, { conversationId: first.conversationId })).json(),
             ).toMatchObject(first);
+            const listed = await request(`chat/bots/${bot.botId}/managed-sessions`, {});
+            expect(listed.status).toBe(200);
+            expect(await listed.json()).toMatchObject({
+                sessions: expect.arrayContaining([
+                    {
+                        kind: "conversation",
+                        id: first.conversationId,
+                        title: "New chat",
+                        userId: expect.any(String),
+                        projectId: identity.projectId,
+                    },
+                    {
+                        kind: "conversation",
+                        id: second.conversationId,
+                        title: "New chat",
+                        userId: expect.any(String),
+                        projectId: identity.projectId,
+                    },
+                ]),
+            });
+            const other = v.parse(
+                v.object({ token: v.string(), projectId: v.string() }),
+                await (
+                    await app.request("https://cloud.test/mobius-cloud/api/identity/anonymous-users", {
+                        method: "POST",
+                    })
+                ).json(),
+            );
+            for (const scope of [
+                { token: other.token, projectId: identity.projectId },
+                { token: identity.token, projectId: other.projectId },
+            ]) {
+                const forbidden = await app.request(
+                    `https://cloud.test/mobius-cloud/api/chat/projects/${scope.projectId}/bots/${bot.botId}/managed-sessions`,
+                    {
+                        method: "POST",
+                        headers: { authorization: `Bearer ${scope.token}`, "content-type": "application/json" },
+                        body: "{}",
+                    },
+                );
+                expect(forbidden.status).toBe(401);
+            }
+            expect(
+                (await request(`chat/bots/${bot.botId}/managed-session`, { sessionId: "unknown-fork" })).status,
+            ).toBe(404);
         } finally {
             await platform.close();
             database.close();
