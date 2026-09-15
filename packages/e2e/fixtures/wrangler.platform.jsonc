@@ -18,6 +18,12 @@
     ],
     "d1_databases": [
         {
+            "binding": "D1_SHARD_WNAM_01",
+            "database_name": "mobius-platform-e2e-wnam-shard",
+            "database_id": "00000000-0000-0000-0000-000000000103",
+            "migrations_dir": "../../../third-party/mobius/packages/relay-core/migrations/d1"
+        },
+        {
             "binding": "D1_SHARD_APAC_01",
             "database_name": "mobius-platform-e2e-shard",
             "database_id": "00000000-0000-0000-0000-000000000101",
@@ -30,7 +36,10 @@
             "migrations_dir": "../../../third-party/mobius/packages/relay-cloudflare-platform/migrations/d1"
         }
     ],
-    "r2_buckets": [{ "binding": "R2_BUCKET_APAC", "bucket_name": "mobius-platform-local-e2e-objects" }],
+    "r2_buckets": [
+        { "binding": "R2_BUCKET_APAC", "bucket_name": "mobius-platform-local-e2e-objects" },
+        { "binding": "R2_BUCKET_WNAM", "bucket_name": "mobius-platform-local-e2e-wnam-objects" }
+    ],
     "vars": {
         "SESSION_ACTIVE_SESSIONS_PER_PROJECT": "1000",
         "SESSION_ARCHIVE_BYTES_PER_SESSION": "268435456"

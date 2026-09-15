@@ -35,6 +35,29 @@ and conversation access. Platform independently authorizes SDK operations.
 
 ## Worker structure
 
+### Setup download
+
+`packages/setup/src/setup.ts` owns the TypeScript setup implementation. Its CLI
+entrypoint is bundled by Vite into the self-contained `packages/setup/dist/setup.mjs`;
+generated JavaScript is not checked in. `pnpm build` builds it before the application.
+The bundle also exports `runSetup(args, host)` for integrations, with cancellable
+Runtime and clock ports. The CLI supplies the local OS Runtime implementation.
+
+The Worker serves `/setup.mjs` from the fixed `artifacts/setup.mjs` object in the
+existing `CHAT_ATTACHMENTS_APAC` bucket.
+The download uses JavaScript content type and requires cache revalidation.
+Missing artifacts return `SETUP_ARTIFACT_UNAVAILABLE`
+with HTTP 503. Request query parameters never select R2 keys.
+
+The CD token needs R2 object write permission on the existing attachments bucket. CD
+uploads the generated bundle before deploying Workers. To seed or refresh local
+development R2:
+
+```sh
+pnpm build:setup
+pnpm exec wrangler r2 object put mobius-chat-local-apac-attachments/artifacts/setup.mjs --file packages/setup/dist/setup.mjs --local
+```
+
 ### Project-ID regional routing
 
 After this, a user can reload a Project workspace through the same Chat origin

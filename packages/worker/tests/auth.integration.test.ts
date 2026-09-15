@@ -607,7 +607,7 @@ process.send('ready');
                 const child = spawn(
                     process.execPath,
                     [
-                        fileURLToPath(new URL("../../../public/setup.mjs", import.meta.url)),
+                        fileURLToPath(new URL("../../setup/src/cli.ts", import.meta.url)),
                         command,
                         "--base-url",
                         base,

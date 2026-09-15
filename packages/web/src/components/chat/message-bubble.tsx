@@ -4,12 +4,15 @@ import { cn } from "@/lib/utils";
 export function MessageBubble({
     speaker,
     children,
+    "data-testid": testId,
 }: {
     readonly speaker: "user" | "assistant";
     readonly children: ReactNode;
+    readonly "data-testid"?: string;
 }) {
     return (
         <article
+            data-testid={testId}
             aria-label={speaker === "user" ? "Your message" : "Agent response"}
             className={cn(
                 "min-w-0 border text-sm leading-[1.8] [overflow-wrap:anywhere]",

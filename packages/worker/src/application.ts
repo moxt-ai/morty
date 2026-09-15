@@ -5,6 +5,7 @@ import { createManagementApplication } from "./components/management/http/create
 import { slackApplication } from "./components/slack/slack-application.ts";
 import { type ApplicationContext, createApplicationDependencies } from "./composition/application-context.ts";
 import { instructionDocuments } from "./gateway/instruction-documents.ts";
+import { setupArtifact } from "./gateway/setup-artifact.ts";
 import type { CloudBindings } from "./infra/cloud-bindings.ts";
 import { RequestError } from "./infra/request-error.ts";
 import { errorMiddleware, rethrowHttpError } from "./middleware/error-middleware.ts";
@@ -49,6 +50,7 @@ const application = new Hono<{ readonly Bindings: CloudBindings }>()
     .all("/mobius-cloud/api", notFound)
     .all("/mobius-slack/api", notFound)
     .route("/", instructionDocuments)
+    .route("/", setupArtifact)
     .route("/mobius-cloud/api", cloudRoutes)
     .route("/mobius-slack/api", slackRoutes)
     .notFound(notFound);
