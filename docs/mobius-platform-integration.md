@@ -32,7 +32,8 @@ and `MOBIUS_APP_SECRET` together on the corresponding Chat Worker. Verification
 used an unavailable storage location and created no Project. Cloudflare confirmed
 all three secret updates for each Worker.
 
-These values are maintained as Cloudflare Worker secrets. `MOBIUS_APP_SECRET`
+These values are maintained in GitHub Environment configuration and synced by CD
+to Cloudflare; see [deployment configuration](./deployment.md). `MOBIUS_APP_SECRET`
 must contain the full `mapp_…` AppCredential returned when a key is created,
 not its public Key ID. A credential must belong to an App in the configured
 Platform environment.
@@ -40,9 +41,9 @@ Platform environment.
 AppCredentials do not expire. Only SHA-256 digests are
 stored in D1. Developer memberships were added separately as described below;
 no Project has been created. Plaintext
-credentials are held outside the repository. `MOBIUS_APP_ID`, `MOBIUS_APP_SECRET`,
-and `MOBIUS_BASE_URL` are installed as secrets on `mobius-chat-staging` and
-`mobius-chat-production`.
+credentials are held in GitHub Environment secrets, outside the repository.
+`MOBIUS_APP_ID` and `MOBIUS_BASE_URL` are Worker variables; `MOBIUS_APP_SECRET`
+is a Worker secret on `mobius-chat-staging` and `mobius-chat-production`.
 
 ## Remaining requirements
 
@@ -89,8 +90,9 @@ Project mapping is persisted by Cloud user, Platform origin, and App; it survive
 reloads and is isolated from other users. AppCredentials stay server-side.
 
 Before running this flow, apply `packages/worker/migrations/0003_platform_project.sql`
-through Wrangler D1 migrations and configure `MOBIUS_PROJECT_LOCATION_HINT`.
-Staging and production use the `apac` location hint; Platform resolves storage placement. Bindings are recorded
+through Wrangler D1 migrations.
+Cloudflare request metadata selects placement, with an `apac` fallback defined in code;
+Platform resolves storage placement. Bindings are recorded
 in `wrangler.jsonc`. The deployment workflow applies Cloud D1 migrations before
 deploying each environment. Staging anonymous provisioning and persistence after
 reload were verified with `agent-browser` against the deployed services.

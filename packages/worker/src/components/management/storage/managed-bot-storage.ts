@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import type { HttpError } from "../../../infra/http-error.ts";
 
 const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
 const titleSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200));
@@ -185,11 +186,16 @@ export class ManagedBotStorage {
     };
 }
 
-export class ManagementStorageError extends Error {
+class ManagementStorageError extends Error implements HttpError {
     readonly code: "BOT_ALREADY_CLAIMED" | "DATABASE_UNAVAILABLE";
     constructor(code: "BOT_ALREADY_CLAIMED" | "DATABASE_UNAVAILABLE", message: string) {
         super(message);
         this.code = code;
         this.name = "ManagementStorageError";
     }
+
+    readonly toHttpJson: HttpError["toHttpJson"] = () => ({
+        body: { error: { code: this.code, message: this.message } },
+        status: this.code === "BOT_ALREADY_CLAIMED" ? 409 : 503,
+    });
 }

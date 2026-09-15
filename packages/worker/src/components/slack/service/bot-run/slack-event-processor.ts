@@ -1,9 +1,17 @@
 import type { BotTriggerLimiter } from "../../../../gateway/bot-trigger-limiter";
+import type {
+    ContextLoadType,
+    SlackConversationInput,
+    SlackConversationKey,
+    SlackMessageFile,
+} from "../../entity/conversation";
 import type { SlackLogger } from "../../infra/util/logger";
-import type { SlackMessageFile } from "../bot-tools/slack-bot-tool-service";
+
+export type { SlackConversationInput, SlackConversationKey } from "../../entity/conversation";
+
 import type { SlackEventCallbackPayload } from "../events/events";
 import type { TenantContext } from "../identity/tenant-context";
-import { type ContextLoadType, type DecisionInput, decideSlackEvent, type Sender } from "./event-decision";
+import { type DecisionInput, decideSlackEvent, type Sender } from "./event-decision";
 import type { SlackConversationService } from "./slack-conversation-service";
 import type { SlackEventContextService } from "./slack-event-context-service";
 
@@ -12,22 +20,6 @@ export interface SlackEventTargetContext {
     readonly botUserId: string;
     readonly sender: Sender;
     readonly tenantId: string;
-}
-
-export interface SlackConversationKey {
-    readonly botId: string;
-    readonly channelId: string;
-    readonly tenantId: string;
-    readonly threadTs: string | null;
-}
-
-export interface SlackConversationInput extends SlackConversationKey {
-    readonly contextLoadType: ContextLoadType;
-    readonly eventId: string;
-    readonly eventTs: string;
-    readonly files: readonly SlackMessageFile[];
-    readonly sender: Sender;
-    readonly text: string;
 }
 
 export type SlackEventProcessingResult =

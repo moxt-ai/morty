@@ -9,7 +9,7 @@ supplies a logical location hint and Platform resolves its storage placement. Bo
 Chat support anonymous users; Slack additionally requires a verified Clerk session.
 Chat derives new Project placement from Cloudflare's server-provided `request.cf.continent`:
 Asia/Oceania use `apac`; other recognized continents use `wnam`, the other supported region.
-Missing or unrecognized metadata falls back to `MOBIUS_PROJECT_LOCATION_HINT`.
+Missing or unrecognized metadata falls back to `apac`, defined in code.
 Client headers and request bodies do not control this selection. Existing Projects retain
 their recorded placement when the user changes location.
 
@@ -87,11 +87,16 @@ and other common settings are inherited from the existing configuration.
 The renderer JSON-encodes `<%% name %%>` substitutions and rejects missing or
 unresolved placeholders before writing valid JSON. Deployment renders configurations from the Vite-built Worker using
 `third-party/mobius/packages/relay-cloudflare-platform/scripts/regional-workers.ts`.
-Both regional backends deploy before the public router. Before the first regional
-deployment, provision the same required runtime secrets on
-`mobius-chat-<environment>-apac` and `mobius-chat-<environment>-wnam` as on the
-public Worker. Secret values are not readable or automatically copied from the
-public Worker; CI verifies all three secret-name inventories before deploying.
+Both regional backends deploy before the public router. Configure the runtime
+variables and secrets in the corresponding GitHub Environment. Deployment validates
+them with `scripts/validate-worker-config.ts`, then supplies them to both regional
+Workers and the public Worker using Wrangler's `--var` and `--secrets-file` options.
+Existing Worker secret values are not read or copied.
+
+CI validates staging configuration for pull requests, merge groups, and ordinary
+main pushes. A manual deployment validates its selected environment. Production
+configuration is also validated inside the production deployment job after its
+environment approval; it must not gate a staging deployment.
 
 To generate configs for inspection after `pnpm build:staging`:
 
@@ -171,3 +176,10 @@ directly and rejects recursive configuration and redirects.
 
 Run `pnpm check`. Product behavior is covered at HTTP and browser boundaries; tests
 use deterministic time and stateful fakes rather than request mocks.
+
+The check includes combined production TS/TSX coverage and executable dependency
+boundaries. `pnpm check:architecture` follows type imports and re-exports. Slack
+storage consumes shared records from `components/slack/entity` and execution ports
+from `infra`, with no dependency on services, gateways, or composition. Biome's
+`useLiteralKeys` rule is disabled because TypeScript's index-signature access rules
+require bracket notation for untrusted records. See `TESTING.md` for report scope.

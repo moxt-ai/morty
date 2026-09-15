@@ -1,17 +1,17 @@
 import * as v from "valibot";
+import type { SlackConversationInput, SlackConversationKey, SlackMessageReplyContext } from "../entity/conversation";
+import { type SlackEventCallbackPayload, slackEventCallbackPayloadSchema } from "../entity/events";
+import type {
+    BotSlackInstallation,
+    ManagedSlackApp,
+    ManagedSlackInstallation,
+    SlackAppConfiguration,
+    SlackInstallationRecord,
+} from "../entity/installation";
+import type { TenantContext } from "../entity/tenant-context";
 import type { DatabaseResolver } from "../infra/database-resolver";
 import { queueMessageSchema, type SecretCipher } from "../infra/index";
 import type { SlackQueue } from "../infra/slack-queue";
-import type { SlackConversationInput, SlackConversationKey } from "../service/bot-run/slack-event-processor";
-import type { SlackMessageReplyContext } from "../service/bot-run/slack-reply-delivery-service";
-import type { BotSlackInstallation } from "../service/bot-tools/slack-bot-tool-service";
-import { type SlackEventCallbackPayload, slackEventCallbackPayloadSchema } from "../service/events/events";
-import type { TenantContext } from "../service/identity/tenant-context";
-import type {
-    SlackAppConfiguration,
-    SlackInstallationRecord,
-} from "../service/installation/slack-installation-service";
-import type { ManagedSlackApp, ManagedSlackInstallation } from "../service/installation/slack-management-service";
 import type { StoredSlackConversation, StoredSlackEventTarget } from "./slack-event-records";
 
 const appRowSchema = v.object({

@@ -6,15 +6,13 @@ import { slackApplication } from "./components/slack/slack-application.ts";
 import { type ApplicationContext, createApplicationDependencies } from "./composition/application-context.ts";
 import { instructionDocuments } from "./gateway/instruction-documents.ts";
 import { setupArtifact } from "./gateway/setup-artifact.ts";
-import { applicationErrorResponse } from "./infra/application-error.ts";
 import type { CloudBindings } from "./infra/cloud-bindings.ts";
-import { json } from "./infra/http.ts";
+import { RequestError } from "./infra/request-error.ts";
+import { errorMiddleware, rethrowHttpError } from "./middleware/error-middleware.ts";
 import { cloudProjectContext, slackProjectContext } from "./middleware/project-context.ts";
 
 const managementApplication = createManagementApplication();
-const chatApplication = createChatApplication().onError((error, context) =>
-    applicationErrorResponse(error, context.env.logger),
-);
+const chatApplication = createChatApplication();
 
 type CloudHttpEnvironment = {
     readonly Bindings: CloudBindings;
@@ -36,11 +34,19 @@ const slackRoutes = new Hono<{ readonly Bindings: CloudBindings }>()
     .use("*", slackProjectContext)
     .all("*", (context) => slackApplication.fetch(context.req.raw, context.var.projectBindings));
 
-const notFound = () => json({ error: { code: "NOT_FOUND", message: "Not found." } }, 404);
+const notFound = (): never => {
+    throw new RequestError("NOT_FOUND", "Not found.", 404);
+};
 
 const application = new Hono<{ readonly Bindings: CloudBindings }>()
+    .onError(rethrowHttpError)
+    .use(
+        "*",
+        errorMiddleware<{ readonly Bindings: CloudBindings }>(
+            (context) => createApplicationDependencies(context.env).logger,
+        ),
+    )
     .use("/mobius-cloud/api/*", bodyLimit({ maxSize: 110000 }))
-    .onError((error, context) => applicationErrorResponse(error, createApplicationDependencies(context.env).logger))
     .all("/mobius-cloud/api", notFound)
     .all("/mobius-slack/api", notFound)
     .route("/", instructionDocuments)

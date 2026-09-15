@@ -182,7 +182,6 @@ export class LocalStack {
             MOBIUS_APP_ID: application.appId,
             MOBIUS_APP_SECRET: application.appSecret,
             MOBIUS_BASE_URL: this.platformOrigin,
-            MOBIUS_PROJECT_LOCATION_HINT: "apac",
             SLACK_MOBIUS_AUTH_TOKEN: "unused-in-opencode-e2e",
             SLACK_OAUTH_STATE_SIGNING_KEY: "unused-in-opencode-e2e",
             SLACK_SERVER_BASE_URL: this.chatOrigin,

@@ -1,8 +1,8 @@
 import * as v from "valibot";
-import { type MobiusBinding, mobiusBindingSchema } from "../../../gateway/mobius-gateway";
+import { type MobiusBinding, mobiusBindingSchema } from "../entity/mobius-binding";
+import type { TenantContext } from "../entity/tenant-context";
 import type { DatabaseResolver } from "../infra/database-resolver";
 import type { SecretCipher } from "../infra/util/secret-cipher";
-import type { TenantContext } from "../service/identity/tenant-context";
 
 export class MobiusConnectionStorage {
     readonly #database: DatabaseResolver;

@@ -1,9 +1,11 @@
+import type { BotSlackInstallation } from "../../entity/installation";
 import type { TenantContext } from "../identity/tenant-context";
-export interface BotSlackInstallation {
-    readonly botToken: string;
-    readonly slackAppId: string;
-    readonly tenantId: string;
-}
+
+export type { BotSlackInstallation } from "../../entity/installation";
+
+import type { SlackMessageFile } from "../../entity/conversation";
+
+export type { SlackMessageFile } from "../../entity/conversation";
 
 export interface SlackMessage {
     readonly botId: string | null;
@@ -12,14 +14,6 @@ export interface SlackMessage {
     readonly threadTs: string | null;
     readonly ts: string;
     readonly userId: string | null;
-}
-
-export interface SlackMessageFile {
-    readonly id: string;
-    readonly mimetype: string | null;
-    readonly name: string | null;
-    readonly size: number | null;
-    readonly urlPrivate: string | null;
 }
 
 import type { ErrorToResponse } from "../../infra/util/error-to-response";

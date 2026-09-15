@@ -27,14 +27,9 @@ const AI_BOT_APP_SCOPES = [
     "users:read.email",
 ].join(",");
 
-export interface SlackAppConfiguration {
-    readonly botId: string;
-    readonly clientId: string;
-    readonly clientSecretEncrypted: string;
-    readonly id: number;
-    readonly oauthRedirectUri: string;
-    readonly tenantId: string;
-}
+import type { SlackAppConfiguration } from "../../entity/installation";
+
+export type { SlackAppConfiguration } from "../../entity/installation";
 
 export interface SlackOAuthInstallation {
     readonly accessToken: string;
@@ -42,12 +37,6 @@ export interface SlackOAuthInstallation {
     readonly botUserId: string;
     readonly teamId: string;
     readonly teamName: string | null;
-}
-
-export interface SlackInstallationRecord {
-    readonly slackAppRecordId: number;
-    readonly slackTeamId: string;
-    readonly tenantId: string;
 }
 
 import type { ErrorToResponse } from "../../infra/util/error-to-response";

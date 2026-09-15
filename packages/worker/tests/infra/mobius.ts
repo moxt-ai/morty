@@ -75,13 +75,13 @@ export async function createMobiusPlatformFixture() {
         const tenantResponse = await app.request("/mobius/api/v1/platform/tenants", {
             headers,
         });
-        const tenants = v.parse(
+        const { tenants } = v.parse(
             v.object({ tenants: v.array(v.object({ tenantId: v.string() })) }),
             await tenantResponse.json(),
         );
-        const tenant = tenants.tenants[0];
+        const tenant = tenants[0];
         if (tenant === undefined) {
-            throw new Error("Expected Clerk organization tenant");
+            throw new Error("Expected the developer's active organization");
         }
         const applicationResponse = await app.request("/mobius/api/v1/apps", {
             method: "POST",

@@ -1,6 +1,13 @@
 engineStrict: true
 minimumReleaseAge: 1440
 
+# dependency-cruiser's parser uses the TypeScript 6 JavaScript compiler API.
+# Application compilation continues to use TypeScript 7.
+packageExtensions:
+  dependency-cruiser@18.2.0:
+    dependencies:
+      typescript: 6.0.3
+
 packages:
   - packages/e2e
   - packages/setup

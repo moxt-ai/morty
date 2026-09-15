@@ -1,5 +1,40 @@
 # Testing Guide
 
+## Required quality gate
+
+`pnpm check` includes `pnpm check:architecture` and `pnpm test:coverage`.
+The coverage command runs both Worker and web suites, then merges their Istanbul
+execution maps into `coverage/lcov.info`, `coverage/coverage-summary.json`, and an
+HTML report in `coverage/`. It reports an informational 95% target for lines,
+statements, functions, and branches using exact covered/total counts. A failing
+suite or missing or empty suite report fails the command; unmet coverage targets do not.
+
+Scope includes unexecuted production `.ts` and `.tsx` in both packages. Tests,
+stateful test fakes, declarations, and the generated `routeTree.gen.ts` are excluded.
+The Mobius submodule has its own report and informational 100% target. Code executed only in a
+separate subprocess or externally bundled Worker is not credited by the parent
+runner; its source remains in the denominator until instrumented coverage exists.
+
+CI saves the combined report as a `coverage-report` artifact for 14 days using
+the permitted GitHub-owned artifact action. Upload failures are non-blocking.
+The required `check` status keeps test failures blocking. If Codecov uploads
+are enabled later, project and patch statuses are configured as informational.
+
+## Architecture enforcement
+
+`pnpm check:architecture` resolves TypeScript imports, including type-only imports,
+and checks dependency direction. Shared Slack records and event schemas belong in
+`components/slack/entity`; storage and infrastructure cannot import services,
+composition, HTTP, or gateways. Browser and Worker implementations cannot import
+one another. See `dependency-cruiser.config.cjs` for the executable rules.
+
+These boundaries apply the information-hiding approach in
+[Business logic decomposition patterns](https://github.com/taowen/modularization-examples).
+Private persisted records stay with their storage owner; shared records describe
+the contract consumed by storage and services. Reuse requires an explicit purpose
+and applicability scope. Interface churn and state visibility inform design review;
+the checker enforces the concrete dependency directions.
+
 ## Executable Product Specifications
 
 Deliver each behavior change as the smallest end-to-end path a user can run and observe. Before implementation, state the slice in one sentence:

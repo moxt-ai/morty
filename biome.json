@@ -27,6 +27,9 @@
         },
         "rules": {
             "preset": "recommended",
+            "complexity": {
+                "useLiteralKeys": "off"
+            },
             "style": {
                 "useBlockStatements": "error"
             },

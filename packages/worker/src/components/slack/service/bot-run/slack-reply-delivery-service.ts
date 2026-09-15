@@ -1,15 +1,6 @@
 import type { SlackLogger } from "../../infra/util/logger";
 import type { TenantContext } from "../identity/tenant-context";
 
-export interface SlackMessageReplyContext {
-    readonly botToken: string;
-    readonly channelId: string;
-    readonly replyThreadTs: string | null;
-    readonly conversationMappingId: number;
-    readonly statusThreadTs: string | null;
-    readonly tenantId: string;
-}
-
 export type MobiusTurnCompletion =
     | {
           readonly kind: "completed";

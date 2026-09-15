@@ -1,0 +1,17 @@
+coverage:
+  precision: 2
+  round: down
+  status:
+    project:
+      default:
+        informational: true
+        target: 95%
+        threshold: 0%
+    patch:
+      default:
+        informational: true
+        target: 95%
+        threshold: 0%
+comment:
+  layout: "reach,diff,flags,files"
+  require_changes: true

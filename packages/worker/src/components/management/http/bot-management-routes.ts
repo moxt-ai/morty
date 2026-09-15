@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import * as v from "valibot";
 import { json } from "../../../infra/http.ts";
+import { ManagementError } from "../entity/management-error.ts";
 import { authenticatedSession } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
 import { provisionUserBot } from "./user-bot-setup.ts";
@@ -61,7 +62,7 @@ export function createBotManagementRoutes() {
                 context.req.raw.signal,
             );
             if (botId === null) {
-                return json({ error: { code: "NOT_FOUND", message: "Not found." } }, 404);
+                throw new ManagementError("NOT_FOUND", "Not found.", 404);
             }
             return json(
                 await context.env.services.mobiusApp.regenerateAccessToken(accessTokenId, context.req.raw.signal),

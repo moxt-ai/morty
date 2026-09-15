@@ -28,7 +28,7 @@ afterEach(async () => {
     }
 });
 
-async function fixture(location = "apac") {
+async function fixture(location?: string) {
     const mobius = await createMobiusPlatformFixture();
     cleanup.push(mobius.close);
     const database = new InMemoryD1Database();
@@ -45,9 +45,13 @@ async function fixture(location = "apac") {
         MOBIUS_APP_ID: mobius.appId,
         MOBIUS_APP_SECRET: mobius.appCredential,
         MOBIUS_BASE_URL: mobius.baseUrl,
-        MOBIUS_PROJECT_LOCATION_HINT: location,
     };
-    const app = new Hono().all("*", (context) => worker.fetch(context.req.raw, bindings));
+    const app = new Hono().all("*", (context) => {
+        if (location !== undefined) {
+            Object.defineProperty(context.req.raw, "cf", { value: { continent: location === "wnam" ? "NA" : "AS" } });
+        }
+        return worker.fetch(context.req.raw, bindings);
+    });
     const projects = new Map<string, string>();
     const request = (path: string, token: string, method = "GET", body?: object) =>
         app.request(`https://cloud.test/mobius-cloud/api/${path}`, {
@@ -78,7 +82,10 @@ test.each(["apac", "wnam"])(
         const empty = new InMemoryD1Database();
         cleanup.push(empty.close);
         const regional = (region: string) => ({
-            fetch: (request: Request) => worker.fetch(request, { ...fixture.bindings, MOBIUS_WORKER_REGION: region }),
+            fetch: (request: Request) => {
+                Object.defineProperty(request, "cf", { value: { continent: region === "wnam" ? "NA" : "AS" } });
+                return worker.fetch(request, { ...fixture.bindings, MOBIUS_WORKER_REGION: region });
+            },
         });
         const edge = {
             ...fixture.bindings,
@@ -96,10 +103,11 @@ test.each(["apac", "wnam"])(
         expect((await worker.fetch(request(fixture.token), edge)).status).toBe(200);
         expect((await worker.fetch(request("mobius_anon_invalid"), edge)).status).toBe(401);
         expect((await regional(region === "apac" ? "wnam" : "apac").fetch(request(fixture.token))).status).toBe(421);
-        const created = await worker.fetch(
-            new Request("https://cloud.test/mobius-cloud/api/identity/anonymous-users", { method: "POST" }),
-            edge,
-        );
+        const creationRequest = new Request("https://cloud.test/mobius-cloud/api/identity/anonymous-users", {
+            method: "POST",
+        });
+        Object.defineProperty(creationRequest, "cf", { value: { continent: region === "wnam" ? "NA" : "AS" } });
+        const created = await worker.fetch(creationRequest, edge);
         expect(created.status).toBe(201);
         const identity = v.parse(v.object({ token: v.string(), projectId: v.string() }), await created.json());
         expect(identity.projectId.startsWith(region === "apac" ? "prj_a" : "prj_w")).toBe(true);

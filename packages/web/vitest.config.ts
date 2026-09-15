@@ -34,5 +34,13 @@ export default defineConfig({
     test: {
         include: ["tests/{client,protocol}/**/*.{contract,integration}.test.ts"],
         testTimeout: 5_000,
+        coverage: {
+            provider: "istanbul",
+            reporter: ["text-summary", "json"],
+            reportsDirectory: "../../coverage/web",
+            reportOnFailure: true,
+            include: ["src/**/*.{ts,tsx}"],
+            exclude: ["**/*.d.ts", "**/testing/**", "src/routeTree.gen.ts"],
+        },
     },
 });
