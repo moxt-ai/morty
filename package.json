@@ -21,6 +21,7 @@
         "test:watch": "pnpm --recursive --parallel --if-present test:watch",
         "test:coverage": "pnpm --filter @moxt-ai/mobius-cloud-worker test:coverage && pnpm --filter @moxt-ai/mobius-cloud-web test",
         "test:e2e:opencode": "node scripts/e2e/opencode-live.mjs",
+        "test:e2e:conversation": "node scripts/e2e/new-conversation.mjs",
         "knip": "knip",
         "check": "pnpm typecheck && pnpm build && pnpm lint && pnpm test:coverage && pnpm knip",
         "postinstall": "simple-git-hooks",
