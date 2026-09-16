@@ -1,4 +1,4 @@
-import { Brain, ChevronRight, LoaderCircle } from "lucide-react";
+import { Brain, ChevronDown, LoaderCircle } from "lucide-react";
 import type { ThinkingPresentation } from "../../services/chat/agent-reply.ts";
 import { AgentMarkdown } from "../agents/agent-markdown.tsx";
 
@@ -29,21 +29,30 @@ export function AgentThinking({ entries, status }: ThinkingPresentation) {
     }
     const thinking = status === "thinking";
     return (
-        <div className="min-w-0 px-4 text-xs text-muted-foreground">
+        <div className="min-w-0 text-sm text-muted-foreground">
             <details aria-label="Agent thinking" className="group/thinking min-w-0">
-                <summary className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-md px-2 outline-none hover:bg-primary/5 focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8">
-                    <ChevronRight
+                <summary className="flex min-h-10 w-fit cursor-pointer list-none items-center gap-2 rounded-lg px-1 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+                    <ChevronDown
                         aria-hidden="true"
-                        className="size-3.5 transition-transform group-open/thinking:rotate-90 motion-reduce:transition-none"
+                        className="size-3.5 -rotate-90 transition-transform group-open/thinking:rotate-0 motion-reduce:transition-none"
                     />
-                    <Brain aria-hidden="true" className="size-3.5" />
-                    <span>{thinking ? "Thinking…" : "Thinking"}</span>
+                    <span>{thinking ? "Show intermediate steps · Thinking…" : "Show intermediate steps"}</span>
                     {thinking && <WorkingIndicator />}
                 </summary>
-                <div className="mt-2 ml-3 grid min-w-0 gap-3 border-l border-primary/20 pl-4 [overflow-wrap:anywhere]">
-                    {entries.map((entry) => (
-                        <AgentMarkdown key={entry.id} markdown={entry.text} streaming={entry.status === "streaming"} />
-                    ))}
+                <div className="mt-1 ml-1 min-w-0 border-l border-[#d9dde1] py-2 pl-5 [overflow-wrap:anywhere]">
+                    <div className="mb-3 flex items-center gap-2 text-sm text-copy-secondary">
+                        <Brain aria-hidden="true" className="size-4" />
+                        <span>Thinking</span>
+                    </div>
+                    <div className="grid min-w-0 gap-3 text-muted-foreground">
+                        {entries.map((entry) => (
+                            <AgentMarkdown
+                                key={entry.id}
+                                markdown={entry.text}
+                                streaming={entry.status === "streaming"}
+                            />
+                        ))}
+                    </div>
                 </div>
             </details>
             {status === "working" && <WorkingLabel status="working" />}

@@ -1,12 +1,17 @@
-import { MobiusAgentActivityEvent, MobiusAgentMessageEvent, type MobiusSessionEvent } from "@moxt-ai/mobius-sdk";
+import {
+    MobiusAgentActivityEvent,
+    MobiusAgentMessageEvent,
+    type MobiusSessionEvent,
+    MobiusTurnCompletedEvent,
+    MobiusTurnFailedEvent,
+    MobiusTurnStartedEvent,
+} from "@moxt-ai/mobius-sdk";
 import { type MobiusBrowserClient, type MobiusBrowserHistory, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
-import { MessageSquare, Send } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ComposerSurface } from "../../components/chat/composer-surface.tsx";
+import { MessageSquare } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { BotChatComposer, type ComposerAttachment } from "../../components/chat/bot-chat-composer.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
-import { Textarea } from "../../components/ui/textarea.tsx";
-import { dataTestId } from "../../data-testid.ts";
 import { type RecordedAgentActivity, recordAgentActivity } from "../../services/chat/agent-activities.ts";
 import type { BotChatApi, ChatDraftConfiguration, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
@@ -143,6 +148,7 @@ export function BotChatHome({
     const [state, setState] = useState<State>({ kind: "loading" });
     const [revision, retry] = useState(0);
     const [draft, setDraft] = useState("");
+    const [attachments, setAttachments] = useState<readonly ComposerAttachment[]>([]);
     const [initialTarget] = useState<
         | { readonly kind: "draft"; readonly key: string }
         | { readonly kind: "existing"; readonly conversationId: string }
@@ -166,6 +172,7 @@ export function BotChatHome({
         readonly adopt: (bot: ManagedBot, client: MobiusBrowserClient, history: MobiusBrowserHistory) => void;
     } | null>(null);
     const messageList = useRef<HTMLDivElement | null>(null);
+    const messageContent = useRef<HTMLDivElement | null>(null);
     const followLatest = useRef(true);
     const [conversation, setConversation] = useState<
         { readonly kind: "bot" } | { readonly kind: "local"; readonly session: OpenLocalSession }
@@ -174,6 +181,7 @@ export function BotChatHome({
     const newConversation = useCallback(() => {
         lifetime.current?.controller.abort();
         setDraft("");
+        setAttachments([]);
         setSending({ kind: "idle" });
         setDraftSettings(null);
         messageAttempt.current = null;
@@ -191,6 +199,7 @@ export function BotChatHome({
     const openManaged = (kind: "conversation" | "fork", id: string) => {
         lifetime.current?.controller.abort();
         setDraft("");
+        setAttachments([]);
         setSending({ kind: "idle" });
         setDraftSettings(null);
         messageAttempt.current = null;
@@ -204,11 +213,28 @@ export function BotChatHome({
             kind === "conversation" ? { kind: "existing", conversationId: id } : { kind: "fork", sessionId: id };
         retry((value) => value + 1);
     };
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (state.kind === "ready" && followLatest.current && messageList.current !== null) {
             messageList.current.scrollTop = messageList.current.scrollHeight;
         }
     }, [state]);
+    useLayoutEffect(() => {
+        const list = messageList.current;
+        const content = messageContent.current;
+        if (conversation.kind !== "bot" || list === null || content === null) {
+            return;
+        }
+        const keepLatestVisible = () => {
+            if (followLatest.current) {
+                list.scrollTop = list.scrollHeight;
+            }
+        };
+        const observer = new ResizeObserver(keepLatestVisible);
+        observer.observe(list);
+        observer.observe(content);
+        keepLatestVisible();
+        return () => observer.disconnect();
+    }, [conversation]);
     // biome-ignore lint/correctness/useExhaustiveDependencies: Reconnect explicitly restarts the SDK session.
     useEffect(() => {
         const controller = new AbortController();
@@ -276,24 +302,16 @@ export function BotChatHome({
                 if (event.payload instanceof MobiusAgentMessageEvent) {
                     setState((current) => updateStreamedHistory(current, session, event));
                 } else if (
-                    !(event.payload instanceof MobiusAgentActivityEvent) &&
+                    (event.payload instanceof MobiusTurnStartedEvent ||
+                        event.payload instanceof MobiusTurnCompletedEvent ||
+                        event.payload instanceof MobiusTurnFailedEvent) &&
                     BigInt(event.sequence) > snapshotSequence
                 ) {
                     await refresh();
                 }
                 return true;
             };
-            let events = await session.readEvents(new MobiusPageRequest(10, ""), controller.signal);
-            for (const event of events.events) {
-                await receive(event);
-            }
-            while (events.hasMore) {
-                events = await session.readEvents(new MobiusPageRequest(10, events.cursor), controller.signal);
-                for (const event of events.events) {
-                    await receive(event);
-                }
-            }
-            const subscription = await session.events.subscribe(events.cursor, { receive }, controller.signal);
+            const subscription = await session.events.subscribe("", { receive }, controller.signal);
             controller.signal.throwIfAborted();
             await subscription.completed;
             controller.signal.throwIfAborted();
@@ -333,7 +351,7 @@ export function BotChatHome({
             (state.kind !== "ready" && state.kind !== "draft") ||
             connection === null ||
             sending.kind === "sending" ||
-            draft.trim().length === 0
+            (draft.trim().length === 0 && attachments.length === 0)
         ) {
             return;
         }
@@ -361,7 +379,14 @@ export function BotChatHome({
                     target.current.key,
                     draftSettings,
                     controller.signal,
-                    draft.trim().slice(0, 500),
+                    (
+                        draft.trim() ||
+                        attachments
+                            .map((attachment) =>
+                                attachment.kind === "image" ? attachment.image.name : attachment.resource.name,
+                            )
+                            .join(", ")
+                    ).slice(0, 500),
                 );
                 controller.signal.throwIfAborted();
                 createdId = access.conversationId;
@@ -375,8 +400,12 @@ export function BotChatHome({
                     content: attempt.content,
                     idempotencyKey: attempt.key,
                     artifactIds: [],
-                    images: [],
-                    resources: [],
+                    images: attachments.flatMap((attachment) =>
+                        attachment.kind === "image" ? [attachment.image] : [],
+                    ),
+                    resources: attachments.flatMap((attachment) =>
+                        attachment.kind === "resource" ? [attachment.resource] : [],
+                    ),
                 },
                 controller.signal,
             );
@@ -395,6 +424,7 @@ export function BotChatHome({
                     setState((current) => updateHistory(current, client, history));
                 }
                 setDraft("");
+                setAttachments([]);
                 messageAttempt.current = null;
                 setSending({ kind: "idle" });
             }
@@ -418,7 +448,7 @@ export function BotChatHome({
         <main
             aria-label="Chat"
             data-chat-state={state.kind === "ready" ? "connected" : "disconnected"}
-            className="flex h-dvh min-h-0 flex-col bg-[#f7f9f8] text-foreground sm:flex-row"
+            className="fixed inset-0 flex min-h-0 overflow-hidden bg-white text-foreground max-sm:flex-col sm:flex-row"
         >
             {active !== null && (
                 <ConversationSidebar
@@ -449,122 +479,101 @@ export function BotChatHome({
                     onBack={showBot}
                 />
             ) : (
-                <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                     <div
                         ref={messageList}
                         onScroll={(event) => {
                             const element = event.currentTarget;
                             followLatest.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
                         }}
-                        className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10"
+                        className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-4 py-6 [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10"
                         role="log"
                         aria-label="Messages"
                     >
-                        {state.kind === "loading" ? (
-                            <div className="m-auto">
-                                <Spinner label="Connecting to your agent" />
-                            </div>
-                        ) : state.kind === "setup" ? (
-                            <section className="m-auto w-full max-w-lg animate-cloud-enter rounded-2xl border border-border bg-card p-8 shadow-sm motion-reduce:animate-none">
-                                <MessageSquare className="mb-5 size-8 text-primary" aria-hidden="true" />
-                                <h1 className="text-2xl font-semibold tracking-tight">
-                                    {state.reason === "unconfigured"
-                                        ? "Your Chat is ready to connect"
-                                        : "Chat is waiting to reconnect"}
-                                </h1>
-                                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                                    {setupDescription(state.reason)}
-                                </p>
-                                <PairingInstruction requests={requests} />
-                                <p role="status" className="mt-4 text-sm text-muted-foreground">
-                                    Checking automatically every 5 seconds. Chat will open when this Bot is active and
-                                    its selected agent is online.
-                                </p>
-                            </section>
-                        ) : state.kind === "failed" ? (
-                            <div className="m-auto grid justify-items-center gap-4 text-center">
-                                <p role="alert">{state.message}</p>
-                                <Button onClick={() => retry((value) => value + 1)}>Reconnect</Button>
-                                <PairingInstruction requests={requests} />
-                            </div>
-                        ) : active === null ? null : active.kind === "draft" || active.history.turns.length === 0 ? (
-                            <div className="m-auto max-w-lg text-center">
-                                <span className="mx-auto mb-6 flex size-16 items-center justify-center rounded-3xl bg-primary/10 text-primary shadow-[inset_0_0_0_1px_rgba(34,123,78,0.12)]">
-                                    <MessageSquare className="size-7" aria-hidden="true" />
-                                </span>
-                                <h1 className="text-3xl font-semibold tracking-tight">{active.bot.displayName}</h1>
-                                <p className="mt-2 text-sm text-muted-foreground">Send a message to your agent.</p>
-                            </div>
-                        ) : (
-                            [...active.history.turns]
-                                .reverse()
-                                .map((turn) => (
-                                    <BotConversationTurn
-                                        key={`${turn.sessionId}:${turn.commandId}`}
-                                        turn={turn}
-                                        activities={active.activities}
-                                        botId={active.bot.botId}
-                                        requests={requests}
-                                    />
-                                ))
-                        )}
+                        <div ref={messageContent} className="flex min-h-full flex-col gap-8">
+                            {state.kind === "loading" ? (
+                                <div className="m-auto">
+                                    <Spinner label="Connecting to your agent" />
+                                </div>
+                            ) : state.kind === "setup" ? (
+                                <section className="m-auto w-full max-w-lg animate-cloud-enter rounded-2xl border border-border bg-card p-8 shadow-sm motion-reduce:animate-none">
+                                    <MessageSquare className="mb-5 size-8 text-primary" aria-hidden="true" />
+                                    <h1 className="text-2xl font-semibold tracking-tight">
+                                        {state.reason === "unconfigured"
+                                            ? "Your Chat is ready to connect"
+                                            : "Chat is waiting to reconnect"}
+                                    </h1>
+                                    <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                                        {setupDescription(state.reason)}
+                                    </p>
+                                    <PairingInstruction requests={requests} />
+                                    <p role="status" className="mt-4 text-sm text-muted-foreground">
+                                        Checking automatically every 5 seconds. Chat will open when this Bot is active
+                                        and its selected agent is online.
+                                    </p>
+                                </section>
+                            ) : state.kind === "failed" ? (
+                                <div className="m-auto grid justify-items-center gap-4 text-center">
+                                    <p role="alert">{state.message}</p>
+                                    <Button onClick={() => retry((value) => value + 1)}>Reconnect</Button>
+                                    <PairingInstruction requests={requests} />
+                                </div>
+                            ) : active === null ? null : active.kind === "draft" ||
+                              active.history.turns.length === 0 ? (
+                                <div className="m-auto max-w-lg text-center">
+                                    <span className="mx-auto mb-5 flex size-16 items-center justify-center rounded-[22px] bg-[#f2e8ff] text-[#a855f7] shadow-[inset_0_0_0_1px_rgba(168,85,247,0.08)]">
+                                        <MessageSquare className="size-7" aria-hidden="true" />
+                                    </span>
+                                    <h1 className="text-3xl font-semibold tracking-tight">{active.bot.displayName}</h1>
+                                </div>
+                            ) : (
+                                [...active.history.turns]
+                                    .reverse()
+                                    .map((turn) => (
+                                        <BotConversationTurn
+                                            key={`${turn.sessionId}:${turn.commandId}`}
+                                            turn={turn}
+                                            activities={active.activities}
+                                            botId={active.bot.botId}
+                                            requests={requests}
+                                        />
+                                    ))
+                            )}
+                        </div>
                     </div>
                     {active !== null && (
-                        <form
-                            className="mx-auto mb-6 w-full max-w-3xl px-4"
-                            onSubmit={(event) => {
-                                event.preventDefault();
-                                void send();
-                            }}
+                        <BotChatComposer
+                            attachments={attachments}
+                            disabled={switching || sending.kind === "sending"}
+                            draft={draft}
+                            error={sending.kind === "failed" ? sending.message : ""}
+                            onAttachmentsChange={setAttachments}
+                            onDraftChange={setDraft}
+                            onSubmit={() => void send()}
+                            submitDisabled={
+                                switching ||
+                                sending.kind === "sending" ||
+                                (draft.trim().length === 0 && attachments.length === 0) ||
+                                (active.kind === "draft" && draftSettings === null)
+                            }
                         >
-                            <div className="mb-3">
-                                {active.kind === "draft" ? (
-                                    <DraftChatControls
-                                        key={target.current.kind === "draft" ? target.current.key : "existing"}
-                                        botId={active.bot.botId}
-                                        requests={requests}
-                                        disabled={switching || sending.kind === "sending"}
-                                        onSettings={setDraftSettings}
-                                    />
-                                ) : (
-                                    <ChatControls
-                                        botId={active.bot.botId}
-                                        client={active.client}
-                                        requests={requests}
-                                        disabled={switching}
-                                    />
-                                )}
-                            </div>
-                            {sending.kind === "failed" && (
-                                <p role="alert" className="mb-2 text-sm text-destructive">
-                                    {sending.message}
-                                </p>
-                            )}
-                            <ComposerSurface>
-                                <Textarea
-                                    aria-label="Message"
-                                    data-testid={dataTestId.messageComposer}
-                                    placeholder="Message your agent…"
-                                    value={draft}
-                                    onChange={(event) => setDraft(event.target.value)}
+                            {active.kind === "draft" ? (
+                                <DraftChatControls
+                                    key={target.current.kind === "draft" ? target.current.key : "existing"}
+                                    botId={active.bot.botId}
+                                    requests={requests}
                                     disabled={switching || sending.kind === "sending"}
+                                    onSettings={setDraftSettings}
                                 />
-                                <Button
-                                    type="submit"
-                                    size="icon"
-                                    aria-label="Send message"
-                                    data-testid={dataTestId.sendMessage}
-                                    disabled={
-                                        switching ||
-                                        sending.kind === "sending" ||
-                                        draft.trim().length === 0 ||
-                                        (active.kind === "draft" && draftSettings === null)
-                                    }
-                                >
-                                    <Send className="size-4" aria-hidden="true" />
-                                </Button>
-                            </ComposerSurface>
-                        </form>
+                            ) : (
+                                <ChatControls
+                                    botId={active.bot.botId}
+                                    client={active.client}
+                                    requests={requests}
+                                    disabled={switching}
+                                />
+                            )}
+                        </BotChatComposer>
                     )}
                 </section>
             )}

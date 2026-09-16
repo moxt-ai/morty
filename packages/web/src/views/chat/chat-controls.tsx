@@ -164,9 +164,10 @@ export function ChatControls({
             (option.category === "thought_level" || option.category === "model_config") && option.type !== "boolean",
     );
     return (
-        <div className="space-y-2">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="flex min-w-0 items-center gap-1">
+            <div className="flex min-w-0 items-center gap-1">
                 <Select
+                    compact
                     label="Harness"
                     value={inventory.harness}
                     disabled
@@ -177,6 +178,7 @@ export function ChatControls({
                     onValueChange={() => {}}
                 />
                 <Select
+                    compact
                     label="Model"
                     value={model?.currentValue ?? ""}
                     disabled={disabled || busy || model === undefined}
@@ -188,6 +190,7 @@ export function ChatControls({
                     }}
                 />
                 <Select
+                    compact
                     label="Variant"
                     value={variant?.currentValue ?? ""}
                     disabled={disabled || busy || variant === undefined}
@@ -199,21 +202,15 @@ export function ChatControls({
                     }}
                 />
             </div>
-            {busy && (
-                <p role="status" className="text-xs text-muted-foreground">
-                    Waiting for your agent to apply the selection…
-                </p>
-            )}
-            <p className="text-xs text-muted-foreground">
+            {busy && <span className="sr-only">Waiting for your agent to apply the selection…</span>}
+            <p className="sr-only">
                 The harness is fixed for this conversation. Start a new conversation to choose another harness.
             </p>
             {model === undefined && (
-                <p className="text-xs text-muted-foreground">
-                    Model choices appear when your local agent reports its session settings.
-                </p>
+                <p className="sr-only">Model choices appear when your local agent reports its session settings.</p>
             )}
             {change.kind === "failed" && (
-                <p role="alert" className="text-xs text-destructive">
+                <p role="alert" className="sr-only">
                     {change.message}
                 </p>
             )}

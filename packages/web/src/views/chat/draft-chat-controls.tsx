@@ -136,9 +136,10 @@ export function DraftChatControls({
     const selected = settings.workspace.selected;
     const model = settings.options.find((option) => option.category === "model" && option.type !== "boolean");
     return (
-        <div className="space-y-2">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="flex min-w-0 items-center gap-1">
+            <div className="flex min-w-0 items-center gap-1">
                 <Select
+                    compact
                     label="Harness"
                     value={selected === null ? "" : `${selected.runtimeId}:${selected.agentRef}`}
                     disabled={disabled}
@@ -151,6 +152,7 @@ export function DraftChatControls({
                     onValueChange={(value) => void selectHarness(value)}
                 />
                 <Select
+                    compact
                     label="Model"
                     value={model?.currentValue ?? ""}
                     disabled={disabled || model === undefined}
@@ -182,11 +184,7 @@ export function DraftChatControls({
                     }}
                 />
             </div>
-            {model === undefined && (
-                <p role="status" className="text-xs text-muted-foreground">
-                    This harness has not reported any model choices.
-                </p>
-            )}
+            {model === undefined && <span className="sr-only">This harness has not reported any model choices.</span>}
         </div>
     );
 }
