@@ -28,6 +28,9 @@ export const serverTiming = createMiddleware<ChatHttpEnvironment>(async (context
                 metrics.push({ name, description, durationMilliseconds: duration(operationStartedAt) });
             }
         },
+        record: (name, description, durationMilliseconds) => {
+            metrics.push({ name, description, durationMilliseconds });
+        },
     };
     context.set("operationTiming", operationTiming);
     await next();

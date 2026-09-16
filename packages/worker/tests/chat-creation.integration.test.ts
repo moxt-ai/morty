@@ -106,7 +106,9 @@ test.each([true, false])(
             };
             const firstResponse = await request(`chat/bots/${bot.botId}/access`, input);
             expect(firstResponse.headers.get("server-timing")).toEqual(
-                expect.stringMatching(/(?:^|,)total;dur=.*authentication;dur=.*ownership;dur=.*bot;dur=/u),
+                expect.stringMatching(
+                    /(?:^|,)total;dur=.*authentication;dur=.*ownership;dur=.*bot;dur=.*platform-conversation-create-provision;dur=.*platform-prepare-control-runtime;dur=/u,
+                ),
             );
             if (!settingsAvailable) {
                 // Chat prepares the created Conversation's Session before issuing access, so an

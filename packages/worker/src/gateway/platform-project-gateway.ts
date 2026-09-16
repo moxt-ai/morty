@@ -30,6 +30,29 @@ export type ChatConversationInput =
           readonly configuration: Parameters<MobiusBotOwnerClient["createProjectConversation"]>[0]["configuration"];
       };
 
+const platformTimingMetric = /^([a-z][a-z0-9-]{0,63});dur=(\d+(?:\.\d+)?);desc="([^"\\]{1,120})"$/u;
+
+function recordPlatformTiming(encoded: string | null, prefix: string, timing: OperationTiming): void {
+    if (encoded === null || encoded.length > 8_192) {
+        return;
+    }
+    for (const entry of encoded.split(",")) {
+        const match = platformTimingMetric.exec(entry.trim());
+        if (match === null) {
+            continue;
+        }
+        const [, name, duration, description] = match;
+        if (name === undefined || duration === undefined || description === undefined) {
+            continue;
+        }
+        const durationMilliseconds = Number(duration);
+        if (!Number.isFinite(durationMilliseconds) || durationMilliseconds < 0 || durationMilliseconds > 120_000) {
+            continue;
+        }
+        timing.record(`platform-${prefix}-${name}`, `Platform: ${description}`, durationMilliseconds);
+    }
+}
+
 export class PlatformProjectGateway {
     readonly #bindings: CloudBindings;
     constructor(bindings: CloudBindings) {
@@ -325,12 +348,16 @@ export class PlatformProjectGateway {
                 }
                 const configuration = this.configuration();
                 if ("conversationKey" in input) {
+                    let platformOperation = "prepare";
                     const projectClient = new MobiusClient({
                         endpoint: configuration.origin,
                         projectId,
                         credentialProvider: new MobiusAppCredentialProvider(
                             v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET),
                         ),
+                        observeResponse: ({ serverTiming }) => {
+                            recordPlatformTiming(serverTiming, platformOperation, timing);
+                        },
                         operationTimeoutMilliseconds: 120000,
                     });
                     try {
@@ -358,6 +385,7 @@ export class PlatformProjectGateway {
                             (option) => option.id === requested.configId && option.currentValue === requested.value,
                         );
                         if (!applied) {
+                            platformOperation = "configuration";
                             const update: {
                                 readonly configId: string;
                                 readonly value: string;
@@ -518,6 +546,13 @@ export class PlatformProjectGateway {
             projectId,
             actorReference,
             credentialProvider: new MobiusAppCredentialProvider(v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET)),
+            ...(timing === undefined
+                ? {}
+                : {
+                      observeResponse: ({ serverTiming }: { readonly serverTiming: string | null }) => {
+                          recordPlatformTiming(serverTiming, "conversation", timing);
+                      },
+                  }),
             operationTimeoutMilliseconds: 15000,
         });
         try {
