@@ -271,7 +271,7 @@ export async function platformPeer({
                 response
                     .writeHead(settingsAvailable ? 201 : 409, {
                         "server-timing":
-                            'total;dur=12.0;desc="Total Platform operation time",create-provision-session-runtime;dur=2.0;desc="Provision Session runtime state",create-provision-directory-sync;dur=1.0;desc="Synchronize Session directory",create-provision;dur=3.0;desc="Provision conversation Session",prepare-control-runtime;dur=7.0;desc="Wait for configured Runtime Session"',
+                            'total;dur=12.0;desc="Total Platform operation time",create-provision-session-runtime-context-read;dur=0.2;desc="Read Bot Session context",create-provision-session-runtime-session-create;dur=1.0;desc="Create conversation Session",create-provision-session-runtime-context-insert;dur=0.1;desc="Insert Bot Session context",create-provision-session-runtime-boundary;dur=0.7;desc="Reach Session runtime Durable Object",create-provision-session-runtime;dur=2.0;desc="Provision Session runtime state",create-provision-directory-sync;dur=1.0;desc="Synchronize Session directory",create-provision;dur=3.0;desc="Provision conversation Session",prepare-control-runtime;dur=7.0;desc="Wait for configured Runtime Session",runtime-prepare-total;dur=4.0;desc="Prepare local Runtime Session",prepare-control-runtime-relay;dur=3.0;desc="Wait for Runtime relay transport",daemon-access-total;dur=7.0;desc="Total daemon access time",daemon-access-count;dur=1.0;desc="Daemon access count"',
                     })
                     .end(
                         JSON.stringify(

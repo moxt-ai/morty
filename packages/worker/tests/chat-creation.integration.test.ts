@@ -107,7 +107,7 @@ test.each([true, false])(
             const firstResponse = await request(`chat/bots/${bot.botId}/access`, input);
             expect(firstResponse.headers.get("server-timing")).toEqual(
                 expect.stringMatching(
-                    /(?:^|,)total;dur=.*authentication;dur=.*ownership;dur=.*bot;dur=.*platform-conversation-create-provision-session-runtime;dur=.*platform-conversation-create-provision-directory-sync;dur=.*platform-conversation-create-provision;dur=.*platform-conversation-prepare-control-runtime;dur=.*mobius;dur=[\d.]+;desc="Mobius access";count=[1-9]\d*.*d1;dur=[\d.]+;desc="D1 access";count=[1-9]\d*/u,
+                    /(?:^|,)total;dur=.*authentication;dur=.*ownership;dur=.*bot;dur=.*platform-conversation-create-provision-session-runtime-context-read;dur=.*platform-conversation-create-provision-session-runtime-session-create;dur=.*platform-conversation-create-provision-session-runtime-context-insert;dur=.*platform-conversation-create-provision-session-runtime-boundary;dur=.*platform-conversation-create-provision-session-runtime;dur=.*platform-conversation-create-provision-directory-sync;dur=.*platform-conversation-create-provision;dur=.*platform-conversation-prepare-control-runtime;dur=.*platform-conversation-runtime-prepare-total;dur=.*platform-conversation-prepare-control-runtime-relay;dur=.*platform-conversation-daemon-access-total;dur=.*platform-conversation-daemon-access-count;dur=1\.0.*mobius;dur=[\d.]+;desc="Mobius access";count=[1-9]\d*.*d1;dur=[\d.]+;desc="D1 access";count=[1-9]\d*/u,
                 ),
             );
             if (!settingsAvailable) {
