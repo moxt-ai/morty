@@ -107,7 +107,7 @@ test.each([true, false])(
             const firstResponse = await request(`chat/bots/${bot.botId}/access`, input);
             expect(firstResponse.headers.get("server-timing")).toEqual(
                 expect.stringMatching(
-                    /(?:^|,)total;dur=.*authentication;dur=.*ownership;dur=.*bot;dur=.*platform-conversation-create-provision;dur=.*platform-conversation-prepare-control-runtime;dur=/u,
+                    /(?:^|,)total;dur=.*authentication;dur=.*ownership;dur=.*bot;dur=.*platform-conversation-create-provision-session-runtime;dur=.*platform-conversation-create-provision-directory-sync;dur=.*platform-conversation-create-provision;dur=.*platform-conversation-prepare-control-runtime;dur=/u,
                 ),
             );
             if (!settingsAvailable) {

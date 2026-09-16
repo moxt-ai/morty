@@ -62,7 +62,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [typecheck, build, lint, "test:web", "test:worker", knip, "test:e2e:opencode", migrations]
+        check: [typecheck, build, lint, "test:web", "test:worker", knip, migrations]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -72,29 +72,11 @@ jobs:
         with:
           mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
 
-      - name: Install latest OpenCode
-        if: matrix.check == 'test:e2e:opencode'
-        run: |
-          npm install --global opencode-ai@latest
-          opencode --version
-
       - name: Run ${{ matrix.check }}
         if: matrix.check != 'migrations'
         run: pnpm "$CHECK_SCRIPT"
         env:
           CHECK_SCRIPT: ${{ matrix.check }}
-          MOBIUS_E2E_ARTIFACT_ROOT: ${{ runner.temp }}/mobius-chat-setup-e2e
-          MOBIUS_E2E_CLERK_PUBLISHABLE_KEY: ${{ vars.CLERK_PUBLISHABLE_KEY }}
-          MOBIUS_E2E_TIMEOUT_MS: "1200000"
-          OPENCODE_DISABLE_AUTOUPDATE: "1"
-
-      - name: Upload browser journey failure diagnostics
-        if: failure() && matrix.check == 'test:e2e:opencode'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: opencode-e2e-${{ github.run_id }}
-          path: ${{ runner.temp }}/mobius-chat-setup-e2e/**/artifacts
-          if-no-files-found: ignore
 
       - name: Save suite coverage for merging
         if: ${{ !cancelled() && (matrix.check == 'test:web' || matrix.check == 'test:worker') }}

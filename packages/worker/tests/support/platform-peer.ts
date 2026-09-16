@@ -271,7 +271,7 @@ export async function platformPeer({
                 response
                     .writeHead(settingsAvailable ? 201 : 409, {
                         "server-timing":
-                            'total;dur=12.0;desc="Total Platform operation time",create-provision;dur=3.0;desc="Provision conversation Session",prepare-control-runtime;dur=7.0;desc="Wait for configured Runtime Session"',
+                            'total;dur=12.0;desc="Total Platform operation time",create-provision-session-runtime;dur=2.0;desc="Provision Session runtime state",create-provision-directory-sync;dur=1.0;desc="Synchronize Session directory",create-provision;dur=3.0;desc="Provision conversation Session",prepare-control-runtime;dur=7.0;desc="Wait for configured Runtime Session"',
                     })
                     .end(
                         JSON.stringify(
