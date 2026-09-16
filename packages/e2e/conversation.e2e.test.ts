@@ -43,7 +43,11 @@ test("Given a paired workspace, When a user creates and reloads conversations, T
     await runtime.sendMessage(followUp);
     await expect(page.getByTestId(dataTestId.agentResponse).nth(1)).toContainText(followUp);
     const savedUrl = page.url();
+    const initialEventsRequest = page.waitForRequest((request) =>
+        new URL(request.url()).pathname.endsWith("/client/session/events"),
+    );
     await page.reload();
+    expect(new URL((await initialEventsRequest).url()).searchParams.get("limit")).toBe("100");
     await expect(page.getByTestId(dataTestId.agentResponse).nth(1)).toContainText(followUp);
     expect(page.url()).toBe(savedUrl);
     await expect(page.getByTestId(dataTestId.userMessage)).toHaveText(["Second conversation", followUp]);

@@ -19,6 +19,8 @@ import type { OpenLocalSession } from "./local-session-dialog.tsx";
 import { LocalSessionPane } from "./local-session-pane.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
 
+const SESSION_EVENT_PAGE_LIMIT = 100;
+
 type SetupReason = "unconfigured" | "inactive" | "no-selection" | "agent-missing" | "agent-offline" | "agent-required";
 
 function setupReason(workspace: ChatWorkspace): SetupReason | null {
@@ -283,12 +285,18 @@ export function BotChatHome({
                 }
                 return true;
             };
-            let events = await session.readEvents(new MobiusPageRequest(10, ""), controller.signal);
+            let events = await session.readEvents(
+                new MobiusPageRequest(SESSION_EVENT_PAGE_LIMIT, ""),
+                controller.signal,
+            );
             for (const event of events.events) {
                 await receive(event);
             }
             while (events.hasMore) {
-                events = await session.readEvents(new MobiusPageRequest(10, events.cursor), controller.signal);
+                events = await session.readEvents(
+                    new MobiusPageRequest(SESSION_EVENT_PAGE_LIMIT, events.cursor),
+                    controller.signal,
+                );
                 for (const event of events.events) {
                     await receive(event);
                 }
