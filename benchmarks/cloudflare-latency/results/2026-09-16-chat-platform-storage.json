@@ -1,0 +1,209 @@
+{
+    "storageMeasuredAt": "2026-09-16T03:24:29.023Z",
+    "platformMeasuredAt": "2026-09-16T03:28:23.799Z",
+    "warmupSamples": 5,
+    "measuredSamples": 100,
+    "context": {
+        "chatEnvironment": "staging",
+        "platformEnvironment": "production",
+        "platformHealthUrl": "https://mobius.moxt.ai/mobius/api/health",
+        "platformRevision": "8651d7477aed50ed46bd89cc2929cf2fc543af06",
+        "platformDeploymentVersion": "7b1b4b59-e9ce-46d1-90e4-218a93d2cd03",
+        "d1ServingColoObservedAfterRun": {
+            "chat-apac": "SIN",
+            "chat-wnam": "DEN",
+            "platform-apac-01": "SIN",
+            "platform-apac-02": "HKG",
+            "platform-wnam-01": "SEA",
+            "platform-wnam-02": "DEN"
+        }
+    },
+    "measurements": {
+        "chat-apac-d1": {
+            "wallMilliseconds": {
+                "samples": 100,
+                "minimum": 7,
+                "p50": 10,
+                "p95": 14,
+                "p99": 18,
+                "maximum": 18,
+                "mean": 10.42
+            },
+            "sqlMilliseconds": {
+                "samples": 100,
+                "minimum": 0.085,
+                "p50": 0.113,
+                "p95": 0.163,
+                "p99": 0.25,
+                "maximum": 0.252,
+                "mean": 0.117
+            }
+        },
+        "chat-apac-r2": {
+            "wallMilliseconds": {
+                "samples": 100,
+                "minimum": 27,
+                "p50": 39,
+                "p95": 86,
+                "p99": 137,
+                "maximum": 173,
+                "mean": 44.2
+            }
+        },
+        "chat-apac-platform": {
+            "wallMilliseconds": {
+                "samples": 100,
+                "minimum": 7,
+                "p50": 12,
+                "p95": 21,
+                "p99": 83,
+                "maximum": 337,
+                "mean": 16.82
+            }
+        },
+        "chat-wnam-d1": {
+            "wallMilliseconds": {
+                "samples": 100,
+                "minimum": 44,
+                "p50": 52,
+                "p95": 68,
+                "p99": 100,
+                "maximum": 100,
+                "mean": 55.08
+            },
+            "sqlMilliseconds": {
+                "samples": 100,
+                "minimum": 0.09,
+                "p50": 0.132,
+                "p95": 0.215,
+                "p99": 0.334,
+                "maximum": 0.525,
+                "mean": 0.144
+            }
+        },
+        "chat-wnam-r2": {
+            "wallMilliseconds": {
+                "samples": 100,
+                "minimum": 53,
+                "p50": 75,
+                "p95": 161,
+                "p99": 667,
+                "maximum": 941,
+                "mean": 102.48
+            }
+        },
+        "chat-wnam-platform": {
+            "wallMilliseconds": {
+                "samples": 100,
+                "minimum": 6,
+                "p50": 9,
+                "p95": 16,
+                "p99": 26,
+                "maximum": 29,
+                "mean": 10.74
+            }
+        },
+        "platform-apac-01-d1": {
+            "wallMilliseconds": {
+                "samples": 100,
+                "minimum": 7,
+                "p50": 10,
+                "p95": 14,
+                "p99": 20,
+                "maximum": 25,
+                "mean": 10.48
+            },
+            "sqlMilliseconds": {
+                "samples": 100,
+                "minimum": 0.079,
+                "p50": 0.105,
+                "p95": 0.153,
+                "p99": 0.213,
+                "maximum": 1.386,
+                "mean": 0.123
+            }
+        },
+        "platform-apac-01-r2": {
+            "wallMilliseconds": {
+                "samples": 100,
+                "minimum": 114,
+                "p50": 132,
+                "p95": 163,
+                "p99": 187,
+                "maximum": 234,
+                "mean": 136.49
+            }
+        },
+        "platform-apac-02-d1": {
+            "wallMilliseconds": {
+                "samples": 100,
+                "minimum": 40,
+                "p50": 46,
+                "p95": 153,
+                "p99": 297,
+                "maximum": 389,
+                "mean": 61.74
+            },
+            "sqlMilliseconds": {
+                "samples": 100,
+                "minimum": 0.077,
+                "p50": 0.116,
+                "p95": 0.166,
+                "p99": 0.194,
+                "maximum": 0.196,
+                "mean": 0.118
+            }
+        },
+        "platform-wnam-01-d1": {
+            "wallMilliseconds": {
+                "samples": 100,
+                "minimum": 7,
+                "p50": 12,
+                "p95": 22,
+                "p99": 66,
+                "maximum": 275,
+                "mean": 16.36
+            },
+            "sqlMilliseconds": {
+                "samples": 100,
+                "minimum": 0.13,
+                "p50": 0.217,
+                "p95": 0.43,
+                "p99": 0.961,
+                "maximum": 6.188,
+                "mean": 0.308
+            }
+        },
+        "platform-wnam-01-r2": {
+            "wallMilliseconds": {
+                "samples": 100,
+                "minimum": 61,
+                "p50": 83,
+                "p95": 177,
+                "p99": 254,
+                "maximum": 283,
+                "mean": 91.9
+            }
+        },
+        "platform-wnam-02-d1": {
+            "wallMilliseconds": {
+                "samples": 100,
+                "minimum": 46,
+                "p50": 56,
+                "p95": 67,
+                "p99": 70,
+                "maximum": 71,
+                "mean": 56.89
+            },
+            "sqlMilliseconds": {
+                "samples": 100,
+                "minimum": 0.152,
+                "p50": 0.238,
+                "p95": 0.434,
+                "p99": 0.678,
+                "maximum": 2.769,
+                "mean": 0.278
+            }
+        }
+    }
+}

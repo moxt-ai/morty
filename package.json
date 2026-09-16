@@ -34,6 +34,8 @@
         "preview": "vite preview",
         "build:staging": "pnpm build:setup && CLOUDFLARE_ENV=staging vite build",
         "build:production": "pnpm build:setup && CLOUDFLARE_ENV=production vite build",
+        "bench:cloudflare-latency": "node --use-env-proxy benchmarks/cloudflare-latency/run.mjs",
+        "bench:chat-to-prod-mobius": "node --use-env-proxy benchmarks/cloudflare-latency/run.mjs chat-to-platform",
         "deploy:staging": "pnpm build:staging && node third-party/mobius/packages/relay-cloudflare-platform/scripts/regional-workers.ts --config wrangler.jsonc --built --env staging --template wrangler.regional.template.json --placement regional-placement.json --output .wrangler/regional/staging && wrangler deploy --config .wrangler/regional/staging/apac.json && wrangler deploy --config .wrangler/regional/staging/wnam.json && wrangler deploy --env staging",
         "deploy:production": "pnpm build:production && node third-party/mobius/packages/relay-cloudflare-platform/scripts/regional-workers.ts --config wrangler.jsonc --built --env production --template wrangler.regional.template.json --placement regional-placement.json --output .wrangler/regional/production && wrangler deploy --config .wrangler/regional/production/apac.json && wrangler deploy --config .wrangler/regional/production/wnam.json && wrangler deploy --env production"
     },

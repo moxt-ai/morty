@@ -1,0 +1,22 @@
+{
+    "$schema": "../../node_modules/wrangler/config-schema.json",
+    "name": "mobius-latency-chat-apac",
+    "main": "worker.ts",
+    "compatibility_date": "2026-09-07",
+    "account_id": "95af7a3d67be8c49b1619544e3ce53c0",
+    "placement": { "region": "aws:ap-southeast-1" },
+    "workers_dev": true,
+    "preview_urls": false,
+    "vars": {
+        "PROBE_NAME": "mobius-chat-apac",
+        "TARGET_URL": "https://mobius.moxt.ai/mobius/api/health"
+    },
+    "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "mobius-chat-staging-apac-attachments" }],
+    "d1_databases": [
+        {
+            "binding": "DATABASE",
+            "database_name": "mobius-chat-staging-apac",
+            "database_id": "ccbf7137-7983-4a7d-b205-04fb82a6019a"
+        }
+    ]
+}

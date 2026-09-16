@@ -3,6 +3,9 @@
     "ignore": ["third-party/**"],
     "ignoreDependencies": ["cloudflare"],
     "workspaces": {
+        ".": {
+            "entry": ["benchmarks/cloudflare-latency/run.mjs", "benchmarks/cloudflare-latency/worker.ts"]
+        },
         "packages/e2e": {
             "entry": ["*.e2e.test.ts", "fixtures/local-platform-worker.ts", "infra/acp-proxy.ts"]
         },

@@ -1,0 +1,19 @@
+{
+    "$schema": "../../node_modules/wrangler/config-schema.json",
+    "name": "mobius-latency-platform-apac-02",
+    "main": "worker.ts",
+    "compatibility_date": "2026-09-03",
+    "account_id": "95af7a3d67be8c49b1619544e3ce53c0",
+    "placement": { "region": "aws:ap-southeast-1" },
+    "workers_dev": true,
+    "preview_urls": false,
+    "vars": { "PROBE_NAME": "platform-apac-02" },
+    "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "mobius-cloud-production-apac-objects" }],
+    "d1_databases": [
+        {
+            "binding": "DATABASE",
+            "database_name": "mobius-cloud-production-apac-02",
+            "database_id": "c20de4d5-4d9b-4ed2-b11f-fd660124de2d"
+        }
+    ]
+}
