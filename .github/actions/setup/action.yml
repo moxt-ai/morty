@@ -36,9 +36,14 @@ runs:
     - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.pnpm.outputs.store-path }}
-        key: pnpm-v11-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+        key: pnpm-v11-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'third-party/mobius/pnpm-lock.yaml') }}
         restore-keys: |
           pnpm-v11-${{ runner.os }}-${{ runner.arch }}-
 
-    - shell: bash
+    - name: Install Mobius dependencies
+      shell: bash
+      run: pnpm --dir third-party/mobius install --frozen-lockfile
+
+    - name: Install Chat dependencies
+      shell: bash
       run: pnpm install --frozen-lockfile

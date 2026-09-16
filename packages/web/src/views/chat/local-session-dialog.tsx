@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
+import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
 
 export interface OpenLocalSession {
@@ -22,15 +23,7 @@ type Directory =
           readonly nextCursor: string | null;
       }
     | { readonly kind: "failed"; readonly message: string };
-type Preview =
-    | { readonly kind: "empty" }
-    | { readonly kind: "loading"; readonly entry: NativeSessionEntry }
-    | {
-          readonly kind: "ready";
-          readonly entry: NativeSessionEntry;
-          readonly content: Awaited<ReturnType<BotChatApi["nativeSession"]>>;
-      }
-    | { readonly kind: "failed"; readonly entry: NativeSessionEntry; readonly message: string };
+type Selection = { readonly kind: "empty" } | { readonly kind: "selected"; readonly entry: NativeSessionEntry };
 
 export function LocalSessionDialog({
     botId,
@@ -39,23 +32,22 @@ export function LocalSessionDialog({
     onClose,
 }: {
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "workspace" | "nativeSessions" | "nativeSession">;
+    readonly requests: Pick<BotChatApi, "workspace" | "nativeSessions">;
     readonly onOpen: (session: OpenLocalSession) => void;
     readonly onClose: () => void;
 }) {
     const [agents, setAgents] = useState<ChatWorkspace["agents"]>([]);
     const [selected, setSelected] = useState("");
     const [directory, setDirectory] = useState<Directory>({ kind: "loading" });
-    const [preview, setPreview] = useState<Preview>({ kind: "empty" });
+    const [selection, setSelection] = useState<Selection>({ kind: "empty" });
     const [operation, setOperation] = useState<"idle" | "more" | "fork">("idle");
     const [error, setError] = useState("");
     const lifetime = useRef<AbortController | null>(null);
-    const selection = useRef<AbortController | null>(null);
     useEffect(() => {
         const controller = new AbortController();
         lifetime.current = controller;
         setDirectory({ kind: "loading" });
-        setPreview({ kind: "empty" });
+        setSelection({ kind: "empty" });
         setError("");
         const open = async () => {
             const workspace = await requests.workspace(botId, controller.signal);
@@ -104,48 +96,12 @@ export function LocalSessionDialog({
         });
         return () => {
             controller.abort();
-            selection.current?.abort();
         };
     }, [botId, requests, selected]);
-    const select = async (entry: NativeSessionEntry) => {
-        if (directory.kind !== "ready" || operation !== "idle" || lifetime.current === null) {
-            return;
-        }
-        selection.current?.abort();
-        const controller = new AbortController();
-        selection.current = controller;
-        const signal = AbortSignal.any([controller.signal, lifetime.current.signal]);
-        setPreview({ kind: "loading", entry });
-        setError("");
-        try {
-            const content = await requests.nativeSession(
-                botId,
-                directory.runtimeId,
-                {
-                    discoveryId: directory.discoveryId,
-                    agentId: directory.agentRef,
-                    directoryId: entry.directoryId,
-                    additionalDirectoryIds: entry.additionalDirectories.map((item) => item.directoryId),
-                    entryId: entry.entryId,
-                },
-                signal,
-            );
-            signal.throwIfAborted();
-            setPreview({ kind: "ready", entry, content });
-        } catch (cause) {
-            if (!signal.aborted) {
-                setPreview({
-                    kind: "failed",
-                    entry,
-                    message: cause instanceof Error ? cause.message : "The preview could not be loaded.",
-                });
-            }
-        }
-    };
     const fork = async () => {
         if (
             directory.kind !== "ready" ||
-            preview.kind !== "ready" ||
+            selection.kind !== "selected" ||
             operation !== "idle" ||
             lifetime.current === null
         ) {
@@ -162,9 +118,9 @@ export function LocalSessionDialog({
                     action: "fork",
                     discoveryId: directory.discoveryId,
                     agentId: directory.agentRef,
-                    directoryId: preview.entry.directoryId,
-                    additionalDirectoryIds: preview.entry.additionalDirectories.map((item) => item.directoryId),
-                    entryId: preview.entry.entryId,
+                    directoryId: selection.entry.directoryId,
+                    additionalDirectoryIds: selection.entry.additionalDirectories.map((item) => item.directoryId),
+                    entryId: selection.entry.entryId,
                 },
                 signal,
             );
@@ -172,7 +128,7 @@ export function LocalSessionDialog({
             if (result.action !== "fork") {
                 throw new Error("This agent cannot fork the selected local session.");
             }
-            onOpen({ agentRef: directory.agentRef, result: { ...result, action: "fork" }, entry: preview.entry });
+            onOpen({ agentRef: directory.agentRef, result: { ...result, action: "fork" }, entry: selection.entry });
         } catch (cause) {
             if (!signal.aborted) {
                 setError(cause instanceof Error ? cause.message : "The session could not be forked.");
@@ -237,7 +193,7 @@ export function LocalSessionDialog({
     return (
         <Dialog
             title="Open Local Session"
-            description="Select a local session to preview its history, then fork a copy into Chat."
+            description="Select a local session, then fork a copy into Chat."
             onClose={onClose}
             busy={operation === "fork"}
             wide
@@ -274,10 +230,16 @@ export function LocalSessionDialog({
                                 <button
                                     type="button"
                                     key={entry.entryId}
+                                    data-testid={dataTestId.localSessionEntry}
                                     aria-label={entry.title || "Untitled session"}
-                                    aria-pressed={preview.kind !== "empty" && preview.entry.entryId === entry.entryId}
+                                    aria-pressed={
+                                        selection.kind === "selected" && selection.entry.entryId === entry.entryId
+                                    }
                                     disabled={operation !== "idle"}
-                                    onClick={() => void select(entry)}
+                                    onClick={() => {
+                                        setSelection({ kind: "selected", entry });
+                                        setError("");
+                                    }}
                                     className="w-full rounded-lg p-3 text-left hover:bg-muted focus-visible:outline-ring aria-pressed:bg-primary/10"
                                 >
                                     <span className="block truncate font-medium">
@@ -295,42 +257,15 @@ export function LocalSessionDialog({
                         )}
                     </div>
                 </section>
-                <section aria-label="Selected session preview" className="min-w-0 space-y-4 overflow-y-auto p-4 sm:p-6">
-                    {preview.kind === "empty" && (
-                        <p className="text-muted-foreground">Select a session to preview its history.</p>
+                <section aria-label="Selected local session" className="min-w-0 space-y-4 overflow-y-auto p-4 sm:p-6">
+                    {selection.kind === "empty" && (
+                        <p className="text-muted-foreground">Select a session to fork into Chat.</p>
                     )}
-                    {preview.kind === "loading" && <p role="status">Loading session preview…</p>}
-                    {preview.kind === "failed" && (
-                        <p role="alert" className="text-destructive">
-                            {preview.message}
-                        </p>
-                    )}
-                    {preview.kind === "ready" && (
+                    {selection.kind === "selected" && (
                         <>
-                            <h2 className="font-semibold">
-                                {preview.content.title || preview.entry.title || "Untitled session"}
-                            </h2>
-                            {preview.content.history.status === "unavailable" ? (
-                                <p>This agent does not expose saved message history.</p>
-                            ) : (
-                                <>
-                                    {preview.content.history.messages.length === 0 && (
-                                        <p>No messages in this session.</p>
-                                    )}
-                                    {preview.content.history.messages.map((message, index) => (
-                                        <div
-                                            // biome-ignore lint/suspicious/noArrayIndexKey: Native history has no message IDs; this read-only snapshot never reorders messages.
-                                            key={`${index}-${message.role}`}
-                                            className={`whitespace-pre-wrap break-words rounded-xl p-3 ${message.role === "user" ? "ml-6 bg-primary/10" : "mr-6 bg-muted"}`}
-                                        >
-                                            {message.text}
-                                        </div>
-                                    ))}
-                                    {preview.content.history.truncated && (
-                                        <p className="text-muted-foreground">Showing a partial history preview.</p>
-                                    )}
-                                </>
-                            )}
+                            <h2 className="font-semibold">{selection.entry.title || "Untitled session"}</h2>
+                            <p className="text-muted-foreground">{selection.entry.directoryLabel}</p>
+                            <p>The original local session will remain unchanged.</p>
                         </>
                     )}
                 </section>
@@ -344,7 +279,11 @@ export function LocalSessionDialog({
                 <Button variant="outline" disabled={operation === "fork"} onClick={onClose}>
                     Cancel
                 </Button>
-                <Button disabled={preview.kind !== "ready" || operation !== "idle"} onClick={() => void fork()}>
+                <Button
+                    data-testid={dataTestId.forkLocalSession}
+                    disabled={selection.kind !== "selected" || operation !== "idle"}
+                    onClick={() => void fork()}
+                >
                     {operation === "fork" ? "Forking…" : "Fork"}
                 </Button>
             </footer>

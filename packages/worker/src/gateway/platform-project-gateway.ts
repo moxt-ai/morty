@@ -30,6 +30,29 @@ export type ChatConversationInput =
           readonly configuration: Parameters<MobiusBotOwnerClient["createProjectConversation"]>[0]["configuration"];
       };
 
+const platformTimingMetric = /^([a-z][a-z0-9-]{0,63});dur=(\d+(?:\.\d+)?);desc="([^"\\]{1,120})"$/u;
+
+function recordPlatformTiming(encoded: string | null, prefix: string, timing: OperationTiming): void {
+    if (encoded === null || encoded.length > 8_192) {
+        return;
+    }
+    for (const entry of encoded.split(",")) {
+        const match = platformTimingMetric.exec(entry.trim());
+        if (match === null) {
+            continue;
+        }
+        const [, name, duration, description] = match;
+        if (name === undefined || duration === undefined || description === undefined) {
+            continue;
+        }
+        const durationMilliseconds = Number(duration);
+        if (!Number.isFinite(durationMilliseconds) || durationMilliseconds < 0 || durationMilliseconds > 120_000) {
+            continue;
+        }
+        timing.record(`platform-${prefix}-${name}`, `Platform: ${description}`, durationMilliseconds);
+    }
+}
+
 export class PlatformProjectGateway {
     readonly #bindings: CloudBindings;
     constructor(bindings: CloudBindings) {
@@ -325,75 +348,25 @@ export class PlatformProjectGateway {
                 }
                 const configuration = this.configuration();
                 if ("conversationKey" in input) {
-                    const projectClient = new MobiusClient({
-                        endpoint: configuration.origin,
-                        projectId,
-                        credentialProvider: new MobiusAppCredentialProvider(
-                            v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET),
-                        ),
-                        operationTimeoutMilliseconds: 120000,
-                    });
-                    try {
-                        const ready = await timing.measure(
-                            "prepare",
-                            "Prepare agent Session",
-                            async () => await projectClient.sessions.prepare(conversation.sessionId, signal),
+                    const ready = conversation.ready;
+                    if (ready === null || ready.sessionId !== conversation.sessionId) {
+                        throw new PlatformProjectError(
+                            "PLATFORM_INVALID_RESPONSE",
+                            "Platform returned an unexpected Session.",
+                            502,
                         );
-                        if (ready.sessionId !== conversation.sessionId) {
-                            throw new PlatformProjectError(
-                                "PLATFORM_INVALID_RESPONSE",
-                                "Platform returned an unexpected Session.",
-                                502,
-                            );
-                        }
-                        const requested = input.configuration;
-                        if (requested.valueType !== "select" && requested.valueType !== "boolean") {
-                            throw new PlatformProjectError(
-                                "INVALID_REQUEST",
-                                "The initial Conversation configuration is invalid.",
-                                400,
-                            );
-                        }
-                        const applied = ready.configOptions.some(
+                    }
+                    const requested = input.configuration;
+                    if (
+                        !ready.configOptions.some(
                             (option) => option.id === requested.configId && option.currentValue === requested.value,
+                        )
+                    ) {
+                        throw new PlatformProjectError(
+                            "AGENT_CONFIGURATION_REJECTED",
+                            "The harness did not confirm the selected model. Choose a model before retrying your message.",
+                            409,
                         );
-                        if (!applied) {
-                            const update: {
-                                readonly configId: string;
-                                readonly value: string;
-                                readonly valueType: "select" | "boolean";
-                                readonly booleanValue: boolean;
-                            } = {
-                                configId: requested.configId,
-                                value: requested.value,
-                                valueType: requested.valueType,
-                                booleanValue: requested.booleanValue,
-                            };
-                            const updated = await timing.measure(
-                                "configuration",
-                                "Update agent configuration",
-                                async () =>
-                                    await projectClient.sessions.updateConfiguration(
-                                        conversation.sessionId,
-                                        update,
-                                        signal,
-                                    ),
-                            );
-                            if (
-                                !updated.configOptions.some(
-                                    (option) =>
-                                        option.id === requested.configId && option.currentValue === requested.value,
-                                )
-                            ) {
-                                throw new PlatformProjectError(
-                                    "AGENT_CONFIGURATION_REJECTED",
-                                    "The harness did not confirm the selected model. Choose a model before retrying your message.",
-                                    409,
-                                );
-                            }
-                        }
-                    } finally {
-                        projectClient.close();
                     }
                 }
                 const platform = new MobiusPlatformAppClient({
@@ -447,6 +420,7 @@ export class PlatformProjectGateway {
                 };
             },
             timing,
+            120000,
         );
 
     readonly draftSettings = async (projectId: string, botId: string, userId: string, signal: AbortSignal) =>
@@ -511,6 +485,7 @@ export class PlatformProjectGateway {
             bot: Awaited<ReturnType<MobiusBotOwnerClient["readBot"]>>,
         ) => Promise<T>,
         timing?: OperationTiming,
+        operationTimeoutMilliseconds = 15000,
     ): Promise<T> => {
         signal.throwIfAborted();
         const client = new MobiusBotOwnerClient({
@@ -518,7 +493,14 @@ export class PlatformProjectGateway {
             projectId,
             actorReference,
             credentialProvider: new MobiusAppCredentialProvider(v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET)),
-            operationTimeoutMilliseconds: 15000,
+            ...(timing === undefined
+                ? {}
+                : {
+                      observeResponse: ({ serverTiming }: { readonly serverTiming: string | null }) => {
+                          recordPlatformTiming(serverTiming, "conversation", timing);
+                      },
+                  }),
+            operationTimeoutMilliseconds,
         });
         try {
             const bot =

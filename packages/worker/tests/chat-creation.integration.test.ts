@@ -106,10 +106,12 @@ test.each([true, false])(
             };
             const firstResponse = await request(`chat/bots/${bot.botId}/access`, input);
             expect(firstResponse.headers.get("server-timing")).toEqual(
-                expect.stringMatching(/(?:^|,)total;dur=.*authentication;dur=.*ownership;dur=.*bot;dur=/u),
+                expect.stringMatching(
+                    /(?:^|,)total;dur=.*authentication;dur=.*ownership;dur=.*bot;dur=.*platform-conversation-create-provision;dur=.*platform-conversation-prepare-control-runtime;dur=/u,
+                ),
             );
             if (!settingsAvailable) {
-                // Chat prepares the created Conversation's Session before issuing access, so an
+                // Platform prepares the created Conversation's Session before returning it, so an
                 // agent that cannot prepare a Session must fail Conversation creation the same way
                 // it fails draft settings.
                 expect(firstResponse.status).toBe(409);
