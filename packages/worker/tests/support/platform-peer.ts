@@ -130,6 +130,10 @@ export async function platformPeer({
             }
             const key = `${projectId}:${sessionId}`;
             if (sessions.has(key) && request.method === "POST" && sessionPath[3] === "prepare") {
+                response.setHeader(
+                    "server-timing",
+                    'total;dur=9.0;desc="Total Platform operation time",control-runtime;dur=7.0;desc="Wait for Runtime control response"',
+                );
                 response.writeHead(settingsAvailable ? 200 : 409).end(
                     JSON.stringify(
                         settingsAvailable
@@ -267,7 +271,12 @@ export async function platformPeer({
                         },
                     });
                 }
-                response.writeHead(201).end(JSON.stringify(conversation));
+                response
+                    .writeHead(201, {
+                        "server-timing":
+                            'total;dur=12.0;desc="Total Platform operation time",create-provision;dur=3.0;desc="Provision conversation Session"',
+                    })
+                    .end(JSON.stringify(conversation));
                 return;
             }
             const conversation = [...conversations.values()].find(
