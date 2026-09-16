@@ -5,4 +5,6 @@ export const dataTestId = Object.freeze({
     agentResponse: "chat-agent-response",
     pairingInstruction: "chat-pairing-instruction",
     newConversation: "chat-new-conversation",
+    localSessionEntry: "chat-local-session-entry",
+    forkLocalSession: "chat-fork-local-session",
 });
