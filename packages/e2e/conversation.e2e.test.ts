@@ -20,7 +20,7 @@ test("Given a paired workspace, When a user adds a file from the composer menu, 
         buffer: Buffer.from("# Project notes\nKeep the reply brief."),
     });
     await expect(page.getByText("project-notes.md", { exact: true })).toBeVisible();
-    await expect(page.getByRole("combobox", { name: "Harness", exact: true })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Harness", exact: true })).toBeEnabled();
     await expect(page.getByRole("combobox", { name: "Model", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: /microphone|whisper/iu })).toHaveCount(0);

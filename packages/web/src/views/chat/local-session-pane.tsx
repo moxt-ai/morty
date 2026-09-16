@@ -9,12 +9,11 @@ import {
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
 import { type MobiusClient, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
-import { ArrowLeft, Send } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { ComposerSurface } from "../../components/chat/composer-surface.tsx";
+import { BotChatComposer, type ComposerAttachment } from "../../components/chat/bot-chat-composer.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
-import { Textarea } from "../../components/ui/textarea.tsx";
 import { type RecordedAgentActivity, recordAgentActivity } from "../../services/chat/agent-activities.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { OpenLocalSession } from "./local-session-dialog.tsx";
@@ -49,6 +48,7 @@ export function LocalSessionPane({
     );
     const [options, setOptions] = useState<readonly SessionConfigOption[]>(session.result.ready.configOptions);
     const [draft, setDraft] = useState("");
+    const [attachments, setAttachments] = useState<readonly ComposerAttachment[]>([]);
     const [activities, setActivities] = useState<ReadonlyMap<string, RecordedAgentActivity>>(new Map());
     const [operation, setOperation] = useState<Operation>({ kind: "idle" });
     const lifetime = useRef(new AbortController());
@@ -255,7 +255,7 @@ export function LocalSessionPane({
     const send = async () => {
         if (
             connection.kind !== "ready" ||
-            draft.trim() === "" ||
+            (draft.trim() === "" && attachments.length === 0) ||
             operation.kind === "sending" ||
             operation.kind === "configuring"
         ) {
@@ -264,11 +264,17 @@ export function LocalSessionPane({
         const commandId = crypto.randomUUID();
         command.current = commandId;
         const prompt = draft.trim();
+        const displayPrompt =
+            prompt ||
+            attachments
+                .map((attachment) => (attachment.kind === "image" ? attachment.image.name : attachment.resource.name))
+                .join(", ");
         followLatest.current = true;
         setDraft("");
+        setAttachments([]);
         setMessages((current) => [
             ...current,
-            { id: commandId, role: "user", text: prompt },
+            { id: commandId, role: "user", text: displayPrompt },
             { id: `${commandId}-reply`, role: "assistant", text: "", attempt: null, commandId },
         ]);
         setOperation({ kind: "sending", commandId });
@@ -279,8 +285,12 @@ export function LocalSessionPane({
                     ...request,
                     idempotencyKey: commandId,
                     content: prompt,
-                    images: [],
-                    resources: [],
+                    images: attachments.flatMap((attachment) =>
+                        attachment.kind === "image" ? [attachment.image] : [],
+                    ),
+                    resources: attachments.flatMap((attachment) =>
+                        attachment.kind === "resource" ? [attachment.resource] : [],
+                    ),
                     artifactIds: [],
                 },
                 lifetime.current.signal,
@@ -363,60 +373,52 @@ export function LocalSessionPane({
                     </div>
                 ))}
             </div>
-            <form
-                onSubmit={(event) => {
-                    event.preventDefault();
-                    void send();
-                }}
-                className="mx-auto w-full max-w-3xl space-y-3 p-4 sm:p-6"
+            <BotChatComposer
+                attachments={attachments}
+                disabled={busy}
+                draft={draft}
+                error={operation.kind === "failed" ? operation.message : ""}
+                messageLabel="Message local session"
+                onAttachmentsChange={setAttachments}
+                onDraftChange={setDraft}
+                onStop={() => {}}
+                onSubmit={() => void send()}
+                outputState="idle"
+                placeholder="Continue this conversation…"
+                submitDisabled={busy || (draft.trim() === "" && attachments.length === 0)}
+                submitLabel="Send to local session"
             >
-                <div className="flex flex-wrap gap-2">
-                    {options
-                        .filter(
-                            (option) =>
-                                ["model", "thought_level", "model_config"].includes(option.category) &&
-                                option.type !== "boolean",
-                        )
-                        .map((option) => (
-                            <div className="min-w-40 flex-1" key={option.id}>
-                                <Select
-                                    label={option.category === "model" ? "Model" : "Variant"}
-                                    value={option.currentValue}
-                                    options={option.values.map((value) => ({ value: value.value, label: value.name }))}
-                                    disabled={busy}
-                                    onValueChange={(value) => void configure(option, value)}
-                                />
-                            </div>
-                        ))}
-                </div>
-                {operation.kind === "failed" && (
-                    <p role="alert" className="text-sm text-destructive">
-                        {operation.message}
-                    </p>
-                )}
+                <Select
+                    compact
+                    label="Harness"
+                    value={session.agentRef}
+                    disabled
+                    options={[{ value: session.agentRef, label: session.agentRef }]}
+                    onValueChange={() => {}}
+                />
+                {options
+                    .filter(
+                        (option) =>
+                            ["model", "thought_level", "model_config"].includes(option.category) &&
+                            option.type !== "boolean",
+                    )
+                    .map((option) => (
+                        <Select
+                            compact
+                            key={option.id}
+                            label={option.category === "model" ? "Model" : "Variant"}
+                            value={option.currentValue}
+                            options={option.values.map((value) => ({ value: value.value, label: value.name }))}
+                            disabled={busy}
+                            onValueChange={(value) => void configure(option, value)}
+                        />
+                    ))}
                 {operation.kind === "configuring" && (
-                    <p role="status" className="text-xs text-muted-foreground">
+                    <span role="status" className="sr-only">
                         Applying agent settings…
-                    </p>
+                    </span>
                 )}
-                <ComposerSurface>
-                    <Textarea
-                        aria-label="Message local session"
-                        placeholder="Continue this conversation…"
-                        value={draft}
-                        onChange={(event) => setDraft(event.target.value)}
-                        disabled={busy}
-                    />
-                    <Button
-                        type="submit"
-                        size="icon"
-                        aria-label="Send to local session"
-                        disabled={busy || draft.trim() === ""}
-                    >
-                        <Send className="size-4" />
-                    </Button>
-                </ComposerSurface>
-            </form>
+            </BotChatComposer>
         </section>
     );
 }

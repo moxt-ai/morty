@@ -66,6 +66,9 @@ export function BotChatComposer({
     onStop,
     onSubmit,
     outputState,
+    messageLabel = "Message",
+    placeholder = "Ask me anything",
+    submitLabel = "Send message",
     submitDisabled,
 }: {
     readonly attachments: readonly ComposerAttachment[];
@@ -78,6 +81,9 @@ export function BotChatComposer({
     readonly onStop: () => void;
     readonly onSubmit: () => void;
     readonly outputState: "idle" | "running" | "stopping";
+    readonly messageLabel?: string;
+    readonly placeholder?: string;
+    readonly submitLabel?: string;
     readonly submitDisabled: boolean;
 }) {
     const fileInput = useRef<HTMLInputElement>(null);
@@ -152,12 +158,12 @@ export function BotChatComposer({
                     </ul>
                 )}
                 <Textarea
-                    aria-label="Message"
+                    aria-label={messageLabel}
                     className="min-h-[62px] px-1 py-1 text-base sm:min-h-[72px]"
                     data-testid={dataTestId.messageComposer}
                     disabled={disabled}
                     onChange={(event) => onDraftChange(event.target.value)}
-                    placeholder="Ask me anything"
+                    placeholder={placeholder}
                     value={draft}
                 />
                 <div className="mt-1 flex min-h-10 items-center justify-between gap-2">
@@ -221,7 +227,7 @@ export function BotChatComposer({
                                 ? "Stop agent output"
                                 : outputState === "stopping"
                                   ? "Stopping agent output"
-                                  : "Send message"
+                                  : submitLabel
                         }
                         className={`size-10 rounded-full text-white ${outputState === "idle" ? "bg-[#2fbd7a] hover:bg-[#28aa6c]" : "bg-[#e65c5c] hover:bg-[#d94d4d]"}`}
                         data-testid={dataTestId.sendMessage}

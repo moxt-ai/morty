@@ -68,6 +68,8 @@ test("Given a saved local session, When a user continues it and opens thinking, 
         "Local thinking example",
     );
     await dialog.getByRole("button", { name: "Fork", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Add", exact: true })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Harness", exact: true })).toBeDisabled();
     await page.getByRole("textbox", { name: "Message local session" }).fill("Continue explaining");
     await page.getByRole("button", { name: "Send to local session" }).click();
     const messages = page.getByRole("log", { name: "Local session messages" });
