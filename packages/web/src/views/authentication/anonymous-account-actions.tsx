@@ -70,7 +70,8 @@ export function AnonymousAccountActions({
                                 />
                                 <p className="text-xs leading-5 text-muted-foreground">
                                     Scan to use this workspace. This code expires at{" "}
-                                    {new Date(state.transfer.expiresAt).toLocaleTimeString()} and can be used once.
+                                    {new Date(state.transfer.expiresAt).toLocaleTimeString()} and can be used up to five
+                                    times.
                                 </p>
                             </>
                         ) : state.kind === "failed" ? (

@@ -48,6 +48,9 @@ class InMemoryD1Database {
         databases.push(this);
         this.#database.exec(readFileSync(new URL("../migrations/0003_platform_project.sql", import.meta.url), "utf8"));
         this.#database.exec(readFileSync(new URL("../migrations/0005_agent_pairing.sql", import.meta.url), "utf8"));
+        this.#database.exec(
+            readFileSync(new URL("../migrations/0007_identity_transfer_redemptions.sql", import.meta.url), "utf8"),
+        );
     }
     readonly close = () => this.#database.close();
     readonly prepare = (query: string) => new InMemoryD1Statement(query, this.#database);
@@ -239,7 +242,9 @@ test("Given separate APAC and WNAM Chat stores and location-only Platform placem
         const redeemed = await redeem();
         expect(redeemed.status).toBe(200);
         expect(await redeemed.json()).toMatchObject({ userId: identity.userId, projectId: identity.projectId });
-        expect((await redeem()).status).toBe(410);
+        const reopened = await redeem();
+        expect(reopened.status).toBe(200);
+        expect(await reopened.json()).toMatchObject({ userId: identity.userId, projectId: identity.projectId });
     }
 });
 
@@ -313,7 +318,7 @@ test("Given a user with a Bot on a Project-scoped Platform, When setup checks th
     expect(await response.json()).toEqual({ status: "draft", selected: null, agents: [] });
 });
 
-test("Given an anonymous user, When a transfer is redeemed twice, Then only the first device receives that identity", async () => {
+test("Given an anonymous user, When a transfer is redeemed six times, Then five devices receive that identity", async () => {
     const database = new InMemoryD1Database();
     const identity = await createAnonymousUser(database);
     const created = await worker.fetch(
@@ -338,15 +343,22 @@ test("Given an anonymous user, When a transfer is redeemed twice, Then only the 
         );
 
     vi.advanceTimersByTime(23 * 60 * 60 * 1000);
-    const first = await redeem();
-    expect(first.status).toBe(200);
-    expect(await first.json()).toMatchObject({
-        userId: identity.userId,
-        token: expect.stringMatching(/^mobius_anon_v2_/),
-    });
-    const second = await redeem();
-    expect(second.status).toBe(410);
-    expect(await second.json()).toMatchObject({ error: { code: "TRANSFER_UNAVAILABLE" } });
+    const tokens = [];
+    for (let redemption = 0; redemption < 5; redemption++) {
+        const response = await redeem();
+        expect(response.status).toBe(200);
+        const received = v.parse(
+            v.object({ userId: v.string(), token: v.pipe(v.string(), v.startsWith("mobius_anon_v2_")) }),
+            await response.json(),
+        );
+        expect(received.userId).toBe(identity.userId);
+        tokens.push(received.token);
+    }
+    expect(new Set(tokens).size).toBe(5);
+
+    const sixth = await redeem();
+    expect(sixth.status).toBe(410);
+    expect(await sixth.json()).toMatchObject({ error: { code: "TRANSFER_UNAVAILABLE" } });
 });
 
 test.each(["anonymous", "clerk"])(

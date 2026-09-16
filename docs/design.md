@@ -13,7 +13,7 @@ local sessions without a manual reconnect step.
   The one-time ticket connects the existing user and Bot; the agent directs the user
   back to the same web page after the Runtime's execution binding is approved.
 - External sharing and testing: `follow <current Chat origin>/setup.md`.
-  This standalone flow returns a one-time browser handoff and is not shown in the web UI.
+  This standalone flow returns a browser handoff that supports up to five uses and is not shown in the web UI.
 - Saved identity: validate and restore automatically. Loading, unconfigured Bot,
   offline Runtime, and failed requests are distinct states.
 - On entry, show the pairing instruction whenever the Bot has no active binding

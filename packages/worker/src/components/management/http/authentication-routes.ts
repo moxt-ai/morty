@@ -145,7 +145,7 @@ export function createAuthenticationRoutes() {
             if (identity === null) {
                 throw new ManagementError(
                     "TRANSFER_UNAVAILABLE",
-                    "This transfer link has expired or has already been used.",
+                    "This transfer link has expired or reached its five-use limit.",
                     410,
                 );
             }

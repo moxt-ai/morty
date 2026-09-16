@@ -138,7 +138,7 @@ export class IdentityStorage {
         const results = await database.batch([
             database
                 .prepare(
-                    "UPDATE identity_transfer SET consumed_at = ?, claim_nonce = ? WHERE code_hash = ? AND consumed_at IS NULL AND expires_at > ?",
+                    "UPDATE identity_transfer SET redemption_count = redemption_count + 1, consumed_at = CASE WHEN redemption_count + 1 = 5 THEN ? ELSE NULL END, claim_nonce = ? WHERE code_hash = ? AND consumed_at IS NULL AND redemption_count < 5 AND expires_at > ?",
                 )
                 .bind(now, claimNonce, codeHash, now),
             database

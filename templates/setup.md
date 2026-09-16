@@ -50,10 +50,12 @@ log path. Waits are cancellable and bounded to five minutes. Complete any requir
 local Runtime approval. Only `status: "ready"` means the binding is active and the
 selected Runtime/agent is online; it does not claim a successful test message.
 
-Return the exact one-time browser `url` and `expiresAt` from the ready result. The
-link is valid for **24 hours** and opens the same user and Bot. Never open, preview,
-or redeem it yourself. Tell the user: **Open this one-time link to chat. Keep the
-Runtime online. You can bind an account later if you want.**
+Return the exact browser `url` and `expiresAt` from the ready result. The link is
+valid for **24 hours**, can be successfully opened at most **five times**, and opens
+the same user and Bot each time. Never open, preview, or redeem it yourself because
+doing so consumes one use. Tell the user: **Open this link to chat. It can be used
+up to five times before it expires. Keep the Runtime online. You can bind an account
+later if you want.**
 
 On failure, use `error.code` and the private Runtime log, fix the problem, and rerun
 the same command. It reuses the saved user identity and starts Runtime pairing fresh. Preserve `$DOCUMENT_DIR/mobius-chat`

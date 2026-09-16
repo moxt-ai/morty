@@ -202,7 +202,7 @@ then exercise the provisioned staging service with a real paired Runtime.
 
 `/setup.md` is the standalone entry point for testing and external sharing
 (such as Twitter), not a web UI instruction: resume the local identity or create
-an anonymous user and Bot, pair a Runtime, and return a one-time browser handoff.
+an anonymous user and Bot, pair a Runtime, and return a browser handoff that supports up to five uses.
 `/pair.md?token=...` is copied from every web workspace. First-time visitors
 receive a browser-held identity and Bot before the instruction is shown. Its opaque,
 24-hour ticket is issued for the authenticated anonymous or Clerk user and target
