@@ -13,14 +13,6 @@ packages:
   - packages/setup
   - packages/web
   - packages/worker
-  - third-party/mobius/packages/protocol
-  - third-party/mobius/packages/mobius-sdk
-  - third-party/mobius/packages/cli
-  - third-party/mobius/e2e/fixtures/fake-acp-agent
-  - third-party/mobius/packages/relay-core
-  - third-party/mobius/packages/relay-cloudflare-platform
-  - third-party/mobius/packages/relay-cloudflare-standalone
-  - third-party/mobius/tests
 
 allowBuilds:
   '@sentry/cli': true
