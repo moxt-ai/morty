@@ -348,80 +348,25 @@ export class PlatformProjectGateway {
                 }
                 const configuration = this.configuration();
                 if ("conversationKey" in input) {
-                    let platformOperation = "prepare";
-                    const projectClient = new MobiusClient({
-                        endpoint: configuration.origin,
-                        projectId,
-                        credentialProvider: new MobiusAppCredentialProvider(
-                            v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET),
-                        ),
-                        observeResponse: ({ serverTiming }) => {
-                            recordPlatformTiming(serverTiming, platformOperation, timing);
-                        },
-                        operationTimeoutMilliseconds: 120000,
-                    });
-                    try {
-                        const ready = await timing.measure(
-                            "prepare",
-                            "Prepare agent Session",
-                            async () => await projectClient.sessions.prepare(conversation.sessionId, signal),
+                    const ready = conversation.ready;
+                    if (ready === null || ready.sessionId !== conversation.sessionId) {
+                        throw new PlatformProjectError(
+                            "PLATFORM_INVALID_RESPONSE",
+                            "Platform returned an unexpected Session.",
+                            502,
                         );
-                        if (ready.sessionId !== conversation.sessionId) {
-                            throw new PlatformProjectError(
-                                "PLATFORM_INVALID_RESPONSE",
-                                "Platform returned an unexpected Session.",
-                                502,
-                            );
-                        }
-                        const requested = input.configuration;
-                        if (requested.valueType !== "select" && requested.valueType !== "boolean") {
-                            throw new PlatformProjectError(
-                                "INVALID_REQUEST",
-                                "The initial Conversation configuration is invalid.",
-                                400,
-                            );
-                        }
-                        const applied = ready.configOptions.some(
+                    }
+                    const requested = input.configuration;
+                    if (
+                        !ready.configOptions.some(
                             (option) => option.id === requested.configId && option.currentValue === requested.value,
+                        )
+                    ) {
+                        throw new PlatformProjectError(
+                            "AGENT_CONFIGURATION_REJECTED",
+                            "The harness did not confirm the selected model. Choose a model before retrying your message.",
+                            409,
                         );
-                        if (!applied) {
-                            platformOperation = "configuration";
-                            const update: {
-                                readonly configId: string;
-                                readonly value: string;
-                                readonly valueType: "select" | "boolean";
-                                readonly booleanValue: boolean;
-                            } = {
-                                configId: requested.configId,
-                                value: requested.value,
-                                valueType: requested.valueType,
-                                booleanValue: requested.booleanValue,
-                            };
-                            const updated = await timing.measure(
-                                "configuration",
-                                "Update agent configuration",
-                                async () =>
-                                    await projectClient.sessions.updateConfiguration(
-                                        conversation.sessionId,
-                                        update,
-                                        signal,
-                                    ),
-                            );
-                            if (
-                                !updated.configOptions.some(
-                                    (option) =>
-                                        option.id === requested.configId && option.currentValue === requested.value,
-                                )
-                            ) {
-                                throw new PlatformProjectError(
-                                    "AGENT_CONFIGURATION_REJECTED",
-                                    "The harness did not confirm the selected model. Choose a model before retrying your message.",
-                                    409,
-                                );
-                            }
-                        }
-                    } finally {
-                        projectClient.close();
                     }
                 }
                 const platform = new MobiusPlatformAppClient({
@@ -475,6 +420,7 @@ export class PlatformProjectGateway {
                 };
             },
             timing,
+            120000,
         );
 
     readonly draftSettings = async (projectId: string, botId: string, userId: string, signal: AbortSignal) =>
@@ -539,6 +485,7 @@ export class PlatformProjectGateway {
             bot: Awaited<ReturnType<MobiusBotOwnerClient["readBot"]>>,
         ) => Promise<T>,
         timing?: OperationTiming,
+        operationTimeoutMilliseconds = 15000,
     ): Promise<T> => {
         signal.throwIfAborted();
         const client = new MobiusBotOwnerClient({
@@ -553,7 +500,7 @@ export class PlatformProjectGateway {
                           recordPlatformTiming(serverTiming, "conversation", timing);
                       },
                   }),
-            operationTimeoutMilliseconds: 15000,
+            operationTimeoutMilliseconds,
         });
         try {
             const bot =
