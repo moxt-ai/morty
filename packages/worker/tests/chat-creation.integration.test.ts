@@ -16,7 +16,7 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 test.each([true, false])(
-    "Given a paired workspace with settings available=%s, When a draft loads models and sends, Then temporary sessions are released and created conversations retain distinct identities",
+    "Given a paired workspace with settings available=%s, When a draft loads models and sends, Then temporary sessions are released and chat access reports its server timings",
     async (settingsAvailable) => {
         const platform = await platformPeer({ activeBots: true, settingsAvailable });
         const database = new InMemoryD1Database();
@@ -105,6 +105,9 @@ test.each([true, false])(
                 },
             };
             const firstResponse = await request(`chat/bots/${bot.botId}/access`, input);
+            expect(firstResponse.headers.get("server-timing")).toEqual(
+                expect.stringMatching(/(?:^|,)total;dur=.*authentication;dur=.*ownership;dur=.*bot;dur=/u),
+            );
             if (!settingsAvailable) {
                 // Chat prepares the created Conversation's Session before issuing access, so an
                 // agent that cannot prepare a Session must fail Conversation creation the same way

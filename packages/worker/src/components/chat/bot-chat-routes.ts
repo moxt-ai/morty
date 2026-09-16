@@ -51,10 +51,17 @@ async function authorizeChat(context: Context<AuthenticatedChatEnvironment>, tim
     const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(timeout)]);
     const projectId = v.parse(platformIdentifier, context.req.param("projectId"));
     const botId = v.parse(platformIdentifier, context.req.param("botId"));
-    const [ownsProject, ownsBot] = await Promise.all([
-        context.env.storages.identities.ownsProject(userId, projectId, signal),
-        context.env.storages.managedBots.ownsBot(userId, botId, signal),
-    ]);
+    const [ownsProject, ownsBot] = await context
+        .get("operationTiming")
+        .measure(
+            "ownership",
+            "Verify Project and Bot ownership",
+            async () =>
+                await Promise.all([
+                    context.env.storages.identities.ownsProject(userId, projectId, signal),
+                    context.env.storages.managedBots.ownsBot(userId, botId, signal),
+                ]),
+        );
     if (!ownsProject) {
         throw new PlatformProjectError("NOT_FOUND", "Your Project was not found.", 404);
     }
@@ -125,18 +132,30 @@ export function createBotChatRoutes() {
                 }
             }
             const input = v.parse(accessInput, body);
-            const access = await gateway.openChat(projectId, botId, userId, signal, input);
+            const access = await gateway.openChat(
+                projectId,
+                botId,
+                userId,
+                signal,
+                input,
+                context.get("operationTiming"),
+            );
             if ("conversationKey" in input) {
-                await context.env.storages.chatSessions.save(
-                    projectId,
-                    userId,
-                    botId,
-                    {
-                        kind: "conversation",
-                        id: access.conversationId,
-                        title: input.title,
-                    },
-                    signal,
+                await context.get("operationTiming").measure(
+                    "session-save",
+                    "Save managed Chat session",
+                    async () =>
+                        await context.env.storages.chatSessions.save(
+                            projectId,
+                            userId,
+                            botId,
+                            {
+                                kind: "conversation",
+                                id: access.conversationId,
+                                title: input.title,
+                            },
+                            signal,
+                        ),
                 );
             }
             context.env.logger.info(

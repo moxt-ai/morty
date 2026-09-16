@@ -7,6 +7,7 @@ import { authenticatedSession } from "../management/http/authenticated-session.t
 import { createBotChatRoutes } from "./bot-chat-routes.ts";
 import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
 import { MobiusAppError } from "./mobius-app-service.ts";
+import { serverTiming } from "./server-timing.ts";
 
 const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
 const sessionInput = v.pipe(
@@ -30,6 +31,7 @@ export function createChatApplication() {
     return new Hono<ChatHttpEnvironment>()
         .basePath("/mobius-cloud/api/chat/projects/:projectId")
         .onError(rethrowHttpError)
+        .use("*", serverTiming)
         .use(
             "*",
             errorMiddleware<ChatHttpEnvironment>((context) => context.env.logger),

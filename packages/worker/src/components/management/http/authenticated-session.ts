@@ -6,10 +6,13 @@ import type { ManagementHttpEnvironment } from "./management-http-environment.ts
 export const authenticatedSession = createMiddleware<
     ManagementHttpEnvironment & { Variables: { readonly session: Session } }
 >(async (context, next) => {
-    const result = await context.env.services.authentication.session(
-        context.get("bearerToken"),
-        context.req.raw.signal,
-    );
+    const timing = context.get("operationTiming");
+    const authenticate = () =>
+        context.env.services.authentication.session(context.get("bearerToken"), context.req.raw.signal);
+    const result =
+        timing === undefined
+            ? await authenticate()
+            : await timing.measure("authentication", "Authenticate request", authenticate);
     switch (result.kind) {
         case "authenticated":
             context.set("session", result.session);
