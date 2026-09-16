@@ -7,21 +7,33 @@ const accessTokenSchema = v.pipe(v.object({ accessTokenId: identifier, accessTok
 
 export type MobiusAccessToken = v.InferOutput<typeof accessTokenSchema>;
 
+interface MobiusAppMetricsLogger {
+    readonly info: (bindings: Readonly<Record<string, unknown>>, message: string) => void;
+}
+
+type MobiusAppOperation = "issue-access-token" | "regenerate-access-token" | "revoke-access-token";
+
 export class MobiusAppService {
     readonly #appId: unknown;
     readonly #appSecret: unknown;
     readonly #baseUrl: unknown;
     readonly #forbiddenOrigin: unknown;
+    readonly #metrics: MobiusAppMetricsLogger;
+    readonly #nowMilliseconds: () => number;
     constructor(configuration: {
         readonly appId: unknown;
         readonly appSecret: unknown;
         readonly baseUrl: unknown;
         readonly forbiddenOrigin: unknown;
+        readonly metrics: MobiusAppMetricsLogger;
+        readonly nowMilliseconds: () => number;
     }) {
         this.#appId = configuration.appId;
         this.#appSecret = configuration.appSecret;
         this.#baseUrl = configuration.baseUrl;
         this.#forbiddenOrigin = configuration.forbiddenOrigin;
+        this.#metrics = configuration.metrics;
+        this.#nowMilliseconds = configuration.nowMilliseconds;
     }
 
     readonly issueAccessToken = async (
@@ -34,6 +46,7 @@ export class MobiusAppService {
             headers.set("authorization", `Bearer ${v.parse(credential, ownerCredential)}`);
         }
         const response = await this.#request(
+            "issue-access-token",
             "/mobius/api/v1/access-tokens",
             { method: "POST", headers, body: JSON.stringify({ botId: v.parse(identifier, botId) }) },
             signal,
@@ -55,6 +68,7 @@ export class MobiusAppService {
 
     readonly revokeAccessToken = async (accessTokenId: string, signal: AbortSignal): Promise<void> => {
         const response = await this.#request(
+            "revoke-access-token",
             `/mobius/api/v1/access-tokens/${encodeURIComponent(v.parse(identifier, accessTokenId))}`,
             { method: "DELETE" },
             signal,
@@ -72,6 +86,7 @@ export class MobiusAppService {
 
     readonly regenerateAccessToken = async (accessTokenId: string, signal: AbortSignal): Promise<MobiusAccessToken> => {
         const response = await this.#request(
+            "regenerate-access-token",
             `/mobius/api/v1/access-tokens/${encodeURIComponent(v.parse(identifier, accessTokenId))}/regenerate`,
             { method: "POST" },
             signal,
@@ -122,8 +137,15 @@ export class MobiusAppService {
         }
     };
 
-    readonly #request = async (path: string, init: RequestInit, signal: AbortSignal): Promise<Response> => {
+    readonly #request = async (
+        operation: MobiusAppOperation,
+        path: string,
+        init: RequestInit,
+        signal: AbortSignal,
+    ): Promise<Response> => {
         signal.throwIfAborted();
+        const startedAt = this.#nowMilliseconds();
+        let outcome: "failure" | "success" = "failure";
         const configuration = this.#configuration();
         const headers = new Headers(init.headers);
         headers.set("x-mobius-app-id", configuration.appId);
@@ -142,6 +164,7 @@ export class MobiusAppService {
                 await response.body?.cancel();
                 throw new MobiusAppError("MOBIUS_BAD_GATEWAY", "Mobius returned an unexpected redirect.", 502);
             }
+            outcome = response.ok ? "success" : "failure";
             return response;
         } catch (cause) {
             signal.throwIfAborted();
@@ -153,6 +176,17 @@ export class MobiusAppService {
                 deadline.aborted ? "Mobius did not respond in time." : "Mobius is unavailable.",
                 deadline.aborted ? 504 : 502,
                 { cause },
+            );
+        } finally {
+            this.#metrics.info(
+                {
+                    durationMs: this.#nowMilliseconds() - startedAt,
+                    event: "performance-metric",
+                    metric: "mobius-chat-gateway-request-duration",
+                    operation,
+                    outcome,
+                },
+                "Performance metric",
             );
         }
     };

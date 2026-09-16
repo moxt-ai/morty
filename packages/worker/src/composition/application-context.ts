@@ -39,6 +39,8 @@ export function createApplicationDependencies(bindings: CloudBindings) {
             appSecret: bindings.MOBIUS_APP_SECRET,
             baseUrl: bindings.MOBIUS_BASE_URL,
             forbiddenOrigin: bindings.APP_ORIGIN,
+            metrics: logger,
+            nowMilliseconds: () => performance.now(),
         }),
     });
     return Object.freeze({ ...cx, services });
