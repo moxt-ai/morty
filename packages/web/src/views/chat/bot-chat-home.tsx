@@ -126,6 +126,7 @@ export function BotChatHome({
     readonly requests: Pick<
         BotChatApi,
         | "listBots"
+        | "access"
         | "connectConversation"
         | "workspace"
         | "selectAgent"
@@ -251,11 +252,9 @@ export function BotChatHome({
                 setState({ kind: "draft", bot });
                 return;
             }
-            const session = await requests.connectConversation(
-                bot.botId,
-                controller.signal,
-                target.current.conversationId,
-            );
+            const access = await requests.access(bot.botId, controller.signal, target.current.conversationId);
+            controller.signal.throwIfAborted();
+            const session = await requests.connectConversation(bot.botId, controller.signal, access);
             client = session;
             const history = await session.history.read(new MobiusPageRequest(100, ""), controller.signal);
             await observe(bot, session, history);
@@ -366,40 +365,8 @@ export function BotChatHome({
                 );
                 controller.signal.throwIfAborted();
                 createdId = access.conversationId;
-                createdClient = await requests.connectConversation(state.bot.botId, controller.signal, createdId);
+                createdClient = await requests.connectConversation(state.bot.botId, controller.signal, access);
                 client = createdClient;
-                const snapshot = await client.session.read(controller.signal);
-                const sessionClient = await requests.connectSession(
-                    state.bot.botId,
-                    snapshot.session.sessionId,
-                    controller.signal,
-                );
-                try {
-                    await sessionClient.sessions.prepare(snapshot.session.sessionId, controller.signal);
-                    const configuration = draftSettings.configuration;
-                    const updated = await sessionClient.sessions.updateConfiguration(
-                        snapshot.session.sessionId,
-                        {
-                            configId: configuration.configId,
-                            value: configuration.value,
-                            valueType: configuration.valueType,
-                            booleanValue: configuration.booleanValue,
-                        },
-                        controller.signal,
-                    );
-                    if (
-                        !updated.configOptions.some(
-                            (option) =>
-                                option.id === configuration.configId && option.currentValue === configuration.value,
-                        )
-                    ) {
-                        throw new Error(
-                            "The harness did not confirm the selected model. Choose a model before retrying your message.",
-                        );
-                    }
-                } finally {
-                    sessionClient.close();
-                }
             } else {
                 client = state.client;
             }

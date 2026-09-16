@@ -226,13 +226,14 @@ export async function platformPeer({
                 const key = `${projectId}:${input.botId}:${input.idempotencyKey}`;
                 let conversation = conversations.get(key);
                 if (conversation === undefined) {
+                    const sessionId = `session-${conversations.size + 1}`;
                     conversation = {
                         projectId,
                         botId: input.botId,
                         clientReference: input.clientReference,
                         idempotencyKey: input.idempotencyKey,
                         conversationId: `conversation-${conversations.size + 1}`,
-                        sessionId: `session-${conversations.size + 1}`,
+                        sessionId,
                         bindingId: "binding-1",
                         bindingRevision: 1,
                         behaviorRevisionId: "behavior-1",
@@ -241,6 +242,30 @@ export async function platformPeer({
                         createdAt: timestamp,
                     };
                     conversations.set(key, conversation);
+                    sessions.set(`${projectId}:${sessionId}`, {
+                        sessionId,
+                        agentId: "agent-one",
+                        runtimeId: "runtime-1",
+                        bindingId: "binding-1",
+                        directoryId: "default",
+                        title: input.title,
+                        projectId,
+                        createdAt: timestamp,
+                        updatedAt: timestamp,
+                        createdBy: "owner",
+                        hasNativeHistory: false,
+                        lastCommittedSeq: "0",
+                        lifecycle: { kind: "ready" },
+                        defaultBinding: {
+                            agentRef: "agent-one",
+                            bindingId: "binding-1",
+                            configRevision: 1,
+                            createdAt: timestamp,
+                            runtimeId: "runtime-1",
+                            sessionId,
+                            workspaceRef: "default",
+                        },
+                    });
                 }
                 response.writeHead(201).end(JSON.stringify(conversation));
                 return;

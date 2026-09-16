@@ -304,6 +304,62 @@ export class PlatformProjectGateway {
                 );
             }
             const configuration = this.configuration();
+            if ("conversationKey" in input) {
+                const projectClient = new MobiusClient({
+                    endpoint: configuration.origin,
+                    projectId,
+                    credentialProvider: new MobiusAppCredentialProvider(
+                        v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET),
+                    ),
+                    operationTimeoutMilliseconds: 120000,
+                });
+                try {
+                    const ready = await projectClient.sessions.prepare(conversation.sessionId, signal);
+                    if (ready.sessionId !== conversation.sessionId) {
+                        throw new PlatformProjectError(
+                            "PLATFORM_INVALID_RESPONSE",
+                            "Platform returned an unexpected Session.",
+                            502,
+                        );
+                    }
+                    const requested = input.configuration;
+                    if (requested.valueType !== "select" && requested.valueType !== "boolean") {
+                        throw new PlatformProjectError(
+                            "INVALID_REQUEST",
+                            "The initial Conversation configuration is invalid.",
+                            400,
+                        );
+                    }
+                    const applied = ready.configOptions.some(
+                        (option) => option.id === requested.configId && option.currentValue === requested.value,
+                    );
+                    if (!applied) {
+                        const updated = await projectClient.sessions.updateConfiguration(
+                            conversation.sessionId,
+                            {
+                                configId: requested.configId,
+                                value: requested.value,
+                                valueType: requested.valueType,
+                                booleanValue: requested.booleanValue,
+                            },
+                            signal,
+                        );
+                        if (
+                            !updated.configOptions.some(
+                                (option) => option.id === requested.configId && option.currentValue === requested.value,
+                            )
+                        ) {
+                            throw new PlatformProjectError(
+                                "AGENT_CONFIGURATION_REJECTED",
+                                "The harness did not confirm the selected model. Choose a model before retrying your message.",
+                                409,
+                            );
+                        }
+                    }
+                } finally {
+                    projectClient.close();
+                }
+            }
             const platform = new MobiusPlatformAppClient({
                 endpoint: configuration.origin,
                 credentialProvider: new MobiusAppCredentialProvider(

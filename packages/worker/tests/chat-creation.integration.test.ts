@@ -105,6 +105,13 @@ test.each([true, false])(
                 },
             };
             const firstResponse = await request(`chat/bots/${bot.botId}/access`, input);
+            if (!settingsAvailable) {
+                // Chat prepares the created Conversation's Session before issuing access, so an
+                // agent that cannot prepare a Session must fail Conversation creation the same way
+                // it fails draft settings.
+                expect(firstResponse.status).toBe(409);
+                return;
+            }
             expect(firstResponse.status).toBe(200);
             const schema = v.object({ conversationId: v.string() });
             const first = v.parse(schema, await firstResponse.json());

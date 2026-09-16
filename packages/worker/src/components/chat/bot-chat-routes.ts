@@ -51,10 +51,14 @@ async function authorizeChat(context: Context<AuthenticatedChatEnvironment>, tim
     const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(timeout)]);
     const projectId = v.parse(platformIdentifier, context.req.param("projectId"));
     const botId = v.parse(platformIdentifier, context.req.param("botId"));
-    if (!(await context.env.storages.identities.ownsProject(userId, projectId, signal))) {
+    const [ownsProject, ownsBot] = await Promise.all([
+        context.env.storages.identities.ownsProject(userId, projectId, signal),
+        context.env.storages.managedBots.ownsBot(userId, botId, signal),
+    ]);
+    if (!ownsProject) {
         throw new PlatformProjectError("NOT_FOUND", "Your Project was not found.", 404);
     }
-    if (!(await context.env.storages.managedBots.ownsBot(userId, botId, signal))) {
+    if (!ownsBot) {
         throw new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);
     }
     const gateway = context.env.gateways.platformProjects;

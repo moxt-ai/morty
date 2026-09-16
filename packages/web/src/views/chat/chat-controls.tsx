@@ -1,5 +1,5 @@
 import type { SessionConfigOption } from "@moxt-ai/mobius-protocol";
-import type { MobiusBrowserClient, MobiusClient } from "@moxt-ai/mobius-sdk/browser";
+import type { MobiusBrowserClient } from "@moxt-ai/mobius-sdk/browser";
 import { useEffect, useRef, useState } from "react";
 import { Select } from "../../components/ui/option-select.tsx";
 import type { BotChatApi, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
@@ -10,8 +10,6 @@ type Inventory =
           readonly kind: "ready";
           readonly workspace: ChatWorkspace;
           readonly options: readonly SessionConfigOption[];
-          readonly sessionClient: MobiusClient;
-          readonly sessionId: string;
           readonly harness: string;
       }
     | { readonly kind: "failed"; readonly message: string };
@@ -29,7 +27,7 @@ export function ChatControls({
     readonly botId: string;
     readonly client: MobiusBrowserClient;
     readonly disabled: boolean;
-    readonly requests: Pick<BotChatApi, "workspace" | "connectSession">;
+    readonly requests: Pick<BotChatApi, "workspace">;
 }) {
     const [inventory, setInventory] = useState<Inventory>({ kind: "loading" });
     const [change, setChange] = useState<Change>({ kind: "idle" });
@@ -37,7 +35,6 @@ export function ChatControls({
     useEffect(() => {
         const controller = new AbortController();
         let timer: ReturnType<typeof setTimeout> | undefined;
-        let sessionClient: MobiusClient | null = null;
         const refresh = async () => {
             try {
                 const workspace = await requests.workspace(botId, controller.signal);
@@ -54,26 +51,21 @@ export function ChatControls({
             }
         };
         const open = async () => {
-            const [workspace, snapshot] = await Promise.all([
+            const [workspace, snapshot, configuration] = await Promise.all([
                 requests.workspace(botId, controller.signal),
                 client.session.read(controller.signal),
+                client.configuration.read(controller.signal),
             ]);
-            sessionClient = await requests.connectSession(botId, snapshot.session.sessionId, controller.signal);
-            controller.signal.throwIfAborted();
-            const ready = await sessionClient.sessions.prepare(snapshot.session.sessionId, controller.signal);
             controller.signal.throwIfAborted();
             setInventory({
                 kind: "ready",
                 workspace,
-                options: ready.configOptions,
-                sessionClient,
-                sessionId: snapshot.session.sessionId,
+                options: configuration.options,
                 harness: `${snapshot.session.defaultBinding.runtimeId}:${snapshot.session.defaultBinding.agentRef}`,
             });
             timer = setTimeout(() => void refresh(), 5000);
         };
         void open().catch((cause: unknown) => {
-            sessionClient?.close();
             if (!controller.signal.aborted) {
                 setInventory({
                     kind: "failed",
@@ -85,7 +77,6 @@ export function ChatControls({
             controller.abort();
             clearTimeout(timer);
             operation.current?.abort();
-            sessionClient?.close();
         };
     }, [botId, client, requests]);
     useEffect(() => {
@@ -126,19 +117,21 @@ export function ChatControls({
         const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(45000)]);
         setChange({ kind: "configuration", value, configId });
         try {
-            const updated = await inventory.sessionClient.sessions.updateConfiguration(
-                inventory.sessionId,
+            await client.configuration.update(
                 {
                     configId,
                     value,
                     valueType: "select",
                     booleanValue: false,
+                    additionalDirectoryIds: [],
+                    idempotencyKey: crypto.randomUUID(),
                 },
                 signal,
             );
+            const updated = await client.configuration.read(signal);
             if (!controller.signal.aborted) {
                 setInventory((current) =>
-                    current.kind === "ready" ? { ...current, options: updated.configOptions } : current,
+                    current.kind === "ready" ? { ...current, options: updated.options } : current,
                 );
             }
         } catch (cause) {

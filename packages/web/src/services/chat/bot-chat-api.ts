@@ -167,18 +167,20 @@ export class BotChatApi {
         }
         return ticket;
     };
-    readonly connectConversation = async (botId: string, signal: AbortSignal, conversationId: string) => {
-        const access = await this.access(botId, signal, conversationId);
+    readonly connectConversation = (botId: string, signal: AbortSignal, access: ChatAccess) => {
         signal.throwIfAborted();
+        const conversationId = access.conversationId;
         let initial = true;
+        let current = access;
         return createMobiusConversationSession({
             projectId: this.#projectId,
-            endpoint: access.endpoint,
+            endpoint: current.endpoint,
             streamConnectionTimeoutMilliseconds: 45000,
             accessTokenProvider: {
                 accessToken: async (parent) => {
-                    const token = initial ? access : await this.access(botId, parent, conversationId);
+                    const token = initial ? current : await this.access(botId, parent, conversationId);
                     initial = false;
+                    current = token;
                     if (token.endpoint !== access.endpoint || token.conversationId !== access.conversationId) {
                         throw new CloudApiError(
                             "CONVERSATION_CHANGED",
