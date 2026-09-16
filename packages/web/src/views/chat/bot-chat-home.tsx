@@ -78,7 +78,12 @@ type State =
 type Sending =
     | { readonly kind: "idle" }
     | { readonly kind: "sending" }
+    | { readonly kind: "running"; readonly turnId: string }
+    | { readonly kind: "stopping"; readonly turnId: string }
+    | { readonly kind: "stop-failed"; readonly turnId: string; readonly message: string }
     | { readonly kind: "failed"; readonly message: string };
+
+const ACTIVE_ATTEMPT_KINDS: ReadonlySet<string> = new Set(["dispatching", "running", "waiting_input"]);
 
 function updateHistory(current: State, client: MobiusBrowserClient, history: MobiusBrowserHistory): State {
     if (
@@ -166,6 +171,11 @@ export function BotChatHome({
     const target = useRef(initialTarget);
     const [draftSettings, setDraftSettings] = useState<ChatDraftConfiguration | null>(null);
     const messageAttempt = useRef<{ readonly content: string; readonly key: string } | null>(null);
+    const activeTurn = useRef<{
+        readonly client: MobiusBrowserClient;
+        readonly sessionId: string;
+        readonly turnId: string;
+    } | null>(null);
     const [sending, setSending] = useState<Sending>({ kind: "idle" });
     const lifetime = useRef<{
         readonly controller: AbortController;
@@ -183,6 +193,7 @@ export function BotChatHome({
         setDraft("");
         setAttachments([]);
         setSending({ kind: "idle" });
+        activeTurn.current = null;
         setDraftSettings(null);
         messageAttempt.current = null;
         setConversation({ kind: "bot" });
@@ -201,6 +212,7 @@ export function BotChatHome({
         setDraft("");
         setAttachments([]);
         setSending({ kind: "idle" });
+        activeTurn.current = null;
         setDraftSettings(null);
         messageAttempt.current = null;
         followLatest.current = true;
@@ -308,6 +320,15 @@ export function BotChatHome({
                     BigInt(event.sequence) > snapshotSequence
                 ) {
                     await refresh();
+                    if (
+                        (event.payload instanceof MobiusTurnCompletedEvent ||
+                            event.payload instanceof MobiusTurnFailedEvent) &&
+                        activeTurn.current?.client === session &&
+                        activeTurn.current.sessionId === event.payload.sessionId
+                    ) {
+                        activeTurn.current = null;
+                        setSending({ kind: "idle" });
+                    }
                 }
                 return true;
             };
@@ -409,7 +430,9 @@ export function BotChatHome({
                 },
                 controller.signal,
             );
-            await client.messages.run(message.messageId, controller.signal);
+            const turn = await client.messages.run(message.messageId, controller.signal);
+            activeTurn.current = { client, sessionId: turn.sessionId, turnId: turn.turnId };
+            setSending({ kind: "running", turnId: turn.turnId });
             const history = await client.history.read(new MobiusPageRequest(100, ""), controller.signal);
             if (!controller.signal.aborted) {
                 if (createdId !== null) {
@@ -426,17 +449,60 @@ export function BotChatHome({
                 setDraft("");
                 setAttachments([]);
                 messageAttempt.current = null;
-                setSending({ kind: "idle" });
+                const recorded = history.turns.find((item) => item.messageId === message.messageId);
+                if (recorded !== undefined && !ACTIVE_ATTEMPT_KINDS.has(recorded.attempt.kind)) {
+                    activeTurn.current = null;
+                    setSending({ kind: "idle" });
+                }
             }
         } catch (cause) {
             if (!controller.signal.aborted) {
-                setSending({
-                    kind: "failed",
-                    message: cause instanceof Error ? cause.message : "The message could not be sent.",
-                });
+                const message = cause instanceof Error ? cause.message : "The message could not be sent.";
+                const turn = activeTurn.current;
+                setSending(
+                    turn === null ? { kind: "failed", message } : { kind: "stop-failed", turnId: turn.turnId, message },
+                );
             }
         } finally {
             createdClient?.close();
+        }
+    };
+
+    const stop = async () => {
+        const turn = activeTurn.current;
+        const connection = lifetime.current;
+        if (
+            turn === null ||
+            connection === null ||
+            (sending.kind !== "running" && sending.kind !== "stop-failed") ||
+            sending.turnId !== turn.turnId
+        ) {
+            return;
+        }
+        setSending({ kind: "stopping", turnId: turn.turnId });
+        try {
+            await turn.client.turns.cancel(
+                turn.turnId,
+                crypto.randomUUID(),
+                AbortSignal.any([connection.controller.signal, AbortSignal.timeout(15000)]),
+            );
+            const history = await turn.client.history.read(
+                new MobiusPageRequest(100, ""),
+                AbortSignal.any([connection.controller.signal, AbortSignal.timeout(15000)]),
+            );
+            if (!connection.controller.signal.aborted && activeTurn.current === turn) {
+                setState((current) => updateHistory(current, turn.client, history));
+                activeTurn.current = null;
+                setSending({ kind: "idle" });
+            }
+        } catch (cause) {
+            if (!connection.controller.signal.aborted && activeTurn.current === turn) {
+                setSending({
+                    kind: "stop-failed",
+                    turnId: turn.turnId,
+                    message: cause instanceof Error ? cause.message : "The agent output could not be stopped.",
+                });
+            }
         }
     };
 
@@ -546,13 +612,21 @@ export function BotChatHome({
                             attachments={attachments}
                             disabled={switching || sending.kind === "sending"}
                             draft={draft}
-                            error={sending.kind === "failed" ? sending.message : ""}
+                            error={sending.kind === "failed" || sending.kind === "stop-failed" ? sending.message : ""}
                             onAttachmentsChange={setAttachments}
                             onDraftChange={setDraft}
+                            onStop={() => void stop()}
                             onSubmit={() => void send()}
+                            outputState={
+                                sending.kind === "running" || sending.kind === "stop-failed"
+                                    ? "running"
+                                    : sending.kind === "stopping"
+                                      ? "stopping"
+                                      : "idle"
+                            }
                             submitDisabled={
                                 switching ||
-                                sending.kind === "sending" ||
+                                (sending.kind !== "idle" && sending.kind !== "failed") ||
                                 (draft.trim().length === 0 && attachments.length === 0) ||
                                 (active.kind === "draft" && draftSettings === null)
                             }

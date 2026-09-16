@@ -1,9 +1,11 @@
-import { ChevronDown, Laptop, RefreshCw, SquarePen } from "lucide-react";
+import { ChevronDown, Laptop, RefreshCw, Share2, SquarePen } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
+import { Dialog } from "../../components/ui/dialog.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import { LocalSessionDialog, type OpenLocalSession } from "./local-session-dialog.tsx";
+import { PairingInstruction } from "./pairing-instruction.tsx";
 
 type Directory =
     | { readonly kind: "loading" }
@@ -19,7 +21,10 @@ export function ConversationSidebar({
     onNewConversation,
 }: {
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "workspace" | "nativeSessions" | "nativeSession" | "managedSessions">;
+    readonly requests: Pick<
+        BotChatApi,
+        "workspace" | "nativeSessions" | "nativeSession" | "managedSessions" | "listBots" | "createPairingInstruction"
+    >;
     readonly activeId: string;
     readonly onOpen: (session: ManagedChatSession) => void;
     readonly onFork: (session: OpenLocalSession) => void;
@@ -29,6 +34,7 @@ export function ConversationSidebar({
     const [revision, refresh] = useState(0);
     const [expanded, setExpanded] = useState(false);
     const [dialog, setDialog] = useState(false);
+    const [sharing, setSharing] = useState(false);
     // biome-ignore lint/correctness/useExhaustiveDependencies: Creation and explicit refresh reload the persisted directory.
     useEffect(() => {
         const controller = new AbortController();
@@ -62,9 +68,13 @@ export function ConversationSidebar({
                 <SquarePen className="size-4" aria-hidden="true" />
                 New Conversation
             </Button>
-            <Button variant="outline" className="mb-5 justify-start" onClick={() => setDialog(true)}>
+            <Button variant="outline" className="mb-2 justify-start" onClick={() => setDialog(true)}>
                 <Laptop className="size-4" aria-hidden="true" />
                 Open Local Session
+            </Button>
+            <Button variant="outline" className="mb-5 justify-start" onClick={() => setSharing(true)}>
+                <Share2 className="size-4" aria-hidden="true" />
+                Share My Machine
             </Button>
             <div className="mb-3 flex items-center justify-between">
                 <h2 className="hidden text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:block">
@@ -129,6 +139,15 @@ export function ConversationSidebar({
                         refresh((value) => value + 1);
                     }}
                 />
+            )}
+            {sharing && (
+                <Dialog
+                    title="Share My Machine"
+                    description="Copy this one-time instruction to an agent you trust to connect it to this workspace."
+                    onClose={() => setSharing(false)}
+                >
+                    <PairingInstruction requests={requests} />
+                </Dialog>
             )}
         </aside>
     );

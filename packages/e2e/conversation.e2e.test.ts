@@ -20,8 +20,50 @@ test("Given a paired workspace, When a user adds a file from the composer menu, 
         buffer: Buffer.from("# Project notes\nKeep the reply brief."),
     });
     await expect(page.getByText("project-notes.md", { exact: true })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Harness", exact: true })).toBeVisible();
     await expect(page.getByRole("combobox", { name: "Model", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: /microphone|whisper/iu })).toHaveCount(0);
+});
+
+test("Given a paired workspace, When the user shares their machine, Then Chat provides a one-time pairing instruction", async ({
+    runtime,
+}) => {
+    await runtime.openPairedChat();
+    const { page } = runtime;
+    await page.getByRole("button", { name: "Share My Machine", exact: true }).click();
+    const share = page.getByRole("dialog", { name: "Share My Machine", exact: true });
+    await expect(share.getByTestId(dataTestId.pairingInstruction)).toBeVisible();
+});
+
+test("Given an agent returns an image, When its reply is displayed, Then the image is available in the conversation", async ({
+    runtime,
+}) => {
+    await runtime.openPairedChat();
+    const { page } = runtime;
+    await runtime.sendMessage("generate markdown image");
+    const image = page.getByRole("img", { name: "generated-image.png", exact: true });
+    await expect(image).toBeVisible();
+    await expect(image).toHaveAttribute("src", /^blob:/u);
+});
+
+test("Given an agent is producing a reply, When the user stops it from the composer, Then the reply is cancelled and the composer can send again", async ({
+    runtime,
+}) => {
+    await runtime.openPairedChat();
+    const { page } = runtime;
+    await runtime.sendMessage("wait until cancelled");
+    const stop = page.getByRole("button", { name: "Stop agent output", exact: true });
+    await expect(stop).toBeVisible();
+    const cancellation = page.waitForResponse(
+        (response) =>
+            response.request().method() === "POST" &&
+            /\/client\/session\/turns\/[^/]+\/cancel$/u.test(new URL(response.url()).pathname),
+    );
+    await stop.click();
+    expect((await cancellation).status()).toBe(200);
+    await expect(page.getByText("Response cancelled.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeVisible();
 });
 
 test("Given a full message viewport, When the user sends another prompt, Then the new turn is brought into view", async ({

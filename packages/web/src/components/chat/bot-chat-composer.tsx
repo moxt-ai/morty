@@ -1,5 +1,5 @@
 import type { PromptImage, PromptResource } from "@moxt-ai/mobius-sdk";
-import { FileText, LoaderCircle, Paperclip, Plus, Send, X } from "lucide-react";
+import { FileText, LoaderCircle, Paperclip, Plus, Send, Square, X } from "lucide-react";
 import { type FormEvent, type ReactNode, useRef, useState } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import {
@@ -63,7 +63,9 @@ export function BotChatComposer({
     error,
     onAttachmentsChange,
     onDraftChange,
+    onStop,
     onSubmit,
+    outputState,
     submitDisabled,
 }: {
     readonly attachments: readonly ComposerAttachment[];
@@ -73,7 +75,9 @@ export function BotChatComposer({
     readonly error: string;
     readonly onAttachmentsChange: (attachments: readonly ComposerAttachment[]) => void;
     readonly onDraftChange: (draft: string) => void;
+    readonly onStop: () => void;
     readonly onSubmit: () => void;
+    readonly outputState: "idle" | "running" | "stopping";
     readonly submitDisabled: boolean;
 }) {
     const fileInput = useRef<HTMLInputElement>(null);
@@ -212,14 +216,30 @@ export function BotChatComposer({
                         <div className="flex min-w-0 items-center gap-1 overflow-x-auto">{children}</div>
                     </div>
                     <Button
-                        aria-label="Send message"
-                        className="size-10 rounded-full bg-[#2fbd7a] text-white hover:bg-[#28aa6c]"
+                        aria-label={
+                            outputState === "running"
+                                ? "Stop agent output"
+                                : outputState === "stopping"
+                                  ? "Stopping agent output"
+                                  : "Send message"
+                        }
+                        className={`size-10 rounded-full text-white ${outputState === "idle" ? "bg-[#2fbd7a] hover:bg-[#28aa6c]" : "bg-[#e65c5c] hover:bg-[#d94d4d]"}`}
                         data-testid={dataTestId.sendMessage}
-                        disabled={submitDisabled}
+                        disabled={outputState === "stopping" || (outputState === "idle" && submitDisabled)}
+                        onClick={outputState === "running" ? onStop : undefined}
                         size="icon"
-                        type="submit"
+                        type={outputState === "idle" ? "submit" : "button"}
                     >
-                        <Send aria-hidden="true" className="size-[18px]" />
+                        {outputState === "idle" ? (
+                            <Send aria-hidden="true" className="size-[18px]" />
+                        ) : outputState === "running" ? (
+                            <Square aria-hidden="true" className="size-3.5 fill-current" />
+                        ) : (
+                            <LoaderCircle
+                                aria-hidden="true"
+                                className="size-[18px] animate-spin motion-reduce:animate-none"
+                            />
+                        )}
                     </Button>
                 </div>
             </div>
