@@ -193,7 +193,7 @@ test("Given a paired workspace, When a user creates and reloads conversations, T
     await expect(page.getByTestId(dataTestId.agentResponse).nth(1)).toContainText(followUp);
     expect(page.url()).toBe(savedUrl);
     await expect(page.getByTestId(dataTestId.userMessage)).toHaveText(["Second conversation", followUp]);
-    await test.step("Given Chat-created conversations, When the user switches sessions, Then Chat stays mounted and local sessions can be previewed and forked", async () => {
+    await test.step("Given Chat-created conversations, When the user switches sessions, Then stale content is replaced by a spinner and local sessions can be previewed and forked", async () => {
         const sidebar = page.getByRole("complementary", { name: "Conversations", exact: true });
         await expect(sidebar.getByRole("button", { name: "First conversation", exact: true })).toBeVisible();
         const originalComposer = await page.getByTestId(dataTestId.messageComposer).elementHandle();
@@ -201,11 +201,12 @@ test("Given a paired workspace, When a user creates and reloads conversations, T
         assert.ok(originalComposer);
         assert.ok(originalSidebar);
         await sidebar.getByRole("button", { name: "First conversation", exact: true }).click();
-        expect(await originalComposer.evaluate((element) => element.isConnected)).toBe(true);
+        await expect(page.getByRole("status", { name: "Switching session", exact: true })).toBeVisible();
+        await expect(page.getByText(followUp, { exact: true })).toHaveCount(0);
+        expect(await originalComposer.evaluate((element) => element.isConnected)).toBe(false);
         expect(await originalSidebar.evaluate((element) => element.isConnected)).toBe(true);
-        await expect(page.getByText("Connecting to your agent", { exact: true })).toHaveCount(0);
         await expect(page.getByTestId(dataTestId.userMessage)).toHaveText(["First conversation"]);
-        expect(await originalComposer.evaluate((element) => element.isConnected)).toBe(true);
+        await expect(page.getByRole("status", { name: "Switching session", exact: true })).toHaveCount(0);
         expect(await originalSidebar.evaluate((element) => element.isConnected)).toBe(true);
         await originalComposer.dispose();
         await originalSidebar.dispose();

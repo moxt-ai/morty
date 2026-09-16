@@ -262,9 +262,9 @@ export function BotChatHome({
             }
             const view = current.kind === "switching" ? current.view : current;
             if (view.kind === "ready" || view.kind === "draft") {
-                // A new draft can render immediately while setup is revalidated. When
-                // opening another session, retain the current view until its replacement
-                // is ready so switching never blanks Chat behind a loading spinner.
+                // A new draft can render immediately while setup is revalidated. Keep the
+                // current Bot available to the sidebar while another session opens, but
+                // hide its stale conversation content behind the switching state.
                 return target.current.kind === "draft" ? { kind: "draft", bot: view.bot } : { kind: "switching", view };
             }
             return { kind: "loading" };
@@ -561,9 +561,15 @@ export function BotChatHome({
                         aria-label="Messages"
                     >
                         <div ref={messageContent} className="flex min-h-full flex-col gap-8">
-                            {state.kind === "loading" ? (
+                            {state.kind === "loading" || state.kind === "switching" ? (
                                 <div className="m-auto">
-                                    <Spinner label="Connecting to your agent" />
+                                    <Spinner
+                                        label={
+                                            state.kind === "switching"
+                                                ? "Switching session"
+                                                : "Connecting to your agent"
+                                        }
+                                    />
                                 </div>
                             ) : state.kind === "setup" ? (
                                 <section className="m-auto w-full max-w-lg animate-cloud-enter rounded-2xl border border-border bg-card p-8 shadow-sm motion-reduce:animate-none">
@@ -611,7 +617,7 @@ export function BotChatHome({
                             )}
                         </div>
                     </div>
-                    {active !== null && (
+                    {active !== null && !switching && (
                         <BotChatComposer
                             attachments={attachments}
                             disabled={switching || sending.kind === "sending"}
