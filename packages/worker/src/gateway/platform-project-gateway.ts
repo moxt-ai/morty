@@ -51,6 +51,9 @@ function recordPlatformTiming(encoded: string | null, prefix: string, timing: Op
         if (!Number.isFinite(durationMilliseconds) || durationMilliseconds < 0 || durationMilliseconds > 120_000) {
             continue;
         }
+        if (name === "total") {
+            timing.record("mobius", "Mobius access", durationMilliseconds);
+        }
         timing.record(`platform-${prefix}-${name}`, `Platform: ${description}`, durationMilliseconds);
     }
 }
@@ -60,6 +63,10 @@ export class PlatformProjectGateway {
     constructor(bindings: CloudBindings) {
         this.#bindings = bindings;
     }
+
+    readonly #observeMobiusResponse = ({ serverTiming }: { readonly serverTiming: string | null }): void => {
+        this.#bindings.requestAccessMetrics?.recordMobiusServerTiming(serverTiming);
+    };
 
     readonly configuration = () => {
         try {
@@ -106,6 +113,7 @@ export class PlatformProjectGateway {
             endpoint: this.configuration().origin,
             projectId,
             credentialProvider: new MobiusAppCredentialProvider(v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET)),
+            observeResponse: this.#observeMobiusResponse,
             operationTimeoutMilliseconds: 15000,
         });
         try {
@@ -376,6 +384,10 @@ export class PlatformProjectGateway {
                     credentialProvider: new MobiusAppCredentialProvider(
                         v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET),
                     ),
+                    observeResponse: ({ serverTiming }: { readonly serverTiming: string | null }) => {
+                        this.#observeMobiusResponse({ serverTiming });
+                        recordPlatformTiming(serverTiming, "credential", timing);
+                    },
                     operationTimeoutMilliseconds: 15000,
                 });
                 const permissions = [
@@ -496,9 +508,10 @@ export class PlatformProjectGateway {
             actorReference,
             credentialProvider: new MobiusAppCredentialProvider(v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET)),
             ...(timing === undefined
-                ? {}
+                ? { observeResponse: this.#observeMobiusResponse }
                 : {
                       observeResponse: ({ serverTiming }: { readonly serverTiming: string | null }) => {
+                          this.#observeMobiusResponse({ serverTiming });
                           recordPlatformTiming(serverTiming, "conversation", timing);
                       },
                   }),
@@ -548,6 +561,7 @@ export class PlatformProjectGateway {
             endpoint: this.configuration().origin,
             projectId: v.parse(platformIdentifier, projectId),
             credentialProvider: new MobiusAppCredentialProvider(v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET)),
+            observeResponse: this.#observeMobiusResponse,
             operationTimeoutMilliseconds,
         });
         try {
@@ -590,6 +604,7 @@ export class PlatformProjectGateway {
                     redirect: "manual",
                 },
             );
+            this.#bindings.requestAccessMetrics?.recordMobiusServerTiming(response.headers.get("server-timing"));
             signal.throwIfAborted();
             if (!response.ok) {
                 await response.body?.cancel();
@@ -643,6 +658,7 @@ export class PlatformProjectGateway {
         const client = new MobiusPlatformAppClient({
             endpoint: configuration.origin,
             credentialProvider: new MobiusAppCredentialProvider(v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET)),
+            observeResponse: this.#observeMobiusResponse,
             operationTimeoutMilliseconds: 15000,
         });
         try {

@@ -7,6 +7,7 @@ import { type ApplicationContext, createApplicationDependencies } from "./compos
 import { instructionDocuments } from "./gateway/instruction-documents.ts";
 import { setupArtifact } from "./gateway/setup-artifact.ts";
 import type { CloudBindings } from "./infra/cloud-bindings.ts";
+import { instrumentD1Database, RequestAccessMetrics } from "./infra/request-access-metrics.ts";
 import { RequestError } from "./infra/request-error.ts";
 import { errorMiddleware, rethrowHttpError } from "./middleware/error-middleware.ts";
 import { cloudProjectContext, slackProjectContext } from "./middleware/project-context.ts";
@@ -61,7 +62,16 @@ const application = new Hono<{ readonly Bindings: CloudBindings }>()
 
 export default {
     async fetch(request: Request, bindings: CloudBindings, context?: ExecutionContext): Promise<Response> {
-        return await application.fetch(request, bindings, context);
+        const metrics = new RequestAccessMetrics();
+        const instrumented = {
+            ...bindings,
+            DATABASE: instrumentD1Database(bindings.DATABASE, metrics),
+            CHAT_DATABASE_APAC: instrumentD1Database(bindings.CHAT_DATABASE_APAC, metrics),
+            CHAT_DATABASE_WNAM: instrumentD1Database(bindings.CHAT_DATABASE_WNAM, metrics),
+            requestAccessMetrics: metrics,
+        };
+        const response = await application.fetch(request, instrumented, context);
+        return metrics.appendServerTiming(response);
     },
     async queue(batch, bindings): Promise<void> {
         await slackApplication.queue(batch, bindings);

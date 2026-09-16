@@ -6,6 +6,7 @@ type TimingMetric = {
     readonly name: string;
     readonly description: string;
     readonly durationMilliseconds: number;
+    readonly count?: number;
 };
 
 function duration(startedAt: number): number {
@@ -13,12 +14,14 @@ function duration(startedAt: number): number {
 }
 
 function headerMetric(metric: TimingMetric): string {
-    return `${metric.name};dur=${metric.durationMilliseconds.toFixed(1)};desc="${metric.description}"`;
+    return `${metric.name};dur=${metric.durationMilliseconds.toFixed(1)};desc="${metric.description}"${metric.count === undefined ? "" : `;count=${metric.count}`}`;
 }
 
 export const serverTiming = createMiddleware<ChatHttpEnvironment>(async (context, next) => {
     const startedAt = performance.now();
     const metrics: TimingMetric[] = [];
+    let mobiusDurationMilliseconds = 0;
+    let mobiusCount = 0;
     const operationTiming: OperationTiming = {
         measure: async (name, description, operation) => {
             const operationStartedAt = performance.now();
@@ -29,7 +32,12 @@ export const serverTiming = createMiddleware<ChatHttpEnvironment>(async (context
             }
         },
         record: (name, description, durationMilliseconds) => {
-            metrics.push({ name, description, durationMilliseconds });
+            if (name === "mobius") {
+                mobiusDurationMilliseconds += durationMilliseconds;
+                mobiusCount += 1;
+            } else {
+                metrics.push({ name, description, durationMilliseconds });
+            }
         },
     };
     context.set("operationTiming", operationTiming);
@@ -39,7 +47,16 @@ export const serverTiming = createMiddleware<ChatHttpEnvironment>(async (context
         description: "Total response time",
         durationMilliseconds: duration(startedAt),
     };
-    const completed = [total, ...metrics];
+    const completed = [
+        total,
+        ...metrics,
+        {
+            name: "mobius",
+            description: "Mobius access",
+            durationMilliseconds: mobiusDurationMilliseconds,
+            count: mobiusCount,
+        },
+    ];
     context.header("Server-Timing", completed.map(headerMetric).join(","));
     context.env.logger.info(
         {

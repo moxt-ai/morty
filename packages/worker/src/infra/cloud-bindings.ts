@@ -1,3 +1,5 @@
+import type { RequestAccessMetrics } from "./request-access-metrics.ts";
+
 export interface CloudBindings {
     readonly MOBIUS_WORKER_REGION?: unknown;
     readonly MOBIUS_REGIONAL_APAC?: unknown;
@@ -28,4 +30,5 @@ export interface CloudBindings {
     readonly SESSION_ACTIVE_SESSIONS_PER_PROJECT?: unknown;
     readonly SESSION_ACTIVE_SESSIONS_PER_TENANT?: unknown;
     readonly SESSION_RELAY?: unknown;
+    readonly requestAccessMetrics?: RequestAccessMetrics;
 }
