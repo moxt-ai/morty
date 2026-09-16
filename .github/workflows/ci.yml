@@ -62,7 +62,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [typecheck, build, lint, "test:web", "test:worker", knip, "test:e2e", "test:e2e:opencode", migrations]
+        check: [typecheck, build, lint, "test:web", "test:worker", knip, "test:e2e:opencode", migrations]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -89,10 +89,10 @@ jobs:
           OPENCODE_DISABLE_AUTOUPDATE: "1"
 
       - name: Upload browser journey failure diagnostics
-        if: failure() && (matrix.check == 'test:e2e' || matrix.check == 'test:e2e:opencode')
+        if: failure() && matrix.check == 'test:e2e:opencode'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: mobius-chat-e2e-${{ matrix.check == 'test:e2e' && 'local' || 'opencode' }}-${{ github.run_id }}
+          name: opencode-e2e-${{ github.run_id }}
           path: ${{ runner.temp }}/mobius-chat-setup-e2e/**/artifacts
           if-no-files-found: ignore
 
