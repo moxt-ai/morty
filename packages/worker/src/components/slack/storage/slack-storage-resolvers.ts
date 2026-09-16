@@ -25,15 +25,23 @@ export function configuredDatabase(bindings: CloudSlackStorageBindings): D1Datab
 
 export class CloudDatabaseResolver implements DatabaseResolver {
     readonly #bindings: CloudSlackStorageBindings;
-    constructor(cx: { readonly config: { readonly bindings: CloudSlackStorageBindings } }) {
+    readonly #metrics: { readonly info: (bindings: Readonly<Record<string, unknown>>, message: string) => void };
+    readonly #nowMilliseconds: () => number;
+    constructor(cx: {
+        readonly config: { readonly bindings: CloudSlackStorageBindings };
+        readonly metrics: { readonly info: (bindings: Readonly<Record<string, unknown>>, message: string) => void };
+        readonly nowMilliseconds: () => number;
+    }) {
         this.#bindings = cx.config.bindings;
+        this.#metrics = cx.metrics;
+        this.#nowMilliseconds = cx.nowMilliseconds;
     }
     readonly resolve: DatabaseResolver["resolve"] = () => {
         const database = configuredDatabase(this.#bindings);
         if (database === null) {
             throw new TenantStorageError();
         }
-        return new D1SqlDatabase(database);
+        return new D1SqlDatabase({ database, metrics: this.#metrics, nowMilliseconds: this.#nowMilliseconds });
     };
 }
 

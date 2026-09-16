@@ -77,7 +77,8 @@ const slack = createSlackWorker<
     ExecutionContext | undefined,
     MessageBatch<SlackQueueMessage>
 >((bindings) => {
-    const host = { config: { bindings } };
+    const nowMilliseconds = () => performance.now();
+    const host = { config: { bindings }, metrics: slackLogger, nowMilliseconds };
     const database = configuredDatabase(bindings);
     if (database === null) {
         throw new Error("Slack database is unavailable.");
@@ -115,7 +116,7 @@ const slack = createSlackWorker<
             baseUrl: bindings.MOBIUS_BASE_URL,
             forbiddenOrigin: bindings.APP_ORIGIN,
         }),
-        slackAppDatabase: new D1SqlDatabase(database),
+        slackAppDatabase: new D1SqlDatabase({ database, metrics: slackLogger, nowMilliseconds }),
     };
     const infrastructure = { config, gateways, logger: slackLogger };
     const cx = createSlackDependencies({
