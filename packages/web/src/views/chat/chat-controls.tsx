@@ -23,10 +23,12 @@ type Change =
 export function ChatControls({
     botId,
     client,
+    disabled,
     requests,
 }: {
     readonly botId: string;
     readonly client: MobiusBrowserClient;
+    readonly disabled: boolean;
     readonly requests: Pick<BotChatApi, "workspace" | "connectSession">;
 }) {
     const [inventory, setInventory] = useState<Inventory>({ kind: "loading" });
@@ -115,7 +117,7 @@ export function ChatControls({
         return () => clearTimeout(timeout);
     }, [change]);
     const select = async (value: string, configId: string) => {
-        if (inventory.kind !== "ready") {
+        if (inventory.kind !== "ready" || disabled) {
             return;
         }
         operation.current?.abort();
@@ -184,7 +186,7 @@ export function ChatControls({
                 <Select
                     label="Model"
                     value={model?.currentValue ?? ""}
-                    disabled={busy || model === undefined}
+                    disabled={disabled || busy || model === undefined}
                     options={model?.values.map((value) => ({ value: value.value, label: value.name })) ?? []}
                     onValueChange={(value) => {
                         if (model !== undefined) {
@@ -195,7 +197,7 @@ export function ChatControls({
                 <Select
                     label="Variant"
                     value={variant?.currentValue ?? ""}
-                    disabled={busy || variant === undefined}
+                    disabled={disabled || busy || variant === undefined}
                     options={variant?.values.map((value) => ({ value: value.value, label: value.name })) ?? []}
                     onValueChange={(value) => {
                         if (variant !== undefined) {

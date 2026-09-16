@@ -24,11 +24,20 @@ test("Given a paired workspace, When a user creates and reloads conversations, T
         expect(conversationId).toBeTruthy();
         expect(conversationIds.has(conversationId)).toBe(false);
         conversationIds.add(conversationId);
+        if (prompt === "First conversation") {
+            const sidebar = page.getByRole("complementary", { name: "Conversations", exact: true });
+            const originalSidebar = await sidebar.elementHandle();
+            assert.ok(originalSidebar);
+            await page.getByTestId(dataTestId.newConversation).click();
+            expect(await originalDocument.evaluate((element) => element.isConnected)).toBe(true);
+            expect(await originalComposer.evaluate((element) => element.isConnected)).toBe(true);
+            expect(await originalSidebar.evaluate((element) => element.isConnected)).toBe(true);
+            await expect(sidebar.getByTestId(dataTestId.newConversation)).toBeVisible();
+            await expect(page.getByTestId(dataTestId.messageComposer)).toBeVisible();
+            await originalSidebar.dispose();
+        }
         await originalComposer.dispose();
         await originalDocument.dispose();
-        if (prompt === "First conversation") {
-            await page.getByTestId(dataTestId.newConversation).click();
-        }
     }
     const followUp = "Continue the second conversation";
     await runtime.sendMessage(followUp);
@@ -38,11 +47,22 @@ test("Given a paired workspace, When a user creates and reloads conversations, T
     await expect(page.getByTestId(dataTestId.agentResponse).nth(1)).toContainText(followUp);
     expect(page.url()).toBe(savedUrl);
     await expect(page.getByTestId(dataTestId.userMessage)).toHaveText(["Second conversation", followUp]);
-    await test.step("Given Chat-created conversations, When the user opens the sidebar, Then only managed conversations appear and a local session can be previewed and forked", async () => {
+    await test.step("Given Chat-created conversations, When the user switches sessions, Then Chat stays mounted and local sessions can be previewed and forked", async () => {
         const sidebar = page.getByRole("complementary", { name: "Conversations", exact: true });
         await expect(sidebar.getByRole("button", { name: "First conversation", exact: true })).toBeVisible();
+        const originalComposer = await page.getByTestId(dataTestId.messageComposer).elementHandle();
+        const originalSidebar = await sidebar.elementHandle();
+        assert.ok(originalComposer);
+        assert.ok(originalSidebar);
         await sidebar.getByRole("button", { name: "First conversation", exact: true }).click();
+        expect(await originalComposer.evaluate((element) => element.isConnected)).toBe(true);
+        expect(await originalSidebar.evaluate((element) => element.isConnected)).toBe(true);
+        await expect(page.getByText("Connecting to your agent", { exact: true })).toHaveCount(0);
         await expect(page.getByTestId(dataTestId.userMessage)).toHaveText(["First conversation"]);
+        expect(await originalComposer.evaluate((element) => element.isConnected)).toBe(true);
+        expect(await originalSidebar.evaluate((element) => element.isConnected)).toBe(true);
+        await originalComposer.dispose();
+        await originalSidebar.dispose();
         await page.getByRole("button", { name: "Open Local Session", exact: true }).click();
         const dialog = page.getByRole("dialog", { name: "Open Local Session", exact: true });
         await expect(dialog.getByRole("button", { name: "Fork", exact: true })).toBeDisabled();

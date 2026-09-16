@@ -55,17 +55,20 @@ function setupDescription(reason: SetupReason): string {
     }
 }
 
-type State =
-    | { readonly kind: "loading" }
+type ActiveState =
     | { readonly kind: "draft"; readonly bot: ManagedBot }
-    | { readonly kind: "setup"; readonly reason: SetupReason }
     | {
           readonly kind: "ready";
           readonly bot: ManagedBot;
           readonly client: MobiusBrowserClient;
           readonly history: MobiusBrowserHistory;
           readonly activities: ReadonlyMap<string, RecordedAgentActivity>;
-      }
+      };
+type State =
+    | { readonly kind: "loading" }
+    | { readonly kind: "switching"; readonly view: ActiveState }
+    | ActiveState
+    | { readonly kind: "setup"; readonly reason: SetupReason }
     | { readonly kind: "failed"; readonly message: string };
 type Sending =
     | { readonly kind: "idle" }
@@ -211,7 +214,19 @@ export function BotChatHome({
         setConversation({ kind: "bot" });
         let client: MobiusBrowserClient | null = null;
         let reconciliationTimer: ReturnType<typeof setTimeout> | undefined;
-        setState((current) => (current.kind === "setup" ? current : { kind: "loading" }));
+        setState((current) => {
+            if (current.kind === "setup") {
+                return current;
+            }
+            const view = current.kind === "switching" ? current.view : current;
+            if (view.kind === "ready" || view.kind === "draft") {
+                // A new draft can render immediately while setup is revalidated. When
+                // opening another session, retain the current view until its replacement
+                // is ready so switching never blanks Chat behind a loading spinner.
+                return target.current.kind === "draft" ? { kind: "draft", bot: view.bot } : { kind: "switching", view };
+            }
+            return { kind: "loading" };
+        });
         const open = async () => {
             const bot = (await requests.listBots(controller.signal))[0];
             if (bot === undefined) {
@@ -428,13 +443,17 @@ export function BotChatHome({
         }
     };
 
+    const active =
+        state.kind === "switching" ? state.view : state.kind === "ready" || state.kind === "draft" ? state : null;
+    const switching = state.kind === "switching";
+
     return (
         <main
             aria-label="Chat"
             data-chat-state={state.kind === "ready" ? "connected" : "disconnected"}
             className="flex h-dvh min-h-0 flex-col bg-[#f7f9f8] text-foreground sm:flex-row"
         >
-            {(state.kind === "ready" || state.kind === "draft") && (
+            {active !== null && (
                 <ConversationSidebar
                     activeId={
                         target.current.kind === "existing"
@@ -443,7 +462,7 @@ export function BotChatHome({
                               ? target.current.sessionId
                               : ""
                     }
-                    botId={state.bot.botId}
+                    botId={active.bot.botId}
                     requests={requests}
                     onOpen={(session) => openManaged(session.kind, session.id)}
                     onFork={(session) => {
@@ -454,9 +473,9 @@ export function BotChatHome({
                     onNewConversation={newConversation}
                 />
             )}
-            {conversation.kind === "local" && (state.kind === "ready" || state.kind === "draft") ? (
+            {conversation.kind === "local" && active !== null ? (
                 <LocalSessionPane
-                    botId={state.bot.botId}
+                    botId={active.bot.botId}
                     requests={requests}
                     key={conversation.session.result.ready.sessionId}
                     session={conversation.session}
@@ -501,29 +520,29 @@ export function BotChatHome({
                                 <Button onClick={() => retry((value) => value + 1)}>Reconnect</Button>
                                 <PairingInstruction requests={requests} />
                             </div>
-                        ) : state.kind === "draft" || state.history.turns.length === 0 ? (
+                        ) : active === null ? null : active.kind === "draft" || active.history.turns.length === 0 ? (
                             <div className="m-auto max-w-lg text-center">
                                 <span className="mx-auto mb-6 flex size-16 items-center justify-center rounded-3xl bg-primary/10 text-primary shadow-[inset_0_0_0_1px_rgba(34,123,78,0.12)]">
                                     <MessageSquare className="size-7" aria-hidden="true" />
                                 </span>
-                                <h1 className="text-3xl font-semibold tracking-tight">{state.bot.displayName}</h1>
+                                <h1 className="text-3xl font-semibold tracking-tight">{active.bot.displayName}</h1>
                                 <p className="mt-2 text-sm text-muted-foreground">Send a message to your agent.</p>
                             </div>
                         ) : (
-                            [...state.history.turns]
+                            [...active.history.turns]
                                 .reverse()
                                 .map((turn) => (
                                     <BotConversationTurn
                                         key={`${turn.sessionId}:${turn.commandId}`}
                                         turn={turn}
-                                        activities={state.activities}
-                                        botId={state.bot.botId}
+                                        activities={active.activities}
+                                        botId={active.bot.botId}
                                         requests={requests}
                                     />
                                 ))
                         )}
                     </div>
-                    {(state.kind === "ready" || state.kind === "draft") && (
+                    {active !== null && (
                         <form
                             className="mx-auto mb-6 w-full max-w-3xl px-4"
                             onSubmit={(event) => {
@@ -532,16 +551,21 @@ export function BotChatHome({
                             }}
                         >
                             <div className="mb-3">
-                                {state.kind === "draft" ? (
+                                {active.kind === "draft" ? (
                                     <DraftChatControls
                                         key={target.current.kind === "draft" ? target.current.key : "existing"}
-                                        botId={state.bot.botId}
+                                        botId={active.bot.botId}
                                         requests={requests}
-                                        disabled={sending.kind === "sending"}
+                                        disabled={switching || sending.kind === "sending"}
                                         onSettings={setDraftSettings}
                                     />
                                 ) : (
-                                    <ChatControls botId={state.bot.botId} client={state.client} requests={requests} />
+                                    <ChatControls
+                                        botId={active.bot.botId}
+                                        client={active.client}
+                                        requests={requests}
+                                        disabled={switching}
+                                    />
                                 )}
                             </div>
                             {sending.kind === "failed" && (
@@ -556,7 +580,7 @@ export function BotChatHome({
                                     placeholder="Message your agent…"
                                     value={draft}
                                     onChange={(event) => setDraft(event.target.value)}
-                                    disabled={sending.kind === "sending"}
+                                    disabled={switching || sending.kind === "sending"}
                                 />
                                 <Button
                                     type="submit"
@@ -564,9 +588,10 @@ export function BotChatHome({
                                     aria-label="Send message"
                                     data-testid={dataTestId.sendMessage}
                                     disabled={
+                                        switching ||
                                         sending.kind === "sending" ||
                                         draft.trim().length === 0 ||
-                                        (state.kind === "draft" && draftSettings === null)
+                                        (active.kind === "draft" && draftSettings === null)
                                     }
                                 >
                                     <Send className="size-4" aria-hidden="true" />
