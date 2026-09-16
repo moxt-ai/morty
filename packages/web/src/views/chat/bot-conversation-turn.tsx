@@ -70,7 +70,7 @@ export function BotConversationTurn({
     const turnActivities = activitiesForTurn(activities, turn.sessionId, turn.commandId);
     const images = turnActivities.flatMap((activity) => activity.content.filter((content) => content.type === "image"));
     return (
-        <div className="mx-auto grid min-w-0 w-full max-w-3xl gap-6 [overflow-wrap:anywhere]">
+        <div className="mx-auto grid min-w-0 w-full max-w-[1120px] gap-8 [overflow-wrap:anywhere]">
             <MessageBubble speaker="user" data-testid={dataTestId.userMessage}>
                 {turn.prompt}
             </MessageBubble>

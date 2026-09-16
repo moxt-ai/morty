@@ -1,6 +1,7 @@
 import { Select as Primitive } from "radix-ui";
 
 export function Select({
+    compact = false,
     label,
     value,
     onValueChange,
@@ -12,12 +13,13 @@ export function Select({
     readonly onValueChange: (value: string) => void;
     readonly options: readonly { readonly value: string; readonly label: string }[];
     readonly disabled?: boolean;
+    readonly compact?: boolean;
 }) {
     return (
         <Primitive.Root value={value} onValueChange={onValueChange} disabled={disabled}>
             <Primitive.Trigger
                 aria-label={label}
-                className="flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-border bg-background px-3 text-left text-[13px] outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50 motion-reduce:transition-none"
+                className={`flex h-9 min-w-0 items-center justify-between gap-1.5 rounded-lg text-left text-[13px] outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50 motion-reduce:transition-none ${compact ? "w-auto max-w-48 border-transparent bg-transparent px-2" : "w-full gap-2 border border-border bg-background px-3"}`}
             >
                 <span className="min-w-0 truncate">
                     <Primitive.Value placeholder={`Select ${label.toLowerCase()}`} />
