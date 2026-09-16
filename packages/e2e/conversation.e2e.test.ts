@@ -26,14 +26,24 @@ test("Given a paired workspace, When a user adds a file from the composer menu, 
     await expect(page.getByRole("button", { name: /microphone|whisper/iu })).toHaveCount(0);
 });
 
-test("Given a paired workspace, When the user shares their machine, Then Chat provides a one-time pairing instruction", async ({
+test("Given a paired workspace, When the user shares their machine, Then Chat provides a fresh five-use QR link", async ({
     runtime,
 }) => {
     await runtime.openPairedChat();
     const { page } = runtime;
     await page.getByRole("button", { name: "Share My Machine", exact: true }).click();
-    const share = page.getByRole("dialog", { name: "Share My Machine", exact: true });
-    await expect(share.getByTestId(dataTestId.pairingInstruction)).toBeVisible();
+    let share = page.getByRole("dialog", { name: "Share My Machine", exact: true });
+    await expect(share.getByRole("img", { name: "Machine sharing QR code", exact: true })).toBeVisible();
+    const firstUrl = await share.getByRole("link", { name: "Open sharing link", exact: true }).getAttribute("href");
+    assert.match(firstUrl ?? "", /\/continue#code=/u);
+    await expect(share.getByText(/used up to five times/iu)).toBeVisible();
+
+    await share.getByRole("button", { name: "Close dialog", exact: true }).click();
+    await page.getByRole("button", { name: "Share My Machine", exact: true }).click();
+    share = page.getByRole("dialog", { name: "Share My Machine", exact: true });
+    const secondUrl = await share.getByRole("link", { name: "Open sharing link", exact: true }).getAttribute("href");
+    assert.match(secondUrl ?? "", /\/continue#code=/u);
+    assert.notEqual(secondUrl, firstUrl);
 });
 
 test("Given an agent returns an image, When its reply is displayed, Then the image is available in the conversation", async ({

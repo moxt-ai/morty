@@ -14,6 +14,7 @@ import { Button } from "../../components/ui/cloud-button.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { type RecordedAgentActivity, recordAgentActivity } from "../../services/chat/agent-activities.ts";
 import type { BotChatApi, ChatDraftConfiguration, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
+import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
 import { BotConversationTurn } from "./bot-conversation-turn.tsx";
@@ -132,6 +133,7 @@ function updateStreamedHistory(current: State, client: MobiusBrowserClient, even
 
 export function BotChatHome({
     requests,
+    createTransfer,
 }: {
     readonly requests: Pick<
         BotChatApi,
@@ -149,6 +151,7 @@ export function BotChatHome({
         | "createConversation"
         | "draftSettings"
     >;
+    readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
 }) {
     const [state, setState] = useState<State>({ kind: "loading" });
     const [revision, retry] = useState(0);
@@ -527,6 +530,7 @@ export function BotChatHome({
                     }
                     botId={active.bot.botId}
                     requests={requests}
+                    createTransfer={createTransfer}
                     onOpen={(session) => openManaged(session.kind, session.id)}
                     onFork={(session) => {
                         if (session.result.action === "fork") {

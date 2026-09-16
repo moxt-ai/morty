@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import { AnonymousIdentityApi } from "../../services/identity/anonymous-identity-api.ts";
 import { ManagementApi } from "../../services/management/management-api.ts";
 import { BrowserChannelConnection } from "../../view-models/channel-connection.ts";
 import { useActiveIdentity } from "../authentication/identity-context.tsx";
@@ -31,5 +32,16 @@ export function MobiusManagement() {
             }),
         [identity],
     );
-    return <BotChatHome requests={requests} />;
+    const createTransfer = useCallback(
+        async (signal: AbortSignal) => {
+            const api = new AnonymousIdentityApi({ origin: window.location.origin, storage: window.localStorage });
+            const localIdentity = await api.loadExisting(signal);
+            if (localIdentity === null || localIdentity.projectId !== identity.projectId) {
+                throw new Error("This workspace cannot be shared from this device.");
+            }
+            return await api.createTransfer(localIdentity.token, signal);
+        },
+        [identity.projectId],
+    );
+    return <BotChatHome requests={requests} createTransfer={createTransfer} />;
 }

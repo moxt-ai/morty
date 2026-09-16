@@ -4,8 +4,9 @@ import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
+import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import { LocalSessionDialog, type OpenLocalSession } from "./local-session-dialog.tsx";
-import { PairingInstruction } from "./pairing-instruction.tsx";
+import { MachineSharing } from "./machine-sharing.tsx";
 
 type Directory =
     | { readonly kind: "loading" }
@@ -19,16 +20,15 @@ export function ConversationSidebar({
     onOpen,
     onFork,
     onNewConversation,
+    createTransfer,
 }: {
     readonly botId: string;
-    readonly requests: Pick<
-        BotChatApi,
-        "workspace" | "nativeSessions" | "nativeSession" | "managedSessions" | "listBots" | "createPairingInstruction"
-    >;
+    readonly requests: Pick<BotChatApi, "workspace" | "nativeSessions" | "nativeSession" | "managedSessions">;
     readonly activeId: string;
     readonly onOpen: (session: ManagedChatSession) => void;
     readonly onFork: (session: OpenLocalSession) => void;
     readonly onNewConversation: () => void;
+    readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
 }) {
     const [directory, setDirectory] = useState<Directory>({ kind: "loading" });
     const [revision, refresh] = useState(0);
@@ -143,10 +143,10 @@ export function ConversationSidebar({
             {sharing && (
                 <Dialog
                     title="Share My Machine"
-                    description="Copy this one-time instruction to an agent you trust to connect it to this workspace."
+                    description="Scan the QR code or open the link on another device to use this workspace."
                     onClose={() => setSharing(false)}
                 >
-                    <PairingInstruction requests={requests} />
+                    <MachineSharing createTransfer={createTransfer} />
                 </Dialog>
             )}
         </aside>
