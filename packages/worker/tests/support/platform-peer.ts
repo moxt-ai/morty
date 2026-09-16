@@ -2,6 +2,51 @@ import { createServer } from "node:http";
 import * as v from "valibot";
 import { AUTH_TIME } from "./identity-provider.ts";
 
+function readySession(sessionId: string, currentValue = "model-one") {
+    return {
+        kind: "session.ready",
+        sessionId,
+        requestId: "prepare-settings",
+        agentId: "agent-one",
+        agentName: "Agent One",
+        agentVersion: "1",
+        restored: false,
+        directoryId: "default",
+        directoryLabel: "Workspace",
+        additionalDirectories: [],
+        commands: [],
+        capabilities: {
+            additionalDirectories: false,
+            audioPrompt: false,
+            closeSession: true,
+            deleteSession: true,
+            embeddedContextPrompt: true,
+            imagePrompt: false,
+            listSessions: true,
+            loadSession: true,
+            promptQueueing: false,
+            resumeSession: true,
+            steering: false,
+            unstableForkSession: false,
+        },
+        configOptions: [
+            {
+                id: "model",
+                name: "Model",
+                description: "Session model",
+                booleanValue: false,
+                category: "model",
+                type: "select",
+                currentValue,
+                values: [
+                    { name: "Model One", value: "model-one", description: "", groupId: "", groupName: "" },
+                    { name: "Model Two", value: "model-two", description: "", groupId: "", groupName: "" },
+                ],
+            },
+        ],
+    };
+}
+
 // Stateful HTTP peer for identity scenarios; live Platform credentials are not
 // suitable for deterministic tests. Projects and Bots are retained by this peer.
 export async function platformPeer({
@@ -137,61 +182,13 @@ export async function platformPeer({
                 response.writeHead(settingsAvailable ? 200 : 409).end(
                     JSON.stringify(
                         settingsAvailable
-                            ? {
-                                  kind: "session.ready",
-                                  sessionId,
-                                  requestId: "prepare-settings",
-                                  agentId: "agent-one",
-                                  agentName: "Agent One",
-                                  agentVersion: "1",
-                                  restored: false,
-                                  directoryId: "default",
-                                  directoryLabel: "Workspace",
-                                  additionalDirectories: [],
-                                  commands: [],
-                                  capabilities: {
-                                      additionalDirectories: false,
-                                      audioPrompt: false,
-                                      closeSession: true,
-                                      deleteSession: true,
-                                      embeddedContextPrompt: true,
-                                      imagePrompt: false,
-                                      listSessions: true,
-                                      loadSession: true,
-                                      promptQueueing: false,
-                                      resumeSession: true,
-                                      steering: false,
-                                      unstableForkSession: false,
+                            ? readySession(v.parse(v.string(), sessionId))
+                            : {
+                                  error: {
+                                      code: "agent_unavailable",
+                                      message: "The settings agent is unavailable",
                                   },
-                                  configOptions: [
-                                      {
-                                          id: "model",
-                                          name: "Model",
-                                          description: "Session model",
-                                          booleanValue: false,
-                                          category: "model",
-                                          type: "select",
-                                          currentValue: "model-one",
-                                          values: [
-                                              {
-                                                  name: "Model One",
-                                                  value: "model-one",
-                                                  description: "",
-                                                  groupId: "",
-                                                  groupName: "",
-                                              },
-                                              {
-                                                  name: "Model Two",
-                                                  value: "model-two",
-                                                  description: "",
-                                                  groupId: "",
-                                                  groupName: "",
-                                              },
-                                          ],
-                                      },
-                                  ],
-                              }
-                            : { error: { code: "agent_unavailable", message: "The settings agent is unavailable" } },
+                              },
                     ),
                 );
                 return;
@@ -272,11 +269,25 @@ export async function platformPeer({
                     });
                 }
                 response
-                    .writeHead(201, {
+                    .writeHead(settingsAvailable ? 201 : 409, {
                         "server-timing":
-                            'total;dur=12.0;desc="Total Platform operation time",create-provision;dur=3.0;desc="Provision conversation Session"',
+                            'total;dur=12.0;desc="Total Platform operation time",create-provision;dur=3.0;desc="Provision conversation Session",prepare-control-runtime;dur=7.0;desc="Wait for configured Runtime Session"',
                     })
-                    .end(JSON.stringify(conversation));
+                    .end(
+                        JSON.stringify(
+                            settingsAvailable
+                                ? {
+                                      ...conversation,
+                                      ready: readySession(conversation.sessionId, input.configuration.value),
+                                  }
+                                : {
+                                      error: {
+                                          code: "agent_unavailable",
+                                          message: "The settings agent is unavailable",
+                                      },
+                                  },
+                        ),
+                    );
                 return;
             }
             const conversation = [...conversations.values()].find(
