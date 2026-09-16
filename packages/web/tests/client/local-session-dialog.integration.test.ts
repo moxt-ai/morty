@@ -76,10 +76,10 @@ afterEach(() => {
     document.body.replaceChildren();
 });
 
-it("Given a listed local session, When a user selects and forks it, Then Chat creates the fork without first requesting its history", async () => {
+it("Given a listed local session, When a user selects and forks it, Then Chat previews its history before creating the fork", async () => {
     const actions: string[] = [];
     let opened: OpenLocalSession | null = null;
-    const requests: Pick<BotChatApi, "workspace" | "nativeSessions"> = {
+    const requests: Pick<BotChatApi, "workspace" | "nativeSessions" | "nativeSession"> = {
         workspace: async () => ({
             agents: [
                 { agentRef: "codex", label: "Codex", machineName: "Local Mac", online: true, runtimeId: "runtime" },
@@ -90,6 +90,19 @@ it("Given a listed local session, When a user selects and forks it, Then Chat cr
         nativeSessions: async (_botId, _runtimeId, input) => {
             actions.push(input.action);
             return input.action === "list" ? listed : forked;
+        },
+        nativeSession: async () => {
+            actions.push("preview");
+            return {
+                title: "Active Codex session",
+                history: {
+                    coveredCommandIds: [],
+                    coveredMessageIds: [],
+                    messages: [{ role: "user", text: "Explain the session preview" }],
+                    status: "available",
+                    truncated: false,
+                },
+            };
         },
     };
     const container = document.createElement("div");
@@ -112,6 +125,8 @@ it("Given a listed local session, When a user selects and forks it, Then Chat cr
         throw new Error("The local session was not rendered");
     }
     await act(async () => session.click());
+    const preview = document.querySelector<HTMLElement>(`[aria-label="Selected session preview"]`);
+    expect(preview?.textContent).toContain("Explain the session preview");
     const fork = document.querySelector<HTMLButtonElement>(`[data-testid="${dataTestId.forkLocalSession}"]`);
     if (fork === null) {
         throw new Error("The Fork action was not rendered");
@@ -119,7 +134,7 @@ it("Given a listed local session, When a user selects and forks it, Then Chat cr
     expect(fork.disabled).toBe(false);
     await act(async () => fork.click());
 
-    expect(actions).toEqual(["list", "fork"]);
+    expect(actions).toEqual(["list", "preview", "fork"]);
     expect(opened).toMatchObject({ entry: { entryId: "native-entry" }, result: { sessionId: "discovery-session" } });
     await act(async () => root.unmount());
 });
