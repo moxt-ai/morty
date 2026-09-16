@@ -15,8 +15,7 @@ test("Given a paired workspace, When a user creates and reloads conversations, T
         const originalDocument = await page.locator("html").elementHandle();
         assert.ok(originalComposer);
         assert.ok(originalDocument);
-        await composer.fill(prompt);
-        await page.getByTestId(dataTestId.sendMessage).click();
+        await runtime.sendMessage(prompt);
         await expect(page.getByTestId(dataTestId.agentResponse).first()).toContainText(prompt);
         expect(await originalDocument.evaluate((element) => element.isConnected)).toBe(true);
         expect(await originalComposer.evaluate((element) => element.isConnected)).toBe(true);
@@ -32,8 +31,7 @@ test("Given a paired workspace, When a user creates and reloads conversations, T
         }
     }
     const followUp = "Continue the second conversation";
-    await page.getByTestId(dataTestId.messageComposer).fill(followUp);
-    await page.getByTestId(dataTestId.sendMessage).click();
+    await runtime.sendMessage(followUp);
     await expect(page.getByTestId(dataTestId.agentResponse).nth(1)).toContainText(followUp);
     const savedUrl = page.url();
     await page.reload();

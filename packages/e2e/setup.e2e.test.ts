@@ -1,3 +1,4 @@
+import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
 for (const mode of ["pair", "setup"]) {
@@ -29,8 +30,7 @@ for (const mode of ["pair", "setup"]) {
         await expect(page.getByTestId(dataTestId.pairingInstruction)).toHaveCount(0);
 
         const prompt = `Hello from the ${mode}.md journey`;
-        await composer.fill(prompt);
-        await page.getByTestId(dataTestId.sendMessage).click();
+        await runtime.sendMessage(prompt);
         const reply = page.getByTestId(dataTestId.agentResponse).first();
         await expect(reply).toContainText(prompt);
         await expect(page.getByTestId(dataTestId.userMessage).last()).toHaveText(prompt);
@@ -42,13 +42,10 @@ for (const mode of ["pair", "setup"]) {
             expect(page.url()).toBe(conversationUrl);
             await expect(page.getByTestId(dataTestId.pairingInstruction)).toHaveCount(0);
             const followUp = `Still connected after reloading ${mode}.md`;
-            await composer.fill(followUp);
-            await page.getByTestId(dataTestId.sendMessage).click();
+            await runtime.sendMessage(followUp);
             await expect(page.getByTestId(dataTestId.agentResponse).nth(1)).toContainText(followUp);
             await expect(page.getByTestId(dataTestId.userMessage).last()).toHaveText(followUp);
             expect(page.url()).toBe(conversationUrl);
         });
     });
 }
-
-import { dataTestId } from "../web/src/data-testid.ts";

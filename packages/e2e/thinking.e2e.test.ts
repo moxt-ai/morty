@@ -1,5 +1,4 @@
 import { dataTestId } from "../web/src/data-testid.ts";
-import { object, text } from "./infra/chat-api.ts";
 import { expect, test } from "./infra/test.ts";
 
 test("Given a paired agent, When a user expands thinking and reloads the reply, Then recorded reasoning remains readable without a working spinner", async ({
@@ -7,8 +6,7 @@ test("Given a paired agent, When a user expands thinking and reloads the reply, 
 }, testInfo) => {
     await runtime.openPairedChat();
     const { page } = runtime;
-    await page.getByTestId(dataTestId.messageComposer).fill("Explain the workspace");
-    await page.getByTestId(dataTestId.sendMessage).click();
+    await runtime.sendMessage("Explain the workspace");
     await expect(page.getByTestId(dataTestId.agentResponse)).toContainText("Explain the workspace");
     const thinking = page.getByRole("group", { name: "Agent thinking" });
     await expect(thinking).toBeVisible();
@@ -32,17 +30,7 @@ test("Given an agent still thinking, When a user expands, collapses and reloads 
 }, testInfo) => {
     await runtime.openPairedChat();
     const { page } = runtime;
-    await page.getByTestId(dataTestId.messageComposer).fill("wait until cancelled");
-    const acceptance = page.waitForResponse(
-        (response) =>
-            new URL(response.url()).pathname === "/mobius/api/v1/client/session/turns" &&
-            response.request().method() === "POST",
-    );
-    await page.getByTestId(dataTestId.sendMessage).click();
-    const accepted: unknown = await (await acceptance).json();
-    const turnId = text(object(accepted, "accepted turn").turnId, "turn ID");
-    const acceptanceBody = object(accepted, "turn acceptance");
-    const sessionId = text(object(acceptanceBody.turn, "accepted turn").sessionId, "session ID");
+    const { sessionId, turnId } = await runtime.sendMessage("wait until cancelled");
     const thinking = page.getByRole("group", { name: "Agent thinking" });
     const working = page.getByRole("status", { name: "Agent working" });
     await expect(thinking).toBeVisible();
@@ -71,8 +59,7 @@ test("Given a saved local session, When a user continues it and opens thinking, 
 }, testInfo) => {
     await runtime.openPairedChat();
     const { page } = runtime;
-    await page.getByTestId(dataTestId.messageComposer).fill("Local thinking example");
-    await page.getByTestId(dataTestId.sendMessage).click();
+    await runtime.sendMessage("Local thinking example");
     await expect(page.getByTestId(dataTestId.agentResponse)).toContainText("Local thinking example");
     await page.getByRole("button", { name: "Open Local Session", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Open Local Session", exact: true });

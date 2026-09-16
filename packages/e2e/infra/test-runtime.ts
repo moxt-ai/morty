@@ -5,6 +5,7 @@ import { mock } from "node:test";
 import { pathToFileURL } from "node:url";
 import { chromium } from "playwright-core";
 import type { runSetup as setup } from "../../setup/src/setup.ts";
+import { dataTestId } from "../../web/src/data-testid.ts";
 import { ChatApi, object, text } from "./chat-api.ts";
 import type { E2EHarness } from "./harness.ts";
 import { LocalStack, repository } from "./local-stack.ts";
@@ -46,10 +47,32 @@ export async function createTestRuntime(harness: E2EHarness) {
             return { botId: user.botId, projectId: user.projectId };
         };
 
+        const sendMessage = async (prompt: string) => {
+            await page.getByTestId(dataTestId.messageComposer).fill(prompt);
+            const [response] = await Promise.all([
+                page.waitForResponse(
+                    (candidate) =>
+                        candidate.request().method() === "POST" &&
+                        new URL(candidate.url()).pathname.endsWith("/client/session/turns"),
+                    { timeout: 15_000 },
+                ),
+                page.getByTestId(dataTestId.sendMessage).click(),
+            ]);
+            if (response.status() !== 202) {
+                throw new Error(`Turn request failed with HTTP ${response.status()}`);
+            }
+            const accepted = object(await response.json(), "accepted turn");
+            return {
+                turnId: text(accepted.turnId, "turn ID"),
+                sessionId: text(object(accepted.turn, "turn").sessionId, "session ID"),
+            };
+        };
+
         return {
             page,
             origin: stack.chatOrigin,
             openChat,
+            sendMessage,
             cancelSessionTurn: (sessionId: string, turnId: string) => chat.cancelSessionTurn(sessionId, turnId),
             openPairedChat: async () => {
                 await openChat();
