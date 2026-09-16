@@ -27,7 +27,9 @@ export type ChatConversationInput =
     | {
           readonly conversationKey: string;
           readonly bindingId: string;
-          readonly configuration: Parameters<MobiusBotOwnerClient["createProjectConversation"]>[0]["configuration"];
+          readonly configuration: NonNullable<
+              Parameters<MobiusBotOwnerClient["createProjectConversation"]>[0]["configuration"]
+          >;
       };
 
 const platformTimingMetric = /^([a-z][a-z0-9-]{0,63});dur=(\d+(?:\.\d+)?);desc="([^"\\]{1,120})"$/u;
