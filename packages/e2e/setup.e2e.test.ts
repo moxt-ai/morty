@@ -136,3 +136,29 @@ test("Given a continued setup session needs approval, When the user decides on m
     await expect(permission).toHaveCount(0);
     await expect(composer).toBeEnabled();
 });
+
+test("Given a continued setup session, When the agent creates image and video output, Then both remain available after reopening on a phone", async ({
+    runtime,
+}) => {
+    const { page } = runtime;
+    const sessionId = "setup-media-session";
+    await runtime.seedNativeSession(sessionId, "Prepare media output");
+    const connected = await runtime.followInstructions("/setup.md", sessionId);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(connected.url);
+
+    const composer = page.getByRole("textbox", { name: "Message local session", exact: true });
+    await composer.fill("generate media artifacts");
+    await page.getByRole("button", { name: "Send to local session", exact: true }).click();
+
+    await expect(page.getByRole("img", { name: "generated-image.png", exact: true })).toBeVisible();
+    await expect(page.locator('video[aria-label="generated-video.mp4"]')).toHaveAttribute("src", /^blob:/u);
+
+    await page.reload();
+
+    await expect(page.getByRole("img", { name: "generated-image.png", exact: true })).toBeVisible();
+    const video = page.locator('video[aria-label="generated-video.mp4"]');
+    await expect(video).toBeVisible();
+    await expect(video).toHaveAttribute("controls", "");
+    await expect(video).toHaveAttribute("src", /^blob:/u);
+});
