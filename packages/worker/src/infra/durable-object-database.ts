@@ -52,6 +52,12 @@ class DurableObjectStatement {
 
     readonly all = async () => ({ results: this.#sql.exec(this.#query, ...this.#values).toArray(), success: true });
 
+    readonly raw = async () =>
+        this.#sql
+            .exec(this.#query, ...this.#values)
+            .toArray()
+            .map((row) => Object.values(row));
+
     readonly run = async () => this.runSynchronously();
 
     readonly runSynchronously = () => {
