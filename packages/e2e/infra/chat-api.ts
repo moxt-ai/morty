@@ -122,32 +122,32 @@ export class ChatApi {
         }
     };
 
-    async waitForOpenCode(harness: E2EHarness, pairingId: string) {
+    async waitForAgent(harness: E2EHarness, pairingId: string, agentId: string, agentLabel: string) {
         const paired = await harness.waitFor(
-            "Mobius pairing with OpenCode",
+            `Mobius pairing with ${agentLabel}`,
             () => this.#request(`/mobius-cloud/api/management/runtime-pairings/${encodeURIComponent(pairingId)}`),
             (status) =>
                 status.status === "paired" &&
                 Array.isArray(status.agents) &&
-                status.agents.some((agent) => object(agent, "agent").id === "opencode"),
+                status.agents.some((agent) => object(agent, "agent").id === agentId),
         );
         return { runtimeId: text(paired.runtimeId, "runtimeId") };
     }
 
-    async bindOpenCode(runtimeId: string) {
+    async bindAgent(runtimeId: string, agentId: string) {
         const identity = this.#requireIdentity();
         await this.#request(
             `/mobius-cloud/api/chat/projects/${encodeURIComponent(identity.projectId)}/bots/${encodeURIComponent(identity.botId)}/setup`,
             {
-                body: { runtimeId, agentRef: "opencode", workspaceRef: "default", agentConfigRevision: 1 },
+                body: { runtimeId, agentRef: agentId, workspaceRef: "default", agentConfigRevision: 1 },
             },
         );
     }
 
-    async waitForBinding(harness: E2EHarness) {
+    async waitForBinding(harness: E2EHarness, agentId: string, agentLabel: string) {
         const identity = this.#requireIdentity();
         await harness.waitFor(
-            "OpenCode Bot binding",
+            `${agentLabel} Bot binding`,
             () =>
                 this.#request(
                     `/mobius-cloud/api/chat/projects/${encodeURIComponent(identity.projectId)}/bots/${encodeURIComponent(identity.botId)}/workspace`,
@@ -158,7 +158,7 @@ export class ChatApi {
             (workspace) =>
                 workspace.status === "active" &&
                 workspace.selected !== null &&
-                object(workspace.selected, "selected").agentRef === "opencode",
+                object(workspace.selected, "selected").agentRef === agentId,
         );
     }
 

@@ -26,9 +26,13 @@ export async function createTestRuntime(harness: E2EHarness) {
     );
     await chmod(binary, 0o700);
     const stack = await LocalStack.create(harness, {
-        binary,
-        xdgConfigHome: harness.workDirectory,
+        acpBinary: binary,
+        adapterOverrideVariable: "MOBIUS_OPENCODE_PATH",
+        description: "stateful fake OpenCode ACP agent",
+        id: "opencode",
+        label: "OpenCode",
         publishableKey: "pk_test_c21hc2hpbmctc3BpZGVyLTg1NzQuY2xlcmsuYWNjb3VudHMuZGV2JA",
+        runtimeEnvironment: {},
     });
     await stack.startChat(await stack.startPlatform());
     const browser = await chromium.launch({ channel: "chrome", headless: true });
@@ -98,9 +102,14 @@ export async function createTestRuntime(harness: E2EHarness) {
                 await openChat();
                 const pairing = await chat.createPairing();
                 await stack.startMobius(pairing);
-                const paired = await chat.waitForOpenCode(harness, text(pairing.pairingId, "pairingId"));
-                await chat.bindOpenCode(paired.runtimeId);
-                await chat.waitForBinding(harness);
+                const paired = await chat.waitForAgent(
+                    harness,
+                    text(pairing.pairingId, "pairingId"),
+                    stack.agent.id,
+                    stack.agent.label,
+                );
+                await chat.bindAgent(paired.runtimeId, stack.agent.id);
+                await chat.waitForBinding(harness, stack.agent.id, stack.agent.label);
                 await page.reload();
             },
             followInstructions: async (instructionUrl: string, sessionId?: string) => {

@@ -26,6 +26,7 @@
         "test:web": "pnpm --dir packages/web exec vitest run --coverage",
         "test:worker": "pnpm --dir packages/worker exec vitest run --coverage",
         "test:e2e": "pnpm --filter @moxt-ai/mobius-chat-e2e test",
+        "test:e2e:codex": "node scripts/e2e/codex-live.mjs",
         "test:e2e:opencode": "node scripts/e2e/opencode-live.mjs",
         "knip": "knip",
         "check": "pnpm typecheck && pnpm build && pnpm lint && pnpm test:coverage && pnpm knip",
