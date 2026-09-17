@@ -15,17 +15,14 @@ The Mobius submodule has its own report and informational 100% target. Code exec
 separate subprocess or externally bundled Worker is not credited by the parent
 runner; its source remains in the denominator until instrumented coverage exists.
 
-CI saves the combined report as a `coverage-report` artifact for 14 days using
-the permitted GitHub-owned artifact action. Upload failures are non-blocking.
-On pull requests and merge-queue events, CI runs type checking, build, lint/architecture,
-web tests, Worker tests, unused-code checks, browser E2E, live OpenCode E2E, and D1
-migration validation as independent parallel jobs. Web and Worker tests each upload
-coverage execution maps; the `check` job merges them into the combined report using
-`pnpm test:coverage:merge`. Run the suites separately with `pnpm test:web` and
-`pnpm test:worker`. All jobs
-finish even if another fails. The required `check` status succeeds only when every
-parallel job succeeds, keeping failures and cancellations blocking. If Codecov uploads
-are enabled later, project and patch statuses are configured as informational.
+On pull requests and merge-queue events, CI installs the workspace once for static
+verification and once for tests. The `static` job runs type checking, build,
+lint/architecture, unused-code checks, and local D1 migration validation. The `tests`
+job runs the web and Worker suites once, merges their execution maps, and saves the
+combined report as a non-blocking `coverage-report` artifact for 14 days. Run the
+suites separately with `pnpm test:web` and `pnpm test:worker`. The required `check`
+status only combines the two job results; it does not check out the repository or
+install dependencies again.
 
 Main pushes and manual deployments skip these checks and deploy after Worker
 configuration validation; checks are not repeated after merging.
@@ -145,8 +142,7 @@ run individual journeys in parallel, including scenarios in the same file. Each
 journey owns temporary storage, Runtime state, dynamic HTTP and inspector ports,
 and its browser. Run these journeys locally with `pnpm test:e2e`; failed journeys
 retain their own diagnostics directories. The `Verify browser journeys` job is no
-longer scheduled in CI, and the required `check` status waits for the parallel
-quality-check matrix. HTTP integration
+longer scheduled in CI. HTTP integration
 coverage additionally runs the TypeScript CLI as a subprocess to verify identity
 reuse, ticket consumption, private configuration, and Runtime replacement failures.
 
@@ -161,8 +157,8 @@ Then the reply contains each text delta once. Given exhausted stream recovery,
 Then Chat shows a connection failure instead of silently remaining live.
 
 Run `pnpm test:e2e:opencode` for the live OpenCode browser journey. It is excluded
-from local `pnpm check` and runs in parallel PR/merge-queue CI as well as nightly
-in GitHub Actions. It uses the latest OpenCode release and an available free model.
+from local `pnpm check` and PR/merge-queue CI and runs nightly in GitHub Actions.
+It uses the latest OpenCode release with a local fake LLM provider.
 Verify other visual details
 manually with the `agent-browser` CLI against the running application. A first-time
 visitor should

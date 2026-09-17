@@ -3,10 +3,10 @@
 [![CI](https://github.com/moxt-ai/mobius-chat/actions/workflows/ci.yml/badge.svg)](https://github.com/moxt-ai/mobius-chat/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/moxt-ai/mobius-chat/branch/main/graph/badge.svg)](https://codecov.io/gh/moxt-ai/mobius-chat)
 
-The engineering-quality target is 95% across lines, statements, functions, and
-branches. `pnpm check` enforces the target over combined web and Worker production
-TS/TSX coverage, together with architecture constraints. The coverage badge shows
-the measured result, not the target. See [Testing](TESTING.md) for scope and commands.
+`pnpm check` runs the same static verification and test coverage used by CI.
+Coverage reports a 95% advisory target across lines, statements, functions, and
+branches; missing coverage is visible but does not fail the build. See
+[Testing](TESTING.md) for scope and commands.
 
 Mobius Cloud is one web application and one Cloudflare Worker. Clerk authenticates
 individual users; Clerk Organizations and Cloud workspaces are not used. A signed-in
@@ -29,9 +29,9 @@ packages/
     src/gateway/               # Request dispatch and all external gateways
 ```
 
-There are no Git submodules, `apps/` packages, storage shards, or standalone Slack
-database. Each deployment environment uses one `DATABASE` D1 binding and one
-`ATTACHMENTS` R2 binding.
+The pinned Mobius source under `third-party/mobius` supplies the protocol, SDK, and
+local end-to-end stack. Each deployment environment uses regional Chat databases and
+attachment buckets plus one Slack database and attachment bucket.
 
 ## Development
 
