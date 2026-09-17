@@ -176,7 +176,12 @@ export class ChatService {
         return result;
     };
 
-    readonly continueNativeSession = async (scope: ChatScope, harness: string, sessionId: string) => {
+    readonly continueNativeSession = async (
+        scope: ChatScope,
+        harness: string,
+        sessionId: string,
+        action: "fork" | "import",
+    ) => {
         const workspace = await this.workspace(scope);
         const selected = workspace.selected;
         const agent = workspace.agents.find(
@@ -206,7 +211,7 @@ export class ChatService {
             scope.projectId,
             agent.runtimeId,
             {
-                action: "fork",
+                action,
                 discoveryId: found.sessionId,
                 agentId: agent.agentRef,
                 directoryId: entry.directoryId,
@@ -215,10 +220,12 @@ export class ChatService {
             },
             scope.signal,
         );
-        if (result.action !== "fork" || result.ready.sessionId !== result.targetSessionId) {
+        if (result.action !== action || result.ready.sessionId !== result.targetSessionId) {
             throw new PlatformProjectError(
-                "CONTINUATION_UNAVAILABLE",
-                "The handoff session could not be continued.",
+                action === "import" ? "IMPORT_UNAVAILABLE" : "CONTINUATION_UNAVAILABLE",
+                action === "import"
+                    ? "The original session could not be imported. You can choose Fork session instead."
+                    : "The handoff session could not be forked.",
                 409,
             );
         }
@@ -228,7 +235,7 @@ export class ChatService {
             scope.userId,
             scope.botId,
             {
-                kind: "fork",
+                kind: action,
                 id: result.ready.sessionId,
                 title: result.title || "Untitled session",
                 data: JSON.stringify(stored),
@@ -237,7 +244,8 @@ export class ChatService {
         );
         this.#logger.info(
             {
-                event: "native-session-forked-from-handoff",
+                event:
+                    action === "fork" ? "native-session-forked-from-handoff" : "native-session-imported-from-handoff",
                 userId: scope.userId,
                 projectId: scope.projectId,
                 botId: scope.botId,

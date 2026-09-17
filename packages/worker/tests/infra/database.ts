@@ -37,8 +37,8 @@ export class InMemoryD1Database {
             "0002_anonymous_identity.sql",
             "0003_platform_project.sql",
             "0006_chat_managed_session.sql",
-            "0007_chat_managed_import.sql",
             "0008_remote_access.sql",
+            "0009_chat_managed_import.sql",
         ]) {
             this.#database.exec(readFileSync(new URL(`../../migrations/${migration}`, import.meta.url), "utf8"));
         }

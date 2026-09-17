@@ -23,9 +23,10 @@ local identity, and returns a browser handoff carrying the validated harness and
 session ID. The ready result includes the exact URL, its expiry, an owner-only PNG QR
 code, and the path to a private temporary text file containing a terminal-safe QR
 rendering. The bundled setup CLI decodes the PNG before returning it so the QR payload
-cannot differ from the URL. After transfer redemption, Chat finds that native session through the paired
-Runtime, forks it under an opaque entry capability, records it, and opens the independent
-continuation. Forking allows the originating harness to retain its active writer. Native
+cannot differ from the URL. The browser handoff shows the native session's harness and ID,
+then requires the user to import the original, fork an independent continuation, or skip it.
+The selected import or fork crosses the Chat boundary explicitly; an import failure never
+falls back to a fork without another user choice. Native
 session IDs are not returned by ordinary directory listings. The redeemed browser credential
 remains bound to that transfer's 24-hour lifetime. A user can choose **End remote access**
 from the continued Session; this revokes the entry and every browser credential redeemed from
@@ -168,9 +169,7 @@ the directory returns metadata only, selecting an entry fetches its history from
 `native-session/:id`; Import resumes it in Chat, while Fork creates a separate native
 Session. Cancelling the dialog creates no Chat-managed record. After import or fork, the
 result uses the normal Session message surface and can be stopped from the composer.
-Imported and forked Sessions reopen by `sessionId` in the saved page URL. Apply migrations
-`0006_chat_managed_session.sql` and `0007_chat_managed_import.sql` through the Durable
-Object schema migrator before serving a Project.
+Imported and forked Sessions reopen by `sessionId` in the saved page URL.
 The Worker discovers, imports, and forks native sessions through the Project SDK. Its
 `session-access` endpoint issues credentials scoped to the selected Session inside
 the user's Project. The browser uses those credentials with the Session SDK to

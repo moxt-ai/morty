@@ -142,17 +142,22 @@ export class BotChatApi {
         }
         return { ...stored, result };
     };
-    readonly continueNativeSession = async (botId: string, harness: string, sessionId: string, signal: AbortSignal) => {
+    readonly continueNativeSession = async (
+        botId: string,
+        harness: string,
+        sessionId: string,
+        action: "fork" | "import",
+        signal: AbortSignal,
+    ) => {
         const stored = v.parse(
             localSessionSchema,
-            await this.#request(botId, "continue-native-session", { harness, sessionId }, signal),
+            await this.#request(botId, "continue-native-session", { action, harness, sessionId }, signal),
         );
         const result = decodeNativeSessionResult(JSON.stringify(stored.result));
-        if (result.action !== "fork" || result.ready.sessionId !== result.targetSessionId) {
+        if (result.action !== action || result.ready.sessionId !== result.targetSessionId) {
             throw new CloudApiError("INVALID_SESSION", "The continued Chat session is invalid.");
         }
-        const action: "fork" = result.action;
-        return { ...stored, result: { ...result, action } };
+        return { ...stored, result };
     };
     readonly agentSettings = async (botId: string, signal: AbortSignal) => {
         const result = v.parse(

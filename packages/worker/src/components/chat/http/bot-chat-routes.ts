@@ -31,7 +31,11 @@ const nativeListInput = v.strictObject({
     discoveryId: v.nullable(platformIdentifier),
 });
 const nativeEntryInput = v.strictObject({ ...nativeIdentity, discoveryId: platformIdentifier });
-const nativeContinuationInput = v.strictObject({ harness: platformIdentifier, sessionId: platformIdentifier });
+const nativeContinuationInput = v.strictObject({
+    action: v.picklist(["fork", "import"]),
+    harness: platformIdentifier,
+    sessionId: platformIdentifier,
+});
 const nativeSessionInput = v.strictObject({ sessionId: platformIdentifier });
 const accessInput = v.union([
     v.strictObject({ conversationId: platformIdentifier }),
@@ -160,6 +164,7 @@ export function createBotChatRoutes() {
                         context.get("chatScope"),
                         input.harness,
                         input.sessionId,
+                        input.action,
                     ),
                 );
             },

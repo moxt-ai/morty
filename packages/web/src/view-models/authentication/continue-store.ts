@@ -4,15 +4,27 @@ import { ANONYMOUS_CREDENTIAL_KEY, AnonymousIdentityApi } from "@/services/ident
 type Handoff =
     | { readonly kind: "workspace" }
     | { readonly kind: "session"; readonly harness: string; readonly sessionId: string };
+type NativeSessionChoice = "fork" | "import" | "skip";
 type ContinueState =
-    | { readonly kind: "confirm"; readonly code: string; readonly handoff: Handoff }
-    | { readonly kind: "redeeming"; readonly code: string; readonly handoff: Handoff }
+    | {
+          readonly kind: "confirm";
+          readonly code: string;
+          readonly handoff: Handoff;
+          readonly replacesWorkspace: boolean;
+      }
+    | {
+          readonly kind: "redeeming";
+          readonly code: string;
+          readonly handoff: Handoff;
+          readonly choice: "workspace" | NativeSessionChoice;
+      }
     | { readonly kind: "failed"; readonly message: string }
     | { readonly kind: "invalid" };
 
 export interface ContinueStore {
     readonly state: ContinueState;
-    readonly confirm: () => void;
+    readonly continueSession: (choice: NativeSessionChoice) => void;
+    readonly continueWorkspace: () => void;
     readonly redeem: (signal: AbortSignal) => Promise<void>;
 }
 
@@ -33,18 +45,26 @@ function initialState(): ContinueState {
     }
     const handoff: Handoff =
         harness === null || sessionId === null ? { kind: "workspace" } : { kind: "session", harness, sessionId };
-    return window.localStorage.getItem(ANONYMOUS_CREDENTIAL_KEY) === null
-        ? { code, handoff, kind: "redeeming" }
-        : { code, handoff, kind: "confirm" };
+    const replacesWorkspace = window.localStorage.getItem(ANONYMOUS_CREDENTIAL_KEY) !== null;
+    if (handoff.kind === "session" || replacesWorkspace) {
+        return { code, handoff, kind: "confirm", replacesWorkspace };
+    }
+    return { choice: "workspace", code, handoff, kind: "redeeming" };
 }
 
 export const createContinueStore = () =>
     createStore<ContinueStore>()((set, get) => ({
         state: initialState(),
-        confirm: () => {
+        continueSession: (choice) => {
             const state = get().state;
-            if (state.kind === "confirm") {
-                set({ state: { ...state, kind: "redeeming" } });
+            if (state.kind === "confirm" && state.handoff.kind === "session") {
+                set({ state: { choice, code: state.code, handoff: state.handoff, kind: "redeeming" } });
+            }
+        },
+        continueWorkspace: () => {
+            const state = get().state;
+            if (state.kind === "confirm" && state.handoff.kind === "workspace") {
+                set({ state: { choice: "workspace", code: state.code, handoff: state.handoff, kind: "redeeming" } });
             }
         },
         redeem: async (signal) => {
@@ -61,8 +81,11 @@ export const createContinueStore = () =>
                     return;
                 }
                 const destination = new URL("/", window.location.origin);
-                destination.searchParams.set("harness", state.handoff.harness);
-                destination.searchParams.set("sessionId", state.handoff.sessionId);
+                if (state.choice !== "skip" && state.choice !== "workspace") {
+                    destination.searchParams.set("harness", state.handoff.harness);
+                    destination.searchParams.set("sessionId", state.handoff.sessionId);
+                    destination.searchParams.set("nativeSessionAction", state.choice);
+                }
                 destination.searchParams.set("remoteAccess", "1");
                 window.location.replace(destination);
             } catch (cause) {

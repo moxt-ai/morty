@@ -6,6 +6,7 @@ import agentPairing from "../../migrations/0005_agent_pairing.sql?raw";
 import managedSession from "../../migrations/0006_chat_managed_session.sql?raw";
 import transferRedemptions from "../../migrations/0007_identity_transfer_redemptions.sql?raw";
 import remoteAccess from "../../migrations/0008_remote_access.sql?raw";
+import managedSessionImport from "../../migrations/0009_chat_managed_import.sql?raw";
 
 const migrations = [
     management,
@@ -16,6 +17,7 @@ const migrations = [
     managedSession,
     transferRedemptions,
     remoteAccess,
+    managedSessionImport,
 ];
 
 type BoundValue = ArrayBuffer | string | number | null;

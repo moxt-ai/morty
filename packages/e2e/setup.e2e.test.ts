@@ -26,7 +26,7 @@ test("Given setup creates a browser handoff, When setup becomes ready, Then the 
     expect(decoded).toMatchObject({ data: connected.url });
 });
 
-test("Given a user following setup.md, When they continue a local session and reload, Then its history remains available", async ({
+test("Given a setup handoff names a native session, When the user imports it and reloads, Then its history remains available", async ({
     runtime,
 }) => {
     const { page } = runtime;
@@ -44,10 +44,16 @@ test("Given a user following setup.md, When they continue a local session and re
                 response.request().method() === "POST" &&
                 new URL(response.url()).pathname.endsWith("/continue-native-session"),
         ),
-        page.goto(connected.url),
+        (async () => {
+            await page.goto(connected.url);
+            await expect(page.getByRole("heading", { name: "Continue native session" })).toBeVisible();
+            await expect(page.getByText("opencode", { exact: true })).toBeVisible();
+            await expect(page.getByText(sessionId, { exact: true })).toBeVisible();
+            await page.getByRole("button", { name: "Import session", exact: true }).click();
+        })(),
     ]);
     expect(continuation.status()).toBe(200);
-    expect(await continuation.json()).toMatchObject({ result: { action: "fork" } });
+    expect(await continuation.json()).toMatchObject({ result: { action: "import" } });
     const messages = page.getByRole("log", { name: "Messages", exact: true });
     await expect(messages).toContainText("Continue this setup session");
 
@@ -63,6 +69,29 @@ test("Given a user following setup.md, When they continue a local session and re
     expect(page.url()).toBe(conversationUrl);
 });
 
+test("Given a setup handoff names a native session, When the user skips it, Then Chat opens without importing or forking", async ({
+    runtime,
+}) => {
+    const { page } = runtime;
+    const sessionId = "setup-skipped-session";
+    await runtime.seedNativeSession(sessionId, "Do not continue this session");
+    const connected = await runtime.followInstructions("/setup.md", sessionId);
+    const continuationRequests: string[] = [];
+    page.on("request", (request) => {
+        if (new URL(request.url()).pathname.endsWith("/continue-native-session")) {
+            continuationRequests.push(request.url());
+        }
+    });
+
+    await page.goto(connected.url);
+
+    await expect(page.getByRole("button", { name: "Import session", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Fork session", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Skip", exact: true }).click();
+    await expect(page.getByRole("textbox", { name: "Message", exact: true })).toBeVisible();
+    expect(continuationRequests).toEqual([]);
+});
+
 test("Given a continued setup session needs approval, When the user decides on mobile and reloads, Then pending interactions remain actionable exactly once", async ({
     runtime,
 }) => {
@@ -72,6 +101,7 @@ test("Given a continued setup session needs approval, When the user decides on m
     await runtime.seedNativeSession(sessionId, "Prepare permission handling");
     const connected = await runtime.followInstructions("/setup.md", sessionId);
     await page.goto(connected.url);
+    await page.getByRole("button", { name: "Fork session", exact: true }).click();
 
     const composer = page.getByRole("textbox", { name: "Message", exact: true });
     await expect(composer).toBeVisible();
@@ -119,6 +149,7 @@ test("Given a continued setup session exposes task controls, When the user steer
     const connected = await runtime.followInstructions("/setup.md", sessionId);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(connected.url);
+    await page.getByRole("button", { name: "Fork session", exact: true }).click();
 
     const composer = page.getByRole("textbox", { name: "Message", exact: true });
     await composer.fill("wait for steering");
@@ -169,6 +200,7 @@ test("Given a continued setup session, When the agent creates image and video ou
     const connected = await runtime.followInstructions("/setup.md", sessionId);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(connected.url);
+    await page.getByRole("button", { name: "Fork session", exact: true }).click();
 
     const composer = page.getByRole("textbox", { name: "Message", exact: true });
     await composer.fill("generate media artifacts");
@@ -194,6 +226,7 @@ test("Given a remote setup session, When message delivery cannot be confirmed, T
     await runtime.seedNativeSession(sessionId, "Prepare uncertain delivery");
     const connected = await runtime.followInstructions("/setup.md", sessionId);
     await page.goto(connected.url);
+    await page.getByRole("button", { name: "Fork session", exact: true }).click();
     const composer = page.getByRole("textbox", { name: "Message", exact: true });
     await expect(composer).toBeVisible();
 
@@ -217,6 +250,7 @@ test("Given remote access to a running local session, When the user ends access,
     await runtime.seedNativeSession(sessionId, "Keep the local task alive");
     const connected = await runtime.followInstructions("/setup.md", sessionId);
     await page.goto(connected.url);
+    await page.getByRole("button", { name: "Fork session", exact: true }).click();
 
     await page.getByRole("button", { name: "End remote access", exact: true }).click();
     await page.getByRole("button", { name: "Confirm end access", exact: true }).click();

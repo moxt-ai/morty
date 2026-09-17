@@ -164,14 +164,23 @@ export function BotChatHome({
         | { readonly kind: "draft"; readonly key: string }
         | { readonly kind: "conversation-access"; readonly conversationId: string }
         | { readonly kind: "session-access"; readonly sessionId: string }
-        | { readonly kind: "continue"; readonly harness: string; readonly sessionId: string }
+        | {
+              readonly kind: "continue";
+              readonly action: "fork" | "import";
+              readonly harness: string;
+              readonly sessionId: string;
+          }
     >(() => {
         const url = new URL(window.location.href);
         const sessionId = url.searchParams.get("sessionId");
         const harness = url.searchParams.get("harness");
+        const requestedAction = url.searchParams.get("nativeSessionAction");
         if (sessionId !== null && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(sessionId)) {
             if (harness !== null && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(harness)) {
-                return { kind: "continue", harness, sessionId };
+                if (requestedAction === null || requestedAction === "fork" || requestedAction === "import") {
+                    return { kind: "continue", action: requestedAction ?? "fork", harness, sessionId };
+                }
+                return { kind: "draft", key: crypto.randomUUID() };
             }
             return { kind: "session-access", sessionId };
         }
@@ -295,11 +304,13 @@ export function BotChatHome({
                     bot.botId,
                     target.current.harness,
                     target.current.sessionId,
+                    target.current.action,
                     controller.signal,
                 );
                 controller.signal.throwIfAborted();
                 const url = new URL(window.location.href);
                 url.searchParams.delete("harness");
+                url.searchParams.delete("nativeSessionAction");
                 url.searchParams.set("sessionId", session.result.ready.sessionId);
                 window.history.replaceState(window.history.state, "", url);
                 target.current = { kind: "session-access", sessionId: session.result.ready.sessionId };
@@ -618,7 +629,24 @@ export function BotChatHome({
                             ) : state.kind === "failed" ? (
                                 <div className="m-auto grid justify-items-center gap-4 text-center">
                                     <p role="alert">{state.message}</p>
-                                    <Button onClick={() => retry((value) => value + 1)}>Reconnect</Button>
+                                    {target.current.kind === "continue" && target.current.action === "import" ? (
+                                        <Button
+                                            onClick={() => {
+                                                if (target.current.kind !== "continue") {
+                                                    return;
+                                                }
+                                                target.current = { ...target.current, action: "fork" };
+                                                const url = new URL(window.location.href);
+                                                url.searchParams.set("nativeSessionAction", "fork");
+                                                window.history.replaceState(window.history.state, "", url);
+                                                retry((value) => value + 1);
+                                            }}
+                                        >
+                                            Fork session instead
+                                        </Button>
+                                    ) : (
+                                        <Button onClick={() => retry((value) => value + 1)}>Reconnect</Button>
+                                    )}
                                     <PairingInstruction requests={requests} />
                                 </div>
                             ) : active === null ? null : active.kind === "draft" ||
