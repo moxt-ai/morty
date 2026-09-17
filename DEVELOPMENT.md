@@ -21,8 +21,9 @@ Runtime to its current user and Bot and directs the user back to Chat.
 social posts. That flow requires the current harness session ID, creates or reuses a
 local identity, and returns a browser handoff carrying the validated harness and native
 session ID. The ready result includes the exact URL, its expiry, an owner-only PNG QR
-code, and a terminal-safe QR rendering. The bundled setup CLI decodes the PNG before
-returning it so the QR payload cannot differ from the URL. After transfer redemption, Chat finds that native session through the paired
+code, and the path to a private temporary text file containing a terminal-safe QR
+rendering. The bundled setup CLI decodes the PNG before returning it so the QR payload
+cannot differ from the URL. After transfer redemption, Chat finds that native session through the paired
 Runtime, forks it under an opaque entry capability, records it, and opens the independent
 continuation. Forking allows the originating harness to retain its active writer. Native
 session IDs are not returned by ordinary directory listings. The redeemed browser credential

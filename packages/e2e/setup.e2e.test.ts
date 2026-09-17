@@ -4,7 +4,7 @@ import { PNG } from "pngjs";
 import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
-test("Given setup creates a browser handoff, When setup becomes ready, Then the exact link and a private QR are available", async ({
+test("Given setup creates a browser handoff, When setup becomes ready, Then the exact link and private QR files are available", async ({
     runtime,
 }) => {
     const sessionId = "setup-qr-session";
@@ -14,7 +14,8 @@ test("Given setup creates a browser handoff, When setup becomes ready, Then the 
 
     expect(connected.expiresAt).toBeTruthy();
     expect(connected.message).toContain("Keep the Runtime online");
-    expect(connected.qrText).toContain("█");
+    expect((await stat(connected.qrTextPath)).mode & 0o777).toBe(0o600);
+    expect(await readFile(connected.qrTextPath, "utf8")).toContain("█");
     expect((await stat(connected.qrPath)).mode & 0o777).toBe(0o600);
     const image = PNG.sync.read(await readFile(connected.qrPath));
     const decoder: unknown = jsQrImport;

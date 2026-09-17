@@ -558,19 +558,26 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             fail("QR_VERIFICATION_FAILED");
         }
 
+        const qrText = await QRCode.toString(value, { type: "utf8", errorCorrectionLevel: "M", margin: 2 });
         const qrPath = join(context.directory, "handoff-qr.png");
-        const temporary = join(context.directory, `.handoff-qr-${crypto.randomUUID()}.png`);
+        const qrTextPath = join(context.directory, "handoff-qr.txt");
+        const temporaryImage = join(context.directory, `.handoff-qr-${crypto.randomUUID()}.png`);
+        const temporaryText = join(context.directory, `.handoff-qr-${crypto.randomUUID()}.txt`);
         try {
-            await writePrivateFile(temporary, image);
-            await rename(temporary, qrPath);
+            await writePrivateFile(temporaryImage, image);
+            await writePrivateFile(temporaryText, qrText);
+            await rename(temporaryImage, qrPath);
+            await rename(temporaryText, qrTextPath);
             await privatePath(qrPath, false);
+            await privatePath(qrTextPath, false);
         } finally {
-            await rm(temporary, { force: true });
+            await rm(temporaryImage, { force: true });
+            await rm(temporaryText, { force: true });
         }
 
         return {
             qrPath,
-            qrText: await QRCode.toString(value, { type: "utf8", errorCorrectionLevel: "M", margin: 2 }),
+            qrTextPath,
         };
     }
 

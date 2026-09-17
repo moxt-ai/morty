@@ -32,8 +32,10 @@ Do not ask for an additional replacement confirmation.
    Honor an explicit user choice instead. Complete that harness's installation and
    authentication if needed; do not ask the user to choose when your own harness is available.
 
-Run this command in the background so it keeps running after this reply. Closing
-this conversation stops the Runtime it started.
+Start this command with your harness's background execution support, then poll its
+output every five seconds until it reports `status: "ready"` or an error. Do not run
+it as a foreground command or terminate it after it becomes ready: the script stays
+running to keep the Runtime alive. Closing this conversation stops the Runtime it started.
 
 ```sh
 node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --harness "$HARNESS" --session-id "$SESSION_ID"
@@ -52,11 +54,14 @@ means the binding is active and the selected Runtime/agent is online; it does no
 claim a successful test message.
 
 Return the exact clickable browser `url`, QR code, and `expiresAt` from the ready result.
-The QR payload is the exact same URL. When running in a TUI, show `qrText` in a
-plain-text block without changing its spacing. Otherwise, when the harness can display
-a local image, show the owner-only PNG at `qrPath`; fall back to the same `qrText`
-rendering if it cannot. The link identifies this harness session so Chat can import it
-and open it after the handoff. The link is valid for **24 hours**, can be successfully
+The QR payload is the exact same URL, and the ready result provides both QR forms:
+a terminal-safe QR code in the private text file at `qrTextPath` and an owner-only PNG
+at `qrPath`. In a TUI, read `qrTextPath` and show its contents in a plain-text block
+without changing the spacing. Choose the PNG instead only when the client reliably
+displays local images. If you show the PNG, tell the user that a text QR is also
+available and can be shown in the TUI if needed; read and render `qrTextPath` when they
+need it or when the image cannot be displayed. The link identifies this harness session
+so Chat can import it and open it after the handoff. The link is valid for **24 hours**, can be successfully
 opened at most **five times**, and opens the same user and Bot each time. Never open,
 preview, scan, or redeem it yourself because doing so consumes one use. Tell the user:
 **Open this link or scan the QR code to chat. It can be used up to five times before it
