@@ -19,7 +19,7 @@ CREATE INDEX slack_app_tenant_idx ON slack_app(tenant_id);
 CREATE TABLE slack_installation (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   tenant_id TEXT NOT NULL,
-  slack_app_record_id INTEGER NOT NULL REFERENCES slack_app(id),
+  slack_app_record_id INTEGER NOT NULL,
   slack_team_id TEXT NOT NULL,
   slack_team_name TEXT,
   slack_bot_user_id TEXT NOT NULL,
@@ -37,7 +37,7 @@ CREATE INDEX slack_installation_bot_user_idx ON slack_installation(slack_bot_use
 CREATE TABLE slack_conversation_mapping (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   tenant_id TEXT NOT NULL,
-  slack_app_record_id INTEGER NOT NULL REFERENCES slack_app(id),
+  slack_app_record_id INTEGER NOT NULL,
   slack_team_id TEXT NOT NULL,
   slack_channel_id TEXT NOT NULL,
   channel_type TEXT NOT NULL CHECK (channel_type IN ('im', 'channel', 'group', 'mpim')),
@@ -60,7 +60,7 @@ CREATE TABLE slack_message_delivery (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   tenant_id TEXT NOT NULL,
   client_message_id TEXT NOT NULL UNIQUE,
-  conversation_mapping_id INTEGER NOT NULL REFERENCES slack_conversation_mapping(id),
+  conversation_mapping_id INTEGER NOT NULL,
   reply_thread_ts TEXT,
   status_thread_ts TEXT,
   trigger_sender_info TEXT,
@@ -76,7 +76,7 @@ CREATE INDEX slack_message_delivery_conversation_idx ON slack_message_delivery(c
 CREATE TABLE slack_pending_message (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   tenant_id TEXT NOT NULL,
-  conversation_mapping_id INTEGER NOT NULL REFERENCES slack_conversation_mapping(id),
+  conversation_mapping_id INTEGER NOT NULL,
   slack_event_id TEXT NOT NULL,
   payload TEXT NOT NULL,
   created_at INTEGER NOT NULL,
@@ -137,8 +137,7 @@ CREATE TABLE slack_mobius_binding (
     connection_id TEXT NOT NULL,
     delivery_target_id TEXT NOT NULL,
     credential_encrypted TEXT NOT NULL,
-    PRIMARY KEY (tenant_id, slack_bot_id),
-    FOREIGN KEY (tenant_id, slack_bot_id) REFERENCES slack_app(tenant_id, slack_bot_id)
+    PRIMARY KEY (tenant_id, slack_bot_id)
 );
 
 CREATE TABLE managed_bot (
@@ -154,7 +153,7 @@ CREATE INDEX managed_bot_user_idx ON managed_bot(user_id, created_at);
 CREATE TABLE chat_session (
     user_id TEXT NOT NULL,
     session_id TEXT NOT NULL,
-    bot_id TEXT NOT NULL REFERENCES managed_bot(bot_id),
+    bot_id TEXT NOT NULL,
     title TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
@@ -166,7 +165,7 @@ CREATE INDEX chat_session_user_updated_idx ON chat_session(user_id, updated_at D
 CREATE TABLE chat_access_token (
     access_token_id TEXT PRIMARY KEY NOT NULL,
     user_id TEXT NOT NULL,
-    bot_id TEXT NOT NULL REFERENCES managed_bot(bot_id),
+    bot_id TEXT NOT NULL,
     created_at INTEGER NOT NULL
 );
 

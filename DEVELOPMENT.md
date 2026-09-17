@@ -107,6 +107,7 @@ Feature logic stays below `packages/worker/src/components`:
 Each component exports its Hono subtree from `http/index.ts`; the Worker application only mounts those subtrees.
 Cross-component HTTP assembly stays under `packages/worker/src/composition`.
 External system adapters stay directly under `packages/worker/src/gateway`; components do not contain gateway directories.
+Database table definitions stay under `packages/worker/src/schema`, with one table per file.
 
 Slack is source code in the Worker package, not an embedded package or standalone
 deployment. Shared runtime helpers remain directly under `packages/worker/src/infra`.

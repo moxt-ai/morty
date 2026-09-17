@@ -13,7 +13,7 @@ CREATE INDEX IF NOT EXISTS managed_bot_user_idx ON managed_bot(user_id, created_
 CREATE TABLE IF NOT EXISTS chat_session (
     user_id TEXT NOT NULL,
     session_id TEXT NOT NULL,
-    bot_id TEXT NOT NULL REFERENCES managed_bot(bot_id),
+    bot_id TEXT NOT NULL,
     title TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
@@ -25,7 +25,7 @@ CREATE INDEX IF NOT EXISTS chat_session_user_updated_idx ON chat_session(user_id
 CREATE TABLE IF NOT EXISTS chat_access_token (
     access_token_id TEXT PRIMARY KEY NOT NULL,
     user_id TEXT NOT NULL,
-    bot_id TEXT NOT NULL REFERENCES managed_bot(bot_id),
+    bot_id TEXT NOT NULL,
     created_at INTEGER NOT NULL
 );
 

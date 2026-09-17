@@ -59,6 +59,10 @@ Make illegal states unrepresentable.
 - Add an abstraction only for a real external boundary, a second real use case, or proven duplication.
 - Do not add speculative extension points, generic frameworks, or unused layers.
 
+## Database schema
+
+- Do not define foreign-key constraints. Enforce relationships and deletion behavior explicitly in application logic.
+
 ## Verification
 
 Run `pnpm check` before submitting a pull request.
