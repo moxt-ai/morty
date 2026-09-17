@@ -54,15 +54,11 @@ jobs:
           SLACK_OAUTH_STATE_SIGNING_KEY: ${{ secrets.SLACK_OAUTH_STATE_SIGNING_KEY }}
           SLACK_TOKEN_ENCRYPTION_KEY: ${{ secrets.SLACK_TOKEN_ENCRYPTION_KEY }}
 
-  checks:
-    name: ${{ matrix.check }}
+  static:
+    name: static
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        check: [typecheck, build, lint, "test:web", "test:worker", knip, migrations]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -72,33 +68,13 @@ jobs:
         with:
           mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
 
-      - name: Run ${{ matrix.check }}
-        if: matrix.check != 'migrations'
-        run: pnpm "$CHECK_SCRIPT"
-        env:
-          CHECK_SCRIPT: ${{ matrix.check }}
+      - run: pnpm check:static
 
-      - name: Save suite coverage for merging
-        if: ${{ !cancelled() && (matrix.check == 'test:web' || matrix.check == 'test:worker') }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: coverage-suite-${{ matrix.check == 'test:web' && 'web' || 'worker' }}
-          path: coverage/
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Validate Cloud D1 migrations
-        if: matrix.check == 'migrations'
-        run: |
-          pnpm exec wrangler d1 migrations apply CHAT_DATABASE_APAC --local
-          pnpm exec wrangler d1 migrations apply CHAT_DATABASE_WNAM --local
-
-  check:
-    name: check
-    needs: [checks]
-    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
+  tests:
+    name: tests
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -108,17 +84,9 @@ jobs:
         with:
           mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
 
-      - name: Download suite coverage
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          pattern: coverage-suite-*
-          merge-multiple: true
-          path: coverage/
+      - run: pnpm test:coverage
 
-      - name: Merge web and Worker coverage
-        run: pnpm test:coverage:merge
-
-      - name: Save combined coverage report
+      - name: Save coverage report
         continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -126,11 +94,20 @@ jobs:
           path: coverage/
           retention-days: 14
 
-      - name: Require every parallel check to pass
-        if: always()
-        run: test "$CHECKS_RESULT" = success
+  check:
+    name: check
+    needs: [static, tests]
+    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require static checks and tests to pass
+        run: |
+          test "$STATIC_RESULT" = success
+          test "$TESTS_RESULT" = success
         env:
-          CHECKS_RESULT: ${{ needs.checks.result }}
+          STATIC_RESULT: ${{ needs.static.result }}
+          TESTS_RESULT: ${{ needs.tests.result }}
 
   deploy:
     needs: [validate-worker-config]
