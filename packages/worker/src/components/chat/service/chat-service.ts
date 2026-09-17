@@ -147,7 +147,7 @@ export class ChatService {
     };
 
     readonly managedSession = async (scope: ChatScope, sessionId: string) =>
-        await this.#chatSessions.readFork(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal);
+        await this.#chatSessions.readLocalSession(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal);
 
     readonly nativeSessions = async (scope: ChatScope, runtimeId: string, input: NativeListInput) => {
         const result = await this.#platform.nativeSessions(scope.projectId, runtimeId, input, scope.signal);
@@ -201,7 +201,7 @@ export class ChatService {
             scope.projectId,
             agent.runtimeId,
             {
-                action: "fork",
+                action: "attach",
                 discoveryId: found.sessionId,
                 agentId: agent.agentRef,
                 directoryId: entry.directoryId,
@@ -210,7 +210,7 @@ export class ChatService {
             },
             scope.signal,
         );
-        if (result.action !== "fork" || result.ready.sessionId !== result.targetSessionId) {
+        if (result.action !== "attach" || result.ready.sessionId !== result.targetSessionId) {
             throw new PlatformProjectError(
                 "CONTINUATION_UNAVAILABLE",
                 "The handoff session could not be continued.",
@@ -223,7 +223,7 @@ export class ChatService {
             scope.userId,
             scope.botId,
             {
-                kind: "fork",
+                kind: "handoff",
                 id: result.ready.sessionId,
                 title: result.title || "Untitled session",
                 data: JSON.stringify(stored),
@@ -232,7 +232,7 @@ export class ChatService {
         );
         this.#logger.info(
             {
-                event: "native-session-forked-from-handoff",
+                event: "native-session-attached-for-handoff",
                 userId: scope.userId,
                 projectId: scope.projectId,
                 botId: scope.botId,

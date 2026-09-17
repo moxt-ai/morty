@@ -20,7 +20,7 @@ const accessSchema = v.pipe(
 export type ChatAccess = v.InferOutput<typeof accessSchema>;
 const managedSessionSchema = v.pipe(
     v.object({
-        kind: v.picklist(["conversation", "fork"]),
+        kind: v.picklist(["conversation", "fork", "handoff"]),
         id: identifier,
         title: v.string(),
         projectId: identifier,
@@ -137,7 +137,10 @@ export class BotChatApi {
             await this.#request(botId, "managed-session", { sessionId }, signal),
         );
         const result = decodeNativeSessionResult(JSON.stringify(stored.result));
-        if ((result.action !== "fork" && result.action !== "import") || result.ready.sessionId !== sessionId) {
+        if (
+            (result.action !== "fork" && result.action !== "import" && result.action !== "attach") ||
+            result.ready.sessionId !== sessionId
+        ) {
             throw new CloudApiError("INVALID_SESSION", "The saved Chat session is invalid.");
         }
         return { ...stored, result };
@@ -148,10 +151,10 @@ export class BotChatApi {
             await this.#request(botId, "continue-native-session", { harness, sessionId }, signal),
         );
         const result = decodeNativeSessionResult(JSON.stringify(stored.result));
-        if (result.action !== "fork" || result.ready.sessionId !== result.targetSessionId) {
+        if (result.action !== "attach" || result.ready.sessionId !== result.targetSessionId) {
             throw new CloudApiError("INVALID_SESSION", "The continued Chat session is invalid.");
         }
-        const action: "fork" = result.action;
+        const action: "attach" = result.action;
         return { ...stored, result: { ...result, action } };
     };
     readonly draftSettings = async (botId: string, signal: AbortSignal) => {

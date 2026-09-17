@@ -33,7 +33,12 @@ for (const mode of ["pair", "setup"]) {
                 page.goto(connected.url),
             ]);
             expect(continuation.status()).toBe(200);
-            expect(await continuation.json()).toMatchObject({ result: { action: "fork" } });
+            expect(await continuation.json()).toMatchObject({
+                result: {
+                    action: "attach",
+                    ready: { restored: true },
+                },
+            });
             await expect(page.getByRole("log", { name: "Local session messages", exact: true })).toContainText(
                 "Continue this setup session",
             );

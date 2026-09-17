@@ -873,7 +873,7 @@ export async function configureConversationSession(
 type NativeSessionAction =
     | { readonly action: "list"; readonly cursor: string | null }
     | {
-          readonly action: "fork" | "import";
+          readonly action: "fork" | "import" | "attach";
           readonly directoryId: string;
           readonly entryId: string;
       }
@@ -906,6 +906,7 @@ export async function manageNativeSession(
     switch (action.action) {
         case "import":
         case "fork":
+        case "attach":
             return await transport.nativeSession(
                 { ...identity, ...action, targetSessionId: crypto.randomUUID() },
                 signal,

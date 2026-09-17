@@ -5,7 +5,7 @@ const summarySchema = v.pipe(
     v.object({
         projectId: platformIdentifier,
         userId: platformIdentifier,
-        kind: v.picklist(["conversation", "fork"]),
+        kind: v.picklist(["conversation", "fork", "handoff"]),
         id: platformIdentifier,
         title: v.pipe(v.string(), v.maxLength(500)),
     }),
@@ -47,7 +47,12 @@ export class ManagedSessionStorage {
         botId: string,
         record:
             | { readonly kind: "conversation"; readonly id: string; readonly title: string }
-            | { readonly kind: "fork"; readonly id: string; readonly title: string; readonly data: string },
+            | {
+                  readonly kind: "fork" | "handoff";
+                  readonly id: string;
+                  readonly title: string;
+                  readonly data: string;
+              },
         signal: AbortSignal,
     ) => {
         const value = v.parse(summarySchema, { ...record, projectId, userId });
@@ -62,17 +67,23 @@ export class ManagedSessionStorage {
                 value.kind,
                 value.id,
                 value.title,
-                record.kind === "fork" ? record.data : null,
+                record.kind === "conversation" ? null : record.data,
                 Date.now(),
             )
             .run();
         signal.throwIfAborted();
     };
 
-    readonly readFork = async (projectId: string, userId: string, botId: string, id: string, signal: AbortSignal) => {
+    readonly readLocalSession = async (
+        projectId: string,
+        userId: string,
+        botId: string,
+        id: string,
+        signal: AbortSignal,
+    ) => {
         signal.throwIfAborted();
         const result = await this.#prepare(
-            "SELECT fork_data AS data FROM chat_managed_session WHERE project_id = ? AND user_id = ? AND bot_id = ? AND kind = 'fork' AND resource_id = ?",
+            "SELECT fork_data AS data FROM chat_managed_session WHERE project_id = ? AND user_id = ? AND bot_id = ? AND kind IN ('fork', 'handoff') AND resource_id = ?",
         )
             .bind(projectId, userId, botId, v.parse(platformIdentifier, id))
             .first();
