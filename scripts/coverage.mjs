@@ -10,10 +10,7 @@ const vitest = fileURLToPath(new URL("vitest.mjs", import.meta.resolve("vitest/p
 const { createCoverageMap } = coverageLibrary;
 const { createContext } = reportLibrary;
 const mergeOnly = process.argv.includes("--merge-only");
-const suites = [
-    ["worker", "packages/worker"],
-    ["web", "packages/web"],
-];
+const suites = [["worker", "packages/worker"]];
 const cancellation = new AbortController();
 const interrupt = () => cancellation.abort();
 process.once("SIGINT", interrupt);

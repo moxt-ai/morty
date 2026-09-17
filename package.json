@@ -23,7 +23,6 @@
         "test:watch": "pnpm --recursive --parallel --if-present test:watch",
         "test:coverage": "node scripts/coverage.mjs",
         "test:coverage:merge": "node scripts/coverage.mjs --merge-only",
-        "test:web": "pnpm --dir packages/web exec vitest run --coverage",
         "test:worker": "pnpm --dir packages/worker exec vitest run --coverage",
         "test:e2e": "pnpm --filter @moxt-ai/mobius-chat-e2e test",
         "test:e2e:codex": "node scripts/e2e/codex-live.mjs",

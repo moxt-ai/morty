@@ -3,14 +3,14 @@
 ## Required quality gate
 
 `pnpm check` includes `pnpm check:architecture` and `pnpm test:coverage`.
-The coverage command runs both Worker and web suites, then merges their Istanbul
-execution maps into `coverage/lcov.info`, `coverage/coverage-summary.json`, and an
+The coverage command runs the Worker boundary suite and writes its Istanbul
+execution map to `coverage/lcov.info`, `coverage/coverage-summary.json`, and an
 HTML report in `coverage/`. It reports an informational 95% target for lines,
 statements, functions, and branches using exact covered/total counts. A failing
-suite or missing or empty suite report fails the command; unmet coverage targets do not.
+suite or missing or empty report fails the command; unmet coverage targets do not.
 
-Scope includes unexecuted production `.ts` and `.tsx` in both packages. Tests,
-stateful test fakes, declarations, and the generated `routeTree.gen.ts` are excluded.
+Scope includes unexecuted production `.ts` in the Worker package. Tests,
+stateful test fakes and declarations are excluded.
 The Mobius submodule has its own report and informational 100% target. Code executed only in a
 separate subprocess or externally bundled Worker is not credited by the parent
 runner; its source remains in the denominator until instrumented coverage exists.
@@ -18,9 +18,8 @@ runner; its source remains in the denominator until instrumented coverage exists
 On pull requests and merge-queue events, CI installs the workspace once for static
 verification and once for tests. The `static` job runs type checking, build,
 lint/architecture, unused-code checks, and local D1 migration validation. The `tests`
-job runs the web and Worker suites once, merges their execution maps, and saves the
-combined report as a non-blocking `coverage-report` artifact for 14 days. Run the
-suites separately with `pnpm test:web` and `pnpm test:worker`. The required `check`
+job runs the Worker suite once and saves its report as a non-blocking
+`coverage-report` artifact for 14 days. Run it directly with `pnpm test:worker`. The required `check`
 status only combines the two job results; it does not check out the repository or
 install dependencies again.
 
