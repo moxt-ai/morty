@@ -11,6 +11,36 @@ import { encodeElicitationForm, readMultiselectDefaults } from "@/services/chat/
 import { respondToElicitation, respondToPermission } from "@/services/chat/mobius-transport";
 import { selectActiveConversation, useChatStore } from "@/view-models/chat-store";
 
+export type PermissionInteraction = Pick<
+    SessionPermissionRequestedEvent,
+    "interactionId" | "options" | "sessionId" | "title" | "toolCallId" | "toolKind"
+>;
+
+export type ElicitationInteraction = Pick<
+    SessionElicitationRequestedEvent,
+    "accepted" | "fields" | "interactionId" | "message" | "mode" | "sessionId" | "url"
+>;
+
+export interface PermissionInteractionResponse {
+    readonly interactionId: string;
+    readonly optionId: string;
+    readonly outcome: "cancelled" | "selected";
+    readonly sessionId: string;
+}
+
+export interface ElicitationInteractionResponse {
+    readonly action: ElicitationResponseRequest["action"];
+    readonly content: string;
+    readonly interactionId: string;
+    readonly sessionId: string;
+}
+
+type InteractionOperation =
+    | { readonly kind: "idle" }
+    | { readonly kind: "submitting"; readonly interactionId: string }
+    | { readonly kind: "submitted"; readonly interactionId: string }
+    | { readonly kind: "failed"; readonly interactionId: string; readonly message: string };
+
 function safeExternalUrl(value: string): string {
     try {
         const url = new URL(value);
@@ -106,11 +136,11 @@ function FieldControl({ field }: { readonly field: SessionElicitationField }) {
 function PermissionCard({
     busy,
     permission,
-    setBusy,
+    respond,
 }: {
     readonly busy: boolean;
-    readonly permission: SessionPermissionRequestedEvent;
-    readonly setBusy: (interactionId: string) => void;
+    readonly permission: PermissionInteraction;
+    readonly respond: (response: PermissionInteractionResponse) => void;
 }) {
     return (
         <section
@@ -134,13 +164,12 @@ function PermissionCard({
                                 disabled={busy}
                                 key={option.optionId}
                                 onClick={() => {
-                                    setBusy(permission.interactionId);
-                                    void respondToPermission({
+                                    respond({
                                         interactionId: permission.interactionId,
                                         optionId: option.optionId,
                                         outcome: "selected",
                                         sessionId: permission.sessionId,
-                                    }).finally(() => setBusy(""));
+                                    });
                                 }}
                                 size="sm"
                                 variant={option.kind.startsWith("allow") ? "default" : "outline"}
@@ -152,13 +181,12 @@ function PermissionCard({
                             className="min-h-11 md:min-h-10"
                             disabled={busy}
                             onClick={() => {
-                                setBusy(permission.interactionId);
-                                void respondToPermission({
+                                respond({
                                     interactionId: permission.interactionId,
                                     optionId: "",
                                     outcome: "cancelled",
                                     sessionId: permission.sessionId,
-                                }).finally(() => setBusy(""));
+                                });
                             }}
                             size="sm"
                             variant="ghost"
@@ -175,21 +203,20 @@ function PermissionCard({
 function ElicitationCard({
     busy,
     elicitation,
-    setBusy,
+    respond,
 }: {
     readonly busy: boolean;
-    readonly elicitation: SessionElicitationRequestedEvent;
-    readonly setBusy: (interactionId: string) => void;
+    readonly elicitation: ElicitationInteraction;
+    readonly respond: (response: ElicitationInteractionResponse) => void;
 }) {
     const externalUrl = safeExternalUrl(elicitation.url);
     const cancel = (action: ElicitationResponseRequest["action"]): void => {
-        setBusy(elicitation.interactionId);
-        void respondToElicitation({
+        respond({
             action,
             content: "",
             interactionId: elicitation.interactionId,
             sessionId: elicitation.sessionId,
-        }).finally(() => setBusy(""));
+        });
     };
 
     return (
@@ -234,13 +261,12 @@ function ElicitationCard({
                                             disabled={busy}
                                             onClick={() => {
                                                 window.open(externalUrl, "_blank", "noopener,noreferrer");
-                                                setBusy(elicitation.interactionId);
-                                                void respondToElicitation({
+                                                respond({
                                                     action: "accept",
                                                     content: "",
                                                     interactionId: elicitation.interactionId,
                                                     sessionId: elicitation.sessionId,
-                                                }).finally(() => setBusy(""));
+                                                });
                                             }}
                                             size="sm"
                                         >
@@ -273,8 +299,7 @@ function ElicitationCard({
                             className="mt-3 grid gap-3"
                             onSubmit={(event) => {
                                 event.preventDefault();
-                                setBusy(elicitation.interactionId);
-                                void respondToElicitation({
+                                respond({
                                     action: "accept",
                                     content: encodeElicitationForm(
                                         new FormData(event.currentTarget),
@@ -282,7 +307,7 @@ function ElicitationCard({
                                     ),
                                     interactionId: elicitation.interactionId,
                                     sessionId: elicitation.sessionId,
-                                }).finally(() => setBusy(""));
+                                });
                             }}
                         >
                             {elicitation.fields.map((field) => (
@@ -319,30 +344,76 @@ function ElicitationCard({
     );
 }
 
-export function SessionInteractions() {
-    const conversation = useChatStore(selectActiveConversation);
-    const [busyId, setBusyId] = useState("");
-    if (conversation.session.permissions.length === 0 && conversation.session.elicitations.length === 0) {
+export function SessionInteractionCards({
+    elicitations,
+    permissions,
+    onElicitationResponse,
+    onPermissionResponse,
+}: {
+    readonly elicitations: readonly ElicitationInteraction[];
+    readonly permissions: readonly PermissionInteraction[];
+    readonly onElicitationResponse: (response: ElicitationInteractionResponse) => Promise<void>;
+    readonly onPermissionResponse: (response: PermissionInteractionResponse) => Promise<void>;
+}) {
+    const [operation, setOperation] = useState<InteractionOperation>({ kind: "idle" });
+    if (permissions.length === 0 && elicitations.length === 0) {
         return null;
     }
+    const submit = (interactionId: string, response: () => Promise<void>): void => {
+        if (
+            operation.kind === "submitting" ||
+            (operation.kind === "submitted" && operation.interactionId === interactionId)
+        ) {
+            return;
+        }
+        setOperation({ kind: "submitting", interactionId });
+        void response().then(
+            () => setOperation({ kind: "submitted", interactionId }),
+            (cause: unknown) =>
+                setOperation({
+                    kind: "failed",
+                    interactionId,
+                    message: cause instanceof Error ? cause.message : "The response could not be submitted.",
+                }),
+        );
+    };
+    const busyInteractionId =
+        operation.kind === "submitting" || operation.kind === "submitted" ? operation.interactionId : "";
     return (
         <div className="mt-4 mb-12 grid w-full max-w-[444px] gap-3">
-            {conversation.session.permissions.map((permission) => (
+            {permissions.map((permission) => (
                 <PermissionCard
-                    busy={busyId === permission.interactionId}
+                    busy={busyInteractionId === permission.interactionId}
                     key={permission.interactionId}
                     permission={permission}
-                    setBusy={setBusyId}
+                    respond={(response) => submit(permission.interactionId, () => onPermissionResponse(response))}
                 />
             ))}
-            {conversation.session.elicitations.map((elicitation) => (
+            {elicitations.map((elicitation) => (
                 <ElicitationCard
-                    busy={busyId === elicitation.interactionId}
+                    busy={busyInteractionId === elicitation.interactionId}
                     elicitation={elicitation}
                     key={elicitation.interactionId}
-                    setBusy={setBusyId}
+                    respond={(response) => submit(elicitation.interactionId, () => onElicitationResponse(response))}
                 />
             ))}
+            {operation.kind === "failed" && (
+                <p role="alert" className="text-xs text-destructive">
+                    {operation.message}
+                </p>
+            )}
         </div>
+    );
+}
+
+export function SessionInteractions() {
+    const conversation = useChatStore(selectActiveConversation);
+    return (
+        <SessionInteractionCards
+            elicitations={conversation.session.elicitations}
+            permissions={conversation.session.permissions}
+            onElicitationResponse={respondToElicitation}
+            onPermissionResponse={respondToPermission}
+        />
     );
 }
