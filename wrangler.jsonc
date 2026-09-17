@@ -1,7 +1,6 @@
 {
     "$schema": "node_modules/wrangler/config-schema.json",
     "name": "mobius-cloud-local",
-    "placement": { "mode": "smart" },
     "main": "packages/worker/src/index.ts",
     "compatibility_date": "2026-09-07",
     "keep_vars": false,
@@ -53,7 +52,6 @@
     "env": {
         "staging": {
             "name": "mobius-chat-staging",
-            "placement": { "mode": "smart" },
             "services": [
                 { "binding": "MOBIUS_REGIONAL_APAC", "service": "mobius-chat-staging-apac" },
                 { "binding": "MOBIUS_REGIONAL_WNAM", "service": "mobius-chat-staging-wnam" }
@@ -118,7 +116,6 @@
         },
         "production": {
             "name": "mobius-chat-production",
-            "placement": { "mode": "smart" },
             "services": [
                 { "binding": "MOBIUS_REGIONAL_APAC", "service": "mobius-chat-production-apac" },
                 { "binding": "MOBIUS_REGIONAL_WNAM", "service": "mobius-chat-production-wnam" }
