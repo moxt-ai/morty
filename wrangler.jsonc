@@ -53,7 +53,7 @@
     "env": {
         "staging": {
             "name": "mobius-chat-staging",
-            "placement": { "mode": "off" },
+            "placement": { "mode": "smart" },
             "services": [
                 { "binding": "MOBIUS_REGIONAL_APAC", "service": "mobius-chat-staging-apac" },
                 { "binding": "MOBIUS_REGIONAL_WNAM", "service": "mobius-chat-staging-wnam" }
@@ -118,7 +118,7 @@
         },
         "production": {
             "name": "mobius-chat-production",
-            "placement": { "mode": "off" },
+            "placement": { "mode": "smart" },
             "services": [
                 { "binding": "MOBIUS_REGIONAL_APAC", "service": "mobius-chat-production-apac" },
                 { "binding": "MOBIUS_REGIONAL_WNAM", "service": "mobius-chat-production-wnam" }
