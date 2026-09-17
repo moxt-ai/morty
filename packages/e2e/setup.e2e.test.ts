@@ -153,6 +153,56 @@ test("Given a continued setup session needs approval, When the user decides on m
     await expect(composer).toBeEnabled();
 });
 
+test("Given a continued setup session exposes task controls, When the user steers, checks compaction and stops, Then controls target supported work", async ({
+    runtime,
+}) => {
+    const { page } = runtime;
+    const sessionId = "setup-task-controls-session";
+    await runtime.seedNativeSession(sessionId, "Prepare task controls");
+    const connected = await runtime.followInstructions("/setup.md", sessionId);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(connected.url);
+
+    const composer = page.getByRole("textbox", { name: "Message", exact: true });
+    await composer.fill("wait for steering");
+    await page.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect(page.getByRole("log", { name: "Messages", exact: true })).toContainText("Inspecting the workspace");
+
+    await expect(composer).toBeEnabled();
+    await composer.fill("Prioritize the mobile controls");
+    const steering = page.waitForResponse(
+        (response) =>
+            response.request().method() === "POST" &&
+            new URL(response.url()).pathname.endsWith("/turns") &&
+            response.request().postDataJSON().disposition === "steer",
+    );
+    await page.getByRole("button", { name: "Steer active task", exact: true }).click();
+    const steeringRequest = (await steering).request().postDataJSON();
+    expect(steeringRequest).toMatchObject({
+        content: "Prioritize the mobile controls",
+        disposition: "steer",
+    });
+    expect(steeringRequest.targetCommandId).toBeTruthy();
+    await expect(page.getByRole("log", { name: "Messages", exact: true })).toContainText(
+        "Steered: Prioritize the mobile controls",
+    );
+
+    const compact = page.getByRole("button", { name: "Compact context", exact: true });
+    await expect(compact).toBeDisabled();
+    await expect(compact).toHaveText("Compact unavailable");
+    await expect(compact).toHaveAttribute("title", "This agent does not provide a compact command.");
+
+    await composer.fill("wait until cancelled");
+    await page.getByRole("button", { name: "Send message", exact: true }).click();
+    const cancellation = page.waitForResponse(
+        (response) =>
+            response.request().method() === "POST" && /\/turns\/[^/]+\/cancel$/u.test(new URL(response.url()).pathname),
+    );
+    await page.getByRole("button", { name: "Stop agent output", exact: true }).click();
+    expect((await cancellation).status()).toBe(202);
+    await expect(page.getByText("Response cancelled.", { exact: true })).toBeVisible();
+});
+
 test("Given a continued setup session, When the agent creates image and video output, Then both remain available after reopening on a phone", async ({
     runtime,
 }) => {

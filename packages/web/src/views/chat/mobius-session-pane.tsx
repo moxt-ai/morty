@@ -1,6 +1,7 @@
 import {
     type AgentDisplayContent,
     decodeAgentContentEvent,
+    decodeSessionCommandsUpdatedEvent,
     decodeSessionElicitationRequestedEvent,
     decodeSessionElicitationResolvedEvent,
     decodeSessionPermissionRequestedEvent,
@@ -19,6 +20,7 @@ import {
 } from "@moxt-ai/mobius-sdk";
 import { type MobiusClient, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
 import { useEffect, useRef, useState } from "react";
+import { useStore } from "zustand";
 import { BotChatComposer, type ComposerAttachment } from "../../components/chat/bot-chat-composer.tsx";
 import {
     type ElicitationInteraction,
@@ -27,17 +29,17 @@ import {
     type PermissionInteractionResponse,
     SessionInteractionCards,
 } from "../../components/chat/session-interactions.tsx";
+import { Button } from "../../components/ui/cloud-button.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
 import { type RecordedAgentActivity, recordAgentActivity } from "../../services/chat/agent-activities.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import { createSessionTaskControlsStore, findCompactCommand } from "../../view-models/chat/session-task-controls.ts";
 import { MobiusSessionMessage, type SessionMessage, type SessionMessageContent } from "./mobius-session-message.tsx";
 import type { OpenMobiusSession } from "./native-session-dialog.tsx";
 
 type Operation =
     | { readonly kind: "idle" }
     | { readonly kind: "sending"; readonly commandId: string }
-    | { readonly kind: "running"; readonly commandId: string; readonly turnId: string }
-    | { readonly kind: "stopping"; readonly commandId: string; readonly turnId: string }
     | { readonly kind: "configuring" }
     | { readonly kind: "failed"; readonly message: string };
 
@@ -190,6 +192,31 @@ export function MobiusSessionPane({
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession">;
 }) {
+    const sessionId = session.result.ready.sessionId;
+    const clientReference = useRef<MobiusClient | null>(null);
+    const [taskControlsStore] = useState(() =>
+        createSessionTaskControlsStore({
+            commands: session.result.ready.commands,
+            steeringSupported: session.result.ready.capabilities.steering,
+            port: {
+                cancel: async (turnId, idempotencyKey, signal) => {
+                    const client = clientReference.current;
+                    if (client === null) {
+                        throw new Error("The Session is not connected.");
+                    }
+                    return await client.turns.cancel(sessionId, turnId, { idempotencyKey }, signal);
+                },
+                submit: async (request, signal) => {
+                    const client = clientReference.current;
+                    if (client === null) {
+                        throw new Error("The Session is not connected.");
+                    }
+                    return await client.turns.submit(sessionId, request, signal);
+                },
+            },
+        }),
+    );
+    const taskControls = useStore(taskControlsStore);
     const [messages, setMessages] = useState<readonly SessionMessage[]>(() =>
         session.result.history.status === "available"
             ? session.result.history.messages.map((message, index): SessionMessage => {
@@ -215,7 +242,6 @@ export function MobiusSessionPane({
     const [operation, setOperation] = useState<Operation>({ kind: "idle" });
     const lifetime = useRef(new AbortController());
     const command = useRef("");
-    const turnId = useRef("");
     const [connection, setConnection] = useState<
         | { readonly kind: "loading" }
         | { readonly kind: "ready"; readonly client: MobiusClient }
@@ -229,7 +255,6 @@ export function MobiusSessionPane({
             messageList.current.scrollTop = messageList.current.scrollHeight;
         }
     }, [messages]);
-    const sessionId = session.result.ready.sessionId;
     useEffect(() => {
         const controller = new AbortController();
         lifetime.current = controller;
@@ -260,12 +285,13 @@ export function MobiusSessionPane({
             );
             if (["succeeded", "failed", "cancelled", "indeterminate"].includes(message.attempt.kind)) {
                 setOperation({ kind: "idle" });
+                taskControlsStore.getState().finish(currentCommand);
                 command.current = "";
-                turnId.current = "";
             }
         };
         const open = async () => {
             client = await requests.connectSession(botId, sessionId, controller.signal);
+            clientReference.current = client;
             const [saved, pendingInteractions] = await Promise.all([
                 client.sessions.readMessages(sessionId, new MobiusPageRequest(100, ""), controller.signal),
                 client.interactions.listPending(sessionId, controller.signal),
@@ -338,6 +364,10 @@ export function MobiusSessionPane({
                         if (payload instanceof MobiusControlEvent) {
                             if (payload.kind === "agent.content") {
                                 setMessages((current) => applyRecordedContents(current, [event]));
+                            } else if (payload.kind === "session.commands.updated") {
+                                taskControlsStore
+                                    .getState()
+                                    .updateCommands(decodeSessionCommandsUpdatedEvent(payload.encodedPayload).commands);
                             } else if (payload.kind === "session.permission.requested") {
                                 const permission = decodeSessionPermissionRequestedEvent(payload.encodedPayload);
                                 setInteractions((current) =>
@@ -429,6 +459,7 @@ export function MobiusSessionPane({
         };
         void open().catch((cause: unknown) => {
             client?.close();
+            clientReference.current = null;
             if (!controller.signal.aborted) {
                 setConnection({ kind: "failed" });
                 setOperation({
@@ -440,8 +471,9 @@ export function MobiusSessionPane({
         return () => {
             controller.abort();
             client?.close();
+            clientReference.current = null;
         };
-    }, [session, sessionId, botId, requests]);
+    }, [session, sessionId, botId, requests, taskControlsStore]);
     const request = {
         additionalDirectoryIds: session.result.ready.additionalDirectories.map((directory) => directory.directoryId),
     };
@@ -450,9 +482,8 @@ export function MobiusSessionPane({
             connection.kind !== "ready" ||
             (draft.trim() === "" && attachments.length === 0) ||
             operation.kind === "sending" ||
-            operation.kind === "running" ||
-            operation.kind === "stopping" ||
-            operation.kind === "configuring"
+            operation.kind === "configuring" ||
+            taskControls.operation.kind !== "idle"
         ) {
             return;
         }
@@ -491,8 +522,8 @@ export function MobiusSessionPane({
                 lifetime.current.signal,
             );
             if (!lifetime.current.signal.aborted && command.current === commandId) {
-                turnId.current = accepted.turnId;
-                setOperation({ kind: "running", commandId, turnId: accepted.turnId });
+                taskControlsStore.getState().start(commandId, accepted.turnId);
+                setOperation({ kind: "idle" });
             }
         } catch (cause) {
             if (!lifetime.current.signal.aborted) {
@@ -503,27 +534,53 @@ export function MobiusSessionPane({
             }
         }
     };
-    const stop = async () => {
-        if (connection.kind !== "ready" || operation.kind !== "running") {
+    const steer = async () => {
+        if (connection.kind !== "ready") {
             return;
         }
-        const running = operation;
-        setOperation({ kind: "stopping", commandId: running.commandId, turnId: running.turnId });
-        try {
-            await connection.client.turns.cancel(
-                sessionId,
-                running.turnId,
-                { idempotencyKey: crypto.randomUUID() },
-                AbortSignal.any([lifetime.current.signal, AbortSignal.timeout(15000)]),
-            );
-        } catch (cause) {
-            if (!lifetime.current.signal.aborted && command.current === running.commandId) {
-                setOperation({
-                    kind: "failed",
-                    message: cause instanceof Error ? cause.message : "The agent output could not be stopped.",
-                });
-            }
+        const prompt = draft.trim();
+        const selectedAttachments = attachments;
+        await taskControlsStore.getState().steer(
+            prompt,
+            {
+                ...request,
+                images: selectedAttachments.flatMap((attachment) =>
+                    attachment.kind === "image" ? [attachment.image] : [],
+                ),
+                resources: selectedAttachments.flatMap((attachment) =>
+                    attachment.kind === "resource" ? [attachment.resource] : [],
+                ),
+                artifactIds: [],
+            },
+            (commandId, content) => {
+                followLatest.current = true;
+                setDraft("");
+                setAttachments([]);
+                setMessages((current) => [
+                    ...current,
+                    { id: `${commandId}-user`, role: "user", text: content, contents: [] },
+                ]);
+            },
+            lifetime.current.signal,
+        );
+    };
+    const compact = async () => {
+        if (connection.kind !== "ready") {
+            return;
         }
+        await taskControlsStore.getState().compact(
+            { ...request, artifactIds: [], images: [], resources: [] },
+            (commandId, prompt) => {
+                command.current = commandId;
+                followLatest.current = true;
+                setMessages((current) => [
+                    ...current,
+                    { id: `${commandId}-user`, role: "user", text: prompt, contents: [] },
+                    { id: `${commandId}-reply`, role: "assistant", text: "", attempt: null, commandId, contents: [] },
+                ]);
+            },
+            lifetime.current.signal,
+        );
     };
     const configure = async (option: SessionConfigOption, value: string) => {
         if (connection.kind !== "ready") {
@@ -605,17 +662,33 @@ export function MobiusSessionPane({
             await reconcileInteraction(connection.client, response.interactionId, cause);
         }
     };
+    const activeControl =
+        taskControls.operation.kind === "running" ||
+        taskControls.operation.kind === "steering" ||
+        taskControls.operation.kind === "stopping"
+            ? taskControls.operation
+            : null;
+    const controlRunning = activeControl !== null;
     const busy =
         connection.kind !== "ready" ||
         operation.kind === "sending" ||
-        operation.kind === "running" ||
-        operation.kind === "stopping" ||
-        operation.kind === "configuring";
+        operation.kind === "configuring" ||
+        taskControls.operation.kind === "compacting" ||
+        taskControls.operation.kind === "steering" ||
+        taskControls.operation.kind === "stopping" ||
+        (taskControls.operation.kind === "running" && !taskControls.steeringSupported);
     const activeCommandId =
-        connection.kind === "ready" &&
-        (operation.kind === "sending" || operation.kind === "running" || operation.kind === "stopping")
-            ? operation.commandId
-            : null;
+        connection.kind !== "ready"
+            ? null
+            : operation.kind === "sending"
+              ? operation.commandId
+              : activeControl !== null
+                ? activeControl.active.commandId
+                : taskControls.operation.kind === "compacting"
+                  ? taskControls.operation.commandId
+                  : null;
+    const compactAvailable = findCompactCommand(taskControls.commands) !== null;
+    const taskControlError = taskControls.feedback.kind === "failed" ? taskControls.feedback.message : "";
     return (
         <section className="flex min-h-0 min-w-0 flex-1 animate-cloud-enter flex-col motion-reduce:animate-none">
             <div
@@ -660,15 +733,25 @@ export function MobiusSessionPane({
                 attachments={attachments}
                 disabled={busy}
                 draft={draft}
-                error={operation.kind === "failed" ? operation.message : ""}
+                error={operation.kind === "failed" ? operation.message : taskControlError}
                 onAttachmentsChange={setAttachments}
-                onDraftChange={setDraft}
-                onStop={() => void stop()}
-                onSubmit={() => void send()}
-                outputState={
-                    operation.kind === "running" ? "running" : operation.kind === "stopping" ? "stopping" : "idle"
+                onDraftChange={(value) => {
+                    taskControlsStore.getState().dismissFailure();
+                    setDraft(value);
+                }}
+                onStop={() => void taskControlsStore.getState().stop(lifetime.current.signal)}
+                onSubmit={() =>
+                    void (taskControls.operation.kind === "running" && taskControls.steeringSupported
+                        ? steer()
+                        : send())
                 }
-                submitDisabled={busy || (draft.trim() === "" && attachments.length === 0)}
+                outputState={
+                    taskControls.operation.kind === "stopping" ? "stopping" : controlRunning ? "running" : "idle"
+                }
+                submitDisabled={
+                    (taskControls.operation.kind !== "running" && busy) ||
+                    (draft.trim() === "" && attachments.length === 0)
+                }
             >
                 <Select
                     compact
@@ -695,6 +778,39 @@ export function MobiusSessionPane({
                             onValueChange={(value) => void configure(option, value)}
                         />
                     ))}
+                {controlRunning && taskControls.steeringSupported && (
+                    <Button
+                        aria-label="Steer active task"
+                        disabled={taskControls.operation.kind !== "running" || draft.trim() === ""}
+                        onClick={() => void steer()}
+                        size="sm"
+                        variant="outline"
+                    >
+                        Steer
+                    </Button>
+                )}
+                {controlRunning && !taskControls.steeringSupported && (
+                    <span className="whitespace-nowrap text-xs text-muted-foreground">Steering unavailable</span>
+                )}
+                <Button
+                    aria-label="Compact context"
+                    disabled={
+                        connection.kind !== "ready" ||
+                        operation.kind !== "idle" ||
+                        taskControls.operation.kind !== "idle" ||
+                        !compactAvailable
+                    }
+                    onClick={() => void compact()}
+                    size="sm"
+                    title={
+                        compactAvailable
+                            ? "Compact the agent context"
+                            : "This agent does not provide a compact command."
+                    }
+                    variant="outline"
+                >
+                    {compactAvailable ? "Compact" : "Compact unavailable"}
+                </Button>
                 {operation.kind === "configuring" && (
                     <span role="status" className="sr-only">
                         Applying agent settings…
