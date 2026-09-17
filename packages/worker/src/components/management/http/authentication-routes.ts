@@ -2,6 +2,7 @@ import * as v from "valibot";
 import { projectObject } from "../../../gateway/project-object-routing.ts";
 import { json } from "../../../infra/http.ts";
 import { bodyParser } from "../../../middleware/body-parser.ts";
+import { serverTiming } from "../../../middleware/server-timing.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { projectLocationHint } from "../util/project-location.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
@@ -51,22 +52,43 @@ export function createAuthenticationRoutes() {
                     return unavailable();
             }
         })
+        .use(
+            "/identity/anonymous-users",
+            serverTiming<ManagementHttpEnvironment>({
+                event: "anonymous-user-request-timing",
+                message: "Anonymous user request timing",
+            }),
+        )
         .post("/identity/anonymous-users", async (context) => {
             const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]);
             const userId = `usr_${crypto.randomUUID()}`;
-            const project = await context.env.gateways.platformProjects.create(
-                userId,
-                "Personal workspace",
-                signal,
-                projectLocationHint(context.req.raw),
+            const timing = context.get("operationTiming");
+            if (timing === undefined) {
+                throw new Error("Anonymous user request timing is unavailable.");
+            }
+            const project = await timing.measure(
+                "anonymous-project-create",
+                "Create Platform Project",
+                async () =>
+                    await context.env.gateways.platformProjects.create(
+                        userId,
+                        "Personal workspace",
+                        signal,
+                        projectLocationHint(context.req.raw),
+                    ),
             );
-            const response = await projectObject(context.env.config.bindings, project.projectId).fetch(
-                new Request("https://project.internal/__project/bootstrap", {
-                    body: JSON.stringify({ project, userId }),
-                    headers: { "content-type": "application/json" },
-                    method: "POST",
-                    signal,
-                }),
+            const response = await timing.measure(
+                "anonymous-project-bootstrap",
+                "Bootstrap Project",
+                async () =>
+                    await projectObject(context.env.config.bindings, project.projectId).fetch(
+                        new Request("https://project.internal/__project/bootstrap", {
+                            body: JSON.stringify({ project, userId }),
+                            headers: { "content-type": "application/json" },
+                            method: "POST",
+                            signal,
+                        }),
+                    ),
             );
             signal.throwIfAborted();
             return response;

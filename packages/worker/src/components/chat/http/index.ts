@@ -4,11 +4,11 @@ import { json } from "../../../infra/http.ts";
 import { bodyParser } from "../../../middleware/body-parser.ts";
 import { errorMiddleware, rethrowHttpError } from "../../../middleware/error-middleware.ts";
 import { requestHeaders } from "../../../middleware/request-headers.ts";
+import { serverTiming } from "../../../middleware/server-timing.ts";
 import { authenticatedSession } from "../../management/http/authenticated-session.ts";
 import { MobiusAppError } from "../service/mobius-app-service.ts";
 import { createBotChatRoutes } from "./bot-chat-routes.ts";
 import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
-import { serverTiming } from "./server-timing.ts";
 
 const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
 const sessionInput = v.pipe(
@@ -32,7 +32,13 @@ export function createChatApplication() {
     return new Hono<ChatHttpEnvironment>()
         .basePath("/mobius-cloud/api/chat/projects/:projectId")
         .onError(rethrowHttpError)
-        .use("*", serverTiming)
+        .use(
+            "*",
+            serverTiming<ChatHttpEnvironment>({
+                event: "chat-request-timing",
+                message: "Chat request timing",
+            }),
+        )
         .use(
             "*",
             errorMiddleware<ChatHttpEnvironment>((context) => context.env.logger),
