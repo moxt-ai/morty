@@ -290,6 +290,19 @@ export class PlatformProjectGateway {
             120000,
         );
 
+    readonly findNativeSessionByNativeSessionId = async (
+        projectId: string,
+        runtimeId: string,
+        request: Parameters<MobiusClient["runtimes"]["findNativeSessionByNativeSessionId"]>[1],
+        signal: AbortSignal,
+    ) =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) => await client.runtimes.findNativeSessionByNativeSessionId(runtimeId, request, signal),
+            120000,
+        );
+
     readonly openChat = async (
         projectId: string,
         botId: string,

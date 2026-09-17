@@ -146,6 +146,7 @@ export function BotChatHome({
         | "nativeSession"
         | "managedSessions"
         | "managedSession"
+        | "continueNativeSession"
         | "connectSession"
         | "createPairingInstruction"
         | "createConversation"
@@ -161,12 +162,18 @@ export function BotChatHome({
         | { readonly kind: "draft"; readonly key: string }
         | { readonly kind: "existing"; readonly conversationId: string }
         | { readonly kind: "fork"; readonly sessionId: string }
+        | { readonly kind: "continue"; readonly harness: string; readonly sessionId: string }
     >(() => {
-        const sessionId = new URL(window.location.href).searchParams.get("sessionId");
+        const url = new URL(window.location.href);
+        const sessionId = url.searchParams.get("sessionId");
+        const harness = url.searchParams.get("harness");
         if (sessionId !== null && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(sessionId)) {
+            if (harness !== null && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(harness)) {
+                return { kind: "continue", harness, sessionId };
+            }
             return { kind: "fork", sessionId };
         }
-        const conversationId = new URL(window.location.href).searchParams.get("conversationId");
+        const conversationId = url.searchParams.get("conversationId");
         return conversationId !== null && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(conversationId)
             ? { kind: "existing", conversationId }
             : { kind: "draft", key: crypto.randomUUID() };
@@ -276,6 +283,23 @@ export function BotChatHome({
             }
             const workspace = await requests.workspace(bot.botId, controller.signal);
             controller.signal.throwIfAborted();
+            if (target.current.kind === "continue") {
+                const session = await requests.continueNativeSession(
+                    bot.botId,
+                    target.current.harness,
+                    target.current.sessionId,
+                    controller.signal,
+                );
+                controller.signal.throwIfAborted();
+                const url = new URL(window.location.href);
+                url.searchParams.delete("harness");
+                url.searchParams.set("sessionId", session.result.ready.sessionId);
+                window.history.replaceState(window.history.state, "", url);
+                target.current = { kind: "fork", sessionId: session.result.ready.sessionId };
+                setState({ kind: "draft", bot });
+                setConversation({ kind: "local", session });
+                return;
+            }
             if (target.current.kind === "fork") {
                 const session = await requests.managedSession(bot.botId, target.current.sessionId, controller.signal);
                 controller.signal.throwIfAborted();

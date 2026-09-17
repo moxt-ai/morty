@@ -18,7 +18,12 @@ Bot; returning visitors restore their saved identity automatically. Every web
 workspace copies `/pair.md?token=...`, a one-time ticket that connects the local
 Runtime to its current user and Bot and directs the user back to Chat.
 `/setup.md` is reserved for standalone testing and external sharing, including
-social posts. That flow creates or reuses a local identity and returns a browser handoff.
+social posts. That flow requires the current harness session ID, creates or reuses a
+local identity, and returns a browser handoff carrying the validated harness and native
+session ID. After transfer redemption, Chat finds that native session through the paired
+Runtime, forks it under an opaque entry capability, records it, and opens the independent
+continuation. Forking allows the originating harness to retain its active writer. Native
+session IDs are not returned by ordinary directory listings.
 Both instruction documents are Markdown templates in `templates/`, outside the
 static public assets. The Worker renders them at `/setup.md` and `/pair.md` at
 request time. `{{BASE_URL}}` uses `APP_ORIGIN` when set, otherwise the

@@ -74,6 +74,26 @@ export async function createTestRuntime(harness: E2EHarness) {
             openChat,
             sendMessage,
             cancelSessionTurn: (sessionId: string, turnId: string) => chat.cancelSessionTurn(sessionId, turnId),
+            seedNativeSession: async (sessionId: string, prompt: string) => {
+                await writeFile(
+                    join(harness.workDirectory, "agent-state", `${encodeURIComponent(sessionId)}.json`),
+                    JSON.stringify({
+                        additionalDirectories: [],
+                        cwd: stack.directories.workspace,
+                        fastMode: false,
+                        history: [
+                            { messageId: "saved-user", role: "user", text: prompt },
+                            { messageId: "saved-assistant", role: "assistant", text: `OpenCode turn 1: ${prompt}` },
+                        ],
+                        mode: "code",
+                        model: "test-small",
+                        reasoningEffort: "medium",
+                        title: prompt,
+                        turnCount: 1,
+                    }),
+                    { mode: 0o600 },
+                );
+            },
             openPairedChat: async () => {
                 await openChat();
                 const pairing = await chat.createPairing();
@@ -83,7 +103,7 @@ export async function createTestRuntime(harness: E2EHarness) {
                 await chat.waitForBinding(harness);
                 await page.reload();
             },
-            followInstructions: async (instructionUrl: string) => {
+            followInstructions: async (instructionUrl: string, sessionId?: string) => {
                 const url = new URL(instructionUrl, stack.chatOrigin);
                 const document = await fetch(url, { signal: harness.signal, redirect: "error" });
                 assert.equal(document.status, 200);
@@ -96,6 +116,7 @@ export async function createTestRuntime(harness: E2EHarness) {
                         .replaceAll('"', "")
                         .replaceAll("$BASE_URL", stack.chatOrigin)
                         .replaceAll("$HARNESS", "opencode")
+                        .replaceAll("$SESSION_ID", sessionId ?? "")
                         .replaceAll("$TOKEN", url.searchParams.get("token") ?? ""),
                 );
                 const download = markdown.match(/https?:\/\/[^\s`]+\/setup\.mjs/u)?.[0];

@@ -28,6 +28,7 @@ const nativeListInput = v.strictObject({
     discoveryId: v.nullable(platformIdentifier),
 });
 const nativeEntryInput = v.strictObject({ ...nativeIdentity, discoveryId: platformIdentifier });
+const nativeContinuationInput = v.strictObject({ harness: platformIdentifier, sessionId: platformIdentifier });
 const accessInput = v.union([
     v.strictObject({ conversationId: platformIdentifier }),
     v.strictObject({
@@ -197,6 +198,84 @@ export function createBotChatRoutes() {
                 "Chat audit event",
             );
             return privateJson(result);
+        })
+        .post("/bots/:botId/continue-native-session", authenticatedSession, async (context) => {
+            const { projectId, botId, userId, gateway, signal } = await authorizeChat(context, 120000);
+            const input = v.parse(nativeContinuationInput, await readJson(context, signal));
+            const workspace = await gateway.chatWorkspace(projectId, botId, userId, signal);
+            const selected = workspace.selected;
+            const agent = workspace.agents.find(
+                (item) =>
+                    selected !== null &&
+                    item.runtimeId === selected.runtimeId &&
+                    item.agentRef === selected.agentRef &&
+                    item.agentRef === input.harness &&
+                    item.online,
+            );
+            if (agent === undefined) {
+                throw new PlatformProjectError("HARNESS_UNAVAILABLE", "The handoff harness is unavailable.", 409);
+            }
+            const found = await gateway.findNativeSessionByNativeSessionId(
+                projectId,
+                agent.runtimeId,
+                {
+                    agentId: agent.agentRef,
+                    directoryId: "default",
+                    additionalDirectoryIds: [],
+                    nativeSessionId: input.sessionId,
+                },
+                signal,
+            );
+            const entry = found.entry;
+            const result = await gateway.nativeSessions(
+                projectId,
+                agent.runtimeId,
+                {
+                    action: "fork",
+                    discoveryId: found.sessionId,
+                    agentId: agent.agentRef,
+                    directoryId: entry.directoryId,
+                    additionalDirectoryIds: entry.additionalDirectories.map((item) => item.directoryId),
+                    entryId: entry.entryId,
+                },
+                signal,
+            );
+            if (result.action !== "fork" || result.ready.sessionId !== result.targetSessionId) {
+                throw new PlatformProjectError(
+                    "CONTINUATION_UNAVAILABLE",
+                    "The handoff session could not be continued.",
+                    409,
+                );
+            }
+            const stored = {
+                agentRef: agent.agentRef,
+                result,
+                entry,
+            };
+            await context.env.storages.chatSessions.save(
+                projectId,
+                userId,
+                botId,
+                {
+                    kind: "fork",
+                    id: result.ready.sessionId,
+                    title: result.title || "Untitled session",
+                    data: JSON.stringify(stored),
+                },
+                signal,
+            );
+            context.env.logger.info(
+                {
+                    event: "native-session-forked-from-handoff",
+                    userId,
+                    projectId,
+                    botId,
+                    runtimeId: agent.runtimeId,
+                    harness: input.harness,
+                },
+                "Chat audit event",
+            );
+            return privateJson(stored);
         })
         .post("/bots/:botId/native-session/:id", authenticatedSession, async (context) => {
             const { projectId, botId, userId, gateway, signal } = await authorizeChat(context, 120000);

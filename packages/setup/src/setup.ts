@@ -36,7 +36,7 @@ interface Context {
 
 type Options =
     | { readonly mode: "pair"; readonly base: string; readonly harness: string; readonly token: string }
-    | { readonly mode: "setup"; readonly base: string; readonly harness: string };
+    | { readonly mode: "setup"; readonly base: string; readonly harness: string; readonly sessionId: string };
 
 function errorCode(cause: unknown): unknown {
     return cause !== null && typeof cause === "object" && "code" in cause ? cause.code : undefined;
@@ -224,7 +224,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const { values, positionals } = parseArgs({
             args: [...args],
             allowPositionals: true,
-            options: { token: { type: "string" }, harness: { type: "string" }, "base-url": { type: "string" } },
+            options: {
+                token: { type: "string" },
+                harness: { type: "string" },
+                "base-url": { type: "string" },
+                "session-id": { type: "string" },
+            },
         });
         if (positionals.length !== 1 || !["pair", "setup"].includes(positionals[0])) {
             fail("INVALID_ARGUMENTS");
@@ -241,6 +246,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             if (values.token === undefined) {
                 fail("PAIRING_TICKET_REQUIRED");
             }
+            if (values["session-id"] !== undefined) {
+                fail("INVALID_ARGUMENTS");
+            }
             return {
                 mode: "pair",
                 base,
@@ -251,7 +259,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (values.token !== undefined) {
             fail("INVALID_ARGUMENTS");
         }
-        return { mode: "setup", base, harness };
+        if (values["session-id"] === undefined) {
+            fail("SESSION_ID_REQUIRED");
+        }
+        return { mode: "setup", base, harness, sessionId: identifier(values["session-id"]) };
     }
 
     async function preparePairIdentity(context: Context, ticket: string) {
@@ -523,10 +534,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
-    async function finishSetup(context: Context, mode: Options["mode"]) {
+    async function finishSetup(context: Context, options: Options) {
         await waitForReadiness(context);
         const botId = context.config.bot_id;
-        if (mode === "pair") {
+        if (options.mode === "pair") {
             emit({
                 status: "ready",
                 botId,
@@ -540,10 +551,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (
             url.origin !== context.base ||
             url.pathname !== "/continue" ||
+            url.search !== "" ||
             !new URLSearchParams(url.hash.slice(1)).has("code")
         ) {
             fail("INVALID_HANDOFF");
         }
+        url.searchParams.set("harness", options.harness);
+        url.searchParams.set("sessionId", options.sessionId);
         emit({ status: "ready", botId, url: url.toString(), expiresAt: text(transfer.expiresAt) });
     }
 
@@ -563,7 +577,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             context = await startRuntime(context, await runtimeArguments(context));
             await waitForRuntime(context, options.harness);
             context = await bindAgent(context, options.harness);
-            await finishSetup(context, options.mode);
+            await finishSetup(context, options);
         } finally {
             await rm(lock, { recursive: true, force: true });
         }

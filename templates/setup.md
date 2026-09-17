@@ -27,15 +27,16 @@ Do not ask for an additional replacement confirmation.
    and install or repair missing dependencies using the host's normal tools.
 3. Download `{{BASE_URL}}/setup.mjs` into a private local directory, with
    finite timeouts and no redirects. Inspect it before running.
-4. Set `HARNESS` to your own harness ID: `codex`, `claude`, or `opencode`. Honor an
-   explicit user choice instead. Complete that harness's installation/authentication
-   if needed; do not ask the user to choose when your own harness is available.
+4. Set `HARNESS` to your own harness ID: `codex`, `claude`, or `opencode`. Set
+   `SESSION_ID` to this current harness session's exact ID. Both values are required.
+   Honor an explicit user choice instead. Complete that harness's installation and
+   authentication if needed; do not ask the user to choose when your own harness is available.
 
 Run this command in the background so it keeps running after this reply. Closing
 this conversation stops the Runtime it started.
 
 ```sh
-node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --harness "$HARNESS"
+node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --harness "$HARNESS" --session-id "$SESSION_ID"
 ```
 
 The command handles identity, Runtime pairing, Runtime launch, Bot binding, and
@@ -50,7 +51,8 @@ log path. Waits are cancellable and bounded to five minutes. Complete any requir
 local Runtime approval. Only `status: "ready"` means the binding is active and the
 selected Runtime/agent is online; it does not claim a successful test message.
 
-Return the exact browser `url` and `expiresAt` from the ready result. The link is
+Return the exact browser `url` and `expiresAt` from the ready result. The link identifies
+this harness session so Chat can import it and open it after the handoff. The link is
 valid for **24 hours**, can be successfully opened at most **five times**, and opens
 the same user and Bot each time. Never open, preview, or redeem it yourself because
 doing so consumes one use. Tell the user: **Open this link to chat. It can be used

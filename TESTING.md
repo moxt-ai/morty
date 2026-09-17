@@ -127,9 +127,10 @@ the paired Bot's Chat view, send a prompt, and see the agent reply and saved his
 The scenarios fetch the rendered document and generated bundle from the local
 Worker/R2 boundary, then execute the bundle's `runSetup` entrypoint with a real,
 isolated Runtime subprocess. Pair preserves the browser's original Bot and Project;
-standalone setup opens its five-use browser handoff. Both reload the connected Chat
-view without re-pairing, send a prompt, reload its saved conversation, and send a
-follow-up that receives a fresh reply in the same conversation.
+standalone setup opens its five-use browser handoff, finds the supplied harness session
+by its native ID, returns a forked continuation, and displays its history. Both reload
+the connected Chat view without re-pairing, send a prompt, reload its saved conversation
+or Session, and send a follow-up that receives a fresh reply in the same context.
 Agent inference uses the stateful ACP test agent; Platform provisioning uses the
 shared local developer-authentication fixture. The browser still loads Clerk's
 hosted SDK, so the suite requires internet access but no Clerk login. Setup

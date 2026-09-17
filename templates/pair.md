@@ -53,9 +53,10 @@ an active binding and online Runtime. A successful chat reply is a separate chec
 When ready, tell the user: **Your Bot is connected. Return to your Mobius Chat page
 to start chatting. Keep the Runtime online.** Include the returned URL and Bot ID.
 
-On failure, use `error.code` and the private Runtime log to resolve the problem,
-then reconnect using `node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --harness "$HARNESS"` if
-`identity_ready` was emitted. Setup loads the saved user and Bot and starts Runtime
+On failure, use `error.code` and the private Runtime log to resolve the problem.
+If `identity_ready` was emitted, set `SESSION_ID` to this current harness session's
+exact ID and reconnect using `node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --harness "$HARNESS" --session-id "$SESSION_ID"`.
+Setup loads the saved user and Bot and starts Runtime
 pairing fresh; its ready result includes a browser handoff as described in `/setup.md`.
 `HARNESS_UNAVAILABLE` reports the advertised alternatives; repair authentication or
 ask the user before selecting a different harness. Pair always redeems its ticket;

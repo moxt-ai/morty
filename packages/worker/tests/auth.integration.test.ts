@@ -596,6 +596,7 @@ test.each([
                         base,
                         "--harness",
                         "codex",
+                        ...(command === "setup" ? ["--session-id", "test-session"] : []),
                         ...(command === "pair" ? [`--token=${ticket}`] : []),
                     ],
                     {

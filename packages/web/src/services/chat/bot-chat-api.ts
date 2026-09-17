@@ -67,6 +67,18 @@ const sessionAccessSchema = v.object({
     expiresAt: v.pipe(v.string(), v.isoTimestamp()),
     endpoint: v.pipe(v.string(), v.url()),
 });
+const localSessionSchema = v.object({
+    agentRef: identifier,
+    result: v.unknown(),
+    entry: v.object({
+        entryId: identifier,
+        title: v.string(),
+        directoryId: v.string(),
+        directoryLabel: v.string(),
+        additionalDirectories: v.array(v.object({ directoryId: v.string(), name: v.string() })),
+        updatedAt: v.nullable(v.string()),
+    }),
+});
 function sessionEndpoint(value: string): string {
     const endpoint = new URL(value);
     if (
@@ -121,23 +133,23 @@ export class BotChatApi {
         ).sessions;
     readonly managedSession = async (botId: string, sessionId: string, signal: AbortSignal) => {
         const stored = v.parse(
-            v.object({
-                agentRef: identifier,
-                result: v.unknown(),
-                entry: v.object({
-                    entryId: identifier,
-                    title: v.string(),
-                    directoryId: v.string(),
-                    directoryLabel: v.string(),
-                    additionalDirectories: v.array(v.object({ directoryId: v.string(), name: v.string() })),
-                    updatedAt: v.nullable(v.string()),
-                }),
-            }),
+            localSessionSchema,
             await this.#request(botId, "managed-session", { sessionId }, signal),
         );
         const result = decodeNativeSessionResult(JSON.stringify(stored.result));
-        if (result.action !== "fork" || result.ready.sessionId !== sessionId) {
+        if ((result.action !== "fork" && result.action !== "import") || result.ready.sessionId !== sessionId) {
             throw new CloudApiError("INVALID_SESSION", "The saved Chat session is invalid.");
+        }
+        return { ...stored, result };
+    };
+    readonly continueNativeSession = async (botId: string, harness: string, sessionId: string, signal: AbortSignal) => {
+        const stored = v.parse(
+            localSessionSchema,
+            await this.#request(botId, "continue-native-session", { harness, sessionId }, signal),
+        );
+        const result = decodeNativeSessionResult(JSON.stringify(stored.result));
+        if (result.action !== "fork" || result.ready.sessionId !== result.targetSessionId) {
+            throw new CloudApiError("INVALID_SESSION", "The continued Chat session is invalid.");
         }
         const action: "fork" = result.action;
         return { ...stored, result: { ...result, action } };

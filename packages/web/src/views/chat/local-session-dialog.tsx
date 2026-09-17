@@ -8,7 +8,7 @@ import type { BotChatApi, ChatWorkspace } from "../../services/chat/bot-chat-api
 
 export interface OpenLocalSession {
     readonly agentRef: string;
-    readonly result: Extract<NativeSessionResult, { readonly ready: unknown }> & { readonly action: "fork" };
+    readonly result: Extract<NativeSessionResult, { readonly ready: unknown }>;
     readonly entry: NativeSessionEntry;
 }
 type Directory =
