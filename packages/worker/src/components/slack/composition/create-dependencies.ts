@@ -31,7 +31,10 @@ export function createSlackDependencies(infrastructure: SlackInfrastructure) {
     const mobiusConnections = new MobiusConnectionService(cx);
     const installations = new SlackInstallationService({ ...cx, services: { identities, slackTokens } });
     const botTools = new SlackBotToolService({ ...cx, services: { identities } });
-    const management = new SlackManagementService({ ...cx, services: { mobiusConnections } });
+    const management = new SlackManagementService({
+        ...cx,
+        services: { installations, mobiusConnections, slackTokens },
+    });
     const replies = new SlackReplyDeliveryService(cx);
     const slackMessageRenderer = new SlackMessageRenderer(cx);
     const slackFiles = new SlackFileService(cx);

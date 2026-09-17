@@ -65,6 +65,18 @@ describe("Slack management journeys", () => {
         });
         expect(response.status).toBe(502);
     });
+    it("Given an authenticated user, When a Slack API body is not JSON media, Then the request is rejected", async () => {
+        const app = await createTestApplication();
+        const response = await app.request("/mobius-slack/api/slack/bots/bot-1/binding", {
+            method: "PUT",
+            headers: { ...(await authorization(app)), "content-type": "text/plain" },
+            body: JSON.stringify({ botId: "bot-1", ownerCredential: "s".repeat(32) }),
+        });
+        expect(response.status).toBe(400);
+        expect(await response.json()).toEqual({
+            error: { code: "INVALID_REQUEST", message: "A JSON request is required." },
+        });
+    });
     it("Given a signed-in user, When the dashboard loads bots, Then it shows only that user's configured bots", async () => {
         const app = await createTestApplication();
         const response = await app.request("/mobius-slack/api/slack/bots", { headers: await authorization(app) });

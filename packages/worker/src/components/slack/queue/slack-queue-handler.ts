@@ -1,12 +1,12 @@
 import * as v from "valibot";
-import type { SlackQueueConsumer } from "../index.ts";
 import { queueMessageSchema, type SlackQueueMessage } from "../infra/queue-message.ts";
 import type { SlackLogger } from "../infra/util/logger.ts";
+import type { TenantQueueConsumer } from "../service/bot-run/tenant-queue-consumer.ts";
 
 export class SlackQueueHandler {
-    readonly #consumer: SlackQueueConsumer;
+    readonly #consumer: TenantQueueConsumer;
     readonly #logger: SlackLogger;
-    constructor(consumer: SlackQueueConsumer, logger: SlackLogger) {
+    constructor(consumer: TenantQueueConsumer, logger: SlackLogger) {
         this.#consumer = consumer;
         this.#logger = logger;
     }

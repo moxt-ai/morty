@@ -7,6 +7,7 @@ import { type ApplicationContext, createApplicationDependencies } from "../compo
 import { projectBindings } from "../composition/chat-shards.ts";
 import { routeRegionalChat } from "../gateway/regional-chat-routing.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
+import { readJsonBody } from "./body-parser.ts";
 
 export const cloudProjectContext = createMiddleware<{
     readonly Bindings: CloudBindings;
@@ -67,7 +68,7 @@ async function cloudProjectId(request: Request): Promise<string | null> {
               ? "token"
               : null;
     if (request.method === "POST" && inputKey !== null) {
-        const input: unknown = await request.clone().json();
+        const input = await readJsonBody(request.clone());
         const parsed = v.safeParse(v.record(v.string(), v.unknown()), input);
         const ticket = parsed.success ? readProjectCredential(parsed.output[inputKey]) : null;
         const expectedKind = inputKey === "code" ? "mobius_transfer_v2" : "mobius_pair_v2";

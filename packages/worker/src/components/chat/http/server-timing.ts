@@ -1,5 +1,5 @@
 import { createMiddleware } from "hono/factory";
-import type { OperationTiming } from "../../infra/operation-timing.ts";
+import type { OperationTiming } from "../../../infra/operation-timing.ts";
 import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
 
 type TimingMetric = {

@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { expect, test } from "vitest";
-import { MobiusAppService } from "../src/components/chat/mobius-app-service.ts";
+import { MobiusAppService } from "../src/components/chat/service/mobius-app-service.ts";
 import { D1SqlDatabase } from "../src/components/slack/storage/d1-database.ts";
 
 class CapturedMetrics {

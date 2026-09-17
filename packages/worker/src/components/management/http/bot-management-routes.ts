@@ -1,10 +1,10 @@
 import { Hono } from "hono";
 import * as v from "valibot";
 import { json } from "../../../infra/http.ts";
-import { ManagementError } from "../entity/management-error.ts";
+import { bodyParser } from "../../../middleware/body-parser.ts";
+import { projectLocationHint } from "../util/project-location.ts";
 import { authenticatedSession } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
-import { provisionUserBot } from "./user-bot-setup.ts";
 
 const claimSchema = v.pipe(
     v.object({
@@ -19,53 +19,37 @@ export function createBotManagementRoutes() {
     return new Hono<ManagementHttpEnvironment>()
         .get("/bots", authenticatedSession, async (context) => {
             const session = context.get("session");
-            await provisionUserBot(
-                context.env,
-                session.userId,
-                AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]),
-                context.req.raw,
-            );
+            const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]);
             return json({
-                bots: await context.env.storages.managedBots.listBots(session.userId, context.req.raw.signal),
+                bots: await context.env.services.management.listBots(
+                    session.userId,
+                    projectLocationHint(context.req.raw),
+                    signal,
+                ),
             });
         })
-        .post("/bots/claims", authenticatedSession, async (context) => {
-            const session = context.get("session");
-            const input = v.parse(claimSchema, await context.req.json());
-            const accessToken = await context.env.services.mobiusApp.issueAccessToken(
-                input.botId,
-                input.ownerCredential,
-                context.req.raw.signal,
-            );
-            try {
-                await context.env.storages.managedBots.saveClaim(
-                    session.userId,
-                    { botId: input.botId, displayName: input.displayName },
-                    Date.now(),
-                    context.req.raw.signal,
+        .post(
+            "/bots/claims",
+            authenticatedSession,
+            bodyParser<ManagementHttpEnvironment, typeof claimSchema>(claimSchema),
+            async (context) => {
+                const session = context.get("session");
+                const input = context.req.valid("json");
+                return json(
+                    await context.env.services.management.claimBot(session.userId, input, context.req.raw.signal),
+                    201,
                 );
-            } finally {
-                await context.env.services.mobiusApp.revokeAccessToken(
-                    accessToken.accessTokenId,
-                    AbortSignal.timeout(10_000),
-                );
-                context.req.raw.signal.throwIfAborted();
-            }
-            return json({ botId: input.botId, displayName: input.displayName }, 201);
-        })
+            },
+        )
         .post("/access-tokens/:accessTokenId/regenerate", authenticatedSession, async (context) => {
             const session = context.get("session");
             const accessTokenId = context.req.param("accessTokenId");
-            const botId = await context.env.storages.managedBots.accessTokenBot(
-                session.userId,
-                accessTokenId,
-                context.req.raw.signal,
-            );
-            if (botId === null) {
-                throw new ManagementError("NOT_FOUND", "Not found.", 404);
-            }
             return json(
-                await context.env.services.mobiusApp.regenerateAccessToken(accessTokenId, context.req.raw.signal),
+                await context.env.services.management.regenerateAccessToken(
+                    session.userId,
+                    accessTokenId,
+                    context.req.raw.signal,
+                ),
             );
         });
 }

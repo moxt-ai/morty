@@ -116,12 +116,14 @@ pnpm exec wrangler deploy --config .wrangler/regional/staging/wnam.json --dry-ru
 
 Feature logic stays below `packages/worker/src/components`:
 
-- `cloud`: Clerk configuration, token verification, and `/mobius-cloud/api`.
 - `chat`: safe forwarding for `/mobius/api/*`.
+- `instruction-documents`: `/setup.md` and `/pair.md` routes and rendering service.
+- `management`: identity, Bot, Project, and Runtime management.
 - `slack`: Slack HTTP routes, services, queue processing, D1/R2 adapters, and rate limiting.
 
-All external gateways and top-level request dispatch stay directly under
-`packages/worker/src/gateway`; components do not contain gateway directories.
+Each component exports its Hono subtree from `http/index.ts`; the Worker application only mounts those subtrees.
+Cross-component HTTP assembly stays under `packages/worker/src/composition`.
+External system adapters stay directly under `packages/worker/src/gateway`; components do not contain gateway directories.
 
 Slack is source code in the Worker package, not an embedded package or standalone
 deployment. Shared runtime helpers remain directly under `packages/worker/src/infra`.

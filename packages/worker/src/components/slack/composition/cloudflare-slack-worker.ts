@@ -1,33 +1,31 @@
 import * as v from "valibot";
-import { projectBindings } from "../../composition/chat-shards.ts";
-import { ClerkGateway } from "../../gateway/clerk-gateway.ts";
-import { IdentityGateway } from "../../gateway/identity-gateway.ts";
-import { FetchMobiusTransport, MobiusGateway } from "../../gateway/mobius-gateway.ts";
-import { SlackWebApi } from "../../gateway/slack-web-gateway.ts";
-import type { CloudBindings } from "../../infra/cloud-bindings.ts";
-import { json } from "../../infra/http.ts";
-import { IdentityStorage } from "../management/storage/identity-storage.ts";
-import type { BotTriggerRateLimiter } from "./do/bot-trigger-rate-limiter.ts";
-import { CloudflareBotTriggerLimiter } from "./do/cloudflare-bot-trigger-limiter.ts";
-import {
-    ClockService,
-    createSlackApplication,
-    createSlackDependencies,
-    createSlackFileHandler,
-    createSlackWorker,
-    DatabaseSlackAppDirectory,
-} from "./index.ts";
-import { CloudflareSlackQueue } from "./infra/cloudflare-slack-queue.ts";
-import { type ProjectQueueMessage, projectQueueMessageSchema, type SlackQueueMessage } from "./infra/queue-message.ts";
-import { slackLogger } from "./infra/util/logger.ts";
-import { SecretCipher } from "./infra/util/secret-cipher.ts";
-import { SlackQueueHandler } from "./queue/slack-queue-handler.ts";
-import { D1SqlDatabase } from "./storage/d1-database.ts";
+import { projectBindings } from "../../../composition/chat-shards.ts";
+import { ClerkGateway } from "../../../gateway/clerk-gateway.ts";
+import { IdentityGateway } from "../../../gateway/identity-gateway.ts";
+import { FetchMobiusTransport, MobiusGateway } from "../../../gateway/mobius-gateway.ts";
+import { SlackWebApi } from "../../../gateway/slack-web-gateway.ts";
+import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
+import { json } from "../../../infra/http.ts";
+import { IdentityStorage } from "../../management/storage/identity-storage.ts";
+import type { BotTriggerRateLimiter } from "../do/bot-trigger-rate-limiter.ts";
+import { CloudflareBotTriggerLimiter } from "../do/cloudflare-bot-trigger-limiter.ts";
+import { createSlackFileHandler } from "../http/bot-tools/slack-file-handler.ts";
+import { createSlackApplication } from "../http/slack-api-routes.ts";
+import { CloudflareSlackQueue } from "../infra/cloudflare-slack-queue.ts";
+import { type ProjectQueueMessage, projectQueueMessageSchema, type SlackQueueMessage } from "../infra/queue-message.ts";
+import { slackLogger } from "../infra/util/logger.ts";
+import { SecretCipher } from "../infra/util/secret-cipher.ts";
+import { SlackQueueHandler } from "../queue/slack-queue-handler.ts";
+import { ClockService } from "../service/identity/clock-service.ts";
+import { D1SqlDatabase } from "../storage/d1-database.ts";
+import { DatabaseSlackAppDirectory } from "../storage/database-slack-app-directory.ts";
 import {
     CloudAttachmentStorageResolver,
     CloudDatabaseResolver,
     configuredDatabase,
-} from "./storage/slack-storage-resolvers.ts";
+} from "../storage/slack-storage-resolvers.ts";
+import { createSlackDependencies } from "./create-dependencies.ts";
+import { createSlackWorker } from "./slack-worker.ts";
 
 const slackBindingsSchema = v.object({
     CHAT_PROJECT_ID: v.string(),
@@ -139,7 +137,7 @@ const slack = createSlackWorker<
     };
 });
 
-export const slackApplication = {
+export const slackWorker = {
     fetch: async (request: Request, bindings: CloudBindings, context?: ExecutionContext) => {
         if (!hasSlackBindings(bindings)) {
             return json(

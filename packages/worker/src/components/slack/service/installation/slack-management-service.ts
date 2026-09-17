@@ -1,6 +1,8 @@
 import type { HumanPrincipal } from "../identity/identity-service";
-import type { TenantContext } from "../identity/tenant-context";
+import type { SlackTokenService } from "../identity/slack-token-service";
+import { type TenantContext, tenantContext } from "../identity/tenant-context";
 import type { MobiusConnectionService } from "./mobius-connection-service";
+import type { SlackInstallationService } from "./slack-installation-service";
 
 export type SlackConnectionStatus =
     | { readonly kind: "not-configured" }
@@ -80,9 +82,15 @@ export class SlackManagementService {
     readonly #projectId: string;
     readonly #secrets: SecretCipher;
     readonly #mobius: MobiusConnectionService;
+    readonly #installationService: SlackInstallationService;
+    readonly #tokens: SlackTokenService;
     constructor(cx: {
         readonly storages: { readonly slackEventStorage: SlackEventStorage };
-        readonly services: { readonly mobiusConnections: MobiusConnectionService };
+        readonly services: {
+            readonly installations: SlackInstallationService;
+            readonly mobiusConnections: MobiusConnectionService;
+            readonly slackTokens: SlackTokenService;
+        };
         readonly gateways: {
             readonly slackWebApi: SlackWebApi;
             readonly secretEncryption: SecretCipher;
@@ -91,10 +99,12 @@ export class SlackManagementService {
         readonly config: { readonly publicBaseUrl: string; readonly projectId: string };
     }) {
         const { slackEventStorage: storage } = cx.storages;
-        const { mobiusConnections: mobius } = cx.services;
+        const { installations, mobiusConnections: mobius, slackTokens } = cx.services;
         const { slackWebApi: manifestApi, secretEncryption: secrets, nowEpochMilliseconds } = cx.gateways;
         const { publicBaseUrl } = cx.config;
         this.#mobius = mobius;
+        this.#installationService = installations;
+        this.#tokens = slackTokens;
         this.#apps = storage;
         this.#configTokens = storage;
         this.#installations = storage;
@@ -147,6 +157,46 @@ export class SlackManagementService {
 
     readonly listBots = async (tenant: TenantContext, signal: AbortSignal) =>
         await this.#mobius.listBots(tenant, signal);
+
+    readonly authorizationUrl = async (
+        tenant: TenantContext,
+        principal: HumanPrincipal,
+        botId: string,
+        signal: AbortSignal,
+    ) => ({
+        url: await this.#installationService.createAuthorizationUrl(
+            tenant,
+            { botId, humanId: principal.humanId, tenantId: principal.tenantId },
+            signal,
+        ),
+    });
+
+    readonly completeAuthorization = async (code: string, state: string, signal: AbortSignal): Promise<void> => {
+        const verified = await this.#tokens.readOAuthState(state, signal);
+        await this.#installationService.completeAuthorization(tenantContext(verified.tenantId), code, verified, signal);
+    };
+
+    readonly registerManualAppAndAuthorize = async (
+        tenant: TenantContext,
+        principal: HumanPrincipal,
+        input: Parameters<SlackManagementService["registerManualApp"]>[2],
+        signal: AbortSignal,
+    ) => {
+        await this.registerManualApp(tenant, principal, input, signal);
+        const { url } = await this.authorizationUrl(tenant, principal, input.slackBotId, signal);
+        return { oauthAuthorizeUrl: url };
+    };
+
+    readonly createAppAndAuthorize = async (
+        tenant: TenantContext,
+        principal: HumanPrincipal,
+        input: Parameters<SlackManagementService["createApp"]>[2],
+        signal: AbortSignal,
+    ) => {
+        const created = await this.createApp(tenant, principal, input, signal);
+        const { url: oauthAuthorizeUrl } = await this.authorizationUrl(tenant, principal, input.slackBotId, signal);
+        return { ...created, oauthAuthorizeUrl };
+    };
 
     readonly registerManualApp = async (
         tenant: TenantContext,

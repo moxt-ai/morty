@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
 import * as v from "valibot";
+import { bodyParser } from "../../../../middleware/body-parser.ts";
 import { tenantContext } from "../../service/identity/tenant-context";
 import type { SlackHttpEnvironment } from "../slack-http-environment";
 
@@ -59,24 +60,32 @@ export function createSlackBotToolRoutes() {
     };
 
     return new Hono<SlackHttpEnvironment>()
-        .post("/messages", async (context) => {
-            const { principal, tenant, tools } = await authenticateTools(context);
-            const input = v.parse(messageBodySchema, await context.req.json());
-            return context.json(await tools.sendMessage(tenant, principal, input, context.req.raw.signal));
-        })
-        .post("/direct-messages/slack-user", async (context) => {
-            const { principal, tenant, tools } = await authenticateTools(context);
-            const input = v.parse(directMessageBodySchema, await context.req.json());
-            return context.json(
-                await tools.sendDirectMessageToSlackUser(
-                    tenant,
-                    principal,
-                    input.slackUserId,
-                    input.text,
-                    context.req.raw.signal,
-                ),
-            );
-        })
+        .post(
+            "/messages",
+            bodyParser<SlackHttpEnvironment, typeof messageBodySchema>(messageBodySchema),
+            async (context) => {
+                const { principal, tenant, tools } = await authenticateTools(context);
+                const input = context.req.valid("json");
+                return context.json(await tools.sendMessage(tenant, principal, input, context.req.raw.signal));
+            },
+        )
+        .post(
+            "/direct-messages/slack-user",
+            bodyParser<SlackHttpEnvironment, typeof directMessageBodySchema>(directMessageBodySchema),
+            async (context) => {
+                const { principal, tenant, tools } = await authenticateTools(context);
+                const input = context.req.valid("json");
+                return context.json(
+                    await tools.sendDirectMessageToSlackUser(
+                        tenant,
+                        principal,
+                        input.slackUserId,
+                        input.text,
+                        context.req.raw.signal,
+                    ),
+                );
+            },
+        )
         .get("/channels", async (context) => {
             const { principal, tenant, tools } = await authenticateTools(context);
             return context.json({
@@ -112,30 +121,38 @@ export function createSlackBotToolRoutes() {
                 threadTs: query.threadTs,
             });
         })
-        .post("/reactions", async (context) => {
-            const { principal, tenant, tools } = await authenticateTools(context);
-            const input = v.parse(reactionBodySchema, await context.req.json());
-            await tools.addReaction(
-                tenant,
-                principal,
-                input.channelId,
-                input.messageTs,
-                input.emojiName,
-                context.req.raw.signal,
-            );
-            return context.json({ success: true });
-        })
-        .delete("/reactions", async (context) => {
-            const { principal, tenant, tools } = await authenticateTools(context);
-            const input = v.parse(reactionBodySchema, await context.req.json());
-            await tools.removeReaction(
-                tenant,
-                principal,
-                input.channelId,
-                input.messageTs,
-                input.emojiName,
-                context.req.raw.signal,
-            );
-            return context.json({ success: true });
-        });
+        .post(
+            "/reactions",
+            bodyParser<SlackHttpEnvironment, typeof reactionBodySchema>(reactionBodySchema),
+            async (context) => {
+                const { principal, tenant, tools } = await authenticateTools(context);
+                const input = context.req.valid("json");
+                await tools.addReaction(
+                    tenant,
+                    principal,
+                    input.channelId,
+                    input.messageTs,
+                    input.emojiName,
+                    context.req.raw.signal,
+                );
+                return context.json({ success: true });
+            },
+        )
+        .delete(
+            "/reactions",
+            bodyParser<SlackHttpEnvironment, typeof reactionBodySchema>(reactionBodySchema),
+            async (context) => {
+                const { principal, tenant, tools } = await authenticateTools(context);
+                const input = context.req.valid("json");
+                await tools.removeReaction(
+                    tenant,
+                    principal,
+                    input.channelId,
+                    input.messageTs,
+                    input.emojiName,
+                    context.req.raw.signal,
+                );
+                return context.json({ success: true });
+            },
+        );
 }

@@ -1,5 +1,5 @@
-import { createSlackApplication } from "../../../src/components/slack/app";
 import { createSlackDependencies } from "../../../src/components/slack/composition/create-dependencies";
+import { createSlackApplication } from "../../../src/components/slack/http";
 import { createSlackFileHandler } from "../../../src/components/slack/http/bot-tools/slack-file-handler";
 import type { SlackQueueMessage } from "../../../src/components/slack/infra/queue-message";
 import { slackLogger } from "../../../src/components/slack/infra/util/logger";

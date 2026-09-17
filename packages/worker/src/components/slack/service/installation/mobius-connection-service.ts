@@ -6,6 +6,7 @@ import type { TenantContext } from "../identity/tenant-context";
 
 export class MobiusConnectionService {
     readonly #mobius: MobiusGateway;
+    readonly #relayUrl: string;
     readonly #storage: MobiusConnectionStorage;
     readonly #apps: SlackEventStorage;
     constructor(cx: {
@@ -14,10 +15,12 @@ export class MobiusConnectionService {
             readonly mobiusConnectionStorage: MobiusConnectionStorage;
             readonly slackEventStorage: SlackEventStorage;
         };
+        readonly config: { readonly mobiusBaseUrl: string };
     }) {
         this.#mobius = cx.gateways.mobius;
         this.#storage = cx.storages.mobiusConnectionStorage;
         this.#apps = cx.storages.slackEventStorage;
+        this.#relayUrl = cx.config.mobiusBaseUrl;
     }
     readonly bind = async (
         tenant: TenantContext,
@@ -52,6 +55,46 @@ export class MobiusConnectionService {
     };
     readonly listBots = async (tenant: TenantContext, signal: AbortSignal) =>
         await this.#storage.listBots(tenant, signal);
+
+    readonly readBotSetup = async (
+        projectId: string,
+        botId: string,
+        ownerCredential: string,
+        forwardingToken: string | null,
+        signal: AbortSignal,
+    ) => await this.#mobius.botSetup(projectId, botId, ownerCredential, forwardingToken, signal);
+
+    readonly configureBot = async (
+        projectId: string,
+        botId: string,
+        input: Parameters<MobiusGateway["configureBot"]>[2],
+        forwardingToken: string | null,
+        signal: AbortSignal,
+    ) => await this.#mobius.configureBot(projectId, botId, input, forwardingToken, signal);
+
+    readonly createPairing = async (forwardingToken: string | null, tenantId: string, signal: AbortSignal) => ({
+        ...(await this.#mobius.createPairing(forwardingToken, signal, tenantId)),
+        relayUrl: this.#relayUrl,
+    });
+
+    readonly pairingStatus = async (input: Parameters<MobiusGateway["pairingStatus"]>[0], signal: AbortSignal) =>
+        await this.#mobius.pairingStatus(input, signal);
+
+    readonly projectStatus = async (projectId: string, forwardingToken: string | null, signal: AbortSignal) =>
+        await this.#mobius.projectStatus(projectId, forwardingToken, signal);
+
+    readonly listProjects = async (forwardingToken: string | null, signal: AbortSignal) =>
+        await this.#mobius.listProjects(forwardingToken, signal);
+
+    readonly listProjectBots = async (projectId: string, forwardingToken: string | null, signal: AbortSignal) =>
+        await this.#mobius.listProjectBots(projectId, forwardingToken, signal);
+
+    readonly createBot = async (
+        projectId: string,
+        forwardingToken: string | null,
+        input: Parameters<MobiusGateway["createBot"]>[2],
+        signal: AbortSignal,
+    ) => await this.#mobius.createBot(projectId, forwardingToken, input, signal);
     readonly resolveBinding = async (
         tenant: TenantContext,
         tenantId: string,

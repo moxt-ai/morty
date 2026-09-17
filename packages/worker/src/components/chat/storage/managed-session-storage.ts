@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { PlatformProjectError, platformIdentifier } from "../management/entity/platform-project.ts";
+import { PlatformProjectError, platformIdentifier } from "../../management/entity/platform-project.ts";
 
 const summarySchema = v.pipe(
     v.object({

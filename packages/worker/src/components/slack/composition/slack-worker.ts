@@ -1,11 +1,3 @@
-import { Hono } from "hono";
-import { createSlackBotToolRoutes } from "./http/bot-tools/slack-bot-tool-routes";
-import { handleError } from "./http/error-handler";
-import { createSlackEventsRoutes } from "./http/events/slack-events-routes";
-import { createHealthRoutes } from "./http/health/health-routes";
-import { createSlackManagementRoutes } from "./http/installation/slack-management-routes";
-import type { SlackHttpEnvironment } from "./http/slack-http-environment";
-
 const slackApiPrefix = "/mobius-slack/api";
 
 export interface SlackRuntime<TEnvironment, TContext, TQueueBatch> {
@@ -35,14 +27,4 @@ export function createSlackWorker<TEnvironment, TContext, TQueueBatch>(
         },
         queue: async (batch, environment) => await createRuntime(environment).consumeQueue(batch),
     };
-}
-
-export function createSlackApplication() {
-    return new Hono<SlackHttpEnvironment>()
-        .basePath(slackApiPrefix)
-        .onError(handleError)
-        .route("/", createHealthRoutes())
-        .route("/slack", createSlackEventsRoutes())
-        .route("/slack", createSlackManagementRoutes())
-        .route("/bot/slack", createSlackBotToolRoutes());
 }

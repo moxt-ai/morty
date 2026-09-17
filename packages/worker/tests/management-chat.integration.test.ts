@@ -251,4 +251,16 @@ test("Given a workspace, When unauthenticated or malformed setup requests arrive
         expect(invalid.status).toBe(400);
         expect(await invalid.json()).toMatchObject({ error: { code: "INVALID_REQUEST" } });
     }
+    const nonJson = await app.request(
+        `https://cloud.test/mobius-cloud/api/projects/${project.projectId}/management/project`,
+        {
+            method: "POST",
+            headers: { authorization: `Bearer ${alice}`, "content-type": "text/plain" },
+            body: JSON.stringify({ displayName: "My Project" }),
+        },
+    );
+    expect(nonJson.status).toBe(400);
+    expect(await nonJson.json()).toEqual({
+        error: { code: "INVALID_REQUEST", message: "A JSON request is required." },
+    });
 });

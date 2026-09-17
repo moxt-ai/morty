@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import type { HttpError } from "../../infra/http-error.ts";
+import type { HttpError } from "../../../infra/http-error.ts";
 
 const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
 const credential = v.pipe(v.string(), v.minLength(1), v.maxLength(4096));

@@ -1,6 +1,6 @@
 import { PlatformProjectError } from "../components/management/entity/platform-project.ts";
 import { projectRegion } from "../components/management/entity/project-region.ts";
-import { projectLocationHint } from "../components/management/http/project-location.ts";
+import { projectLocationHint } from "../components/management/util/project-location.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 
 export async function routeRegionalChat(

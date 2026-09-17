@@ -1,43 +1,15 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { createChatApplication } from "./components/chat/chat-routes.ts";
-import { createManagementApplication } from "./components/management/http/create-application.ts";
-import { slackApplication } from "./components/slack/slack-application.ts";
-import { type ApplicationContext, createApplicationDependencies } from "./composition/application-context.ts";
-import { instructionDocuments } from "./gateway/instruction-documents.ts";
+import { instructionDocumentRoutes } from "./components/instruction-documents/http/index.ts";
+import { slackWorker } from "./components/slack/composition/cloudflare-slack-worker.ts";
+import { slackRoutes } from "./components/slack/http/index.ts";
+import { createApplicationDependencies } from "./composition/application-context.ts";
+import { cloudRoutes } from "./composition/cloud-http.ts";
 import { setupArtifact } from "./gateway/setup-artifact.ts";
 import type { CloudBindings } from "./infra/cloud-bindings.ts";
 import { instrumentD1Database, RequestAccessMetrics } from "./infra/request-access-metrics.ts";
 import { RequestError } from "./infra/request-error.ts";
 import { errorMiddleware, rethrowHttpError } from "./middleware/error-middleware.ts";
-import { cloudProjectContext, slackProjectContext } from "./middleware/project-context.ts";
-
-const managementApplication = createManagementApplication();
-const projectManagementApplication = createManagementApplication("/mobius-cloud/api/projects/:projectId");
-const chatApplication = createChatApplication();
-
-type CloudHttpEnvironment = {
-    readonly Bindings: CloudBindings;
-    readonly Variables: { readonly dependencies: ApplicationContext };
-};
-
-const cloudRoutes = new Hono<CloudHttpEnvironment>()
-    .use("*", cloudProjectContext)
-    .all("/projects/:projectId/*", (context) =>
-        projectManagementApplication.fetch(context.req.raw, context.var.dependencies),
-    )
-    .all("/chat", (context) => managementApplication.fetch(context.req.raw, context.var.dependencies))
-    .route(
-        "/chat",
-        new Hono<CloudHttpEnvironment>().all("/*", (context) =>
-            chatApplication.fetch(context.req.raw, context.var.dependencies),
-        ),
-    )
-    .all("*", (context) => managementApplication.fetch(context.req.raw, context.var.dependencies));
-
-const slackRoutes = new Hono<{ readonly Bindings: CloudBindings }>()
-    .use("*", slackProjectContext)
-    .all("*", (context) => slackApplication.fetch(context.req.raw, context.var.projectBindings));
 
 const notFound = (): never => {
     throw new RequestError("NOT_FOUND", "Not found.", 404);
@@ -54,7 +26,7 @@ const application = new Hono<{ readonly Bindings: CloudBindings }>()
     .use("/mobius-cloud/api/*", bodyLimit({ maxSize: 110000 }))
     .all("/mobius-cloud/api", notFound)
     .all("/mobius-slack/api", notFound)
-    .route("/", instructionDocuments)
+    .route("/", instructionDocumentRoutes)
     .route("/", setupArtifact)
     .route("/mobius-cloud/api", cloudRoutes)
     .route("/mobius-slack/api", slackRoutes)
@@ -74,6 +46,6 @@ export default {
         return metrics.appendServerTiming(response);
     },
     async queue(batch, bindings): Promise<void> {
-        await slackApplication.queue(batch, bindings);
+        await slackWorker.queue(batch, bindings);
     },
 } satisfies ExportedHandler<CloudBindings, unknown>;

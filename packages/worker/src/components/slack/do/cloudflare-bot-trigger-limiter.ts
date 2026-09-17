@@ -1,4 +1,4 @@
-import type { SlackConversationKey } from "../index.ts";
+import type { SlackConversationKey } from "../service/bot-run/slack-event-processor.ts";
 import type { BotTriggerRateLimiter } from "./bot-trigger-rate-limiter";
 
 export class CloudflareBotTriggerLimiter {
