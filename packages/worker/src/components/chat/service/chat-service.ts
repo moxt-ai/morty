@@ -147,7 +147,7 @@ export class ChatService {
     };
 
     readonly managedSession = async (scope: ChatScope, sessionId: string) =>
-        await this.#chatSessions.readFork(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal);
+        await this.#chatSessions.readLocalSession(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal);
 
     readonly nativeSessions = async (scope: ChatScope, runtimeId: string, input: NativeListInput) => {
         const result = await this.#platform.nativeSessions(scope.projectId, runtimeId, input, scope.signal);
@@ -277,22 +277,37 @@ export class ChatService {
         return { title: result.title, history: result.history };
     };
 
+    readonly importNativeSession = async (
+        scope: ChatScope,
+        runtimeId: string,
+        entryId: string,
+        input: NativeEntryInput,
+    ) => await this.#openNativeSession(scope, runtimeId, entryId, input, "import");
+
     readonly forkNativeSession = async (
         scope: ChatScope,
         runtimeId: string,
         entryId: string,
         input: NativeEntryInput,
+    ) => await this.#openNativeSession(scope, runtimeId, entryId, input, "fork");
+
+    readonly #openNativeSession = async (
+        scope: ChatScope,
+        runtimeId: string,
+        entryId: string,
+        input: NativeEntryInput,
+        action: "fork" | "import",
     ) => {
         const result = await this.#platform.nativeSessions(
             scope.projectId,
             runtimeId,
-            { ...input, entryId, action: "fork" },
+            { ...input, entryId, action },
             scope.signal,
         );
-        if (result.action !== "fork" || result.ready.sessionId !== result.targetSessionId) {
+        if (result.action !== action || result.ready.sessionId !== result.targetSessionId) {
             throw new PlatformProjectError(
-                "FORK_UNAVAILABLE",
-                "This agent cannot fork the selected local session.",
+                action === "fork" ? "FORK_UNAVAILABLE" : "IMPORT_UNAVAILABLE",
+                `This agent cannot ${action} the selected local session.`,
                 409,
             );
         }
@@ -301,7 +316,7 @@ export class ChatService {
             scope.userId,
             scope.botId,
             {
-                kind: "fork",
+                kind: action,
                 id: result.ready.sessionId,
                 title: result.title || "Untitled session",
                 data: JSON.stringify({
@@ -321,7 +336,7 @@ export class ChatService {
         );
         this.#logger.info(
             {
-                event: "native-session-forked",
+                event: action === "fork" ? "native-session-forked" : "native-session-imported",
                 userId: scope.userId,
                 projectId: scope.projectId,
                 botId: scope.botId,

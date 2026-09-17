@@ -183,6 +183,24 @@ export function createBotChatRoutes() {
             },
         )
         .post(
+            "/bots/:botId/native-session/:id/import",
+            authenticatedSession,
+            authorizedChat(120000),
+            bodyParser<AuthorizedChatEnvironment, typeof nativeEntryInput>(nativeEntryInput),
+            async (context) => {
+                const entryId = v.parse(platformIdentifier, context.req.param("id"));
+                const { runtimeId, ...input } = context.req.valid("json");
+                return privateJson(
+                    await context.env.services.chat.importNativeSession(
+                        context.get("chatScope"),
+                        runtimeId,
+                        entryId,
+                        input,
+                    ),
+                );
+            },
+        )
+        .post(
             "/bots/:botId/native-session/:id/fork",
             authenticatedSession,
             authorizedChat(120000),

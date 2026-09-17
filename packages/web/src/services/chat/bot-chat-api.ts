@@ -20,7 +20,7 @@ const accessSchema = v.pipe(
 export type ChatAccess = v.InferOutput<typeof accessSchema>;
 const managedSessionSchema = v.pipe(
     v.object({
-        kind: v.picklist(["conversation", "fork"]),
+        kind: v.picklist(["conversation", "fork", "import"]),
         id: identifier,
         title: v.string(),
         projectId: identifier,
@@ -220,15 +220,15 @@ export class BotChatApi {
                 JSON.stringify(await this.#request(botId, "native-sessions", { ...input, runtimeId }, signal)),
             );
         }
-        if (input.action !== "fork") {
+        if (input.action !== "fork" && input.action !== "import") {
             throw new CloudApiError("INVALID_REQUEST", "Use the session preview endpoint to read local history.");
         }
-        const { entryId, action: _action, ...identity } = input;
+        const { entryId, action, ...identity } = input;
         return decodeNativeSessionResult(
             JSON.stringify(
                 await this.#request(
                     botId,
-                    `native-session/${encodeURIComponent(v.parse(identifier, entryId))}/fork`,
+                    `native-session/${encodeURIComponent(v.parse(identifier, entryId))}/${action}`,
                     { ...identity, runtimeId },
                     signal,
                 ),

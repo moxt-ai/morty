@@ -19,6 +19,7 @@ type Directory =
           readonly runtimeId: string;
           readonly discoveryId: string;
           readonly agentRef: string;
+          readonly capabilities: Extract<NativeSessionResult, { readonly action: "list" }>["capabilities"];
           readonly entries: readonly NativeSessionEntry[];
           readonly nextCursor: string | null;
       }
@@ -48,7 +49,7 @@ export function LocalSessionDialog({
     const [selected, setSelected] = useState("");
     const [directory, setDirectory] = useState<Directory>({ kind: "loading" });
     const [preview, setPreview] = useState<Preview>({ kind: "empty" });
-    const [operation, setOperation] = useState<"idle" | "more" | "fork">("idle");
+    const [operation, setOperation] = useState<"idle" | "more" | "import" | "fork">("idle");
     const [error, setError] = useState("");
     const lifetime = useRef<AbortController | null>(null);
     const selection = useRef<AbortController | null>(null);
@@ -91,6 +92,7 @@ export function LocalSessionDialog({
                 runtimeId: agent.runtimeId,
                 discoveryId: result.sessionId,
                 agentRef: agent.agentRef,
+                capabilities: result.capabilities,
                 entries: result.entries,
                 nextCursor: result.nextCursor,
             });
@@ -143,7 +145,7 @@ export function LocalSessionDialog({
             }
         }
     };
-    const fork = async () => {
+    const openSession = async (action: "import" | "fork") => {
         if (
             directory.kind !== "ready" ||
             preview.kind !== "ready" ||
@@ -153,14 +155,14 @@ export function LocalSessionDialog({
             return;
         }
         const signal = lifetime.current.signal;
-        setOperation("fork");
+        setOperation(action);
         setError("");
         try {
             const result = await requests.nativeSessions(
                 botId,
                 directory.runtimeId,
                 {
-                    action: "fork",
+                    action,
                     discoveryId: directory.discoveryId,
                     agentId: directory.agentRef,
                     directoryId: preview.entry.directoryId,
@@ -170,13 +172,13 @@ export function LocalSessionDialog({
                 signal,
             );
             signal.throwIfAborted();
-            if (result.action !== "fork") {
-                throw new Error("This agent cannot fork the selected local session.");
+            if (result.action !== action) {
+                throw new Error(`This agent cannot ${action} the selected local session.`);
             }
-            onOpen({ agentRef: directory.agentRef, result: { ...result, action: "fork" }, entry: preview.entry });
+            onOpen({ agentRef: directory.agentRef, result, entry: preview.entry });
         } catch (cause) {
             if (!signal.aborted) {
-                setError(cause instanceof Error ? cause.message : "The session could not be forked.");
+                setError(cause instanceof Error ? cause.message : `The session could not be ${action}ed.`);
             }
         } finally {
             if (!signal.aborted) {
@@ -238,9 +240,9 @@ export function LocalSessionDialog({
     return (
         <Dialog
             title="Open Local Session"
-            description="Select a local session to preview its history, then fork a copy into Chat."
+            description="Select a local session to preview its history, then import or fork it into Chat."
             onClose={onClose}
-            busy={operation === "fork"}
+            busy={operation === "import" || operation === "fork"}
             wide
         >
             <div className="grid h-[min(60dvh,36rem)] min-h-0 grid-cols-[minmax(8rem,1fr)_minmax(0,2fr)] overflow-hidden rounded-xl border border-border">
@@ -343,13 +345,26 @@ export function LocalSessionDialog({
                 </p>
             )}
             <footer className="mt-5 flex justify-end gap-2">
-                <Button variant="outline" disabled={operation === "fork"} onClick={onClose}>
+                <Button variant="outline" disabled={operation === "import" || operation === "fork"} onClick={onClose}>
                     Cancel
+                </Button>
+                <Button
+                    data-testid={dataTestId.importLocalSession}
+                    variant="outline"
+                    disabled={
+                        preview.kind !== "ready" ||
+                        operation !== "idle" ||
+                        directory.kind !== "ready" ||
+                        (!directory.capabilities.loadSession && !directory.capabilities.resumeSession)
+                    }
+                    onClick={() => void openSession("import")}
+                >
+                    {operation === "import" ? "Importing…" : "Import"}
                 </Button>
                 <Button
                     data-testid={dataTestId.forkLocalSession}
                     disabled={preview.kind !== "ready" || operation !== "idle"}
-                    onClick={() => void fork()}
+                    onClick={() => void openSession("fork")}
                 >
                     {operation === "fork" ? "Forking…" : "Fork"}
                 </Button>

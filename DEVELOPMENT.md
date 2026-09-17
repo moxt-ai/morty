@@ -180,16 +180,17 @@ model and approved Bot binding. Existing conversations reopen by Conversation ID
 including credential refresh, and keep their harness fixed.
 First Send keeps the created connection and transitions the draft in place; it
 updates the saved URL without removing the sidebar or composer to reconnect.
-Chat records created Conversations and forked Sessions in `chat_managed_session`,
+Chat records created Conversations and imported or forked Sessions in `chat_managed_session`,
 keyed and indexed by Project ID, user ID, Bot ID, resource kind and resource ID.
 The sidebar lists these managed records. New Conversation records the first prompt
 as its title. Open Local Session opens a two-column directory and preview dialog;
 the directory returns metadata only, selecting an entry fetches its history from
-`native-session/:id`, and `native-session/:id/fork` creates and records a separate Session.
-Cancelling the dialog creates no Chat-managed record. Forked Sessions reopen by
-`sessionId` in the saved page URL. Apply migration `0006_chat_managed_session.sql`
-to both regional Chat databases before deployment.
-The Worker discovers and forks native sessions through the Project SDK. Its
+`native-session/:id`; Import resumes it in Chat, while Fork creates a separate native
+Session. Cancelling the dialog creates no Chat-managed record. Imported and forked
+Sessions reopen by `sessionId` in the saved page URL. Apply migrations
+`0006_chat_managed_session.sql` and `0007_chat_managed_import.sql` to both regional
+Chat databases before deployment.
+The Worker discovers, imports, and forks native sessions through the Project SDK. Its
 `session-access` endpoint issues credentials scoped to the selected Session inside
 the user's Project. The browser uses those credentials with the Session SDK to
 communicate directly with Mobius; it receives no Runtime-wide host credential.

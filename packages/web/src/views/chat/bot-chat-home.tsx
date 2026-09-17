@@ -161,7 +161,7 @@ export function BotChatHome({
     const [initialTarget] = useState<
         | { readonly kind: "draft"; readonly key: string }
         | { readonly kind: "existing"; readonly conversationId: string }
-        | { readonly kind: "fork"; readonly sessionId: string }
+        | { readonly kind: "local"; readonly sessionId: string }
         | { readonly kind: "continue"; readonly harness: string; readonly sessionId: string }
     >(() => {
         const url = new URL(window.location.href);
@@ -171,7 +171,7 @@ export function BotChatHome({
             if (harness !== null && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(harness)) {
                 return { kind: "continue", harness, sessionId };
             }
-            return { kind: "fork", sessionId };
+            return { kind: "local", sessionId };
         }
         const conversationId = url.searchParams.get("conversationId");
         return conversationId !== null && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(conversationId)
@@ -217,7 +217,7 @@ export function BotChatHome({
         target.current = { kind: "draft", key };
         retry((value) => value + 1);
     }, []);
-    const openManaged = (kind: "conversation" | "fork", id: string) => {
+    const openManaged = (kind: "conversation" | "fork" | "import", id: string) => {
         lifetime.current?.controller.abort();
         setDraft("");
         setAttachments([]);
@@ -232,7 +232,7 @@ export function BotChatHome({
         url.searchParams.set(kind === "conversation" ? "conversationId" : "sessionId", id);
         window.history.replaceState(window.history.state, "", url);
         target.current =
-            kind === "conversation" ? { kind: "existing", conversationId: id } : { kind: "fork", sessionId: id };
+            kind === "conversation" ? { kind: "existing", conversationId: id } : { kind: "local", sessionId: id };
         retry((value) => value + 1);
     };
     useLayoutEffect(() => {
@@ -295,12 +295,12 @@ export function BotChatHome({
                 url.searchParams.delete("harness");
                 url.searchParams.set("sessionId", session.result.ready.sessionId);
                 window.history.replaceState(window.history.state, "", url);
-                target.current = { kind: "fork", sessionId: session.result.ready.sessionId };
+                target.current = { kind: "local", sessionId: session.result.ready.sessionId };
                 setState({ kind: "draft", bot });
                 setConversation({ kind: "local", session });
                 return;
             }
-            if (target.current.kind === "fork") {
+            if (target.current.kind === "local") {
                 const session = await requests.managedSession(bot.botId, target.current.sessionId, controller.signal);
                 controller.signal.throwIfAborted();
                 setState({ kind: "draft", bot });
@@ -548,7 +548,7 @@ export function BotChatHome({
                     activeId={
                         target.current.kind === "existing"
                             ? target.current.conversationId
-                            : target.current.kind === "fork"
+                            : target.current.kind === "local"
                               ? target.current.sessionId
                               : ""
                     }
@@ -556,11 +556,7 @@ export function BotChatHome({
                     requests={requests}
                     createTransfer={createTransfer}
                     onOpen={(session) => openManaged(session.kind, session.id)}
-                    onFork={(session) => {
-                        if (session.result.action === "fork") {
-                            openManaged("fork", session.result.ready.sessionId);
-                        }
-                    }}
+                    onOpenLocal={(session) => openManaged(session.result.action, session.result.ready.sessionId)}
                     onNewConversation={newConversation}
                 />
             )}

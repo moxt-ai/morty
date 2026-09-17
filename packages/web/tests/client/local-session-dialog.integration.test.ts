@@ -47,8 +47,8 @@ const listed: NativeSessionResult = {
     sessionId: "discovery-session",
 };
 
-const forked: NativeSessionResult = {
-    action: "fork",
+const imported: NativeSessionResult = {
+    action: "import",
     history: { coveredCommandIds: [], coveredMessageIds: [], messages: [], status: "available", truncated: false },
     kind: "native.session.result",
     ready: {
@@ -62,13 +62,13 @@ const forked: NativeSessionResult = {
         directoryId: "default",
         directoryLabel: "Workspace",
         kind: "session.ready",
-        requestId: "fork-request",
+        requestId: "import-request",
         restored: true,
-        sessionId: "forked-session",
+        sessionId: "imported-session",
     },
-    requestId: "fork-request",
+    requestId: "import-request",
     sessionId: "discovery-session",
-    targetSessionId: "forked-session",
+    targetSessionId: "imported-session",
     title: "Active Codex session",
 };
 
@@ -76,7 +76,7 @@ afterEach(() => {
     document.body.replaceChildren();
 });
 
-it("Given a listed local session, When a user selects and forks it, Then Chat previews its history before creating the fork", async () => {
+it("Given a listed local session, When a user selects and imports it, Then Chat offers Import before Fork and opens the imported session", async () => {
     const actions: string[] = [];
     let opened: OpenLocalSession | null = null;
     const requests: Pick<BotChatApi, "workspace" | "nativeSessions" | "nativeSession"> = {
@@ -89,7 +89,7 @@ it("Given a listed local session, When a user selects and forks it, Then Chat pr
         }),
         nativeSessions: async (_botId, _runtimeId, input) => {
             actions.push(input.action);
-            return input.action === "list" ? listed : forked;
+            return input.action === "list" ? listed : imported;
         },
         nativeSession: async () => {
             actions.push("preview");
@@ -127,14 +127,25 @@ it("Given a listed local session, When a user selects and forks it, Then Chat pr
     await act(async () => session.click());
     const preview = document.querySelector<HTMLElement>(`[aria-label="Selected session preview"]`);
     expect(preview?.textContent).toContain("Explain the session preview");
+    const importedSession = document.querySelector<HTMLButtonElement>(
+        `[data-testid="${dataTestId.importLocalSession}"]`,
+    );
     const fork = document.querySelector<HTMLButtonElement>(`[data-testid="${dataTestId.forkLocalSession}"]`);
-    if (fork === null) {
-        throw new Error("The Fork action was not rendered");
+    if (importedSession === null || fork === null) {
+        throw new Error("The Import and Fork actions were not rendered");
     }
-    expect(fork.disabled).toBe(false);
-    await act(async () => fork.click());
+    expect(Array.from(document.querySelectorAll("footer button"), (button) => button.textContent)).toEqual([
+        "Cancel",
+        "Import",
+        "Fork",
+    ]);
+    expect(importedSession.disabled).toBe(false);
+    await act(async () => importedSession.click());
 
-    expect(actions).toEqual(["list", "preview", "fork"]);
-    expect(opened).toMatchObject({ entry: { entryId: "native-entry" }, result: { sessionId: "discovery-session" } });
+    expect(actions).toEqual(["list", "preview", "import"]);
+    expect(opened).toMatchObject({
+        entry: { entryId: "native-entry" },
+        result: { action: "import", ready: { sessionId: "imported-session" } },
+    });
     await act(async () => root.unmount());
 });

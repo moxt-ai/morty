@@ -18,7 +18,7 @@ export function ConversationSidebar({
     requests,
     activeId,
     onOpen,
-    onFork,
+    onOpenLocal,
     onNewConversation,
     createTransfer,
 }: {
@@ -26,7 +26,7 @@ export function ConversationSidebar({
     readonly requests: Pick<BotChatApi, "workspace" | "nativeSessions" | "nativeSession" | "managedSessions">;
     readonly activeId: string;
     readonly onOpen: (session: ManagedChatSession) => void;
-    readonly onFork: (session: OpenLocalSession) => void;
+    readonly onOpenLocal: (session: OpenLocalSession) => void;
     readonly onNewConversation: () => void;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
 }) {
@@ -134,7 +134,7 @@ export function ConversationSidebar({
                     requests={requests}
                     onClose={() => setDialog(false)}
                     onOpen={(session) => {
-                        onFork(session);
+                        onOpenLocal(session);
                         setDialog(false);
                         refresh((value) => value + 1);
                     }}

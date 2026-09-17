@@ -6,5 +6,6 @@ export const dataTestId = Object.freeze({
     pairingInstruction: "chat-pairing-instruction",
     newConversation: "chat-new-conversation",
     localSessionEntry: "chat-local-session-entry",
+    importLocalSession: "chat-import-local-session",
     forkLocalSession: "chat-fork-local-session",
 });
