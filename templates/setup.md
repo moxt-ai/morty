@@ -52,9 +52,10 @@ means the binding is active and the selected Runtime/agent is online; it does no
 claim a successful test message.
 
 Return the exact clickable browser `url`, QR code, and `expiresAt` from the ready result.
-The QR payload is the exact same URL. When the harness can display a local image, show
-the owner-only PNG at `qrPath`; otherwise return `qrText` in a plain-text block without
-changing its spacing. The link identifies this harness session so Chat can import it
+The QR payload is the exact same URL. When running in a TUI, show `qrText` in a
+plain-text block without changing its spacing. Otherwise, when the harness can display
+a local image, show the owner-only PNG at `qrPath`; fall back to the same `qrText`
+rendering if it cannot. The link identifies this harness session so Chat can import it
 and open it after the handoff. The link is valid for **24 hours**, can be successfully
 opened at most **five times**, and opens the same user and Bot each time. Never open,
 preview, scan, or redeem it yourself because doing so consumes one use. Tell the user:
