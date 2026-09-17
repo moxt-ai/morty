@@ -87,3 +87,52 @@ for (const mode of ["pair", "setup"]) {
         });
     });
 }
+
+test("Given a continued setup session needs approval, When the user decides on mobile and reloads, Then pending interactions remain actionable exactly once", async ({
+    runtime,
+}) => {
+    const { page } = runtime;
+    await page.setViewportSize({ width: 390, height: 844 });
+    const sessionId = "setup-permission-session";
+    await runtime.seedNativeSession(sessionId, "Prepare permission handling");
+    const connected = await runtime.followInstructions("/setup.md", sessionId);
+    await page.goto(connected.url);
+
+    const composer = page.getByRole("textbox", { name: "Message local session", exact: true });
+    await expect(composer).toBeVisible();
+    await composer.fill("exercise ACP controls");
+    await page.getByRole("button", { name: "Send to local session", exact: true }).click();
+
+    const permission = page.getByRole("alertdialog", { name: "Agent permission request", exact: true });
+    await expect(permission).toContainText("Run the verification command");
+    let permissionResponses = 0;
+    page.on("request", (request) => {
+        if (request.method() === "POST" && new URL(request.url()).pathname.endsWith("/responses")) {
+            permissionResponses += 1;
+        }
+    });
+    const permissionResponse = page.waitForResponse(
+        (response) => response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/responses"),
+        { timeout: 15_000 },
+    );
+    await permission.getByRole("button", { name: "Allow once", exact: true }).dispatchEvent("click");
+    expect((await permissionResponse).status()).toBe(202);
+    expect(permissionResponses).toBe(1);
+
+    const elicitation = page.getByRole("dialog", { name: "Agent information request", exact: true });
+    await expect(elicitation).toContainText("Choose the branch to verify", { timeout: 30_000 });
+    await elicitation.getByRole("textbox").fill("mobile-approval");
+    await elicitation.getByRole("button", { name: "Continue", exact: true }).dispatchEvent("click");
+    await expect(page.getByRole("log", { name: "Local session messages", exact: true })).toContainText(
+        "mobile-approval",
+    );
+
+    await composer.fill("exercise ACP controls");
+    await page.getByRole("button", { name: "Send to local session", exact: true }).click();
+    await expect(permission).toBeVisible();
+    await page.reload();
+    await expect(permission).toContainText("Run the verification command");
+    await permission.getByRole("button", { name: "Reject", exact: true }).dispatchEvent("click");
+    await expect(permission).toHaveCount(0);
+    await expect(composer).toBeEnabled();
+});

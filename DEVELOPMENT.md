@@ -195,6 +195,11 @@ The Worker discovers, imports, and forks native sessions through the Project SDK
 `session-access` endpoint issues credentials scoped to the selected Session inside
 the user's Project. The browser uses those credentials with the Session SDK to
 communicate directly with Mobius; it receives no Runtime-wide host credential.
+That Session credential also permits reading and answering interactions for only
+the selected Session. Continued Sessions show pending permission and elicitation
+requests, restore them after a reload, and reconcile a decision with Mobius before
+offering it again. Closing or reloading the pane does not implicitly cancel the
+active Turn.
 Slack's `MobiusGateway` also calls Mobius
 directly and rejects recursive configuration and redirects.
 

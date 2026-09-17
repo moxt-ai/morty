@@ -1,7 +1,13 @@
 import {
+    decodeSessionElicitationRequestedEvent,
+    decodeSessionElicitationResolvedEvent,
+    decodeSessionPermissionRequestedEvent,
+    decodeSessionPermissionResolvedEvent,
     MobiusAgentActivityEvent,
     MobiusAgentMessageEvent,
     MobiusControlEvent,
+    MobiusElicitationResponseRequest,
+    MobiusPermissionResponseRequest,
     MobiusRunningAttemptSummary,
     MobiusTurnCompletedEvent,
     MobiusTurnFailedEvent,
@@ -12,6 +18,13 @@ import { type MobiusClient, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browse
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { BotChatComposer, type ComposerAttachment } from "../../components/chat/bot-chat-composer.tsx";
+import {
+    type ElicitationInteraction,
+    type ElicitationInteractionResponse,
+    type PermissionInteraction,
+    type PermissionInteractionResponse,
+    SessionInteractionCards,
+} from "../../components/chat/session-interactions.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
 import { type RecordedAgentActivity, recordAgentActivity } from "../../services/chat/agent-activities.ts";
@@ -24,6 +37,81 @@ type Operation =
     | { readonly kind: "sending"; readonly commandId: string }
     | { readonly kind: "configuring" }
     | { readonly kind: "failed"; readonly message: string };
+
+type ServiceInteraction = Awaited<ReturnType<MobiusClient["interactions"]["listPending"]>>[number];
+type LocalInteraction =
+    | { readonly kind: "permission"; readonly permission: PermissionInteraction }
+    | { readonly kind: "elicitation"; readonly elicitation: ElicitationInteraction };
+
+function acceptedUrlInteraction(interaction: ServiceInteraction): boolean {
+    if (
+        interaction.request.kind !== "elicitation" ||
+        interaction.request.mode !== "url" ||
+        interaction.state.kind !== "responded" ||
+        interaction.state.response.kind !== "elicitation"
+    ) {
+        return false;
+    }
+    try {
+        const response: unknown = JSON.parse(interaction.state.response.content);
+        return (
+            typeof response === "object" &&
+            response !== null &&
+            !Array.isArray(response) &&
+            Reflect.get(response, "action") === "accept"
+        );
+    } catch {
+        return false;
+    }
+}
+
+function presentInteraction(interaction: ServiceInteraction): LocalInteraction | null {
+    if (interaction.request.kind === "permission") {
+        return interaction.state.kind === "pending"
+            ? {
+                  kind: "permission",
+                  permission: {
+                      interactionId: interaction.interactionId,
+                      options: interaction.request.options,
+                      sessionId: interaction.sessionId,
+                      title: interaction.request.title,
+                      toolCallId: interaction.request.toolCallId,
+                      toolKind: interaction.request.toolKind,
+                  },
+              }
+            : null;
+    }
+    if (interaction.state.kind !== "pending" && !acceptedUrlInteraction(interaction)) {
+        return null;
+    }
+    return {
+        kind: "elicitation",
+        elicitation: {
+            accepted: interaction.state.kind === "responded",
+            fields: interaction.request.fields,
+            interactionId: interaction.interactionId,
+            message: interaction.request.message,
+            mode: interaction.request.mode,
+            sessionId: interaction.sessionId,
+            url: interaction.request.url,
+        },
+    };
+}
+
+function interactionId(interaction: LocalInteraction): string {
+    return interaction.kind === "permission"
+        ? interaction.permission.interactionId
+        : interaction.elicitation.interactionId;
+}
+
+function replaceInteraction(
+    current: readonly LocalInteraction[],
+    id: string,
+    replacement: LocalInteraction | null,
+): readonly LocalInteraction[] {
+    const remaining = current.filter((interaction) => interactionId(interaction) !== id);
+    return replacement === null ? remaining : [...remaining, replacement];
+}
 
 export function LocalSessionPane({
     session,
@@ -50,6 +138,7 @@ export function LocalSessionPane({
     const [draft, setDraft] = useState("");
     const [attachments, setAttachments] = useState<readonly ComposerAttachment[]>([]);
     const [activities, setActivities] = useState<ReadonlyMap<string, RecordedAgentActivity>>(new Map());
+    const [interactions, setInteractions] = useState<readonly LocalInteraction[]>([]);
     const [operation, setOperation] = useState<Operation>({ kind: "idle" });
     const lifetime = useRef(new AbortController());
     const command = useRef("");
@@ -104,12 +193,17 @@ export function LocalSessionPane({
         };
         const open = async () => {
             client = await requests.connectSession(botId, sessionId, controller.signal);
-            const saved = await client.sessions.readMessages(
-                sessionId,
-                new MobiusPageRequest(100, ""),
-                controller.signal,
-            );
+            const [saved, pendingInteractions] = await Promise.all([
+                client.sessions.readMessages(sessionId, new MobiusPageRequest(100, ""), controller.signal),
+                client.interactions.listPending(sessionId, controller.signal),
+            ]);
             controller.signal.throwIfAborted();
+            setInteractions(
+                pendingInteractions.flatMap((interaction) => {
+                    const presented = presentInteraction(interaction);
+                    return presented === null ? [] : [presented];
+                }),
+            );
             lastSequence = BigInt(saved.lastCommittedSequence);
             const history = session.result.history;
             const initial: readonly LocalMessage[] =
@@ -155,6 +249,31 @@ export function LocalSessionPane({
                         if (payload instanceof MobiusAgentActivityEvent) {
                             setActivities((current) => recordAgentActivity(current, event));
                             return true;
+                        }
+                        if (payload instanceof MobiusControlEvent) {
+                            if (payload.kind === "session.permission.requested") {
+                                const permission = decodeSessionPermissionRequestedEvent(payload.encodedPayload);
+                                setInteractions((current) =>
+                                    replaceInteraction(current, permission.interactionId, {
+                                        kind: "permission",
+                                        permission,
+                                    }),
+                                );
+                            } else if (payload.kind === "session.permission.resolved") {
+                                const resolved = decodeSessionPermissionResolvedEvent(payload.encodedPayload);
+                                setInteractions((current) => replaceInteraction(current, resolved.interactionId, null));
+                            } else if (payload.kind === "session.elicitation.requested") {
+                                const elicitation = decodeSessionElicitationRequestedEvent(payload.encodedPayload);
+                                setInteractions((current) =>
+                                    replaceInteraction(current, elicitation.interactionId, {
+                                        kind: "elicitation",
+                                        elicitation,
+                                    }),
+                                );
+                            } else if (payload.kind === "session.elicitation.resolved") {
+                                const resolved = decodeSessionElicitationResolvedEvent(payload.encodedPayload);
+                                setInteractions((current) => replaceInteraction(current, resolved.interactionId, null));
+                            }
                         }
                         if (
                             command.current !== "" &&
@@ -233,20 +352,7 @@ export function LocalSessionPane({
         });
         return () => {
             controller.abort();
-            const currentClient = client;
-            if (currentClient !== null && turnId.current !== "") {
-                void currentClient.turns
-                    .cancel(
-                        sessionId,
-                        turnId.current,
-                        { idempotencyKey: crypto.randomUUID() },
-                        AbortSignal.timeout(15000),
-                    )
-                    .catch(() => undefined)
-                    .finally(() => currentClient.close());
-            } else {
-                currentClient?.close();
-            }
+            client?.close();
         };
     }, [session, sessionId, botId, requests]);
     const request = {
@@ -331,6 +437,62 @@ export function LocalSessionPane({
             }
         }
     };
+    const applyAuthoritativeInteraction = (interaction: ServiceInteraction): void => {
+        setInteractions((current) =>
+            replaceInteraction(current, interaction.interactionId, presentInteraction(interaction)),
+        );
+    };
+    const reconcileInteraction = async (client: MobiusClient, id: string, cause: unknown): Promise<void> => {
+        lifetime.current.signal.throwIfAborted();
+        try {
+            const interaction = await client.interactions.read(
+                sessionId,
+                id,
+                AbortSignal.any([lifetime.current.signal, AbortSignal.timeout(20_000)]),
+            );
+            applyAuthoritativeInteraction(interaction);
+            if (interaction.state.kind === "pending") {
+                throw cause;
+            }
+        } catch (reconciliationCause) {
+            lifetime.current.signal.throwIfAborted();
+            throw reconciliationCause === cause ? cause : reconciliationCause;
+        }
+    };
+    const respondToLocalPermission = async (response: PermissionInteractionResponse): Promise<void> => {
+        if (connection.kind !== "ready") {
+            throw new Error("The Session is not connected.");
+        }
+        try {
+            applyAuthoritativeInteraction(
+                await connection.client.interactions.respond(
+                    sessionId,
+                    response.interactionId,
+                    new MobiusPermissionResponseRequest("mobius-web", response.outcome, response.optionId),
+                    AbortSignal.any([lifetime.current.signal, AbortSignal.timeout(20_000)]),
+                ),
+            );
+        } catch (cause) {
+            await reconcileInteraction(connection.client, response.interactionId, cause);
+        }
+    };
+    const respondToLocalElicitation = async (response: ElicitationInteractionResponse): Promise<void> => {
+        if (connection.kind !== "ready") {
+            throw new Error("The Session is not connected.");
+        }
+        try {
+            applyAuthoritativeInteraction(
+                await connection.client.interactions.respond(
+                    sessionId,
+                    response.interactionId,
+                    new MobiusElicitationResponseRequest("mobius-web", response.action, response.content),
+                    AbortSignal.any([lifetime.current.signal, AbortSignal.timeout(20_000)]),
+                ),
+            );
+        } catch (cause) {
+            await reconcileInteraction(connection.client, response.interactionId, cause);
+        }
+    };
     const busy = connection.kind !== "ready" || operation.kind === "sending" || operation.kind === "configuring";
     const activeCommandId = connection.kind === "ready" && operation.kind === "sending" ? operation.commandId : null;
     return (
@@ -372,6 +534,18 @@ export function LocalSessionPane({
                         />
                     </div>
                 ))}
+                <div className="mx-auto w-full min-w-0 max-w-3xl">
+                    <SessionInteractionCards
+                        elicitations={interactions.flatMap((interaction) =>
+                            interaction.kind === "elicitation" ? [interaction.elicitation] : [],
+                        )}
+                        permissions={interactions.flatMap((interaction) =>
+                            interaction.kind === "permission" ? [interaction.permission] : [],
+                        )}
+                        onElicitationResponse={respondToLocalElicitation}
+                        onPermissionResponse={respondToLocalPermission}
+                    />
+                </div>
             </div>
             <BotChatComposer
                 attachments={attachments}
