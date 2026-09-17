@@ -5,8 +5,8 @@ import { Dialog } from "../../components/ui/dialog.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
-import { LocalSessionDialog, type OpenLocalSession } from "./local-session-dialog.tsx";
 import { MachineSharing } from "./machine-sharing.tsx";
+import { NativeSessionDialog, type OpenMobiusSession } from "./native-session-dialog.tsx";
 
 type Directory =
     | { readonly kind: "loading" }
@@ -18,7 +18,7 @@ export function ConversationSidebar({
     requests,
     activeId,
     onOpen,
-    onOpenLocal,
+    onOpenSession,
     onNewConversation,
     createTransfer,
 }: {
@@ -26,7 +26,7 @@ export function ConversationSidebar({
     readonly requests: Pick<BotChatApi, "workspace" | "nativeSessions" | "nativeSession" | "managedSessions">;
     readonly activeId: string;
     readonly onOpen: (session: ManagedChatSession) => void;
-    readonly onOpenLocal: (session: OpenLocalSession) => void;
+    readonly onOpenSession: (session: OpenMobiusSession) => void;
     readonly onNewConversation: () => void;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
 }) {
@@ -70,7 +70,7 @@ export function ConversationSidebar({
             </Button>
             <Button variant="outline" className="mb-2 justify-start" onClick={() => setDialog(true)}>
                 <Laptop className="size-4" aria-hidden="true" />
-                Open Local Session
+                Native Sessions
             </Button>
             <Button variant="outline" className="mb-5 justify-start" onClick={() => setSharing(true)}>
                 <Share2 className="size-4" aria-hidden="true" />
@@ -129,12 +129,12 @@ export function ConversationSidebar({
                     ))}
             </div>
             {dialog && (
-                <LocalSessionDialog
+                <NativeSessionDialog
                     botId={botId}
                     requests={requests}
                     onClose={() => setDialog(false)}
                     onOpen={(session) => {
-                        onOpenLocal(session);
+                        onOpenSession(session);
                         setDialog(false);
                         refresh((value) => value + 1);
                     }}

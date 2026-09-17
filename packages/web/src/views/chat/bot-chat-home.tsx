@@ -17,12 +17,12 @@ import type { BotChatApi, ChatDraftConfiguration, ChatWorkspace } from "../../se
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
-import { BotConversationTurn } from "./bot-conversation-turn.tsx";
 import { ChatControls } from "./chat-controls.tsx";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
-import type { OpenLocalSession } from "./local-session-dialog.tsx";
-import { LocalSessionPane } from "./local-session-pane.tsx";
+import { MobiusSessionPane } from "./mobius-session-pane.tsx";
+import { MobiusSessionTurn } from "./mobius-session-turn.tsx";
+import type { OpenMobiusSession } from "./native-session-dialog.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
 
 type SetupReason = "unconfigured" | "inactive" | "no-selection" | "agent-missing" | "agent-offline" | "agent-required";
@@ -160,8 +160,8 @@ export function BotChatHome({
     const [attachments, setAttachments] = useState<readonly ComposerAttachment[]>([]);
     const [initialTarget] = useState<
         | { readonly kind: "draft"; readonly key: string }
-        | { readonly kind: "existing"; readonly conversationId: string }
-        | { readonly kind: "local"; readonly sessionId: string }
+        | { readonly kind: "conversation-access"; readonly conversationId: string }
+        | { readonly kind: "session-access"; readonly sessionId: string }
         | { readonly kind: "continue"; readonly harness: string; readonly sessionId: string }
     >(() => {
         const url = new URL(window.location.href);
@@ -171,11 +171,11 @@ export function BotChatHome({
             if (harness !== null && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(harness)) {
                 return { kind: "continue", harness, sessionId };
             }
-            return { kind: "local", sessionId };
+            return { kind: "session-access", sessionId };
         }
         const conversationId = url.searchParams.get("conversationId");
         return conversationId !== null && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(conversationId)
-            ? { kind: "existing", conversationId }
+            ? { kind: "conversation-access", conversationId }
             : { kind: "draft", key: crypto.randomUUID() };
     });
     const target = useRef(initialTarget);
@@ -194,10 +194,10 @@ export function BotChatHome({
     const messageList = useRef<HTMLDivElement | null>(null);
     const messageContent = useRef<HTMLDivElement | null>(null);
     const followLatest = useRef(true);
-    const [conversation, setConversation] = useState<
-        { readonly kind: "bot" } | { readonly kind: "local"; readonly session: OpenLocalSession }
-    >({ kind: "bot" });
-    const showBot = useCallback(() => setConversation({ kind: "bot" }), []);
+    const [sessionView, setSessionView] = useState<
+        | { readonly kind: "conversation-access" }
+        | { readonly kind: "session-access"; readonly session: OpenMobiusSession }
+    >({ kind: "conversation-access" });
     const newConversation = useCallback(() => {
         lifetime.current?.controller.abort();
         setDraft("");
@@ -206,7 +206,7 @@ export function BotChatHome({
         activeTurn.current = null;
         setDraftSettings(null);
         messageAttempt.current = null;
-        setConversation({ kind: "bot" });
+        setSessionView({ kind: "conversation-access" });
         followLatest.current = true;
         const key = crypto.randomUUID();
         const url = new URL(window.location.href);
@@ -232,7 +232,9 @@ export function BotChatHome({
         url.searchParams.set(kind === "conversation" ? "conversationId" : "sessionId", id);
         window.history.replaceState(window.history.state, "", url);
         target.current =
-            kind === "conversation" ? { kind: "existing", conversationId: id } : { kind: "local", sessionId: id };
+            kind === "conversation"
+                ? { kind: "conversation-access", conversationId: id }
+                : { kind: "session-access", sessionId: id };
         retry((value) => value + 1);
     };
     useLayoutEffect(() => {
@@ -243,7 +245,7 @@ export function BotChatHome({
     useLayoutEffect(() => {
         const list = messageList.current;
         const content = messageContent.current;
-        if (conversation.kind !== "bot" || list === null || content === null) {
+        if (sessionView.kind !== "conversation-access" || list === null || content === null) {
             return;
         }
         const keepLatestVisible = () => {
@@ -256,11 +258,11 @@ export function BotChatHome({
         observer.observe(content);
         keepLatestVisible();
         return () => observer.disconnect();
-    }, [conversation]);
+    }, [sessionView]);
     // biome-ignore lint/correctness/useExhaustiveDependencies: Reconnect explicitly restarts the SDK session.
     useEffect(() => {
         const controller = new AbortController();
-        setConversation({ kind: "bot" });
+        setSessionView({ kind: "conversation-access" });
         let client: MobiusBrowserClient | null = null;
         let reconciliationTimer: ReturnType<typeof setTimeout> | undefined;
         setState((current) => {
@@ -295,16 +297,16 @@ export function BotChatHome({
                 url.searchParams.delete("harness");
                 url.searchParams.set("sessionId", session.result.ready.sessionId);
                 window.history.replaceState(window.history.state, "", url);
-                target.current = { kind: "local", sessionId: session.result.ready.sessionId };
+                target.current = { kind: "session-access", sessionId: session.result.ready.sessionId };
                 setState({ kind: "draft", bot });
-                setConversation({ kind: "local", session });
+                setSessionView({ kind: "session-access", session });
                 return;
             }
-            if (target.current.kind === "local") {
+            if (target.current.kind === "session-access") {
                 const session = await requests.managedSession(bot.botId, target.current.sessionId, controller.signal);
                 controller.signal.throwIfAborted();
                 setState({ kind: "draft", bot });
-                setConversation({ kind: "local", session });
+                setSessionView({ kind: "session-access", session });
                 return;
             }
             const reason = target.current.kind === "draft" ? setupReason(workspace) : null;
@@ -467,7 +469,7 @@ export function BotChatHome({
                     url.searchParams.delete("conversation");
                     url.searchParams.set("conversationId", createdId);
                     window.history.replaceState(window.history.state, "", url);
-                    target.current = { kind: "existing", conversationId: createdId };
+                    target.current = { kind: "conversation-access", conversationId: createdId };
                     connection.adopt(state.bot, client, history);
                     createdClient = null;
                 } else {
@@ -546,9 +548,9 @@ export function BotChatHome({
             {active !== null && (
                 <ConversationSidebar
                     activeId={
-                        target.current.kind === "existing"
+                        target.current.kind === "conversation-access"
                             ? target.current.conversationId
-                            : target.current.kind === "local"
+                            : target.current.kind === "session-access"
                               ? target.current.sessionId
                               : ""
                     }
@@ -556,17 +558,16 @@ export function BotChatHome({
                     requests={requests}
                     createTransfer={createTransfer}
                     onOpen={(session) => openManaged(session.kind, session.id)}
-                    onOpenLocal={(session) => openManaged(session.result.action, session.result.ready.sessionId)}
+                    onOpenSession={(session) => openManaged(session.result.action, session.result.ready.sessionId)}
                     onNewConversation={newConversation}
                 />
             )}
-            {conversation.kind === "local" && active !== null ? (
-                <LocalSessionPane
+            {sessionView.kind === "session-access" && active !== null ? (
+                <MobiusSessionPane
                     botId={active.bot.botId}
                     requests={requests}
-                    key={conversation.session.result.ready.sessionId}
-                    session={conversation.session}
-                    onBack={showBot}
+                    key={sessionView.session.result.ready.sessionId}
+                    session={sessionView.session}
                 />
             ) : (
                 <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -626,7 +627,7 @@ export function BotChatHome({
                                 [...active.history.turns]
                                     .reverse()
                                     .map((turn) => (
-                                        <BotConversationTurn
+                                        <MobiusSessionTurn
                                             key={`${turn.sessionId}:${turn.commandId}`}
                                             turn={turn}
                                             activities={active.activities}

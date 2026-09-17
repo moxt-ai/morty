@@ -54,15 +54,15 @@ test("Given an agent still thinking, When a user expands, collapses and reloads 
     await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toBeVisible();
 });
 
-test("Given a saved local session, When a user continues it and opens thinking, Then reasoning is readable and only the active reply shows a spinner", async ({
+test("Given a forked native session, When a user continues it and opens thinking, Then reasoning is readable and only the active reply shows a spinner", async ({
     runtime,
 }, testInfo) => {
     await runtime.openPairedChat();
     const { page } = runtime;
     await runtime.sendMessage("Local thinking example");
     await expect(page.getByTestId(dataTestId.agentResponse)).toContainText("Local thinking example");
-    await page.getByRole("button", { name: "Open Local Session", exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: "Open Local Session", exact: true });
+    await page.getByRole("button", { name: "Native Sessions", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Native Sessions", exact: true });
     await dialog.getByRole("button", { name: "Local thinking example", exact: true }).click();
     await expect(dialog.getByRole("region", { name: "Selected session preview" })).toContainText(
         "Local thinking example",
@@ -70,21 +70,25 @@ test("Given a saved local session, When a user continues it and opens thinking, 
     await dialog.getByRole("button", { name: "Fork", exact: true }).click();
     await expect(page.getByRole("button", { name: "Add", exact: true })).toBeVisible();
     await expect(page.getByRole("combobox", { name: "Harness", exact: true })).toBeDisabled();
-    await page.getByRole("textbox", { name: "Message local session" }).fill("Continue explaining");
-    await page.getByRole("button", { name: "Send to local session" }).click();
-    const messages = page.getByRole("log", { name: "Local session messages" });
+    await page.getByRole("textbox", { name: "Message" }).fill("Continue explaining");
+    await page.getByRole("button", { name: "Send message" }).click();
+    const messages = page.getByRole("log", { name: "Messages" });
     await expect(messages.getByLabel("Agent response").last()).toContainText("Continue explaining");
     const thinking = messages.getByRole("group", { name: "Agent thinking" });
     await thinking.locator("summary").click();
     await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toBeVisible();
     await expect(messages.getByRole("status", { name: "Agent working" })).toHaveCount(0);
-    await page.getByRole("textbox", { name: "Message local session" }).fill("wait until cancelled");
-    await page.getByRole("button", { name: "Send to local session" }).click();
+    await page.getByRole("textbox", { name: "Message" }).fill("wait until cancelled");
+    await page.getByRole("button", { name: "Send message" }).click();
     await expect(thinking).toHaveCount(2);
     await thinking.last().locator("summary").click();
     await expect(thinking.last().getByText("Inspecting the workspace", { exact: true })).toBeVisible();
     await expect(messages.getByRole("status", { name: "Agent working" })).toHaveCount(1);
     await page.screenshot({ path: testInfo.outputPath("local-thinking-active.png"), animations: "disabled" });
-    await page.getByRole("button", { name: "Back to Bot chat" }).click();
-    await expect(page.getByRole("status", { name: "Agent working" })).toHaveCount(0);
+    const cancellation = page.waitForResponse(
+        (response) => response.request().method() === "POST" && /\/turns\/[^/]+\/cancel$/u.test(response.url()),
+    );
+    await page.getByRole("button", { name: "Stop agent output", exact: true }).click();
+    expect((await cancellation).status()).toBe(202);
+    await expect(page.getByText("Response cancelled.", { exact: true })).toBeVisible();
 });

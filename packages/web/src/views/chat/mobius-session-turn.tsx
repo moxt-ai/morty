@@ -56,7 +56,7 @@ function BotArtifactContent({
     }
 }
 
-export function BotConversationTurn({
+export function MobiusSessionTurn({
     turn,
     activities,
     botId,

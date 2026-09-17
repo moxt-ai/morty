@@ -146,7 +146,7 @@ longer scheduled in CI. HTTP integration
 coverage additionally runs the TypeScript CLI as a subprocess to verify identity
 reuse, ticket consumption, private configuration, and Runtime replacement failures.
 
-Given an open Bot conversation or continued local Session, When an agent streams
+Given an open Mobius Session, including one imported or forked from a native session, When an agent streams
 a reply, Then text appears incrementally without a message/history snapshot GET
 for each text or activity event. When the turn finishes, Then its final response
 and status match the saved history. When the conversation is idle, Then no

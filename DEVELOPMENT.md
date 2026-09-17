@@ -180,19 +180,21 @@ places the Project ID in the path for regional routing. Deploy Chat's updated SD
 together with the corresponding Platform endpoint cutover.
 New Conversation opens a browser-local draft. Its Harness selector chooses a paired
 agent; a temporary Project Session prepares that agent's model options and is deleted
-after preparation. First Send creates a canonical Project Conversation with the selected
-model and approved Bot binding. Existing conversations reopen by Conversation ID,
-including credential refresh, and keep their harness fixed.
+after preparation. First Send materializes the draft as a Mobius Session with the selected
+model and approved Bot binding. The Conversation API is the creation and access path for
+these Sessions; it is not a separate user-facing chat type. Existing Sessions created by
+that path reopen by Conversation ID, including credential refresh, and keep their harness fixed.
 First Send keeps the created connection and transitions the draft in place; it
 updates the saved URL without removing the sidebar or composer to reconnect.
-Chat records created Conversations and imported or forked Sessions in `chat_managed_session`,
-keyed and indexed by Project ID, user ID, Bot ID, resource kind and resource ID.
-The sidebar lists these managed records. New Conversation records the first prompt
-as its title. Open Local Session opens a two-column directory and preview dialog;
+Chat records materialized Sessions in `chat_managed_session`, keyed and indexed by Project ID,
+user ID, Bot ID, access-path provenance and resource ID. The sidebar lists all of them as
+Sessions. New Conversation records the first prompt as its title. Native Sessions opens a
+two-column discovery and preview dialog;
 the directory returns metadata only, selecting an entry fetches its history from
 `native-session/:id`; Import resumes it in Chat, while Fork creates a separate native
-Session. Cancelling the dialog creates no Chat-managed record. Imported and forked
-Sessions reopen by `sessionId` in the saved page URL. Apply migrations
+Session. Cancelling the dialog creates no Chat-managed record. After import or fork, the
+result uses the normal Session message surface and can be stopped from the composer.
+Imported and forked Sessions reopen by `sessionId` in the saved page URL. Apply migrations
 `0006_chat_managed_session.sql` and `0007_chat_managed_import.sql` to both regional
 Chat databases before deployment.
 The Worker discovers, imports, and forks native sessions through the Project SDK. Its
