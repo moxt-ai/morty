@@ -33,6 +33,11 @@ class InMemoryD1Statement {
         );
     readonly first = async () => this.#database.prepare(this.#query).get(...this.#values) ?? null;
     readonly all = async () => ({ results: this.#database.prepare(this.#query).all(...this.#values), success: true });
+    readonly raw = async () =>
+        this.#database
+            .prepare(this.#query)
+            .all(...this.#values)
+            .map((row) => Object.values(row));
     readonly run = async () => {
         const result = this.#database.prepare(this.#query).run(...this.#values);
         return { meta: { changes: Number(result.changes) } };

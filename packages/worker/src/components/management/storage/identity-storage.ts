@@ -1,26 +1,23 @@
+import { and, eq, exists, gt, isNull, lt, notExists, sql } from "drizzle-orm";
 import * as v from "valibot";
 import type { HttpError } from "../../../infra/http-error.ts";
+import { createDatabase, type Database } from "../../../schema/database.ts";
+import {
+    agentPairingTicket,
+    anonymousCredential,
+    appUser,
+    chatAccessToken,
+    chatSession,
+    clerkUserBinding,
+    identityTransfer,
+    managedBot,
+    platformProjectMapping,
+} from "../../../schema/index.ts";
 import { createProjectCredential, readProjectCredential } from "../entity/project-credential.ts";
 
 const anonymousToken = v.pipe(v.string(), v.regex(/^mobius_anon_v2_[A-Za-z0-9_-]{43}$/u));
 const userRow = v.pipe(v.object({ userId: v.string() }), v.readonly());
 const oneTimeCredentialLifetime = 24 * 60 * 60 * 1000;
-
-interface Database {
-    readonly batch: (statements: readonly D1PreparedStatement[]) => Promise<readonly D1Result[]>;
-    readonly prepare: (query: string) => D1PreparedStatement;
-}
-
-function isDatabase(value: unknown): value is Database {
-    return (
-        typeof value === "object" &&
-        value !== null &&
-        "prepare" in value &&
-        typeof value.prepare === "function" &&
-        "batch" in value &&
-        typeof value.batch === "function"
-    );
-}
 
 function randomSecret(): string {
     const bytes = new Uint8Array(32);
@@ -62,10 +59,11 @@ export class IdentityStorage {
     }
 
     readonly #requireDatabase = (): Database => {
-        if (!isDatabase(this.#database)) {
+        const database = createDatabase(this.#database);
+        if (database === null) {
             throw new IdentityStorageError("IDENTITY_UNAVAILABLE", "Identity storage is unavailable.");
         }
-        return this.#database;
+        return database;
     };
 
     readonly createAnonymous = async (
@@ -77,13 +75,16 @@ export class IdentityStorage {
         signal.throwIfAborted();
         const credentialId = `cred_${crypto.randomUUID()}`;
         const token = `mobius_anon_v2_${randomSecret()}`;
-        await this.#requireDatabase().batch([
-            this.#requireDatabase().prepare("INSERT INTO app_user (id, created_at) VALUES (?, ?)").bind(userId, now),
-            this.#requireDatabase()
-                .prepare(
-                    "INSERT INTO anonymous_credential (id, user_id, token_hash, status, created_at) VALUES (?, ?, ?, 'active', ?)",
-                )
-                .bind(credentialId, userId, await digest(token), now),
+        const database = this.#requireDatabase();
+        await database.batch([
+            database.insert(appUser).values({ id: userId, createdAt: now }),
+            database.insert(anonymousCredential).values({
+                id: credentialId,
+                userId,
+                tokenHash: await digest(token),
+                status: "active",
+                createdAt: now,
+            }),
         ]);
         signal.throwIfAborted();
         return { token, userId, projectId };
@@ -96,11 +97,17 @@ export class IdentityStorage {
         }
         signal.throwIfAborted();
         const result = await this.#requireDatabase()
-            .prepare(
-                "SELECT credential.user_id AS userId FROM anonymous_credential AS credential JOIN platform_project_mapping AS project ON project.user_id = credential.user_id WHERE credential.token_hash = ? AND credential.status = 'active' AND project.project_id = ?",
+            .select({ userId: anonymousCredential.userId })
+            .from(anonymousCredential)
+            .innerJoin(platformProjectMapping, eq(platformProjectMapping.userId, anonymousCredential.userId))
+            .where(
+                and(
+                    eq(anonymousCredential.tokenHash, await digest(parsed.output)),
+                    eq(anonymousCredential.status, "active"),
+                    eq(platformProjectMapping.projectId, this.#projectId),
+                ),
             )
-            .bind(await digest(parsed.output), this.#projectId)
-            .first();
+            .get();
         signal.throwIfAborted();
         const row = v.safeParse(userRow, result);
         return row.success ? row.output.userId : null;
@@ -111,10 +118,14 @@ export class IdentityStorage {
         const code = createProjectCredential("mobius_transfer_v2", v.parse(v.string(), this.#projectId));
         const expiresAt = now + oneTimeCredentialLifetime;
         await this.#requireDatabase()
-            .prepare(
-                "INSERT INTO identity_transfer (id, code_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",
-            )
-            .bind(`transfer_${crypto.randomUUID()}`, await digest(code), userId, expiresAt, now)
+            .insert(identityTransfer)
+            .values({
+                id: `transfer_${crypto.randomUUID()}`,
+                codeHash: await digest(code),
+                userId,
+                expiresAt,
+                createdAt: now,
+            })
             .run();
         signal.throwIfAborted();
         return { code, expiresAt };
@@ -137,24 +148,43 @@ export class IdentityStorage {
         const token = `mobius_anon_v2_${randomSecret()}`;
         const results = await database.batch([
             database
-                .prepare(
-                    "UPDATE identity_transfer SET redemption_count = redemption_count + 1, consumed_at = CASE WHEN redemption_count + 1 = 5 THEN ? ELSE NULL END, claim_nonce = ? WHERE code_hash = ? AND consumed_at IS NULL AND redemption_count < 5 AND expires_at > ?",
-                )
-                .bind(now, claimNonce, codeHash, now),
-            database
-                .prepare(
-                    "INSERT INTO anonymous_credential (id, user_id, token_hash, status, created_at) SELECT ?, user_id, ?, 'active', ? FROM identity_transfer WHERE code_hash = ? AND claim_nonce = ?",
-                )
-                .bind(credentialId, await digest(token), now, codeHash, claimNonce),
+                .update(identityTransfer)
+                .set({
+                    redemptionCount: sql`${identityTransfer.redemptionCount} + 1`,
+                    consumedAt: sql`case when ${identityTransfer.redemptionCount} + 1 = 5 then ${now} else null end`,
+                    claimNonce,
+                })
+                .where(
+                    and(
+                        eq(identityTransfer.codeHash, codeHash),
+                        isNull(identityTransfer.consumedAt),
+                        lt(identityTransfer.redemptionCount, 5),
+                        gt(identityTransfer.expiresAt, now),
+                    ),
+                ),
+            database.insert(anonymousCredential).select(
+                database
+                    .select({
+                        id: sql<string>`${credentialId}`.as("id"),
+                        userId: identityTransfer.userId,
+                        tokenHash: sql<string>`${await digest(token)}`.as("token_hash"),
+                        status: sql<"active">`'active'`.as("status"),
+                        createdAt: sql<number>`${now}`.as("created_at"),
+                        revokedAt: sql<null>`null`.as("revoked_at"),
+                    })
+                    .from(identityTransfer)
+                    .where(and(eq(identityTransfer.codeHash, codeHash), eq(identityTransfer.claimNonce, claimNonce))),
+            ),
         ]);
         signal.throwIfAborted();
         if (results[0]?.meta.changes !== 1) {
             return null;
         }
         const row = await database
-            .prepare("SELECT user_id AS userId FROM anonymous_credential WHERE id = ?")
-            .bind(credentialId)
-            .first();
+            .select({ userId: anonymousCredential.userId })
+            .from(anonymousCredential)
+            .where(eq(anonymousCredential.id, credentialId))
+            .get();
         const user = v.parse(userRow, row);
         return { token, userId: user.userId, projectId: parsed.projectId };
     };
@@ -162,9 +192,10 @@ export class IdentityStorage {
     readonly clerkBinding = async (clerkUserId: string, signal: AbortSignal): Promise<string | null> => {
         signal.throwIfAborted();
         const row = await this.#requireDatabase()
-            .prepare("SELECT user_id AS userId FROM clerk_user_binding WHERE clerk_user_id = ?")
-            .bind(clerkUserId)
-            .first();
+            .select({ userId: clerkUserBinding.userId })
+            .from(clerkUserBinding)
+            .where(eq(clerkUserBinding.clerkUserId, clerkUserId))
+            .get();
         signal.throwIfAborted();
         const parsed = v.safeParse(userRow, row);
         return parsed.success ? parsed.output.userId : null;
@@ -173,11 +204,12 @@ export class IdentityStorage {
     readonly ownsProject = async (userId: string, projectId: string, signal: AbortSignal): Promise<boolean> => {
         signal.throwIfAborted();
         const row = await this.#requireDatabase()
-            .prepare("SELECT 1 AS owned FROM platform_project_mapping WHERE user_id = ? AND project_id = ?")
-            .bind(userId, projectId)
-            .first();
+            .select({ projectId: platformProjectMapping.projectId })
+            .from(platformProjectMapping)
+            .where(and(eq(platformProjectMapping.userId, userId), eq(platformProjectMapping.projectId, projectId)))
+            .get();
         signal.throwIfAborted();
-        return row !== null;
+        return row !== undefined;
     };
 
     readonly createPairing = async (
@@ -190,8 +222,8 @@ export class IdentityStorage {
         const code = createProjectCredential("mobius_pair_v2", v.parse(v.string(), this.#projectId));
         const expiresAt = now + oneTimeCredentialLifetime;
         await this.#requireDatabase()
-            .prepare("INSERT INTO agent_pairing_ticket (code_hash, user_id, bot_id, expires_at) VALUES (?, ?, ?, ?)")
-            .bind(await digest(code), userId, botId, expiresAt)
+            .insert(agentPairingTicket)
+            .values({ codeHash: await digest(code), userId, botId, expiresAt })
             .run();
         signal.throwIfAborted();
         return { code, expiresAt };
@@ -211,17 +243,42 @@ export class IdentityStorage {
         const hash = await digest(code);
         const nonce = crypto.randomUUID();
         const token = `mobius_anon_v2_${randomSecret()}`;
+        const credentialId = `cred_${crypto.randomUUID()}`;
         const results = await database.batch([
             database
-                .prepare(
-                    "UPDATE agent_pairing_ticket SET consumed_at = ?, claim_nonce = ? WHERE code_hash = ? AND consumed_at IS NULL AND expires_at > ? AND EXISTS (SELECT 1 FROM managed_bot WHERE managed_bot.bot_id = agent_pairing_ticket.bot_id AND managed_bot.user_id = agent_pairing_ticket.user_id)",
-                )
-                .bind(now, nonce, hash, now),
-            database
-                .prepare(
-                    "INSERT INTO anonymous_credential (id, user_id, token_hash, status, created_at) SELECT ?, user_id, ?, 'active', ? FROM agent_pairing_ticket WHERE code_hash = ? AND claim_nonce = ?",
-                )
-                .bind(`cred_${crypto.randomUUID()}`, await digest(token), now, hash, nonce),
+                .update(agentPairingTicket)
+                .set({ consumedAt: now, claimNonce: nonce })
+                .where(
+                    and(
+                        eq(agentPairingTicket.codeHash, hash),
+                        isNull(agentPairingTicket.consumedAt),
+                        gt(agentPairingTicket.expiresAt, now),
+                        exists(
+                            database
+                                .select({ botId: managedBot.botId })
+                                .from(managedBot)
+                                .where(
+                                    and(
+                                        eq(managedBot.botId, agentPairingTicket.botId),
+                                        eq(managedBot.userId, agentPairingTicket.userId),
+                                    ),
+                                ),
+                        ),
+                    ),
+                ),
+            database.insert(anonymousCredential).select(
+                database
+                    .select({
+                        id: sql<string>`${credentialId}`.as("id"),
+                        userId: agentPairingTicket.userId,
+                        tokenHash: sql<string>`${await digest(token)}`.as("token_hash"),
+                        status: sql<"active">`'active'`.as("status"),
+                        createdAt: sql<number>`${now}`.as("created_at"),
+                        revokedAt: sql<null>`null`.as("revoked_at"),
+                    })
+                    .from(agentPairingTicket)
+                    .where(and(eq(agentPairingTicket.codeHash, hash), eq(agentPairingTicket.claimNonce, nonce))),
+            ),
         ]);
         signal.throwIfAborted();
         if (results[0]?.meta.changes !== 1) {
@@ -230,11 +287,10 @@ export class IdentityStorage {
         const row = v.parse(
             v.object({ userId: v.string(), botId: v.string() }),
             await database
-                .prepare(
-                    "SELECT user_id AS userId, bot_id AS botId FROM agent_pairing_ticket WHERE code_hash = ? AND claim_nonce = ?",
-                )
-                .bind(hash, nonce)
-                .first(),
+                .select({ userId: agentPairingTicket.userId, botId: agentPairingTicket.botId })
+                .from(agentPairingTicket)
+                .where(and(eq(agentPairingTicket.codeHash, hash), eq(agentPairingTicket.claimNonce, nonce)))
+                .get(),
         );
         signal.throwIfAborted();
         return { ...row, token, projectId: parsed.projectId };
@@ -247,12 +303,11 @@ export class IdentityStorage {
         }
         const database = this.#requireDatabase();
         await database.batch([
-            database.prepare("INSERT OR IGNORE INTO app_user (id, created_at) VALUES (?, ?)").bind(clerkUserId, now),
+            database.insert(appUser).values({ id: clerkUserId, createdAt: now }).onConflictDoNothing(),
             database
-                .prepare(
-                    "INSERT OR IGNORE INTO clerk_user_binding (clerk_user_id, user_id, created_at, updated_at) VALUES (?, ?, ?, ?)",
-                )
-                .bind(clerkUserId, clerkUserId, now, now),
+                .insert(clerkUserBinding)
+                .values({ clerkUserId, userId: clerkUserId, createdAt: now, updatedAt: now })
+                .onConflictDoNothing(),
         ]);
         signal.throwIfAborted();
         const resolved = await this.clerkBinding(clerkUserId, signal);
@@ -279,10 +334,33 @@ export class IdentityStorage {
                 return { kind: "conflict" };
             }
             const result = await database
-                .prepare(
-                    "INSERT INTO clerk_user_binding (clerk_user_id, user_id, created_at, updated_at) SELECT ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM clerk_user_binding WHERE clerk_user_id = ?) AND NOT EXISTS (SELECT 1 FROM clerk_user_binding WHERE user_id = ?)",
+                .insert(clerkUserBinding)
+                .select(
+                    database
+                        .select({
+                            clerkUserId: sql<string>`${clerkUserId}`.as("clerk_user_id"),
+                            userId: sql<string>`${localUserId}`.as("user_id"),
+                            createdAt: sql<number>`${now}`.as("created_at"),
+                            updatedAt: sql<number>`${now}`.as("updated_at"),
+                        })
+                        .from(sql`(select 1)`)
+                        .where(
+                            and(
+                                notExists(
+                                    database
+                                        .select({ userId: clerkUserBinding.userId })
+                                        .from(clerkUserBinding)
+                                        .where(eq(clerkUserBinding.clerkUserId, clerkUserId)),
+                                ),
+                                notExists(
+                                    database
+                                        .select({ userId: clerkUserBinding.userId })
+                                        .from(clerkUserBinding)
+                                        .where(eq(clerkUserBinding.userId, localUserId)),
+                                ),
+                            ),
+                        ),
                 )
-                .bind(clerkUserId, localUserId, now, now, clerkUserId, localUserId)
                 .run();
             signal.throwIfAborted();
             return result.meta.changes === 1 ? { kind: "bound", userId: localUserId } : { kind: "conflict" };
@@ -292,29 +370,40 @@ export class IdentityStorage {
         }
         if (action === "override") {
             const result = await database
-                .prepare(
-                    "UPDATE clerk_user_binding SET user_id = ?, updated_at = ? WHERE clerk_user_id = ? AND user_id = ? AND NOT EXISTS (SELECT 1 FROM clerk_user_binding WHERE user_id = ?)",
+                .update(clerkUserBinding)
+                .set({ userId: localUserId, updatedAt: now })
+                .where(
+                    and(
+                        eq(clerkUserBinding.clerkUserId, clerkUserId),
+                        eq(clerkUserBinding.userId, current),
+                        notExists(
+                            database
+                                .select({ userId: clerkUserBinding.userId })
+                                .from(clerkUserBinding)
+                                .where(eq(clerkUserBinding.userId, localUserId)),
+                        ),
+                    ),
                 )
-                .bind(localUserId, now, clerkUserId, current, localUserId)
                 .run();
             signal.throwIfAborted();
             return result.meta.changes === 1 ? { kind: "bound", userId: localUserId } : { kind: "invalid-local-user" };
         }
         const localBinding = await database
-            .prepare("SELECT user_id AS userId FROM clerk_user_binding WHERE user_id = ?")
-            .bind(localUserId)
-            .first();
-        if (localBinding !== null) {
+            .select({ userId: clerkUserBinding.userId })
+            .from(clerkUserBinding)
+            .where(eq(clerkUserBinding.userId, localUserId))
+            .get();
+        if (localBinding !== undefined) {
             return { kind: "invalid-local-user" };
         }
         await database.batch([
-            database.prepare("DELETE FROM agent_pairing_ticket WHERE user_id = ?").bind(localUserId),
-            database.prepare("DELETE FROM identity_transfer WHERE user_id = ?").bind(localUserId),
-            database.prepare("DELETE FROM anonymous_credential WHERE user_id = ?").bind(localUserId),
-            database.prepare("DELETE FROM chat_access_token WHERE user_id = ?").bind(localUserId),
-            database.prepare("DELETE FROM chat_session WHERE user_id = ?").bind(localUserId),
-            database.prepare("DELETE FROM managed_bot WHERE user_id = ?").bind(localUserId),
-            database.prepare("DELETE FROM app_user WHERE id = ?").bind(localUserId),
+            database.delete(agentPairingTicket).where(eq(agentPairingTicket.userId, localUserId)),
+            database.delete(identityTransfer).where(eq(identityTransfer.userId, localUserId)),
+            database.delete(anonymousCredential).where(eq(anonymousCredential.userId, localUserId)),
+            database.delete(chatAccessToken).where(eq(chatAccessToken.userId, localUserId)),
+            database.delete(chatSession).where(eq(chatSession.userId, localUserId)),
+            database.delete(managedBot).where(eq(managedBot.userId, localUserId)),
+            database.delete(appUser).where(eq(appUser.id, localUserId)),
         ]);
         signal.throwIfAborted();
         return { kind: "bound", userId: current };

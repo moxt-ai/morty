@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { sql } from "drizzle-orm";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { expect, test } from "vitest";
 import { MobiusAppService } from "../src/components/chat/service/mobius-app-service.ts";
@@ -93,9 +94,14 @@ test("Given a D1 query, When the database returns, Then operators receive its pe
             nowMilliseconds: sequenceClock([200, 229]),
         });
 
-        await expect(measured.first("SELECT value FROM example", [], new AbortController().signal)).resolves.toEqual({
-            value: "stored",
-        });
+        await expect(
+            measured.execute(
+                "first",
+                1,
+                new AbortController().signal,
+                async (orm) => await orm.run(sql`UPDATE example SET value = 'stored'`),
+            ),
+        ).resolves.toMatchObject({ meta: { changes: 1 } });
         expect(metrics.entries).toEqual([
             {
                 bindings: {

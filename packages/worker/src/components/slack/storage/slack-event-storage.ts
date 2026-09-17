@@ -1,4 +1,17 @@
+import { and, asc, desc, eq, ne, or, sql } from "drizzle-orm";
 import * as v from "valibot";
+import type { Database } from "../../../schema/database.ts";
+import {
+    processedSlackEvent,
+    slackApp,
+    slackConversationLease,
+    slackConversationMapping,
+    slackInstallation,
+    slackMessageDelivery,
+    slackMobiusBinding,
+    slackPendingMessage,
+    slackUserConfigToken,
+} from "../../../schema/index.ts";
 import type { SlackConversationInput, SlackConversationKey, SlackMessageReplyContext } from "../entity/conversation";
 import { type SlackEventCallbackPayload, slackEventCallbackPayloadSchema } from "../entity/events";
 import type {
@@ -43,7 +56,6 @@ const configTokenRowSchema = v.object({
 });
 
 const stringRowSchema = v.object({ value: v.string() });
-const countRowSchema = v.object({ count: v.pipe(v.number(), v.safeInteger(), v.minValue(0)) });
 
 const messageDeliveryRowSchema = v.object({
     bot_token_encrypted: v.string(),
@@ -78,11 +90,17 @@ export class SlackEventStorage {
     ): Promise<boolean> => {
         const row = await this.#first(
             tenant,
-            "SELECT status FROM processed_slack_event WHERE tenant_id = ?1 AND slack_event_id = ?2",
-            [tenantId, eventId],
             signal,
+            async (database) =>
+                await database
+                    .select({ status: processedSlackEvent.status })
+                    .from(processedSlackEvent)
+                    .where(
+                        and(eq(processedSlackEvent.tenantId, tenantId), eq(processedSlackEvent.slackEventId, eventId)),
+                    )
+                    .get(),
         );
-        return row !== null && v.parse(v.object({ status: v.string() }), row).status !== "processed";
+        return row !== undefined && v.parse(v.object({ status: v.string() }), row).status !== "processed";
     };
     readonly releaseMessageDelivery = async (
         tenant: TenantContext,
@@ -92,9 +110,19 @@ export class SlackEventStorage {
     ): Promise<void> => {
         await this.#run(
             tenant,
-            "UPDATE slack_message_delivery SET delivery_status = 'pending' WHERE tenant_id = ?1 AND client_message_id = ?2 AND delivery_status = 'delivering'",
-            [tenantId, clientMessageId],
             signal,
+            async (database) =>
+                await database
+                    .update(slackMessageDelivery)
+                    .set({ deliveryStatus: "pending" })
+                    .where(
+                        and(
+                            eq(slackMessageDelivery.tenantId, tenantId),
+                            eq(slackMessageDelivery.clientMessageId, clientMessageId),
+                            eq(slackMessageDelivery.deliveryStatus, "delivering"),
+                        ),
+                    )
+                    .run(),
         );
     };
     readonly prepareMessageDelivery = async (
@@ -112,43 +140,56 @@ export class SlackEventStorage {
     ): Promise<StoredSlackConversation> => {
         const c = input.conversation;
         const now = Date.now();
-        const selectConversation =
-            "SELECT id FROM slack_conversation_mapping WHERE tenant_id = ?1 AND conversation_id = ?3";
-        await this.#database.resolve().batch(
-            [
-                {
-                    query: `INSERT INTO slack_conversation_mapping (tenant_id, slack_app_record_id, slack_team_id, slack_channel_id, channel_type, thread_ts, initiator_slack_user_id, conversation_id, latest_event_ts, last_active_at, created_at, updated_at, connection_id)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10, ?10, ?11)
-                ON CONFLICT DO UPDATE SET latest_event_ts = excluded.latest_event_ts, last_active_at = excluded.last_active_at, updated_at = excluded.updated_at`,
-                    values: [
-                        c.tenantId,
-                        input.slackAppRecordId,
-                        input.slackTeamId,
-                        c.channelId,
-                        c.channelId.startsWith("D") ? "im" : "channel",
-                        c.threadTs,
-                        c.sender.kind === "user" ? c.sender.slackUserId : c.sender.slackBotId,
-                        input.conversationId,
-                        input.latestEventTs,
-                        now,
-                        input.connectionId,
-                    ],
-                },
-                {
-                    query: `INSERT INTO slack_message_delivery (tenant_id, client_message_id, conversation_mapping_id, reply_thread_ts, status_thread_ts, trigger_sender_info, created_at, updated_at)
-                VALUES (?1, ?2, (${selectConversation}), ?4, ?4, ?5, ?6, ?6)`,
-                    values: [
-                        c.tenantId,
-                        input.clientMessageId,
-                        input.conversationId,
-                        c.threadTs,
-                        JSON.stringify(c.sender),
-                        now,
-                    ],
-                },
-            ],
-            signal,
-        );
+        await this.#batch(tenant, 2, signal, async (database) => {
+            const conversationId = database
+                .select({ id: slackConversationMapping.id })
+                .from(slackConversationMapping)
+                .where(
+                    and(
+                        eq(slackConversationMapping.tenantId, c.tenantId),
+                        eq(slackConversationMapping.conversationId, input.conversationId),
+                    ),
+                );
+            await database.batch([
+                database
+                    .insert(slackConversationMapping)
+                    .values({
+                        tenantId: c.tenantId,
+                        slackAppRecordId: input.slackAppRecordId,
+                        slackTeamId: input.slackTeamId,
+                        slackChannelId: c.channelId,
+                        channelType: c.channelId.startsWith("D") ? "im" : "channel",
+                        threadTs: c.threadTs,
+                        initiatorSlackUserId: c.sender.kind === "user" ? c.sender.slackUserId : c.sender.slackBotId,
+                        conversationId: input.conversationId,
+                        connectionId: input.connectionId,
+                        latestEventTs: input.latestEventTs,
+                        lastActiveAt: now,
+                        createdAt: now,
+                        updatedAt: now,
+                    })
+                    .onConflictDoUpdate({
+                        target: [
+                            slackConversationMapping.tenantId,
+                            slackConversationMapping.slackAppRecordId,
+                            slackConversationMapping.connectionId,
+                            slackConversationMapping.slackChannelId,
+                            sql`ifnull(${slackConversationMapping.threadTs}, '')`,
+                        ],
+                        set: { latestEventTs: input.latestEventTs, lastActiveAt: now, updatedAt: now },
+                    }),
+                database.insert(slackMessageDelivery).values({
+                    tenantId: c.tenantId,
+                    clientMessageId: input.clientMessageId,
+                    conversationMappingId: sql`(${conversationId})`,
+                    replyThreadTs: c.threadTs,
+                    statusThreadTs: c.threadTs,
+                    triggerSenderInfo: JSON.stringify(c.sender),
+                    createdAt: now,
+                    updatedAt: now,
+                }),
+            ]);
+        });
         const conversation = await this.findConversation(tenant, c, signal, input.connectionId);
         if (conversation === null) {
             throw new Error("Prepared conversation is missing");
@@ -164,11 +205,17 @@ export class SlackEventStorage {
         const now = Date.now();
         const result = await this.#run(
             tenant,
-            `INSERT INTO slack_conversation_lease (conversation_key, owner, expires_at)
-            VALUES (?1, ?2, ?3) ON CONFLICT(conversation_key) DO UPDATE SET owner = excluded.owner, expires_at = excluded.expires_at
-            WHERE slack_conversation_lease.expires_at <= ?4`,
-            [key, owner, now + 660_000, now],
             signal,
+            async (database) =>
+                await database
+                    .insert(slackConversationLease)
+                    .values({ conversationKey: key, owner, expiresAt: now + 660_000 })
+                    .onConflictDoUpdate({
+                        target: slackConversationLease.conversationKey,
+                        set: { owner, expiresAt: now + 660_000 },
+                        setWhere: sql`${slackConversationLease.expiresAt} <= ${now}`,
+                    })
+                    .run(),
         );
         return result.meta.changes === 1;
     };
@@ -180,9 +227,14 @@ export class SlackEventStorage {
     ): Promise<void> => {
         await this.#run(
             tenant,
-            "DELETE FROM slack_conversation_lease WHERE conversation_key = ?1 AND owner = ?2",
-            [key, owner],
             signal,
+            async (database) =>
+                await database
+                    .delete(slackConversationLease)
+                    .where(
+                        and(eq(slackConversationLease.conversationKey, key), eq(slackConversationLease.owner, owner)),
+                    )
+                    .run(),
         );
     };
     readonly findEvent = async (
@@ -193,11 +245,21 @@ export class SlackEventStorage {
     ): Promise<SlackEventCallbackPayload | null> => {
         const row = await this.#first(
             tenant,
-            "SELECT payload FROM processed_slack_event WHERE slack_event_id = ?1 AND tenant_id = ?2 AND payload != ''",
-            [eventId, tenantId],
             signal,
+            async (database) =>
+                await database
+                    .select({ payload: processedSlackEvent.payload })
+                    .from(processedSlackEvent)
+                    .where(
+                        and(
+                            eq(processedSlackEvent.slackEventId, eventId),
+                            eq(processedSlackEvent.tenantId, tenantId),
+                            ne(processedSlackEvent.payload, ""),
+                        ),
+                    )
+                    .get(),
         );
-        if (row === null) {
+        if (row === undefined) {
             return null;
         }
         return v.parse(
@@ -229,11 +291,15 @@ export class SlackEventStorage {
     ): Promise<string | null> => {
         const row = await this.#first(
             tenant,
-            "SELECT signing_secret_encrypted FROM slack_app WHERE slack_app_id = ?1 AND status = 'enabled'",
-            [slackAppId],
             signal,
+            async (database) =>
+                await database
+                    .select({ signing_secret_encrypted: slackApp.signingSecretEncrypted })
+                    .from(slackApp)
+                    .where(and(eq(slackApp.slackAppId, slackAppId), eq(slackApp.status, "enabled")))
+                    .get(),
         );
-        if (row === null) {
+        if (row === undefined) {
             return null;
         }
         return await this.#cipher.decrypt(
@@ -249,11 +315,15 @@ export class SlackEventStorage {
     ): Promise<string | null> => {
         const row = await this.#first(
             tenant,
-            "SELECT tenant_id FROM slack_app WHERE slack_app_id = ?1 AND status = 'enabled'",
-            [slackAppId],
             signal,
+            async (database) =>
+                await database
+                    .select({ tenant_id: slackApp.tenantId })
+                    .from(slackApp)
+                    .where(and(eq(slackApp.slackAppId, slackAppId), eq(slackApp.status, "enabled")))
+                    .get(),
         );
-        return row === null ? null : v.parse(v.object({ tenant_id: v.string() }), row).tenant_id;
+        return row === undefined ? null : v.parse(v.object({ tenant_id: v.string() }), row).tenant_id;
     };
 
     readonly insertEvent = async (
@@ -264,11 +334,21 @@ export class SlackEventStorage {
     ): Promise<boolean> => {
         const result = await this.#run(
             tenant,
-            `INSERT OR IGNORE INTO processed_slack_event
-            (tenant_id, slack_event_id, slack_app_id, slack_team_id, payload, status, created_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, 'pending', ?6)`,
-            [tenantId, payload.event_id, payload.api_app_id, payload.team_id, JSON.stringify(payload), Date.now()],
             signal,
+            async (database) =>
+                await database
+                    .insert(processedSlackEvent)
+                    .values({
+                        tenantId,
+                        slackEventId: payload.event_id,
+                        slackAppId: payload.api_app_id,
+                        slackTeamId: payload.team_id,
+                        payload: JSON.stringify(payload),
+                        status: "pending",
+                        createdAt: Date.now(),
+                    })
+                    .onConflictDoNothing()
+                    .run(),
         );
         return result.meta.changes === 1;
     };
@@ -281,14 +361,25 @@ export class SlackEventStorage {
     ): Promise<ManagedSlackApp | null> => {
         const row = await this.#first(
             tenant,
-            `SELECT id, tenant_id, slack_bot_id, app_name, slack_app_id,
-                    slack_client_id, client_secret_encrypted, oauth_redirect_uri, status
-               FROM slack_app
-              WHERE tenant_id = ?1 AND slack_bot_id = ?2`,
-            [tenantId, botId],
             signal,
+            async (database) =>
+                await database
+                    .select({
+                        id: slackApp.id,
+                        tenant_id: slackApp.tenantId,
+                        slack_bot_id: slackApp.slackBotId,
+                        app_name: slackApp.appName,
+                        slack_app_id: slackApp.slackAppId,
+                        slack_client_id: slackApp.slackClientId,
+                        client_secret_encrypted: slackApp.clientSecretEncrypted,
+                        oauth_redirect_uri: slackApp.oauthRedirectUri,
+                        status: slackApp.status,
+                    })
+                    .from(slackApp)
+                    .where(and(eq(slackApp.tenantId, tenantId), eq(slackApp.slackBotId, botId)))
+                    .get(),
         );
-        if (row === null) {
+        if (row === undefined) {
             return null;
         }
         const app = v.parse(appRowSchema, row);
@@ -311,14 +402,31 @@ export class SlackEventStorage {
     ): Promise<SlackAppConfiguration | null> => {
         const row = await this.#first(
             tenant,
-            `SELECT id, tenant_id, slack_bot_id, app_name, slack_app_id,
-                    slack_client_id, client_secret_encrypted, oauth_redirect_uri, status
-               FROM slack_app
-              WHERE tenant_id = ?1 AND slack_bot_id = ?2 AND status = 'enabled'`,
-            [tenantId, botId],
             signal,
+            async (database) =>
+                await database
+                    .select({
+                        id: slackApp.id,
+                        tenant_id: slackApp.tenantId,
+                        slack_bot_id: slackApp.slackBotId,
+                        app_name: slackApp.appName,
+                        slack_app_id: slackApp.slackAppId,
+                        slack_client_id: slackApp.slackClientId,
+                        client_secret_encrypted: slackApp.clientSecretEncrypted,
+                        oauth_redirect_uri: slackApp.oauthRedirectUri,
+                        status: slackApp.status,
+                    })
+                    .from(slackApp)
+                    .where(
+                        and(
+                            eq(slackApp.tenantId, tenantId),
+                            eq(slackApp.slackBotId, botId),
+                            eq(slackApp.status, "enabled"),
+                        ),
+                    )
+                    .get(),
         );
-        if (row === null) {
+        if (row === undefined) {
             return null;
         }
         const app = v.parse(appRowSchema, row);
@@ -349,32 +457,37 @@ export class SlackEventStorage {
     ): Promise<void> => {
         await this.#run(
             tenant,
-            `INSERT INTO slack_app
-                (tenant_id, slack_bot_id, slack_app_id, slack_client_id,
-                 client_secret_encrypted, signing_secret_encrypted,
-                 oauth_redirect_uri, app_name, status, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'enabled', ?9, ?9)
-             ON CONFLICT(tenant_id, slack_bot_id) DO UPDATE SET
-                 slack_app_id = excluded.slack_app_id,
-                 slack_client_id = excluded.slack_client_id,
-                 client_secret_encrypted = excluded.client_secret_encrypted,
-                 signing_secret_encrypted = excluded.signing_secret_encrypted,
-                 oauth_redirect_uri = excluded.oauth_redirect_uri,
-                 app_name = excluded.app_name,
-                 status = 'enabled',
-                 updated_at = excluded.updated_at`,
-            [
-                input.tenantId,
-                input.botId,
-                input.slackAppId,
-                input.clientId,
-                input.clientSecretEncrypted,
-                input.signingSecretEncrypted,
-                input.oauthRedirectUri,
-                input.appName,
-                input.timestamp,
-            ],
             signal,
+            async (database) =>
+                await database
+                    .insert(slackApp)
+                    .values({
+                        tenantId: input.tenantId,
+                        slackBotId: input.botId,
+                        slackAppId: input.slackAppId,
+                        slackClientId: input.clientId,
+                        clientSecretEncrypted: input.clientSecretEncrypted,
+                        signingSecretEncrypted: input.signingSecretEncrypted,
+                        oauthRedirectUri: input.oauthRedirectUri,
+                        appName: input.appName,
+                        status: "enabled",
+                        createdAt: input.timestamp,
+                        updatedAt: input.timestamp,
+                    })
+                    .onConflictDoUpdate({
+                        target: [slackApp.tenantId, slackApp.slackBotId],
+                        set: {
+                            slackAppId: input.slackAppId,
+                            slackClientId: input.clientId,
+                            clientSecretEncrypted: input.clientSecretEncrypted,
+                            signingSecretEncrypted: input.signingSecretEncrypted,
+                            oauthRedirectUri: input.oauthRedirectUri,
+                            appName: input.appName,
+                            status: "enabled",
+                            updatedAt: input.timestamp,
+                        },
+                    })
+                    .run(),
         );
     };
 
@@ -386,9 +499,13 @@ export class SlackEventStorage {
     ): Promise<void> => {
         await this.#run(
             tenant,
-            "UPDATE slack_app SET status = 'disabled', updated_at = ?3 WHERE tenant_id = ?1 AND slack_bot_id = ?2",
-            [tenantId, botId, Date.now()],
             signal,
+            async (database) =>
+                await database
+                    .update(slackApp)
+                    .set({ status: "disabled", updatedAt: Date.now() })
+                    .where(and(eq(slackApp.tenantId, tenantId), eq(slackApp.slackBotId, botId)))
+                    .run(),
         );
     };
 
@@ -400,9 +517,16 @@ export class SlackEventStorage {
     ): Promise<SlackInstallationRecord | null> => {
         const value = await this.#installation(
             tenant,
-            "WHERE slack_team_id = ?1 AND slack_app_record_id = ?2",
-            [slackTeamId, slackAppRecordId],
             signal,
+            async (database) =>
+                await this.#installationQuery(database)
+                    .where(
+                        and(
+                            eq(slackInstallation.slackTeamId, slackTeamId),
+                            eq(slackInstallation.slackAppRecordId, slackAppRecordId),
+                        ),
+                    )
+                    .get(),
         );
         return value === null
             ? null
@@ -421,9 +545,17 @@ export class SlackEventStorage {
     ): Promise<ManagedSlackInstallation | null> => {
         const value = await this.#installation(
             tenant,
-            "WHERE tenant_id = ?1 AND slack_app_record_id = ?2 ORDER BY updated_at DESC LIMIT 1",
-            [tenantId, slackAppRecordId],
             signal,
+            async (database) =>
+                await this.#installationQuery(database)
+                    .where(
+                        and(
+                            eq(slackInstallation.tenantId, tenantId),
+                            eq(slackInstallation.slackAppRecordId, slackAppRecordId),
+                        ),
+                    )
+                    .orderBy(desc(slackInstallation.updatedAt))
+                    .get(),
         );
         return value === null
             ? null
@@ -449,28 +581,34 @@ export class SlackEventStorage {
     ): Promise<void> => {
         await this.#run(
             tenant,
-            `INSERT INTO slack_installation
-                (tenant_id, slack_app_record_id, slack_team_id, slack_team_name,
-                 slack_bot_user_id, bot_token_encrypted, status, installed_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'connected', ?7, ?7)
-             ON CONFLICT(slack_app_record_id, slack_team_id) DO UPDATE SET
-                 tenant_id = excluded.tenant_id,
-                 slack_team_name = excluded.slack_team_name,
-                 slack_bot_user_id = excluded.slack_bot_user_id,
-                 bot_token_encrypted = excluded.bot_token_encrypted,
-                 status = 'connected',
-                 installed_at = excluded.installed_at,
-                 updated_at = excluded.updated_at`,
-            [
-                input.tenantId,
-                input.slackAppRecordId,
-                input.slackTeamId,
-                input.slackTeamName,
-                input.slackBotUserId,
-                input.botTokenEncrypted,
-                input.installedAt,
-            ],
             signal,
+            async (database) =>
+                await database
+                    .insert(slackInstallation)
+                    .values({
+                        tenantId: input.tenantId,
+                        slackAppRecordId: input.slackAppRecordId,
+                        slackTeamId: input.slackTeamId,
+                        slackTeamName: input.slackTeamName,
+                        slackBotUserId: input.slackBotUserId,
+                        botTokenEncrypted: input.botTokenEncrypted,
+                        status: "connected",
+                        installedAt: input.installedAt,
+                        updatedAt: input.installedAt,
+                    })
+                    .onConflictDoUpdate({
+                        target: [slackInstallation.slackAppRecordId, slackInstallation.slackTeamId],
+                        set: {
+                            tenantId: input.tenantId,
+                            slackTeamName: input.slackTeamName,
+                            slackBotUserId: input.slackBotUserId,
+                            botTokenEncrypted: input.botTokenEncrypted,
+                            status: "connected",
+                            installedAt: input.installedAt,
+                            updatedAt: input.installedAt,
+                        },
+                    })
+                    .run(),
         );
     };
 
@@ -482,11 +620,18 @@ export class SlackEventStorage {
     ): Promise<void> => {
         await this.#run(
             tenant,
-            `UPDATE slack_installation
-                SET status = 'uninstalled', updated_at = ?3
-              WHERE tenant_id = ?1 AND slack_app_record_id = ?2`,
-            [tenantId, slackAppRecordId, Date.now()],
             signal,
+            async (database) =>
+                await database
+                    .update(slackInstallation)
+                    .set({ status: "uninstalled", updatedAt: Date.now() })
+                    .where(
+                        and(
+                            eq(slackInstallation.tenantId, tenantId),
+                            eq(slackInstallation.slackAppRecordId, slackAppRecordId),
+                        ),
+                    )
+                    .run(),
         );
     };
 
@@ -498,11 +643,21 @@ export class SlackEventStorage {
     ): Promise<void> => {
         await this.#run(
             tenant,
-            `UPDATE slack_installation
-                SET status = ?2, updated_at = ?3
-              WHERE slack_app_record_id = (SELECT id FROM slack_app WHERE slack_app_id = ?1)`,
-            [slackAppId, status, Date.now()],
             signal,
+            async (database) =>
+                await database
+                    .update(slackInstallation)
+                    .set({ status, updatedAt: Date.now() })
+                    .where(
+                        eq(
+                            slackInstallation.slackAppRecordId,
+                            database
+                                .select({ id: slackApp.id })
+                                .from(slackApp)
+                                .where(eq(slackApp.slackAppId, slackAppId)),
+                        ),
+                    )
+                    .run(),
         );
     };
 
@@ -513,14 +668,18 @@ export class SlackEventStorage {
     ): Promise<StoredSlackEventTarget | null> => {
         const row = await this.#first(
             tenant,
-            `SELECT a.id, a.tenant_id, a.slack_bot_id,
-                    i.slack_team_id, i.slack_bot_user_id, i.bot_token_encrypted
-               FROM slack_app a
-               JOIN slack_installation i ON i.slack_app_record_id = a.id
-              WHERE a.slack_app_id = ?1 AND i.slack_team_id = ?2
-                AND a.status = 'enabled' AND i.status = 'connected'`,
-            [payload.api_app_id, payload.team_id],
             signal,
+            async (database) =>
+                await this.#eventTargetQuery(database)
+                    .where(
+                        and(
+                            eq(slackApp.slackAppId, payload.api_app_id),
+                            eq(slackInstallation.slackTeamId, payload.team_id),
+                            eq(slackApp.status, "enabled"),
+                            eq(slackInstallation.status, "connected"),
+                        ),
+                    )
+                    .get(),
         );
         return await this.#eventTarget(row, signal);
     };
@@ -533,15 +692,19 @@ export class SlackEventStorage {
     ): Promise<StoredSlackEventTarget | null> => {
         const row = await this.#first(
             tenant,
-            `SELECT a.id, a.tenant_id, a.slack_bot_id,
-                    i.slack_team_id, i.slack_bot_user_id, i.bot_token_encrypted
-               FROM slack_app a
-               JOIN slack_installation i ON i.slack_app_record_id = a.id
-              WHERE a.tenant_id = ?1 AND a.slack_bot_id = ?2
-                AND a.status = 'enabled' AND i.status = 'connected'
-              ORDER BY i.updated_at DESC LIMIT 1`,
-            [tenantId, botId],
             signal,
+            async (database) =>
+                await this.#eventTargetQuery(database)
+                    .where(
+                        and(
+                            eq(slackApp.tenantId, tenantId),
+                            eq(slackApp.slackBotId, botId),
+                            eq(slackApp.status, "enabled"),
+                            eq(slackInstallation.status, "connected"),
+                        ),
+                    )
+                    .orderBy(desc(slackInstallation.updatedAt))
+                    .get(),
         );
         return await this.#eventTarget(row, signal);
     };
@@ -554,12 +717,21 @@ export class SlackEventStorage {
     ): Promise<string | null> => {
         const row = await this.#first(
             tenant,
-            `SELECT slack_bot_id AS value FROM slack_app
-              WHERE tenant_id = ?1 AND slack_app_id = ?2 AND status = 'enabled'`,
-            [tenantId, slackAppId],
             signal,
+            async (database) =>
+                await database
+                    .select({ value: slackApp.slackBotId })
+                    .from(slackApp)
+                    .where(
+                        and(
+                            eq(slackApp.tenantId, tenantId),
+                            eq(slackApp.slackAppId, slackAppId),
+                            eq(slackApp.status, "enabled"),
+                        ),
+                    )
+                    .get(),
         );
-        return row === null ? null : v.parse(stringRowSchema, row).value;
+        return row === undefined ? null : v.parse(stringRowSchema, row).value;
     };
 
     readonly findConversation = async (
@@ -570,19 +742,36 @@ export class SlackEventStorage {
     ): Promise<StoredSlackConversation | null> => {
         const row = await this.#first(
             tenant,
-            `SELECT s.id, s.conversation_id, s.latest_event_ts
-               FROM slack_conversation_mapping s
-               JOIN slack_app a ON a.id = s.slack_app_record_id
-               JOIN slack_mobius_binding b ON b.tenant_id = a.tenant_id AND b.slack_bot_id = a.slack_bot_id
-              WHERE s.tenant_id = ?1 AND a.slack_bot_id = ?2
-                AND s.slack_channel_id = ?3
-                AND IFNULL(s.thread_ts, '') = IFNULL(?4, '')
-                AND s.connection_id = COALESCE(?5, b.connection_id)
-              ORDER BY s.updated_at DESC LIMIT 1`,
-            [input.tenantId, input.botId, input.channelId, input.threadTs, connectionId ?? null],
             signal,
+            async (database) =>
+                await database
+                    .select({
+                        id: slackConversationMapping.id,
+                        conversation_id: slackConversationMapping.conversationId,
+                        latest_event_ts: slackConversationMapping.latestEventTs,
+                    })
+                    .from(slackConversationMapping)
+                    .innerJoin(slackApp, eq(slackApp.id, slackConversationMapping.slackAppRecordId))
+                    .innerJoin(
+                        slackMobiusBinding,
+                        and(
+                            eq(slackMobiusBinding.tenantId, slackApp.tenantId),
+                            eq(slackMobiusBinding.slackBotId, slackApp.slackBotId),
+                        ),
+                    )
+                    .where(
+                        and(
+                            eq(slackConversationMapping.tenantId, input.tenantId),
+                            eq(slackApp.slackBotId, input.botId),
+                            eq(slackConversationMapping.slackChannelId, input.channelId),
+                            sql`ifnull(${slackConversationMapping.threadTs}, '') = ifnull(${input.threadTs}, '')`,
+                            sql`${slackConversationMapping.connectionId} = coalesce(${connectionId ?? null}, ${slackMobiusBinding.connectionId})`,
+                        ),
+                    )
+                    .orderBy(desc(slackConversationMapping.updatedAt))
+                    .get(),
         );
-        if (row === null) {
+        if (row === undefined) {
             return null;
         }
         const conversation = v.parse(conversationRowSchema, row);
@@ -602,11 +791,19 @@ export class SlackEventStorage {
     ): Promise<void> => {
         await this.#run(
             tenant,
-            `INSERT OR IGNORE INTO slack_pending_message
-                (tenant_id, conversation_mapping_id, slack_event_id, payload, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5)`,
-            [input.tenantId, conversationMappingId, input.eventId, JSON.stringify(input), timestamp],
             signal,
+            async (database) =>
+                await database
+                    .insert(slackPendingMessage)
+                    .values({
+                        tenantId: input.tenantId,
+                        conversationMappingId,
+                        slackEventId: input.eventId,
+                        payload: JSON.stringify(input),
+                        createdAt: timestamp,
+                    })
+                    .onConflictDoNothing()
+                    .run(),
         );
     };
 
@@ -624,20 +821,22 @@ export class SlackEventStorage {
     ): Promise<void> => {
         await this.#run(
             tenant,
-            `INSERT INTO slack_message_delivery
-                (tenant_id, client_message_id, conversation_mapping_id,
-                 reply_thread_ts, status_thread_ts,
-                 trigger_sender_info, delivery_status, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?4, ?5, 'pending', ?6, ?6)`,
-            [
-                input.tenantId,
-                input.clientMessageId,
-                input.conversationMappingId,
-                input.replyThreadTs,
-                input.sender,
-                input.timestamp,
-            ],
             signal,
+            async (database) =>
+                await database
+                    .insert(slackMessageDelivery)
+                    .values({
+                        tenantId: input.tenantId,
+                        clientMessageId: input.clientMessageId,
+                        conversationMappingId: input.conversationMappingId,
+                        replyThreadTs: input.replyThreadTs,
+                        statusThreadTs: input.replyThreadTs,
+                        triggerSenderInfo: input.sender,
+                        deliveryStatus: "pending",
+                        createdAt: input.timestamp,
+                        updatedAt: input.timestamp,
+                    })
+                    .run(),
         );
     };
 
@@ -650,12 +849,23 @@ export class SlackEventStorage {
     ): Promise<void> => {
         await this.#run(
             tenant,
-            `UPDATE processed_slack_event
-                SET status = ?2, processed_at = ?3,
-                    payload = CASE WHEN ?2 = 'processed' THEN '' ELSE payload END
-              WHERE slack_event_id = ?1 AND tenant_id = ?4 AND (status != 'processed' OR ?2 = 'processed')`,
-            [eventId, status, timestamp, tenant.tenantId],
             signal,
+            async (database) =>
+                await database
+                    .update(processedSlackEvent)
+                    .set({
+                        status,
+                        processedAt: timestamp,
+                        payload: status === "processed" ? "" : processedSlackEvent.payload,
+                    })
+                    .where(
+                        and(
+                            eq(processedSlackEvent.slackEventId, eventId),
+                            eq(processedSlackEvent.tenantId, tenant.tenantId),
+                            or(ne(processedSlackEvent.status, "processed"), eq(sql`${status}`, "processed")),
+                        ),
+                    )
+                    .run(),
         );
     };
 
@@ -667,18 +877,33 @@ export class SlackEventStorage {
     ): Promise<BotSlackInstallation | null> => {
         const row = await this.#first(
             tenant,
-            `SELECT i.bot_token_encrypted, i.slack_app_record_id,
-                    i.slack_bot_user_id, i.slack_team_id, i.slack_team_name,
-                    i.status, i.tenant_id, a.slack_app_id
-               FROM slack_app a
-               JOIN slack_installation i ON i.slack_app_record_id = a.id
-              WHERE a.tenant_id = ?1 AND a.slack_bot_id = ?2
-                AND a.status = 'enabled' AND i.status = 'connected'
-              ORDER BY i.updated_at DESC LIMIT 1`,
-            [tenantId, botId],
             signal,
+            async (database) =>
+                await database
+                    .select({
+                        bot_token_encrypted: slackInstallation.botTokenEncrypted,
+                        slack_app_record_id: slackInstallation.slackAppRecordId,
+                        slack_bot_user_id: slackInstallation.slackBotUserId,
+                        slack_team_id: slackInstallation.slackTeamId,
+                        slack_team_name: slackInstallation.slackTeamName,
+                        status: slackInstallation.status,
+                        tenant_id: slackInstallation.tenantId,
+                        slack_app_id: slackApp.slackAppId,
+                    })
+                    .from(slackApp)
+                    .innerJoin(slackInstallation, eq(slackInstallation.slackAppRecordId, slackApp.id))
+                    .where(
+                        and(
+                            eq(slackApp.tenantId, tenantId),
+                            eq(slackApp.slackBotId, botId),
+                            eq(slackApp.status, "enabled"),
+                            eq(slackInstallation.status, "connected"),
+                        ),
+                    )
+                    .orderBy(desc(slackInstallation.updatedAt))
+                    .get(),
         );
-        if (row === null) {
+        if (row === undefined) {
             return null;
         }
         const value = v.parse(v.object({ ...installationRowSchema.entries, slack_app_id: v.string() }), row);
@@ -695,16 +920,17 @@ export class SlackEventStorage {
         humanId: string,
         signal: AbortSignal,
     ): Promise<boolean> => {
-        const row = v.parse(
-            countRowSchema,
-            await this.#first(
-                tenant,
-                "SELECT COUNT(*) AS count FROM slack_user_config_token WHERE tenant_id = ?1 AND human_id = ?2",
-                [tenantId, humanId],
-                signal,
-            ),
+        const row = await this.#first(
+            tenant,
+            signal,
+            async (database) =>
+                await database
+                    .select({ id: slackUserConfigToken.id })
+                    .from(slackUserConfigToken)
+                    .where(and(eq(slackUserConfigToken.tenantId, tenantId), eq(slackUserConfigToken.humanId, humanId)))
+                    .get(),
         );
-        return row.count > 0;
+        return row !== undefined;
     };
 
     readonly getConfigToken = async (
@@ -719,13 +945,19 @@ export class SlackEventStorage {
     } | null> => {
         const row = await this.#first(
             tenant,
-            `SELECT access_token_encrypted, refresh_token_encrypted, expires_at
-               FROM slack_user_config_token
-              WHERE tenant_id = ?1 AND human_id = ?2`,
-            [tenantId, humanId],
             signal,
+            async (database) =>
+                await database
+                    .select({
+                        access_token_encrypted: slackUserConfigToken.accessTokenEncrypted,
+                        refresh_token_encrypted: slackUserConfigToken.refreshTokenEncrypted,
+                        expires_at: slackUserConfigToken.expiresAt,
+                    })
+                    .from(slackUserConfigToken)
+                    .where(and(eq(slackUserConfigToken.tenantId, tenantId), eq(slackUserConfigToken.humanId, humanId)))
+                    .get(),
         );
-        if (row === null) {
+        if (row === undefined) {
             return null;
         }
         const value = v.parse(configTokenRowSchema, row);
@@ -750,24 +982,29 @@ export class SlackEventStorage {
     ): Promise<void> => {
         await this.#run(
             tenant,
-            `INSERT INTO slack_user_config_token
-                (tenant_id, human_id, access_token_encrypted,
-                 refresh_token_encrypted, expires_at, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
-             ON CONFLICT(tenant_id, human_id) DO UPDATE SET
-                 access_token_encrypted = excluded.access_token_encrypted,
-                 refresh_token_encrypted = excluded.refresh_token_encrypted,
-                 expires_at = excluded.expires_at,
-                 updated_at = excluded.updated_at`,
-            [
-                input.tenantId,
-                input.humanId,
-                input.accessTokenEncrypted,
-                input.refreshTokenEncrypted,
-                input.expiresAt,
-                input.timestamp,
-            ],
             signal,
+            async (database) =>
+                await database
+                    .insert(slackUserConfigToken)
+                    .values({
+                        tenantId: input.tenantId,
+                        humanId: input.humanId,
+                        accessTokenEncrypted: input.accessTokenEncrypted,
+                        refreshTokenEncrypted: input.refreshTokenEncrypted,
+                        expiresAt: input.expiresAt,
+                        createdAt: input.timestamp,
+                        updatedAt: input.timestamp,
+                    })
+                    .onConflictDoUpdate({
+                        target: [slackUserConfigToken.tenantId, slackUserConfigToken.humanId],
+                        set: {
+                            accessTokenEncrypted: input.accessTokenEncrypted,
+                            refreshTokenEncrypted: input.refreshTokenEncrypted,
+                            expiresAt: input.expiresAt,
+                            updatedAt: input.timestamp,
+                        },
+                    })
+                    .run(),
         );
     };
 
@@ -779,9 +1016,12 @@ export class SlackEventStorage {
     ): Promise<void> => {
         await this.#run(
             tenant,
-            "DELETE FROM slack_user_config_token WHERE tenant_id = ?1 AND human_id = ?2",
-            [tenantId, humanId],
             signal,
+            async (database) =>
+                await database
+                    .delete(slackUserConfigToken)
+                    .where(and(eq(slackUserConfigToken.tenantId, tenantId), eq(slackUserConfigToken.humanId, humanId)))
+                    .run(),
         );
     };
 
@@ -793,12 +1033,19 @@ export class SlackEventStorage {
     ): Promise<SlackMessageReplyContext | null> => {
         const changed = await this.#run(
             tenant,
-            `UPDATE slack_message_delivery
-                SET delivery_status = 'delivering', updated_at = ?3
-              WHERE tenant_id = ?1 AND client_message_id = ?2
-                AND delivery_status = 'pending'`,
-            [tenantId, clientMessageId, Date.now()],
             signal,
+            async (database) =>
+                await database
+                    .update(slackMessageDelivery)
+                    .set({ deliveryStatus: "delivering", updatedAt: Date.now() })
+                    .where(
+                        and(
+                            eq(slackMessageDelivery.tenantId, tenantId),
+                            eq(slackMessageDelivery.clientMessageId, clientMessageId),
+                            eq(slackMessageDelivery.deliveryStatus, "pending"),
+                        ),
+                    )
+                    .run(),
         );
         if (changed.meta.changes !== 1) {
             return null;
@@ -807,17 +1054,36 @@ export class SlackEventStorage {
             messageDeliveryRowSchema,
             await this.#first(
                 tenant,
-                `SELECT p.tenant_id, p.conversation_mapping_id, p.reply_thread_ts,
-                        p.status_thread_ts, s.slack_channel_id,
-                        i.bot_token_encrypted
-                   FROM slack_message_delivery p
-                   JOIN slack_conversation_mapping s ON s.id = p.conversation_mapping_id
-                   JOIN slack_installation i
-                     ON i.slack_app_record_id = s.slack_app_record_id
-                    AND i.slack_team_id = s.slack_team_id
-                  WHERE p.tenant_id = ?1 AND p.client_message_id = ?2`,
-                [tenantId, clientMessageId],
                 signal,
+                async (database) =>
+                    await database
+                        .select({
+                            tenant_id: slackMessageDelivery.tenantId,
+                            conversation_mapping_id: slackMessageDelivery.conversationMappingId,
+                            reply_thread_ts: slackMessageDelivery.replyThreadTs,
+                            status_thread_ts: slackMessageDelivery.statusThreadTs,
+                            slack_channel_id: slackConversationMapping.slackChannelId,
+                            bot_token_encrypted: slackInstallation.botTokenEncrypted,
+                        })
+                        .from(slackMessageDelivery)
+                        .innerJoin(
+                            slackConversationMapping,
+                            eq(slackConversationMapping.id, slackMessageDelivery.conversationMappingId),
+                        )
+                        .innerJoin(
+                            slackInstallation,
+                            and(
+                                eq(slackInstallation.slackAppRecordId, slackConversationMapping.slackAppRecordId),
+                                eq(slackInstallation.slackTeamId, slackConversationMapping.slackTeamId),
+                            ),
+                        )
+                        .where(
+                            and(
+                                eq(slackMessageDelivery.tenantId, tenantId),
+                                eq(slackMessageDelivery.clientMessageId, clientMessageId),
+                            ),
+                        )
+                        .get(),
             ),
         );
         return {
@@ -838,11 +1104,18 @@ export class SlackEventStorage {
     ): Promise<void> => {
         await this.#run(
             tenant,
-            `UPDATE slack_message_delivery
-                SET delivery_status = 'completed', updated_at = ?3
-              WHERE tenant_id = ?1 AND client_message_id = ?2`,
-            [tenantId, clientMessageId, Date.now()],
             signal,
+            async (database) =>
+                await database
+                    .update(slackMessageDelivery)
+                    .set({ deliveryStatus: "completed", updatedAt: Date.now() })
+                    .where(
+                        and(
+                            eq(slackMessageDelivery.tenantId, tenantId),
+                            eq(slackMessageDelivery.clientMessageId, clientMessageId),
+                        ),
+                    )
+                    .run(),
         );
     };
 
@@ -854,19 +1127,34 @@ export class SlackEventStorage {
     ): Promise<void> => {
         await this.#run(
             tenant,
-            `UPDATE slack_conversation_mapping
-                SET updated_at = ?3
-              WHERE tenant_id = ?1 AND id = ?2`,
-            [tenantId, conversationMappingId, Date.now()],
             signal,
+            async (database) =>
+                await database
+                    .update(slackConversationMapping)
+                    .set({ updatedAt: Date.now() })
+                    .where(
+                        and(
+                            eq(slackConversationMapping.tenantId, tenantId),
+                            eq(slackConversationMapping.id, conversationMappingId),
+                        ),
+                    )
+                    .run(),
         );
         const pending = await this.#first(
             tenant,
-            `SELECT id, payload FROM slack_pending_message
-              WHERE tenant_id = ?1 AND conversation_mapping_id = ?2
-              ORDER BY created_at, id LIMIT 1`,
-            [tenantId, conversationMappingId],
             signal,
+            async (database) =>
+                await database
+                    .select({ id: slackPendingMessage.id, payload: slackPendingMessage.payload })
+                    .from(slackPendingMessage)
+                    .where(
+                        and(
+                            eq(slackPendingMessage.tenantId, tenantId),
+                            eq(slackPendingMessage.conversationMappingId, conversationMappingId),
+                        ),
+                    )
+                    .orderBy(asc(slackPendingMessage.createdAt), asc(slackPendingMessage.id))
+                    .get(),
         );
         const parsed = v.safeParse(
             v.object({ id: v.pipe(v.number(), v.safeInteger(), v.minValue(1)), payload: v.string() }),
@@ -877,9 +1165,14 @@ export class SlackEventStorage {
         }
         await this.#run(
             tenant,
-            "DELETE FROM slack_pending_message WHERE id = ?1 AND tenant_id = ?2",
-            [parsed.output.id, tenantId],
             signal,
+            async (database) =>
+                await database
+                    .delete(slackPendingMessage)
+                    .where(
+                        and(eq(slackPendingMessage.id, parsed.output.id), eq(slackPendingMessage.tenantId, tenantId)),
+                    )
+                    .run(),
         );
         const message = v.parse(queueMessageSchema, {
             input: JSON.parse(parsed.output.payload),
@@ -891,23 +1184,43 @@ export class SlackEventStorage {
 
     readonly #installation = async (
         tenant: TenantContext,
-        where: string,
-        values: readonly unknown[],
         signal: AbortSignal,
+        query: (database: Database) => Promise<unknown>,
     ): Promise<v.InferOutput<typeof installationRowSchema> | null> => {
-        const row = await this.#first(
-            tenant,
-            `SELECT tenant_id, slack_app_record_id, slack_team_id, slack_team_name,
-                    slack_bot_user_id, bot_token_encrypted, status
-               FROM slack_installation ${where}`,
-            values,
-            signal,
-        );
-        return row === null ? null : v.parse(installationRowSchema, row);
+        const row = await this.#first(tenant, signal, query);
+        return row === undefined ? null : v.parse(installationRowSchema, row);
     };
 
+    readonly #installationQuery = (database: Database) =>
+        database
+            .select({
+                tenant_id: slackInstallation.tenantId,
+                slack_app_record_id: slackInstallation.slackAppRecordId,
+                slack_team_id: slackInstallation.slackTeamId,
+                slack_team_name: slackInstallation.slackTeamName,
+                slack_bot_user_id: slackInstallation.slackBotUserId,
+                bot_token_encrypted: slackInstallation.botTokenEncrypted,
+                status: slackInstallation.status,
+            })
+            .from(slackInstallation)
+            .$dynamic();
+
+    readonly #eventTargetQuery = (database: Database) =>
+        database
+            .select({
+                id: slackApp.id,
+                tenant_id: slackApp.tenantId,
+                slack_bot_id: slackApp.slackBotId,
+                slack_team_id: slackInstallation.slackTeamId,
+                slack_bot_user_id: slackInstallation.slackBotUserId,
+                bot_token_encrypted: slackInstallation.botTokenEncrypted,
+            })
+            .from(slackApp)
+            .innerJoin(slackInstallation, eq(slackInstallation.slackAppRecordId, slackApp.id))
+            .$dynamic();
+
     readonly #eventTarget = async (row: unknown, signal: AbortSignal): Promise<StoredSlackEventTarget | null> => {
-        if (row === null) {
+        if (row === undefined) {
             return null;
         }
         const target = v.parse(eventTargetRowSchema, row);
@@ -923,25 +1236,34 @@ export class SlackEventStorage {
 
     readonly #first = async (
         _tenant: TenantContext,
-        query: string,
-        values: readonly unknown[],
         signal: AbortSignal,
+        query: (database: Database) => Promise<unknown>,
     ): Promise<unknown> => {
         signal.throwIfAborted();
-        const result = await this.#database.resolve().first(query, values, signal);
+        const result = await this.#database.resolve().execute("first", 1, signal, query);
         signal.throwIfAborted();
         return result;
     };
 
     readonly #run = async (
         _tenant: TenantContext,
-        query: string,
-        values: readonly unknown[],
         signal: AbortSignal,
+        query: (database: Database) => Promise<D1Result>,
     ): Promise<{ readonly meta: { readonly changes: number } }> => {
         signal.throwIfAborted();
-        const result = await this.#database.resolve().run(query, values, signal);
+        const result = await this.#database.resolve().execute("run", 1, signal, query);
         signal.throwIfAborted();
         return result;
+    };
+
+    readonly #batch = async (
+        _tenant: TenantContext,
+        queryCount: number,
+        signal: AbortSignal,
+        query: (database: Database) => Promise<void>,
+    ): Promise<void> => {
+        signal.throwIfAborted();
+        await this.#database.resolve().execute("batch", queryCount, signal, query);
+        signal.throwIfAborted();
     };
 }

@@ -1,15 +1,10 @@
+import type { Database } from "../../../schema/database.ts";
+
 export interface SqlDatabase {
-    readonly batch: (
-        statements: readonly {
-            readonly query: string;
-            readonly values: readonly unknown[];
-        }[],
+    readonly execute: <T>(
+        operation: "batch" | "first" | "run",
+        queryCount: number,
         signal: AbortSignal,
-    ) => Promise<void>;
-    readonly first: (query: string, values: readonly unknown[], signal: AbortSignal) => Promise<unknown>;
-    readonly run: (
-        query: string,
-        values: readonly unknown[],
-        signal: AbortSignal,
-    ) => Promise<{ readonly meta: { readonly changes: number } }>;
+        query: (database: Database) => Promise<T>,
+    ) => Promise<T>;
 }

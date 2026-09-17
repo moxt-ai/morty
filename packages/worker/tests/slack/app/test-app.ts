@@ -21,7 +21,7 @@ export async function createTestApplication(
     createMobiusGateway: (cx: ConstructorParameters<typeof MobiusGateway>[0]) => MobiusGateway = (cx) =>
         new MobiusGateway(cx),
 ) {
-    const database = createTestDatabase();
+    const database = await createTestDatabase();
     const cipher = new SecretCipher(btoa("a".repeat(32)));
     const slack = new InMemorySlack();
     const mobius = new InMemoryMobius();
