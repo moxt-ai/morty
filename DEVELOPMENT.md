@@ -25,7 +25,10 @@ code, and a terminal-safe QR rendering. The bundled setup CLI decodes the PNG be
 returning it so the QR payload cannot differ from the URL. After transfer redemption, Chat finds that native session through the paired
 Runtime, forks it under an opaque entry capability, records it, and opens the independent
 continuation. Forking allows the originating harness to retain its active writer. Native
-session IDs are not returned by ordinary directory listings.
+session IDs are not returned by ordinary directory listings. The redeemed browser credential
+remains bound to that transfer's 24-hour lifetime. A user can choose **End remote access**
+from the continued Session; this revokes the entry and every browser credential redeemed from
+it without stopping the local Runtime or task.
 Both instruction documents are Markdown templates in `templates/`, outside the
 static public assets. The Worker renders them at `/setup.md` and `/pair.md` at
 request time. `{{BASE_URL}}` uses `APP_ORIGIN` when set, otherwise the
@@ -175,7 +178,10 @@ That Session credential also permits reading and answering interactions for only
 the selected Session. Continued Sessions show pending permission and elicitation
 requests, restore them after a reload, and reconcile a decision with Mobius before
 offering it again. Closing or reloading the pane does not implicitly cancel the
-active Turn.
+active Turn. Continued Sessions persist the command ID before submission. If a transport
+failure leaves acceptance uncertain, Chat displays **Delivery unknown**, never resubmits
+automatically, and offers an explicit retry that reuses the original idempotency key. Reload
+reconciliation clears that warning when the command is already present in saved messages.
 Slack's `MobiusGateway` also calls Mobius
 directly and rejects recursive configuration and redirects.
 

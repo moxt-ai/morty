@@ -43,5 +43,13 @@ export function MobiusManagement() {
         },
         [identity.projectId],
     );
-    return <BotChatHome requests={requests} createTransfer={createTransfer} />;
+    const endRemoteAccess = useCallback(async (signal: AbortSignal) => {
+        const api = new AnonymousIdentityApi({ origin: window.location.origin, storage: window.localStorage });
+        const localIdentity = await api.loadExisting(signal);
+        if (localIdentity === null) {
+            throw new Error("Remote access is no longer available.");
+        }
+        await api.endRemoteAccess(localIdentity.token, signal);
+    }, []);
+    return <BotChatHome requests={requests} createTransfer={createTransfer} endRemoteAccess={endRemoteAccess} />;
 }

@@ -10,9 +10,11 @@ export const anonymousCredential = sqliteTable(
         status: text("status", { enum: ["active", "revoked"] }).notNull(),
         createdAt: integer("created_at").notNull(),
         revokedAt: integer("revoked_at"),
+        remoteTransferId: text("remote_transfer_id"),
     },
     (table) => [
         check("anonymous_credential_status_check", sql`${table.status} in ('active', 'revoked')`),
         index("anonymous_credential_user_idx").on(table.userId, table.status),
+        index("anonymous_credential_remote_transfer_idx").on(table.remoteTransferId, table.status),
     ],
 );

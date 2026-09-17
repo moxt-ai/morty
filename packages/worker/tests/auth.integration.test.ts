@@ -56,6 +56,7 @@ class InMemoryD1Database {
         this.#database.exec(
             readFileSync(new URL("../migrations/0007_identity_transfer_redemptions.sql", import.meta.url), "utf8"),
         );
+        this.#database.exec(readFileSync(new URL("../migrations/0008_remote_access.sql", import.meta.url), "utf8"));
     }
     readonly close = () => this.#database.close();
     readonly prepare = (query: string) => new InMemoryD1Statement(query, this.#database);
@@ -373,6 +374,60 @@ test("Given an anonymous user, When a transfer is redeemed six times, Then five 
     const sixth = await redeem();
     expect(sixth.status).toBe(410);
     expect(await sixth.json()).toMatchObject({ error: { code: "TRANSFER_UNAVAILABLE" } });
+});
+
+test("Given remote browsers redeemed one access link, When one browser ends remote access, Then every remote credential and the link stop while the owner remains connected", async () => {
+    const database = new InMemoryD1Database();
+    const environment = slackConfiguration(database);
+    const owner = await createAnonymousUser(database);
+    const created = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${owner.projectId}/identity/transfers`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${owner.token}` },
+        }),
+        environment,
+    );
+    const transfer = v.parse(v.object({ url: v.string() }), await created.json());
+    const code = new URL(transfer.url).hash.slice("#code=".length);
+    const redeem = async () => {
+        const response = await worker.fetch(
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/transfers/redeem`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ code }),
+            }),
+            environment,
+        );
+        expect(response.status).toBe(200);
+        return v.parse(v.object({ token: v.string() }), await response.json()).token;
+    };
+    const firstRemote = await redeem();
+    const secondRemote = await redeem();
+
+    const ended = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${owner.projectId}/identity/remote-access`, {
+            method: "DELETE",
+            headers: { authorization: `Bearer ${firstRemote}` },
+        }),
+        environment,
+    );
+
+    expect(ended.status).toBe(204);
+    expect((await worker.fetch(accountRequest(firstRemote, owner.projectId), environment)).status).toBe(401);
+    expect((await worker.fetch(accountRequest(secondRemote, owner.projectId), environment)).status).toBe(401);
+    expect((await worker.fetch(accountRequest(owner.token, owner.projectId), environment)).status).toBe(200);
+    expect(
+        (
+            await worker.fetch(
+                new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/transfers/redeem`, {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ code }),
+                }),
+                environment,
+            )
+        ).status,
+    ).toBe(410);
 });
 
 test.each(["anonymous", "clerk"])(

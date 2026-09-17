@@ -63,6 +63,7 @@ export const createContinueStore = () =>
                 const destination = new URL("/", window.location.origin);
                 destination.searchParams.set("harness", state.handoff.harness);
                 destination.searchParams.set("sessionId", state.handoff.sessionId);
+                destination.searchParams.set("remoteAccess", "1");
                 window.location.replace(destination);
             } catch (cause) {
                 if (!signal.aborted) {

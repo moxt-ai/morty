@@ -33,6 +33,8 @@ import { Button } from "../../components/ui/cloud-button.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
 import { type RecordedAgentActivity, recordAgentActivity } from "../../services/chat/agent-activities.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import { createRemoteAccessStore } from "../../view-models/chat/remote-access-store.ts";
+import { createSessionDeliveryStore } from "../../view-models/chat/session-delivery-store.ts";
 import { createSessionTaskControlsStore, findCompactCommand } from "../../view-models/chat/session-task-controls.ts";
 import { MobiusSessionMessage, type SessionMessage, type SessionMessageContent } from "./mobius-session-message.tsx";
 import type { OpenMobiusSession } from "./native-session-dialog.tsx";
@@ -187,13 +189,29 @@ export function MobiusSessionPane({
     session,
     botId,
     requests,
+    endRemoteAccess,
 }: {
     readonly session: OpenMobiusSession;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession">;
+    readonly endRemoteAccess?: (signal: AbortSignal) => Promise<void>;
 }) {
     const sessionId = session.result.ready.sessionId;
     const clientReference = useRef<MobiusClient | null>(null);
+    const [deliveryStore] = useState(() =>
+        createSessionDeliveryStore({
+            sessionId,
+            storage: window.localStorage,
+            submit: async (request, signal) => {
+                const client = clientReference.current;
+                if (client === null) {
+                    throw new Error("The Session is not connected.");
+                }
+                return await client.turns.submit(sessionId, request, signal);
+            },
+        }),
+    );
+    const delivery = useStore(deliveryStore);
     const [taskControlsStore] = useState(() =>
         createSessionTaskControlsStore({
             commands: session.result.ready.commands,
@@ -216,6 +234,10 @@ export function MobiusSessionPane({
             },
         }),
     );
+    const [remoteAccessStore] = useState(() =>
+        createRemoteAccessStore(endRemoteAccess ?? (async () => Promise.resolve())),
+    );
+    const remoteAccess = useStore(remoteAccessStore);
     const taskControls = useStore(taskControlsStore);
     const [messages, setMessages] = useState<readonly SessionMessage[]>(() =>
         session.result.history.status === "available"
@@ -303,6 +325,7 @@ export function MobiusSessionPane({
                     return presented === null ? [] : [presented];
                 }),
             );
+            deliveryStore.getState().reconcile(saved.messages.map((message) => message.commandId));
             lastSequence = BigInt(saved.lastCommittedSequence);
             const history = session.result.history;
             const initial: readonly SessionMessage[] =
@@ -473,7 +496,14 @@ export function MobiusSessionPane({
             client?.close();
             clientReference.current = null;
         };
-    }, [session, sessionId, botId, requests, taskControlsStore]);
+    }, [session, sessionId, botId, requests, taskControlsStore, deliveryStore]);
+    useEffect(() => {
+        if (remoteAccess.state.kind === "ended") {
+            lifetime.current.abort();
+            clientReference.current?.close();
+            clientReference.current = null;
+        }
+    }, [remoteAccess.state.kind]);
     const request = {
         additionalDirectoryIds: session.result.ready.additionalDirectories.map((directory) => directory.directoryId),
     };
@@ -505,11 +535,11 @@ export function MobiusSessionPane({
         ]);
         setOperation({ kind: "sending", commandId });
         try {
-            const accepted = await connection.client.turns.submit(
-                sessionId,
+            const accepted = await deliveryStore.getState().submit(
+                commandId,
+                displayPrompt,
                 {
                     ...request,
-                    idempotencyKey: commandId,
                     content: prompt,
                     images: attachments.flatMap((attachment) =>
                         attachment.kind === "image" ? [attachment.image] : [],
@@ -521,8 +551,10 @@ export function MobiusSessionPane({
                 },
                 lifetime.current.signal,
             );
-            if (!lifetime.current.signal.aborted && command.current === commandId) {
+            if (accepted !== null && !lifetime.current.signal.aborted && command.current === commandId) {
                 taskControlsStore.getState().start(commandId, accepted.turnId);
+                setOperation({ kind: "idle" });
+            } else if (!lifetime.current.signal.aborted) {
                 setOperation({ kind: "idle" });
             }
         } catch (cause) {
@@ -532,6 +564,33 @@ export function MobiusSessionPane({
                     message: cause instanceof Error ? cause.message : "The agent could not complete the message.",
                 });
             }
+        }
+    };
+    const retryUnknownDelivery = async () => {
+        if (connection.kind !== "ready" || delivery.state.kind !== "delivery-unknown") {
+            return;
+        }
+        const pending = delivery.state.journal;
+        command.current = pending.commandId;
+        setMessages((current) =>
+            current.some((message) => message.role === "assistant" && message.commandId === pending.commandId)
+                ? current
+                : [
+                      ...current,
+                      { id: `${pending.commandId}-user`, role: "user", text: pending.displayPrompt, contents: [] },
+                      {
+                          id: `${pending.commandId}-reply`,
+                          role: "assistant",
+                          text: "",
+                          attempt: null,
+                          commandId: pending.commandId,
+                          contents: [],
+                      },
+                  ],
+        );
+        const accepted = await deliveryStore.getState().retry(lifetime.current.signal);
+        if (accepted !== null && !lifetime.current.signal.aborted) {
+            taskControlsStore.getState().start(pending.commandId, accepted.turnId);
         }
     };
     const steer = async () => {
@@ -671,6 +730,8 @@ export function MobiusSessionPane({
     const controlRunning = activeControl !== null;
     const busy =
         connection.kind !== "ready" ||
+        delivery.state.kind === "submitting" ||
+        delivery.state.kind === "delivery-unknown" ||
         operation.kind === "sending" ||
         operation.kind === "configuring" ||
         taskControls.operation.kind === "compacting" ||
@@ -689,8 +750,44 @@ export function MobiusSessionPane({
                   : null;
     const compactAvailable = findCompactCommand(taskControls.commands) !== null;
     const taskControlError = taskControls.feedback.kind === "failed" ? taskControls.feedback.message : "";
+    if (endRemoteAccess !== undefined && remoteAccess.state.kind === "ended") {
+        return (
+            <section className="m-auto grid max-w-lg gap-3 p-8 text-center">
+                <h1 className="text-2xl font-semibold">Remote access ended</h1>
+                <p>Your local task is still running on your computer. This browser can no longer open it.</p>
+            </section>
+        );
+    }
     return (
         <section className="flex min-h-0 min-w-0 flex-1 animate-cloud-enter flex-col motion-reduce:animate-none">
+            {endRemoteAccess !== undefined && (
+                <div className="flex items-center justify-end gap-2 border-b border-border px-4 py-2">
+                    {remoteAccess.state.kind === "confirming" ? (
+                        <>
+                            <span className="text-sm">End access for every remote browser?</span>
+                            <Button
+                                variant="destructive"
+                                disabled={false}
+                                onClick={() => void remoteAccessStore.getState().end(lifetime.current.signal)}
+                            >
+                                Confirm end access
+                            </Button>
+                            <Button variant="ghost" onClick={remoteAccessStore.getState().cancelEnd}>
+                                Cancel
+                            </Button>
+                        </>
+                    ) : (
+                        <Button
+                            variant="outline"
+                            disabled={remoteAccess.state.kind === "ending"}
+                            onClick={remoteAccessStore.getState().requestEnd}
+                        >
+                            {remoteAccess.state.kind === "ending" ? "Ending remote access…" : "End remote access"}
+                        </Button>
+                    )}
+                    {remoteAccess.state.kind === "failed" && <p role="alert">{remoteAccess.state.message}</p>}
+                </div>
+            )}
             <div
                 role="log"
                 ref={messageList}
@@ -733,7 +830,13 @@ export function MobiusSessionPane({
                 attachments={attachments}
                 disabled={busy}
                 draft={draft}
-                error={operation.kind === "failed" ? operation.message : taskControlError}
+                error={
+                    operation.kind === "failed"
+                        ? operation.message
+                        : delivery.state.kind === "failed"
+                          ? delivery.state.message
+                          : taskControlError
+                }
                 onAttachmentsChange={setAttachments}
                 onDraftChange={(value) => {
                     taskControlsStore.getState().dismissFailure();
@@ -753,6 +856,14 @@ export function MobiusSessionPane({
                     (draft.trim() === "" && attachments.length === 0)
                 }
             >
+                {delivery.state.kind === "delivery-unknown" && (
+                    <div role="alert" className="flex items-center gap-2 text-sm">
+                        <span>Delivery unknown. This message will not be sent again automatically.</span>
+                        <Button variant="outline" size="sm" onClick={() => void retryUnknownDelivery()}>
+                            Retry same message
+                        </Button>
+                    </div>
+                )}
                 <Select
                     compact
                     label="Harness"

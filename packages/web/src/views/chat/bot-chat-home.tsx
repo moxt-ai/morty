@@ -134,6 +134,7 @@ function updateStreamedHistory(current: State, client: MobiusBrowserClient, even
 export function BotChatHome({
     requests,
     createTransfer,
+    endRemoteAccess,
 }: {
     readonly requests: Pick<
         BotChatApi,
@@ -153,6 +154,7 @@ export function BotChatHome({
         | "draftSettings"
     >;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
+    readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
 }) {
     const [state, setState] = useState<State>({ kind: "loading" });
     const [revision, retry] = useState(0);
@@ -178,6 +180,7 @@ export function BotChatHome({
             ? { kind: "conversation-access", conversationId }
             : { kind: "draft", key: crypto.randomUUID() };
     });
+    const [remoteAccess] = useState(() => new URL(window.location.href).searchParams.get("remoteAccess") === "1");
     const target = useRef(initialTarget);
     const [draftSettings, setDraftSettings] = useState<ChatDraftConfiguration | null>(null);
     const messageAttempt = useRef<{ readonly content: string; readonly key: string } | null>(null);
@@ -213,6 +216,7 @@ export function BotChatHome({
         url.searchParams.delete("conversation");
         url.searchParams.delete("conversationId");
         url.searchParams.delete("sessionId");
+        url.searchParams.delete("remoteAccess");
         window.history.replaceState(window.history.state, "", url);
         target.current = { kind: "draft", key };
         retry((value) => value + 1);
@@ -229,6 +233,7 @@ export function BotChatHome({
         const url = new URL(window.location.href);
         url.searchParams.delete("conversationId");
         url.searchParams.delete("sessionId");
+        url.searchParams.delete("remoteAccess");
         url.searchParams.set(kind === "conversation" ? "conversationId" : "sessionId", id);
         window.history.replaceState(window.history.state, "", url);
         target.current =
@@ -568,6 +573,7 @@ export function BotChatHome({
                     requests={requests}
                     key={sessionView.session.result.ready.sessionId}
                     session={sessionView.session}
+                    {...(remoteAccess ? { endRemoteAccess } : {})}
                 />
             ) : (
                 <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">

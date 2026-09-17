@@ -123,6 +123,16 @@ export class AnonymousIdentityApi {
         return identity;
     };
 
+    readonly endRemoteAccess = async (token: string, signal: AbortSignal): Promise<void> => {
+        await this.#request(
+            "/identity/remote-access",
+            { method: "DELETE", headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
+            signal,
+        );
+        this.#storage.removeItem(ANONYMOUS_CREDENTIAL_KEY);
+        this.#storage.removeItem(WORKSPACE_KEY);
+    };
+
     readonly clerkBinding = async (clerkToken: string, signal: AbortSignal): Promise<ClerkBinding> =>
         v.parse(
             bindingSchema,
@@ -209,7 +219,7 @@ export class AnonymousIdentityApi {
         const response = await this.#fetchRequest(
             new Request(new URL(`/mobius-cloud/api${scopedPath}`, this.#origin), { ...init, headers, signal }),
         );
-        const value: unknown = await response.json();
+        const value: unknown = response.status === 204 ? null : await response.json();
         signal.throwIfAborted();
         if (!response.ok) {
             const error = v.safeParse(v.object({ error: v.object({ code: v.string(), message: v.string() }) }), value);

@@ -12,6 +12,7 @@ export const identityTransfer = sqliteTable(
         claimNonce: text("claim_nonce"),
         createdAt: integer("created_at").notNull(),
         redemptionCount: integer("redemption_count").notNull().default(0),
+        revokedAt: integer("revoked_at"),
     },
     (table) => [
         check("identity_transfer_redemption_count_check", sql`${table.redemptionCount} between 0 and 5`),

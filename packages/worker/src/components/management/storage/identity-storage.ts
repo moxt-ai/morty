@@ -1,4 +1,4 @@
-import { and, eq, exists, gt, isNull, lt, notExists, sql } from "drizzle-orm";
+import { and, eq, exists, gt, isNull, lt, notExists, or, sql } from "drizzle-orm";
 import * as v from "valibot";
 import type { HttpError } from "../../../infra/http-error.ts";
 import { createDatabase, type Database } from "../../../schema/database.ts";
@@ -48,6 +48,11 @@ export type BindingResult =
     | { readonly kind: "bound"; readonly userId: string }
     | { readonly kind: "conflict" }
     | { readonly kind: "invalid-local-user" };
+
+export type EndRemoteAccessResult =
+    | { readonly kind: "ended"; readonly transferId: string; readonly userId: string }
+    | { readonly kind: "not-remote" }
+    | { readonly kind: "unauthenticated" };
 
 export class IdentityStorage {
     readonly #database: unknown;
@@ -100,11 +105,16 @@ export class IdentityStorage {
             .select({ userId: anonymousCredential.userId })
             .from(anonymousCredential)
             .innerJoin(platformProjectMapping, eq(platformProjectMapping.userId, anonymousCredential.userId))
+            .leftJoin(identityTransfer, eq(identityTransfer.id, anonymousCredential.remoteTransferId))
             .where(
                 and(
                     eq(anonymousCredential.tokenHash, await digest(parsed.output)),
                     eq(anonymousCredential.status, "active"),
                     eq(platformProjectMapping.projectId, this.#projectId),
+                    or(
+                        isNull(anonymousCredential.remoteTransferId),
+                        and(isNull(identityTransfer.revokedAt), gt(identityTransfer.expiresAt, Date.now())),
+                    ),
                 ),
             )
             .get();
@@ -171,6 +181,7 @@ export class IdentityStorage {
                         status: sql<"active">`'active'`.as("status"),
                         createdAt: sql<number>`${now}`.as("created_at"),
                         revokedAt: sql<null>`null`.as("revoked_at"),
+                        remoteTransferId: identityTransfer.id,
                     })
                     .from(identityTransfer)
                     .where(and(eq(identityTransfer.codeHash, codeHash), eq(identityTransfer.claimNonce, claimNonce))),
@@ -187,6 +198,72 @@ export class IdentityStorage {
             .get();
         const user = v.parse(userRow, row);
         return { token, userId: user.userId, projectId: parsed.projectId };
+    };
+
+    readonly endRemoteAccess = async (
+        token: string,
+        now: number,
+        signal: AbortSignal,
+    ): Promise<EndRemoteAccessResult> => {
+        const parsed = v.safeParse(anonymousToken, token);
+        if (!parsed.success || this.#projectId === null) {
+            return { kind: "unauthenticated" };
+        }
+        signal.throwIfAborted();
+        const database = this.#requireDatabase();
+        const credential = await database
+            .select({
+                transferId: anonymousCredential.remoteTransferId,
+                userId: anonymousCredential.userId,
+            })
+            .from(anonymousCredential)
+            .innerJoin(platformProjectMapping, eq(platformProjectMapping.userId, anonymousCredential.userId))
+            .leftJoin(identityTransfer, eq(identityTransfer.id, anonymousCredential.remoteTransferId))
+            .where(
+                and(
+                    eq(anonymousCredential.tokenHash, await digest(parsed.output)),
+                    eq(anonymousCredential.status, "active"),
+                    eq(platformProjectMapping.projectId, this.#projectId),
+                    or(
+                        isNull(anonymousCredential.remoteTransferId),
+                        and(isNull(identityTransfer.revokedAt), gt(identityTransfer.expiresAt, now)),
+                    ),
+                ),
+            )
+            .get();
+        signal.throwIfAborted();
+        if (credential === undefined) {
+            return { kind: "unauthenticated" };
+        }
+        if (credential.transferId === null) {
+            return { kind: "not-remote" };
+        }
+        const results = await database.batch([
+            database
+                .update(identityTransfer)
+                .set({ revokedAt: now, consumedAt: now })
+                .where(
+                    and(
+                        eq(identityTransfer.id, credential.transferId),
+                        eq(identityTransfer.userId, credential.userId),
+                        isNull(identityTransfer.revokedAt),
+                    ),
+                ),
+            database
+                .update(anonymousCredential)
+                .set({ status: "revoked", revokedAt: now })
+                .where(
+                    and(
+                        eq(anonymousCredential.remoteTransferId, credential.transferId),
+                        eq(anonymousCredential.status, "active"),
+                    ),
+                ),
+        ]);
+        signal.throwIfAborted();
+        if (results[0]?.meta.changes !== 1) {
+            return { kind: "unauthenticated" };
+        }
+        return { kind: "ended", transferId: credential.transferId, userId: credential.userId };
     };
 
     readonly clerkBinding = async (clerkUserId: string, signal: AbortSignal): Promise<string | null> => {
@@ -275,6 +352,7 @@ export class IdentityStorage {
                         status: sql<"active">`'active'`.as("status"),
                         createdAt: sql<number>`${now}`.as("created_at"),
                         revokedAt: sql<null>`null`.as("revoked_at"),
+                        remoteTransferId: sql<null>`null`.as("remote_transfer_id"),
                     })
                     .from(agentPairingTicket)
                     .where(and(eq(agentPairingTicket.codeHash, hash), eq(agentPairingTicket.claimNonce, nonce))),

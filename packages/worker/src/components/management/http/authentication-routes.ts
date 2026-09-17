@@ -137,6 +137,20 @@ export function createAuthenticationRoutes() {
                 return json(identity);
             },
         )
+        .delete("/identity/remote-access", async (context) => {
+            const result = await context.env.services.authentication.endRemoteAccess(
+                context.get("bearerToken"),
+                context.req.raw.signal,
+            );
+            switch (result.kind) {
+                case "ended":
+                    return new Response(null, { status: 204 });
+                case "not-remote":
+                    throw new ManagementError("REMOTE_ACCESS_REQUIRED", "This device is not using remote access.", 409);
+                case "unauthenticated":
+                    throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
+            }
+        })
         .get("/identity/clerk-binding", async (context) => {
             const result = await context.env.services.authentication.clerkBinding(
                 context.get("bearerToken"),

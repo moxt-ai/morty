@@ -136,6 +136,23 @@ export class AuthenticationService {
         return identity;
     };
 
+    readonly endRemoteAccess = async (token: string | undefined, signal: AbortSignal) => {
+        if (token === undefined) {
+            return { kind: "unauthenticated" } as const;
+        }
+        const result = await this.identities.endRemoteAccess(token, Date.now(), signal);
+        this.logger.info(
+            {
+                event: "remote-access-ended",
+                outcome: result.kind,
+                userId: result.kind === "ended" ? result.userId : undefined,
+                transferId: result.kind === "ended" ? result.transferId : undefined,
+            },
+            "Identity audit event",
+        );
+        return result;
+    };
+
     readonly clerkBinding = async (
         token: string | undefined,
         signal: AbortSignal,

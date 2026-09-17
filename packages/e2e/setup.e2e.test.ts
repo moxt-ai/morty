@@ -228,3 +228,42 @@ test("Given a continued setup session, When the agent creates image and video ou
     await expect(video).toHaveAttribute("controls", "");
     await expect(video).toHaveAttribute("src", /^blob:/u);
 });
+
+test("Given a remote setup session, When message delivery cannot be confirmed, Then the user sees delivery unknown and chooses the only retry", async ({
+    runtime,
+}) => {
+    const { page } = runtime;
+    const sessionId = "setup-delivery-unknown-session";
+    await runtime.seedNativeSession(sessionId, "Prepare uncertain delivery");
+    const connected = await runtime.followInstructions("/setup.md", sessionId);
+    await page.goto(connected.url);
+    const composer = page.getByRole("textbox", { name: "Message", exact: true });
+    await expect(composer).toBeVisible();
+
+    await composer.fill("deliver this exactly once");
+    await page.context().setOffline(true);
+    await page.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("Delivery unknown");
+
+    await page.context().setOffline(false);
+    await page.reload();
+    await expect(page.getByRole("alert")).toContainText("will not be sent again automatically");
+    await page.getByRole("button", { name: "Retry same message", exact: true }).click();
+    await expect(page.getByRole("log", { name: "Messages", exact: true })).toContainText("deliver this exactly once");
+});
+
+test("Given remote access to a running local session, When the user ends access, Then remote browsers are revoked while the local task continues", async ({
+    runtime,
+}) => {
+    const { page } = runtime;
+    const sessionId = "setup-end-remote-access-session";
+    await runtime.seedNativeSession(sessionId, "Keep the local task alive");
+    const connected = await runtime.followInstructions("/setup.md", sessionId);
+    await page.goto(connected.url);
+
+    await page.getByRole("button", { name: "End remote access", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm end access", exact: true }).click();
+
+    await expect(page.getByRole("heading", { name: "Remote access ended", exact: true })).toBeVisible();
+    await expect(page.getByText("Your local task is still running on your computer.", { exact: false })).toBeVisible();
+});

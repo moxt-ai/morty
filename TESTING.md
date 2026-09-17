@@ -155,6 +155,10 @@ the persistent `events` request is the SDK's SSE connection.
 Given an interrupted event connection, When the SDK reconnects and replays events,
 Then the reply contains each text delta once. Given exhausted stream recovery,
 Then Chat shows a connection failure instead of silently remaining live.
+Given a Session command whose delivery cannot be confirmed, Chat retains its command ID,
+shows **Delivery unknown** after reload, and only retries after the user chooses the retry.
+Given a browser that redeemed a setup entry, ending remote access revokes that entry and
+every credential redeemed from it while the owner's local identity and Runtime remain active.
 
 Run `pnpm test:e2e:opencode` for the live OpenCode browser journey. It is excluded
 from local `pnpm check` and PR/merge-queue CI and runs nightly in GitHub Actions.
