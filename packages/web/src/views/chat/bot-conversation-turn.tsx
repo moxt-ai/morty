@@ -48,9 +48,9 @@ function BotArtifactContent({
     }, [botId, requests, sessionId]);
     switch (connection.kind) {
         case "loading":
-            return <p className="text-xs text-muted-foreground">Loading image…</p>;
+            return <p className="text-xs text-muted-foreground">Loading media…</p>;
         case "failed":
-            return <p className="text-xs text-muted-foreground">Image content could not be loaded.</p>;
+            return <p className="text-xs text-muted-foreground">Media content could not be loaded.</p>;
         case "ready":
             return <AgentRichContent contents={contents} serviceClient={connection.client} sessionId={sessionId} />;
     }
@@ -68,7 +68,9 @@ export function BotConversationTurn({
     readonly requests: Pick<BotChatApi, "connectSession">;
 }) {
     const turnActivities = activitiesForTurn(activities, turn.sessionId, turn.commandId);
-    const images = turnActivities.flatMap((activity) => activity.content.filter((content) => content.type === "image"));
+    const media = turnActivities.flatMap((activity) =>
+        activity.content.filter((content) => content.type === "image" || content.type === "video"),
+    );
     return (
         <div className="mx-auto grid min-w-0 w-full max-w-[1120px] gap-8 [overflow-wrap:anywhere]">
             <MessageBubble speaker="user" data-testid={dataTestId.userMessage}>
@@ -82,11 +84,11 @@ export function BotConversationTurn({
                 botId={botId}
                 data-testid={dataTestId.agentResponse}
             >
-                {images.length > 0 && (
-                    <section aria-label="Agent image output" className="min-w-0 px-4">
+                {media.length > 0 && (
+                    <section aria-label="Agent media output" className="min-w-0 px-4">
                         <BotArtifactContent
                             botId={botId}
-                            contents={images}
+                            contents={media}
                             requests={requests}
                             sessionId={turn.sessionId}
                         />

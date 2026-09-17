@@ -1,11 +1,12 @@
 import type { AgentDisplayContent, MobiusClient } from "@moxt-ai/mobius-sdk";
 import type { MobiusBrowserClient } from "@moxt-ai/mobius-sdk/browser";
-import { ExternalLink, FileText, Image as ImageIcon, Terminal } from "lucide-react";
+import { ExternalLink, FileText, Image as ImageIcon, Terminal, Video } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AgentMarkdown } from "@/components/agents/agent-markdown";
 import { readSessionArtifactBytes } from "@/services/pairing/pairing-api";
 
 const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/;
+const SAFE_VIDEO_MIME = /^video\/(?:mp4|webm)$/;
 
 function safeLink(value: string): string {
     try {
@@ -23,6 +24,8 @@ function ContentHeader({ content }: { readonly content: AgentDisplayContent }) {
         <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold tracking-[0.04em] text-[#7d8590] uppercase">
             {content.type === "image" ? (
                 <ImageIcon className="size-3" />
+            ) : content.type === "video" ? (
+                <Video className="size-3" />
             ) : content.type === "terminal" ? (
                 <Terminal className="size-3" />
             ) : (
@@ -35,7 +38,7 @@ function ContentHeader({ content }: { readonly content: AgentDisplayContent }) {
     );
 }
 
-function ArtifactImage({
+function ArtifactMedia({
     browserClient,
     channelId,
     content,
@@ -63,7 +66,8 @@ function ArtifactImage({
                     .then((artifact) => ({ bytes: artifact.bytes, mimeType: artifact.artifact.mediaType }));
         void download
             .then((artifact) => {
-                if (controller.signal.aborted || !SAFE_IMAGE_MIME.test(artifact.mimeType)) {
+                const safeMime = content.type === "image" ? SAFE_IMAGE_MIME : SAFE_VIDEO_MIME;
+                if (controller.signal.aborted || !safeMime.test(artifact.mimeType)) {
                     return;
                 }
                 objectUrl = URL.createObjectURL(
@@ -82,19 +86,35 @@ function ArtifactImage({
                 URL.revokeObjectURL(objectUrl);
             }
         };
-    }, [browserClient, channelId, content.artifactId, serviceClient, sessionId]);
+    }, [browserClient, channelId, content.artifactId, content.type, serviceClient, sessionId]);
     if (source === null) {
         return (
             <div className="rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
-                Loading image…
+                Loading media…
             </div>
         );
     }
     if (source.length === 0) {
         return (
             <div className="rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
-                Image content could not be loaded.
+                Media content could not be loaded.
             </div>
+        );
+    }
+    if (content.type === "video") {
+        return (
+            <figure className="m-0 overflow-hidden rounded-xl border-[0.5px] border-black/9 bg-white p-2">
+                <ContentHeader content={content} />
+                <video
+                    aria-label={content.name.length > 0 ? content.name : "Agent-provided video"}
+                    className="max-h-[480px] w-auto max-w-full rounded-lg bg-black object-contain"
+                    controls
+                    muted
+                    playsInline
+                    preload="metadata"
+                    src={source}
+                />
+            </figure>
         );
     }
     return (
@@ -123,7 +143,7 @@ function AgentRichContentItem({
     readonly serviceClient?: Pick<MobiusClient, "artifacts"> | undefined;
     readonly sessionId?: string | undefined;
 }) {
-    if (content.type === "image") {
+    if (content.type === "image" || content.type === "video") {
         if (
             content.artifactId.length > 0 &&
             (browserClient !== undefined ||
@@ -131,7 +151,7 @@ function AgentRichContentItem({
                 (channelId !== undefined && sessionId !== undefined))
         ) {
             return (
-                <ArtifactImage
+                <ArtifactMedia
                     browserClient={browserClient}
                     channelId={channelId ?? ""}
                     content={content}
@@ -140,11 +160,28 @@ function AgentRichContentItem({
                 />
             );
         }
-        if (!SAFE_IMAGE_MIME.test(content.mimeType) || content.data.length === 0) {
+        const safeMime = content.type === "image" ? SAFE_IMAGE_MIME : SAFE_VIDEO_MIME;
+        if (!safeMime.test(content.mimeType) || content.data.length === 0) {
             return (
                 <div className="rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
-                    Image content could not be displayed safely.
+                    Media content could not be displayed safely.
                 </div>
+            );
+        }
+        if (content.type === "video") {
+            return (
+                <figure className="m-0 overflow-hidden rounded-xl border-[0.5px] border-black/9 bg-white p-2">
+                    <ContentHeader content={content} />
+                    <video
+                        aria-label={content.name.length > 0 ? content.name : "Agent-provided video"}
+                        className="max-h-[480px] w-auto max-w-full rounded-lg bg-black object-contain"
+                        controls
+                        muted
+                        playsInline
+                        preload="metadata"
+                        src={`data:${content.mimeType};base64,${content.data}`}
+                    />
+                </figure>
             );
         }
         return (
