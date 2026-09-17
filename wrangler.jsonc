@@ -26,37 +26,26 @@
         { "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "mobius-chat-local-apac-attachments" },
         { "binding": "CHAT_ATTACHMENTS_WNAM", "bucket_name": "mobius-chat-local-wnam-attachments" }
     ],
-    "d1_databases": [
-        {
-            "binding": "CHAT_DATABASE_APAC",
-            "database_name": "mobius-chat-local-apac",
-            "database_id": "00000000-0000-0000-0000-000000000002",
-            "migrations_dir": "packages/worker/migrations"
-        },
-        {
-            "binding": "CHAT_DATABASE_WNAM",
-            "database_name": "mobius-chat-local-wnam",
-            "database_id": "00000000-0000-0000-0000-000000000003",
-            "migrations_dir": "packages/worker/migrations"
-        }
-    ],
     "durable_objects": {
         "bindings": [
             {
                 "name": "BOT_TRIGGER_RATE_LIMITER",
                 "class_name": "BotTriggerRateLimiter"
+            },
+            {
+                "name": "CHAT_PROJECTS",
+                "class_name": "ProjectDurableObject"
             }
         ]
     },
-    "migrations": [{ "tag": "v1", "new_sqlite_classes": ["BotTriggerRateLimiter"] }],
+    "migrations": [
+        { "tag": "v1", "new_sqlite_classes": ["BotTriggerRateLimiter"] },
+        { "tag": "v2", "new_sqlite_classes": ["ProjectDurableObject"] }
+    ],
     "env": {
         "staging": {
             "name": "mobius-chat-staging",
-            "services": [
-                { "binding": "MOBIUS_REGIONAL_APAC", "service": "mobius-chat-staging-apac" },
-                { "binding": "MOBIUS_REGIONAL_WNAM", "service": "mobius-chat-staging-wnam" }
-            ],
-            "vars": { "MOBIUS_WORKER_REGION": "edge" },
+            "placement": { "mode": "off" },
             "secrets": {
                 "required": [
                     "MOBIUS_APP_SECRET",
@@ -91,36 +80,22 @@
                 { "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "mobius-chat-staging-apac-attachments" },
                 { "binding": "CHAT_ATTACHMENTS_WNAM", "bucket_name": "mobius-chat-staging-wnam-attachments" }
             ],
-            "d1_databases": [
-                {
-                    "binding": "CHAT_DATABASE_APAC",
-                    "database_name": "mobius-chat-staging-apac",
-                    "database_id": "ccbf7137-7983-4a7d-b205-04fb82a6019a",
-                    "migrations_dir": "packages/worker/migrations"
-                },
-                {
-                    "binding": "CHAT_DATABASE_WNAM",
-                    "database_name": "mobius-chat-staging-wnam",
-                    "database_id": "51e83fb8-70ef-4c68-98b2-5a6481fc0fc9",
-                    "migrations_dir": "packages/worker/migrations"
-                }
-            ],
             "durable_objects": {
                 "bindings": [
                     {
                         "name": "BOT_TRIGGER_RATE_LIMITER",
                         "class_name": "BotTriggerRateLimiter"
+                    },
+                    {
+                        "name": "CHAT_PROJECTS",
+                        "class_name": "ProjectDurableObject"
                     }
                 ]
             }
         },
         "production": {
             "name": "mobius-chat-production",
-            "services": [
-                { "binding": "MOBIUS_REGIONAL_APAC", "service": "mobius-chat-production-apac" },
-                { "binding": "MOBIUS_REGIONAL_WNAM", "service": "mobius-chat-production-wnam" }
-            ],
-            "vars": { "MOBIUS_WORKER_REGION": "edge" },
+            "placement": { "mode": "off" },
             "secrets": {
                 "required": [
                     "MOBIUS_APP_SECRET",
@@ -136,25 +111,15 @@
                 }
             ],
             "workers_dev": false,
-            "d1_databases": [
-                {
-                    "binding": "CHAT_DATABASE_APAC",
-                    "database_name": "mobius-chat-production-apac",
-                    "database_id": "698bd441-3709-43fc-994f-107e84fe74f7",
-                    "migrations_dir": "packages/worker/migrations"
-                },
-                {
-                    "binding": "CHAT_DATABASE_WNAM",
-                    "database_name": "mobius-chat-production-wnam",
-                    "database_id": "a614d890-971c-4b97-aaee-8e71c289c57e",
-                    "migrations_dir": "packages/worker/migrations"
-                }
-            ],
             "durable_objects": {
                 "bindings": [
                     {
                         "name": "BOT_TRIGGER_RATE_LIMITER",
                         "class_name": "BotTriggerRateLimiter"
+                    },
+                    {
+                        "name": "CHAT_PROJECTS",
+                        "class_name": "ProjectDurableObject"
                     }
                 ]
             },

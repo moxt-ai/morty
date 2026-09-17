@@ -1,7 +1,7 @@
-import { MobiusApiError, type MobiusBot, type MobiusBotOwnerClient } from "@moxt-ai/mobius-sdk";
 import { ArrowRight, Bot, LoaderCircle, Plus, RefreshCw, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { useStore } from "zustand";
 import {
     BOT_FIELD_CLASS,
     BOT_TEXTAREA_CLASS,
@@ -12,89 +12,46 @@ import {
 } from "@/components/bots/bot-page-header";
 import { Button } from "@/components/ui/button";
 import { botRoutePath } from "@/services/application/app-routes";
-import { createBotOwnerClient } from "@/services/bots/bot-api";
+import {
+    type BotCreationState,
+    type BotDirectoryState,
+    createBotDirectoryStore,
+    formatBotUpdatedAt,
+} from "@/view-models/bots/directory-store";
 import type { ChannelConnection } from "@/view-models/chat/channel";
-
-abstract class BotDirectoryState {}
-
-class LoadingBotDirectoryState extends BotDirectoryState {}
-
-class ReadyBotDirectoryState extends BotDirectoryState {
-    readonly bots: readonly MobiusBot[];
-
-    constructor(bots: readonly MobiusBot[]) {
-        super();
-        this.bots = bots;
-    }
-}
-
-class LinkedDeviceBotDirectoryState extends BotDirectoryState {}
-
-class FailedBotDirectoryState extends BotDirectoryState {
-    readonly message: string;
-
-    constructor(message: string) {
-        super();
-        this.message = message;
-    }
-}
-
-function errorMessage(error: unknown): string {
-    return error instanceof MobiusApiError ? `${error.code}: ${error.message}` : "The Bot request failed unexpectedly.";
-}
-
-function formatUpdatedAt(value: string): string {
-    return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-}
 
 function BotDirectoryContent({
     channelId,
-    client,
+    creation,
     directory,
+    onCloseCreation,
+    onOpenCreation,
     onReload,
-    signal,
+    onSetAvatarRef,
+    onSetDescription,
+    onSetDisplayName,
+    onSubmitCreation,
 }: {
     readonly channelId: string;
-    readonly client: MobiusBotOwnerClient;
-    readonly directory: ReadyBotDirectoryState;
+    readonly creation: BotCreationState;
+    readonly directory: Extract<BotDirectoryState, { readonly kind: "ready" }>;
+    readonly onCloseCreation: () => void;
+    readonly onOpenCreation: () => void;
     readonly onReload: () => Promise<void>;
-    readonly signal: AbortSignal;
+    readonly onSetAvatarRef: (value: string) => void;
+    readonly onSetDescription: (value: string) => void;
+    readonly onSetDisplayName: (value: string) => void;
+    readonly onSubmitCreation: () => Promise<void>;
 }) {
-    const navigate = useNavigate();
     const errorSummaryRef = useRef<HTMLDivElement>(null);
-    const [createOpen, setCreateOpen] = useState(false);
-    const [creating, setCreating] = useState(false);
-    const [displayName, setDisplayName] = useState("");
-    const [description, setDescription] = useState("");
-    const [avatarRef, setAvatarRef] = useState("");
-    const [formError, setFormError] = useState("");
-
-    const createBot = async (): Promise<void> => {
-        const normalizedName = displayName.trim();
-        if (normalizedName.length === 0) {
-            setFormError("Enter a name for this Bot.");
+    const createOpen = creation.kind === "editing";
+    const creating = creation.kind === "editing" && creation.submitting;
+    const formError = creation.kind === "editing" ? creation.error : "";
+    useEffect(() => {
+        if (formError.length > 0) {
             queueMicrotask(() => errorSummaryRef.current?.focus());
-            return;
         }
-        setCreating(true);
-        setFormError("");
-        try {
-            const bot = await client.createBot(
-                { avatarRef: avatarRef.trim(), description: description.trim(), displayName: normalizedName },
-                signal,
-            );
-            await navigate(botRoutePath(channelId, bot.botId));
-        } catch (error) {
-            if (!signal.aborted) {
-                setFormError(errorMessage(error));
-                queueMicrotask(() => errorSummaryRef.current?.focus());
-            }
-        } finally {
-            if (!signal.aborted) {
-                setCreating(false);
-            }
-        }
-    };
+    }, [formError]);
 
     return (
         <div className="mx-auto w-full max-w-[1040px] px-5 py-8 sm:px-8 sm:py-10">
@@ -116,7 +73,7 @@ function BotDirectoryContent({
                         </p>
                     </div>
                     {!createOpen && (
-                        <Button className="min-h-11 shrink-0" onClick={() => setCreateOpen(true)}>
+                        <Button className="min-h-11 shrink-0" onClick={onOpenCreation}>
                             <Plus aria-hidden="true" className="size-4" /> Create Bot
                         </Button>
                     )}
@@ -128,7 +85,7 @@ function BotDirectoryContent({
                         className="mt-6 rounded-2xl border-[0.5px] border-black/10 bg-white p-5 shadow-[0_1px_4px_rgba(0,0,0,0.04)] sm:p-6"
                         onSubmit={(event) => {
                             event.preventDefault();
-                            void createBot();
+                            void onSubmitCreation();
                         }}
                     >
                         <div className="flex items-start justify-between gap-4">
@@ -144,7 +101,7 @@ function BotDirectoryContent({
                                 aria-label="Close Bot form"
                                 className="size-11 sm:size-9"
                                 disabled={creating}
-                                onClick={() => setCreateOpen(false)}
+                                onClick={onCloseCreation}
                                 size="icon"
                                 type="button"
                                 variant="ghost"
@@ -173,9 +130,9 @@ function BotDirectoryContent({
                                     disabled={creating}
                                     id="bot-name"
                                     maxLength={80}
-                                    onChange={(event) => setDisplayName(event.target.value)}
+                                    onChange={(event) => onSetDisplayName(event.target.value)}
                                     placeholder="Research assistant"
-                                    value={displayName}
+                                    value={creation.kind === "editing" ? creation.displayName : ""}
                                 />
                                 <span className="font-normal text-muted-foreground" id="bot-name-help">
                                     A stable, user-facing identity. You can revise it later.
@@ -189,9 +146,9 @@ function BotDirectoryContent({
                                     disabled={creating}
                                     id="bot-avatar-ref"
                                     maxLength={4096}
-                                    onChange={(event) => setAvatarRef(event.target.value)}
+                                    onChange={(event) => onSetAvatarRef(event.target.value)}
                                     placeholder="https://… or an asset reference"
-                                    value={avatarRef}
+                                    value={creation.kind === "editing" ? creation.avatarRef : ""}
                                 />
                             </label>
                         </div>
@@ -202,9 +159,9 @@ function BotDirectoryContent({
                                 disabled={creating}
                                 id="bot-description"
                                 maxLength={2000}
-                                onChange={(event) => setDescription(event.target.value)}
+                                onChange={(event) => onSetDescription(event.target.value)}
                                 placeholder="What this Bot is for"
-                                value={description}
+                                value={creation.kind === "editing" ? creation.description : ""}
                             />
                         </label>
                         <div className="mt-5 flex flex-wrap items-center gap-2">
@@ -219,7 +176,7 @@ function BotDirectoryContent({
                             <Button
                                 className="min-h-11"
                                 disabled={creating}
-                                onClick={() => setCreateOpen(false)}
+                                onClick={onCloseCreation}
                                 type="button"
                                 variant="ghost"
                             >
@@ -275,7 +232,7 @@ function BotDirectoryContent({
                                             {bot.description.length > 0 ? bot.description : "No description yet."}
                                         </span>
                                         <span className="mt-3 block text-[11px] text-muted-foreground">
-                                            Updated {formatUpdatedAt(bot.updatedAt)}
+                                            Updated {formatBotUpdatedAt(bot.updatedAt)}
                                         </span>
                                     </span>
                                     <ArrowRight
@@ -301,31 +258,22 @@ export function BotDirectoryPage({
     readonly desktopSidebarCollapsed: boolean;
     readonly onToggleDesktopSidebar: () => void;
 }) {
-    const [client] = useState(() => createBotOwnerClient(connection));
-    const [controller] = useState(() => new AbortController());
-    const [directory, setDirectory] = useState<BotDirectoryState>(new LoadingBotDirectoryState());
-
-    const loadBots = useCallback(async (): Promise<void> => {
-        setDirectory(new LoadingBotDirectoryState());
-        try {
-            const value = await client.listBots(controller.signal);
-            setDirectory(new ReadyBotDirectoryState(value.bots));
-        } catch (error) {
-            if (controller.signal.aborted) {
-                return;
-            }
-            if (error instanceof MobiusApiError && error.code === "owner_access_required") {
-                setDirectory(new LinkedDeviceBotDirectoryState());
-                return;
-            }
-            setDirectory(new FailedBotDirectoryState(errorMessage(error)));
-        }
-    }, [client, controller]);
+    const navigate = useNavigate();
+    const [store] = useState(() =>
+        createBotDirectoryStore(connection, async (bot) => {
+            await navigate(botRoutePath(connection.channelId, bot.botId));
+        }),
+    );
+    const viewModel = useStore(store);
+    const controller = useRef(new AbortController());
+    const { directory } = viewModel;
 
     useEffect(() => {
-        void loadBots();
-        return () => controller.abort();
-    }, [controller, loadBots]);
+        const lifetime = new AbortController();
+        controller.current = lifetime;
+        void viewModel.reload(lifetime.signal);
+        return () => lifetime.abort();
+    }, [viewModel.reload]);
 
     return (
         <>
@@ -335,7 +283,7 @@ export function BotDirectoryPage({
                 title="Bots"
             />
             <div className="min-h-0 flex-1 overflow-y-auto">
-                {directory instanceof LoadingBotDirectoryState && (
+                {directory.kind === "loading" && (
                     <div
                         aria-busy="true"
                         aria-live="polite"
@@ -344,7 +292,7 @@ export function BotDirectoryPage({
                         <LoaderCircle aria-hidden="true" className="size-5 animate-spin" /> Loading Bots…
                     </div>
                 )}
-                {directory instanceof LinkedDeviceBotDirectoryState && (
+                {directory.kind === "linked-device" && (
                     <div className="mx-auto mt-10 w-[min(640px,calc(100%-40px))] rounded-2xl border-[0.5px] border-black/10 bg-white p-6 text-center">
                         <h2 className="text-base font-semibold">Owner access required</h2>
                         <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -353,22 +301,31 @@ export function BotDirectoryPage({
                         </p>
                     </div>
                 )}
-                {directory instanceof FailedBotDirectoryState && (
+                {directory.kind === "failed" && (
                     <div className="mx-auto mt-10 w-[min(640px,calc(100%-40px))] rounded-2xl border border-[#f2c4c4] bg-[#fff7f7] p-6 text-center">
                         <h2 className="text-base font-semibold text-[#9b2c32]">Bots unavailable</h2>
                         <BotInlineError>{directory.message}</BotInlineError>
-                        <Button className="mt-5 min-h-11" onClick={() => void loadBots()} variant="outline">
+                        <Button
+                            className="mt-5 min-h-11"
+                            onClick={() => void viewModel.reload(controller.current.signal)}
+                            variant="outline"
+                        >
                             <RefreshCw aria-hidden="true" className="size-4" /> Retry
                         </Button>
                     </div>
                 )}
-                {directory instanceof ReadyBotDirectoryState && (
+                {directory.kind === "ready" && (
                     <BotDirectoryContent
                         channelId={connection.channelId}
-                        client={client}
+                        creation={viewModel.creation}
                         directory={directory}
-                        onReload={loadBots}
-                        signal={controller.signal}
+                        onCloseCreation={viewModel.closeCreation}
+                        onOpenCreation={viewModel.openCreation}
+                        onReload={() => viewModel.reload(controller.current.signal)}
+                        onSetAvatarRef={viewModel.setAvatarRef}
+                        onSetDescription={viewModel.setDescription}
+                        onSetDisplayName={viewModel.setDisplayName}
+                        onSubmitCreation={() => viewModel.submitCreation(controller.current.signal)}
                     />
                 )}
             </div>

@@ -11,76 +11,13 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { useStore } from "zustand";
 
 import { Button } from "@/components/ui/button";
 import { channelRoutePath } from "@/services/application/app-routes";
-import { createBrowserPairing, pairingCommand, readBrowserPairingStatus } from "@/services/pairing/pairing-api";
-import {
-    type ChannelConnection,
-    ConnectedBrowserPairingStatus,
-    type CreatedPairing,
-    ExpiredBrowserPairingStatus,
-    PairingApiError,
-} from "@/view-models/chat/channel";
-
-const POLL_INTERVAL_MILLISECONDS = 1_200;
-const CONNECTED_PAUSE_MILLISECONDS = 650;
-
-abstract class PairingPageState {
-    abstract readonly status: string;
-}
-
-class CreatingPairingPageState extends PairingPageState {
-    readonly status = "creating";
-}
-
-class WaitingPairingPageState extends PairingPageState {
-    readonly pairing: CreatedPairing;
-    readonly status = "waiting";
-
-    constructor(pairing: CreatedPairing) {
-        super();
-        this.pairing = pairing;
-    }
-}
-
-class ConnectedPairingPageState extends PairingPageState {
-    readonly machineName: string;
-    readonly status = "connected";
-
-    constructor(machineName: string) {
-        super();
-        this.machineName = machineName;
-    }
-}
-
-class ExpiredPairingPageState extends PairingPageState {
-    readonly status = "expired";
-}
-
-class FailedPairingPageState extends PairingPageState {
-    readonly message: string;
-    readonly status = "failed";
-
-    constructor(message: string) {
-        super();
-        this.message = message;
-    }
-}
-
-function waitForPoll(signal: AbortSignal): Promise<void> {
-    return new Promise((resolve) => {
-        const timeout = window.setTimeout(finish, POLL_INTERVAL_MILLISECONDS);
-
-        function finish(): void {
-            window.clearTimeout(timeout);
-            signal.removeEventListener("abort", finish);
-            resolve();
-        }
-
-        signal.addEventListener("abort", finish, { once: true });
-    });
-}
+import { pairingCommand } from "@/services/pairing/pairing-api";
+import type { ChannelConnection, CreatedPairing } from "@/view-models/chat/channel";
+import { createBrowserPairingStore } from "@/view-models/pairing/browser-pairing-store";
 
 function MobiusWordmark() {
     return (
@@ -295,67 +232,23 @@ function PairingWorkflow({
     readonly onRetry: () => void;
     readonly getPairingToken: (signal: AbortSignal) => Promise<string | null>;
 }) {
-    const [state, setState] = useState<PairingPageState>(new CreatingPairingPageState());
+    const [store] = useState(() => createBrowserPairingStore(getPairingToken, onConnected));
+    const { run, state } = useStore(store);
 
     useEffect(() => {
         const controller = new AbortController();
-
-        const run = async (): Promise<void> => {
-            try {
-                const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]);
-                const token = await getPairingToken(signal);
-                signal.throwIfAborted();
-                const pairing = await createBrowserPairing(signal, token);
-                if (controller.signal.aborted) {
-                    return;
-                }
-                setState(new WaitingPairingPageState(pairing));
-
-                while (!controller.signal.aborted) {
-                    await waitForPoll(controller.signal);
-                    if (controller.signal.aborted) {
-                        return;
-                    }
-                    const status = await readBrowserPairingStatus(pairing);
-                    if (status instanceof ExpiredBrowserPairingStatus) {
-                        setState(new ExpiredPairingPageState());
-                        return;
-                    }
-                    if (status instanceof ConnectedBrowserPairingStatus) {
-                        setState(new ConnectedPairingPageState(status.connection.machineName));
-                        await new Promise<void>((resolve) => {
-                            window.setTimeout(resolve, CONNECTED_PAUSE_MILLISECONDS);
-                        });
-                        if (!controller.signal.aborted) {
-                            onConnected(status.connection);
-                        }
-                        return;
-                    }
-                }
-            } catch (error) {
-                if (controller.signal.aborted) {
-                    return;
-                }
-                const message =
-                    error instanceof PairingApiError
-                        ? `${error.code}: ${error.message}`
-                        : "The pairing flow failed unexpectedly.";
-                setState(new FailedPairingPageState(message));
-            }
-        };
-
-        void run();
+        void run(controller.signal);
         return () => controller.abort();
-    }, [onConnected, getPairingToken]);
+    }, [run]);
 
     let content = <PairingLoading />;
-    if (state instanceof WaitingPairingPageState) {
+    if (state.kind === "waiting") {
         content = <PairingInstructions pairing={state.pairing} />;
-    } else if (state instanceof ConnectedPairingPageState) {
+    } else if (state.kind === "connected") {
         content = <PairingConnected machineName={state.machineName} />;
-    } else if (state instanceof ExpiredPairingPageState) {
+    } else if (state.kind === "expired") {
         content = <PairingError message="The one-time code expired before a daemon claimed it." onRetry={onRetry} />;
-    } else if (state instanceof FailedPairingPageState) {
+    } else if (state.kind === "failed") {
         content = <PairingError message={state.message} onRetry={onRetry} />;
     }
 

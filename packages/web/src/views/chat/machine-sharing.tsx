@@ -1,35 +1,20 @@
-import QRCode from "qrcode";
 import { useEffect, useState } from "react";
+import { useStore } from "zustand";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
-
-type State =
-    | { readonly kind: "loading" }
-    | { readonly kind: "ready"; readonly image: string; readonly transfer: IdentityTransfer }
-    | { readonly kind: "failed" };
+import { createMachineSharingStore } from "../../view-models/chat/machine-sharing-store.ts";
 
 export function MachineSharing({
     createTransfer,
 }: {
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
 }) {
-    const [state, setState] = useState<State>({ kind: "loading" });
+    const [store] = useState(() => createMachineSharingStore(createTransfer));
+    const { load, state } = useStore(store);
     useEffect(() => {
         const controller = new AbortController();
-        void createTransfer(controller.signal).then(
-            async (transfer) => {
-                const image = await QRCode.toDataURL(transfer.url, { margin: 1, width: 224 });
-                if (!controller.signal.aborted) {
-                    setState({ image, kind: "ready", transfer });
-                }
-            },
-            () => {
-                if (!controller.signal.aborted) {
-                    setState({ kind: "failed" });
-                }
-            },
-        );
+        void load(controller.signal);
         return () => controller.abort();
-    }, [createTransfer]);
+    }, [load]);
 
     if (state.kind === "loading") {
         return <p role="status">Creating secure QR code…</p>;

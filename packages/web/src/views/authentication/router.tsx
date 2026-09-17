@@ -1,8 +1,9 @@
 import { AuthenticateWithRedirectCallback, SignIn, SignUp, useUser } from "@clerk/react";
 import { createRootRoute, createRoute, createRouter, Link, Outlet } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useStore } from "zustand";
 import { Button, reportApplicationError } from "../../index.ts";
-import { ANONYMOUS_CREDENTIAL_KEY, AnonymousIdentityApi } from "../../services/identity/anonymous-identity-api.ts";
+import { createContinueStore } from "../../view-models/authentication/continue-store.ts";
 import { Page } from "../application/app.tsx";
 
 function LandingPage() {
@@ -76,65 +77,17 @@ function LoginPage({ register = false }: { readonly register?: boolean }) {
     );
 }
 
-type Handoff =
-    | { readonly kind: "workspace" }
-    | { readonly kind: "session"; readonly harness: string; readonly sessionId: string };
-type ContinueState =
-    | { readonly kind: "confirm"; readonly code: string; readonly handoff: Handoff }
-    | { readonly kind: "redeeming"; readonly code: string; readonly handoff: Handoff }
-    | { readonly kind: "failed"; readonly message: string }
-    | { readonly kind: "invalid" };
-
 function ContinuePage() {
-    const [state, setState] = useState<ContinueState>(() => {
-        const code = new URLSearchParams(window.location.hash.slice(1)).get("code");
-        const query = new URLSearchParams(window.location.search);
-        const harness = query.get("harness");
-        const sessionId = query.get("sessionId");
-        window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-        const identifier = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u;
-        if (
-            code === null ||
-            code.length === 0 ||
-            (harness === null) !== (sessionId === null) ||
-            (harness !== null && (!identifier.test(harness) || sessionId === null || !identifier.test(sessionId)))
-        ) {
-            return { kind: "invalid" };
-        }
-        const handoff: Handoff =
-            harness === null || sessionId === null ? { kind: "workspace" } : { kind: "session", harness, sessionId };
-        return window.localStorage.getItem(ANONYMOUS_CREDENTIAL_KEY) === null
-            ? { code, handoff, kind: "redeeming" }
-            : { code, handoff, kind: "confirm" };
-    });
+    const [store] = useState(createContinueStore);
+    const { confirm, redeem, state } = useStore(store);
     useEffect(() => {
         if (state.kind !== "redeeming") {
             return;
         }
         const controller = new AbortController();
-        const api = new AnonymousIdentityApi({ origin: window.location.origin, storage: window.localStorage });
-        void api.redeemTransfer(state.code, controller.signal).then(
-            () => {
-                if (state.handoff.kind === "workspace") {
-                    window.location.replace("/");
-                    return;
-                }
-                const destination = new URL("/", window.location.origin);
-                destination.searchParams.set("harness", state.handoff.harness);
-                destination.searchParams.set("sessionId", state.handoff.sessionId);
-                window.location.replace(destination);
-            },
-            (cause: unknown) => {
-                if (!controller.signal.aborted) {
-                    setState({
-                        kind: "failed",
-                        message: cause instanceof Error ? cause.message : "This transfer link is unavailable.",
-                    });
-                }
-            },
-        );
+        void redeem(controller.signal);
         return () => controller.abort();
-    }, [state]);
+    }, [redeem, state.kind]);
     return (
         <Page>
             <section className="mx-auto max-w-xl rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
@@ -144,10 +97,7 @@ function ContinuePage() {
                         <p className="mt-4 leading-7 text-muted-foreground">
                             Continuing replaces the anonymous workspace currently stored on this device.
                         </p>
-                        <Button
-                            className="mt-6"
-                            onClick={() => setState({ code: state.code, handoff: state.handoff, kind: "redeeming" })}
-                        >
+                        <Button className="mt-6" onClick={confirm}>
                             Replace and continue
                         </Button>
                     </>

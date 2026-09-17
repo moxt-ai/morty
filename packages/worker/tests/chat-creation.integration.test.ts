@@ -30,16 +30,26 @@ test.each([true, false])(
         );
         try {
             const attachments = await storage.getR2Bucket("ATTACHMENTS");
-            const app = new Hono().all("*", (context) =>
-                worker.fetch(context.req.raw, {
-                    ...platform.bindings,
-                    APP_ORIGIN: "https://cloud.test",
-                    DATABASE: database,
-                    CHAT_DATABASE_APAC: database,
-                    CHAT_DATABASE_WNAM: database,
-                    CHAT_ATTACHMENTS_APAC: attachments,
-                    CHAT_ATTACHMENTS_WNAM: attachments,
+            const base = {
+                ...platform.bindings,
+                APP_ORIGIN: "https://cloud.test",
+                CHAT_ATTACHMENTS_APAC: attachments,
+                CHAT_ATTACHMENTS_WNAM: attachments,
+            };
+            const projects = {
+                idFromName: (name: string) => name,
+                get: (projectId: string) => ({
+                    fetch: (request: Request) =>
+                        worker.fetch(request, {
+                            ...base,
+                            ATTACHMENTS: attachments,
+                            CHAT_PROJECT_ID: projectId,
+                            DATABASE: database,
+                        }),
                 }),
+            };
+            const app = new Hono().all("*", (context) =>
+                worker.fetch(context.req.raw, { ...base, CHAT_PROJECTS: projects }),
             );
             const identity = v.parse(
                 v.object({ token: v.string(), projectId: v.string() }),

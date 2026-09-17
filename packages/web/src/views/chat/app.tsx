@@ -12,6 +12,7 @@ import {
     useOutletContext,
     useParams,
 } from "react-router";
+import { useStore } from "zustand";
 import { AgentInstallationPage } from "@/components/agents/agent-installation-panel";
 import { AgentSettingsPage } from "@/components/agents/agent-settings-page";
 import { BotConnectionsPage } from "@/components/bots/bot-connections-page";
@@ -42,14 +43,10 @@ import {
     encodeSidebarLayoutPreference,
     toggleSidebar,
 } from "@/services/chat/workspace-layout";
-import {
-    readChannelConnection,
-    readChannelHistory,
-    readChannelHistoryForSynchronization,
-    redeemChannelAccessGrantFromLocation,
-} from "@/services/pairing/pairing-api";
+import { readChannelHistoryForSynchronization } from "@/services/pairing/pairing-api";
 import type { ChannelConnection, ChannelHistory } from "@/view-models/chat/channel";
 import { isIdentifier, PairingApiError } from "@/view-models/chat/channel";
+import { createChannelRouteStore } from "@/view-models/chat/channel-route-store";
 import { useChatStore } from "@/view-models/chat-store";
 
 const SIDEBAR_LAYOUT_STORAGE_KEY = "mobius:conversation-sidebar-layout";
@@ -273,85 +270,27 @@ function ChannelWorkspace({
     );
 }
 
-abstract class ChannelRouteState {
-    abstract readonly status: string;
-}
-
-class LoadingChannelRouteState extends ChannelRouteState {
-    readonly status = "loading";
-}
-
-class ReadyChannelRouteState extends ChannelRouteState {
-    readonly connection: ChannelConnection;
-    readonly history: ChannelHistory;
-    readonly status = "ready";
-
-    constructor(connection: ChannelConnection, history: ChannelHistory) {
-        super();
-        this.connection = connection;
-        this.history = history;
-    }
-}
-
-class FailedChannelRouteState extends ChannelRouteState {
-    readonly message: string;
-    readonly status = "failed";
-
-    constructor(message: string) {
-        super();
-        this.message = message;
-    }
-}
-
 function ChannelRoute() {
     const params = useParams<"channelId">();
     const channelId = params.channelId ?? "";
-    const [state, setState] = useState<ChannelRouteState>(new LoadingChannelRouteState());
+    const [store] = useState(() => createChannelRouteStore(channelId));
+    const { load, state } = useStore(store);
 
     useEffect(() => {
-        if (!isIdentifier(channelId)) {
-            return;
-        }
-        let active = true;
         const controller = new AbortController();
-        setState(new LoadingChannelRouteState());
-        const load = async (): Promise<void> => {
-            try {
-                await redeemChannelAccessGrantFromLocation(channelId, controller.signal);
-                // Validate the channel-scoped credential before using it for broader
-                // project history reads so revoked access reports the channel boundary.
-                const connection = await readChannelConnection(channelId);
-                const history = await readChannelHistory(channelId);
-                if (active) {
-                    setState(new ReadyChannelRouteState(connection, history));
-                }
-            } catch (error) {
-                if (!active) {
-                    return;
-                }
-                const message =
-                    error instanceof PairingApiError
-                        ? `${error.code}: ${error.message}`
-                        : "The channel could not be loaded.";
-                setState(new FailedChannelRouteState(message));
-            }
-        };
-        void load();
-        return () => {
-            active = false;
-            controller.abort();
-        };
-    }, [channelId]);
+        void load(controller.signal);
+        return () => controller.abort();
+    }, [load]);
 
     if (!isIdentifier(channelId)) {
         return <ChannelErrorPage message="The channel route is malformed." title="Invalid channel" />;
     }
-    if (state instanceof ReadyChannelRouteState && state.connection.channelId === channelId) {
+    if (state.kind === "ready" && state.connection.channelId === channelId) {
         return (
             <ChannelWorkspace connection={state.connection} history={state.history} key={state.connection.channelId} />
         );
     }
-    if (state instanceof FailedChannelRouteState) {
+    if (state.kind === "failed") {
         return <ChannelErrorPage message={state.message} title="Channel unavailable" />;
     }
     return <ChannelLoadingPage />;

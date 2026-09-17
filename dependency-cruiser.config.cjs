@@ -5,8 +5,8 @@ module.exports = {
             severity: "error",
             from: {
                 path: [
-                    "^packages/worker/src/(storage|entity|infra)/",
-                    "^packages/worker/src/components/[^/]+/(storage|entity|infra)/",
+                    "^packages/worker/src/(schema|storage|entity|infra)/",
+                    "^packages/worker/src/components/[^/]+/(schema|storage|entity|infra)/",
                 ],
             },
             to: {

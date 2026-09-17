@@ -62,9 +62,13 @@ describe("Slack message journeys", () => {
             expect(app.mobius.runs[0]?.prompt).toContain("private context");
             expect(app.mobius.runs[0]?.prompt).toContain("investigate");
             expect(
-                app.database.sqlite.prepare("SELECT name FROM sqlite_master WHERE name = 'slack_prompt_command'").all(),
+                (
+                    await app.database.d1
+                        .prepare("SELECT name FROM sqlite_master WHERE name = 'slack_prompt_command'")
+                        .all()
+                ).results,
             ).toEqual([]);
-            const runs = app.database.sqlite.prepare("SELECT * FROM slack_message_delivery").all();
+            const runs = (await app.database.d1.prepare("SELECT * FROM slack_message_delivery").all()).results;
             expect(runs).toHaveLength(1);
             expect(runs[0]).not.toHaveProperty("context_messages");
             expect(JSON.stringify(runs)).not.toContain("private context");
@@ -253,9 +257,9 @@ describe("Slack message journeys", () => {
             prompt: "<@U_BOT> investigate",
         });
         expect(
-            app.database.sqlite
+            await app.database.d1
                 .prepare("SELECT payload, status FROM processed_slack_event WHERE slack_event_id = 'Ev123'")
-                .get(),
+                .first(),
         ).toMatchObject({ payload: "", status: "processed" });
     });
     it("Given an invalid Slack signature, When a message arrives, Then no bot run starts", async () => {
@@ -325,17 +329,17 @@ describe("Slack message journeys", () => {
             event_id: "Ev124",
             event: { ...event.event, ts: "101.0", thread_ts: "100.0" },
         });
-        const stored = app.database.sqlite
+        const stored = await app.database.d1
             .prepare("SELECT payload FROM processed_slack_event WHERE slack_event_id = 'Ev124'")
-            .get();
-        expect(stored === undefined ? undefined : Reflect.get(stored, "payload")).toContain("Ev124");
+            .first<{ readonly payload: string }>();
+        expect(stored?.payload).toContain("Ev124");
         gate.complete();
         await first;
         expect(app.slack.messages).toHaveLength(2);
         expect(app.slack.messages.every((message) => message.threadTs === "100.0")).toBe(true);
         expect(app.queueErrors).toEqual([]);
         expect(app.mobius.runs).toHaveLength(2);
-        expect(app.database.sqlite.prepare("SELECT payload FROM processed_slack_event").all()).toEqual([
+        expect((await app.database.d1.prepare("SELECT payload FROM processed_slack_event").all()).results).toEqual([
             { payload: "" },
             { payload: "" },
         ]);

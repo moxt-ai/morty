@@ -1,4 +1,6 @@
+import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
+import { slackApp } from "../../../schema/index.ts";
 import { tenantContext } from "../entity/tenant-context.ts";
 import type { SqlDatabase } from "../infra/sql-database.ts";
 import type { SecretCipher } from "../infra/util/secret-cipher.ts";
@@ -17,21 +19,30 @@ export class DatabaseSlackAppDirectory implements SlackAppDirectory {
         this.#cipher = cx.gateways.secretEncryption;
     }
     readonly find: SlackAppDirectory["find"] = async (slackAppId, signal) => {
-        const value = await this.#database.first(
-            "SELECT tenant_id, signing_secret_encrypted FROM slack_app WHERE slack_app_id = ?1 AND status = 'enabled'",
-            [slackAppId],
+        const value = await this.#database.execute(
+            "first",
+            1,
             signal,
+            async (database) =>
+                await database
+                    .select({ tenantId: slackApp.tenantId, signingSecretEncrypted: slackApp.signingSecretEncrypted })
+                    .from(slackApp)
+                    .where(and(eq(slackApp.slackAppId, slackAppId), eq(slackApp.status, "enabled")))
+                    .get(),
         );
-        if (value === null) {
+        if (value === undefined) {
             return null;
         }
-        const row = v.safeParse(rowSchema, value);
+        const row = v.safeParse(
+            v.object({ tenantId: rowSchema.entries.tenant_id, signingSecretEncrypted: v.string() }),
+            value,
+        );
         if (!row.success) {
             throw new TenantStorageError();
         }
         return {
-            tenant: tenantContext(row.output.tenant_id),
-            signingSecret: await this.#cipher.decrypt(row.output.signing_secret_encrypted, signal),
+            tenant: tenantContext(row.output.tenantId),
+            signingSecret: await this.#cipher.decrypt(row.output.signingSecretEncrypted, signal),
         };
     };
 }

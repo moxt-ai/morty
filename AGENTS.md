@@ -42,6 +42,7 @@ Make illegal states unrepresentable.
 
 ## Delivery
 
+- Format pull request titles as Conventional Commits: `<type>(<optional-scope>): <description>` (for example, `refactor(web): move workflows into Zustand view models`). Use a lowercase semantic type such as `feat`, `fix`, `refactor`, `docs`, `test`, `build`, `ci`, or `chore`.
 - Deliver behavior as the smallest user-runnable vertical slice through input, logic, and observable output.
 - Describe each behavior slice as: "After this, a user can ... and see ..." If that sentence is not concrete, narrow the slice.
 - Start every behavior change with a failing Given-When-Then acceptance scenario that proves the user-visible slice through the first supported product boundary that can observe it. Treat the scenario as executable product documentation, and implement only what it requires.
@@ -58,6 +59,10 @@ Make illegal states unrepresentable.
 - Prefer direct, local, linear code.
 - Add an abstraction only for a real external boundary, a second real use case, or proven duplication.
 - Do not add speculative extension points, generic frameworks, or unused layers.
+
+## Database schema
+
+- Do not define foreign-key constraints. Enforce relationships and deletion behavior explicitly in application logic.
 
 ## Verification
 

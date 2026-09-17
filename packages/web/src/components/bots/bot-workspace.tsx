@@ -1,7 +1,8 @@
-import { MobiusApiError, type MobiusBot, type MobiusBotOwnerClient } from "@moxt-ai/mobius-sdk";
+import type { MobiusBot, MobiusBotOwnerClient } from "@moxt-ai/mobius-sdk";
 import { LoaderCircle, MessageSquare, Plug, RefreshCw, SlidersHorizontal } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useParams } from "react-router";
+import { useStore } from "zustand";
 import { BotAvatar, BotInlineError, BotPageHeader, BotStatusBadge } from "@/components/bots/bot-page-header";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -11,33 +12,8 @@ import {
     botDirectoryRoutePath,
     botRoutePath,
 } from "@/services/application/app-routes";
-import { createBotOwnerClient } from "@/services/bots/bot-api";
+import { createBotWorkspaceStore } from "@/view-models/bots/workspace-store";
 import type { ChannelConnection } from "@/view-models/chat/channel";
-import { isIdentifier } from "@/view-models/chat/channel";
-
-abstract class BotWorkspaceState {}
-
-class LoadingBotWorkspaceState extends BotWorkspaceState {}
-
-class ReadyBotWorkspaceState extends BotWorkspaceState {
-    readonly bot: MobiusBot;
-
-    constructor(bot: MobiusBot) {
-        super();
-        this.bot = bot;
-    }
-}
-
-class LinkedDeviceBotWorkspaceState extends BotWorkspaceState {}
-
-class FailedBotWorkspaceState extends BotWorkspaceState {
-    readonly message: string;
-
-    constructor(message: string) {
-        super();
-        this.message = message;
-    }
-}
 
 export interface BotDetailContext {
     readonly bot: MobiusBot;
@@ -45,10 +21,6 @@ export interface BotDetailContext {
     readonly connection: ChannelConnection;
     readonly refreshBot: () => Promise<MobiusBot>;
     readonly signal: AbortSignal;
-}
-
-function failureMessage(error: unknown): string {
-    return error instanceof MobiusApiError ? `${error.code}: ${error.message}` : "The Bot could not be loaded.";
 }
 
 function BotTabs({ bot, channelId }: { readonly bot: MobiusBot; readonly channelId: string }) {
@@ -83,43 +55,19 @@ export function BotWorkspace({
 }) {
     const params = useParams<"botId">();
     const botId = params.botId ?? "";
-    const [client] = useState(() => createBotOwnerClient(connection));
-    const [controller] = useState(() => new AbortController());
-    const [refreshing, setRefreshing] = useState(false);
-    const [state, setState] = useState<BotWorkspaceState>(new LoadingBotWorkspaceState());
-
-    const refreshBot = useCallback(async (): Promise<MobiusBot> => {
-        setRefreshing(true);
-        try {
-            const bot = await client.readBot(botId, controller.signal);
-            setState(new ReadyBotWorkspaceState(bot));
-            return bot;
-        } catch (error) {
-            if (!controller.signal.aborted) {
-                if (error instanceof MobiusApiError && error.code === "owner_access_required") {
-                    setState(new LinkedDeviceBotWorkspaceState());
-                } else {
-                    setState(new FailedBotWorkspaceState(failureMessage(error)));
-                }
-            }
-            throw error;
-        } finally {
-            if (!controller.signal.aborted) {
-                setRefreshing(false);
-            }
-        }
-    }, [botId, client, controller]);
+    const [store] = useState(() => createBotWorkspaceStore(connection, botId));
+    const viewModel = useStore(store);
+    const controller = useRef(new AbortController());
+    const { client, refresh: refreshBot, refreshing, state } = viewModel;
 
     useEffect(() => {
-        if (isIdentifier(botId)) {
-            void refreshBot().catch(() => undefined);
-        } else {
-            setState(new FailedBotWorkspaceState("The Bot route is malformed."));
-        }
-        return () => controller.abort();
-    }, [botId, controller, refreshBot]);
+        const lifetime = new AbortController();
+        controller.current = lifetime;
+        void viewModel.load(lifetime.signal);
+        return () => lifetime.abort();
+    }, [viewModel.load]);
 
-    if (state instanceof LoadingBotWorkspaceState) {
+    if (state.kind === "loading") {
         return (
             <>
                 <BotPageHeader
@@ -140,7 +88,7 @@ export function BotWorkspace({
         );
     }
 
-    if (state instanceof LinkedDeviceBotWorkspaceState) {
+    if (state.kind === "linked-device") {
         return (
             <>
                 <BotPageHeader
@@ -161,7 +109,7 @@ export function BotWorkspace({
         );
     }
 
-    if (state instanceof FailedBotWorkspaceState) {
+    if (state.kind === "failed") {
         return (
             <>
                 <BotPageHeader
@@ -176,7 +124,7 @@ export function BotWorkspace({
                     <BotInlineError>{state.message}</BotInlineError>
                     <Button
                         className="mt-5 min-h-11"
-                        onClick={() => void refreshBot().catch(() => undefined)}
+                        onClick={() => void refreshBot(controller.current.signal).catch(() => undefined)}
                         variant="outline"
                     >
                         <RefreshCw aria-hidden="true" className="size-4" /> Retry
@@ -186,15 +134,15 @@ export function BotWorkspace({
         );
     }
 
-    if (!(state instanceof ReadyBotWorkspaceState)) {
+    if (state.kind !== "ready") {
         return null;
     }
     const context: BotDetailContext = {
         bot: state.bot,
         client,
         connection,
-        refreshBot,
-        signal: controller.signal,
+        refreshBot: () => refreshBot(controller.current.signal),
+        signal: controller.current.signal,
     };
     return (
         <>
@@ -219,7 +167,7 @@ export function BotWorkspace({
                             aria-busy={refreshing}
                             className="min-h-11 shrink-0 sm:min-h-9"
                             disabled={refreshing}
-                            onClick={() => void refreshBot().catch(() => undefined)}
+                            onClick={() => void refreshBot(controller.current.signal).catch(() => undefined)}
                             variant="ghost"
                         >
                             <RefreshCw aria-hidden="true" className={cn("size-3.5", refreshing && "animate-spin")} />

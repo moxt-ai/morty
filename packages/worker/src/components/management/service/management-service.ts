@@ -1,7 +1,7 @@
 import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
 import type { MobiusAppService } from "../../chat/service/mobius-app-service.ts";
 import { ManagementError } from "../entity/management-error.ts";
-import { PlatformProjectError } from "../entity/platform-project.ts";
+import { type PlatformProject, PlatformProjectError } from "../entity/platform-project.ts";
 import type { ManagedBotStorage } from "../storage/managed-bot-storage.ts";
 import type { PlatformProjectStorage } from "../storage/platform-project-storage.ts";
 import type { AuthenticationService } from "./authentication-service.ts";
@@ -44,10 +44,14 @@ export class ManagementService {
         const userId = `usr_${crypto.randomUUID()}`;
         const project = await this.#platform.create(userId, "Personal workspace", signal, location);
         const scoped = await this.#scopeProject(project.projectId, signal);
-        const identity = await scoped.#authentication.createAnonymous(userId, project.projectId, signal);
+        return await scoped.initializeAnonymousUser(userId, project, signal);
+    };
+
+    readonly initializeAnonymousUser = async (userId: string, project: PlatformProject, signal: AbortSignal) => {
+        const identity = await this.#authentication.createAnonymous(userId, project.projectId, signal);
         const { origin, appId } = this.#platform.configuration();
-        await scoped.#platformProjects.save(userId, origin, appId, project, signal);
-        const bot = await scoped.provisionUserBot(identity.userId, location, signal);
+        await this.#platformProjects.save(userId, origin, appId, project, signal);
+        const bot = await this.provisionUserBot(identity.userId, undefined, signal);
         return { ...identity, bot };
     };
 

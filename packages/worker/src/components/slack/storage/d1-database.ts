@@ -1,24 +1,24 @@
+import { createDatabase, type Database } from "../../../schema/database.ts";
+
 interface DatabaseMetricsLogger {
     readonly info: (bindings: Readonly<Record<string, unknown>>, message: string) => void;
 }
 
 export class D1SqlDatabase {
-    readonly batch = async (
-        statements: readonly {
-            readonly query: string;
-            readonly values: readonly unknown[];
-        }[],
+    readonly execute = async <T>(
+        operation: "batch" | "first" | "run",
+        queryCount: number,
         signal: AbortSignal,
-    ): Promise<void> => {
+        query: (database: Database) => Promise<T>,
+    ): Promise<T> => {
         signal.throwIfAborted();
-        await this.#measure("batch", statements.length, async () => {
-            await this.#database.batch(
-                statements.map((statement) => this.#database.prepare(statement.query).bind(...statement.values)),
-            );
+        return await this.#measure(operation, queryCount, async () => {
+            const result = await query(this.#database);
             signal.throwIfAborted();
+            return result;
         });
     };
-    readonly #database: D1Database;
+    readonly #database: Database;
     readonly #metrics: DatabaseMetricsLogger;
     readonly #nowMilliseconds: () => number;
     constructor(cx: {
@@ -26,37 +26,14 @@ export class D1SqlDatabase {
         readonly metrics: DatabaseMetricsLogger;
         readonly nowMilliseconds: () => number;
     }) {
-        this.#database = cx.database;
+        const database = createDatabase(cx.database);
+        if (database === null) {
+            throw new TypeError("A D1 database is required.");
+        }
+        this.#database = database;
         this.#metrics = cx.metrics;
         this.#nowMilliseconds = cx.nowMilliseconds;
     }
-    readonly first = async (query: string, values: readonly unknown[], signal: AbortSignal): Promise<unknown> => {
-        signal.throwIfAborted();
-        return await this.#measure("first", 1, async () => {
-            const result = await this.#database
-                .prepare(query)
-                .bind(...values)
-                .first();
-            signal.throwIfAborted();
-            return result;
-        });
-    };
-    readonly run = async (
-        query: string,
-        values: readonly unknown[],
-        signal: AbortSignal,
-    ): Promise<{ readonly meta: { readonly changes: number } }> => {
-        signal.throwIfAborted();
-        return await this.#measure("run", 1, async () => {
-            const result = await this.#database
-                .prepare(query)
-                .bind(...values)
-                .run();
-            signal.throwIfAborted();
-            return result;
-        });
-    };
-
     readonly #measure = async <T>(
         operation: "batch" | "first" | "run",
         queryCount: number,

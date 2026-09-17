@@ -1,17 +1,14 @@
 import { ChevronDown, Laptop, RefreshCw, Share2, SquarePen } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
+import { createConversationDirectoryStore } from "../../view-models/chat/conversation-directory-store.ts";
 import { MachineSharing } from "./machine-sharing.tsx";
 import { NativeSessionDialog, type OpenMobiusSession } from "./native-session-dialog.tsx";
-
-type Directory =
-    | { readonly kind: "loading" }
-    | { readonly kind: "ready"; readonly sessions: readonly ManagedChatSession[] }
-    | { readonly kind: "failed"; readonly message: string };
 
 export function ConversationSidebar({
     botId,
@@ -30,7 +27,8 @@ export function ConversationSidebar({
     readonly onNewConversation: () => void;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
 }) {
-    const [directory, setDirectory] = useState<Directory>({ kind: "loading" });
+    const [store] = useState(() => createConversationDirectoryStore(botId, requests));
+    const { load, state: directory } = useStore(store);
     const [revision, refresh] = useState(0);
     const [expanded, setExpanded] = useState(false);
     const [dialog, setDialog] = useState(false);
@@ -38,23 +36,9 @@ export function ConversationSidebar({
     // biome-ignore lint/correctness/useExhaustiveDependencies: Creation and explicit refresh reload the persisted directory.
     useEffect(() => {
         const controller = new AbortController();
-        void requests
-            .managedSessions(botId, controller.signal)
-            .then((sessions) => {
-                if (!controller.signal.aborted) {
-                    setDirectory({ kind: "ready", sessions });
-                }
-            })
-            .catch((cause: unknown) => {
-                if (!controller.signal.aborted) {
-                    setDirectory({
-                        kind: "failed",
-                        message: cause instanceof Error ? cause.message : "Conversations are unavailable.",
-                    });
-                }
-            });
+        void load(controller.signal);
         return () => controller.abort();
-    }, [botId, requests, activeId, revision]);
+    }, [activeId, load, revision]);
     return (
         <aside
             aria-label="Conversations"

@@ -33,19 +33,29 @@ async function fixture(location?: string) {
     cleanup.push(mobius.close);
     const database = new InMemoryD1Database();
     cleanup.push(database.close);
-    const bindings = {
+    const baseBindings = {
         APP_ORIGIN,
         CLERK_JWT_KEY: issuer.publicKey,
         CLERK_PUBLISHABLE_KEY: issuer.publishableKey,
-        DATABASE: database,
-        CHAT_DATABASE_APAC: database,
-        CHAT_DATABASE_WNAM: database,
         CHAT_ATTACHMENTS_APAC: mobius.attachments,
         CHAT_ATTACHMENTS_WNAM: mobius.attachments,
         MOBIUS_APP_ID: mobius.appId,
         MOBIUS_APP_SECRET: mobius.appCredential,
         MOBIUS_BASE_URL: mobius.baseUrl,
     };
+    const projectObjects = {
+        idFromName: (name: string) => name,
+        get: (projectId: string) => ({
+            fetch: (request: Request) =>
+                worker.fetch(request, {
+                    ...baseBindings,
+                    CHAT_PROJECT_ID: projectId,
+                    DATABASE: database,
+                    ATTACHMENTS: mobius.attachments,
+                }),
+        }),
+    };
+    const bindings = { ...baseBindings, CHAT_PROJECTS: projectObjects };
     const app = new Hono().all("*", (context) => {
         if (location !== undefined) {
             Object.defineProperty(context.req.raw, "cf", { value: { continent: location === "wnam" ? "NA" : "AS" } });
@@ -74,29 +84,17 @@ async function fixture(location?: string) {
         projects.set(identity.token, identity.projectId);
         return identity.token;
     };
-    return { app, mobius, request, anonymous, bindings };
+    return { app, mobius, request, anonymous, bindings, database };
 }
 
 test.each(["apac", "wnam"])(
-    "Given a Project routed through regional Chat Workers in %s, When its session is read at the edge, Then the regional backend authenticates it without edge storage",
+    "Given a Project Durable Object in %s, When its session is read at the edge, Then the object authenticates it without shared database storage",
     async (region) => {
-        const fixture = await fixtureForRegionalRouting(region);
-        const empty = new InMemoryD1Database();
-        cleanup.push(empty.close);
-        const regional = (region: string) => ({
-            fetch: (request: Request) => {
-                Object.defineProperty(request, "cf", { value: { continent: region === "wnam" ? "NA" : "AS" } });
-                return worker.fetch(request, { ...fixture.bindings, MOBIUS_WORKER_REGION: region });
-            },
-        });
+        const fixture = await fixtureForProjectObject(region);
         const edge = {
             ...fixture.bindings,
-            DATABASE: empty,
-            CHAT_DATABASE_APAC: empty,
-            CHAT_DATABASE_WNAM: empty,
-            MOBIUS_WORKER_REGION: "edge",
-            MOBIUS_REGIONAL_APAC: regional("apac"),
-            MOBIUS_REGIONAL_WNAM: regional("wnam"),
+            DATABASE: undefined,
+            CHAT_PROJECTS: fixture.projects,
         };
         const request = (token: string) =>
             new Request(`https://cloud.test/mobius-cloud/api/projects/${fixture.projectId}/session`, {
@@ -104,30 +102,30 @@ test.each(["apac", "wnam"])(
             });
         expect((await worker.fetch(request(fixture.token), edge)).status).toBe(200);
         expect((await worker.fetch(request("mobius_anon_invalid"), edge)).status).toBe(401);
-        expect((await regional(region === "apac" ? "wnam" : "apac").fetch(request(fixture.token))).status).toBe(421);
-        const creationRequest = new Request("https://cloud.test/mobius-cloud/api/identity/anonymous-users", {
-            method: "POST",
-        });
-        Object.defineProperty(creationRequest, "cf", { value: { continent: region === "wnam" ? "NA" : "AS" } });
-        const created = await worker.fetch(creationRequest, edge);
-        expect(created.status).toBe(201);
-        const identity = v.parse(v.object({ token: v.string(), projectId: v.string() }), await created.json());
-        expect(identity.projectId.startsWith(region === "apac" ? "prj_a" : "prj_w")).toBe(true);
-        const session = await worker.fetch(
-            new Request(`https://cloud.test/mobius-cloud/api/projects/${identity.projectId}/session`, {
-                headers: { authorization: `Bearer ${identity.token}` },
-            }),
-            edge,
-        );
-        expect(session.status).toBe(200);
     },
 );
 
-async function fixtureForRegionalRouting(region: string) {
+async function fixtureForProjectObject(region: string) {
     const value = await fixture(region);
-    const token = await value.anonymous();
-    const { project } = v.parse(projectSchema, await (await value.request("management/project", token)).json());
-    return { ...value, token, projectId: project.projectId };
+    const created = await value.app.request("https://cloud.test/mobius-cloud/api/identity/anonymous-users", {
+        method: "POST",
+    });
+    const identity = v.parse(v.object({ token: v.string(), projectId: v.string() }), await created.json());
+    const projects = {
+        idFromName: (name: string) => name,
+        get: (projectId: string) => ({
+            fetch: (request: Request) =>
+                worker.fetch(request, {
+                    ...value.bindings,
+                    CHAT_PROJECT_ID: projectId,
+                    DATABASE: value.database,
+                    ATTACHMENTS: projectId.startsWith("prj_a")
+                        ? value.bindings.CHAT_ATTACHMENTS_APAC
+                        : value.bindings.CHAT_ATTACHMENTS_WNAM,
+                }),
+        }),
+    };
+    return { ...value, token: identity.token, projectId: identity.projectId, projects };
 }
 
 test("Given an anonymous user, When they provision a Platform Project and reload, Then their Project and Bot persist and are isolated from other users", async () => {
@@ -175,26 +173,6 @@ test("Given an anonymous user, When they provision a Platform Project and reload
         status: "pending",
     });
     expect((await request(`management/runtime-pairings/${pairing.pairingId}`, bob)).status).toBe(404);
-});
-
-test("Given a signed-in user, When they open their workspace and reload, Then a Platform Bot is provisioned for them and other users receive their own Bot", async () => {
-    const { request, mobius } = await fixture();
-    const alice = issuer.createSession("user_alice");
-    const bob = issuer.createSession("user_bob");
-    const response = await request("management/bots", alice);
-    expect(response.status).toBe(200);
-    const { bots } = v.parse(botsSchema, await response.json());
-    expect(bots).toHaveLength(1);
-    expect(await (await request("management/bots", alice)).json()).toEqual({ bots });
-    const other = v.parse(botsSchema, await (await request("management/bots", bob)).json());
-    expect(other.bots).toHaveLength(1);
-    expect(other.bots).not.toEqual(bots);
-    const project = v.parse(projectSchema, await (await request("management/project", alice)).json()).project;
-    const persisted = await mobius.app.request(`/mobius/api/v1/projects/${project.projectId}/bots`, {
-        headers: { authorization: `Bearer ${mobius.appCredential}` },
-    });
-    expect(persisted.status).toBe(200);
-    expect(await persisted.json()).toMatchObject({ bots });
 });
 
 test("Given a user-owned Platform Bot, When session records are managed, Then changes persist and another user cannot access or delete them", async () => {

@@ -1,203 +1,38 @@
-import {
-    MobiusApiError,
-    type MobiusBotConnectionDirectory,
-    type MobiusBotConnectionGrant,
-    type MobiusOwnerBotConnection,
-} from "@moxt-ai/mobius-sdk";
 import { Check, Copy, LoaderCircle, Plug, RefreshCw, ShieldCheck, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useOutletContext } from "react-router";
+import { useStore } from "zustand";
 import { BOT_FIELD_CLASS, BotInlineError } from "@/components/bots/bot-page-header";
 import type { BotDetailContext } from "@/components/bots/bot-workspace";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-const CONNECTOR_SCOPES = Object.freeze([
-    "conversation-events:read",
-    "inbound-conversation:create",
-    "inbound-message:create",
-    "outbound-message:ack",
-    "outbound-message:read",
-    "turn:cancel",
-]);
-
-abstract class ConnectionDirectoryState {}
-
-class LoadingConnectionDirectoryState extends ConnectionDirectoryState {}
-
-class ReadyConnectionDirectoryState extends ConnectionDirectoryState {
-    readonly directory: MobiusBotConnectionDirectory;
-
-    constructor(directory: MobiusBotConnectionDirectory) {
-        super();
-        this.directory = directory;
-    }
-}
-
-class FailedConnectionDirectoryState extends ConnectionDirectoryState {
-    readonly message: string;
-
-    constructor(message: string) {
-        super();
-        this.message = message;
-    }
-}
-
-abstract class ConnectionGrantState {}
-
-class IdleConnectionGrantState extends ConnectionGrantState {}
-
-class CreatingConnectionGrantState extends ConnectionGrantState {}
-
-class ReadyConnectionGrantState extends ConnectionGrantState {
-    readonly grant: MobiusBotConnectionGrant;
-
-    constructor(grant: MobiusBotConnectionGrant) {
-        super();
-        this.grant = grant;
-    }
-}
-
-class FailedConnectionGrantState extends ConnectionGrantState {
-    readonly message: string;
-
-    constructor(message: string) {
-        super();
-        this.message = message;
-    }
-}
-
-function failureMessage(error: unknown): string {
-    return error instanceof MobiusApiError ? `${error.code}: ${error.message}` : "The connection request failed.";
-}
-
-function formattedDate(value: string): string {
-    return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-}
-
-function targetsForConnection(directory: MobiusBotConnectionDirectory, connectionId: string) {
-    return directory.deliveryTargets.filter((target) => target.connectionId === connectionId);
-}
+import {
+    CONNECTOR_SCOPES,
+    createBotConnectionsStore,
+    formatConnectionDate,
+    targetsForConnection,
+} from "@/view-models/bots/connections-store";
 
 export function BotConnectionsPage() {
     const { bot, client, signal } = useOutletContext<BotDetailContext>();
-    const [state, setState] = useState<ConnectionDirectoryState>(new LoadingConnectionDirectoryState());
-    const [grantState, setGrantState] = useState<ConnectionGrantState>(new IdleConnectionGrantState());
-    const [grantFormOpen, setGrantFormOpen] = useState(false);
-    const [audience, setAudience] = useState("mobius-cloud");
-    const [label, setLabel] = useState("");
-    const [copyAnnouncement, setCopyAnnouncement] = useState("");
-    const [busyResourceId, setBusyResourceId] = useState("");
-    const [revokeConfirmationId, setRevokeConfirmationId] = useState("");
-    const [operationError, setOperationError] = useState("");
-
-    const openGrantForm = (): void => {
-        setGrantState(new IdleConnectionGrantState());
-        setCopyAnnouncement("");
-        setGrantFormOpen(true);
-    };
-
-    const closeGrantForm = (): void => {
-        setGrantFormOpen(false);
-        setGrantState(new IdleConnectionGrantState());
-        setCopyAnnouncement("");
-    };
-
-    const loadConnections = useCallback(async (): Promise<void> => {
-        setState(new LoadingConnectionDirectoryState());
-        try {
-            setState(new ReadyConnectionDirectoryState(await client.listConnections(bot.botId, signal)));
-        } catch (error) {
-            if (!signal.aborted) {
-                setState(new FailedConnectionDirectoryState(failureMessage(error)));
-            }
-        }
-    }, [bot.botId, client, signal]);
+    const [store] = useState(() => createBotConnectionsStore(bot.botId, client));
+    const viewModel = useStore(store);
+    const {
+        busyResourceId,
+        copyAnnouncement,
+        directory: state,
+        grant: grantState,
+        grantForm,
+        operationError,
+        revokeConfirmationId,
+    } = viewModel;
+    const grantFormOpen = grantForm.kind === "editing";
 
     useEffect(() => {
-        void loadConnections();
-    }, [loadConnections]);
+        void viewModel.loadConnections(signal);
+    }, [signal, viewModel.loadConnections]);
 
-    const createGrant = async (): Promise<void> => {
-        if (audience.trim().length === 0 || label.trim().length === 0) {
-            setGrantState(new FailedConnectionGrantState("Enter both a connector audience and a connection label."));
-            return;
-        }
-        setGrantState(new CreatingConnectionGrantState());
-        setCopyAnnouncement("");
-        try {
-            setGrantState(
-                new ReadyConnectionGrantState(
-                    await client.createConnectionGrant(
-                        bot.botId,
-                        {
-                            audience: audience.trim(),
-                            expiresInSeconds: 600,
-                            label: label.trim(),
-                            scopes: CONNECTOR_SCOPES,
-                        },
-                        signal,
-                    ),
-                ),
-            );
-        } catch (error) {
-            if (!signal.aborted) {
-                setGrantState(new FailedConnectionGrantState(failureMessage(error)));
-            }
-        }
-    };
-
-    const copyGrant = async (grant: MobiusBotConnectionGrant): Promise<void> => {
-        try {
-            await navigator.clipboard.writeText(
-                JSON.stringify({
-                    audience: grant.audience,
-                    grantId: grant.grantId,
-                    grantSecret: grant.grantSecret,
-                }),
-            );
-            setCopyAnnouncement("Connection grant copied.");
-        } catch {
-            setCopyAnnouncement("Copy was unavailable. Select the grant ID and secret manually.");
-        }
-    };
-
-    const approveTarget = async (deliveryTargetId: string, revision: number): Promise<void> => {
-        setBusyResourceId(deliveryTargetId);
-        setOperationError("");
-        try {
-            await client.approveDeliveryTarget(bot.botId, deliveryTargetId, revision, signal);
-            await loadConnections();
-        } catch (error) {
-            if (!signal.aborted) {
-                setOperationError(failureMessage(error));
-            }
-        } finally {
-            if (!signal.aborted) {
-                setBusyResourceId("");
-            }
-        }
-    };
-
-    const revokeConnection = async (connection: MobiusOwnerBotConnection): Promise<void> => {
-        setBusyResourceId(connection.connectionId);
-        setOperationError("");
-        try {
-            await client.revokeConnection(bot.botId, connection.connectionId, connection.lifecycleRevision, signal);
-            setRevokeConfirmationId("");
-            await loadConnections();
-        } catch (error) {
-            if (!signal.aborted) {
-                setOperationError(failureMessage(error));
-            }
-        } finally {
-            if (!signal.aborted) {
-                setBusyResourceId("");
-            }
-        }
-    };
-
-    const ready = state instanceof ReadyConnectionDirectoryState ? state.directory : undefined;
+    const ready = state.kind === "ready" ? state.directory : undefined;
     return (
         <div className="mx-auto w-full max-w-[920px] px-5 py-7 sm:px-8 sm:py-9">
             <section aria-labelledby="bot-connections-heading">
@@ -218,7 +53,7 @@ export function BotConnectionsPage() {
                         <Button
                             className="min-h-11 shrink-0"
                             disabled={bot.state.kind === "archived"}
-                            onClick={openGrantForm}
+                            onClick={viewModel.openGrantForm}
                         >
                             <Plug aria-hidden="true" className="size-4" /> Create connection grant
                         </Button>
@@ -230,7 +65,7 @@ export function BotConnectionsPage() {
                         className="mt-5 rounded-2xl border-[0.5px] border-black/10 bg-white p-5 shadow-[0_1px_4px_rgba(0,0,0,0.035)]"
                         onSubmit={(event) => {
                             event.preventDefault();
-                            void createGrant();
+                            void viewModel.createGrant(signal);
                         }}
                     >
                         <div className="flex items-start justify-between gap-3">
@@ -243,8 +78,8 @@ export function BotConnectionsPage() {
                             <Button
                                 aria-label="Close connection grant form"
                                 className="size-11 sm:size-9"
-                                disabled={grantState instanceof CreatingConnectionGrantState}
-                                onClick={closeGrantForm}
+                                disabled={grantState.kind === "creating"}
+                                onClick={viewModel.closeGrantForm}
                                 size="icon"
                                 type="button"
                                 variant="ghost"
@@ -257,22 +92,22 @@ export function BotConnectionsPage() {
                                 Connector audience
                                 <input
                                     className={BOT_FIELD_CLASS}
-                                    disabled={grantState instanceof CreatingConnectionGrantState}
+                                    disabled={grantState.kind === "creating"}
                                     id="bot-connector-audience"
-                                    onChange={(event) => setAudience(event.target.value)}
-                                    value={audience}
+                                    onChange={(event) => viewModel.setAudience(event.target.value)}
+                                    value={grantForm.kind === "editing" ? grantForm.audience : ""}
                                 />
                             </label>
                             <label className="grid gap-1.5 text-xs font-semibold" htmlFor="bot-connection-label">
                                 Connection label
                                 <input
                                     className={BOT_FIELD_CLASS}
-                                    disabled={grantState instanceof CreatingConnectionGrantState}
+                                    disabled={grantState.kind === "creating"}
                                     id="bot-connection-label"
                                     maxLength={200}
-                                    onChange={(event) => setLabel(event.target.value)}
+                                    onChange={(event) => viewModel.setLabel(event.target.value)}
                                     placeholder="Production connector"
-                                    value={label}
+                                    value={grantForm.kind === "editing" ? grantForm.label : ""}
                                 />
                             </label>
                         </div>
@@ -289,23 +124,21 @@ export function BotConnectionsPage() {
                                 ))}
                             </ul>
                         </fieldset>
-                        {grantState instanceof FailedConnectionGrantState && (
-                            <BotInlineError>{grantState.message}</BotInlineError>
-                        )}
-                        {grantState instanceof ReadyConnectionGrantState && (
+                        {grantState.kind === "failed" && <BotInlineError>{grantState.message}</BotInlineError>}
+                        {grantState.kind === "ready" && (
                             <div className="mt-4 rounded-xl border border-[#9bd8b7] bg-[#f4fcf7] p-4">
                                 <div className="flex items-start justify-between gap-3">
                                     <span>
                                         <strong className="block text-sm font-semibold">Copy this grant now</strong>
                                         <span className="mt-1 block text-xs leading-5 text-muted-foreground">
                                             The secret is displayed once and expires{" "}
-                                            {formattedDate(grantState.grant.expiresAt)}.
+                                            {formatConnectionDate(grantState.grant.expiresAt)}.
                                         </span>
                                     </span>
                                     <Button
                                         aria-label="Copy connection grant"
                                         className="size-11 shrink-0 sm:size-9"
-                                        onClick={() => void copyGrant(grantState.grant)}
+                                        onClick={() => void viewModel.copyGrant()}
                                         size="icon"
                                         type="button"
                                         variant="outline"
@@ -334,15 +167,12 @@ export function BotConnectionsPage() {
                         )}
                         <div className="mt-4">
                             <Button
-                                aria-busy={grantState instanceof CreatingConnectionGrantState}
+                                aria-busy={grantState.kind === "creating"}
                                 className="min-h-11"
-                                disabled={
-                                    grantState instanceof CreatingConnectionGrantState ||
-                                    grantState instanceof ReadyConnectionGrantState
-                                }
+                                disabled={grantState.kind === "creating" || grantState.kind === "ready"}
                                 type="submit"
                             >
-                                {grantState instanceof CreatingConnectionGrantState ? (
+                                {grantState.kind === "creating" ? (
                                     <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
                                 ) : (
                                     <ShieldCheck aria-hidden="true" className="size-4" />
@@ -362,7 +192,7 @@ export function BotConnectionsPage() {
                     <Button
                         aria-label="Refresh connections"
                         className="size-11 sm:size-9"
-                        onClick={() => void loadConnections()}
+                        onClick={() => void viewModel.loadConnections(signal)}
                         size="icon"
                         variant="ghost"
                     >
@@ -370,7 +200,7 @@ export function BotConnectionsPage() {
                     </Button>
                 </div>
                 {operationError.length > 0 && <BotInlineError>{operationError}</BotInlineError>}
-                {state instanceof LoadingConnectionDirectoryState && (
+                {state.kind === "loading" && (
                     <div
                         aria-busy="true"
                         className="mt-3 flex min-h-24 items-center gap-3 rounded-xl border-[0.5px] border-black/10 bg-white px-5 text-sm text-muted-foreground"
@@ -378,10 +208,14 @@ export function BotConnectionsPage() {
                         <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> Loading connections…
                     </div>
                 )}
-                {state instanceof FailedConnectionDirectoryState && (
+                {state.kind === "failed" && (
                     <div className="mt-3 rounded-xl border border-[#f2c4c4] bg-[#fff7f7] p-4">
                         <BotInlineError>{state.message}</BotInlineError>
-                        <Button className="mt-3 min-h-11" onClick={() => void loadConnections()} variant="outline">
+                        <Button
+                            className="mt-3 min-h-11"
+                            onClick={() => void viewModel.loadConnections(signal)}
+                            variant="outline"
+                        >
                             Retry
                         </Button>
                     </div>
@@ -427,7 +261,7 @@ export function BotConnectionsPage() {
                                         {connection.state.kind === "active" && !confirming && (
                                             <Button
                                                 className="min-h-11 text-[#9b2c32] hover:text-[#9b2c32]"
-                                                onClick={() => setRevokeConfirmationId(connection.connectionId)}
+                                                onClick={() => viewModel.confirmRevocation(connection.connectionId)}
                                                 variant="ghost"
                                             >
                                                 <Trash2 aria-hidden="true" className="size-4" /> Revoke
@@ -444,7 +278,7 @@ export function BotConnectionsPage() {
                                                 <Button
                                                     className="min-h-11 bg-[#8f252b] text-white hover:bg-[#781f24]"
                                                     disabled={busyResourceId === connection.connectionId}
-                                                    onClick={() => void revokeConnection(connection)}
+                                                    onClick={() => void viewModel.revokeConnection(connection, signal)}
                                                 >
                                                     {busyResourceId === connection.connectionId ? (
                                                         <LoaderCircle
@@ -458,7 +292,7 @@ export function BotConnectionsPage() {
                                                 </Button>
                                                 <Button
                                                     className="min-h-11"
-                                                    onClick={() => setRevokeConfirmationId("")}
+                                                    onClick={() => viewModel.confirmRevocation("")}
                                                     variant="ghost"
                                                 >
                                                     Cancel
@@ -495,9 +329,10 @@ export function BotConnectionsPage() {
                                                                 className="min-h-11 sm:min-h-9"
                                                                 disabled={busyResourceId === target.deliveryTargetId}
                                                                 onClick={() =>
-                                                                    void approveTarget(
+                                                                    void viewModel.approveTarget(
                                                                         target.deliveryTargetId,
                                                                         target.outboundPolicyRevision,
+                                                                        signal,
                                                                     )
                                                                 }
                                                                 variant="outline"

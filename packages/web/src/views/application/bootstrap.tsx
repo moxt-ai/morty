@@ -1,35 +1,22 @@
 import { ClerkProvider } from "@clerk/react";
 import { useEffect, useState } from "react";
+import { useStore } from "zustand";
 import { reportApplicationError } from "../../index.ts";
-import { getPublicConfig } from "../../view-models/authentication/config.ts";
+import { createBootstrapStore } from "../../view-models/authentication/bootstrap-store.ts";
 import { router as authRouter } from "../authentication/router.tsx";
 import { SessionApplication } from "../authentication/session-application.tsx";
 import { App } from "./app.tsx";
 
-type BootstrapState =
-    | { readonly kind: "loading" }
-    | { readonly kind: "ready"; readonly publishableKey: string }
-    | { readonly kind: "failed" };
-
 export function Bootstrap() {
-    const [state, setState] = useState<BootstrapState>({ kind: "loading" });
+    const [store] = useState(() =>
+        createBootstrapStore((error) => reportApplicationError(error, "authentication-bootstrap")),
+    );
+    const { load, state } = useStore(store);
     useEffect(() => {
         const controller = new AbortController();
-        void getPublicConfig(controller.signal).then(
-            ({ publishableKey }) => {
-                if (!controller.signal.aborted) {
-                    setState({ kind: "ready", publishableKey });
-                }
-            },
-            (error: unknown) => {
-                if (!controller.signal.aborted) {
-                    reportApplicationError(error, "authentication-bootstrap");
-                    setState({ kind: "failed" });
-                }
-            },
-        );
+        void load(controller.signal);
         return () => controller.abort();
-    }, []);
+    }, [load]);
     if (state.kind === "loading") {
         return <App state={{ kind: "loading" }} />;
     }

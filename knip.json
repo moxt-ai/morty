@@ -13,6 +13,9 @@
                 "src/views/applications/slack-management.tsx",
                 "src/components/ui/*.tsx"
             ]
+        },
+        "packages/worker": {
+            "entry": ["src/index.ts", "src/schema/index.ts"]
         }
     }
 }

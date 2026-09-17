@@ -1,8 +1,9 @@
 import * as v from "valibot";
-import { projectBindings } from "../../../composition/chat-shards.ts";
+import { projectBindings } from "../../../composition/project-bindings.ts";
 import { ClerkGateway } from "../../../gateway/clerk-gateway.ts";
 import { IdentityGateway } from "../../../gateway/identity-gateway.ts";
 import { FetchMobiusTransport, MobiusGateway } from "../../../gateway/mobius-gateway.ts";
+import { projectObject } from "../../../gateway/project-object-routing.ts";
 import { SlackWebApi } from "../../../gateway/slack-web-gateway.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
 import { json } from "../../../infra/http.ts";
@@ -12,7 +13,12 @@ import { CloudflareBotTriggerLimiter } from "../do/cloudflare-bot-trigger-limite
 import { createSlackFileHandler } from "../http/bot-tools/slack-file-handler.ts";
 import { createSlackApplication } from "../http/slack-api-routes.ts";
 import { CloudflareSlackQueue } from "../infra/cloudflare-slack-queue.ts";
-import { type ProjectQueueMessage, projectQueueMessageSchema, type SlackQueueMessage } from "../infra/queue-message.ts";
+import {
+    type ProjectQueueDelivery,
+    type ProjectQueueMessage,
+    projectQueueMessageSchema,
+    type SlackQueueMessage,
+} from "../infra/queue-message.ts";
 import { slackLogger } from "../infra/util/logger.ts";
 import { SecretCipher } from "../infra/util/secret-cipher.ts";
 import { SlackQueueHandler } from "../queue/slack-queue-handler.ts";
@@ -155,33 +161,63 @@ export const slackWorker = {
                 continue;
             }
             try {
-                const regional = await projectBindings(bindings, parsed.output.projectId, AbortSignal.timeout(20000));
-                if (!hasSlackBindings(regional)) {
-                    message.retry();
-                    continue;
-                }
-                await slack.queue(
-                    {
-                        metadata: batch.metadata,
-                        queue: batch.queue,
-                        messages: [
-                            {
-                                id: message.id,
-                                timestamp: message.timestamp,
-                                attempts: message.attempts,
-                                body: parsed.output.message,
-                                ack: () => message.ack(),
-                                retry: (options) => message.retry(options),
-                            },
-                        ],
-                        ackAll: () => message.ack(),
-                        retryAll: (options) => message.retry(options),
-                    },
-                    regional,
+                const delivery = {
+                    attempts: message.attempts,
+                    id: message.id,
+                    message: parsed.output,
+                    timestamp: message.timestamp.toISOString(),
+                };
+                const response = await projectObject(bindings, parsed.output.projectId).fetch(
+                    new Request("https://project.internal/__project/queue", {
+                        body: JSON.stringify(delivery),
+                        headers: { "content-type": "application/json" },
+                        method: "POST",
+                        signal: AbortSignal.timeout(840_000),
+                    }),
                 );
+                response.ok ? message.ack() : message.retry();
             } catch {
                 message.retry();
             }
         }
     },
 } satisfies ExportedHandler<CloudBindings, unknown>;
+
+export async function consumeProjectQueueDelivery(
+    delivery: ProjectQueueDelivery,
+    bindings: CloudBindings,
+): Promise<boolean> {
+    const scoped = await projectBindings(bindings, delivery.message.projectId, AbortSignal.timeout(20_000));
+    if (!hasSlackBindings(scoped)) {
+        return false;
+    }
+    const outcome = Promise.withResolvers<boolean>();
+    await slack.queue(
+        {
+            metadata: { metrics: { backlogBytes: 0, backlogCount: 0 } },
+            queue: "project-delivery",
+            messages: [
+                {
+                    ack: () => {
+                        outcome.resolve(true);
+                    },
+                    attempts: delivery.attempts,
+                    body: delivery.message.message,
+                    id: delivery.id,
+                    retry: () => {
+                        outcome.resolve(false);
+                    },
+                    timestamp: new Date(delivery.timestamp),
+                },
+            ],
+            ackAll: () => {
+                outcome.resolve(true);
+            },
+            retryAll: () => {
+                outcome.resolve(false);
+            },
+        },
+        scoped,
+    );
+    return await outcome.promise;
+}

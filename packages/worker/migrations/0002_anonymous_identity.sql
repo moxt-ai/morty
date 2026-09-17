@@ -5,7 +5,7 @@ CREATE TABLE app_user (
 
 CREATE TABLE anonymous_credential (
     id TEXT PRIMARY KEY NOT NULL,
-    user_id TEXT NOT NULL REFERENCES app_user(id),
+    user_id TEXT NOT NULL,
     token_hash TEXT NOT NULL UNIQUE,
     status TEXT NOT NULL CHECK (status IN ('active', 'revoked')),
     created_at INTEGER NOT NULL,
@@ -16,7 +16,7 @@ CREATE INDEX anonymous_credential_user_idx ON anonymous_credential(user_id, stat
 
 CREATE TABLE clerk_user_binding (
     clerk_user_id TEXT PRIMARY KEY NOT NULL,
-    user_id TEXT NOT NULL UNIQUE REFERENCES app_user(id),
+    user_id TEXT NOT NULL UNIQUE,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
@@ -24,7 +24,7 @@ CREATE TABLE clerk_user_binding (
 CREATE TABLE identity_transfer (
     id TEXT PRIMARY KEY NOT NULL,
     code_hash TEXT NOT NULL UNIQUE,
-    user_id TEXT NOT NULL REFERENCES app_user(id),
+    user_id TEXT NOT NULL,
     expires_at INTEGER NOT NULL,
     consumed_at INTEGER,
     claim_nonce TEXT,

@@ -33,6 +33,11 @@ class InMemoryD1Statement {
         );
     readonly first = async () => this.#database.prepare(this.#query).get(...this.#values) ?? null;
     readonly all = async () => ({ results: this.#database.prepare(this.#query).all(...this.#values), success: true });
+    readonly raw = async () =>
+        this.#database
+            .prepare(this.#query)
+            .all(...this.#values)
+            .map((row) => Object.values(row));
     readonly run = async () => {
         const result = this.#database.prepare(this.#query).run(...this.#values);
         return { meta: { changes: Number(result.changes) } };
@@ -72,17 +77,14 @@ class InMemoryD1Database {
 const databases: InMemoryD1Database[] = [];
 const baseConfiguration = { CLERK_PUBLISHABLE_KEY: issuer.publishableKey, CLERK_JWT_KEY: issuer.publicKey, APP_ORIGIN };
 function slackConfiguration(database = new InMemoryD1Database()) {
-    return {
+    const attachments = { get: () => Promise.resolve(null), put: () => Promise.resolve() };
+    const base = {
         ...baseConfiguration,
         BOT_TRIGGER_RATE_LIMITER: { get: () => undefined, idFromName: () => undefined },
         ASSETS: { fetch: () => Promise.resolve(new Response()) },
-        ATTACHMENTS: { get: () => Promise.resolve(null), put: () => Promise.resolve() },
+        CHAT_ATTACHMENTS_APAC: attachments,
+        CHAT_ATTACHMENTS_WNAM: attachments,
         AUTHENTICATION_BASE_URL: "https://identity.test",
-        DATABASE: database,
-        CHAT_DATABASE_APAC: database,
-        CHAT_DATABASE_WNAM: database,
-        CHAT_ATTACHMENTS_APAC: { get: () => Promise.resolve(null), put: () => Promise.resolve() },
-        CHAT_ATTACHMENTS_WNAM: { get: () => Promise.resolve(null), put: () => Promise.resolve() },
         EVENTS: { send: () => Promise.resolve() },
         ...platform.bindings,
         SLACK_MOBIUS_AUTH_TOKEN: "service-token",
@@ -90,6 +92,19 @@ function slackConfiguration(database = new InMemoryD1Database()) {
         SLACK_SERVER_BASE_URL: APP_ORIGIN,
         SLACK_TOKEN_ENCRYPTION_KEY: btoa("a".repeat(32)),
     };
+    const projects = {
+        idFromName: (name: string) => name,
+        get: (projectId: string) => ({
+            fetch: (request: Request) =>
+                worker.fetch(request, {
+                    ...base,
+                    ATTACHMENTS: attachments,
+                    CHAT_PROJECT_ID: projectId,
+                    DATABASE: database,
+                }),
+        }),
+    };
+    return { ...base, CHAT_PROJECTS: projects };
 }
 beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -183,13 +198,8 @@ test.each([
     },
 );
 
-test("Given separate APAC and WNAM Chat stores and location-only Platform placement, When users reopen and transfer their workspaces, Then Project context routes them to their own identities and rejects another Project", async () => {
-    const environment = {
-        ...slackConfiguration(),
-        DATABASE: undefined,
-        CHAT_DATABASE_APAC: new InMemoryD1Database(),
-        CHAT_DATABASE_WNAM: new InMemoryD1Database(),
-    };
+test("Given Projects in separate regions, When users reopen and transfer their workspaces, Then Project objects retain their identities and reject another Project", async () => {
+    const environment = slackConfiguration();
     class RegionalRequest extends Request {
         override readonly cf: { readonly continent: string };
         constructor(continent: string) {
@@ -816,14 +826,24 @@ test("Given configured Clerk sign-in, When public configuration is loaded, Then 
 });
 
 test("Given an active Clerk user, When account data is requested, Then only user and session identity are returned", async () => {
-    const response = await worker.fetch(
-        accountRequest(issuer.createSession("user_alice", APP_ORIGIN, "active", "org_ignored")),
-        slackConfiguration(),
+    const database = new InMemoryD1Database();
+    const environment = slackConfiguration(database);
+    const local = await createAnonymousUser(database);
+    const clerkToken = issuer.createSession("user_alice", APP_ORIGIN, "active", "org_ignored");
+    const bound = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${local.projectId}/identity/clerk-binding`, {
+            body: JSON.stringify({ action: "bind", anonymousToken: local.token }),
+            headers: { authorization: `Bearer ${clerkToken}`, "content-type": "application/json" },
+            method: "POST",
+        }),
+        environment,
     );
+    expect(bound.status).toBe(200);
+    const response = await worker.fetch(accountRequest(clerkToken, local.projectId), environment);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
         authentication: { kind: "clerk" },
-        userId: "user_alice",
+        userId: local.userId,
         sessionId: expect.stringMatching(/^sess_/),
     });
 });
@@ -844,7 +864,7 @@ test("Given a pending Clerk session, When account data is requested, Then access
     expect(response.status).toBe(401);
 });
 
-test("Given regional storage, When an authenticated user lists Slack bots, Then the user ID scopes the empty result", async () => {
+test("Given Project storage, When an authenticated user lists Slack bots, Then the user ID scopes the empty result", async () => {
     const response = await worker.fetch(
         new Request(`${APP_ORIGIN}/mobius-slack/api/slack/bots?projectId=prj_ap_01_${"a".repeat(24)}`, {
             headers: {
@@ -857,8 +877,8 @@ test("Given regional storage, When an authenticated user lists Slack bots, Then 
     expect(await response.json()).toEqual({ bots: [] });
 });
 
-test("Given a missing regional database, When an authenticated user lists Slack bots, Then storage fails closed", async () => {
-    const configuration = { ...slackConfiguration(), CHAT_DATABASE_APAC: undefined };
+test("Given a missing Project object namespace, When an authenticated user lists Slack bots, Then storage fails closed", async () => {
+    const configuration = { ...slackConfiguration(), CHAT_PROJECTS: undefined };
     const response = await worker.fetch(
         new Request(`${APP_ORIGIN}/mobius-slack/api/slack/bots?projectId=prj_ap_01_${"a".repeat(24)}`, {
             headers: {
@@ -868,7 +888,7 @@ test("Given a missing regional database, When an authenticated user lists Slack 
         configuration,
     );
     expect(response.status).toBe(503);
-    expect(await response.json()).toMatchObject({ error: { code: "CHAT_SHARD_UNAVAILABLE" } });
+    expect(await response.json()).toMatchObject({ error: { code: "PROJECT_OBJECT_UNAVAILABLE" } });
 });
 
 test("Given the combined Worker, When Slack health is requested, Then Slack responds", async () => {

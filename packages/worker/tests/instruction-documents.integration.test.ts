@@ -13,7 +13,7 @@ test("Given a published setup artifact, When a user downloads the original setup
         platform: "browser",
         target: "es2022",
         external: ["node:*", "cloudflare:*"],
-        loader: { ".md": "text" },
+        loader: { ".md": "text", ".sql": "text" },
     });
     const output = bundle.outputFiles[0];
     if (output === undefined) {
@@ -69,7 +69,7 @@ test("Given rendered pairing instructions at the edge, When users fetch differen
         platform: "browser",
         target: "es2022",
         external: ["node:*", "cloudflare:*"],
-        loader: { ".md": "text" },
+        loader: { ".md": "text", ".sql": "text" },
     });
     const output = bundle.outputFiles[0];
     if (output === undefined) {
