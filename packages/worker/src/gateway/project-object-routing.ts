@@ -5,7 +5,7 @@ import type { CloudBindings } from "../infra/cloud-bindings.ts";
 interface ProjectObjectNamespace {
     readonly get: (
         id: unknown,
-        options?: { readonly locationHint?: "apac" | "wnam" },
+        options?: { readonly locationHint?: "apac" | "apac-ne" | "apac-se" | "wnam" },
     ) => { readonly fetch: (request: Request) => Promise<Response> };
     readonly idFromName: (name: string) => unknown;
 }

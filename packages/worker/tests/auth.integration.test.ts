@@ -140,23 +140,25 @@ async function createAnonymousUser(
 }
 
 test.each([
-    ["AS", "apac"],
-    ["OC", "apac"],
-    ["NA", "wnam"],
-    ["SA", "wnam"],
-    ["EU", "wnam"],
-    ["AF", "wnam"],
-    ["AN", "wnam"],
-    ["unknown", "apac"],
+    ["AS", "CN", "apac-ne"],
+    ["AS", "SG", "apac-se"],
+    ["AS", "IN", "apac"],
+    ["OC", "AU", "apac"],
+    ["NA", "US", "wnam"],
+    ["SA", "BR", "wnam"],
+    ["EU", "DE", "wnam"],
+    ["AF", "ZA", "wnam"],
+    ["AN", "AQ", "wnam"],
+    ["unknown", "US", "apac"],
 ])(
-    "Given a visitor geolocated to %s, When Chat provisions their workspace, Then Platform places it in %s and retains it when they travel",
-    async (continent, region) => {
+    "Given a visitor geolocated to %s/%s, When Chat provisions their workspace, Then Platform places it in %s and retains it when they travel",
+    async (continent, country, region) => {
         // Cloudflare supplies cf metadata on incoming Requests; Node does not.
         class GeolocatedRequest extends Request {
-            override readonly cf: { readonly continent: string };
-            constructor(request: Request, continent: string) {
+            override readonly cf: { readonly continent: string; readonly country: string };
+            constructor(request: Request, continent: string, country: string) {
                 super(request);
-                this.cf = { continent };
+                this.cf = { continent, country };
             }
         }
         const environment = slackConfiguration();
@@ -167,6 +169,7 @@ test.each([
                     headers: { "cf-ipcountry": "US" },
                 }),
                 continent,
+                country,
             ),
             environment,
         );
@@ -179,7 +182,8 @@ test.each([
         const response = await worker.fetch(projectRequest(), environment);
         expect(response.status).toBe(200);
         const initial = v.parse(v.object({ project: v.object({ projectId: v.string() }) }), await response.json());
-        expect(initial.project.projectId).toMatch(new RegExp(`^prj_${region === "apac" ? "ap" : "wn"}_01_`));
+        const projectCode = { apac: "ap", "apac-ne": "an", "apac-se": "as", wnam: "wn" }[region];
+        expect(initial.project.projectId).toMatch(new RegExp(`^prj_${projectCode}_01_`));
         const revisited = await worker.fetch(
             new GeolocatedRequest(
                 new Request(projectRequest(), {
@@ -190,7 +194,8 @@ test.each([
                     },
                     body: JSON.stringify({ displayName: "Personal workspace" }),
                 }),
-                region === "apac" ? "NA" : "AS",
+                region === "wnam" ? "AS" : "NA",
+                region === "wnam" ? "CN" : "US",
             ),
             environment,
         );

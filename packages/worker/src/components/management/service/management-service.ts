@@ -4,9 +4,10 @@ import { ManagementError } from "../entity/management-error.ts";
 import { type PlatformProject, PlatformProjectError } from "../entity/platform-project.ts";
 import type { ManagedBotStorage } from "../storage/managed-bot-storage.ts";
 import type { PlatformProjectStorage } from "../storage/platform-project-storage.ts";
+import type { ProjectLocationHint } from "../util/project-location.ts";
 import type { AuthenticationService } from "./authentication-service.ts";
 
-type LocationHint = "apac" | "wnam" | undefined;
+type LocationHint = ProjectLocationHint | undefined;
 
 interface AuditLogger {
     readonly info: (value: Readonly<Record<string, unknown>>, message: string) => void;
