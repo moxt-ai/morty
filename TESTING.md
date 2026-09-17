@@ -128,7 +128,9 @@ The scenarios fetch the rendered document and generated bundle from the local
 Worker/R2 boundary, then execute the bundle's `runSetup` entrypoint with a real,
 isolated Runtime subprocess. Pair preserves the browser's original Bot and Project;
 standalone setup opens its five-use browser handoff, finds the supplied harness session
-by its native ID, returns a forked continuation, and displays its history. Both reload
+by its native ID, emits a private PNG and terminal QR containing the exact handoff URL,
+returns a forked continuation, and displays its history. The setup acceptance scenario
+decodes the PNG instead of relying on a file-existence or screenshot assertion. Both reload
 the connected Chat view without re-pairing, send a prompt, reload its saved conversation
 or Session, and send a follow-up that receives a fresh reply in the same context.
 Agent inference uses the stateful ACP test agent; Platform provisioning uses the

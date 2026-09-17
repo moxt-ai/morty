@@ -171,6 +171,9 @@ export async function createTestRuntime(harness: E2EHarness) {
                     botId: text(ready.botId, "ready Bot"),
                     url: text(ready.url, "Chat URL"),
                     expiresAt: ready.expiresAt,
+                    qrPath: text(ready.qrPath, "QR path"),
+                    qrText: text(ready.qrText, "terminal QR"),
+                    message: text(ready.message, "ready message"),
                     identity: {
                         botId: text(configuration.bot_id, "saved Bot"),
                         projectId: text(configuration.project_id, "saved Project"),

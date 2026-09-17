@@ -1,5 +1,30 @@
+import { readFile, stat } from "node:fs/promises";
+import jsQrImport from "jsqr";
+import { PNG } from "pngjs";
 import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
+
+test("Given setup creates a browser handoff, When setup becomes ready, Then the exact link and a private QR are available", async ({
+    runtime,
+}) => {
+    const sessionId = "setup-qr-session";
+    await runtime.seedNativeSession(sessionId, "Prepare QR handoff");
+
+    const connected = await runtime.followInstructions("/setup.md", sessionId);
+
+    expect(connected.expiresAt).toBeTruthy();
+    expect(connected.message).toContain("Keep the Runtime online");
+    expect(connected.qrText).toContain("█");
+    expect((await stat(connected.qrPath)).mode & 0o777).toBe(0o600);
+    const image = PNG.sync.read(await readFile(connected.qrPath));
+    const decoder: unknown = jsQrImport;
+    expect(typeof decoder).toBe("function");
+    if (typeof decoder !== "function") {
+        return;
+    }
+    const decoded: unknown = decoder(new Uint8ClampedArray(image.data), image.width, image.height);
+    expect(decoded).toMatchObject({ data: connected.url });
+});
 
 for (const mode of ["pair", "setup"]) {
     test(`Given a user following ${mode}.md, When they pair, chat and reload, Then the agent replies without re-pairing`, async ({

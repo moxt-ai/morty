@@ -20,7 +20,9 @@ Runtime to its current user and Bot and directs the user back to Chat.
 `/setup.md` is reserved for standalone testing and external sharing, including
 social posts. That flow requires the current harness session ID, creates or reuses a
 local identity, and returns a browser handoff carrying the validated harness and native
-session ID. After transfer redemption, Chat finds that native session through the paired
+session ID. The ready result includes the exact URL, its expiry, an owner-only PNG QR
+code, and a terminal-safe QR rendering. The bundled setup CLI decodes the PNG before
+returning it so the QR payload cannot differ from the URL. After transfer redemption, Chat finds that native session through the paired
 Runtime, forks it under an opaque entry capability, records it, and opens the independent
 continuation. Forking allows the originating harness to retain its active writer. Native
 session IDs are not returned by ordinary directory listings.
@@ -45,6 +47,8 @@ and conversation access. Platform independently authorizes SDK operations.
 `packages/setup/src/setup.ts` owns the TypeScript setup implementation. Its CLI
 entrypoint is bundled by Vite into the self-contained `packages/setup/dist/setup.mjs`;
 generated JavaScript is not checked in. `pnpm build` builds it before the application.
+QR encoding, PNG reading, and QR decoding are included in that bundle and do not require
+packages to be installed separately on the user's machine.
 The bundle also exports `runSetup(args, host)` for integrations, with cancellable
 Runtime and clock ports. The CLI supplies the local OS Runtime implementation.
 
