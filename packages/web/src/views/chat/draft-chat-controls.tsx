@@ -11,7 +11,7 @@ export function DraftChatControls({
     onSettings,
 }: {
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "workspace" | "selectAgent" | "draftSettings">;
+    readonly requests: Pick<BotChatApi, "workspace" | "selectAgent" | "agentSettings">;
     readonly disabled: boolean;
     readonly onSettings: (settings: ChatDraftConfiguration | null) => void;
 }) {

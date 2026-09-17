@@ -94,8 +94,8 @@ export function createBotChatRoutes() {
         .post("/bots/:botId/managed-sessions", authenticatedSession, authorizedChat(), async (context) => {
             return privateJson(await context.env.services.chat.managedSessions(context.get("chatScope")));
         })
-        .post("/bots/:botId/draft-settings", authenticatedSession, authorizedChat(120000), async (context) => {
-            return privateJson(await context.env.services.chat.draftSettings(context.get("chatScope")));
+        .post("/bots/:botId/agent-settings", authenticatedSession, authorizedChat(120000), async (context) => {
+            return privateJson(await context.env.services.chat.agentSettings(context.get("chatScope")));
         })
         .post(
             "/bots/:botId/access",

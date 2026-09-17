@@ -1,7 +1,7 @@
 import {
+    decodeAgentSettingsDiscoveredEvent,
     decodeNativeSessionHistory,
     decodeNativeSessionResult,
-    decodeSessionReadyEvent,
 } from "@moxt-ai/mobius-protocol";
 import { createMobiusConversationSession, MobiusBrowserAccessToken, MobiusClient } from "@moxt-ai/mobius-sdk/browser";
 import * as v from "valibot";
@@ -154,14 +154,14 @@ export class BotChatApi {
         const action: "fork" = result.action;
         return { ...stored, result: { ...result, action } };
     };
-    readonly draftSettings = async (botId: string, signal: AbortSignal) => {
+    readonly agentSettings = async (botId: string, signal: AbortSignal) => {
         const result = v.parse(
-            v.object({ bindingId: identifier, ready: v.unknown() }),
-            await this.#request(botId, "draft-settings", {}, signal),
+            v.object({ bindingId: identifier, settings: v.unknown() }),
+            await this.#request(botId, "agent-settings", {}, signal),
         );
         return {
             bindingId: result.bindingId,
-            options: decodeSessionReadyEvent(JSON.stringify(result.ready)).configOptions,
+            options: decodeAgentSettingsDiscoveredEvent(JSON.stringify(result.settings)).configOptions,
         };
     };
     readonly createPairingInstruction = async (botId: string, signal: AbortSignal) => {
@@ -302,7 +302,7 @@ export class BotChatApi {
         const signal = AbortSignal.any([
             parent,
             AbortSignal.timeout(
-                operation.startsWith("native-session") || operation === "draft-settings" ? 120000 : 45000,
+                operation.startsWith("native-session") || operation === "agent-settings" ? 120000 : 45000,
             ),
         ]);
         const requestedBotId = v.parse(identifier, botId);

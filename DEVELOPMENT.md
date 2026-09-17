@@ -152,8 +152,8 @@ Conversation credential operations and `client/session` browser requests. The SD
 places the Project ID in the path for Durable Object routing. Deploy Chat's updated SDK
 together with the corresponding Platform endpoint cutover.
 New Conversation opens a browser-local draft. Its Harness selector chooses a paired
-agent; a temporary Project Session prepares that agent's model options and is deleted
-after preparation. First Send materializes the draft as a Mobius Session with the selected
+agent; Chat discovers that agent's settings directly without creating a temporary Session.
+First Send materializes the draft as a Mobius Session with the selected
 model and approved Bot binding. The Conversation API is the creation and access path for
 these Sessions; it is not a separate user-facing chat type. Existing Sessions created by
 that path reopen by Conversation ID, including credential refresh, and keep their harness fixed.

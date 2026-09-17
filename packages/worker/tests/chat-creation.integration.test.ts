@@ -16,7 +16,7 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 test.each([true, false])(
-    "Given a paired workspace with settings available=%s, When a draft loads models and sends, Then temporary sessions are released and chat access reports its server timings",
+    "Given a paired workspace with settings available=%s, When a draft loads models and sends, Then settings are discovered without retaining a Session and chat access reports its server timings",
     async (settingsAvailable) => {
         const platform = await platformPeer({ activeBots: true, settingsAvailable });
         const database = new InMemoryD1Database();
@@ -82,12 +82,16 @@ test.each([true, false])(
             expect(await (await request(`chat/bots/${bot.botId}/managed-sessions`, {})).json()).toEqual({
                 sessions: [],
             });
-            const prepared = await request(`chat/bots/${bot.botId}/draft-settings`, {});
+            const prepared = await request(`chat/bots/${bot.botId}/agent-settings`, {});
             expect(prepared.status).toBe(settingsAvailable ? 200 : 409);
             if (settingsAvailable) {
                 expect(await prepared.json()).toMatchObject({
                     bindingId: "binding-1",
-                    ready: { configOptions: [expect.objectContaining({ id: "model", currentValue: "model-one" })] },
+                    settings: {
+                        configOptions: expect.arrayContaining([
+                            expect.objectContaining({ id: "model", currentValue: "model-one" }),
+                        ]),
+                    },
                 });
             }
             const projectClient = new MobiusClient({

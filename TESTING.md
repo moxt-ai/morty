@@ -185,8 +185,8 @@ HTTP integration tests cover identity creation, Bot ownership, and authorization
 
 Given a paired workspace, When the user opens Chat or clicks New Conversation,
 Then the composer opens a local draft with Harness to the left of Model. Loading
-the model inventory may prepare a temporary settings Session, which is deleted
-after preparation; it must not create a Conversation or issue Conversation access.
+the model inventory discovers the selected Agent's settings directly; it must not
+create a Session or Conversation or issue Conversation access.
 
 Given a draft with a selected harness, model, and prompt, When the user sends,
 Then a new Conversation is created with that configuration and the prompt is

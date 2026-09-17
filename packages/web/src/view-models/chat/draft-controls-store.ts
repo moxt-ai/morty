@@ -33,7 +33,7 @@ function wait(signal: AbortSignal): Promise<void> {
 
 export const createDraftControlsStore = (
     botId: string,
-    requests: Pick<BotChatApi, "workspace" | "selectAgent" | "draftSettings">,
+    requests: Pick<BotChatApi, "workspace" | "selectAgent" | "agentSettings">,
     onSettings: (settings: ChatDraftConfiguration | null) => void,
 ) =>
     createStore<DraftControlsStore>()((set, get) => {
@@ -50,7 +50,7 @@ export const createDraftControlsStore = (
                         selected !== null &&
                         (selectedHarness === "" || `${selected.runtimeId}:${selected.agentRef}` === selectedHarness)
                     ) {
-                        const result = await requests.draftSettings(botId, signal);
+                        const result = await requests.agentSettings(botId, signal);
                         signal.throwIfAborted();
                         set({ settings: { kind: "ready", workspace, ...result } });
                         const model = result.options.find(

@@ -89,10 +89,15 @@ export class ChatService {
         sessions: await this.#chatSessions.list(scope.projectId, scope.userId, scope.botId, scope.signal),
     });
 
-    readonly draftSettings = async (scope: ChatScope) => {
-        const settings = await this.#platform.draftSettings(scope.projectId, scope.botId, scope.userId, scope.signal);
+    readonly agentSettings = async (scope: ChatScope) => {
+        const settings = await this.#platform.agentSettings(scope.projectId, scope.botId, scope.userId, scope.signal);
         this.#logger.info(
-            { event: "chat-settings-prepared", userId: scope.userId, projectId: scope.projectId, botId: scope.botId },
+            {
+                event: "chat-agent-settings-discovered",
+                userId: scope.userId,
+                projectId: scope.projectId,
+                botId: scope.botId,
+            },
             "Chat audit event",
         );
         return settings;

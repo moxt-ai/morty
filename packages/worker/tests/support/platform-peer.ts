@@ -31,6 +31,18 @@ function readySession(sessionId: string, currentValue = "model-one") {
         },
         configOptions: [
             {
+                id: "permission_mode",
+                name: "Permissions",
+                description: "Session permissions",
+                booleanValue: false,
+                category: "_mobius_permission",
+                type: "select",
+                currentValue: "workspace-write",
+                values: [
+                    { name: "Workspace write", value: "workspace-write", description: "", groupId: "", groupName: "" },
+                ],
+            },
+            {
                 id: "model",
                 name: "Model",
                 description: "Session model",
@@ -42,6 +54,16 @@ function readySession(sessionId: string, currentValue = "model-one") {
                     { name: "Model One", value: "model-one", description: "", groupId: "", groupName: "" },
                     { name: "Model Two", value: "model-two", description: "", groupId: "", groupName: "" },
                 ],
+            },
+            {
+                id: "reasoning_effort",
+                name: "Reasoning effort",
+                description: "Session reasoning effort",
+                booleanValue: false,
+                category: "thought_level",
+                type: "select",
+                currentValue: "high",
+                values: [{ name: "High", value: "high", description: "", groupId: "", groupName: "" }],
             },
         ],
     };
@@ -470,6 +492,35 @@ export async function platformPeer({
                 );
                 return;
             }
+        }
+        const agentSettingsPath = request.url?.match(
+            /^\/mobius\/api\/v1\/projects\/([^/]+)\/runtimes\/([^/]+)\/agent-settings$/u,
+        );
+        if (request.method === "POST" && agentSettingsPath !== undefined && agentSettingsPath !== null) {
+            const input = v.parse(
+                v.strictObject({
+                    additionalDirectoryIds: v.array(v.string()),
+                    agentId: v.string(),
+                    directoryId: v.string(),
+                }),
+                JSON.parse(body),
+            );
+            response.writeHead(settingsAvailable ? 200 : 409).end(
+                JSON.stringify(
+                    settingsAvailable
+                        ? {
+                              kind: "agent.settings.discovered",
+                              requestId: "discover-settings",
+                              agentId: input.agentId,
+                              agentName: "Agent One",
+                              agentVersion: "1",
+                              directoryId: input.directoryId,
+                              configOptions: readySession("settings").configOptions,
+                          }
+                        : { error: { code: "agent_unavailable", message: "The settings agent is unavailable" } },
+                ),
+            );
+            return;
         }
         const runtimePath = request.url?.match(/^\/mobius\/api\/v1\/projects\/([^/]+)\/runtimes$/u);
         if (

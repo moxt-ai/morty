@@ -151,7 +151,7 @@ export function BotChatHome({
         | "connectSession"
         | "createPairingInstruction"
         | "createConversation"
-        | "draftSettings"
+        | "agentSettings"
     >;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
     readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;

@@ -6,12 +6,11 @@ import {
     MobiusTimeoutError,
 } from "@moxt-ai/mobius-sdk/platform";
 import {
-    DEFAULT_AGENT_EXECUTION_CONFIGURATION,
+    type AgentExecutionConfiguration,
     MobiusActiveBotState,
     MobiusBotOwnerClient,
     MobiusClient,
     MobiusNoBotCompletionPolicy,
-    MobiusRecordingPolicy,
     MobiusRuntimePairingRequest,
 } from "@moxt-ai/mobius-sdk/server";
 import * as v from "valibot";
@@ -33,6 +32,49 @@ export type ChatConversationInput =
               Parameters<MobiusBotOwnerClient["createProjectConversation"]>[0]["configuration"]
           >;
       };
+
+type DiscoveredAgentSettings = Awaited<ReturnType<MobiusClient["runtimes"]["discoverAgentSettings"]>>;
+
+function executionConfiguration(settings: DiscoveredAgentSettings): AgentExecutionConfiguration {
+    const permission = settings.configOptions.find((option) => option.id === "permission_mode");
+    const model = settings.configOptions.find(
+        (option) => (option.id === "model" || option.category === "model") && option.type === "select",
+    );
+    const reasoningEffort = settings.configOptions.find(
+        (option) =>
+            (option.id === "reasoning_effort" || option.category === "thought_level") && option.type === "select",
+    );
+    if (
+        permission === undefined ||
+        permission.type !== "select" ||
+        model === undefined ||
+        reasoningEffort === undefined ||
+        !permission.values.some((value) => value.value === permission.currentValue) ||
+        !model.values.some((value) => value.value === model.currentValue) ||
+        !reasoningEffort.values.some((value) => value.value === reasoningEffort.currentValue)
+    ) {
+        throw new PlatformProjectError(
+            "PLATFORM_INVALID_RESPONSE",
+            "Platform returned incomplete Agent execution settings.",
+            502,
+        );
+    }
+    return {
+        model: {
+            booleanValue: false,
+            configId: model.id,
+            value: model.currentValue,
+            valueType: "select",
+        },
+        permissionMode: permission.currentValue,
+        reasoningEffort: {
+            booleanValue: false,
+            configId: reasoningEffort.id,
+            value: reasoningEffort.currentValue,
+            valueType: "select",
+        },
+    };
+}
 
 const platformTimingMetric = /^([a-z][a-z0-9-]{0,63});dur=(\d+(?:\.\d+)?);desc="([^"\\]{1,120})"$/u;
 
@@ -182,6 +224,28 @@ export class PlatformProjectGateway {
                     409,
                 );
             }
+            const settings = await this.#withProject(
+                projectId,
+                signal,
+                async (projectClient) =>
+                    await projectClient.runtimes.discoverAgentSettings(
+                        input.runtimeId,
+                        {
+                            additionalDirectoryIds: [],
+                            agentId: input.agentRef,
+                            directoryId: input.workspaceRef,
+                        },
+                        signal,
+                    ),
+                120000,
+            );
+            if (settings.agentId !== input.agentRef || settings.directoryId !== input.workspaceRef) {
+                throw new PlatformProjectError(
+                    "PLATFORM_INVALID_RESPONSE",
+                    "Platform returned settings for an unexpected Agent.",
+                    502,
+                );
+            }
             const activeBehavior =
                 activeState instanceof MobiusActiveBotState
                     ? behaviors.behaviorRevisions.find(
@@ -211,7 +275,7 @@ export class PlatformProjectGateway {
                     expectedRevision: bot.lifecycleRevision,
                     allowedDeliveryTargetIds: [],
                     completionPolicy: new MobiusNoBotCompletionPolicy(),
-                    executionConfiguration: DEFAULT_AGENT_EXECUTION_CONFIGURATION,
+                    executionConfiguration: executionConfiguration(settings),
                 },
                 signal,
             );
@@ -433,7 +497,7 @@ export class PlatformProjectGateway {
             120000,
         );
 
-    readonly draftSettings = async (projectId: string, botId: string, userId: string, signal: AbortSignal) =>
+    readonly agentSettings = async (projectId: string, botId: string, userId: string, signal: AbortSignal) =>
         await this.#withBot(projectId, botId, userId, signal, async (owner, bot) => {
             const state = bot.state;
             if (!(state instanceof MobiusActiveBotState)) {
@@ -448,38 +512,23 @@ export class PlatformProjectGateway {
                 projectId,
                 signal,
                 async (client) => {
-                    const sessionId = `settings-${crypto.randomUUID()}`;
-                    try {
-                        await client.sessions.create(
-                            {
-                                sessionId,
-                                runtimeId: binding.runtimeId,
-                                agentId: binding.agentRef,
-                                directoryId: binding.workspaceRef,
-                                bindingId: binding.bindingId,
-                                title: "Chat settings",
-                                policy: new MobiusRecordingPolicy("summary", 60000, 10, 1024),
-                            },
-                            signal,
+                    const settings = await client.runtimes.discoverAgentSettings(
+                        binding.runtimeId,
+                        {
+                            additionalDirectoryIds: [],
+                            agentId: binding.agentRef,
+                            directoryId: binding.workspaceRef,
+                        },
+                        signal,
+                    );
+                    if (settings.agentId !== binding.agentRef || settings.directoryId !== binding.workspaceRef) {
+                        throw new PlatformProjectError(
+                            "PLATFORM_INVALID_RESPONSE",
+                            "Platform returned unexpected harness settings.",
+                            502,
                         );
-                        const ready = await client.sessions.prepare(sessionId, signal);
-                        if (ready.sessionId !== sessionId || ready.agentId !== binding.agentRef) {
-                            throw new PlatformProjectError(
-                                "PLATFORM_INVALID_RESPONSE",
-                                "Platform returned unexpected harness settings.",
-                                502,
-                            );
-                        }
-                        return { bindingId: binding.bindingId, ready };
-                    } finally {
-                        // Cleanup must also run after the caller cancels preparation.
-                        await client.sessions.delete(sessionId, AbortSignal.timeout(15000)).catch((cause: unknown) => {
-                            signal.throwIfAborted();
-                            if (!(cause instanceof MobiusApiError && cause.status === 404)) {
-                                throw cause;
-                            }
-                        });
                     }
+                    return { bindingId: binding.bindingId, settings };
                 },
                 120000,
             );
