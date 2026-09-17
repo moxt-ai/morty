@@ -67,56 +67,34 @@ pnpm build:setup
 pnpm exec wrangler r2 object put mobius-chat-local-apac-attachments/artifacts/setup.mjs --file packages/setup/dist/setup.mjs --local
 ```
 
-### Project-ID regional routing
+### Project Durable Objects
 
 After this, a user can reload a Project workspace through the same Chat origin
-and have its request authenticated by the corresponding regional Chat Worker.
-The public Worker routes Project-scoped requests using the validated Project ID;
-pairing/transfer redemption uses the Project encoded in its existing ticket.
-Anonymous creation chooses a region from Cloudflare request metadata, with the
-configured location hint as fallback. Client-provided region headers have no
-authority. Regional backends still authenticate the user and check ownership.
+and have its request authenticated inside that Project's Durable Object. The
+public Worker validates the Project ID and resolves one SQLite-backed object by
+name. Pairing and transfer redemption use the Project encoded in their tickets;
+Slack HTTP and queue deliveries use their validated Project context.
 
-Regional backends decode Project placement locally rather than calling Platform's
-storage-placement endpoint. They call Platform's public API, whose own router
-selects the regional Platform backend. A mismatched Project sent directly to a
-Chat backend returns HTTP 421. Requests without Project context otherwise retain
-their existing entrypoint, as do queue consumers.
+Anonymous creation first creates the Platform Project using Cloudflare request
+metadata as the location hint, then initializes the corresponding Chat object.
+The Project ID supplies the Durable Object placement hint and selects the APAC or
+WNAM attachment bucket. Client-provided region headers have no authority.
 
-`regional-placement.json` controls explicit placement hints for each backend.
-The public Worker has placement disabled; regional Workers use service-binding
-`fetch()` and explicit cloud-region hints. Hints are not exact-city guarantees.
-Existing D1/R2 resources, queue producers, and the public Worker's Durable Object
-namespace are shared. Regional Workers do not own queue consumers.
-
-Each product owns a small `wrangler.regional.template.json` containing only
-regional overrides: Worker name, entrypoint, placement hint, logical region, and
-deployment flags. Shared D1/R2/KV bindings, compatibility settings, variables,
-and other common settings are inherited from the existing configuration.
-The renderer JSON-encodes `<%% name %%>` substitutions and rejects missing or
-unresolved placeholders before writing valid JSON. Deployment renders configurations from the Vite-built Worker using
-`third-party/mobius/packages/relay-cloudflare-platform/scripts/regional-workers.ts`.
-Both regional backends deploy before the public router. Configure the runtime
-variables and secrets in the corresponding GitHub Environment. Deployment validates
-them with `scripts/validate-worker-config.ts`, then supplies them to both regional
-Workers and the public Worker using Wrangler's `--var` and `--secrets-file` options.
-Existing Worker secret values are not read or copied.
+Each object owns all relational Chat, identity, and Slack state for one Project.
+Schema migrations run transactionally when the object starts. Chat has no D1
+binding and no regional backend Workers. The public Worker and object class deploy
+together. Runtime variables and secrets come from the corresponding GitHub
+Environment and are validated before deployment.
 
 CI validates staging configuration for pull requests, merge groups, and ordinary
 main pushes. A manual deployment validates its selected environment. Production
 configuration is also validated inside the production deployment job after its
 environment approval; it must not gate a staging deployment.
 
-To generate configs for inspection after `pnpm build:staging`:
+To inspect the deployment after `pnpm build:staging`:
 
 ```bash
-node third-party/mobius/packages/relay-cloudflare-platform/scripts/regional-workers.ts \
-  --config wrangler.jsonc --built --env staging \
-  --template wrangler.regional.template.json \
-  --placement regional-placement.json \
-  --output .wrangler/regional/staging
-pnpm exec wrangler deploy --config .wrangler/regional/staging/apac.json --dry-run
-pnpm exec wrangler deploy --config .wrangler/regional/staging/wnam.json --dry-run
+pnpm exec wrangler deploy --env staging --dry-run
 ```
 
 Feature logic stays below `packages/worker/src/components`:
@@ -135,32 +113,23 @@ deployment. Shared runtime helpers remain directly under `packages/worker/src/in
 
 ## Storage
 
-Every environment binds regional D1 databases as `CHAT_DATABASE_APAC` and
-`CHAT_DATABASE_WNAM`, with corresponding `CHAT_ATTACHMENTS_APAC` and
-`CHAT_ATTACHMENTS_WNAM` R2 buckets. Chat resolves the caller-supplied Project through
-Platform's public storage-placement endpoint, which returns only `{ location: string }`,
-and verifies ownership separately. Chat accepts `apac` or `wnam` and selects its own
-regional database and attachment bucket from that location.
+Every Project has a SQLite-backed `ProjectDurableObject`. The validated Project ID
+selects the object and its `CHAT_ATTACHMENTS_APAC` or `CHAT_ATTACHMENTS_WNAM` R2
+bucket. The object verifies user ownership independently.
 The browser persists `{ userId, projectId }`. Chat requests use
 `/mobius-cloud/api/chat/projects/:projectId/...`; project-scoped identity and
 management requests use `/mobius-cloud/api/projects/:projectId/...`.
-The path selects regional storage before authentication; ownership is checked
-independently inside the selected Project. Project headers are not used.
+The path selects the Project object before authentication; ownership is checked
+inside the selected Project. Project headers are not used.
 Only one-time pairing and transfer tickets embed Project context; anonymous
-credentials are opaque. Apply the schema locally with:
-
-```sh
-pnpm exec wrangler d1 migrations apply CHAT_DATABASE_APAC --local
-pnpm exec wrangler d1 migrations apply CHAT_DATABASE_WNAM --local
-```
-
-Staging and production resources are named in `wrangler.jsonc`. Apply remote
-migrations with the matching Wrangler environment.
+credentials are opaque. The object applies the SQL files in
+`packages/worker/migrations` automatically and records their versions locally.
+Staging and production R2 resources are named in `wrangler.jsonc`.
 
 Slack management requests supply a `projectId` query parameter. Generated Slack
 event and OAuth callback URLs, and attachment links, carry a `projectId` query
 parameter. Queue deliveries contain `{ projectId, message }` so asynchronous
-processing resolves the same regional bindings. Callback routing does not replace
+processing resolves the same Project object. Callback routing does not replace
 Slack signature or OAuth-state validation.
 
 Clerk binding returns only the Chat user ID. Discarding a conflicting local
@@ -176,7 +145,7 @@ ownership. The browser uses `createMobiusConversationSession` to communicate dir
 with Mobius, including history, messages, events, and credential refresh.
 Project-scoped Mobius APIs share `/mobius/api/v1/projects/:projectId/...`, including
 Conversation credential operations and `client/session` browser requests. The SDK
-places the Project ID in the path for regional routing. Deploy Chat's updated SDK
+places the Project ID in the path for Durable Object routing. Deploy Chat's updated SDK
 together with the corresponding Platform endpoint cutover.
 New Conversation opens a browser-local draft. Its Harness selector chooses a paired
 agent; a temporary Project Session prepares that agent's model options and is deleted
@@ -195,8 +164,8 @@ the directory returns metadata only, selecting an entry fetches its history from
 Session. Cancelling the dialog creates no Chat-managed record. After import or fork, the
 result uses the normal Session message surface and can be stopped from the composer.
 Imported and forked Sessions reopen by `sessionId` in the saved page URL. Apply migrations
-`0006_chat_managed_session.sql` and `0007_chat_managed_import.sql` to both regional
-Chat databases before deployment.
+`0006_chat_managed_session.sql` and `0007_chat_managed_import.sql` through the Durable
+Object schema migrator before serving a Project.
 The Worker discovers, imports, and forks native sessions through the Project SDK. Its
 `session-access` endpoint issues credentials scoped to the selected Session inside
 the user's Project. The browser uses those credentials with the Session SDK to

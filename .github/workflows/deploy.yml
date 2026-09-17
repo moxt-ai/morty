@@ -86,14 +86,6 @@ jobs:
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
-      - name: Generate regional Worker configurations
-        run: >-
-          node third-party/mobius/packages/relay-cloudflare-platform/scripts/regional-workers.ts
-          --config wrangler.jsonc --built --env "${{ inputs.environment }}"
-          --template wrangler.regional.template.json
-          --placement regional-placement.json
-          --output ".wrangler/regional/${{ inputs.environment }}"
-
       - name: Validate GitHub runtime configuration
         env:
           APP_ORIGIN: ${{ vars.APP_ORIGIN }}

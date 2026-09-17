@@ -4,8 +4,8 @@ import { ManagementError } from "../components/management/entity/management-erro
 import { platformIdentifier } from "../components/management/entity/platform-project.ts";
 import { readProjectCredential } from "../components/management/entity/project-credential.ts";
 import { type ApplicationContext, createApplicationDependencies } from "../composition/application-context.ts";
-import { projectBindings } from "../composition/chat-shards.ts";
-import { routeRegionalChat } from "../gateway/regional-chat-routing.ts";
+import { projectBindings } from "../composition/project-bindings.ts";
+import { routeProjectObject } from "../gateway/project-object-routing.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 import { readJsonBody } from "./body-parser.ts";
 
@@ -16,7 +16,7 @@ export const cloudProjectContext = createMiddleware<{
     const request = context.req.raw;
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(20000)]);
     const projectId = await cloudProjectId(request);
-    const routed = await routeRegionalChat(request, context.env, projectId);
+    const routed = await routeProjectObject(request, context.env, projectId);
     if (routed !== null) {
         return routed;
     }
@@ -33,7 +33,7 @@ export const slackProjectContext = createMiddleware<{
     if (projectId === undefined) {
         throw new ManagementError("PROJECT_REQUIRED", "Project context is required.", 400);
     }
-    const routed = await routeRegionalChat(context.req.raw, context.env, projectId);
+    const routed = await routeProjectObject(context.req.raw, context.env, projectId);
     if (routed !== null) {
         return routed;
     }
@@ -42,7 +42,7 @@ export const slackProjectContext = createMiddleware<{
     return await next();
 });
 
-async function cloudProjectId(request: Request): Promise<string | null> {
+export async function cloudProjectId(request: Request): Promise<string | null> {
     const path = new URL(request.url).pathname;
     if (path.startsWith("/mobius-cloud/api/projects/")) {
         const projectId = path.split("/")[4];

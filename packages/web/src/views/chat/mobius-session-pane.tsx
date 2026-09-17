@@ -1,4 +1,6 @@
 import {
+    type AgentDisplayContent,
+    decodeAgentContentEvent,
     decodeSessionElicitationRequestedEvent,
     decodeSessionElicitationResolvedEvent,
     decodeSessionPermissionRequestedEvent,
@@ -9,6 +11,7 @@ import {
     MobiusElicitationResponseRequest,
     MobiusPermissionResponseRequest,
     MobiusRunningAttemptSummary,
+    type MobiusSessionEvent,
     MobiusTurnCompletedEvent,
     MobiusTurnFailedEvent,
     MobiusTurnStartedEvent,
@@ -27,7 +30,7 @@ import {
 import { Select } from "../../components/ui/option-select.tsx";
 import { type RecordedAgentActivity, recordAgentActivity } from "../../services/chat/agent-activities.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
-import { MobiusSessionMessage, type SessionMessage } from "./mobius-session-message.tsx";
+import { MobiusSessionMessage, type SessionMessage, type SessionMessageContent } from "./mobius-session-message.tsx";
 import type { OpenMobiusSession } from "./native-session-dialog.tsx";
 
 type Operation =
@@ -113,6 +116,71 @@ function replaceInteraction(
     return replacement === null ? remaining : [...remaining, replacement];
 }
 
+function historyContents(
+    images: readonly { readonly data: string; readonly mimeType: string; readonly name: string }[] | undefined,
+): readonly SessionMessageContent[] {
+    return (images ?? []).map((image, index) => ({
+        contentId: `history-image-${index.toString()}`,
+        content: {
+            artifactId: "",
+            data: image.data,
+            mimeType: image.mimeType,
+            name: image.name,
+            newText: "",
+            oldText: "",
+            path: "",
+            terminalId: "",
+            text: "",
+            type: "image",
+            uri: "",
+        },
+    }));
+}
+
+function replaceMessageContent(
+    messages: readonly SessionMessage[],
+    commandId: string,
+    contentId: string,
+    content: AgentDisplayContent,
+): readonly SessionMessage[] {
+    return messages.map((message) => {
+        if (message.role !== "assistant" || message.commandId !== commandId) {
+            return message;
+        }
+        return {
+            ...message,
+            contents: [
+                ...message.contents.filter((candidate) => candidate.contentId !== contentId),
+                { contentId, content },
+            ],
+        };
+    });
+}
+
+function recordedContent(event: MobiusSessionEvent): {
+    readonly commandId: string;
+    readonly content: AgentDisplayContent;
+    readonly contentId: string;
+} | null {
+    if (!(event.payload instanceof MobiusControlEvent) || event.payload.kind !== "agent.content") {
+        return null;
+    }
+    const decoded = decodeAgentContentEvent(event.payload.encodedPayload);
+    return { commandId: decoded.commandId, content: decoded.content, contentId: decoded.contentId };
+}
+
+function applyRecordedContents(
+    messages: readonly SessionMessage[],
+    events: readonly MobiusSessionEvent[],
+): readonly SessionMessage[] {
+    return events.reduce((current, event) => {
+        const recorded = recordedContent(event);
+        return recorded === null
+            ? current
+            : replaceMessageContent(current, recorded.commandId, recorded.contentId, recorded.content);
+    }, messages);
+}
+
 export function MobiusSessionPane({
     session,
     botId,
@@ -127,8 +195,15 @@ export function MobiusSessionPane({
             ? session.result.history.messages.map((message, index): SessionMessage => {
                   const id = `history-${index}`;
                   return message.role === "user"
-                      ? { id, role: "user", text: message.text }
-                      : { id, role: "assistant", text: message.text, attempt: null, commandId: null };
+                      ? { id, role: "user", text: message.text, contents: historyContents(message.images) }
+                      : {
+                            id,
+                            role: "assistant",
+                            text: message.text,
+                            attempt: null,
+                            commandId: null,
+                            contents: historyContents(message.images),
+                        };
               })
             : [],
     );
@@ -209,17 +284,23 @@ export function MobiusSessionPane({
                     ? history.messages.map(
                           (message, index): SessionMessage =>
                               message.role === "user"
-                                  ? { id: `history-${index}`, role: "user", text: message.text }
+                                  ? {
+                                        id: `history-${index}`,
+                                        role: "user",
+                                        text: message.text,
+                                        contents: historyContents(message.images),
+                                    }
                                   : {
                                         id: `history-${index}`,
                                         role: "assistant",
                                         text: message.text,
                                         attempt: null,
                                         commandId: null,
+                                        contents: historyContents(message.images),
                                     },
                       )
                     : [];
-            setMessages([
+            const restoredMessages: readonly SessionMessage[] = [
                 ...initial,
                 ...[...saved.messages]
                     .reverse()
@@ -228,19 +309,25 @@ export function MobiusSessionPane({
                             history.status !== "available" || !history.coveredCommandIds.includes(message.commandId),
                     )
                     .flatMap((message): readonly SessionMessage[] => [
-                        { id: `${message.commandId}-user`, role: "user", text: message.prompt },
+                        { id: `${message.commandId}-user`, role: "user", text: message.prompt, contents: [] },
                         {
                             id: `${message.commandId}-reply`,
                             role: "assistant",
                             text: message.response,
                             attempt: message.attempt,
                             commandId: message.commandId,
+                            contents: message.contents.map((content, index) => ({
+                                contentId: `saved-content-${index.toString()}`,
+                                content,
+                            })),
                         },
                     ]),
-            ]);
+            ];
+            controller.signal.throwIfAborted();
+            setMessages(restoredMessages);
             const subscription = await client.events.subscribe(
                 sessionId,
-                "",
+                saved.tailEventCursor,
                 {
                     receive: async (event) => {
                         const payload = event.payload;
@@ -249,7 +336,9 @@ export function MobiusSessionPane({
                             return true;
                         }
                         if (payload instanceof MobiusControlEvent) {
-                            if (payload.kind === "session.permission.requested") {
+                            if (payload.kind === "agent.content") {
+                                setMessages((current) => applyRecordedContents(current, [event]));
+                            } else if (payload.kind === "session.permission.requested") {
                                 const permission = decodeSessionPermissionRequestedEvent(payload.encodedPayload);
                                 setInteractions((current) =>
                                     replaceInteraction(current, permission.interactionId, {
@@ -380,8 +469,8 @@ export function MobiusSessionPane({
         setAttachments([]);
         setMessages((current) => [
             ...current,
-            { id: commandId, role: "user", text: displayPrompt },
-            { id: `${commandId}-reply`, role: "assistant", text: "", attempt: null, commandId },
+            { id: commandId, role: "user", text: displayPrompt, contents: [] },
+            { id: `${commandId}-reply`, role: "assistant", text: "", attempt: null, commandId, contents: [] },
         ]);
         setOperation({ kind: "sending", commandId });
         try {
@@ -550,6 +639,7 @@ export function MobiusSessionPane({
                             activeCommandId={activeCommandId}
                             sessionId={sessionId}
                             botId={botId}
+                            client={connection.kind === "ready" ? connection.client : null}
                         />
                     </div>
                 ))}

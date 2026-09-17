@@ -191,10 +191,6 @@ export class LocalStack {
     }
 
     async startChat(application: { readonly appId: string; readonly appSecret: string }) {
-        await migrate(this.harness, chatConfiguration, "CHAT_DATABASE_WNAM", this.directories.chat);
-        await this.harness.stage("migrate-chat", () =>
-            migrate(this.harness, chatConfiguration, "CHAT_DATABASE_APAC", this.directories.chat),
-        );
         const { publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
         const variables = {
             APP_ORIGIN: this.chatOrigin,

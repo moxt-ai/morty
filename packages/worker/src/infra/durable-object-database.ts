@@ -1,0 +1,97 @@
+import management from "../../migrations/0001_initial.sql?raw";
+import anonymousIdentity from "../../migrations/0002_anonymous_identity.sql?raw";
+import platformProject from "../../migrations/0003_platform_project.sql?raw";
+import platformOrigin from "../../migrations/0004_platform_origin.sql?raw";
+import agentPairing from "../../migrations/0005_agent_pairing.sql?raw";
+import managedSession from "../../migrations/0006_chat_managed_session.sql?raw";
+import transferRedemptions from "../../migrations/0007_identity_transfer_redemptions.sql?raw";
+
+const migrations = [
+    management,
+    anonymousIdentity,
+    platformProject,
+    platformOrigin,
+    agentPairing,
+    managedSession,
+    transferRedemptions,
+];
+
+type BoundValue = ArrayBuffer | string | number | null;
+
+function boundValue(value: unknown): BoundValue {
+    if (value instanceof ArrayBuffer) {
+        return value;
+    }
+    if (value === null || typeof value === "string" || typeof value === "number") {
+        return value;
+    }
+    if (typeof value === "boolean") {
+        return value ? 1 : 0;
+    }
+    throw new TypeError("Unsupported SQL binding.");
+}
+
+class DurableObjectStatement {
+    readonly #query: string;
+    readonly #sql: SqlStorage;
+    readonly #values: readonly BoundValue[];
+
+    constructor(sql: SqlStorage, query: string, values: readonly BoundValue[] = []) {
+        this.#sql = sql;
+        this.#query = query;
+        this.#values = values;
+    }
+
+    readonly bind = (...values: readonly unknown[]) =>
+        new DurableObjectStatement(this.#sql, this.#query, values.map(boundValue));
+
+    readonly first = async (column?: string): Promise<unknown> => {
+        const row = this.#sql.exec(this.#query, ...this.#values).toArray()[0] ?? null;
+        return row !== null && column !== undefined ? (row[column] ?? null) : row;
+    };
+
+    readonly all = async () => ({ results: this.#sql.exec(this.#query, ...this.#values).toArray(), success: true });
+
+    readonly run = async () => this.runSynchronously();
+
+    readonly runSynchronously = () => {
+        const cursor = this.#sql.exec(this.#query, ...this.#values);
+        cursor.toArray();
+        return { meta: { changes: cursor.rowsWritten }, success: true };
+    };
+}
+
+export class DurableObjectDatabase {
+    readonly #storage: DurableObjectStorage;
+
+    constructor(storage: DurableObjectStorage) {
+        this.#storage = storage;
+        this.#migrate();
+    }
+
+    readonly prepare = (query: string) => new DurableObjectStatement(this.#storage.sql, query);
+
+    readonly batch = async (statements: readonly DurableObjectStatement[]) =>
+        this.#storage.transactionSync(() => statements.map((statement) => statement.runSynchronously()));
+
+    readonly #migrate = () => {
+        this.#storage.transactionSync(() => {
+            this.#storage.sql.exec(
+                "CREATE TABLE IF NOT EXISTS _chat_schema_migration (version INTEGER PRIMARY KEY NOT NULL)",
+            );
+            const applied = new Set(
+                this.#storage.sql
+                    .exec<{ version: number }>("SELECT version FROM _chat_schema_migration")
+                    .toArray()
+                    .map((row) => row.version),
+            );
+            migrations.forEach((migration, index) => {
+                const version = index + 1;
+                if (!applied.has(version)) {
+                    this.#storage.sql.exec(migration);
+                    this.#storage.sql.exec("INSERT INTO _chat_schema_migration (version) VALUES (?)", version);
+                }
+            });
+        });
+    };
+}
