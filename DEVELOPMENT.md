@@ -83,17 +83,16 @@ selects the regional Platform backend. A mismatched Project sent directly to a
 Chat backend returns HTTP 421. Requests without Project context otherwise retain
 their existing entrypoint, as do queue consumers.
 
-The public Worker and regional backends use Cloudflare Smart Placement. Logical
-APAC and WNAM routing still selects the Project's configured D1 and R2 bindings,
-while Cloudflare places each Worker near the services it accesses. Existing
-D1/R2 resources, queue producers, and the public Worker's Durable Object
+`regional-placement.json` controls explicit placement hints for each backend.
+The public Worker has placement disabled; regional Workers use service-binding
+`fetch()` and explicit cloud-region hints. Hints are not exact-city guarantees.
+Existing D1/R2 resources, queue producers, and the public Worker's Durable Object
 namespace are shared. Regional Workers do not own queue consumers.
 
 Each product owns a small `wrangler.regional.template.json` containing only
-regional overrides: Worker name, entrypoint, smart placement mode, logical
-region, and deployment flags. Shared D1/R2/KV bindings, compatibility settings,
-variables, and other common settings are inherited from the existing
-configuration.
+regional overrides: Worker name, entrypoint, placement hint, logical region, and
+deployment flags. Shared D1/R2/KV bindings, compatibility settings, variables,
+and other common settings are inherited from the existing configuration.
 The renderer JSON-encodes `<%% name %%>` substitutions and rejects missing or
 unresolved placeholders before writing valid JSON. Deployment renders configurations from the Vite-built Worker using
 `third-party/mobius/packages/relay-cloudflare-platform/scripts/regional-workers.ts`.
@@ -114,6 +113,7 @@ To generate configs for inspection after `pnpm build:staging`:
 node third-party/mobius/packages/relay-cloudflare-platform/scripts/regional-workers.ts \
   --config wrangler.jsonc --built --env staging \
   --template wrangler.regional.template.json \
+  --placement regional-placement.json \
   --output .wrangler/regional/staging
 pnpm exec wrangler deploy --config .wrangler/regional/staging/apac.json --dry-run
 pnpm exec wrangler deploy --config .wrangler/regional/staging/wnam.json --dry-run

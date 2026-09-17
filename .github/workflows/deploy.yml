@@ -91,6 +91,7 @@ jobs:
           node third-party/mobius/packages/relay-cloudflare-platform/scripts/regional-workers.ts
           --config wrangler.jsonc --built --env "${{ inputs.environment }}"
           --template wrangler.regional.template.json
+          --placement regional-placement.json
           --output ".wrangler/regional/${{ inputs.environment }}"
 
       - name: Validate GitHub runtime configuration
