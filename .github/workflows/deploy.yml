@@ -101,14 +101,6 @@ jobs:
           SLACK_TOKEN_ENCRYPTION_KEY: ${{ secrets.SLACK_TOKEN_ENCRYPTION_KEY }}
         run: node scripts/validate-worker-config.ts
 
-      - name: Apply Cloud D1 migrations
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
-        run: |
-          pnpm exec wrangler d1 migrations apply CHAT_DATABASE_APAC --env "$DEPLOY_ENVIRONMENT" --remote
-          pnpm exec wrangler d1 migrations apply CHAT_DATABASE_WNAM --env "$DEPLOY_ENVIRONMENT" --remote
-
       - name: Publish setup artifact
         run: >-
           pnpm exec wrangler r2 object put "mobius-chat-${{ inputs.environment }}-apac-attachments/artifacts/setup.mjs"
@@ -143,7 +135,4 @@ jobs:
           while IFS= read -r -d '' binding; do
             args+=(--var "$binding")
           done < <(printf '%s' "$worker_vars" | jq -j 'to_entries[] | .key + ":" + .value + "\u0000"')
-          for region in apac wnam; do
-            pnpm exec wrangler deploy --config ".wrangler/regional/$DEPLOY_ENVIRONMENT/$region.json" --secrets-file "$secrets_file" "${args[@]}"
-          done
           pnpm exec wrangler deploy --env "$DEPLOY_ENVIRONMENT" --secrets-file "$secrets_file" "${args[@]}"
