@@ -19,6 +19,7 @@ import {
     platformIdentifier,
     platformProjectSchema,
 } from "../components/management/entity/platform-project.ts";
+import type { ProjectLocationHint } from "../components/management/util/project-location.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 import type { OperationTiming } from "../infra/operation-timing.ts";
 
@@ -663,7 +664,7 @@ export class PlatformProjectGateway {
         userId: string,
         displayName: string,
         signal: AbortSignal,
-        requestedLocationHint?: "apac" | "wnam",
+        requestedLocationHint?: ProjectLocationHint,
     ) => {
         signal.throwIfAborted();
         const configuration = this.configuration();
