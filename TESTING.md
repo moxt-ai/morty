@@ -118,18 +118,13 @@ The TypeScript scenarios receive a `runtime` fixture from `infra/test.ts`.
 execution and deterministic setup timers; the fixture owns diagnostics and cleanup.
 Scenarios describe user actions and assert visible results. The package's strict
 TypeScript check is included in `pnpm check`.
-The setup scenarios cover both
-instruction journeys. After this, a user can follow `pair.md` or `setup.md`, enter
-the paired Bot's Chat view, send a prompt, and see the agent reply and saved history.
-The scenarios fetch the rendered document and generated bundle from the local
-Worker/R2 boundary, then execute the bundle's `runSetup` entrypoint with a real,
-isolated Runtime subprocess. Pair preserves the browser's original Bot and Project;
-standalone setup opens its five-use browser handoff, finds the supplied harness session
+The setup scenarios cover the standalone `setup.md` journey. They fetch the rendered
+document and generated bundle from the local Worker/R2 boundary, then execute the
+bundle's `runSetup` entrypoint with a real, isolated Runtime subprocess. Standalone
+setup opens its five-use browser handoff, finds the supplied harness session
 by its native ID, emits a private PNG and terminal QR containing the exact handoff URL,
 returns a forked continuation, and displays its history. The setup acceptance scenario
-decodes the PNG instead of relying on a file-existence or screenshot assertion. Both reload
-the connected Chat view without re-pairing, send a prompt, reload its saved conversation
-or Session, and send a follow-up that receives a fresh reply in the same context.
+decodes the PNG instead of relying on a file-existence or screenshot assertion.
 Agent inference uses the stateful ACP test agent; Platform provisioning uses the
 shared local developer-authentication fixture. The browser still loads Clerk's
 hosted SDK, so the suite requires internet access but no Clerk login. Setup
@@ -160,9 +155,12 @@ shows **Delivery unknown** after reload, and only retries after the user chooses
 Given a browser that redeemed a setup entry, ending remote access revokes that entry and
 every credential redeemed from it while the owner's local identity and Runtime remain active.
 
-Run `pnpm test:e2e:opencode` for the live OpenCode browser journey. It is excluded
-from local `pnpm check` and PR/merge-queue CI and runs nightly in GitHub Actions.
-It uses the latest OpenCode release with a local fake LLM provider.
+Run `pnpm test:e2e:opencode` for the OpenCode product journey. It is excluded from
+local `pnpm check` and PR/merge-queue CI and runs nightly in GitHub Actions. It uses
+the latest OpenCode release with a local fake LLM provider. The journey starts at the
+unpaired browser, follows the displayed `pair.md` instruction through the downloaded
+production setup bundle, and continues through the paired Chat, image tool, artifact,
+and browser rendering path. This is the primary pairing acceptance scenario.
 Verify other visual details
 manually with the `agent-browser` CLI against the running application. A first-time
 visitor should

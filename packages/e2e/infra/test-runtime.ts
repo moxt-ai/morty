@@ -1,18 +1,12 @@
-import assert from "node:assert/strict";
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { mock } from "node:test";
-import { pathToFileURL } from "node:url";
 import { chromium } from "playwright-core";
-import type { runSetup as setup } from "../../setup/src/setup.ts";
 import { dataTestId } from "../../web/src/data-testid.ts";
 import { ChatApi, object, text } from "./chat-api.ts";
 import type { E2EHarness } from "./harness.ts";
 import { LocalStack, repository } from "./local-stack.ts";
-
-function isSetupModule(value: unknown): value is { readonly runSetup: typeof setup } {
-    return value !== null && typeof value === "object" && "runSetup" in value && typeof value.runSetup === "function";
-}
+import { followSetupInstructions } from "./setup-instructions.ts";
 
 export async function createTestRuntime(harness: E2EHarness) {
     // The stateful ACP agent implements sessions and replies without requiring
@@ -114,37 +108,13 @@ export async function createTestRuntime(harness: E2EHarness) {
             },
             followInstructions: async (instructionUrl: string, sessionId?: string) => {
                 const url = new URL(instructionUrl, stack.chatOrigin);
-                const document = await fetch(url, { signal: harness.signal, redirect: "error" });
-                assert.equal(document.status, 200);
-                const markdown = await document.text();
-                assert.ok(markdown.includes(`BASE_URL="${stack.chatOrigin}"`));
-                const command = markdown.match(/^node "\$SCRIPT_DIR\/setup\.mjs" (.+)$/mu)?.[1];
-                assert.ok(command);
-                const args = command.split(/\s+/u).map((argument) =>
-                    argument
-                        .replaceAll('"', "")
-                        .replaceAll("$BASE_URL", stack.chatOrigin)
-                        .replaceAll("$HARNESS", "opencode")
-                        .replaceAll("$SESSION_ID", sessionId ?? "")
-                        .replaceAll("$TOKEN", url.searchParams.get("token") ?? ""),
-                );
-                const download = markdown.match(/https?:\/\/[^\s`]+\/setup\.mjs/u)?.[0];
-                assert.ok(download);
-                const response = await fetch(download, { signal: harness.signal, redirect: "error" });
-                assert.equal(response.status, 200);
-                const script = join(harness.workDirectory, "setup.mjs");
-                await writeFile(script, await response.text(), { mode: 0o600 });
-                const bundle: unknown = await import(pathToFileURL(script).href);
-                assert.ok(isSetupModule(bundle));
-                const { runSetup } = bundle;
-                const events: Readonly<Record<string, unknown>>[] = [];
                 mock.timers.enable({ apis: ["Date", "setTimeout"], now: new Date("2026-09-15T12:00:00Z") });
-                let exitCode: number;
                 try {
-                    exitCode = await runSetup(args, {
+                    const result = await followSetupInstructions({
+                        instructionUrl: url.href,
                         documents: harness.workDirectory,
+                        harness: stack.agent.id,
                         signal: harness.signal,
-                        emit: (event) => events.push(event),
                         clock: {
                             now: () => new Date(),
                             wait: async (milliseconds, signal) => {
@@ -156,29 +126,20 @@ export async function createTestRuntime(harness: E2EHarness) {
                             },
                         },
                         runtime: stack.setupRuntime(),
+                        sessionId,
                     });
+                    return {
+                        botId: text(result.ready.botId, "ready Bot"),
+                        url: text(result.ready.url, "Chat URL"),
+                        expiresAt: result.ready.expiresAt,
+                        qrPath: text(result.ready.qrPath, "QR path"),
+                        qrTextPath: text(result.ready.qrTextPath, "terminal QR path"),
+                        message: text(result.ready.message, "ready message"),
+                        identity: result.identity,
+                    };
                 } finally {
                     mock.timers.reset();
                 }
-                assert.equal(exitCode, 0, JSON.stringify(events));
-                const ready = events.find((event) => event.status === "ready");
-                assert.ok(ready);
-                const configuration = object(
-                    JSON.parse(await readFile(join(harness.workDirectory, "mobius-chat/config.json"), "utf8")),
-                    "local configuration",
-                );
-                return {
-                    botId: text(ready.botId, "ready Bot"),
-                    url: text(ready.url, "Chat URL"),
-                    expiresAt: ready.expiresAt,
-                    qrPath: text(ready.qrPath, "QR path"),
-                    qrTextPath: text(ready.qrTextPath, "terminal QR path"),
-                    message: text(ready.message, "ready message"),
-                    identity: {
-                        botId: text(configuration.bot_id, "saved Bot"),
-                        projectId: text(configuration.project_id, "saved Project"),
-                    },
-                };
             },
         };
     } catch (error) {

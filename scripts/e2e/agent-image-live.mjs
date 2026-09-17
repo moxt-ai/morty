@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
 import { buildLocalStack } from "../../packages/e2e/infra/build.ts";
-import { ChatApi, text } from "../../packages/e2e/infra/chat-api.ts";
+import { ChatApi } from "../../packages/e2e/infra/chat-api.ts";
 import { runE2E } from "../../packages/e2e/infra/harness.ts";
 import { LocalStack, repository } from "../../packages/e2e/infra/local-stack.ts";
+import { followSetupInstructions } from "../../packages/e2e/infra/setup-instructions.ts";
+import { dataTestId } from "../../packages/web/src/data-testid.ts";
 import { FakeOpenAiProvider } from "../../third-party/mobius/tests/agent-daemon/providers/openai.ts";
 
 export async function runAgentImageE2E({ answer, expectedTool, model, name, prepareAgent, prompt, providerOptions }) {
@@ -29,7 +31,7 @@ export async function runAgentImageE2E({ answer, expectedTool, model, name, prep
         await harness.attachBrowser(browser, context, page);
         const chat = new ChatApi(stack.chatOrigin, harness.signal);
 
-        await harness.stage("create-browser-identity", async () => {
+        const identity = await harness.stage("open-unpaired-chat", async () => {
             const identityResponse = page.waitForResponse(
                 (response) => new URL(response.url()).pathname === "/mobius-cloud/api/identity/anonymous-users",
                 { timeout: harness.timeoutMilliseconds },
@@ -38,17 +40,23 @@ export async function runAgentImageE2E({ answer, expectedTool, model, name, prep
                 waitUntil: "domcontentloaded",
                 timeout: harness.timeoutMilliseconds,
             });
-            await chat.readBrowserIdentity(await identityResponse);
+            return await chat.readBrowserIdentity(await identityResponse);
         });
 
-        const pairing = await harness.stage("create-runtime-pairing", () => chat.createPairing());
-        await harness.stage("start-mobius", () => stack.startMobius(pairing));
-        const paired = await harness.stage("wait-for-agent", () =>
-            chat.waitForAgent(harness, text(pairing.pairingId, "pairingId"), agent.id, agent.label),
-        );
-        await harness.stage("bind-agent", async () => {
-            await chat.bindAgent(text(paired.runtimeId, "runtimeId"), agent.id);
-            await chat.waitForBinding(harness, agent.id, agent.label);
+        await harness.stage("follow-browser-pairing-instructions", async () => {
+            const instruction = await page.getByTestId(dataTestId.pairingInstruction).inputValue();
+            assert.match(instruction, /^follow /u);
+            const connected = await followSetupInstructions({
+                documents: harness.workDirectory,
+                harness: agent.id,
+                instructionUrl: instruction.slice("follow ".length),
+                runtime: stack.setupRuntime(),
+                signal: harness.signal,
+            });
+            assert.deepEqual(connected.identity, { botId: identity.botId, projectId: identity.projectId });
+            assert.equal(connected.ready.botId, identity.botId);
+            assert.equal(connected.ready.url, stack.chatOrigin);
+            await page.reload({ waitUntil: "domcontentloaded", timeout: harness.timeoutMilliseconds });
         });
 
         const artifactDownload = () =>
@@ -66,11 +74,16 @@ export async function runAgentImageE2E({ answer, expectedTool, model, name, prep
             );
 
         await harness.stage("render-agent-generated-image", async () => {
-            const messageBox = page.getByLabel("Message", { exact: true });
+            const messageBox = page.getByTestId(dataTestId.messageComposer);
             await messageBox.waitFor({ state: "visible", timeout: harness.timeoutMilliseconds });
-            const firstDownload = artifactDownload();
+            await page
+                .getByPlaceholder("Ask me anything", { exact: true })
+                .waitFor({ state: "visible", timeout: harness.timeoutMilliseconds });
             await messageBox.fill(prompt);
-            await page.getByLabel("Send message", { exact: true }).click({ timeout: harness.timeoutMilliseconds });
+            const firstDownload = artifactDownload();
+            await page.getByTestId(dataTestId.sendMessage).click({
+                timeout: harness.timeoutMilliseconds,
+            });
 
             const image = page.getByLabel("Agent media output").locator("img");
             await image.waitFor({ state: "visible", timeout: harness.timeoutMilliseconds });
