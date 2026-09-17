@@ -33,9 +33,12 @@ Do not ask for an additional replacement confirmation.
    authentication if needed; do not ask the user to choose when your own harness is available.
 
 Start this command with your harness's background execution support, then poll its
-output every five seconds until it reports `status: "ready"` or an error. Do not run
-it as a foreground command or terminate it after it becomes ready: the script stays
-running to keep the Runtime alive. Closing this conversation stops the Runtime it started.
+output every five seconds until it reports `status: "ready"` or an error. A successful
+invocation intentionally never completes on its own: the script owns the Runtime daemon
+and must remain running to keep that daemon alive. After `status: "ready"`, stop polling
+but leave the background process running. Do not wait for it to exit, which would block
+forever while the Runtime is online, and do not terminate it, which would stop the
+Runtime. Closing this conversation stops the Runtime it started.
 
 ```sh
 node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --harness "$HARNESS" --session-id "$SESSION_ID"
