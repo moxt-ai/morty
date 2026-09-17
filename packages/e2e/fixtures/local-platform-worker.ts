@@ -37,5 +37,6 @@ export default createPlatformWorker(
 export {
     BotConnectionActor,
     PlatformSessionRelay,
+    ProjectRelay,
     RuntimeRelay,
-} from "../../../third-party/mobius/packages/relay-cloudflare-platform/src/durable-objects.ts";
+} from "../../../third-party/mobius/packages/relay-cloudflare-platform/src/worker.ts";

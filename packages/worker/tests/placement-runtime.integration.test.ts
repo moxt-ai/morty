@@ -30,7 +30,7 @@ test.each([false, true])(
                     bindings: peer.bindings,
                 }),
             );
-            const projectId = `prj_a01_${"a".repeat(24)}`;
+            const projectId = `prj_ap_01_${"a".repeat(24)}`;
             const response = await runtime.dispatchFetch(`http://worker.test/${projectId}`);
             expect(response.status).toBe(redirectPlacement ? 503 : 200);
             expect(await response.json()).toEqual(

@@ -163,7 +163,7 @@ test.each([
         const response = await worker.fetch(projectRequest(), environment);
         expect(response.status).toBe(200);
         const initial = v.parse(v.object({ project: v.object({ projectId: v.string() }) }), await response.json());
-        expect(initial.project.projectId).toMatch(new RegExp(`^prj_${region === "apac" ? "a01" : "w01"}_`));
+        expect(initial.project.projectId).toMatch(new RegExp(`^prj_${region === "apac" ? "ap" : "wn"}_01_`));
         const revisited = await worker.fetch(
             new GeolocatedRequest(
                 new Request(projectRequest(), {
@@ -284,8 +284,12 @@ test("Given a first-time visitor, When an anonymous identity is created, Then th
     expect(identity.projectId).toBe(project.projectId);
     expect(identity.token).toMatch(/^mobius_anon_v2_[A-Za-z0-9_-]{43}$/u);
     expect(
-        (await worker.fetch(accountRequest(identity.token, `prj_w01_${"z".repeat(24)}`), slackConfiguration(database)))
-            .status,
+        (
+            await worker.fetch(
+                accountRequest(identity.token, `prj_wn_01_${"z".repeat(24)}`),
+                slackConfiguration(database),
+            )
+        ).status,
     ).toBe(401);
 });
 
@@ -842,7 +846,7 @@ test("Given a pending Clerk session, When account data is requested, Then access
 
 test("Given regional storage, When an authenticated user lists Slack bots, Then the user ID scopes the empty result", async () => {
     const response = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/bots?projectId=prj_a01_${"a".repeat(24)}`, {
+        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/bots?projectId=prj_ap_01_${"a".repeat(24)}`, {
             headers: {
                 Authorization: `Bearer ${issuer.createSession("user_alice")}`,
             },
@@ -856,7 +860,7 @@ test("Given regional storage, When an authenticated user lists Slack bots, Then 
 test("Given a missing regional database, When an authenticated user lists Slack bots, Then storage fails closed", async () => {
     const configuration = { ...slackConfiguration(), CHAT_DATABASE_APAC: undefined };
     const response = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/bots?projectId=prj_a01_${"a".repeat(24)}`, {
+        new Request(`${APP_ORIGIN}/mobius-slack/api/slack/bots?projectId=prj_ap_01_${"a".repeat(24)}`, {
             headers: {
                 Authorization: `Bearer ${issuer.createSession("user_alice")}`,
             },
@@ -869,7 +873,7 @@ test("Given a missing regional database, When an authenticated user lists Slack 
 
 test("Given the combined Worker, When Slack health is requested, Then Slack responds", async () => {
     const response = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-slack/api/health?projectId=prj_a01_${"a".repeat(24)}`),
+        new Request(`${APP_ORIGIN}/mobius-slack/api/health?projectId=prj_ap_01_${"a".repeat(24)}`),
         slackConfiguration(),
     );
     expect(response.status).toBe(200);

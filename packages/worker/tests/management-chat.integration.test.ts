@@ -144,7 +144,7 @@ test("Given an anonymous user, When they provision a Platform Project and reload
     });
     const other = v.parse(projectSchema, await (await request("management/project", bob)).json()).project;
     expect(other.projectId).not.toBe(project.projectId);
-    const upstream = await mobius.app.request(`/mobius/api/v1/apps/${mobius.appId}/projects`, {
+    const upstream = await mobius.app.request(`/mobius/api/dashboard/v1/apps/${mobius.appId}/projects`, {
         headers: { authorization: "Bearer developer-token", "x-mobius-oidc-provider": "clerk" },
     });
     expect(upstream.status).toBe(200);

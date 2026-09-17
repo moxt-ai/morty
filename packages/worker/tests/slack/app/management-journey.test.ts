@@ -31,7 +31,7 @@ describe("Slack management journeys", () => {
             ...manifest.oauth_config.redirect_urls,
             manifest.settings.event_subscriptions.request_url,
         ]) {
-            expect(new URL(target).searchParams.get("projectId")).toBe(`prj_a01_${"a".repeat(24)}`);
+            expect(new URL(target).searchParams.get("projectId")).toBe(`prj_ap_01_${"a".repeat(24)}`);
         }
     });
     it("Given an authenticated user, When they list bots and complete OAuth, Then their configured bots and connection are visible", async () => {

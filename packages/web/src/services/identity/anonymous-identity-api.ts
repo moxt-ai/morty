@@ -5,7 +5,7 @@ export const ANONYMOUS_CREDENTIAL_KEY = "mobius.anonymous-credential.v2";
 const tokenSchema = v.pipe(v.string(), v.regex(/^mobius_anon_v2_[A-Za-z0-9_-]{43}$/u));
 const workspaceSchema = v.object({
     userId: v.string(),
-    projectId: v.pipe(v.string(), v.regex(/^prj_[aw][0-9]{2}_[A-Za-z0-9_-]{24}$/u)),
+    projectId: v.pipe(v.string(), v.regex(/^prj_(wn|en|sa|we|ee|ap|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u)),
 });
 const identitySchema = v.pipe(v.object({ token: tokenSchema, ...workspaceSchema.entries }), v.readonly());
 const WORKSPACE_KEY = "mobius.workspace.v2";

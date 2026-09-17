@@ -7,28 +7,21 @@
         "bindings": [
             { "name": "RUNTIME_RELAY", "class_name": "RuntimeRelay" },
             { "name": "SESSION_RELAY", "class_name": "PlatformSessionRelay" },
-            { "name": "BOT_CONNECTIONS", "class_name": "BotConnectionActor" }
+            { "name": "BOT_CONNECTIONS", "class_name": "BotConnectionActor" },
+            { "name": "PROJECT_RELAY", "class_name": "ProjectRelay" }
         ]
     },
     "migrations": [
         {
             "tag": "platform-initial",
             "new_sqlite_classes": ["RuntimeRelay", "PlatformSessionRelay", "BotConnectionActor"]
+        },
+        {
+            "tag": "platform-project-relay",
+            "new_sqlite_classes": ["ProjectRelay"]
         }
     ],
     "d1_databases": [
-        {
-            "binding": "D1_SHARD_WNAM_01",
-            "database_name": "mobius-platform-e2e-wnam-shard",
-            "database_id": "00000000-0000-0000-0000-000000000103",
-            "migrations_dir": "../../../third-party/mobius/packages/relay-core/migrations/d1"
-        },
-        {
-            "binding": "D1_SHARD_APAC_01",
-            "database_name": "mobius-platform-e2e-shard",
-            "database_id": "00000000-0000-0000-0000-000000000101",
-            "migrations_dir": "../../../third-party/mobius/packages/relay-core/migrations/d1"
-        },
         {
             "binding": "PLATFORM_DIRECTORY_DATABASE",
             "database_name": "mobius-platform-e2e-directory",
@@ -41,6 +34,9 @@
         { "binding": "R2_BUCKET_WNAM", "bucket_name": "mobius-platform-local-e2e-wnam-objects" }
     ],
     "vars": {
+        "MOBIUS_PLATFORM_ALLOWED_ORIGINS": "[\"*\"]",
+        "MOBIUS_PLATFORM_OIDC_PROVIDERS": "[]",
+        "MOBIUS_PLATFORM_OPERATOR_SUBJECTS": "[]",
         "SESSION_ACTIVE_SESSIONS_PER_PROJECT": "1000",
         "SESSION_ARCHIVE_BYTES_PER_SESSION": "268435456"
     }

@@ -96,14 +96,14 @@ export async function platformPeer({
     const server = createServer(async (request, response) => {
         response.setHeader("content-type", "application/json");
         const placementPath = request.url?.match(
-            /^\/mobius\/api\/v1\/projects\/(prj_([aw])0[12]_[A-Za-z0-9_-]{24})\/storage-placement(?:\?resolved)?$/u,
+            /^\/mobius\/api\/dashboard\/v1\/projects\/(prj_(wn|en|sa|we|ee|ap|oc|af|me)_01_[A-Za-z0-9_-]{24})\/storage-placement(?:\?resolved)?$/u,
         );
         if (request.method === "GET" && placementPath !== null && placementPath !== undefined) {
             if (redirectPlacement && !request.url?.endsWith("?resolved")) {
                 response.writeHead(302, { location: `${request.url}?resolved` }).end();
                 return;
             }
-            const region = placementPath[2] === "a" ? "apac" : "wnam";
+            const region = placementPath[2] === "ap" || placementPath[2] === "oc" ? "apac" : "wnam";
             response.writeHead(200).end(
                 JSON.stringify({
                     location: region,
@@ -369,7 +369,7 @@ export async function platformPeer({
                 return;
             }
         }
-        if (request.method === "POST" && request.url === "/mobius/api/v1/apps/cloud-app/projects") {
+        if (request.method === "POST" && request.url === "/mobius/api/dashboard/v1/apps/cloud-app/projects") {
             const input = v.parse(
                 v.object({
                     idempotencyKey: v.string(),
@@ -382,7 +382,7 @@ export async function platformPeer({
             let project = projects.get(input.idempotencyKey);
             if (project === undefined) {
                 project = {
-                    projectId: `prj_${input.locationHint === "apac" ? "a01" : "w01"}_${String(projects.size + 1).padStart(24, "0")}`,
+                    projectId: `prj_${input.locationHint === "apac" ? "ap" : "wn"}_01_${String(projects.size + 1).padStart(24, "0")}`,
                     appId: "cloud-app",
                     tenantId: "tenant-test",
                     clientReference: input.clientReference,

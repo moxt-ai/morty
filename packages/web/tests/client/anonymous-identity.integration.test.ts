@@ -27,7 +27,7 @@ test("Given a browser without an identity, When Mobius starts twice, Then one ge
     const storage = new MemoryStorage();
     let creations = 0;
     const credential = `mobius_anon_v2_${"a".repeat(43)}`;
-    const identity = { token: credential, userId: "usr_local", projectId: `prj_a01_${"a".repeat(24)}` };
+    const identity = { token: credential, userId: "usr_local", projectId: `prj_ap_01_${"a".repeat(24)}` };
     const api = new AnonymousIdentityApi({
         origin: "https://cloud.test",
         storage,

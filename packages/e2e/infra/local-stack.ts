@@ -112,41 +112,6 @@ export class LocalStack {
             await migrate(
                 this.harness,
                 platformConfiguration,
-                "D1_SHARD_WNAM_01",
-                this.directories.platform,
-                mobiusRepository,
-            );
-            await migrate(
-                this.harness,
-                platformConfiguration,
-                "D1_SHARD_APAC_01",
-                this.directories.platform,
-                mobiusRepository,
-            );
-            const shardingConfiguration = join(this.directories.platform, "sharding-migrations.json");
-            await this.harness.run(
-                "node",
-                [
-                    "packages/relay-cloudflare-platform/scripts/sharding-migrations.ts",
-                    "--config",
-                    platformConfiguration,
-                    "--output",
-                    shardingConfiguration,
-                ],
-                { cwd: mobiusRepository },
-            );
-            for (const binding of ["D1_SHARD_WNAM_01", "D1_SHARD_APAC_01"]) {
-                await migrate(
-                    this.harness,
-                    shardingConfiguration,
-                    binding,
-                    this.directories.platform,
-                    mobiusRepository,
-                );
-            }
-            await migrate(
-                this.harness,
-                platformConfiguration,
                 "PLATFORM_DIRECTORY_DATABASE",
                 this.directories.platform,
                 mobiusRepository,
@@ -173,13 +138,20 @@ export class LocalStack {
                 ],
                 { cwd: mobiusRepository },
             );
-            await this.harness.waitForHttp(`${this.platformOrigin}/mobius/api/health`, "mobius-platform health");
+            await this.harness.waitForHttp(
+                `${this.platformOrigin}/mobius/api/dashboard/health`,
+                "mobius-platform health",
+            );
         });
         return await this.harness.stage("provision-platform-application", async () => {
             const authentication = { provider: "e2e", token: "mobius-chat-local-e2e", signal: this.harness.signal };
-            const inventory = await jsonRequest(this.platformOrigin, "/mobius/api/v1/platform/tenants", authentication);
+            const inventory = await jsonRequest(
+                this.platformOrigin,
+                "/mobius/api/dashboard/v1/platform/tenants",
+                authentication,
+            );
             const tenant = object(Array.isArray(inventory.tenants) ? inventory.tenants[0] : undefined, "tenant");
-            const application = await jsonRequest(this.platformOrigin, "/mobius/api/v1/apps", {
+            const application = await jsonRequest(this.platformOrigin, "/mobius/api/dashboard/v1/apps", {
                 ...authentication,
                 body: { displayName: "Mobius Chat live E2E", tenantId: text(tenant.tenantId, "tenantId") },
             });

@@ -51,7 +51,7 @@ export async function createTestApplication(
             CLERK_PUBLISHABLE_KEY: "test-publishable-key",
         },
         publicBaseUrl: "https://slack.example.test",
-        projectId: `prj_a01_${"a".repeat(24)}`,
+        projectId: `prj_ap_01_${"a".repeat(24)}`,
         mobiusBaseUrl: "https://mobius.test",
         signingKey: "state-signing-key",
     };

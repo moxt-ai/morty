@@ -34,26 +34,26 @@ export async function createMobiusPlatformFixture() {
             modules: true,
             script: output.text,
             compatibilityDate: "2026-09-03",
-            d1Databases: ["D1_SHARD_APAC_01", "D1_SHARD_WNAM_01", "PLATFORM_DIRECTORY_DATABASE"],
+            d1Databases: ["PLATFORM_DIRECTORY_DATABASE"],
             kvNamespaces: ["APP_CREDENTIAL_CACHE"],
             r2Buckets: ["R2_BUCKET_APAC", "R2_BUCKET_WNAM"],
+            bindings: {
+                MOBIUS_PLATFORM_ALLOWED_ORIGINS: "[]",
+                MOBIUS_PLATFORM_OIDC_PROVIDERS: "[]",
+                MOBIUS_PLATFORM_OPERATOR_SUBJECTS: "[]",
+            },
             durableObjects: {
                 RUNTIME_RELAY: { className: "RuntimeRelay", useSQLite: true },
                 SESSION_RELAY: { className: "PlatformSessionRelay", useSQLite: true },
                 BOT_CONNECTIONS: { className: "BotConnectionActor", useSQLite: true },
+                PROJECT_RELAY: { className: "ProjectRelay", useSQLite: true },
             },
         }),
     );
     try {
         await platform.ready;
-        const bindings = await platform.getBindings<
-            PlatformRelayBindings & { readonly D1_SHARD_WNAM_01: D1Database }
-        >();
+        const bindings = await platform.getBindings<PlatformRelayBindings>();
         for (const [database, directory] of [
-            [bindings.D1_SHARD_APAC_01, new URL("../relay-core/migrations/d1", platformDirectory)],
-            [bindings.D1_SHARD_WNAM_01, new URL("../relay-core/migrations/d1", platformDirectory)],
-            [bindings.D1_SHARD_APAC_01, new URL("migrations/sharding", platformDirectory)],
-            [bindings.D1_SHARD_WNAM_01, new URL("migrations/sharding", platformDirectory)],
             [bindings.PLATFORM_DIRECTORY_DATABASE, new URL("migrations/dashboard", platformDirectory)],
         ] as const) {
             for (const migration of await readD1Migrations(fileURLToPath(directory))) {
@@ -74,7 +74,7 @@ export async function createMobiusPlatformFixture() {
             "x-mobius-oidc-provider": "clerk",
             "content-type": "application/json",
         };
-        const tenantResponse = await app.request("/mobius/api/v1/platform/tenants", {
+        const tenantResponse = await app.request("/mobius/api/dashboard/v1/platform/tenants", {
             headers,
         });
         const { tenants } = v.parse(
@@ -85,7 +85,7 @@ export async function createMobiusPlatformFixture() {
         if (tenant === undefined) {
             throw new Error("Expected the developer's active organization");
         }
-        const applicationResponse = await app.request("/mobius/api/v1/apps", {
+        const applicationResponse = await app.request("/mobius/api/dashboard/v1/apps", {
             method: "POST",
             headers,
             body: JSON.stringify({ displayName: "Cloud test app", tenantId: tenant.tenantId }),

@@ -1,6 +1,6 @@
 import * as v from "valibot";
 
-const projectId = v.pipe(v.string(), v.regex(/^prj_[aw][0-9]{2}_[A-Za-z0-9_-]{24}$/u));
+const projectId = v.pipe(v.string(), v.regex(/^prj_(wn|en|sa|we|ee|ap|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u));
 const secret = v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{43}$/u));
 const credential = v.tuple([v.picklist(["mobius_pair_v2", "mobius_transfer_v2"]), projectId, secret]);
 

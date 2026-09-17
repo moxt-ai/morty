@@ -609,7 +609,7 @@ export class PlatformProjectGateway {
         try {
             const response = await fetch(
                 new URL(
-                    `/mobius/api/v1/projects/${encodeURIComponent(projectId)}/storage-placement`,
+                    `/mobius/api/dashboard/v1/projects/${encodeURIComponent(projectId)}/storage-placement`,
                     this.configuration().origin,
                 ),
                 {
