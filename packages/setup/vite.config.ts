@@ -2,6 +2,9 @@ import { builtinModules } from "node:module";
 import { defineConfig } from "vite";
 
 export default defineConfig({
+    resolve: {
+        mainFields: ["module", "main"],
+    },
     build: {
         target: "node22",
         minify: false,
@@ -12,7 +15,10 @@ export default defineConfig({
         },
         rolldownOptions: {
             external: [...builtinModules, /^node:/u],
-            output: { codeSplitting: false },
+            output: {
+                codeSplitting: false,
+                intro: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);',
+            },
         },
     },
 });

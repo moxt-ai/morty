@@ -5,6 +5,9 @@ import { chmod, copyFile, lstat, mkdir, open, readFile, realpath, rename, rm } f
 import { isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
+import jsQrImport from "jsqr";
+import { PNG } from "pngjs";
+import QRCode from "qrcode";
 
 export interface SetupRuntime {
     readonly start: (
@@ -134,18 +137,22 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return object(JSON.parse(await readFile(path, "utf8")));
     }
 
-    async function writePrivateJson(path: string, value: unknown) {
+    async function writePrivateFile(path: string, value: string | Uint8Array) {
         const file = await open(
             path,
             constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
             0o600,
         );
         try {
-            await file.writeFile(JSON.stringify(value, null, 2));
+            await file.writeFile(value);
             await file.sync();
         } finally {
             await file.close();
         }
+    }
+
+    async function writePrivateJson(path: string, value: unknown) {
+        await writePrivateFile(path, JSON.stringify(value, null, 2));
     }
 
     async function loadConfiguration(directory: string, base: string): Promise<Context> {
@@ -534,6 +541,39 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
+    async function createQrCode(context: Context, value: string) {
+        const image = await QRCode.toBuffer(value, {
+            type: "png",
+            errorCorrectionLevel: "M",
+            margin: 4,
+            width: 512,
+        });
+        const png = PNG.sync.read(image);
+        const decoder: unknown = jsQrImport;
+        if (typeof decoder !== "function") {
+            fail("QR_DECODER_UNAVAILABLE");
+        }
+        const decoded: unknown = decoder(new Uint8ClampedArray(png.data), png.width, png.height);
+        if (decoded === null || object(decoded).data !== value) {
+            fail("QR_VERIFICATION_FAILED");
+        }
+
+        const qrPath = join(context.directory, "handoff-qr.png");
+        const temporary = join(context.directory, `.handoff-qr-${crypto.randomUUID()}.png`);
+        try {
+            await writePrivateFile(temporary, image);
+            await rename(temporary, qrPath);
+            await privatePath(qrPath, false);
+        } finally {
+            await rm(temporary, { force: true });
+        }
+
+        return {
+            qrPath,
+            qrText: await QRCode.toString(value, { type: "utf8", errorCorrectionLevel: "M", margin: 2 }),
+        };
+    }
+
     async function finishSetup(context: Context, options: Options) {
         await waitForReadiness(context);
         const botId = context.config.bot_id;
@@ -558,7 +598,16 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
         url.searchParams.set("harness", options.harness);
         url.searchParams.set("sessionId", options.sessionId);
-        emit({ status: "ready", botId, url: url.toString(), expiresAt: text(transfer.expiresAt) });
+        const handoffUrl = url.toString();
+        const qr = await createQrCode(context, handoffUrl);
+        emit({
+            status: "ready",
+            botId,
+            url: handoffUrl,
+            expiresAt: text(transfer.expiresAt),
+            ...qr,
+            message: "Open the link or scan the QR code to chat. Keep the Runtime online.",
+        });
     }
 
     async function main() {

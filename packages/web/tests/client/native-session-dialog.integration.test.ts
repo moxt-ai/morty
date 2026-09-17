@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it } from "vitest";
 import { dataTestId } from "../../src/data-testid.ts";
 import type { BotChatApi } from "../../src/services/chat/bot-chat-api.ts";
-import { LocalSessionDialog, type OpenLocalSession } from "../../src/views/chat/local-session-dialog.tsx";
+import { NativeSessionDialog, type OpenMobiusSession } from "../../src/views/chat/native-session-dialog.tsx";
 
 declare global {
     var IS_REACT_ACT_ENVIRONMENT: boolean;
@@ -78,7 +78,7 @@ afterEach(() => {
 
 it("Given a listed local session, When a user selects and imports it, Then Chat offers Import before Fork and opens the imported session", async () => {
     const actions: string[] = [];
-    let opened: OpenLocalSession | null = null;
+    let opened: OpenMobiusSession | null = null;
     const requests: Pick<BotChatApi, "workspace" | "nativeSessions" | "nativeSession"> = {
         workspace: async () => ({
             agents: [
@@ -110,7 +110,7 @@ it("Given a listed local session, When a user selects and imports it, Then Chat 
     const root = createRoot(container);
     await act(async () => {
         root.render(
-            createElement(LocalSessionDialog, {
+            createElement(NativeSessionDialog, {
                 botId: "bot",
                 requests,
                 onOpen: (session) => {

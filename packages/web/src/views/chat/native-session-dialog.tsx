@@ -6,7 +6,7 @@ import { Select } from "../../components/ui/option-select.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
 
-export interface OpenLocalSession {
+export interface OpenMobiusSession {
     readonly agentRef: string;
     readonly result: Extract<NativeSessionResult, { readonly ready: unknown }>;
     readonly entry: NativeSessionEntry;
@@ -34,7 +34,7 @@ type Preview =
       }
     | { readonly kind: "failed"; readonly entry: NativeSessionEntry; readonly message: string };
 
-export function LocalSessionDialog({
+export function NativeSessionDialog({
     botId,
     requests,
     onOpen,
@@ -42,7 +42,7 @@ export function LocalSessionDialog({
 }: {
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "workspace" | "nativeSessions" | "nativeSession">;
-    readonly onOpen: (session: OpenLocalSession) => void;
+    readonly onOpen: (session: OpenMobiusSession) => void;
     readonly onClose: () => void;
 }) {
     const [agents, setAgents] = useState<ChatWorkspace["agents"]>([]);
@@ -101,7 +101,7 @@ export function LocalSessionDialog({
             if (!controller.signal.aborted) {
                 setDirectory({
                     kind: "failed",
-                    message: cause instanceof Error ? cause.message : "Local sessions are unavailable.",
+                    message: cause instanceof Error ? cause.message : "Native sessions are unavailable.",
                 });
             }
         });
@@ -173,7 +173,7 @@ export function LocalSessionDialog({
             );
             signal.throwIfAborted();
             if (result.action !== action) {
-                throw new Error(`This agent cannot ${action} the selected local session.`);
+                throw new Error(`This agent cannot ${action} the selected native session.`);
             }
             onOpen({ agentRef: directory.agentRef, result, entry: preview.entry });
         } catch (cause) {
@@ -239,18 +239,18 @@ export function LocalSessionDialog({
     const fallback = agents.find((agent) => agent.online);
     return (
         <Dialog
-            title="Open Local Session"
-            description="Select a local session to preview its history, then import or fork it into Chat."
+            title="Native Sessions"
+            description="Select a native agent session to preview it, then import it or fork it as a Mobius Session."
             onClose={onClose}
             busy={operation === "import" || operation === "fork"}
             wide
         >
             <div className="grid h-[min(60dvh,36rem)] min-h-0 grid-cols-[minmax(8rem,1fr)_minmax(0,2fr)] overflow-hidden rounded-xl border border-border">
                 <section
-                    aria-label="Local sessions"
+                    aria-label="Native sessions"
                     className="flex min-h-0 flex-col gap-3 border-r border-border bg-muted/30 p-3"
                 >
-                    <h2 className="font-semibold">Local Session</h2>
+                    <h2 className="font-semibold">Native Session</h2>
                     {agents.length > 0 && (
                         <Select
                             label="Session agent"
@@ -266,7 +266,7 @@ export function LocalSessionDialog({
                         />
                     )}
                     <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
-                        {directory.kind === "loading" && <p role="status">Discovering local sessions…</p>}
+                        {directory.kind === "loading" && <p role="status">Discovering native sessions…</p>}
                         {directory.kind === "empty" && <p>Connect a local agent to browse its sessions.</p>}
                         {directory.kind === "failed" && <p role="alert">{directory.message}</p>}
                         {directory.kind === "ready" && directory.entries.length === 0 && (

@@ -18,7 +18,6 @@ import {
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
 import { type MobiusClient, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
-import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { BotChatComposer, type ComposerAttachment } from "../../components/chat/bot-chat-composer.tsx";
 import {
@@ -28,16 +27,17 @@ import {
     type PermissionInteractionResponse,
     SessionInteractionCards,
 } from "../../components/chat/session-interactions.tsx";
-import { Button } from "../../components/ui/cloud-button.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
 import { type RecordedAgentActivity, recordAgentActivity } from "../../services/chat/agent-activities.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
-import type { OpenLocalSession } from "./local-session-dialog.tsx";
-import { type LocalMessage, type LocalMessageContent, LocalSessionMessage } from "./local-session-message.tsx";
+import { MobiusSessionMessage, type SessionMessage, type SessionMessageContent } from "./mobius-session-message.tsx";
+import type { OpenMobiusSession } from "./native-session-dialog.tsx";
 
 type Operation =
     | { readonly kind: "idle" }
     | { readonly kind: "sending"; readonly commandId: string }
+    | { readonly kind: "running"; readonly commandId: string; readonly turnId: string }
+    | { readonly kind: "stopping"; readonly commandId: string; readonly turnId: string }
     | { readonly kind: "configuring" }
     | { readonly kind: "failed"; readonly message: string };
 
@@ -118,7 +118,7 @@ function replaceInteraction(
 
 function historyContents(
     images: readonly { readonly data: string; readonly mimeType: string; readonly name: string }[] | undefined,
-): readonly LocalMessageContent[] {
+): readonly SessionMessageContent[] {
     return (images ?? []).map((image, index) => ({
         contentId: `history-image-${index.toString()}`,
         content: {
@@ -138,11 +138,11 @@ function historyContents(
 }
 
 function replaceMessageContent(
-    messages: readonly LocalMessage[],
+    messages: readonly SessionMessage[],
     commandId: string,
     contentId: string,
     content: AgentDisplayContent,
-): readonly LocalMessage[] {
+): readonly SessionMessage[] {
     return messages.map((message) => {
         if (message.role !== "assistant" || message.commandId !== commandId) {
             return message;
@@ -170,9 +170,9 @@ function recordedContent(event: MobiusSessionEvent): {
 }
 
 function applyRecordedContents(
-    messages: readonly LocalMessage[],
+    messages: readonly SessionMessage[],
     events: readonly MobiusSessionEvent[],
-): readonly LocalMessage[] {
+): readonly SessionMessage[] {
     return events.reduce((current, event) => {
         const recorded = recordedContent(event);
         return recorded === null
@@ -181,20 +181,18 @@ function applyRecordedContents(
     }, messages);
 }
 
-export function LocalSessionPane({
+export function MobiusSessionPane({
     session,
-    onBack,
     botId,
     requests,
 }: {
-    readonly session: OpenLocalSession;
-    readonly onBack: () => void;
+    readonly session: OpenMobiusSession;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession">;
 }) {
-    const [messages, setMessages] = useState<readonly LocalMessage[]>(() =>
+    const [messages, setMessages] = useState<readonly SessionMessage[]>(() =>
         session.result.history.status === "available"
-            ? session.result.history.messages.map((message, index): LocalMessage => {
+            ? session.result.history.messages.map((message, index): SessionMessage => {
                   const id = `history-${index}`;
                   return message.role === "user"
                       ? { id, role: "user", text: message.text, contents: historyContents(message.images) }
@@ -281,10 +279,10 @@ export function LocalSessionPane({
             );
             lastSequence = BigInt(saved.lastCommittedSequence);
             const history = session.result.history;
-            const initial: readonly LocalMessage[] =
+            const initial: readonly SessionMessage[] =
                 history.status === "available"
                     ? history.messages.map(
-                          (message, index): LocalMessage =>
+                          (message, index): SessionMessage =>
                               message.role === "user"
                                   ? {
                                         id: `history-${index}`,
@@ -302,7 +300,7 @@ export function LocalSessionPane({
                                     },
                       )
                     : [];
-            const restoredMessages: readonly LocalMessage[] = [
+            const restoredMessages: readonly SessionMessage[] = [
                 ...initial,
                 ...[...saved.messages]
                     .reverse()
@@ -310,7 +308,7 @@ export function LocalSessionPane({
                         (message) =>
                             history.status !== "available" || !history.coveredCommandIds.includes(message.commandId),
                     )
-                    .flatMap((message): readonly LocalMessage[] => [
+                    .flatMap((message): readonly SessionMessage[] => [
                         { id: `${message.commandId}-user`, role: "user", text: message.prompt, contents: [] },
                         {
                             id: `${message.commandId}-reply`,
@@ -452,6 +450,8 @@ export function LocalSessionPane({
             connection.kind !== "ready" ||
             (draft.trim() === "" && attachments.length === 0) ||
             operation.kind === "sending" ||
+            operation.kind === "running" ||
+            operation.kind === "stopping" ||
             operation.kind === "configuring"
         ) {
             return;
@@ -492,12 +492,35 @@ export function LocalSessionPane({
             );
             if (!lifetime.current.signal.aborted && command.current === commandId) {
                 turnId.current = accepted.turnId;
+                setOperation({ kind: "running", commandId, turnId: accepted.turnId });
             }
         } catch (cause) {
             if (!lifetime.current.signal.aborted) {
                 setOperation({
                     kind: "failed",
                     message: cause instanceof Error ? cause.message : "The agent could not complete the message.",
+                });
+            }
+        }
+    };
+    const stop = async () => {
+        if (connection.kind !== "ready" || operation.kind !== "running") {
+            return;
+        }
+        const running = operation;
+        setOperation({ kind: "stopping", commandId: running.commandId, turnId: running.turnId });
+        try {
+            await connection.client.turns.cancel(
+                sessionId,
+                running.turnId,
+                { idempotencyKey: crypto.randomUUID() },
+                AbortSignal.any([lifetime.current.signal, AbortSignal.timeout(15000)]),
+            );
+        } catch (cause) {
+            if (!lifetime.current.signal.aborted && command.current === running.commandId) {
+                setOperation({
+                    kind: "failed",
+                    message: cause instanceof Error ? cause.message : "The agent output could not be stopped.",
                 });
             }
         }
@@ -582,23 +605,19 @@ export function LocalSessionPane({
             await reconcileInteraction(connection.client, response.interactionId, cause);
         }
     };
-    const busy = connection.kind !== "ready" || operation.kind === "sending" || operation.kind === "configuring";
-    const activeCommandId = connection.kind === "ready" && operation.kind === "sending" ? operation.commandId : null;
+    const busy =
+        connection.kind !== "ready" ||
+        operation.kind === "sending" ||
+        operation.kind === "running" ||
+        operation.kind === "stopping" ||
+        operation.kind === "configuring";
+    const activeCommandId =
+        connection.kind === "ready" &&
+        (operation.kind === "sending" || operation.kind === "running" || operation.kind === "stopping")
+            ? operation.commandId
+            : null;
     return (
         <section className="flex min-h-0 min-w-0 flex-1 animate-cloud-enter flex-col motion-reduce:animate-none">
-            <div className="flex items-center gap-3 border-b border-border bg-card/80 px-5 py-4 backdrop-blur-sm">
-                <Button variant="ghost" size="icon" onClick={onBack} aria-label="Back to Bot chat">
-                    <ArrowLeft className="size-4" />
-                </Button>
-                <div className="min-w-0">
-                    <h1 className="truncate text-sm font-semibold">
-                        {session.result.title || session.entry.title || "Local session"}
-                    </h1>
-                    <p className="truncate text-xs text-muted-foreground">
-                        {session.agentRef} · {session.entry.directoryLabel}
-                    </p>
-                </div>
-            </div>
             <div
                 role="log"
                 ref={messageList}
@@ -606,15 +625,15 @@ export function LocalSessionPane({
                     const element = event.currentTarget;
                     followLatest.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
                 }}
-                aria-label="Local session messages"
-                className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10"
+                aria-label="Messages"
+                className="min-h-0 flex-1 space-y-8 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10"
             >
                 {session.result.history.status === "unavailable" && (
                     <p className="text-sm text-muted-foreground">This agent does not expose saved message history.</p>
                 )}
                 {messages.map((message) => (
-                    <div key={message.id} className="mx-auto w-full min-w-0 max-w-3xl">
-                        <LocalSessionMessage
+                    <div key={message.id} className="mx-auto w-full min-w-0 max-w-[1120px]">
+                        <MobiusSessionMessage
                             message={message}
                             activities={activities}
                             activeCommandId={activeCommandId}
@@ -624,7 +643,7 @@ export function LocalSessionPane({
                         />
                     </div>
                 ))}
-                <div className="mx-auto w-full min-w-0 max-w-3xl">
+                <div className="mx-auto w-full min-w-0 max-w-[1120px]">
                     <SessionInteractionCards
                         elicitations={interactions.flatMap((interaction) =>
                             interaction.kind === "elicitation" ? [interaction.elicitation] : [],
@@ -642,15 +661,14 @@ export function LocalSessionPane({
                 disabled={busy}
                 draft={draft}
                 error={operation.kind === "failed" ? operation.message : ""}
-                messageLabel="Message local session"
                 onAttachmentsChange={setAttachments}
                 onDraftChange={setDraft}
-                onStop={() => {}}
+                onStop={() => void stop()}
                 onSubmit={() => void send()}
-                outputState="idle"
-                placeholder="Continue this conversation…"
+                outputState={
+                    operation.kind === "running" ? "running" : operation.kind === "stopping" ? "stopping" : "idle"
+                }
                 submitDisabled={busy || (draft.trim() === "" && attachments.length === 0)}
-                submitLabel="Send to local session"
             >
                 <Select
                     compact

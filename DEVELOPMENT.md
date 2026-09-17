@@ -20,7 +20,9 @@ Runtime to its current user and Bot and directs the user back to Chat.
 `/setup.md` is reserved for standalone testing and external sharing, including
 social posts. That flow requires the current harness session ID, creates or reuses a
 local identity, and returns a browser handoff carrying the validated harness and native
-session ID. After transfer redemption, Chat finds that native session through the paired
+session ID. The ready result includes the exact URL, its expiry, an owner-only PNG QR
+code, and a terminal-safe QR rendering. The bundled setup CLI decodes the PNG before
+returning it so the QR payload cannot differ from the URL. After transfer redemption, Chat finds that native session through the paired
 Runtime, forks it under an opaque entry capability, records it, and opens the independent
 continuation. Forking allows the originating harness to retain its active writer. Native
 session IDs are not returned by ordinary directory listings.
@@ -45,6 +47,8 @@ and conversation access. Platform independently authorizes SDK operations.
 `packages/setup/src/setup.ts` owns the TypeScript setup implementation. Its CLI
 entrypoint is bundled by Vite into the self-contained `packages/setup/dist/setup.mjs`;
 generated JavaScript is not checked in. `pnpm build` builds it before the application.
+QR encoding, PNG reading, and QR decoding are included in that bundle and do not require
+packages to be installed separately on the user's machine.
 The bundle also exports `runSetup(args, host)` for integrations, with cancellable
 Runtime and clock ports. The CLI supplies the local OS Runtime implementation.
 
@@ -79,17 +83,16 @@ selects the regional Platform backend. A mismatched Project sent directly to a
 Chat backend returns HTTP 421. Requests without Project context otherwise retain
 their existing entrypoint, as do queue consumers.
 
-The public Worker and regional backends use Cloudflare Smart Placement. Logical
-APAC and WNAM routing still selects the Project's configured D1 and R2 bindings,
-while Cloudflare places each Worker near the services it accesses. Existing
-D1/R2 resources, queue producers, and the public Worker's Durable Object
+`regional-placement.json` controls explicit placement hints for each backend.
+The public Worker has placement disabled; regional Workers use service-binding
+`fetch()` and explicit cloud-region hints. Hints are not exact-city guarantees.
+Existing D1/R2 resources, queue producers, and the public Worker's Durable Object
 namespace are shared. Regional Workers do not own queue consumers.
 
 Each product owns a small `wrangler.regional.template.json` containing only
-regional overrides: Worker name, entrypoint, smart placement mode, logical
-region, and deployment flags. Shared D1/R2/KV bindings, compatibility settings,
-variables, and other common settings are inherited from the existing
-configuration.
+regional overrides: Worker name, entrypoint, placement hint, logical region, and
+deployment flags. Shared D1/R2/KV bindings, compatibility settings, variables,
+and other common settings are inherited from the existing configuration.
 The renderer JSON-encodes `<%% name %%>` substitutions and rejects missing or
 unresolved placeholders before writing valid JSON. Deployment renders configurations from the Vite-built Worker using
 `third-party/mobius/packages/relay-cloudflare-platform/scripts/regional-workers.ts`.
@@ -110,6 +113,7 @@ To generate configs for inspection after `pnpm build:staging`:
 node third-party/mobius/packages/relay-cloudflare-platform/scripts/regional-workers.ts \
   --config wrangler.jsonc --built --env staging \
   --template wrangler.regional.template.json \
+  --placement regional-placement.json \
   --output .wrangler/regional/staging
 pnpm exec wrangler deploy --config .wrangler/regional/staging/apac.json --dry-run
 pnpm exec wrangler deploy --config .wrangler/regional/staging/wnam.json --dry-run
@@ -176,19 +180,21 @@ places the Project ID in the path for regional routing. Deploy Chat's updated SD
 together with the corresponding Platform endpoint cutover.
 New Conversation opens a browser-local draft. Its Harness selector chooses a paired
 agent; a temporary Project Session prepares that agent's model options and is deleted
-after preparation. First Send creates a canonical Project Conversation with the selected
-model and approved Bot binding. Existing conversations reopen by Conversation ID,
-including credential refresh, and keep their harness fixed.
+after preparation. First Send materializes the draft as a Mobius Session with the selected
+model and approved Bot binding. The Conversation API is the creation and access path for
+these Sessions; it is not a separate user-facing chat type. Existing Sessions created by
+that path reopen by Conversation ID, including credential refresh, and keep their harness fixed.
 First Send keeps the created connection and transitions the draft in place; it
 updates the saved URL without removing the sidebar or composer to reconnect.
-Chat records created Conversations and imported or forked Sessions in `chat_managed_session`,
-keyed and indexed by Project ID, user ID, Bot ID, resource kind and resource ID.
-The sidebar lists these managed records. New Conversation records the first prompt
-as its title. Open Local Session opens a two-column directory and preview dialog;
+Chat records materialized Sessions in `chat_managed_session`, keyed and indexed by Project ID,
+user ID, Bot ID, access-path provenance and resource ID. The sidebar lists all of them as
+Sessions. New Conversation records the first prompt as its title. Native Sessions opens a
+two-column discovery and preview dialog;
 the directory returns metadata only, selecting an entry fetches its history from
 `native-session/:id`; Import resumes it in Chat, while Fork creates a separate native
-Session. Cancelling the dialog creates no Chat-managed record. Imported and forked
-Sessions reopen by `sessionId` in the saved page URL. Apply migrations
+Session. Cancelling the dialog creates no Chat-managed record. After import or fork, the
+result uses the normal Session message surface and can be stopped from the composer.
+Imported and forked Sessions reopen by `sessionId` in the saved page URL. Apply migrations
 `0006_chat_managed_session.sql` and `0007_chat_managed_import.sql` to both regional
 Chat databases before deployment.
 The Worker discovers, imports, and forks native sessions through the Project SDK. Its

@@ -217,8 +217,8 @@ test("Given a paired workspace, When a user creates and reloads conversations, T
         expect(await originalSidebar.evaluate((element) => element.isConnected)).toBe(true);
         await originalComposer.dispose();
         await originalSidebar.dispose();
-        await page.getByRole("button", { name: "Open Local Session", exact: true }).click();
-        const dialog = page.getByRole("dialog", { name: "Open Local Session", exact: true });
+        await page.getByRole("button", { name: "Native Sessions", exact: true }).click();
+        const dialog = page.getByRole("dialog", { name: "Native Sessions", exact: true });
         await expect(dialog.getByRole("button", { name: "Fork", exact: true })).toBeDisabled();
         await dialog.getByRole("button", { name: "First conversation", exact: true }).click();
         await expect(dialog.getByRole("region", { name: "Selected session preview" })).toContainText(
@@ -227,22 +227,20 @@ test("Given a paired workspace, When a user creates and reloads conversations, T
         await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
         await expect(dialog).toHaveCount(0);
         await expect(sidebar.getByRole("button", { name: "First conversation", exact: true })).toHaveCount(1);
-        await page.getByRole("button", { name: "Open Local Session", exact: true }).click();
+        await page.getByRole("button", { name: "Native Sessions", exact: true }).click();
         await dialog.getByRole("button", { name: "First conversation", exact: true }).click();
         await dialog.getByRole("button", { name: "Fork", exact: true }).click();
         await expect(dialog).toHaveCount(0);
-        await expect(page.getByRole("textbox", { name: "Message local session", exact: true })).toBeEnabled();
+        await expect(page.getByRole("textbox", { name: "Message", exact: true })).toBeEnabled();
         await expect(sidebar.getByRole("button", { name: "First conversation", exact: true })).toHaveCount(2);
-        await page.getByRole("textbox", { name: "Message local session", exact: true }).fill("Continue only the fork");
-        await page.getByRole("button", { name: "Send to local session", exact: true }).click();
-        await expect(page.getByRole("log", { name: "Local session messages", exact: true })).toContainText(
+        await page.getByRole("textbox", { name: "Message", exact: true }).fill("Continue only the fork");
+        await page.getByRole("button", { name: "Send message", exact: true }).click();
+        await expect(page.getByRole("log", { name: "Messages", exact: true })).toContainText(
             /OpenCode turn \d+: Continue only the fork/u,
         );
         await page.reload();
-        await expect(page.getByRole("log", { name: "Local session messages", exact: true })).toContainText(
-            "First conversation",
-        );
-        await expect(page.getByRole("log", { name: "Local session messages", exact: true })).toContainText(
+        await expect(page.getByRole("log", { name: "Messages", exact: true })).toContainText("First conversation");
+        await expect(page.getByRole("log", { name: "Messages", exact: true })).toContainText(
             /OpenCode turn \d+: Continue only the fork/u,
         );
         await sidebar

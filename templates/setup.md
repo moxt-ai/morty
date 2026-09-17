@@ -51,13 +51,15 @@ log path. Waits are cancellable and bounded to five minutes. Complete any requir
 local Runtime approval. Only `status: "ready"` means the binding is active and the
 selected Runtime/agent is online; it does not claim a successful test message.
 
-Return the exact browser `url` and `expiresAt` from the ready result. The link identifies
-this harness session so Chat can import it and open it after the handoff. The link is
-valid for **24 hours**, can be successfully opened at most **five times**, and opens
-the same user and Bot each time. Never open, preview, or redeem it yourself because
-doing so consumes one use. Tell the user: **Open this link to chat. It can be used
-up to five times before it expires. Keep the Runtime online. You can bind an account
-later if you want.**
+Return the exact clickable browser `url`, QR code, and `expiresAt` from the ready result.
+The QR payload is the exact same URL. When the harness can display a local image, show
+the owner-only PNG at `qrPath`; otherwise return `qrText` in a plain-text block without
+changing its spacing. The link identifies this harness session so Chat can import it
+and open it after the handoff. The link is valid for **24 hours**, can be successfully
+opened at most **five times**, and opens the same user and Bot each time. Never open,
+preview, scan, or redeem it yourself because doing so consumes one use. Tell the user:
+**Open this link or scan the QR code to chat. It can be used up to five times before it
+expires. Keep the Runtime online. You can bind an account later if you want.**
 
 On failure, use `error.code` and the private Runtime log, fix the problem, and rerun
 the same command. It reuses the saved user identity and starts Runtime pairing fresh. Preserve `$DOCUMENT_DIR/mobius-chat`
