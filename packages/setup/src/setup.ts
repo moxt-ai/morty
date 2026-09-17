@@ -490,7 +490,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             agentConfigRevision: revision,
         });
         const saved = await saveConfiguration(context, { agent_ref: agentRef, agent_config_revision: revision });
-        emit({ status: "binding_requested", botId: context.config.bot_id, harness });
+        emit({ status: "binding_activated", botId: context.config.bot_id, harness });
         return saved;
     }
 
@@ -535,7 +535,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 fail("BOT_UNAVAILABLE");
             }
             if (attempts++ % 10 === 0) {
-                progress("approval", "Waiting for the Runtime to approve and activate the Bot binding.");
+                progress("activation", "Waiting for the Bot binding to become active.");
             }
             await clock.wait(1000, signal);
         }

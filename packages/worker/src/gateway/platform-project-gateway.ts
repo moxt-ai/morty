@@ -6,6 +6,7 @@ import {
     MobiusTimeoutError,
 } from "@moxt-ai/mobius-sdk/platform";
 import {
+    DEFAULT_AGENT_EXECUTION_CONFIGURATION,
     MobiusActiveBotState,
     MobiusBotOwnerClient,
     MobiusClient,
@@ -166,26 +167,6 @@ export class PlatformProjectGateway {
             ) {
                 return { status: "active" };
             }
-            const pending = bindings.executionBindings.find((binding) => binding.state.kind === "requested");
-            if (pending !== undefined) {
-                if (
-                    pending.runtimeId !== input.runtimeId ||
-                    pending.agentRef !== input.agentRef ||
-                    pending.workspaceRef !== input.workspaceRef ||
-                    pending.agentConfigRevision !== input.agentConfigRevision
-                ) {
-                    throw new PlatformProjectError(
-                        "BOT_SETUP_PENDING",
-                        "The Runtime has not resolved the previous Bot setup request.",
-                        409,
-                    );
-                }
-                return {
-                    bindingId: pending.bindingId,
-                    bindingRevision: pending.bindingRevision,
-                    lifecycle: "requested",
-                };
-            }
             const runtimes = await this.#withProject(
                 projectId,
                 signal,
@@ -230,6 +211,7 @@ export class PlatformProjectGateway {
                     expectedRevision: bot.lifecycleRevision,
                     allowedDeliveryTargetIds: [],
                     completionPolicy: new MobiusNoBotCompletionPolicy(),
+                    executionConfiguration: DEFAULT_AGENT_EXECUTION_CONFIGURATION,
                 },
                 signal,
             );

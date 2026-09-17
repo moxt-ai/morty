@@ -65,11 +65,9 @@ export function BotOverviewPage() {
     }, [operationError]);
 
     const ready = configuration.kind === "ready" ? configuration : undefined;
-    const pendingBinding = ready?.bindings.find((binding) => binding.state.kind === "requested");
     const configurationLocked = bot.state.kind === "archived";
     const selectedAgent = connection.agents.find((agent) => agent.id === agentRef);
     const selectedAgentSupportsInstructions = selectedAgent?.capabilities.embeddedContextPrompt === true;
-    const pendingAgentLabel = connection.agents.find((agent) => agent.id === pendingBinding?.agentRef)?.label;
 
     return (
         <div className="mx-auto w-full max-w-[1040px] px-5 py-7 sm:px-8 sm:py-9">
@@ -164,8 +162,8 @@ export function BotOverviewPage() {
                             Behavior and execution
                         </h2>
                         <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                            Selecting Activate Bot records your confirmation. The paired Runtime then validates the
-                            exact registered Agent and workspace before activation.
+                            Selecting Activate Bot records the exact registered Agent, workspace, and execution
+                            configuration.
                         </p>
                         <Button
                             aria-busy={refreshingConfiguration}
@@ -210,24 +208,7 @@ export function BotOverviewPage() {
                                     void activation.activate(signal);
                                 }}
                             >
-                                {pendingBinding !== undefined && (
-                                    <div className="flex items-start gap-3 rounded-xl border border-[#f2d39b] bg-[#fffaf0] px-4 py-3 text-xs leading-5 text-[#7b4c00]">
-                                        <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-                                        <span>
-                                            <strong className="block">Activating Bot</strong>
-                                            Your Web confirmation is complete. {connection.machineName} is validating
-                                            {` `}
-                                            {pendingAgentLabel ?? pendingBinding.agentRef} in{" "}
-                                            {pendingBinding.workspaceRef}; no additional local action is required.
-                                        </span>
-                                    </div>
-                                )}
-                                <fieldset
-                                    className="grid gap-2"
-                                    disabled={
-                                        configurationLocked || requestingActivation || pendingBinding !== undefined
-                                    }
-                                >
+                                <fieldset className="grid gap-2" disabled={configurationLocked || requestingActivation}>
                                     <legend className="text-xs font-semibold">Behavior mode</legend>
                                     <div className="grid gap-2 sm:grid-cols-2">
                                         <label
@@ -279,11 +260,7 @@ export function BotOverviewPage() {
                                         Behavior instructions
                                         <textarea
                                             className={`${BOT_TEXTAREA_CLASS} min-h-40`}
-                                            disabled={
-                                                configurationLocked ||
-                                                requestingActivation ||
-                                                pendingBinding !== undefined
-                                            }
+                                            disabled={configurationLocked || requestingActivation}
                                             id="bot-behavior-instructions"
                                             maxLength={100000}
                                             onChange={(event) =>
@@ -299,11 +276,7 @@ export function BotOverviewPage() {
                                         Local Agent
                                         <select
                                             className={BOT_FIELD_CLASS}
-                                            disabled={
-                                                configurationLocked ||
-                                                requestingActivation ||
-                                                pendingBinding !== undefined
-                                            }
+                                            disabled={configurationLocked || requestingActivation}
                                             id="bot-local-agent"
                                             onChange={(event) => configurationViewModel.selectAgent(event.target.value)}
                                             value={agentRef}
@@ -323,11 +296,7 @@ export function BotOverviewPage() {
                                         Workspace
                                         <input
                                             className={BOT_FIELD_CLASS}
-                                            disabled={
-                                                configurationLocked ||
-                                                requestingActivation ||
-                                                pendingBinding !== undefined
-                                            }
+                                            disabled={configurationLocked || requestingActivation}
                                             id="bot-workspace-ref"
                                             onChange={(event) =>
                                                 configurationViewModel.setWorkspaceRef(event.target.value)
@@ -338,9 +307,7 @@ export function BotOverviewPage() {
                                 </div>
                                 <fieldset
                                     className="rounded-xl border-[0.5px] border-black/10 p-4"
-                                    disabled={
-                                        configurationLocked || requestingActivation || pendingBinding !== undefined
-                                    }
+                                    disabled={configurationLocked || requestingActivation}
                                 >
                                     <legend className="px-1 text-xs font-semibold">Approved outbound targets</legend>
                                     {ready.deliveryTargets.length === 0 ? (
@@ -401,7 +368,6 @@ export function BotOverviewPage() {
                                         disabled={
                                             configurationLocked ||
                                             requestingActivation ||
-                                            pendingBinding !== undefined ||
                                             allowedDeliveryTargetIds.length === 0
                                         }
                                         id="bot-completion-target"
@@ -433,11 +399,7 @@ export function BotOverviewPage() {
                                         <textarea
                                             aria-describedby="bot-completion-template-help"
                                             className={BOT_TEXTAREA_CLASS}
-                                            disabled={
-                                                configurationLocked ||
-                                                requestingActivation ||
-                                                pendingBinding !== undefined
-                                            }
+                                            disabled={configurationLocked || requestingActivation}
                                             id="bot-completion-template"
                                             maxLength={10000}
                                             onChange={(event) =>
@@ -467,7 +429,6 @@ export function BotOverviewPage() {
                                         disabled={
                                             configurationLocked ||
                                             requestingActivation ||
-                                            pendingBinding !== undefined ||
                                             connection.agents.length === 0
                                         }
                                         type="submit"
@@ -520,10 +481,8 @@ export function BotOverviewPage() {
                                                 <span
                                                     className={cn(
                                                         "rounded-full bg-black/5 px-2 py-1 text-[10px] font-semibold text-muted-foreground",
-                                                        behavior.state.kind === "approved" &&
+                                                        behavior.state.kind === "active" &&
                                                             "bg-[#e8f8ef] text-[#187747]",
-                                                        behavior.state.kind === "awaiting_local_approval" &&
-                                                            "bg-[#fff5e6] text-[#9a5b00]",
                                                     )}
                                                 >
                                                     {botBehaviorStatusLabel(behavior)}

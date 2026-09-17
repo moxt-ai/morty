@@ -46,8 +46,8 @@ Runtime process. The Runtime exits when your agent session ends.
 ## Observe and finish
 
 The script streams timestamped JSON progress, including its Runtime PID and private
-log path. It waits at most five minutes. Complete local Runtime approval if needed.
-`runtime_started` or `binding_requested` is progress; only `status: "ready"` confirms
+log path. It waits at most five minutes. `runtime_started` or `binding_activated` is
+progress; only `status: "ready"` confirms
 an active binding and online Runtime. A successful chat reply is a separate check.
 
 When ready, tell the user: **Your Bot is connected. Return to your Mobius Chat page

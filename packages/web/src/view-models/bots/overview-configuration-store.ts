@@ -80,28 +80,26 @@ export const createBotConfigurationStore = (
                         (target) => target.state.kind === "active" && target.ownerApproved,
                     );
                     const targetIds = new Set(deliveryTargets.map((target) => target.deliveryTargetId));
-                    const approvedBinding = bindings.executionBindings.find(
-                        (binding) => binding.state.kind === "approved",
-                    );
-                    if (approvedBinding !== undefined && bindingDefaultsId !== approvedBinding.bindingId) {
-                        const allowedDeliveryTargetIds = approvedBinding.allowedDeliveryTargetIds.filter((targetId) =>
+                    const activeBinding = bindings.executionBindings.find((binding) => binding.state.kind === "active");
+                    if (activeBinding !== undefined && bindingDefaultsId !== activeBinding.bindingId) {
+                        const allowedDeliveryTargetIds = activeBinding.allowedDeliveryTargetIds.filter((targetId) =>
                             targetIds.has(targetId),
                         );
                         set({
-                            agentRef: approvedBinding.agentRef,
+                            agentRef: activeBinding.agentRef,
                             allowedDeliveryTargetIds,
                             completionSelection:
-                                approvedBinding.completionPolicy instanceof MobiusRequiredBotCompletionPolicy &&
-                                allowedDeliveryTargetIds.includes(approvedBinding.completionPolicy.deliveryTargetId)
+                                activeBinding.completionPolicy instanceof MobiusRequiredBotCompletionPolicy &&
+                                allowedDeliveryTargetIds.includes(activeBinding.completionPolicy.deliveryTargetId)
                                     ? {
                                           kind: "required",
-                                          messageTemplate: approvedBinding.completionPolicy.messageTemplate,
-                                          targetId: approvedBinding.completionPolicy.deliveryTargetId,
+                                          messageTemplate: activeBinding.completionPolicy.messageTemplate,
+                                          targetId: activeBinding.completionPolicy.deliveryTargetId,
                                       }
                                     : { kind: "none" },
-                            workspaceRef: approvedBinding.workspaceRef,
+                            workspaceRef: activeBinding.workspaceRef,
                         });
-                        bindingDefaultsId = approvedBinding.bindingId;
+                        bindingDefaultsId = activeBinding.bindingId;
                     } else {
                         const state = get();
                         set({
@@ -198,11 +196,8 @@ export function formatBotDate(value: string): string {
 }
 
 export function botBehaviorStatusLabel(behavior: MobiusBotBehaviorRevision): string {
-    if (behavior.state.kind === "awaiting_local_approval") {
-        return "Activating";
-    }
-    if (behavior.state.kind === "approved") {
-        return "Approved";
+    if (behavior.state.kind === "active") {
+        return "Active";
     }
     if (behavior.state.kind === "retired") {
         return "Retired";
@@ -211,11 +206,8 @@ export function botBehaviorStatusLabel(behavior: MobiusBotBehaviorRevision): str
 }
 
 export function botBindingStatusLabel(binding: MobiusBotExecutionBinding): string {
-    if (binding.state.kind === "requested") {
-        return "Activating";
-    }
-    if (binding.state.kind === "approved") {
-        return "Approved";
+    if (binding.state.kind === "active") {
+        return "Active";
     }
     if (binding.state.kind === "unavailable") {
         return "Unavailable";

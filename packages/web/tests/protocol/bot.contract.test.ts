@@ -7,17 +7,14 @@ import {
     BotConnectionGrant,
     BotConnectionReplyRoute,
     BotExecution,
-    BotExecutionBindingApprovalRequest,
     BotExecutionCapability,
     BotSessionPromptCommand,
     ConnectedBotConversation,
+    DEFAULT_AGENT_EXECUTION_CONFIGURATION,
     DisabledBotDeliveryTarget,
     DraftBot,
-    decodeBotExecutionBindingApprovalRequest,
     decodeBotSessionPromptCommand,
-    encodeBotExecutionBindingApprovalRequest,
     encodeBotSessionPromptCommand,
-    NoBotCompletionDeliveryPolicy,
     OwnerBotConversation,
     ProtocolMessageError,
     ProvisioningBotConversation,
@@ -56,45 +53,6 @@ describe("Bot protocol", () => {
         });
     });
 
-    it("Given a remote binding proposal, When the daemon decodes it, Then only the bounded provider-neutral approval contract is accepted", () => {
-        const request = new BotExecutionBindingApprovalRequest(
-            "approval_alpha_1",
-            "bot_alpha",
-            "behavior_alpha_1",
-            "binding_alpha_1",
-            1,
-            "runtime_alpha",
-            "codex",
-            "default",
-            4,
-            "Follow the approved project policy.",
-            "a".repeat(64),
-            ["embedded-context"],
-            [
-                {
-                    alias: "team-notifications",
-                    deliveryTargetId: "target_alpha",
-                },
-            ],
-            new NoBotCompletionDeliveryPolicy(),
-        );
-
-        expect(decodeBotExecutionBindingApprovalRequest(encodeBotExecutionBindingApprovalRequest(request))).toEqual(
-            request,
-        );
-
-        expect(() =>
-            decodeBotExecutionBindingApprovalRequest(
-                JSON.stringify({
-                    ...request,
-                    command: "open /Applications/Calculator.app",
-                    provider: "slack",
-                    providerToken: "secret",
-                }),
-            ),
-        ).toThrow(ProtocolMessageError);
-    });
-
     it("Given a Bot turn is accepted, When its daemon decodes the dispatch, Then the pinned Bot and capability cannot be replaced by prompt fields", () => {
         const command = new BotSessionPromptCommand(
             "session_alpha",
@@ -115,7 +73,6 @@ describe("Bot protocol", () => {
             "turn_alpha",
             "behavior_alpha_1",
             1,
-            "grant_alpha",
             "Follow the approved project policy.",
             "a".repeat(64),
             [
@@ -125,6 +82,7 @@ describe("Bot protocol", () => {
                 },
             ],
             new BotConnectionReplyRoute("connection_alpha", "target_alpha"),
+            DEFAULT_AGENT_EXECUTION_CONFIGURATION,
         );
 
         expect(decodeBotSessionPromptCommand(encodeBotSessionPromptCommand(command))).toEqual(command);

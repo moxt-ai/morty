@@ -47,9 +47,9 @@ Mobius Runtime process. No separate prepare, bind, or finish commands are needed
 ## Observe and finish
 
 The script streams timestamped JSON progress and reports the Runtime PID and private
-log path. Waits are cancellable and bounded to five minutes. Complete any required
-local Runtime approval. Only `status: "ready"` means the binding is active and the
-selected Runtime/agent is online; it does not claim a successful test message.
+log path. Waits are cancellable and bounded to five minutes. Only `status: "ready"`
+means the binding is active and the selected Runtime/agent is online; it does not
+claim a successful test message.
 
 Return the exact clickable browser `url`, QR code, and `expiresAt` from the ready result.
 The QR payload is the exact same URL. When the harness can display a local image, show
