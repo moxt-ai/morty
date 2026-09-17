@@ -2,7 +2,6 @@ import { Bot, Laptop, LoaderCircle, MessageSquare, Plus, Settings, Smartphone, X
 import { type ComponentProps, useCallback, useEffect, useRef } from "react";
 import { Link, NavLink } from "react-router";
 
-import { AgentInstallationSidebarPanel } from "@/components/agents/agent-installation-panel";
 import { NativeSessionBrowser } from "@/components/chat/native-session-browser";
 import { SidebarResizeHandle } from "@/components/chat/sidebar-resize-handle";
 import { SidebarRuntimeStatus } from "@/components/chat/sidebar-runtime-status";
@@ -295,8 +294,6 @@ export function ConversationSidebar({
                             <div className="grid gap-0.5">{recentConversations.map(conversationButton)}</div>
                         </section>
                     </nav>
-
-                    {!managementPageOpen && <AgentInstallationSidebarPanel />}
 
                     <nav aria-label="Channel navigation" className="border-t-[0.5px] border-black/6 px-3 py-2.5">
                         <NavLink

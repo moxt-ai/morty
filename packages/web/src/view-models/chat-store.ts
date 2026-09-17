@@ -471,7 +471,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
                 event.requestId,
                 new CancelledAgentInstallationState(event.agentId, event.requestId),
             ),
-            announcement: "Agent integration installation was cancelled.",
+            announcement: "Local Agent check and automatic integration setup were cancelled.",
         }));
     },
     applyAgentInstallCompleted: (event) => {
@@ -482,7 +482,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
                 event.requestId,
                 new SucceededAgentInstallationState(event.agentId, event.requestId, event.authenticationMayBeRequired),
             ),
-            announcement: "Agent integration installation completed.",
+            announcement: "Local Agent check and automatic integration setup completed.",
         }));
     },
     applyAgentInstallFailed: (event) => {
@@ -493,7 +493,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
                 event.requestId,
                 new FailedAgentInstallationState(event.agentId, event.requestId, event.code, event.message),
             ),
-            announcement: `Agent integration installation failed. ${event.message}`,
+            announcement: `Local Agent check or automatic integration setup failed. ${event.message}`,
         }));
     },
     applyAgentInstallProgress: (event) => {
@@ -504,7 +504,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
                 event.requestId,
                 new RunningAgentInstallationState(event.agentId, event.requestId, event.stage),
             ),
-            announcement: "Agent integration installation is in progress.",
+            announcement: "Local Agent check and automatic integration setup are in progress.",
         }));
     },
     applyAgentInstallStarted: (event) => {
@@ -515,7 +515,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
                 event.requestId,
                 new StartingAgentInstallationState(event.agentId, event.requestId),
             ),
-            announcement: "Agent integration installation started.",
+            announcement: "Local Agent check and automatic integration setup started.",
         }));
     },
     applySessionCommands: (event) => {
@@ -649,7 +649,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
                 requestId,
                 new RequestingAgentInstallationState(agentId, requestId),
             ),
-            announcement: "Requesting Agent integration installation.",
+            announcement: "Checking local Agents and setting up integrations automatically.",
         }));
     },
     channelConfigured: false,
