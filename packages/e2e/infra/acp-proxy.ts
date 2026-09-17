@@ -5,10 +5,10 @@ import { createWriteStream } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const binary = process.env.MOBIUS_E2E_OPENCODE_REAL_BIN;
+const binary = process.env.MOBIUS_E2E_ACP_REAL_BIN;
 const directory = process.env.MOBIUS_E2E_ACP_TRACE_DIRECTORY;
 if (binary === undefined || directory === undefined) {
-    throw new Error("OpenCode ACP proxy is not configured");
+    throw new Error("ACP trace proxy is not configured");
 }
 
 await mkdir(directory, { recursive: true });

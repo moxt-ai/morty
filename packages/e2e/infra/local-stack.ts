@@ -8,9 +8,13 @@ import { jsonRequest, object, text } from "./chat-api.ts";
 import type { E2EHarness } from "./harness.ts";
 
 interface AgentConfiguration {
-    readonly binary: string;
-    readonly xdgConfigHome: string;
+    readonly acpBinary: string;
+    readonly adapterOverrideVariable: string;
+    readonly description: string;
+    readonly id: string;
+    readonly label: string;
     readonly publishableKey: string;
+    readonly runtimeEnvironment: Readonly<Record<string, string>>;
 }
 
 export const repository = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -64,35 +68,34 @@ async function migrate(
 
 export class LocalStack {
     readonly harness: E2EHarness;
-    readonly openCode: AgentConfiguration;
+    readonly agent: AgentConfiguration;
     readonly directories: Readonly<Record<string, string>>;
     readonly platformOrigin: string;
     readonly chatOrigin: string;
     readonly platformPort: number;
     readonly chatPort: number;
 
-    static async create(harness: E2EHarness, openCode: AgentConfiguration) {
+    static async create(harness: E2EHarness, agent: AgentConfiguration) {
         const platformPort = await freePort();
         const chatPort = await freePort();
         const directories = Object.fromEntries(
-            ["platform", "chat", "runtime", "workspace", "xdg-cache", "xdg-data", "xdg-state"].map((name) => [
-                name,
-                join(harness.workDirectory, name),
-            ]),
+            ["platform", "chat", "runtime", "workspace", "xdg-cache", "xdg-config", "xdg-data", "xdg-state"].map(
+                (name) => [name, join(harness.workDirectory, name)],
+            ),
         );
         await Promise.all(Object.values(directories).map((path) => mkdir(path, { recursive: true })));
-        return new LocalStack(harness, openCode, directories, platformPort, chatPort);
+        return new LocalStack(harness, agent, directories, platformPort, chatPort);
     }
 
     constructor(
         harness: E2EHarness,
-        openCode: AgentConfiguration,
+        agent: AgentConfiguration,
         directories: Readonly<Record<string, string>>,
         platformPort: number,
         chatPort: number,
     ) {
         this.harness = harness;
-        this.openCode = openCode;
+        this.agent = agent;
         this.directories = directories;
         this.platformOrigin = `http://127.0.0.1:${platformPort}`;
         this.chatOrigin = `http://127.0.0.1:${chatPort}`;
@@ -197,12 +200,12 @@ export class LocalStack {
             APP_ORIGIN: this.chatOrigin,
             AUTHENTICATION_BASE_URL: this.chatOrigin,
             CLERK_JWT_KEY: publicKey.export({ format: "pem", type: "spki" }).toString(),
-            CLERK_PUBLISHABLE_KEY: this.openCode.publishableKey,
+            CLERK_PUBLISHABLE_KEY: this.agent.publishableKey,
             MOBIUS_APP_ID: application.appId,
             MOBIUS_APP_SECRET: application.appSecret,
             MOBIUS_BASE_URL: this.platformOrigin,
-            SLACK_MOBIUS_AUTH_TOKEN: "unused-in-opencode-e2e",
-            SLACK_OAUTH_STATE_SIGNING_KEY: "unused-in-opencode-e2e",
+            SLACK_MOBIUS_AUTH_TOKEN: "unused-in-agent-image-e2e",
+            SLACK_OAUTH_STATE_SIGNING_KEY: "unused-in-agent-image-e2e",
             SLACK_SERVER_BASE_URL: this.chatOrigin,
             SLACK_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
         };
@@ -281,14 +284,14 @@ export class LocalStack {
             {
                 env: {
                     MOBIUS_E2E_ACP_TRACE_DIRECTORY: join(this.harness.artifactDirectory, "acp"),
-                    MOBIUS_E2E_OPENCODE_REAL_BIN: this.openCode.binary,
-                    MOBIUS_OPENCODE_PATH: acpProxy,
+                    MOBIUS_E2E_ACP_REAL_BIN: this.agent.acpBinary,
+                    [this.agent.adapterOverrideVariable]: acpProxy,
                     MOBIUS_STATE_DIRECTORY: this.directories.runtime,
-                    OPENCODE_DISABLE_AUTOUPDATE: "1",
                     XDG_CACHE_HOME: this.directories["xdg-cache"],
-                    XDG_CONFIG_HOME: this.openCode.xdgConfigHome,
+                    XDG_CONFIG_HOME: this.directories["xdg-config"],
                     XDG_DATA_HOME: this.directories["xdg-data"],
                     XDG_STATE_HOME: this.directories["xdg-state"],
+                    ...this.agent.runtimeEnvironment,
                 },
             },
         );
