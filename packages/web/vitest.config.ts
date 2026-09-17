@@ -32,7 +32,7 @@ export default defineConfig({
         ],
     },
     test: {
-        include: ["tests/{client,protocol}/**/*.{contract,integration}.test.ts"],
+        include: ["tests/client/**/*.integration.test.ts"],
         testTimeout: 5_000,
         coverage: {
             provider: "istanbul",

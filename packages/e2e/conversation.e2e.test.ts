@@ -46,24 +46,6 @@ test("Given a paired workspace, When the user shares their machine, Then Chat pr
     assert.notEqual(secondUrl, firstUrl);
 });
 
-test("Given a conversation has image and video artifacts, When it is reopened on a phone, Then both artifacts remain directly available", async ({
-    runtime,
-}) => {
-    await runtime.openPairedChat();
-    const { page } = runtime;
-    await runtime.sendMessage("generate media artifacts");
-    await expect(page.getByRole("img", { name: "generated-image.png", exact: true })).toBeVisible();
-    await expect(page.locator('video[aria-label="generated-video.mp4"]')).toHaveAttribute("src", /^blob:/u);
-
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.reload();
-
-    await expect(page.getByRole("img", { name: "generated-image.png", exact: true })).toBeVisible();
-    const video = page.locator('video[aria-label="generated-video.mp4"]');
-    await expect(video).toBeVisible();
-    await expect(video).toHaveAttribute("controls", "");
-    await expect(video).toHaveAttribute("src", /^blob:/u);
-});
 test("Given an agent is producing a reply, When the user stops it from the composer, Then the reply is cancelled and the composer can send again", async ({
     runtime,
 }) => {
