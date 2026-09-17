@@ -11,185 +11,30 @@ import {
     Smartphone,
     Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
+import { useStore } from "zustand";
 
 import { Button } from "@/components/ui/button";
-import {
-    createChannelAccessGrant,
-    readLinkedChannelDevices,
-    revokeLinkedChannelDevice,
-} from "@/services/pairing/pairing-api";
-import type { CreatedChannelAccessGrant, LinkedChannelDevice } from "@/view-models/chat/channel";
-import { PairingApiError } from "@/view-models/chat/channel";
 import { useChatStore } from "@/view-models/chat-store";
-
-abstract class DeviceDirectoryState {}
-
-class LoadingDeviceDirectoryState extends DeviceDirectoryState {}
-
-class OwnerDeviceDirectoryState extends DeviceDirectoryState {
-    readonly devices: readonly LinkedChannelDevice[];
-
-    constructor(devices: readonly LinkedChannelDevice[]) {
-        super();
-        this.devices = devices;
-    }
-}
-
-class LinkedDeviceDirectoryState extends DeviceDirectoryState {}
-
-class FailedDeviceDirectoryState extends DeviceDirectoryState {
-    readonly message: string;
-
-    constructor(message: string) {
-        super();
-        this.message = message;
-    }
-}
-
-abstract class AccessLinkState {}
-
-class IdleAccessLinkState extends AccessLinkState {}
-
-class CreatingAccessLinkState extends AccessLinkState {}
-
-class ReadyAccessLinkState extends AccessLinkState {
-    readonly expiresAt: Date;
-    readonly url: string;
-
-    constructor(url: string, expiresAt: Date) {
-        super();
-        this.expiresAt = expiresAt;
-        this.url = url;
-    }
-}
-
-class FailedAccessLinkState extends AccessLinkState {
-    readonly message: string;
-
-    constructor(message: string) {
-        super();
-        this.message = message;
-    }
-}
-
-abstract class DeviceRevocationState {}
-
-class IdleDeviceRevocationState extends DeviceRevocationState {}
-
-class RevokingDeviceState extends DeviceRevocationState {
-    readonly credentialId: string;
-
-    constructor(credentialId: string) {
-        super();
-        this.credentialId = credentialId;
-    }
-}
-
-class FailedDeviceRevocationState extends DeviceRevocationState {
-    readonly message: string;
-
-    constructor(message: string) {
-        super();
-        this.message = message;
-    }
-}
-
-function failureMessage(error: unknown): string {
-    return error instanceof PairingApiError
-        ? `${error.code}: ${error.message}`
-        : "The access request failed unexpectedly.";
-}
-
-function accessLink(channelId: string, grant: CreatedChannelAccessGrant): string {
-    const url = new URL(`/channels/${encodeURIComponent(channelId)}`, window.location.origin);
-    const fragment = new URLSearchParams();
-    fragment.set("access", `${grant.grantId}.${grant.grantSecret}`);
-    url.hash = fragment.toString();
-    return url.href;
-}
-
-function formatDate(date: Date): string {
-    return new Intl.DateTimeFormat(undefined, {
-        dateStyle: "medium",
-        timeStyle: "short",
-    }).format(date);
-}
-
-function deviceLabel(device: LinkedChannelDevice): string {
-    return `Linked device ${device.credentialId.slice(-6)}`;
-}
+import {
+    createChannelAccessStore,
+    formatAccessDate,
+    linkedDeviceLabel,
+} from "@/view-models/pairing/channel-access-store";
 
 function ChannelAccessPanel({ channelId }: { readonly channelId: string }) {
-    const [controller] = useState(() => new AbortController());
-    const [directory, setDirectory] = useState<DeviceDirectoryState>(new LoadingDeviceDirectoryState());
-    const [link, setLink] = useState<AccessLinkState>(new IdleAccessLinkState());
-    const [revocation, setRevocation] = useState<DeviceRevocationState>(new IdleDeviceRevocationState());
-    const [copyConfirmation, setCopyConfirmation] = useState("");
-
-    const loadDevices = useCallback(async (): Promise<void> => {
-        setDirectory(new LoadingDeviceDirectoryState());
-        try {
-            setDirectory(new OwnerDeviceDirectoryState(await readLinkedChannelDevices(channelId, controller.signal)));
-        } catch (error) {
-            if (error instanceof PairingApiError && error.code === "owner_access_required") {
-                setDirectory(new LinkedDeviceDirectoryState());
-                return;
-            }
-            if (controller.signal.aborted) {
-                return;
-            }
-            setDirectory(new FailedDeviceDirectoryState(failureMessage(error)));
-        }
-    }, [channelId, controller]);
+    const [store] = useState(() => createChannelAccessStore(channelId));
+    const viewModel = useStore(store);
+    const controller = useRef(new AbortController());
+    const { copyConfirmation, directory, link, revocation } = viewModel;
 
     useEffect(() => {
-        void loadDevices();
-        return () => controller.abort();
-    }, [controller, loadDevices]);
-
-    const createLink = async (): Promise<void> => {
-        setCopyConfirmation("");
-        setLink(new CreatingAccessLinkState());
-        try {
-            const grant = await createChannelAccessGrant(channelId, controller.signal);
-            setLink(new ReadyAccessLinkState(accessLink(channelId, grant), grant.expiresAt));
-        } catch (error) {
-            if (!controller.signal.aborted) {
-                setLink(new FailedAccessLinkState(failureMessage(error)));
-            }
-        }
-    };
-
-    const copyLink = async (readyLink: ReadyAccessLinkState): Promise<void> => {
-        try {
-            await navigator.clipboard.writeText(readyLink.url);
-            setCopyConfirmation("Access link copied.");
-        } catch {
-            setCopyConfirmation("Copy was unavailable. Select the full link and copy it manually.");
-        }
-    };
-
-    const revokeDevice = async (credentialId: string): Promise<void> => {
-        if (!(directory instanceof OwnerDeviceDirectoryState)) {
-            return;
-        }
-        setRevocation(new RevokingDeviceState(credentialId));
-        try {
-            await revokeLinkedChannelDevice(channelId, credentialId, controller.signal);
-            setDirectory(
-                new OwnerDeviceDirectoryState(
-                    directory.devices.filter((device) => device.credentialId !== credentialId),
-                ),
-            );
-            setRevocation(new IdleDeviceRevocationState());
-        } catch (error) {
-            if (!controller.signal.aborted) {
-                setRevocation(new FailedDeviceRevocationState(failureMessage(error)));
-            }
-        }
-    };
+        const lifetime = new AbortController();
+        controller.current = lifetime;
+        void viewModel.loadDevices(lifetime.signal);
+        return () => lifetime.abort();
+    }, [viewModel.loadDevices]);
 
     return (
         <section aria-labelledby="channel-access-heading">
@@ -209,14 +54,14 @@ function ChannelAccessPanel({ channelId }: { readonly channelId: string }) {
                         your owner credential is never put in the link.
                     </p>
                 </div>
-                {directory instanceof OwnerDeviceDirectoryState && (
+                {directory.kind === "owner" && (
                     <Button
-                        aria-busy={link instanceof CreatingAccessLinkState}
+                        aria-busy={link.kind === "creating"}
                         className="min-h-11 shrink-0 sm:self-end"
-                        disabled={link instanceof CreatingAccessLinkState}
-                        onClick={() => void createLink()}
+                        disabled={link.kind === "creating"}
+                        onClick={() => void viewModel.createLink(controller.current.signal)}
                     >
-                        {link instanceof CreatingAccessLinkState ? (
+                        {link.kind === "creating" ? (
                             <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
                         ) : (
                             <Link2 aria-hidden="true" className="size-4" />
@@ -226,23 +71,27 @@ function ChannelAccessPanel({ channelId }: { readonly channelId: string }) {
                 )}
             </div>
 
-            {directory instanceof LinkedDeviceDirectoryState && (
+            {directory.kind === "linked-device" && (
                 <div className="mt-5 rounded-xl border-[0.5px] border-black/10 bg-white px-5 py-4 text-sm leading-6 text-muted-foreground shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
                     This browser has linked-device access. It can use the channel, but only the original browser can
                     create links or revoke devices.
                 </div>
             )}
 
-            {directory instanceof FailedDeviceDirectoryState && (
+            {directory.kind === "failed" && (
                 <div className="mt-5 flex flex-col gap-3 rounded-xl border border-[#f2c4c4] bg-[#fff7f7] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-sm leading-6 text-[#9b2c32]">{directory.message}</p>
-                    <Button className="min-h-11 shrink-0" onClick={() => void loadDevices()} variant="outline">
+                    <Button
+                        className="min-h-11 shrink-0"
+                        onClick={() => void viewModel.loadDevices(controller.current.signal)}
+                        variant="outline"
+                    >
                         <RefreshCw aria-hidden="true" className="size-4" /> Retry
                     </Button>
                 </div>
             )}
 
-            {directory instanceof LoadingDeviceDirectoryState && (
+            {directory.kind === "loading" && (
                 <div
                     aria-busy="true"
                     aria-live="polite"
@@ -253,7 +102,7 @@ function ChannelAccessPanel({ channelId }: { readonly channelId: string }) {
                 </div>
             )}
 
-            {link instanceof ReadyAccessLinkState && (
+            {link.kind === "ready" && (
                 <div className="mt-5 rounded-xl border-[0.5px] border-[#9bd8b7] bg-[#f4fcf7] p-4 sm:p-5">
                     <label className="text-xs font-semibold text-foreground" htmlFor="one-time-access-link">
                         One-time access link
@@ -268,7 +117,11 @@ function ChannelAccessPanel({ channelId }: { readonly channelId: string }) {
                             type="text"
                             value={link.url}
                         />
-                        <Button className="min-h-11 shrink-0" onClick={() => void copyLink(link)} variant="outline">
+                        <Button
+                            className="min-h-11 shrink-0"
+                            onClick={() => void viewModel.copyLink()}
+                            variant="outline"
+                        >
                             {copyConfirmation === "Access link copied." ? (
                                 <Check aria-hidden="true" className="size-4" />
                             ) : (
@@ -278,7 +131,8 @@ function ChannelAccessPanel({ channelId }: { readonly channelId: string }) {
                         </Button>
                     </div>
                     <p className="mt-2 text-xs leading-5 text-muted-foreground" id="one-time-access-link-help">
-                        Expires {formatDate(link.expiresAt)} and becomes invalid immediately after one successful use.
+                        Expires {formatAccessDate(link.expiresAt)} and becomes invalid immediately after one successful
+                        use.
                     </p>
                     <p aria-live="polite" className="mt-1 text-xs leading-5 text-[#218854]">
                         {copyConfirmation}
@@ -286,13 +140,13 @@ function ChannelAccessPanel({ channelId }: { readonly channelId: string }) {
                 </div>
             )}
 
-            {link instanceof FailedAccessLinkState && (
+            {link.kind === "failed" && (
                 <p aria-live="polite" className="mt-4 rounded-lg bg-[#fff0f0] px-4 py-3 text-sm text-[#9b2c32]">
                     {link.message}
                 </p>
             )}
 
-            {directory instanceof OwnerDeviceDirectoryState && (
+            {directory.kind === "owner" && (
                 <div className="mt-6">
                     <div className="flex items-end justify-between gap-4">
                         <div>
@@ -314,8 +168,7 @@ function ChannelAccessPanel({ channelId }: { readonly channelId: string }) {
                         <ul aria-label="Linked devices" className="mt-4 grid gap-3">
                             {directory.devices.map((device) => {
                                 const isRevoking =
-                                    revocation instanceof RevokingDeviceState &&
-                                    revocation.credentialId === device.credentialId;
+                                    revocation.kind === "revoking" && revocation.credentialId === device.credentialId;
                                 return (
                                     <li
                                         className="flex flex-col gap-4 rounded-xl border-[0.5px] border-black/10 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] sm:flex-row sm:items-center"
@@ -326,19 +179,24 @@ function ChannelAccessPanel({ channelId }: { readonly channelId: string }) {
                                         </span>
                                         <span className="min-w-0 flex-1">
                                             <strong className="block text-sm font-semibold">
-                                                {deviceLabel(device)}
+                                                {linkedDeviceLabel(device)}
                                             </strong>
                                             <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-                                                Added {formatDate(device.createdAt)} · Last used{" "}
-                                                {formatDate(device.lastUsedAt)}
+                                                Added {formatAccessDate(device.createdAt)} · Last used{" "}
+                                                {formatAccessDate(device.lastUsedAt)}
                                             </span>
                                         </span>
                                         <Button
                                             aria-busy={isRevoking}
                                             aria-label={`Revoke linked device ${device.credentialId.slice(-6)}`}
                                             className="min-h-11 shrink-0 text-[#a1282e] hover:text-[#821f24]"
-                                            disabled={revocation instanceof RevokingDeviceState}
-                                            onClick={() => void revokeDevice(device.credentialId)}
+                                            disabled={revocation.kind === "revoking"}
+                                            onClick={() =>
+                                                void viewModel.revokeDevice(
+                                                    device.credentialId,
+                                                    controller.current.signal,
+                                                )
+                                            }
                                             variant="outline"
                                         >
                                             {isRevoking ? (
@@ -356,7 +214,7 @@ function ChannelAccessPanel({ channelId }: { readonly channelId: string }) {
                 </div>
             )}
 
-            {revocation instanceof FailedDeviceRevocationState && (
+            {revocation.kind === "failed" && (
                 <p aria-live="polite" className="mt-4 rounded-lg bg-[#fff0f0] px-4 py-3 text-sm text-[#9b2c32]">
                     {revocation.message}
                 </p>

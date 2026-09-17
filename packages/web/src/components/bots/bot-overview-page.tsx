@@ -1,439 +1,75 @@
-import {
-    MobiusApiError,
-    type MobiusBotBehaviorRevision,
-    type MobiusBotExecutionBinding,
-    MobiusNoBotCompletionPolicy,
-    type MobiusOwnerBotDeliveryTarget,
-    MobiusRequiredBotCompletionPolicy,
-    MobiusUnavailableBotBindingState,
-} from "@moxt-ai/mobius-sdk";
+import { MobiusUnavailableBotBindingState } from "@moxt-ai/mobius-sdk";
 import { CheckCircle2, LoaderCircle, Pause, Play, RefreshCw, Save, ShieldCheck, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useOutletContext } from "react-router";
+import { useStore } from "zustand";
 import { BOT_FIELD_CLASS, BOT_TEXTAREA_CLASS, BotInlineError } from "@/components/bots/bot-page-header";
 import type { BotDetailContext } from "@/components/bots/bot-workspace";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { botConnectionsRoutePath } from "@/services/application/app-routes";
-
-const BOT_ACTIVATION_REFRESH_MILLISECONDS = 250;
-
-abstract class BotConfigurationState {}
-
-class LoadingBotConfigurationState extends BotConfigurationState {}
-
-class ReadyBotConfigurationState extends BotConfigurationState {
-    readonly behaviors: readonly MobiusBotBehaviorRevision[];
-    readonly bindings: readonly MobiusBotExecutionBinding[];
-    readonly deliveryTargets: readonly MobiusOwnerBotDeliveryTarget[];
-
-    constructor(
-        behaviors: readonly MobiusBotBehaviorRevision[],
-        bindings: readonly MobiusBotExecutionBinding[],
-        deliveryTargets: readonly MobiusOwnerBotDeliveryTarget[],
-    ) {
-        super();
-        this.behaviors = behaviors;
-        this.bindings = bindings;
-        this.deliveryTargets = deliveryTargets;
-    }
-}
-
-class FailedBotConfigurationState extends BotConfigurationState {
-    readonly message: string;
-
-    constructor(message: string) {
-        super();
-        this.message = message;
-    }
-}
-
-abstract class BotCompletionSelection {}
-
-class NoBotCompletionSelection extends BotCompletionSelection {}
-
-class RequiredBotCompletionSelection extends BotCompletionSelection {
-    readonly messageTemplate: string;
-    readonly targetId: string;
-
-    constructor(targetId: string, messageTemplate: string) {
-        super();
-        this.messageTemplate = messageTemplate;
-        this.targetId = targetId;
-    }
-}
-
-function failureMessage(error: unknown): string {
-    return error instanceof MobiusApiError ? `${error.code}: ${error.message}` : "The Bot operation failed.";
-}
-
-function formattedDate(value: string): string {
-    return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-}
-
-function behaviorStatusLabel(behavior: MobiusBotBehaviorRevision): string {
-    if (behavior.state.kind === "awaiting_local_approval") {
-        return "Activating";
-    }
-    if (behavior.state.kind === "approved") {
-        return "Approved";
-    }
-    if (behavior.state.kind === "retired") {
-        return "Retired";
-    }
-    return "Proposed";
-}
-
-function bindingStatusLabel(binding: MobiusBotExecutionBinding): string {
-    if (binding.state.kind === "requested") {
-        return "Activating";
-    }
-    if (binding.state.kind === "approved") {
-        return "Approved";
-    }
-    if (binding.state.kind === "unavailable") {
-        return "Unavailable";
-    }
-    return "Revoked";
-}
+import { createBotActivationStore } from "@/view-models/bots/overview-activation-store";
+import {
+    botBehaviorStatusLabel,
+    botBindingStatusLabel,
+    createBotConfigurationStore,
+    formatBotDate,
+} from "@/view-models/bots/overview-configuration-store";
+import { createBotLifecycleStore } from "@/view-models/bots/overview-lifecycle-store";
+import { createBotProfileStore } from "@/view-models/bots/overview-profile-store";
 
 export function BotOverviewPage() {
     const { bot, client, connection, refreshBot, signal } = useOutletContext<BotDetailContext>();
     const errorSummaryRef = useRef<HTMLDivElement>(null);
-    const behaviorDefaultsRef = useRef("");
-    const bindingDefaultsRef = useRef("");
-    const instructionCapableAgents = connection.agents.filter((agent) => agent.capabilities.embeddedContextPrompt);
-    const [configuration, setConfiguration] = useState<BotConfigurationState>(new LoadingBotConfigurationState());
-    const [refreshingConfiguration, setRefreshingConfiguration] = useState(false);
-    const [displayName, setDisplayName] = useState(bot.displayName);
-    const [description, setDescription] = useState(bot.description);
-    const [avatarRef, setAvatarRef] = useState(bot.avatarRef);
-    const [instructions, setInstructions] = useState("");
-    const [identityOnly, setIdentityOnly] = useState(instructionCapableAgents.length === 0);
-    const [agentRef, setAgentRef] = useState(instructionCapableAgents[0]?.id ?? connection.agents[0]?.id ?? "");
-    const [workspaceRef, setWorkspaceRef] = useState("default");
-    const [allowedDeliveryTargetIds, setAllowedDeliveryTargetIds] = useState<readonly string[]>([]);
-    const [completionSelection, setCompletionSelection] = useState<BotCompletionSelection>(
-        new NoBotCompletionSelection(),
+    const [configurationStore] = useState(() => createBotConfigurationStore(bot.botId, client, connection));
+    const [activationStore] = useState(() =>
+        createBotActivationStore(bot, client, connection, configurationStore, refreshBot),
     );
-    const [savingProfile, setSavingProfile] = useState(false);
-    const [requestingActivation, setRequestingActivation] = useState(false);
-    const [activationBindingId, setActivationBindingId] = useState("");
-    const [changingLifecycle, setChangingLifecycle] = useState(false);
-    const [archiveConfirmationOpen, setArchiveConfirmationOpen] = useState(false);
-    const [operationError, setOperationError] = useState("");
-    const [announcement, setAnnouncement] = useState("");
+    const [lifecycleStore] = useState(() => createBotLifecycleStore(bot, client, refreshBot));
+    const [profileStore] = useState(() => createBotProfileStore(bot, client, refreshBot));
+    const activation = useStore(activationStore);
+    const configurationViewModel = useStore(configurationStore);
+    const lifecycle = useStore(lifecycleStore);
+    const profile = useStore(profileStore);
+    const {
+        agentRef,
+        allowedDeliveryTargetIds,
+        completionSelection,
+        configuration,
+        identityOnly,
+        instructions,
+        refreshing: refreshingConfiguration,
+        workspaceRef,
+    } = configurationViewModel;
+    const requestingActivation = activation.requesting;
+    const { archiveConfirmationOpen, changing: changingLifecycle } = lifecycle;
+    const { avatarRef, description, displayName, saving: savingProfile } = profile;
+    const operationError = activation.error || profile.error || lifecycle.error;
+    const announcement = activation.announcement || profile.announcement || lifecycle.announcement;
+    const _instructionCapableAgents = connection.agents.filter((agent) => agent.capabilities.embeddedContextPrompt);
 
     useEffect(() => {
-        setDisplayName(bot.displayName);
-        setDescription(bot.description);
-        setAvatarRef(bot.avatarRef);
-    }, [bot]);
-
-    const loadConfiguration = useCallback(async (): Promise<void> => {
-        setRefreshingConfiguration(true);
-        setConfiguration((current) =>
-            current instanceof ReadyBotConfigurationState ? current : new LoadingBotConfigurationState(),
-        );
-        try {
-            const [behaviors, bindings, connections] = await Promise.all([
-                client.listBehaviors(bot.botId, signal),
-                client.listBindings(bot.botId, signal),
-                client.listConnections(bot.botId, signal),
-            ]);
-            const deliveryTargets = connections.deliveryTargets.filter(
-                (target) => target.state.kind === "active" && target.ownerApproved,
-            );
-            const targetIds = new Set(deliveryTargets.map((target) => target.deliveryTargetId));
-            const approvedBinding = bindings.executionBindings.find((binding) => binding.state.kind === "approved");
-            if (approvedBinding !== undefined && bindingDefaultsRef.current !== approvedBinding.bindingId) {
-                const allowedTargets = approvedBinding.allowedDeliveryTargetIds.filter((targetId) =>
-                    targetIds.has(targetId),
-                );
-                setAgentRef(approvedBinding.agentRef);
-                setAllowedDeliveryTargetIds(allowedTargets);
-                setCompletionSelection(
-                    approvedBinding.completionPolicy instanceof MobiusRequiredBotCompletionPolicy &&
-                        allowedTargets.includes(approvedBinding.completionPolicy.deliveryTargetId)
-                        ? new RequiredBotCompletionSelection(
-                              approvedBinding.completionPolicy.deliveryTargetId,
-                              approvedBinding.completionPolicy.messageTemplate,
-                          )
-                        : new NoBotCompletionSelection(),
-                );
-                setWorkspaceRef(approvedBinding.workspaceRef);
-                bindingDefaultsRef.current = approvedBinding.bindingId;
-            } else {
-                setAllowedDeliveryTargetIds((current) => current.filter((targetId) => targetIds.has(targetId)));
-                setCompletionSelection((current) =>
-                    current instanceof RequiredBotCompletionSelection && !targetIds.has(current.targetId)
-                        ? new NoBotCompletionSelection()
-                        : current,
-                );
-            }
-            setConfiguration(
-                new ReadyBotConfigurationState(
-                    behaviors.behaviorRevisions,
-                    bindings.executionBindings,
-                    deliveryTargets,
-                ),
-            );
-            const latest = behaviors.behaviorRevisions[0];
-            if (latest !== undefined && behaviorDefaultsRef.current !== latest.behaviorRevisionId) {
-                setInstructions(latest.instructions);
-                setIdentityOnly(latest.instructions.length === 0 && latest.requiredCapabilities.length === 0);
-                behaviorDefaultsRef.current = latest.behaviorRevisionId;
-            }
-        } catch (error) {
-            if (!signal.aborted) {
-                setConfiguration(new FailedBotConfigurationState(failureMessage(error)));
-            }
-        } finally {
-            if (!signal.aborted) {
-                setRefreshingConfiguration(false);
-            }
-        }
-    }, [bot, client, signal]);
+        activation.syncBot(bot);
+        lifecycle.syncBot(bot);
+        profile.syncBot(bot);
+    }, [activation.syncBot, bot, lifecycle.syncBot, profile.syncBot]);
 
     useEffect(() => {
-        void loadConfiguration();
-    }, [loadConfiguration]);
+        void activation.open(signal);
+    }, [activation.open, signal]);
 
-    const reportError = (error: unknown): void => {
-        if (signal.aborted) {
-            return;
+    useEffect(() => {
+        if (operationError.length > 0) {
+            queueMicrotask(() => errorSummaryRef.current?.focus());
         }
-        setOperationError(failureMessage(error));
-        setAnnouncement("");
-        queueMicrotask(() => errorSummaryRef.current?.focus());
-    };
+    }, [operationError]);
 
-    const saveProfile = async (): Promise<void> => {
-        const normalizedName = displayName.trim();
-        if (normalizedName.length === 0) {
-            reportError(new Error("Enter a Bot name."));
-            setOperationError("Enter a Bot name.");
-            return;
-        }
-        setSavingProfile(true);
-        setOperationError("");
-        try {
-            await client.reviseProfile(
-                bot.botId,
-                {
-                    avatarRef: avatarRef.trim(),
-                    description: description.trim(),
-                    displayName: normalizedName,
-                    expectedRevision: bot.lifecycleRevision,
-                },
-                signal,
-            );
-            await refreshBot();
-            setAnnouncement("Bot profile saved.");
-        } catch (error) {
-            reportError(error);
-        } finally {
-            if (!signal.aborted) {
-                setSavingProfile(false);
-            }
-        }
-    };
-
-    const activateBot = async (ready: ReadyBotConfigurationState): Promise<void> => {
-        const selectedAgent = connection.agents.find((agent) => agent.id === agentRef);
-        if (selectedAgent === undefined) {
-            setOperationError("Choose an available local Agent.");
-            queueMicrotask(() => errorSummaryRef.current?.focus());
-            return;
-        }
-        if (!identityOnly && instructions.trim().length === 0) {
-            setOperationError("Enter behavior instructions before activating the Bot.");
-            queueMicrotask(() => errorSummaryRef.current?.focus());
-            return;
-        }
-        if (!identityOnly && !selectedAgent.capabilities.embeddedContextPrompt) {
-            setOperationError(`${selectedAgent.label} can run this Bot only in identity-only mode.`);
-            queueMicrotask(() => errorSummaryRef.current?.focus());
-            return;
-        }
-        if (workspaceRef.trim().length === 0) {
-            setOperationError("Enter a local workspace reference.");
-            queueMicrotask(() => errorSummaryRef.current?.focus());
-            return;
-        }
-        if (
-            completionSelection instanceof RequiredBotCompletionSelection &&
-            (!allowedDeliveryTargetIds.includes(completionSelection.targetId) ||
-                completionSelection.messageTemplate.trim().length === 0)
-        ) {
-            setOperationError("Choose an allowed completion target and enter its message template.");
-            queueMicrotask(() => errorSummaryRef.current?.focus());
-            return;
-        }
-        setRequestingActivation(true);
-        setOperationError("");
-        setAnnouncement("");
-        try {
-            const behaviorInstructions = identityOnly ? "" : instructions.trim();
-            const requiredCapabilities = identityOnly ? [] : ["embedded-context"];
-            const latestRevision = ready.behaviors[0]?.revisionNumber ?? 0;
-            const latestBehavior = ready.behaviors[0];
-            const behavior =
-                latestBehavior !== undefined &&
-                latestBehavior.state.kind === "proposed" &&
-                latestBehavior.instructions === behaviorInstructions &&
-                latestBehavior.requiredCapabilities.length === requiredCapabilities.length &&
-                latestBehavior.requiredCapabilities.every(
-                    (capability, index) => capability === requiredCapabilities[index],
-                ) &&
-                Object.keys(latestBehavior.agentConfiguration).length === 0
-                    ? latestBehavior
-                    : await client.createBehavior(
-                          bot.botId,
-                          {
-                              agentConfiguration: {},
-                              expectedRevision: latestRevision,
-                              instructions: behaviorInstructions,
-                              requiredCapabilities,
-                          },
-                          signal,
-                      );
-            const accepted = await client.createBinding(
-                bot.botId,
-                {
-                    agentConfigRevision: 1,
-                    agentRef,
-                    allowedDeliveryTargetIds,
-                    behaviorRevisionId: behavior.behaviorRevisionId,
-                    completionPolicy:
-                        completionSelection instanceof RequiredBotCompletionSelection
-                            ? new MobiusRequiredBotCompletionPolicy(
-                                  completionSelection.targetId,
-                                  completionSelection.messageTemplate.trim(),
-                              )
-                            : new MobiusNoBotCompletionPolicy(),
-                    expectedRevision: bot.lifecycleRevision,
-                    runtimeId: connection.runtimeId,
-                    workspaceRef: workspaceRef.trim(),
-                },
-                signal,
-            );
-            setActivationBindingId(accepted.bindingId);
-            setAnnouncement(
-                `Activation confirmed. ${connection.machineName} is validating the selected Agent and workspace.`,
-            );
-            await loadConfiguration();
-        } catch (error) {
-            if (!signal.aborted) {
-                await loadConfiguration();
-                reportError(error);
-            }
-        } finally {
-            if (!signal.aborted) {
-                setRequestingActivation(false);
-            }
-        }
-    };
-
-    const changeLifecycle = async (action: string): Promise<void> => {
-        setChangingLifecycle(true);
-        setOperationError("");
-        setAnnouncement("");
-        try {
-            if (action === "suspend") {
-                await client.suspendBot(bot.botId, bot.lifecycleRevision, signal);
-                setAnnouncement("Bot suspended. Existing history remains available, but new turns are blocked.");
-            } else if (action === "resume") {
-                await client.resumeBot(bot.botId, bot.lifecycleRevision, signal);
-                setAnnouncement("Bot resumed.");
-            } else if (action === "archive") {
-                await client.archiveBot(bot.botId, bot.lifecycleRevision, signal);
-                setAnnouncement("Bot archived.");
-                setArchiveConfirmationOpen(false);
-            }
-            await refreshBot();
-        } catch (error) {
-            reportError(error);
-        } finally {
-            if (!signal.aborted) {
-                setChangingLifecycle(false);
-            }
-        }
-    };
-
-    const ready = configuration instanceof ReadyBotConfigurationState ? configuration : undefined;
+    const ready = configuration.kind === "ready" ? configuration : undefined;
     const pendingBinding = ready?.bindings.find((binding) => binding.state.kind === "requested");
-    const pendingBindingId = pendingBinding?.bindingId ?? "";
     const configurationLocked = bot.state.kind === "archived";
     const selectedAgent = connection.agents.find((agent) => agent.id === agentRef);
     const selectedAgentSupportsInstructions = selectedAgent?.capabilities.embeddedContextPrompt === true;
     const pendingAgentLabel = connection.agents.find((agent) => agent.id === pendingBinding?.agentRef)?.label;
-
-    useEffect(() => {
-        if (pendingBindingId.length === 0) {
-            return;
-        }
-        let stopped = false;
-        let timeout = 0;
-        const refresh = async (): Promise<void> => {
-            await Promise.all([loadConfiguration(), refreshBot().catch(() => undefined)]);
-            if (!stopped && !signal.aborted) {
-                timeout = window.setTimeout(() => void refresh(), BOT_ACTIVATION_REFRESH_MILLISECONDS);
-            }
-        };
-        timeout = window.setTimeout(() => void refresh(), BOT_ACTIVATION_REFRESH_MILLISECONDS);
-        return () => {
-            stopped = true;
-            window.clearTimeout(timeout);
-        };
-    }, [loadConfiguration, pendingBindingId, refreshBot, signal]);
-
-    useEffect(() => {
-        if (activationBindingId.length === 0 || ready === undefined) {
-            return;
-        }
-        const binding = ready.bindings.find((candidate) => candidate.bindingId === activationBindingId);
-        if (binding?.state.kind === "approved") {
-            setActivationBindingId("");
-            setAnnouncement(`Bot activated on ${connection.machineName}.`);
-            void refreshBot().catch(() => undefined);
-            return;
-        }
-        if (binding?.state instanceof MobiusUnavailableBotBindingState) {
-            setActivationBindingId("");
-            setAnnouncement("");
-            setOperationError(`${binding.state.code}: ${binding.state.message}`);
-            queueMicrotask(() => errorSummaryRef.current?.focus());
-        }
-    }, [activationBindingId, connection.machineName, ready, refreshBot]);
-
-    const selectIdentityOnly = (selected: boolean): void => {
-        if (!selected && !selectedAgentSupportsInstructions) {
-            return;
-        }
-        setIdentityOnly(selected);
-    };
-
-    const selectAgent = (selectedAgentRef: string): void => {
-        setAgentRef(selectedAgentRef);
-        const agent = connection.agents.find((candidate) => candidate.id === selectedAgentRef);
-        if (agent !== undefined && !agent.capabilities.embeddedContextPrompt) {
-            setIdentityOnly(true);
-        }
-    };
-
-    const selectDeliveryTarget = (targetId: string, selected: boolean): void => {
-        setAllowedDeliveryTargetIds((current) =>
-            selected ? [...current, targetId] : current.filter((candidate) => candidate !== targetId),
-        );
-        if (!selected) {
-            setCompletionSelection((current) =>
-                current instanceof RequiredBotCompletionSelection && current.targetId === targetId
-                    ? new NoBotCompletionSelection()
-                    : current,
-            );
-        }
-    };
 
     return (
         <div className="mx-auto w-full max-w-[1040px] px-5 py-7 sm:px-8 sm:py-9">
@@ -466,7 +102,7 @@ export function BotOverviewPage() {
                             className="mt-5 grid gap-4 rounded-2xl border-[0.5px] border-black/10 bg-white p-5 shadow-[0_1px_4px_rgba(0,0,0,0.035)]"
                             onSubmit={(event) => {
                                 event.preventDefault();
-                                void saveProfile();
+                                void profile.save(signal);
                             }}
                         >
                             <label className="grid gap-1.5 text-xs font-semibold" htmlFor="bot-profile-name">
@@ -476,7 +112,7 @@ export function BotOverviewPage() {
                                     disabled={configurationLocked || savingProfile}
                                     id="bot-profile-name"
                                     maxLength={80}
-                                    onChange={(event) => setDisplayName(event.target.value)}
+                                    onChange={(event) => profile.setDisplayName(event.target.value)}
                                     value={displayName}
                                 />
                             </label>
@@ -487,7 +123,7 @@ export function BotOverviewPage() {
                                     disabled={configurationLocked || savingProfile}
                                     id="bot-profile-description"
                                     maxLength={2000}
-                                    onChange={(event) => setDescription(event.target.value)}
+                                    onChange={(event) => profile.setDescription(event.target.value)}
                                     value={description}
                                 />
                             </label>
@@ -498,7 +134,7 @@ export function BotOverviewPage() {
                                     disabled={configurationLocked || savingProfile}
                                     id="bot-profile-avatar"
                                     maxLength={4096}
-                                    onChange={(event) => setAvatarRef(event.target.value)}
+                                    onChange={(event) => profile.setAvatarRef(event.target.value)}
                                     value={avatarRef}
                                 />
                             </label>
@@ -535,7 +171,7 @@ export function BotOverviewPage() {
                             aria-busy={refreshingConfiguration}
                             className="mt-3 min-h-11"
                             disabled={refreshingConfiguration}
-                            onClick={() => void loadConfiguration()}
+                            onClick={() => void configurationViewModel.load(signal)}
                             variant="ghost"
                         >
                             <RefreshCw
@@ -545,7 +181,7 @@ export function BotOverviewPage() {
                             Refresh execution
                         </Button>
 
-                        {configuration instanceof LoadingBotConfigurationState && (
+                        {configuration.kind === "loading" && (
                             <div
                                 aria-busy="true"
                                 className="mt-5 flex min-h-24 items-center gap-3 rounded-xl border-[0.5px] border-black/10 bg-white px-5 text-sm text-muted-foreground"
@@ -554,12 +190,12 @@ export function BotOverviewPage() {
                                 configuration…
                             </div>
                         )}
-                        {configuration instanceof FailedBotConfigurationState && (
+                        {configuration.kind === "failed" && (
                             <div className="mt-5 rounded-xl border border-[#f2c4c4] bg-[#fff7f7] p-4">
                                 <BotInlineError>{configuration.message}</BotInlineError>
                                 <Button
                                     className="mt-3 min-h-11"
-                                    onClick={() => void loadConfiguration()}
+                                    onClick={() => void configurationViewModel.load(signal)}
                                     variant="outline"
                                 >
                                     <RefreshCw aria-hidden="true" className="size-4" /> Retry
@@ -571,7 +207,7 @@ export function BotOverviewPage() {
                                 className="mt-5 grid gap-4 rounded-2xl border-[0.5px] border-black/10 bg-white p-5 shadow-[0_1px_4px_rgba(0,0,0,0.035)]"
                                 onSubmit={(event) => {
                                     event.preventDefault();
-                                    void activateBot(ready);
+                                    void activation.activate(signal);
                                 }}
                             >
                                 {pendingBinding !== undefined && (
@@ -606,7 +242,7 @@ export function BotOverviewPage() {
                                                 className="mt-0.5 size-4 accent-[#218854]"
                                                 disabled={!selectedAgentSupportsInstructions}
                                                 name="bot-behavior-mode"
-                                                onChange={() => selectIdentityOnly(false)}
+                                                onChange={() => configurationViewModel.selectIdentityOnly(false)}
                                                 type="radio"
                                             />
                                             <span>
@@ -623,7 +259,7 @@ export function BotOverviewPage() {
                                                 checked={identityOnly}
                                                 className="mt-0.5 size-4 accent-[#218854]"
                                                 name="bot-behavior-mode"
-                                                onChange={() => selectIdentityOnly(true)}
+                                                onChange={() => configurationViewModel.selectIdentityOnly(true)}
                                                 type="radio"
                                             />
                                             <span>
@@ -650,7 +286,9 @@ export function BotOverviewPage() {
                                             }
                                             id="bot-behavior-instructions"
                                             maxLength={100000}
-                                            onChange={(event) => setInstructions(event.target.value)}
+                                            onChange={(event) =>
+                                                configurationViewModel.setInstructions(event.target.value)
+                                            }
                                             placeholder="Describe the stable behavior this Bot should apply to every turn."
                                             value={instructions}
                                         />
@@ -667,7 +305,7 @@ export function BotOverviewPage() {
                                                 pendingBinding !== undefined
                                             }
                                             id="bot-local-agent"
-                                            onChange={(event) => selectAgent(event.target.value)}
+                                            onChange={(event) => configurationViewModel.selectAgent(event.target.value)}
                                             value={agentRef}
                                         >
                                             {connection.agents.length === 0 && (
@@ -691,7 +329,9 @@ export function BotOverviewPage() {
                                                 pendingBinding !== undefined
                                             }
                                             id="bot-workspace-ref"
-                                            onChange={(event) => setWorkspaceRef(event.target.value)}
+                                            onChange={(event) =>
+                                                configurationViewModel.setWorkspaceRef(event.target.value)
+                                            }
                                             value={workspaceRef}
                                         />
                                     </label>
@@ -732,7 +372,7 @@ export function BotOverviewPage() {
                                                                 className="size-4 accent-[#218854]"
                                                                 id={inputId}
                                                                 onChange={(event) =>
-                                                                    selectDeliveryTarget(
+                                                                    configurationViewModel.selectDeliveryTarget(
                                                                         target.deliveryTargetId,
                                                                         event.target.checked,
                                                                     )
@@ -766,22 +406,10 @@ export function BotOverviewPage() {
                                         }
                                         id="bot-completion-target"
                                         onChange={(event) => {
-                                            const targetId = event.target.value;
-                                            setCompletionSelection((current) =>
-                                                targetId.length === 0
-                                                    ? new NoBotCompletionSelection()
-                                                    : new RequiredBotCompletionSelection(
-                                                          targetId,
-                                                          current instanceof RequiredBotCompletionSelection
-                                                              ? current.messageTemplate
-                                                              : "Turn {status}",
-                                                      ),
-                                            );
+                                            configurationViewModel.setCompletionTarget(event.target.value);
                                         }}
                                         value={
-                                            completionSelection instanceof RequiredBotCompletionSelection
-                                                ? completionSelection.targetId
-                                                : ""
+                                            completionSelection.kind === "required" ? completionSelection.targetId : ""
                                         }
                                     >
                                         <option value="">Do not send a completion automatically</option>
@@ -796,7 +424,7 @@ export function BotOverviewPage() {
                                             ))}
                                     </select>
                                 </label>
-                                {completionSelection instanceof RequiredBotCompletionSelection && (
+                                {completionSelection.kind === "required" && (
                                     <label
                                         className="grid gap-1.5 text-xs font-semibold"
                                         htmlFor="bot-completion-template"
@@ -813,12 +441,7 @@ export function BotOverviewPage() {
                                             id="bot-completion-template"
                                             maxLength={10000}
                                             onChange={(event) =>
-                                                setCompletionSelection(
-                                                    new RequiredBotCompletionSelection(
-                                                        completionSelection.targetId,
-                                                        event.target.value,
-                                                    ),
-                                                )
+                                                configurationViewModel.setCompletionTemplate(event.target.value)
                                             }
                                             value={completionSelection.messageTemplate}
                                         />
@@ -903,7 +526,7 @@ export function BotOverviewPage() {
                                                             "bg-[#fff5e6] text-[#9a5b00]",
                                                     )}
                                                 >
-                                                    {behaviorStatusLabel(behavior)}
+                                                    {botBehaviorStatusLabel(behavior)}
                                                 </span>
                                             </div>
                                             <p className="mt-2 line-clamp-3 text-xs leading-5 text-muted-foreground">
@@ -915,7 +538,9 @@ export function BotOverviewPage() {
                                                 <dl className="mt-3 grid gap-1 rounded-lg bg-black/[0.025] p-3 text-[11px]">
                                                     <div className="flex justify-between gap-3">
                                                         <dt className="text-muted-foreground">Binding</dt>
-                                                        <dd className="font-medium">{bindingStatusLabel(binding)}</dd>
+                                                        <dd className="font-medium">
+                                                            {botBindingStatusLabel(binding)}
+                                                        </dd>
                                                     </div>
                                                     <div className="flex justify-between gap-3">
                                                         <dt className="text-muted-foreground">Target</dt>
@@ -939,7 +564,7 @@ export function BotOverviewPage() {
                                                 </p>
                                             )}
                                             <time className="mt-3 block text-[10px] text-muted-foreground">
-                                                {formattedDate(behavior.createdAt)}
+                                                {formatBotDate(behavior.createdAt)}
                                             </time>
                                         </li>
                                     );
@@ -971,7 +596,7 @@ export function BotOverviewPage() {
                                     <Button
                                         className="min-h-11 justify-start"
                                         disabled={changingLifecycle}
-                                        onClick={() => void changeLifecycle("suspend")}
+                                        onClick={() => void lifecycle.change("suspend", signal)}
                                         variant="outline"
                                     >
                                         <Pause aria-hidden="true" className="size-4" /> Suspend Bot
@@ -981,7 +606,7 @@ export function BotOverviewPage() {
                                     <Button
                                         className="min-h-11 justify-start"
                                         disabled={changingLifecycle}
-                                        onClick={() => void changeLifecycle("resume")}
+                                        onClick={() => void lifecycle.change("resume", signal)}
                                     >
                                         <Play aria-hidden="true" className="size-4" /> Resume Bot
                                     </Button>
@@ -990,7 +615,7 @@ export function BotOverviewPage() {
                                     <Button
                                         className="min-h-11 justify-start text-[#9b2c32] hover:text-[#9b2c32]"
                                         disabled={changingLifecycle}
-                                        onClick={() => setArchiveConfirmationOpen(true)}
+                                        onClick={() => lifecycle.setArchiveConfirmationOpen(true)}
                                         variant="ghost"
                                     >
                                         <Trash2 aria-hidden="true" className="size-4" /> Archive Bot
@@ -1005,7 +630,7 @@ export function BotOverviewPage() {
                                             <Button
                                                 className="min-h-11 bg-[#8f252b] text-white hover:bg-[#781f24]"
                                                 disabled={changingLifecycle}
-                                                onClick={() => void changeLifecycle("archive")}
+                                                onClick={() => void lifecycle.change("archive", signal)}
                                             >
                                                 <Trash2 aria-hidden="true" className="size-4" /> Confirm archive
                                             </Button>
@@ -1013,7 +638,7 @@ export function BotOverviewPage() {
                                                 aria-label="Cancel archive"
                                                 className="min-h-11"
                                                 disabled={changingLifecycle}
-                                                onClick={() => setArchiveConfirmationOpen(false)}
+                                                onClick={() => lifecycle.setArchiveConfirmationOpen(false)}
                                                 variant="ghost"
                                             >
                                                 <X aria-hidden="true" className="size-4" /> Cancel

@@ -1,17 +1,8 @@
-import type { SessionConfigOption } from "@moxt-ai/mobius-protocol";
 import { useEffect, useRef, useState } from "react";
+import { useStore } from "zustand";
 import { Select } from "../../components/ui/option-select.tsx";
-import type { BotChatApi, ChatDraftConfiguration, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
-
-type Settings =
-    | { readonly kind: "loading" }
-    | { readonly kind: "failed"; readonly message: string }
-    | {
-          readonly kind: "ready";
-          readonly workspace: ChatWorkspace;
-          readonly bindingId: string;
-          readonly options: readonly SessionConfigOption[];
-      };
+import type { BotChatApi, ChatDraftConfiguration } from "../../services/chat/bot-chat-api.ts";
+import { createDraftControlsStore } from "../../view-models/chat/draft-controls-store.ts";
 
 export function DraftChatControls({
     botId,
@@ -24,98 +15,18 @@ export function DraftChatControls({
     readonly disabled: boolean;
     readonly onSettings: (settings: ChatDraftConfiguration | null) => void;
 }) {
-    const [settings, setSettings] = useState<Settings>({ kind: "loading" });
-    const [selection, setSelection] = useState("");
+    const [store] = useState(() => createDraftControlsStore(botId, requests, onSettings));
+    const viewModel = useStore(store);
+    const { settings } = viewModel;
     const [revision, retry] = useState(0);
     const operation = useRef<AbortController | null>(null);
     // biome-ignore lint/correctness/useExhaustiveDependencies: Retry explicitly reloads harness settings.
     useEffect(() => {
         const controller = new AbortController();
         operation.current = controller;
-        const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]);
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        setSettings({ kind: "loading" });
-        onSettings(null);
-        const load = async () => {
-            try {
-                const workspace = await requests.workspace(botId, signal);
-                const selected = workspace.selected;
-                if (
-                    selected === null ||
-                    (selection !== "" && `${selected.runtimeId}:${selected.agentRef}` !== selection)
-                ) {
-                    signal.throwIfAborted();
-                    timer = setTimeout(() => void load(), 1000);
-                    return;
-                }
-                const result = await requests.draftSettings(botId, signal);
-                signal.throwIfAborted();
-                setSettings({ kind: "ready", workspace, ...result });
-                const model = result.options.find((option) => option.category === "model" && option.type !== "boolean");
-                if (model !== undefined) {
-                    onSettings({
-                        bindingId: result.bindingId,
-                        configuration: {
-                            additionalDirectoryIds: [],
-                            booleanValue: false,
-                            configId: model.id,
-                            value: model.currentValue,
-                            valueType: "select",
-                        },
-                    });
-                }
-            } catch (cause) {
-                if (!controller.signal.aborted) {
-                    setSettings({
-                        kind: "failed",
-                        message: cause instanceof Error ? cause.message : "Harness settings are unavailable.",
-                    });
-                }
-            }
-        };
-        void load();
-        return () => {
-            controller.abort();
-            clearTimeout(timer);
-        };
-    }, [botId, requests, selection, revision, onSettings]);
-
-    const selectHarness = async (value: string) => {
-        if (settings.kind !== "ready" || disabled) {
-            return;
-        }
-        const agent = settings.workspace.agents.find(
-            (item) => `${item.runtimeId}:${item.agentRef}` === value && item.online,
-        );
-        const controller = operation.current;
-        if (agent === undefined || controller === null) {
-            return;
-        }
-        setSettings({ kind: "loading" });
-        onSettings(null);
-        try {
-            await requests.selectAgent(
-                botId,
-                {
-                    runtimeId: agent.runtimeId,
-                    agentRef: agent.agentRef,
-                    workspaceRef: "default",
-                    agentConfigRevision: 1,
-                },
-                AbortSignal.any([controller.signal, AbortSignal.timeout(45000)]),
-            );
-            if (!controller.signal.aborted) {
-                setSelection(value);
-            }
-        } catch (cause) {
-            if (!controller.signal.aborted) {
-                setSettings({
-                    kind: "failed",
-                    message: cause instanceof Error ? cause.message : "The harness could not be selected.",
-                });
-            }
-        }
-    };
+        void viewModel.load(controller.signal);
+        return () => controller.abort();
+    }, [revision, viewModel.load]);
     if (settings.kind === "loading") {
         return (
             <p role="status" className="text-xs text-muted-foreground">
@@ -149,7 +60,12 @@ export function DraftChatControls({
                             value: `${agent.runtimeId}:${agent.agentRef}`,
                             label: `${agent.label} · ${agent.machineName}`,
                         }))}
-                    onValueChange={(value) => void selectHarness(value)}
+                    onValueChange={(value) => {
+                        const controller = operation.current;
+                        if (controller !== null) {
+                            void viewModel.selectHarness(value, disabled, controller.signal);
+                        }
+                    }}
                 />
                 <Select
                     compact
@@ -165,22 +81,7 @@ export function DraftChatControls({
                         if (model === undefined) {
                             return;
                         }
-                        setSettings({
-                            ...settings,
-                            options: settings.options.map((option) =>
-                                option.id === model.id ? { ...option, currentValue: value } : option,
-                            ),
-                        });
-                        onSettings({
-                            bindingId: settings.bindingId,
-                            configuration: {
-                                additionalDirectoryIds: [],
-                                booleanValue: false,
-                                configId: model.id,
-                                value,
-                                valueType: "select",
-                            },
-                        });
+                        viewModel.selectModel(model.id, value);
                     }}
                 />
             </div>

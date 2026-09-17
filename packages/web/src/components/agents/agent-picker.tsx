@@ -3,13 +3,7 @@ import { Check, ChevronDown, LoaderCircle, RefreshCw } from "lucide-react";
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { AgentProductIcon } from "@/components/agents/agent-product-icon";
 import { BotAvatar } from "@/components/bots/bot-page-header";
-import {
-    FailedBotTargetDirectoryState,
-    LoadingBotTargetDirectoryState,
-    ReadyBotTargetDirectoryState,
-    UnavailableBotTargetDirectoryState,
-    useConversationTargets,
-} from "@/components/chat/conversation-target-provider";
+import { useConversationTargets } from "@/components/chat/conversation-target-provider";
 import { cn } from "@/lib/utils";
 import { selectActiveConversation, useChatStore } from "@/view-models/chat-store";
 
@@ -152,7 +146,7 @@ export function AgentPicker() {
         }
     };
 
-    const listedBots = botDirectory instanceof ReadyBotTargetDirectoryState ? botDirectory.bots : [];
+    const listedBots = botDirectory.kind === "ready" ? botDirectory.bots : [];
 
     return (
         <div className="relative shrink-0" ref={wrapperRef}>
@@ -283,7 +277,7 @@ export function AgentPicker() {
                         id={botsPanelId}
                         role="tabpanel"
                     >
-                        {botDirectory instanceof LoadingBotTargetDirectoryState && (
+                        {botDirectory.kind === "loading" && (
                             <p
                                 aria-busy="true"
                                 className="flex min-h-20 items-center justify-center gap-2 text-xs text-muted-foreground"
@@ -292,12 +286,12 @@ export function AgentPicker() {
                                 <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> Loading Bots…
                             </p>
                         )}
-                        {botDirectory instanceof UnavailableBotTargetDirectoryState && (
+                        {botDirectory.kind === "unavailable" && (
                             <p className="px-3 py-5 text-center text-xs leading-5 text-muted-foreground">
                                 {botDirectory.message}
                             </p>
                         )}
-                        {botDirectory instanceof FailedBotTargetDirectoryState && (
+                        {botDirectory.kind === "failed" && (
                             <div className="px-3 py-4 text-center">
                                 <p className="text-xs leading-5 text-[#9b2c32]" role="alert">
                                     {botDirectory.message}
@@ -311,12 +305,12 @@ export function AgentPicker() {
                                 </button>
                             </div>
                         )}
-                        {botDirectory instanceof ReadyBotTargetDirectoryState && listedBots.length === 0 && (
+                        {botDirectory.kind === "ready" && listedBots.length === 0 && (
                             <p className="px-3 py-5 text-center text-xs leading-5 text-muted-foreground">
                                 No Bots are available. Create and activate one from Bots in the sidebar.
                             </p>
                         )}
-                        {botDirectory instanceof ReadyBotTargetDirectoryState &&
+                        {botDirectory.kind === "ready" &&
                             listedBots.map((bot) => {
                                 const active = bot.state.kind === "active";
                                 const launching =

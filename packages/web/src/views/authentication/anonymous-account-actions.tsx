@@ -1,15 +1,10 @@
 import { QrCode } from "lucide-react";
-import QRCode from "qrcode";
 import { useEffect, useState } from "react";
+import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Popover } from "../../components/ui/popover.tsx";
-import { AnonymousIdentityApi, type IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
-
-type TransferState =
-    | { readonly kind: "idle" }
-    | { readonly kind: "loading" }
-    | { readonly kind: "ready"; readonly image: string; readonly transfer: IdentityTransfer }
-    | { readonly kind: "failed" };
+import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
+import { createAnonymousTransferStore } from "../../view-models/authentication/anonymous-transfer-store.ts";
 
 export function AnonymousAccountActions({
     token,
@@ -21,31 +16,17 @@ export function AnonymousAccountActions({
     readonly createTransfer?: (token: string, signal: AbortSignal) => Promise<IdentityTransfer>;
 }) {
     const [open, setOpen] = useState(false);
-    const [state, setState] = useState<TransferState>({ kind: "idle" });
+    const [store] = useState(() => createAnonymousTransferStore(token, createTransfer));
+    const { load, reset, state } = useStore(store);
     useEffect(() => {
         if (!open) {
+            reset();
             return;
         }
         const controller = new AbortController();
-        setState({ kind: "loading" });
-        const transferRequest =
-            createTransfer ??
-            new AnonymousIdentityApi({ origin: window.location.origin, storage: window.localStorage }).createTransfer;
-        void transferRequest(token, controller.signal).then(
-            async (transfer) => {
-                const image = await QRCode.toDataURL(transfer.url, { margin: 1, width: 224 });
-                if (!controller.signal.aborted) {
-                    setState({ image, kind: "ready", transfer });
-                }
-            },
-            () => {
-                if (!controller.signal.aborted) {
-                    setState({ kind: "failed" });
-                }
-            },
-        );
+        void load(controller.signal);
         return () => controller.abort();
-    }, [createTransfer, open, token]);
+    }, [load, open, reset]);
     return (
         <div className="flex items-center gap-2">
             <Popover.Root open={open} onOpenChange={setOpen}>

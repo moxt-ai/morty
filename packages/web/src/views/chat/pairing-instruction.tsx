@@ -1,51 +1,32 @@
 import { Check, Copy } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
-
-type State =
-    | { readonly kind: "loading" }
-    | { readonly kind: "ready"; readonly url: string; readonly expiresAt: string }
-    | { readonly kind: "failed"; readonly message: string };
+import { createPairingInstructionStore } from "../../view-models/chat/pairing-instruction-store.ts";
 
 export function PairingInstruction({
     requests,
 }: {
     readonly requests: Pick<BotChatApi, "listBots" | "createPairingInstruction">;
 }) {
-    const [state, setState] = useState<State>({ kind: "loading" });
+    const [store] = useState(() => createPairingInstructionStore(requests));
+    const { copy, copyInstruction, load, resetCopy, state } = useStore(store);
     const [revision, refresh] = useState(0);
-    const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
     useEffect(() => {
         if (copy === "idle") {
             return;
         }
-        const timeout = window.setTimeout(() => setCopy("idle"), 3000);
+        const timeout = window.setTimeout(resetCopy, 3000);
         return () => window.clearTimeout(timeout);
-    }, [copy]);
+    }, [copy, resetCopy]);
     // biome-ignore lint/correctness/useExhaustiveDependencies: Refresh explicitly issues a new one-time ticket.
     useEffect(() => {
         const controller = new AbortController();
-        setState({ kind: "loading" });
-        void (async () => {
-            const bot = (await requests.listBots(controller.signal))[0];
-            if (bot === undefined) {
-                throw new Error("Your Bot is unavailable.");
-            }
-            const ticket = await requests.createPairingInstruction(bot.botId, controller.signal);
-            controller.signal.throwIfAborted();
-            setState({ kind: "ready", ...ticket });
-        })().catch((cause: unknown) => {
-            if (!controller.signal.aborted) {
-                setState({
-                    kind: "failed",
-                    message: cause instanceof Error ? cause.message : "Pairing is unavailable.",
-                });
-            }
-        });
+        void load(controller.signal);
         return () => controller.abort();
-    }, [requests, revision]);
+    }, [load, revision]);
     return (
         <div className="mt-5 space-y-3">
             <div className="flex items-center gap-2">
@@ -74,15 +55,8 @@ export function PairingInstruction({
                         if (state.kind !== "ready") {
                             return;
                         }
-                        setCopy("idle");
-                        if (navigator.clipboard === undefined) {
-                            setCopy("failed");
-                            return;
-                        }
-                        void navigator.clipboard.writeText(`follow ${state.url}`).then(
-                            () => setCopy("copied"),
-                            () => setCopy("failed"),
-                        );
+                        resetCopy();
+                        void copyInstruction();
                     }}
                 >
                     <Copy aria-hidden="true" className="size-4" />

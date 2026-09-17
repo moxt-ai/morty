@@ -1,11 +1,4 @@
-import {
-    MobiusExpiredRuntimePairingStatus,
-    MobiusPairedRuntimePairingStatus,
-    MobiusPendingRuntimePairingStatus,
-    MobiusRevokedRuntimePairingStatus,
-    type MobiusRuntimeDescriptor,
-    type MobiusRuntimePairing,
-} from "@moxt-ai/mobius-sdk";
+import type { MobiusRuntimeDescriptor, MobiusRuntimePairing } from "@moxt-ai/mobius-sdk";
 import {
     ArrowLeft,
     Check,
@@ -23,190 +16,19 @@ import {
     Wifi,
     WifiOff,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
+import { useStore } from "zustand";
 import { Button } from "@/components/ui/button";
-import {
-    createProjectRuntimePairing,
-    OwnerRuntimeManagementAccess,
-    readProjectRuntimePairing,
-    readProjectRuntimes,
-    readRuntimeManagementAccess,
-    revokeProjectRuntime,
-} from "@/services/pairing/pairing-api";
-import { PairingApiError } from "@/view-models/chat/channel";
 import { useChatStore } from "@/view-models/chat-store";
-
-abstract class RuntimeDirectoryState {}
-
-class LoadingRuntimeDirectoryState extends RuntimeDirectoryState {}
-
-abstract class ReadyRuntimeDirectoryState extends RuntimeDirectoryState {
-    readonly runtimes: readonly MobiusRuntimeDescriptor[];
-
-    constructor(runtimes: readonly MobiusRuntimeDescriptor[]) {
-        super();
-        this.runtimes = runtimes;
-    }
-}
-
-class OwnerRuntimeDirectoryState extends ReadyRuntimeDirectoryState {}
-
-class ReadOnlyRuntimeDirectoryState extends ReadyRuntimeDirectoryState {}
-
-class FailedRuntimeDirectoryState extends RuntimeDirectoryState {
-    readonly message: string;
-
-    constructor(message: string) {
-        super();
-        this.message = message;
-    }
-}
-
-abstract class RuntimePairingCreationState {}
-
-class IdleRuntimePairingCreationState extends RuntimePairingCreationState {}
-
-class CreatingRuntimePairingState extends RuntimePairingCreationState {
-    readonly idempotencyKey: string;
-
-    constructor(idempotencyKey: string) {
-        super();
-        this.idempotencyKey = idempotencyKey;
-    }
-}
-
-class PendingRuntimePairingState extends RuntimePairingCreationState {
-    readonly pairing: MobiusRuntimePairing;
-
-    constructor(pairing: MobiusRuntimePairing) {
-        super();
-        this.pairing = pairing;
-    }
-}
-
-class CheckingRuntimePairingState extends RuntimePairingCreationState {
-    readonly pairing: MobiusRuntimePairing;
-
-    constructor(pairing: MobiusRuntimePairing) {
-        super();
-        this.pairing = pairing;
-    }
-}
-
-class ConnectedRuntimePairingState extends RuntimePairingCreationState {
-    readonly machineName: string;
-
-    constructor(machineName: string) {
-        super();
-        this.machineName = machineName;
-    }
-}
-
-class ClaimedRuntimePairingState extends RuntimePairingCreationState {
-    readonly machineName: string;
-    readonly pairing: MobiusRuntimePairing;
-
-    constructor(pairing: MobiusRuntimePairing, machineName: string) {
-        super();
-        this.machineName = machineName;
-        this.pairing = pairing;
-    }
-}
-
-class ExpiredRuntimePairingState extends RuntimePairingCreationState {}
-
-class RevokedRuntimePairingState extends RuntimePairingCreationState {}
-
-class FailedRuntimePairingCreationState extends RuntimePairingCreationState {
-    readonly idempotencyKey: string;
-    readonly message: string;
-
-    constructor(idempotencyKey: string, message: string) {
-        super();
-        this.idempotencyKey = idempotencyKey;
-        this.message = message;
-    }
-}
-
-class FailedRuntimePairingCheckState extends RuntimePairingCreationState {
-    readonly message: string;
-    readonly pairing: MobiusRuntimePairing;
-
-    constructor(pairing: MobiusRuntimePairing, message: string) {
-        super();
-        this.message = message;
-        this.pairing = pairing;
-    }
-}
-
-abstract class RuntimeRevocationState {}
-
-class IdleRuntimeRevocationState extends RuntimeRevocationState {}
-
-class ConfirmingRuntimeRevocationState extends RuntimeRevocationState {
-    readonly runtimeId: string;
-
-    constructor(runtimeId: string) {
-        super();
-        this.runtimeId = runtimeId;
-    }
-}
-
-class RevokingRuntimeState extends RuntimeRevocationState {
-    readonly runtimeId: string;
-
-    constructor(runtimeId: string) {
-        super();
-        this.runtimeId = runtimeId;
-    }
-}
-
-class FailedRuntimeRevocationState extends RuntimeRevocationState {
-    readonly message: string;
-    readonly runtimeId: string;
-
-    constructor(runtimeId: string, message: string) {
-        super();
-        this.message = message;
-        this.runtimeId = runtimeId;
-    }
-}
-
-function failureMessage(error: unknown): string {
-    return error instanceof PairingApiError
-        ? `${error.code}: ${error.message}`
-        : "The Runtime management request failed unexpectedly.";
-}
-
-function formatDate(value: string): string {
-    return new Intl.DateTimeFormat(undefined, {
-        dateStyle: "medium",
-        timeStyle: "short",
-    }).format(new Date(value));
-}
-
-function runtimeName(runtime: MobiusRuntimeDescriptor): string {
-    return runtime.machineName.trim().length > 0 ? runtime.machineName : `Runtime ${runtime.runtimeId.slice(-6)}`;
-}
-
-function pairingCommand(pairing: MobiusRuntimePairing): string {
-    return `npx --yes @moxt-ai/mobius pair --url ${JSON.stringify(window.location.origin)} --code ${pairing.pairingCode}`;
-}
-
-async function readRuntimeDirectory(
-    channelId: string,
-    projectId: string,
-    signal: AbortSignal,
-): Promise<ReadyRuntimeDirectoryState> {
-    const [runtimes, access] = await Promise.all([
-        readProjectRuntimes(channelId, projectId, signal),
-        readRuntimeManagementAccess(channelId, projectId, signal),
-    ]);
-    return access instanceof OwnerRuntimeManagementAccess
-        ? new OwnerRuntimeDirectoryState(runtimes)
-        : new ReadOnlyRuntimeDirectoryState(runtimes);
-}
+import {
+    createRuntimeManagementStore,
+    formatRuntimeDate,
+    type RuntimeDirectoryState,
+    type RuntimeRevocationState,
+    runtimeDisplayName,
+    runtimePairingCommand,
+} from "@/view-models/pairing/runtime-management-store";
 
 function PairingDetails({
     checking,
@@ -222,7 +44,7 @@ function PairingDetails({
     readonly pairing: MobiusRuntimePairing;
 }) {
     const codeInputRef = useRef<HTMLInputElement>(null);
-    const command = pairingCommand(pairing);
+    const command = runtimePairingCommand(pairing);
 
     useEffect(() => {
         codeInputRef.current?.focus({ preventScroll: true });
@@ -243,8 +65,8 @@ function PairingDetails({
                         Run this on the other machine
                     </h2>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                        The one-time code expires {formatDate(pairing.expiresAt)}. It never contains your Project owner
-                        credential.
+                        The one-time code expires {formatRuntimeDate(pairing.expiresAt)}. It never contains your Project
+                        owner credential.
                     </p>
                 </div>
             </div>
@@ -323,13 +145,13 @@ function RuntimeList({
     revocation,
 }: {
     readonly channelId: string;
-    readonly directory: ReadyRuntimeDirectoryState;
+    readonly directory: Extract<RuntimeDirectoryState, { readonly kind: "ready" }>;
     readonly onCancelRevocation: (runtimeId: string) => void;
     readonly onConfirmRevocation: (runtime: MobiusRuntimeDescriptor) => void;
     readonly onRequestRevocation: (runtimeId: string) => void;
     readonly revocation: RuntimeRevocationState;
 }) {
-    const canManage = directory instanceof OwnerRuntimeDirectoryState;
+    const canManage = directory.canManage;
 
     return (
         <section aria-labelledby="project-runtimes-heading" className="mt-8">
@@ -349,15 +171,10 @@ function RuntimeList({
 
             <ul aria-label="Project runtimes" className="mt-4 grid gap-3">
                 {directory.runtimes.map((runtime) => {
-                    const name = runtimeName(runtime);
-                    const confirming =
-                        revocation instanceof ConfirmingRuntimeRevocationState &&
-                        revocation.runtimeId === runtime.runtimeId;
-                    const revoking =
-                        revocation instanceof RevokingRuntimeState && revocation.runtimeId === runtime.runtimeId;
-                    const failed =
-                        revocation instanceof FailedRuntimeRevocationState &&
-                        revocation.runtimeId === runtime.runtimeId;
+                    const name = runtimeDisplayName(runtime);
+                    const confirming = revocation.kind === "confirming" && revocation.runtimeId === runtime.runtimeId;
+                    const revoking = revocation.kind === "revoking" && revocation.runtimeId === runtime.runtimeId;
+                    const failed = revocation.kind === "failed" && revocation.runtimeId === runtime.runtimeId;
                     return (
                         <li
                             className="rounded-2xl border-[0.5px] border-black/10 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] sm:p-5"
@@ -418,7 +235,7 @@ function RuntimeList({
                                         aria-busy={revoking}
                                         aria-label={`Revoke ${name}`}
                                         className="min-h-11 shrink-0 text-destructive hover:text-destructive"
-                                        disabled={revocation instanceof RevokingRuntimeState}
+                                        disabled={revocation.kind === "revoking"}
                                         id={`revoke-runtime-${runtime.runtimeId}`}
                                         onClick={() => onRequestRevocation(runtime.runtimeId)}
                                         variant="outline"
@@ -484,148 +301,23 @@ function RuntimeList({
 
 function RuntimeManagementPanel({ channelId, projectId }: { readonly channelId: string; readonly projectId: string }) {
     const [controller] = useState(() => new AbortController());
-    const [directory, setDirectory] = useState<RuntimeDirectoryState>(new LoadingRuntimeDirectoryState());
-    const [pairing, setPairing] = useState<RuntimePairingCreationState>(new IdleRuntimePairingCreationState());
-    const [revocation, setRevocation] = useState<RuntimeRevocationState>(new IdleRuntimeRevocationState());
-    const [copyConfirmation, setCopyConfirmation] = useState("");
-    const [announcement, setAnnouncement] = useState("");
-
-    const loadDirectory = useCallback(async (): Promise<void> => {
-        setDirectory(new LoadingRuntimeDirectoryState());
-        try {
-            const loaded = await readRuntimeDirectory(channelId, projectId, controller.signal);
-            if (controller.signal.aborted) {
-                return;
-            }
-            setDirectory(loaded);
-        } catch (error) {
-            if (!controller.signal.aborted) {
-                setDirectory(new FailedRuntimeDirectoryState(failureMessage(error)));
-            }
-        }
-    }, [channelId, controller, projectId]);
+    const [store] = useState(() => createRuntimeManagementStore(channelId, projectId));
+    const viewModel = useStore(store);
+    const { announcement, copyConfirmation, directory, pairing, revocation } = viewModel;
 
     useEffect(() => {
-        void loadDirectory();
+        void viewModel.loadDirectory(controller.signal);
         return () => controller.abort();
-    }, [controller, loadDirectory]);
-
-    const requestPairing = async (idempotencyKey: string): Promise<void> => {
-        setAnnouncement("");
-        setCopyConfirmation("");
-        setPairing(new CreatingRuntimePairingState(idempotencyKey));
-        try {
-            const created = await createProjectRuntimePairing(channelId, projectId, idempotencyKey, controller.signal);
-            if (!controller.signal.aborted) {
-                setPairing(new PendingRuntimePairingState(created));
-            }
-        } catch (error) {
-            if (!controller.signal.aborted) {
-                setPairing(new FailedRuntimePairingCreationState(idempotencyKey, failureMessage(error)));
-            }
-        }
-    };
-
-    const startPairing = (): void => {
-        void requestPairing(`web-${crypto.randomUUID()}`);
-    };
-
-    const checkPairing = async (created: MobiusRuntimePairing): Promise<void> => {
-        setAnnouncement("");
-        setPairing(new CheckingRuntimePairingState(created));
-        try {
-            const status = await readProjectRuntimePairing(channelId, projectId, created.pairingId, controller.signal);
-            if (controller.signal.aborted) {
-                return;
-            }
-            if (status instanceof MobiusPendingRuntimePairingStatus) {
-                setPairing(new PendingRuntimePairingState(created));
-                setAnnouncement("The other machine has not claimed this code yet.");
-                return;
-            }
-            if (status instanceof MobiusPairedRuntimePairingStatus) {
-                const loaded = await readRuntimeDirectory(channelId, projectId, controller.signal);
-                if (controller.signal.aborted) {
-                    return;
-                }
-                setDirectory(loaded);
-                const connected = loaded.runtimes.find((runtime) => runtime.runtimeId === status.runtimeId);
-                if (connected === undefined) {
-                    setPairing(
-                        new FailedRuntimePairingCheckState(
-                            created,
-                            "The paired Runtime is missing from the Project directory.",
-                        ),
-                    );
-                    return;
-                }
-                setPairing(
-                    connected.online
-                        ? new ConnectedRuntimePairingState(status.machineName)
-                        : new ClaimedRuntimePairingState(created, status.machineName),
-                );
-                return;
-            }
-            if (status instanceof MobiusExpiredRuntimePairingStatus) {
-                setPairing(new ExpiredRuntimePairingState());
-                return;
-            }
-            if (status instanceof MobiusRevokedRuntimePairingStatus) {
-                setPairing(new RevokedRuntimePairingState());
-                return;
-            }
-            setPairing(
-                new FailedRuntimePairingCheckState(created, "The Relay returned an unsupported Runtime pairing state."),
-            );
-        } catch (error) {
-            if (!controller.signal.aborted) {
-                setPairing(new FailedRuntimePairingCheckState(created, failureMessage(error)));
-            }
-        }
-    };
-
-    const copyValue = (value: string, successMessage: string): void => {
-        void navigator.clipboard.writeText(value).then(
-            () => setCopyConfirmation(successMessage),
-            () => setCopyConfirmation("Copy was unavailable. Select the value and copy it manually."),
-        );
-    };
+    }, [controller, viewModel.loadDirectory]);
 
     const cancelRevocation = (runtimeId: string): void => {
-        setRevocation(new IdleRuntimeRevocationState());
+        viewModel.cancelRevocation();
         window.requestAnimationFrame(() => document.getElementById(`revoke-runtime-${runtimeId}`)?.focus());
     };
 
-    const revokeRuntime = async (runtime: MobiusRuntimeDescriptor): Promise<void> => {
-        setAnnouncement("");
-        setRevocation(new RevokingRuntimeState(runtime.runtimeId));
-        try {
-            await revokeProjectRuntime(channelId, projectId, runtime.runtimeId, controller.signal);
-            if (controller.signal.aborted) {
-                return;
-            }
-            if (directory instanceof OwnerRuntimeDirectoryState) {
-                setDirectory(
-                    new OwnerRuntimeDirectoryState(
-                        directory.runtimes.filter((candidate) => candidate.runtimeId !== runtime.runtimeId),
-                    ),
-                );
-            }
-            setRevocation(new IdleRuntimeRevocationState());
-            setAnnouncement(`${runtimeName(runtime)} was revoked.`);
-        } catch (error) {
-            if (!controller.signal.aborted) {
-                setRevocation(new FailedRuntimeRevocationState(runtime.runtimeId, failureMessage(error)));
-            }
-        }
-    };
-
-    const readyDirectory = directory instanceof ReadyRuntimeDirectoryState ? directory : null;
-    const ownerDirectory = directory instanceof OwnerRuntimeDirectoryState;
-    const activePairing =
-        pairing instanceof PendingRuntimePairingState || pairing instanceof CheckingRuntimePairingState
-            ? pairing.pairing
-            : null;
+    const readyDirectory = directory.kind === "ready" ? directory : null;
+    const ownerDirectory = directory.kind === "ready" && directory.canManage;
+    const activePairing = pairing.kind === "pending" || pairing.kind === "checking" ? pairing.pairing : null;
 
     return (
         <section aria-labelledby="runtime-management-heading">
@@ -646,17 +338,20 @@ function RuntimeManagementPanel({ channelId, projectId }: { readonly channelId: 
                     </p>
                 </div>
                 {ownerDirectory &&
-                    !(pairing instanceof CreatingRuntimePairingState) &&
-                    !(pairing instanceof PendingRuntimePairingState) &&
-                    !(pairing instanceof CheckingRuntimePairingState) &&
-                    !(pairing instanceof ClaimedRuntimePairingState) && (
-                        <Button className="min-h-11 shrink-0 sm:self-end" onClick={startPairing}>
+                    pairing.kind !== "creating" &&
+                    pairing.kind !== "pending" &&
+                    pairing.kind !== "checking" &&
+                    pairing.kind !== "claimed" && (
+                        <Button
+                            className="min-h-11 shrink-0 sm:self-end"
+                            onClick={() => void viewModel.startPairing(controller.signal)}
+                        >
                             <Plus aria-hidden="true" className="size-4" /> Pair another machine
                         </Button>
                     )}
             </div>
 
-            {directory instanceof LoadingRuntimeDirectoryState && (
+            {directory.kind === "loading" && (
                 <div
                     aria-busy="true"
                     aria-live="polite"
@@ -667,23 +362,27 @@ function RuntimeManagementPanel({ channelId, projectId }: { readonly channelId: 
                 </div>
             )}
 
-            {directory instanceof FailedRuntimeDirectoryState && (
+            {directory.kind === "failed" && (
                 <div className="mt-5 flex flex-col gap-3 rounded-xl border border-destructive/25 bg-destructive/5 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-sm leading-6 text-destructive">{directory.message}</p>
-                    <Button className="min-h-11 shrink-0" onClick={() => void loadDirectory()} variant="outline">
+                    <Button
+                        className="min-h-11 shrink-0"
+                        onClick={() => void viewModel.loadDirectory(controller.signal)}
+                        variant="outline"
+                    >
                         <RefreshCw aria-hidden="true" className="size-4" /> Retry
                     </Button>
                 </div>
             )}
 
-            {directory instanceof ReadOnlyRuntimeDirectoryState && (
+            {directory.kind === "ready" && !directory.canManage && (
                 <div className="mt-5 rounded-xl border-[0.5px] border-black/10 bg-white px-5 py-4 text-sm leading-6 text-muted-foreground shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
                     This browser has linked-device access. It can see Project Runtimes, but only the original owner
                     browser can pair or revoke local machines.
                 </div>
             )}
 
-            {pairing instanceof CreatingRuntimePairingState && (
+            {pairing.kind === "creating" && (
                 <div
                     aria-busy="true"
                     aria-live="polite"
@@ -696,15 +395,15 @@ function RuntimeManagementPanel({ channelId, projectId }: { readonly channelId: 
 
             {activePairing !== null && (
                 <PairingDetails
-                    checking={pairing instanceof CheckingRuntimePairingState}
+                    checking={pairing.kind === "checking"}
                     copyConfirmation={copyConfirmation}
-                    onCheck={() => void checkPairing(activePairing)}
-                    onCopy={copyValue}
+                    onCheck={() => void viewModel.checkPairing(activePairing, controller.signal)}
+                    onCopy={(value, message) => void viewModel.copyValue(value, message)}
                     pairing={activePairing}
                 />
             )}
 
-            {pairing instanceof ConnectedRuntimePairingState && (
+            {pairing.kind === "connected" && (
                 <div
                     aria-live="polite"
                     className="mt-6 flex items-center gap-3 rounded-xl border border-success/30 bg-success-subtle px-4 py-3 text-sm text-success"
@@ -714,7 +413,7 @@ function RuntimeManagementPanel({ channelId, projectId }: { readonly channelId: 
                 </div>
             )}
 
-            {pairing instanceof ClaimedRuntimePairingState && (
+            {pairing.kind === "claimed" && (
                 <div className="mt-6 rounded-xl border border-warning/30 bg-warning-subtle px-4 py-4">
                     <p className="text-sm font-semibold text-warning">{pairing.machineName} is paired but offline.</p>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
@@ -722,7 +421,7 @@ function RuntimeManagementPanel({ channelId, projectId }: { readonly channelId: 
                     </p>
                     <Button
                         className="mt-3 min-h-11"
-                        onClick={() => void checkPairing(pairing.pairing)}
+                        onClick={() => void viewModel.checkPairing(pairing.pairing, controller.signal)}
                         variant="outline"
                     >
                         <RefreshCw aria-hidden="true" className="size-4" /> Check connection
@@ -730,29 +429,33 @@ function RuntimeManagementPanel({ channelId, projectId }: { readonly channelId: 
                 </div>
             )}
 
-            {pairing instanceof ExpiredRuntimePairingState && (
+            {pairing.kind === "expired" && (
                 <div className="mt-6 rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-4">
                     <p className="text-sm text-destructive">The one-time pairing code expired before it was claimed.</p>
-                    <Button className="mt-3 min-h-11" onClick={startPairing} variant="outline">
+                    <Button
+                        className="mt-3 min-h-11"
+                        onClick={() => void viewModel.startPairing(controller.signal)}
+                        variant="outline"
+                    >
                         <RefreshCw aria-hidden="true" className="size-4" /> Create a new pairing
                     </Button>
                 </div>
             )}
 
-            {pairing instanceof RevokedRuntimePairingState && (
+            {pairing.kind === "revoked" && (
                 <p aria-live="polite" className="mt-6 rounded-xl bg-destructive/8 px-4 py-3 text-sm text-destructive">
                     This pending Runtime pairing was revoked. Create a new pairing to continue.
                 </p>
             )}
 
-            {pairing instanceof FailedRuntimePairingCreationState && (
+            {pairing.kind === "creation-failed" && (
                 <div className="mt-6 rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-4">
                     <p aria-live="polite" className="text-sm text-destructive">
                         {pairing.message}
                     </p>
                     <Button
                         className="mt-3 min-h-11"
-                        onClick={() => void requestPairing(pairing.idempotencyKey)}
+                        onClick={() => void viewModel.requestPairing(pairing.idempotencyKey, controller.signal)}
                         variant="outline"
                     >
                         <RefreshCw aria-hidden="true" className="size-4" /> Retry safely
@@ -760,14 +463,14 @@ function RuntimeManagementPanel({ channelId, projectId }: { readonly channelId: 
                 </div>
             )}
 
-            {pairing instanceof FailedRuntimePairingCheckState && (
+            {pairing.kind === "check-failed" && (
                 <div className="mt-6 rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-4">
                     <p aria-live="polite" className="text-sm text-destructive">
                         {pairing.message}
                     </p>
                     <Button
                         className="mt-3 min-h-11"
-                        onClick={() => void checkPairing(pairing.pairing)}
+                        onClick={() => void viewModel.checkPairing(pairing.pairing, controller.signal)}
                         variant="outline"
                     >
                         <RefreshCw aria-hidden="true" className="size-4" /> Retry status check
@@ -784,8 +487,8 @@ function RuntimeManagementPanel({ channelId, projectId }: { readonly channelId: 
                     channelId={channelId}
                     directory={readyDirectory}
                     onCancelRevocation={cancelRevocation}
-                    onConfirmRevocation={(runtime) => void revokeRuntime(runtime)}
-                    onRequestRevocation={(runtimeId) => setRevocation(new ConfirmingRuntimeRevocationState(runtimeId))}
+                    onConfirmRevocation={(runtime) => void viewModel.revokeRuntime(runtime, controller.signal)}
+                    onRequestRevocation={viewModel.requestRevocation}
                     revocation={revocation}
                 />
             )}

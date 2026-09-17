@@ -1,16 +1,4 @@
-import {
-    conversationTitleFromText,
-    MobiusApiError,
-    MobiusBotConversation,
-    type MobiusBotConversationEvent,
-    type MobiusMessage,
-    type MobiusSession,
-    type PromptImage,
-    type PromptResource,
-    type SessionConfigOption,
-    type SessionReadyEvent,
-    type WorkspaceEntry,
-} from "@moxt-ai/mobius-sdk";
+import type { MobiusMessage } from "@moxt-ai/mobius-sdk";
 import {
     ArrowLeft,
     Bot,
@@ -26,8 +14,9 @@ import {
     Square,
     X,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router";
+import { useStore } from "zustand";
 import { AgentMarkdown } from "@/components/agents/agent-markdown";
 import { BotInlineError } from "@/components/bots/bot-page-header";
 import type { BotDetailContext } from "@/components/bots/bot-workspace";
@@ -36,303 +25,39 @@ import { UserPromptMessage } from "@/components/chat/user-prompt-message";
 import { WorkspacePickerControl } from "@/components/chat/workspace-picker";
 import { Button } from "@/components/ui/button";
 import { botConversationRoutePath, botConversationsRoutePath } from "@/services/application/app-routes";
+import { listWorkspace } from "@/services/chat/mobius-transport";
+import { createConversationComposerStore } from "@/view-models/bots/conversation-composer-store";
 import {
-    readBotConversationMessages,
-    readBotConversationSession,
-    updateBotConversationWorkspace,
-    uploadBotPromptAttachments,
-} from "@/services/bots/bot-api";
-import {
-    AttachmentReadError,
-    ReadPromptImage,
-    ReadPromptResource,
-    readPromptAttachment,
-} from "@/services/chat/attachment-reader";
-import {
-    configureConversationSession,
-    listWorkspace,
-    prepareConversationSession,
-} from "@/services/chat/mobius-transport";
+    botConversationTitle,
+    createBotConversationDirectoryStore,
+    formatBotConversationDate,
+} from "@/view-models/bots/conversation-directory-store";
+import { createConversationSessionStore } from "@/view-models/bots/conversation-session-store";
+import { createConversationThreadStore } from "@/view-models/bots/conversation-thread-store";
 
-const BOT_WORKING_ANNOUNCEMENT = "Message accepted. The approved local runtime is working.";
 const BOT_COMPOSER_MAX_HEIGHT = 180;
-
-abstract class ConversationDirectoryState {}
-
-class LoadingConversationDirectoryState extends ConversationDirectoryState {}
-
-class ReadyConversationDirectoryState extends ConversationDirectoryState {
-    readonly conversations: readonly MobiusBotConversation[];
-
-    constructor(conversations: readonly MobiusBotConversation[]) {
-        super();
-        this.conversations = conversations;
-    }
-}
-
-class FailedConversationDirectoryState extends ConversationDirectoryState {
-    readonly message: string;
-
-    constructor(message: string) {
-        super();
-        this.message = message;
-    }
-}
-
-abstract class ConversationTurnState {
-    abstract readonly kind: string;
-}
-
-class IdleConversationTurnState extends ConversationTurnState {
-    readonly kind = "idle";
-}
-
-class RunningConversationTurnState extends ConversationTurnState {
-    readonly kind = "running";
-    readonly turnId: string;
-
-    constructor(turnId: string) {
-        super();
-        this.turnId = turnId;
-    }
-}
-
-class UnidentifiedRunningConversationTurnState extends ConversationTurnState {
-    readonly kind = "running_without_identifier";
-}
-
-abstract class ConversationViewState {}
-
-class LoadingConversationViewState extends ConversationViewState {}
-
-class ReadyConversationViewState extends ConversationViewState {
-    readonly conversation: MobiusBotConversation;
-    readonly messages: readonly MobiusMessage[];
-    readonly nextCursor: string;
-    readonly turn: ConversationTurnState;
-
-    constructor(
-        conversation: MobiusBotConversation,
-        messages: readonly MobiusMessage[],
-        nextCursor: string,
-        turn: ConversationTurnState,
-    ) {
-        super();
-        this.conversation = conversation;
-        this.messages = messages;
-        this.nextCursor = nextCursor;
-        this.turn = turn;
-    }
-}
-
-class FailedConversationViewState extends ConversationViewState {
-    readonly message: string;
-
-    constructor(message: string) {
-        super();
-        this.message = message;
-    }
-}
-
-abstract class BotComposerSessionState {
-    abstract readonly statusLabel: string;
-}
-
-class LoadingBotComposerSessionState extends BotComposerSessionState {
-    readonly statusLabel = "Preparing local agent…";
-}
-
-class PreparingBotComposerSessionState extends BotComposerSessionState {
-    readonly directoryLabel: string;
-    readonly session: MobiusSession;
-    readonly statusLabel = "Preparing local agent…";
-
-    constructor(session: MobiusSession, directoryLabel: string) {
-        super();
-        this.directoryLabel = directoryLabel;
-        this.session = session;
-    }
-}
-
-class ReadyBotComposerSessionState extends BotComposerSessionState {
-    readonly ready: SessionReadyEvent;
-    readonly session: MobiusSession;
-    readonly statusLabel = "Local agent ready";
-
-    constructor(session: MobiusSession, ready: SessionReadyEvent) {
-        super();
-        this.ready = ready;
-        this.session = session;
-    }
-}
-
-class FailedBotComposerSessionState extends BotComposerSessionState {
-    readonly message: string;
-    readonly statusLabel = "Local agent unavailable";
-
-    constructor(message: string) {
-        super();
-        this.message = message;
-    }
-}
-
-class FailedPreparedBotComposerSessionState extends FailedBotComposerSessionState {
-    readonly directoryLabel: string;
-    readonly session: MobiusSession;
-
-    constructor(session: MobiusSession, directoryLabel: string, message: string) {
-        super(message);
-        this.directoryLabel = directoryLabel;
-        this.session = session;
-    }
-}
-
-abstract class OptimisticBotPromptState {}
-
-class EmptyOptimisticBotPromptState extends OptimisticBotPromptState {}
-
-class PendingOptimisticBotPromptState extends OptimisticBotPromptState {
-    readonly clientMessageId: string;
-    readonly images: readonly PromptImage[];
-    readonly resources: readonly PromptResource[];
-    readonly text: string;
-
-    constructor(
-        clientMessageId: string,
-        text: string,
-        images: readonly PromptImage[],
-        resources: readonly PromptResource[],
-    ) {
-        super();
-        this.clientMessageId = clientMessageId;
-        this.text = text;
-        this.images = Object.freeze([...images]);
-        this.resources = Object.freeze([...resources]);
-    }
-}
-
-function failureMessage(error: unknown): string {
-    if (error instanceof MobiusApiError) {
-        return `${error.code}: ${error.message}`;
-    }
-    return error instanceof Error ? error.message : "The conversation request failed.";
-}
-
-function formattedDate(value: string): string {
-    return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-}
-
-function turnState(
-    messages: readonly MobiusMessage[],
-    events: readonly MobiusBotConversationEvent[],
-): ConversationTurnState {
-    const latestMessage = messages.at(-1);
-    if (
-        latestMessage === undefined ||
-        latestMessage.attempt.kind === "succeeded" ||
-        latestMessage.attempt.kind === "failed" ||
-        latestMessage.attempt.kind === "cancelled"
-    ) {
-        return new IdleConversationTurnState();
-    }
-    const latestEvent = events.findLast((event) => event.payload["commandId"] === latestMessage.commandId);
-    if (latestEvent === undefined) {
-        return new UnidentifiedRunningConversationTurnState();
-    }
-    if (
-        latestEvent.kind === "session.completed" ||
-        latestEvent.kind === "session.failed" ||
-        latestEvent.kind === "session.cancelled"
-    ) {
-        return new IdleConversationTurnState();
-    }
-    return new RunningConversationTurnState(latestEvent.turnId);
-}
-
-function conversationTitle(conversation: MobiusBotConversation): string {
-    return conversation.title.trim().length > 0 ? conversation.title : "Untitled conversation";
-}
-
-function retitleConversation(conversation: MobiusBotConversation, title: string): MobiusBotConversation {
-    return new MobiusBotConversation(
-        {
-            behaviorRevisionId: conversation.behaviorRevisionId,
-            bindingId: conversation.bindingId,
-            bindingRevision: conversation.bindingRevision,
-            botId: conversation.botId,
-            clientConversationKey: conversation.clientConversationKey,
-            conversationId: conversation.conversationId,
-            createdAt: conversation.createdAt,
-            creatorPrincipalId: conversation.creatorPrincipalId,
-            sessionId: conversation.sessionId,
-            title,
-        },
-        conversation.origin,
-        conversation.state,
-    );
-}
-
-function mergeConversationMessages(
-    current: readonly MobiusMessage[],
-    received: readonly MobiusMessage[],
-): readonly MobiusMessage[] {
-    const messages = new Map(current.map((message) => [message.commandId, message]));
-    for (const message of received) {
-        messages.set(message.commandId, message);
-    }
-    return Object.freeze(
-        [...messages.values()].sort((left, right) => {
-            const timeDifference = Date.parse(left.createdAt) - Date.parse(right.createdAt);
-            return timeDifference === 0 ? left.commandId.localeCompare(right.commandId) : timeDifference;
-        }),
-    );
-}
 
 export function BotConversationsPage() {
     const { bot, client, connection, signal } = useOutletContext<BotDetailContext>();
     const navigate = useNavigate();
     const errorSummaryRef = useRef<HTMLDivElement>(null);
-    const [state, setState] = useState<ConversationDirectoryState>(new LoadingConversationDirectoryState());
-    const [creating, setCreating] = useState(false);
-    const [formError, setFormError] = useState("");
-
-    const loadConversations = useCallback(async (): Promise<void> => {
-        setState(new LoadingConversationDirectoryState());
-        try {
-            const directory = await client.listConversations(bot.botId, signal);
-            setState(new ReadyConversationDirectoryState(directory.conversations));
-        } catch (error) {
-            if (!signal.aborted) {
-                setState(new FailedConversationDirectoryState(failureMessage(error)));
-            }
-        }
-    }, [bot.botId, client, signal]);
+    const [store] = useState(() =>
+        createBotConversationDirectoryStore(bot.botId, client, async (conversationId) => {
+            await navigate(botConversationRoutePath(connection.channelId, bot.botId, conversationId));
+        }),
+    );
+    const viewModel = useStore(store);
+    const { creating, error: formError, state } = viewModel;
 
     useEffect(() => {
-        void loadConversations();
-    }, [loadConversations]);
+        void viewModel.load(signal);
+    }, [signal, viewModel.load]);
 
-    const createConversation = async (): Promise<void> => {
-        setCreating(true);
-        setFormError("");
-        try {
-            const conversation = await client.createConversation(
-                bot.botId,
-                { clientConversationKey: `web_${crypto.randomUUID()}` },
-                signal,
-            );
-            await navigate(botConversationRoutePath(connection.channelId, bot.botId, conversation.conversationId));
-        } catch (error) {
-            if (!signal.aborted) {
-                setFormError(failureMessage(error));
-                queueMicrotask(() => errorSummaryRef.current?.focus());
-            }
-        } finally {
-            if (!signal.aborted) {
-                setCreating(false);
-            }
+    useEffect(() => {
+        if (formError.length > 0) {
+            queueMicrotask(() => errorSummaryRef.current?.focus());
         }
-    };
+    }, [formError]);
 
     const canCreate = bot.state.kind === "active";
     return (
@@ -353,28 +78,24 @@ export function BotConversationsPage() {
                     </div>
                     <div className="flex items-center gap-2">
                         <Button
-                            aria-busy={state instanceof LoadingConversationDirectoryState}
+                            aria-busy={state.kind === "loading"}
                             aria-label="Refresh conversations"
                             className="size-11 shrink-0"
-                            disabled={state instanceof LoadingConversationDirectoryState}
-                            onClick={() => void loadConversations()}
+                            disabled={state.kind === "loading"}
+                            onClick={() => void viewModel.load(signal)}
                             size="icon"
                             variant="ghost"
                         >
                             <RefreshCw
                                 aria-hidden="true"
-                                className={
-                                    state instanceof LoadingConversationDirectoryState
-                                        ? "size-4 animate-spin"
-                                        : "size-4"
-                                }
+                                className={state.kind === "loading" ? "size-4 animate-spin" : "size-4"}
                             />
                         </Button>
                         <Button
                             aria-busy={creating}
                             className="min-h-11 shrink-0"
                             disabled={!canCreate || creating}
-                            onClick={() => void createConversation()}
+                            onClick={() => void viewModel.createConversation(signal)}
                         >
                             {creating ? (
                                 <LoaderCircle
@@ -407,7 +128,7 @@ export function BotConversationsPage() {
             </section>
 
             <section aria-label="Bot conversation directory" className="mt-8">
-                {state instanceof LoadingConversationDirectoryState && (
+                {state.kind === "loading" && (
                     <div
                         aria-busy="true"
                         className="flex min-h-24 items-center gap-3 rounded-xl border-[0.5px] border-black/10 bg-white px-5 text-sm text-muted-foreground"
@@ -415,15 +136,15 @@ export function BotConversationsPage() {
                         <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> Loading conversations…
                     </div>
                 )}
-                {state instanceof FailedConversationDirectoryState && (
+                {state.kind === "failed" && (
                     <div className="rounded-xl border border-[#f2c4c4] bg-[#fff7f7] p-4">
                         <BotInlineError>{state.message}</BotInlineError>
-                        <Button className="mt-3 min-h-11" onClick={() => void loadConversations()} variant="outline">
+                        <Button className="mt-3 min-h-11" onClick={() => void viewModel.load(signal)} variant="outline">
                             <RefreshCw aria-hidden="true" className="size-4" /> Retry
                         </Button>
                     </div>
                 )}
-                {state instanceof ReadyConversationDirectoryState && state.conversations.length === 0 && (
+                {state.kind === "ready" && state.conversations.length === 0 && (
                     <div className="rounded-2xl border border-dashed border-black/15 bg-white/60 px-6 py-10 text-center">
                         <MessageSquare aria-hidden="true" className="mx-auto size-6 text-[#218854]" />
                         <p className="mt-3 text-sm font-semibold">No conversations yet</p>
@@ -432,7 +153,7 @@ export function BotConversationsPage() {
                         </p>
                     </div>
                 )}
-                {state instanceof ReadyConversationDirectoryState && state.conversations.length > 0 && (
+                {state.kind === "ready" && state.conversations.length > 0 && (
                     <ul aria-label="Bot conversations" className="grid gap-2">
                         {state.conversations.map((conversation) => (
                             <li key={conversation.conversationId}>
@@ -449,14 +170,14 @@ export function BotConversationsPage() {
                                     </span>
                                     <span className="min-w-0 flex-1">
                                         <strong className="block truncate text-sm font-semibold">
-                                            {conversationTitle(conversation)}
+                                            {botConversationTitle(conversation)}
                                         </strong>
                                         <span className="mt-1 block truncate text-[11px] text-muted-foreground">
                                             {conversation.origin.kind === "owner"
                                                 ? "Owner conversation"
                                                 : "External connection"}
                                             {" · "}
-                                            {formattedDate(conversation.createdAt)}
+                                            {formatBotConversationDate(conversation.createdAt)}
                                         </span>
                                     </span>
                                     <span className="rounded-full bg-black/5 px-2 py-1 text-[10px] font-semibold text-muted-foreground">
@@ -516,143 +237,34 @@ export function BotConversationPage() {
     const { bot, client, connection, signal } = useOutletContext<BotDetailContext>();
     const params = useParams<"conversationId">();
     const conversationId = params.conversationId ?? "";
-    const [state, setState] = useState<ConversationViewState>(new LoadingConversationViewState());
-    const [composerSession, setComposerSession] = useState<BotComposerSessionState>(
-        new LoadingBotComposerSessionState(),
+    const [threadStore] = useState(() => createConversationThreadStore(bot.botId, conversationId, client, connection));
+    const [sessionStore] = useState(() => createConversationSessionStore(connection));
+    const [composerStore] = useState(() =>
+        createConversationComposerStore(bot.botId, bot.displayName, client, connection, threadStore, sessionStore),
     );
-    const [draft, setDraft] = useState("");
-    const [draftImages, setDraftImages] = useState<readonly PromptImage[]>([]);
-    const [draftResources, setDraftResources] = useState<readonly PromptResource[]>([]);
-    const [optimisticPrompt, setOptimisticPrompt] = useState<OptimisticBotPromptState>(
-        new EmptyOptimisticBotPromptState(),
-    );
-    const [preparationRevision, setPreparationRevision] = useState(0);
-    const [attaching, setAttaching] = useState(false);
-    const [configuring, setConfiguring] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
-    const [cancelling, setCancelling] = useState(false);
-    const [loadingEarlier, setLoadingEarlier] = useState(false);
-    const [operationError, setOperationError] = useState("");
-    const [announcement, setAnnouncement] = useState("");
+    const thread = useStore(threadStore);
+    const sessionViewModel = useStore(sessionStore);
+    const composer = useStore(composerStore);
+    const { announcement, cancelling, loadingEarlier, operationError, optimisticPrompt, state } = thread;
+    const { configuring, state: composerSession } = sessionViewModel;
+    const { attaching, draft, images: draftImages, resources: draftResources, submitting } = composer;
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const configuringRef = useRef(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const turnWasRunningRef = useRef(false);
-
-    const loadConversation = useCallback(async (): Promise<void> => {
-        try {
-            const directory = await client.listConversations(bot.botId, signal);
-            const conversation = directory.conversations.find(
-                (candidate) => candidate.conversationId === conversationId,
-            );
-            if (conversation === undefined) {
-                setState(new FailedConversationViewState("The Bot conversation does not exist."));
-                return;
-            }
-            const [messages, events] = await Promise.all([
-                readBotConversationMessages(connection, conversation.sessionId, "", signal),
-                client.readConversationEvents(bot.botId, conversation.conversationId, "", signal),
-            ]);
-            const chronologicalMessages = messages.messages.toReversed();
-            const currentTurn = turnState(chronologicalMessages, events.events);
-            setState((current) => {
-                const previous =
-                    current instanceof ReadyConversationViewState &&
-                    current.conversation.conversationId === conversation.conversationId
-                        ? current
-                        : undefined;
-                return new ReadyConversationViewState(
-                    conversation,
-                    mergeConversationMessages(previous?.messages ?? [], chronologicalMessages),
-                    previous?.nextCursor ?? messages.nextCursor,
-                    currentTurn,
-                );
-            });
-            if (
-                optimisticPrompt instanceof PendingOptimisticBotPromptState &&
-                messages.messages.some((message) => message.commandId === optimisticPrompt.clientMessageId)
-            ) {
-                setOptimisticPrompt(new EmptyOptimisticBotPromptState());
-            }
-        } catch (error) {
-            if (!signal.aborted) {
-                setState(new FailedConversationViewState(failureMessage(error)));
-            }
-        }
-    }, [bot.botId, client, connection, conversationId, optimisticPrompt, signal]);
 
     useEffect(() => {
-        void loadConversation();
-    }, [loadConversation]);
+        void thread.open(signal);
+    }, [signal, thread.open]);
 
-    const ready = state instanceof ReadyConversationViewState ? state : undefined;
-    const turnRunning = ready?.turn.kind === "running" || ready?.turn.kind === "running_without_identifier";
+    const ready = state.kind === "ready" ? state : undefined;
+    const turnRunning = ready?.turn.kind === "running" || ready?.turn.kind === "running-without-identifier";
     const readySessionId =
         ready !== undefined && ready.conversation.origin.kind === "owner" ? ready.conversation.sessionId : "";
 
     useEffect(() => {
-        if (readySessionId.length === 0) {
-            return;
+        if (readySessionId.length > 0) {
+            void sessionViewModel.prepare(readySessionId, signal);
         }
-        const controller = new AbortController();
-        const operationSignal = AbortSignal.any([signal, controller.signal, AbortSignal.timeout(120_000)]);
-        setComposerSession(new LoadingBotComposerSessionState());
-        void readBotConversationSession(connection, readySessionId, operationSignal)
-            .then(async (session) => {
-                setComposerSession(new PreparingBotComposerSessionState(session, session.defaultBinding.workspaceRef));
-                const prepared = await prepareConversationSession(
-                    {
-                        additionalDirectoryIds: [],
-                        agentId: session.defaultBinding.agentRef,
-                        bindingId: session.defaultBinding.bindingId,
-                        directoryId: session.defaultBinding.workspaceRef,
-                        requestId: `bot-prepare-${preparationRevision.toString()}-${crypto.randomUUID()}`,
-                        sessionId: session.sessionId,
-                    },
-                    operationSignal,
-                );
-                const refreshedSession = await readBotConversationSession(
-                    connection,
-                    session.sessionId,
-                    operationSignal,
-                );
-                setComposerSession(new ReadyBotComposerSessionState(refreshedSession, prepared));
-                setOperationError("");
-            })
-            .catch((error: unknown) => {
-                if (!operationSignal.aborted) {
-                    setComposerSession(new FailedBotComposerSessionState(failureMessage(error)));
-                }
-            });
-        return () => controller.abort();
-    }, [connection, preparationRevision, readySessionId, signal]);
-
-    useEffect(() => {
-        const responseCompleted = turnWasRunningRef.current && !turnRunning;
-        turnWasRunningRef.current = turnRunning;
-        if (responseCompleted && announcement === BOT_WORKING_ANNOUNCEMENT) {
-            setAnnouncement("Response completed.");
-        }
-    }, [announcement, turnRunning]);
-
-    useEffect(() => {
-        if (!turnRunning) {
-            return;
-        }
-        let cancelled = false;
-        let timeout = 0;
-        const refresh = async (): Promise<void> => {
-            await loadConversation();
-            if (!cancelled) {
-                timeout = window.setTimeout(() => void refresh(), 1_500);
-            }
-        };
-        timeout = window.setTimeout(() => void refresh(), 1_500);
-        return () => {
-            cancelled = true;
-            window.clearTimeout(timeout);
-        };
-    }, [loadConversation, turnRunning]);
+    }, [readySessionId, sessionViewModel.prepare, signal]);
 
     useLayoutEffect(() => {
         const textarea = textareaRef.current;
@@ -663,285 +275,7 @@ export function BotConversationPage() {
         textarea.style.height = `${Math.min(textarea.scrollHeight, BOT_COMPOSER_MAX_HEIGHT).toString()}px`;
     });
 
-    const attachFiles = (files: FileList): void => {
-        if (!(composerSession instanceof ReadyBotComposerSessionState)) {
-            return;
-        }
-        const prepared = composerSession.ready;
-        const selected = Array.from(files).slice(0, 8);
-        setAttaching(true);
-        void Promise.all(selected.map(async (file) => await readPromptAttachment(file)))
-            .then((attachments) => {
-                let images = [...draftImages];
-                let resources = [...draftResources];
-                for (const attachment of attachments) {
-                    if (attachment instanceof ReadPromptImage) {
-                        if (!prepared.capabilities.imagePrompt) {
-                            throw new AttachmentReadError(
-                                "image_prompt_unsupported",
-                                `${bot.displayName} does not accept image prompts.`,
-                            );
-                        }
-                        images = [...images.filter((image) => image.name !== attachment.image.name), attachment.image];
-                    } else if (attachment instanceof ReadPromptResource) {
-                        if (!prepared.capabilities.embeddedContextPrompt) {
-                            throw new AttachmentReadError(
-                                "resource_prompt_unsupported",
-                                `${bot.displayName} does not accept embedded resources.`,
-                            );
-                        }
-                        resources = [
-                            ...resources.filter((resource) => resource.name !== attachment.resource.name),
-                            attachment.resource,
-                        ];
-                    }
-                }
-                setDraftImages(Object.freeze(images));
-                setDraftResources(Object.freeze(resources));
-                setOperationError("");
-            })
-            .catch((error: unknown) => {
-                setOperationError(
-                    error instanceof AttachmentReadError
-                        ? `${error.code}: ${error.message}`
-                        : "attachment_read_failed: The selected file could not be read.",
-                );
-            })
-            .finally(() => {
-                setAttaching(false);
-                if (fileInputRef.current !== null) {
-                    fileInputRef.current.value = "";
-                }
-            });
-    };
-
-    const selectWorkspace = async (directory: WorkspaceEntry): Promise<void> => {
-        if (
-            ready === undefined ||
-            !(composerSession instanceof ReadyBotComposerSessionState) ||
-            ready.messages.length > 0 ||
-            optimisticPrompt instanceof PendingOptimisticBotPromptState ||
-            turnRunning ||
-            configuringRef.current
-        ) {
-            throw new Error("The workspace is fixed after the first message");
-        }
-        const operationSignal = AbortSignal.any([signal, AbortSignal.timeout(120_000)]);
-        let targetSession = composerSession.session;
-        setComposerSession(new PreparingBotComposerSessionState(targetSession, directory.name));
-        try {
-            targetSession = await updateBotConversationWorkspace(
-                connection,
-                targetSession,
-                directory.directoryId,
-                operationSignal,
-            );
-            const prepared = await prepareConversationSession(
-                {
-                    additionalDirectoryIds: [],
-                    agentId: targetSession.defaultBinding.agentRef,
-                    bindingId: targetSession.defaultBinding.bindingId,
-                    directoryId: targetSession.defaultBinding.workspaceRef,
-                    sessionId: targetSession.sessionId,
-                },
-                operationSignal,
-            );
-            targetSession = await readBotConversationSession(connection, targetSession.sessionId, operationSignal);
-            setComposerSession(new ReadyBotComposerSessionState(targetSession, prepared));
-            setOperationError("");
-        } catch (error) {
-            const message = failureMessage(error);
-            setComposerSession(new FailedPreparedBotComposerSessionState(targetSession, directory.name, message));
-            setOperationError(message);
-            throw error;
-        }
-    };
-
-    const configureBotOption = async (
-        option: SessionConfigOption,
-        value: string,
-        booleanValue: boolean,
-    ): Promise<string> => {
-        if (!(composerSession instanceof ReadyBotComposerSessionState)) {
-            return "The local Bot session is not ready.";
-        }
-        if (configuringRef.current) {
-            return "Wait for the current session setting to finish.";
-        }
-        const activeComposer = composerSession;
-        configuringRef.current = true;
-        setConfiguring(true);
-        try {
-            const configured = await configureConversationSession(
-                {
-                    additionalDirectoryIds: [],
-                    agentId: activeComposer.session.defaultBinding.agentRef,
-                    bindingId: activeComposer.session.defaultBinding.bindingId,
-                    booleanValue,
-                    configId: option.id,
-                    directoryId: activeComposer.session.defaultBinding.workspaceRef,
-                    sessionId: activeComposer.session.sessionId,
-                    value,
-                    valueType: option.type,
-                },
-                AbortSignal.any([signal, AbortSignal.timeout(120_000)]),
-            );
-            const refreshedSession = await readBotConversationSession(
-                connection,
-                activeComposer.session.sessionId,
-                AbortSignal.any([signal, AbortSignal.timeout(120_000)]),
-            );
-            setComposerSession((current) =>
-                current instanceof ReadyBotComposerSessionState &&
-                current.session.sessionId === activeComposer.session.sessionId
-                    ? new ReadyBotComposerSessionState(refreshedSession, {
-                          ...current.ready,
-                          configOptions: configured.configOptions,
-                      })
-                    : current,
-            );
-            return "";
-        } catch (error) {
-            return failureMessage(error);
-        } finally {
-            configuringRef.current = false;
-            if (!signal.aborted) {
-                setConfiguring(false);
-            }
-        }
-    };
-
-    const submit = async (): Promise<void> => {
-        const ownerConversation = ready?.conversation.origin.kind === "owner";
-        if (
-            ready === undefined ||
-            (ownerConversation && !(composerSession instanceof ReadyBotComposerSessionState)) ||
-            (!ownerConversation && (draftImages.length > 0 || draftResources.length > 0)) ||
-            (draft.trim().length === 0 && draftImages.length === 0 && draftResources.length === 0) ||
-            turnRunning ||
-            configuringRef.current
-        ) {
-            return;
-        }
-        const prompt = draft.trim();
-        const images = draftImages;
-        const resources = draftResources;
-        const clientMessageId = `web_${crypto.randomUUID()}`;
-        setSubmitting(true);
-        setDraft("");
-        setDraftImages([]);
-        setDraftResources([]);
-        setOptimisticPrompt(new PendingOptimisticBotPromptState(clientMessageId, prompt, images, resources));
-        setOperationError("");
-        setAnnouncement("");
-        try {
-            const operationSignal = AbortSignal.any([signal, AbortSignal.timeout(120_000)]);
-            const artifactIds = ownerConversation
-                ? await uploadBotPromptAttachments(
-                      connection,
-                      ready.conversation.sessionId,
-                      images,
-                      resources,
-                      operationSignal,
-                  )
-                : [];
-            const accepted = await client.submitMessage(
-                bot.botId,
-                ready.conversation.conversationId,
-                {
-                    actorRef: "project-owner",
-                    artifactIds,
-                    clientMessageId,
-                    text: prompt,
-                },
-                operationSignal,
-            );
-            const titleSource = prompt.length > 0 ? prompt : (images[0]?.name ?? resources[0]?.name ?? "Attachment");
-            const conversation =
-                ownerConversation && ready.messages.length === 0
-                    ? retitleConversation(ready.conversation, conversationTitleFromText(titleSource))
-                    : ready.conversation;
-            setState(
-                new ReadyConversationViewState(
-                    conversation,
-                    ready.messages,
-                    ready.nextCursor,
-                    new RunningConversationTurnState(accepted.turnId),
-                ),
-            );
-            setAnnouncement(BOT_WORKING_ANNOUNCEMENT);
-        } catch (error) {
-            if (!signal.aborted) {
-                setDraft(prompt);
-                setDraftImages(images);
-                setDraftResources(resources);
-                setOptimisticPrompt(new EmptyOptimisticBotPromptState());
-                setOperationError(failureMessage(error));
-            }
-        } finally {
-            if (!signal.aborted) {
-                setSubmitting(false);
-            }
-        }
-    };
-
-    const loadEarlierMessages = async (current: ReadyConversationViewState): Promise<void> => {
-        if (current.nextCursor.length === 0) {
-            return;
-        }
-        setLoadingEarlier(true);
-        setOperationError("");
-        try {
-            const page = await readBotConversationMessages(
-                connection,
-                current.conversation.sessionId,
-                current.nextCursor,
-                signal,
-            );
-            setState((latest) => {
-                if (
-                    !(latest instanceof ReadyConversationViewState) ||
-                    latest.conversation.conversationId !== current.conversation.conversationId
-                ) {
-                    return latest;
-                }
-                return new ReadyConversationViewState(
-                    latest.conversation,
-                    mergeConversationMessages(latest.messages, page.messages.toReversed()),
-                    page.nextCursor,
-                    latest.turn,
-                );
-            });
-        } catch (error) {
-            if (!signal.aborted) {
-                setOperationError(failureMessage(error));
-            }
-        } finally {
-            if (!signal.aborted) {
-                setLoadingEarlier(false);
-            }
-        }
-    };
-
-    const cancel = async (running: RunningConversationTurnState): Promise<void> => {
-        setCancelling(true);
-        setOperationError("");
-        try {
-            await client.cancelTurn(bot.botId, running.turnId, `web_${crypto.randomUUID()}`, signal);
-            setAnnouncement("Cancellation accepted.");
-            await loadConversation();
-        } catch (error) {
-            if (!signal.aborted) {
-                setOperationError(failureMessage(error));
-            }
-        } finally {
-            if (!signal.aborted) {
-                setCancelling(false);
-            }
-        }
-    };
-
-    if (state instanceof LoadingConversationViewState) {
+    if (state.kind === "loading") {
         return (
             <div
                 aria-busy="true"
@@ -951,7 +285,7 @@ export function BotConversationPage() {
             </div>
         );
     }
-    if (state instanceof FailedConversationViewState) {
+    if (state.kind === "failed") {
         return (
             <div className="mx-auto w-full max-w-[760px] px-5 py-8 sm:px-8">
                 <Link
@@ -962,7 +296,7 @@ export function BotConversationPage() {
                 </Link>
                 <div className="mt-5 rounded-xl border border-[#f2c4c4] bg-[#fff7f7] p-5">
                     <BotInlineError>{state.message}</BotInlineError>
-                    <Button className="mt-3 min-h-11" onClick={() => void loadConversation()} variant="outline">
+                    <Button className="mt-3 min-h-11" onClick={() => void thread.load(signal)} variant="outline">
                         <RefreshCw aria-hidden="true" className="size-4" /> Retry
                     </Button>
                 </div>
@@ -972,21 +306,19 @@ export function BotConversationPage() {
     if (ready === undefined) {
         return null;
     }
-    const cancellableTurn = ready.turn instanceof RunningConversationTurnState ? ready.turn : undefined;
-    const preparedComposer = composerSession instanceof ReadyBotComposerSessionState ? composerSession : undefined;
-    const preparedFailure = composerSession instanceof FailedBotComposerSessionState ? composerSession.message : "";
+    const cancellableTurn = ready.turn.kind === "running" ? ready.turn : undefined;
+    const preparedComposer = composerSession.kind === "ready" ? composerSession : undefined;
+    const preparedFailure =
+        composerSession.kind === "failed" || composerSession.kind === "prepared-failed" ? composerSession.message : "";
     const composerDirectoryId =
         preparedComposer?.session.defaultBinding.workspaceRef ??
-        (composerSession instanceof FailedPreparedBotComposerSessionState
-            ? composerSession.session.defaultBinding.workspaceRef
-            : "default");
+        (composerSession.kind === "prepared-failed" ? composerSession.session.defaultBinding.workspaceRef : "default");
     const composerDirectoryLabel =
         preparedComposer?.ready.directoryLabel ??
-        (composerSession instanceof PreparingBotComposerSessionState ||
-        composerSession instanceof FailedPreparedBotComposerSessionState
+        (composerSession.kind === "preparing" || composerSession.kind === "prepared-failed"
             ? composerSession.directoryLabel
             : "Approved workspace");
-    const hasOptimisticPrompt = optimisticPrompt instanceof PendingOptimisticBotPromptState;
+    const hasOptimisticPrompt = optimisticPrompt.kind === "pending";
     const ownerConversation = ready.conversation.origin.kind === "owner";
     const hasDraftContent =
         draft.trim().length > 0 || (ownerConversation && (draftImages.length > 0 || draftResources.length > 0));
@@ -1023,7 +355,7 @@ export function BotConversationPage() {
                         </Link>
                         <span className="min-w-0">
                             <h2 className="truncate text-base font-semibold tracking-[-0.015em]">
-                                {conversationTitle(ready.conversation)}
+                                {botConversationTitle(ready.conversation)}
                             </h2>
                             <span className="mt-0.5 block text-[11px] text-muted-foreground">
                                 Behavior revision {ready.conversation.behaviorRevisionId.slice(-6)} · Binding v
@@ -1034,7 +366,7 @@ export function BotConversationPage() {
                     <Button
                         aria-label="Refresh conversation"
                         className="size-11 sm:size-9"
-                        onClick={() => void loadConversation()}
+                        onClick={() => void thread.load(signal)}
                         size="icon"
                         variant="ghost"
                     >
@@ -1050,7 +382,7 @@ export function BotConversationPage() {
                             aria-busy={loadingEarlier}
                             className="min-h-11"
                             disabled={loadingEarlier}
-                            onClick={() => void loadEarlierMessages(ready)}
+                            onClick={() => void thread.loadEarlier(signal)}
                             variant="outline"
                         >
                             {loadingEarlier && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />}
@@ -1073,7 +405,7 @@ export function BotConversationPage() {
                         {ready.messages.map((message) => (
                             <ConversationMessage botName={bot.displayName} key={message.commandId} message={message} />
                         ))}
-                        {optimisticPrompt instanceof PendingOptimisticBotPromptState &&
+                        {optimisticPrompt.kind === "pending" &&
                             !ready.messages.some(
                                 (message) => message.commandId === optimisticPrompt.clientMessageId,
                             ) && (
@@ -1108,11 +440,11 @@ export function BotConversationPage() {
                     </div>
                 )}
                 <form
-                    aria-busy={submitting || configuring || composerSession instanceof PreparingBotComposerSessionState}
+                    aria-busy={submitting || configuring || composerSession.kind === "preparing"}
                     className="composer-shell relative mx-auto w-full max-w-[840px] rounded-2xl bg-white px-2 py-1.5 sm:px-2.5 sm:py-2 md:rounded-[18px] md:px-3 md:py-2.5"
                     onSubmit={(event) => {
                         event.preventDefault();
-                        void submit();
+                        void composer.submit(signal);
                     }}
                 >
                     {(draftImages.length > 0 || draftResources.length > 0) && (
@@ -1130,11 +462,7 @@ export function BotConversationPage() {
                                             <Button
                                                 aria-label={`Remove ${image.name}`}
                                                 className="size-11 lg:size-8"
-                                                onClick={() =>
-                                                    setDraftImages((current) =>
-                                                        current.filter((_, candidate) => candidate !== index),
-                                                    )
-                                                }
+                                                onClick={() => composer.removeImage(image.name)}
                                                 size="icon"
                                                 type="button"
                                                 variant="ghost"
@@ -1157,11 +485,7 @@ export function BotConversationPage() {
                                             <Button
                                                 aria-label={`Remove ${resource.name}`}
                                                 className="size-11 lg:size-8"
-                                                onClick={() =>
-                                                    setDraftResources((current) =>
-                                                        current.filter((_, candidate) => candidate !== index),
-                                                    )
-                                                }
+                                                onClick={() => composer.removeResource(resource.name)}
                                                 size="icon"
                                                 type="button"
                                                 variant="ghost"
@@ -1183,11 +507,11 @@ export function BotConversationPage() {
                         disabled={submitting || turnRunning || bot.state.kind !== "active"}
                         id="bot-message-composer"
                         maxLength={100000}
-                        onChange={(event) => setDraft(event.target.value)}
+                        onChange={(event) => composer.setDraft(event.target.value)}
                         onKeyDown={(event) => {
                             if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                                 event.preventDefault();
-                                void submit();
+                                void composer.submit(signal);
                             }
                         }}
                         placeholder={
@@ -1233,7 +557,11 @@ export function BotConversationPage() {
                                         multiple
                                         onChange={(event) => {
                                             if (event.currentTarget.files !== null) {
-                                                attachFiles(event.currentTarget.files);
+                                                void composer.attachFiles(event.currentTarget.files).finally(() => {
+                                                    if (fileInputRef.current !== null) {
+                                                        fileInputRef.current.value = "";
+                                                    }
+                                                });
                                             }
                                         }}
                                         ref={fileInputRef}
@@ -1252,8 +580,10 @@ export function BotConversationPage() {
                                             listWorkspace(directoryId, AbortSignal.any([signal, listSignal]))
                                         }
                                         locked={workspaceLocked}
-                                        onFailure={setOperationError}
-                                        onSelectPrimary={selectWorkspace}
+                                        onFailure={thread.reportError}
+                                        onSelectPrimary={(directory) =>
+                                            sessionViewModel.selectWorkspace(directory, workspaceLocked, signal)
+                                        }
                                         onToggleAdditional={() => undefined}
                                     />
                                     <SessionConfigControlsView
@@ -1261,13 +591,14 @@ export function BotConversationPage() {
                                         directoryLabel={composerDirectoryLabel}
                                         failure={preparedFailure}
                                         isPreparing={
-                                            composerSession instanceof LoadingBotComposerSessionState ||
-                                            composerSession instanceof PreparingBotComposerSessionState
+                                            composerSession.kind === "loading" || composerSession.kind === "preparing"
                                         }
                                         isReady={preparedComposer !== undefined}
                                         isRunning={turnRunning}
-                                        onConfigure={configureBotOption}
-                                        onRetry={() => setPreparationRevision((current) => current + 1)}
+                                        onConfigure={(option, value, booleanValue) =>
+                                            sessionViewModel.configure(option, value, booleanValue, signal)
+                                        }
+                                        onRetry={() => void sessionViewModel.prepare(readySessionId, signal)}
                                         options={preparedComposer?.ready.configOptions ?? []}
                                         statusLabel={composerSession.statusLabel}
                                     />
@@ -1284,7 +615,7 @@ export function BotConversationPage() {
                                 aria-label="Stop response"
                                 className="size-11 rounded-full lg:size-9"
                                 disabled={cancelling}
-                                onClick={() => void cancel(cancellableTurn)}
+                                onClick={() => void thread.cancel(signal)}
                                 size="icon"
                                 type="button"
                                 variant="outline"
