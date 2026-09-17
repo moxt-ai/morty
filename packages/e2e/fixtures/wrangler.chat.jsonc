@@ -13,18 +13,14 @@
         { "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "mobius-chat-local-e2e-attachments" },
         { "binding": "CHAT_ATTACHMENTS_WNAM", "bucket_name": "mobius-chat-local-e2e-wnam-attachments" }
     ],
-    "d1_databases": [
-        {
-            "binding": "CHAT_DATABASE_WNAM",
-            "database_name": "mobius-chat-local-e2e-wnam",
-            "database_id": "00000000-0000-0000-0000-000000000202",
-            "migrations_dir": "../../../packages/worker/migrations"
-        },
-        {
-            "binding": "CHAT_DATABASE_APAC",
-            "database_name": "mobius-chat-local-e2e",
-            "database_id": "00000000-0000-0000-0000-000000000201",
-            "migrations_dir": "../../../packages/worker/migrations"
-        }
+    "durable_objects": {
+        "bindings": [
+            { "name": "CHAT_PROJECTS", "class_name": "ProjectDurableObject" },
+            { "name": "BOT_TRIGGER_RATE_LIMITER", "class_name": "BotTriggerRateLimiter" }
+        ]
+    },
+    "migrations": [
+        { "tag": "v1", "new_sqlite_classes": ["BotTriggerRateLimiter"] },
+        { "tag": "v2", "new_sqlite_classes": ["ProjectDurableObject"] }
     ]
 }

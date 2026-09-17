@@ -78,3 +78,14 @@ export type SlackQueueMessage = v.InferOutput<typeof queueMessageSchema>;
 
 export const projectQueueMessageSchema = v.object({ projectId: v.string(), message: queueMessageSchema });
 export type ProjectQueueMessage = v.InferOutput<typeof projectQueueMessageSchema>;
+
+export const projectQueueDeliverySchema = v.pipe(
+    v.object({
+        attempts: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
+        id: v.string(),
+        message: projectQueueMessageSchema,
+        timestamp: v.pipe(v.string(), v.isoTimestamp()),
+    }),
+    v.readonly(),
+);
+export type ProjectQueueDelivery = v.InferOutput<typeof projectQueueDeliverySchema>;

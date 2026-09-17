@@ -1,9 +1,9 @@
 import type { RequestAccessMetrics } from "./request-access-metrics.ts";
 
 export interface CloudBindings {
-    readonly MOBIUS_WORKER_REGION?: unknown;
-    readonly MOBIUS_REGIONAL_APAC?: unknown;
-    readonly MOBIUS_REGIONAL_WNAM?: unknown;
+    readonly CHAT_PROJECTS?: unknown;
+    readonly CHAT_ATTACHMENTS_APAC?: unknown;
+    readonly CHAT_ATTACHMENTS_WNAM?: unknown;
     readonly ATTACHMENTS?: unknown;
     readonly BOT_TRIGGER_RATE_LIMITER?: unknown;
     readonly APP_ORIGIN?: unknown;
@@ -13,10 +13,6 @@ export interface CloudBindings {
     readonly CLERK_JWT_KEY?: unknown;
     readonly CLERK_PUBLISHABLE_KEY?: unknown;
     readonly DATABASE?: unknown;
-    readonly CHAT_DATABASE_APAC?: unknown;
-    readonly CHAT_DATABASE_WNAM?: unknown;
-    readonly CHAT_ATTACHMENTS_APAC?: unknown;
-    readonly CHAT_ATTACHMENTS_WNAM?: unknown;
     readonly CHAT_PROJECT_ID?: string;
     readonly EVENTS?: unknown;
     readonly MOBIUS_BASE_URL?: unknown;

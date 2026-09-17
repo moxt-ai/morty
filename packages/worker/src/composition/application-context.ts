@@ -11,7 +11,7 @@ import { PlatformProjectStorage } from "../components/management/storage/platfor
 import { ClerkGateway } from "../gateway/clerk-gateway.ts";
 import { PlatformProjectGateway } from "../gateway/platform-project-gateway.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
-import { projectBindings } from "./chat-shards.ts";
+import { projectBindings } from "./project-bindings.ts";
 
 const logger = pino({
     base: { service: "mobius-chat" },

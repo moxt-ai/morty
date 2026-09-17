@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import { projectObject } from "../../../gateway/project-object-routing.ts";
 import { json } from "../../../infra/http.ts";
 import { bodyParser } from "../../../middleware/body-parser.ts";
 import { ManagementError } from "../entity/management-error.ts";
@@ -52,14 +53,23 @@ export function createAuthenticationRoutes() {
         })
         .post("/identity/anonymous-users", async (context) => {
             const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]);
-            const location =
-                context.env.config.bindings.MOBIUS_WORKER_REGION === "apac" ||
-                context.env.config.bindings.MOBIUS_WORKER_REGION === "wnam"
-                    ? context.env.config.bindings.MOBIUS_WORKER_REGION
-                    : projectLocationHint(context.req.raw);
-            return json(await context.env.services.management.createAnonymousUser(location, signal), 201, {
-                "Cache-Control": "no-store",
-            });
+            const userId = `usr_${crypto.randomUUID()}`;
+            const project = await context.env.gateways.platformProjects.create(
+                userId,
+                "Personal workspace",
+                signal,
+                projectLocationHint(context.req.raw),
+            );
+            const response = await projectObject(context.env.config.bindings, project.projectId).fetch(
+                new Request("https://project.internal/__project/bootstrap", {
+                    body: JSON.stringify({ project, userId }),
+                    headers: { "content-type": "application/json" },
+                    method: "POST",
+                    signal,
+                }),
+            );
+            signal.throwIfAborted();
+            return response;
         })
         .post("/identity/transfers", async (context) => {
             const transfer = await context.env.services.authentication.createTransfer(
