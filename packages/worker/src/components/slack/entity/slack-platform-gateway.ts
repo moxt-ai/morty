@@ -11,12 +11,6 @@ export interface SlackPlatformGateway {
         pairingId: string,
         signal: AbortSignal,
     ) => Promise<{ readonly status: string }>;
-    readonly migrateLegacyBot: (
-        projectId: string,
-        botId: string,
-        userId: string,
-        signal: AbortSignal,
-    ) => Promise<{ readonly configuration: BotConfiguration | null; readonly instructions: string }>;
     readonly openAutomatedChatSession: (
         projectId: string,
         selection: BotConfiguration,

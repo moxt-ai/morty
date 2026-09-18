@@ -6,9 +6,7 @@ import {
     MobiusTimeoutError,
 } from "@moxt-ai/mobius-sdk/platform";
 import {
-    MobiusActiveBotState,
     MobiusAgentMessageEvent,
-    MobiusBotOwnerClient,
     MobiusCancelledTurnState,
     MobiusClient,
     MobiusFailedTurnState,
@@ -402,39 +400,6 @@ export class PlatformProjectGateway {
             600000,
         );
 
-    readonly migrateLegacyBot = async (projectId: string, botId: string, userId: string, signal: AbortSignal) =>
-        await this.#withBot(projectId, botId, userId, signal, async (client, bot) => {
-            if (!(bot.state instanceof MobiusActiveBotState)) {
-                return { configuration: null, instructions: "" };
-            }
-            const activeState = bot.state;
-            const [bindings, behaviors] = await Promise.all([
-                client.listBindings(botId, signal),
-                client.listBehaviors(botId, signal),
-            ]);
-            const binding = bindings.executionBindings.find((item) => item.bindingId === activeState.activeBindingId);
-            const behavior = behaviors.behaviorRevisions.find(
-                (item) => item.behaviorRevisionId === activeState.activeBehaviorRevisionId,
-            );
-            if (binding === undefined || behavior === undefined) {
-                throw new PlatformProjectError(
-                    "PLATFORM_INVALID_RESPONSE",
-                    "The legacy Bot configuration is incomplete.",
-                    502,
-                );
-            }
-            return {
-                configuration: {
-                    bindingId: binding.bindingId,
-                    runtimeId: binding.runtimeId,
-                    agentRef: binding.agentRef,
-                    workspaceRef: binding.workspaceRef,
-                    agentConfigRevision: binding.agentConfigRevision,
-                },
-                instructions: behavior.instructions,
-            };
-        });
-
     readonly nativeSessionAccess = async (projectId: string, sessionId: string, signal: AbortSignal) =>
         await this.#withProject(projectId, signal, async (client) => {
             const access = await client.sessions.createAccess(sessionId, 600, signal);
@@ -468,48 +433,6 @@ export class PlatformProjectGateway {
             async (client) => await client.runtimes.findNativeSessionByNativeSessionId(runtimeId, request, signal),
             120000,
         );
-
-    readonly #withBot = async <T>(
-        projectId: string,
-        botId: string,
-        actorReference: string,
-        signal: AbortSignal,
-        operation: (
-            client: MobiusBotOwnerClient,
-            bot: Awaited<ReturnType<MobiusBotOwnerClient["readBot"]>>,
-        ) => Promise<T>,
-    ): Promise<T> => {
-        signal.throwIfAborted();
-        const client = new MobiusBotOwnerClient({
-            endpoint: this.configuration().origin,
-            projectId,
-            actorReference,
-            credentialProvider: new MobiusAppCredentialProvider(v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET)),
-            observeResponse: this.#observeMobiusResponse,
-            operationTimeoutMilliseconds: 15000,
-        });
-        try {
-            const bot = await client.readBot(botId, signal);
-            if (bot.projectId !== projectId) {
-                throw new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);
-            }
-            return await operation(client, bot);
-        } catch (cause) {
-            signal.throwIfAborted();
-            if (cause instanceof MobiusCancellationError || cause instanceof PlatformProjectError) {
-                throw cause;
-            }
-            if (cause instanceof MobiusTimeoutError) {
-                throw new PlatformProjectError("CHAT_TIMEOUT", "The agent did not respond in time.", 504, { cause });
-            }
-            if (cause instanceof MobiusApiError) {
-                throw new PlatformProjectError(cause.code, "The agent could not complete the request.", cause.status, {
-                    cause,
-                });
-            }
-            throw new PlatformProjectError("CHAT_UNAVAILABLE", "Chat is temporarily unavailable.", 502, { cause });
-        }
-    };
 
     readonly readPairing = async (projectId: string, pairingId: string, signal: AbortSignal) =>
         await this.#withProject(

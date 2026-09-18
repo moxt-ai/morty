@@ -14,7 +14,6 @@ export const slackChatBotBinding = sqliteTable(
         workspaceRef: text("workspace_ref"),
         agentConfigRevision: integer("agent_config_revision"),
         instructions: text("instructions").notNull().default(""),
-        legacyMigrationPending: integer("legacy_migration_pending", { mode: "boolean" }).notNull().default(true),
     },
     (table) => [primaryKey({ columns: [table.tenantId, table.slackBotId] })],
 );

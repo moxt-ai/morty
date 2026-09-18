@@ -57,7 +57,6 @@ export class ManagedBotStorage {
         | (ManagedBot & {
               readonly configuration: BotConfiguration | null;
               readonly instructions: string;
-              readonly legacyMigrationPending: boolean;
           })
         | null
     > => {
@@ -72,7 +71,6 @@ export class ManagedBotStorage {
                 workspaceRef: managedBot.workspaceRef,
                 agentConfigRevision: managedBot.agentConfigRevision,
                 instructions: managedBot.instructions,
-                legacyMigrationPending: managedBot.legacyMigrationPending,
             })
             .from(managedBot)
             .where(and(eq(managedBot.userId, userId), eq(managedBot.botId, v.parse(identifier, botId))))
@@ -87,7 +85,6 @@ export class ManagedBotStorage {
             ...bot,
             configuration: configuration.success ? configuration.output : null,
             instructions: row.instructions,
-            legacyMigrationPending: row.legacyMigrationPending,
         };
     };
 
@@ -102,7 +99,7 @@ export class ManagedBotStorage {
         signal.throwIfAborted();
         const result = await this.#requireDatabase()
             .update(managedBot)
-            .set({ ...value, legacyMigrationPending: false, updatedAt: now })
+            .set({ ...value, updatedAt: now })
             .where(and(eq(managedBot.userId, userId), eq(managedBot.botId, v.parse(identifier, botId))))
             .run();
         signal.throwIfAborted();
@@ -130,40 +127,6 @@ export class ManagedBotStorage {
         return result.meta.changes === 1;
     };
 
-    readonly completeLegacyMigration = async (
-        userId: string,
-        botId: string,
-        migrated: { readonly configuration: BotConfiguration | null; readonly instructions: string },
-        now: number,
-        signal: AbortSignal,
-    ): Promise<boolean> => {
-        signal.throwIfAborted();
-        const configuration =
-            migrated.configuration === null ? null : v.parse(botConfigurationSchema, migrated.configuration);
-        const result = await this.#requireDatabase()
-            .update(managedBot)
-            .set({
-                bindingId: configuration?.bindingId ?? null,
-                runtimeId: configuration?.runtimeId ?? null,
-                agentRef: configuration?.agentRef ?? null,
-                workspaceRef: configuration?.workspaceRef ?? null,
-                agentConfigRevision: configuration?.agentConfigRevision ?? null,
-                instructions: v.parse(v.pipe(v.string(), v.maxLength(100000)), migrated.instructions),
-                legacyMigrationPending: false,
-                updatedAt: now,
-            })
-            .where(
-                and(
-                    eq(managedBot.userId, userId),
-                    eq(managedBot.botId, v.parse(identifier, botId)),
-                    eq(managedBot.legacyMigrationPending, true),
-                ),
-            )
-            .run();
-        signal.throwIfAborted();
-        return result.meta.changes === 1;
-    };
-
     readonly saveClaim = async (userId: string, bot: ManagedBot, now: number, signal: AbortSignal): Promise<void> => {
         const value = v.parse(managedBotSchema, bot);
         signal.throwIfAborted();
@@ -173,7 +136,6 @@ export class ManagedBotStorage {
                 userId,
                 botId: value.botId,
                 displayName: value.displayName,
-                legacyMigrationPending: false,
                 createdAt: now,
                 updatedAt: now,
             })
