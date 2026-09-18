@@ -1,6 +1,7 @@
 import { useSession } from "@clerk/react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Button, createApplicationRouter } from "../../index.ts";
+import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import {
     type AnonymousIdentity,
     AnonymousIdentityApi,
@@ -41,6 +42,7 @@ type WorkspaceApplicationProps = {
 );
 
 function WorkspaceApplication(props: WorkspaceApplicationProps) {
+    const transport = useApiTransport();
     const { activeIdentity, authorize, localIdentity, userId } = props;
     const router = useMemo(() => {
         let account: ReactNode;
@@ -69,10 +71,10 @@ function WorkspaceApplication(props: WorkspaceApplicationProps) {
             authorize,
             userId,
             MobiusManagement,
-            userBotConnection(userId, activeIdentity.projectId, activeIdentity.getToken),
+            userBotConnection(userId, activeIdentity.projectId, activeIdentity.getToken, transport.fetch),
             { Application: Standard, Standard },
         );
-    }, [activeIdentity, authorize, localIdentity, userId]);
+    }, [activeIdentity, authorize, localIdentity, transport.fetch, userId]);
     return (
         <ActiveIdentityProvider value={activeIdentity}>
             <App state={{ kind: "signed-in", router }} />
@@ -89,6 +91,7 @@ function BindingConflict({
     readonly onResolved: (action: "discard-local" | "override", userId: string) => void;
     readonly session: NonNullable<ReturnType<typeof useSession>["session"]>;
 }) {
+    const transport = useApiTransport();
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const operation = useRef<AbortController | null>(null);
@@ -99,7 +102,11 @@ function BindingConflict({
         operation.current = controller;
         setBusy(true);
         setError("");
-        const api = new AnonymousIdentityApi({ origin: window.location.origin, storage: window.localStorage });
+        const api = new AnonymousIdentityApi({
+            fetchRequest: transport.fetch,
+            origin: window.location.origin,
+            storage: window.localStorage,
+        });
         void waitForClerk(() => session.getToken(), controller.signal)
             .then((token) => {
                 if (token === null) {
@@ -155,6 +162,7 @@ function BindingConflict({
 }
 
 export function SessionApplication() {
+    const transport = useApiTransport();
     const { isLoaded, session } = useSession();
     const [state, setState] = useState<IdentityState>({ kind: "loading" });
     const activeSession = useRef(session);
@@ -167,7 +175,11 @@ export function SessionApplication() {
             return;
         }
         const controller = new AbortController();
-        const api = new AnonymousIdentityApi({ origin: window.location.origin, storage: window.localStorage });
+        const api = new AnonymousIdentityApi({
+            fetchRequest: transport.fetch,
+            origin: window.location.origin,
+            storage: window.localStorage,
+        });
         void api
             .loadExisting(controller.signal)
             .then(async (existing) => {
@@ -221,7 +233,7 @@ export function SessionApplication() {
                 }
             });
         return () => controller.abort();
-    }, [authenticationPath, isLoaded, session]);
+    }, [authenticationPath, isLoaded, session, transport.fetch]);
     if (!isLoaded) {
         return <App state={{ kind: "loading" }} />;
     }
@@ -271,7 +283,11 @@ export function SessionApplication() {
         );
     }
     if (state.kind === "anonymous") {
-        const api = new AnonymousIdentityApi({ origin: window.location.origin, storage: window.localStorage });
+        const api = new AnonymousIdentityApi({
+            fetchRequest: transport.fetch,
+            origin: window.location.origin,
+            storage: window.localStorage,
+        });
         const activeIdentity: ActiveIdentity = {
             getToken: async (signal) => {
                 signal.throwIfAborted();
@@ -310,6 +326,7 @@ export function SessionApplication() {
             userId={state.userId}
             authorize={(signal) =>
                 verifySession(
+                    transport.fetch,
                     expectedSessionId,
                     activeSession.current?.id,
                     () => activeSession.current?.getToken() ?? Promise.resolve(null),

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 import { useStore } from "zustand";
 import { BOT_FIELD_CLASS, BotAvatar, BotInlineError, BotPageHeader } from "@/components/bots/bot-page-header";
 import { Button } from "@/components/ui/button";
+import { useApiTransport } from "@/services/api/api-transport-context";
 import { botRoutePath } from "@/services/application/app-routes";
 import { ChatBotApi } from "@/services/bots/bot-api";
 import { createBotDirectoryStore } from "@/view-models/bots/directory-store";
@@ -20,6 +21,7 @@ export function BotDirectoryPage({
     readonly onToggleDesktopSidebar: () => void;
 }) {
     const identity = useActiveIdentity();
+    const transport = useApiTransport();
     const navigate = useNavigate();
     const controller = useRef(new AbortController());
     const [store] = useState(() => {
@@ -27,6 +29,8 @@ export function BotDirectoryPage({
             origin: window.location.origin,
             projectId: identity.projectId,
             getToken: identity.getToken,
+            fetchRequest: transport.fetch,
+            waitForChange: transport.waitForChange,
         });
         return createBotDirectoryStore(api, async (bot) => {
             await navigate(botRoutePath(connection.channelId, bot.botId));

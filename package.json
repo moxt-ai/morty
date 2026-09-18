@@ -64,6 +64,7 @@
         "wrangler": "4.129.0"
     },
     "dependencies": {
+        "base64-js": "^1.5.1",
         "react": "^19.2.8",
         "valibot": "1.4.2"
     }

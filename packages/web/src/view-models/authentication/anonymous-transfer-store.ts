@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
 import { createStore } from "zustand/vanilla";
-import { AnonymousIdentityApi, type IdentityTransfer } from "@/services/identity/anonymous-identity-api";
+import type { IdentityTransfer } from "@/services/identity/anonymous-identity-api";
 
 type AnonymousTransferState =
     | { readonly kind: "idle" }
@@ -16,10 +16,7 @@ export interface AnonymousTransferStore {
 
 export const createAnonymousTransferStore = (
     token: string,
-    createTransfer: (token: string, signal: AbortSignal) => Promise<IdentityTransfer> = new AnonymousIdentityApi({
-        origin: window.location.origin,
-        storage: window.localStorage,
-    }).createTransfer,
+    createTransfer: (token: string, signal: AbortSignal) => Promise<IdentityTransfer>,
 ) =>
     createStore<AnonymousTransferStore>()((set) => ({
         state: { kind: "idle" },

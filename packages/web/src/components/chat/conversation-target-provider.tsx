@@ -1,5 +1,6 @@
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import { useStore } from "zustand";
+import { useApiTransport } from "@/services/api/api-transport-context";
 import { type ChatBot, ChatBotApi } from "@/services/bots/bot-api";
 import {
     type BotTargetDirectoryState,
@@ -33,12 +34,15 @@ export function ConversationTargetProvider({
     readonly onOpenBotConversation: (botId: string) => void;
 }) {
     const identity = useActiveIdentity();
+    const transport = useApiTransport();
     const [client] = useState(
         () =>
             new ChatBotApi({
                 origin: window.location.origin,
                 projectId: identity.projectId,
                 getToken: identity.getToken,
+                fetchRequest: transport.fetch,
+                waitForChange: transport.waitForChange,
             }),
     );
     const [controller] = useState(() => new AbortController());

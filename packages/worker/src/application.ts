@@ -8,6 +8,7 @@ import { slackRoutes } from "./components/slack/http/index.ts";
 import { createApplicationDependencies } from "./composition/application-context.ts";
 import { cloudRoutes } from "./composition/cloud-http.ts";
 import { setupArtifact } from "./gateway/setup-artifact.ts";
+import { createWebSocketApiBridge } from "./gateway/websocket-api-bridge.ts";
 import type { CloudBindings } from "./infra/cloud-bindings.ts";
 import { instrumentD1Database, RequestAccessMetrics } from "./infra/request-access-metrics.ts";
 import { RequestError } from "./infra/request-error.ts";
@@ -42,7 +43,7 @@ async function bootstrapProject(request: Request, bindings: CloudBindings): Prom
     );
 }
 
-const application = new Hono<{ readonly Bindings: CloudBindings }>()
+const application: Hono<{ readonly Bindings: CloudBindings }> = new Hono<{ readonly Bindings: CloudBindings }>()
     .onError(rethrowHttpError)
     .use(
         "*",
@@ -55,6 +56,13 @@ const application = new Hono<{ readonly Bindings: CloudBindings }>()
     .all("/mobius-slack/api", notFound)
     .route("/", instructionDocumentRoutes)
     .route("/", setupArtifact)
+    .get("/mobius-cloud/ws", (context) =>
+        createWebSocketApiBridge(
+            context.req.raw,
+            async (request): Promise<Response> => await application.fetch(request, context.env),
+            createApplicationDependencies(context.env).logger,
+        ),
+    )
     .post("/__project/bootstrap", (context) => bootstrapProject(context.req.raw, context.env))
     .route("/mobius-cloud/api", cloudRoutes)
     .route("/mobius-slack/api", slackRoutes)

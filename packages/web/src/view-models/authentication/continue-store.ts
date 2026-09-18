@@ -52,7 +52,7 @@ function initialState(): ContinueState {
     return { choice: "workspace", code, handoff, kind: "redeeming" };
 }
 
-export const createContinueStore = () =>
+export const createContinueStore = (fetchRequest: (request: Request) => Promise<Response>) =>
     createStore<ContinueStore>()((set, get) => ({
         state: initialState(),
         continueSession: (choice) => {
@@ -72,7 +72,11 @@ export const createContinueStore = () =>
             if (state.kind !== "redeeming") {
                 return;
             }
-            const api = new AnonymousIdentityApi({ origin: window.location.origin, storage: window.localStorage });
+            const api = new AnonymousIdentityApi({
+                fetchRequest,
+                origin: window.location.origin,
+                storage: window.localStorage,
+            });
             try {
                 await api.redeemTransfer(state.code, signal);
                 signal.throwIfAborted();

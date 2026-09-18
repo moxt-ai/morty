@@ -141,11 +141,11 @@ coverage additionally runs the TypeScript CLI as a subprocess to verify identity
 reuse, ticket consumption, private configuration, and Runtime replacement failures.
 
 Given an open Mobius Session, including one imported or forked from a native session, When an agent streams
-a reply, Then text appears incrementally without a message/history snapshot GET
+a reply, Then text appears incrementally without a message/history snapshot request
 for each text or activity event. When the turn finishes, Then its final response
 and status match the saved history. When the conversation is idle, Then no
-five-second message/history polling continues. Inspect Fetch/XHR in DevTools;
-the persistent `events` request is the SDK's SSE connection.
+five-second browser polling continues. Inspect Network in DevTools; Chat application
+API traffic and workspace-change notifications share the `/mobius-cloud/ws` WebSocket.
 Given an interrupted event connection, When the SDK reconnects and replays events,
 Then the reply contains each text delta once. Given exhausted stream recovery,
 Then Chat shows a connection failure instead of silently remaining live.

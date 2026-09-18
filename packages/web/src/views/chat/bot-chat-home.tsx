@@ -142,6 +142,7 @@ export function BotChatHome({
         | "listBots"
         | "access"
         | "workspace"
+        | "waitForWorkspaceChange"
         | "selectAgent"
         | "nativeSessions"
         | "nativeSession"
@@ -284,7 +285,7 @@ export function BotChatHome({
         const controller = new AbortController();
         setSessionView({ kind: "conversation-access" });
         let client: MobiusBrowserClient | null = null;
-        let reconciliationTimer: ReturnType<typeof setTimeout> | undefined;
+        let openedBotId: string | null = null;
         setState((current) => {
             if (current.kind === "setup") {
                 return current;
@@ -303,6 +304,7 @@ export function BotChatHome({
             if (bot === undefined) {
                 throw new Error("Your Bot is unavailable.");
             }
+            openedBotId = bot.botId;
             const workspace = await requests.workspace(bot.botId, controller.signal);
             controller.signal.throwIfAborted();
             if (target.current.kind === "continue") {
@@ -334,7 +336,9 @@ export function BotChatHome({
             const reason = target.current.kind === "draft" ? setupReason(workspace) : null;
             if (reason !== null) {
                 setState({ kind: "setup", reason });
-                reconciliationTimer = setTimeout(() => retry((value) => value + 1), 5000);
+                await requests.waitForWorkspaceChange(bot.botId, controller.signal);
+                controller.signal.throwIfAborted();
+                retry((value) => value + 1);
                 return;
             }
             if (target.current.kind === "draft") {
@@ -395,11 +399,15 @@ export function BotChatHome({
             if (!controller.signal.aborted) {
                 if (cause instanceof CloudApiError && cause.code === "AGENT_REQUIRED") {
                     setState({ kind: "setup", reason: "agent-required" });
-                    reconciliationTimer = setTimeout(() => retry((value) => value + 1), 5000);
-                    return;
+                    if (openedBotId !== null) {
+                        void requests
+                            .waitForWorkspaceChange(openedBotId, controller.signal)
+                            .then(() => retry((value) => value + 1))
+                            .catch(fail);
+                        return;
+                    }
                 }
                 controller.abort();
-                clearTimeout(reconciliationTimer);
                 setState({ kind: "failed", message: cause instanceof Error ? cause.message : "Chat is unavailable." });
             }
         };
@@ -411,7 +419,6 @@ export function BotChatHome({
         };
         void open().catch(fail);
         return () => {
-            clearTimeout(reconciliationTimer);
             controller.abort();
             client?.close();
             lifetime.current = null;
@@ -635,8 +642,8 @@ export function BotChatHome({
                                     </p>
                                     <PairingInstruction requests={requests} />
                                     <p role="status" className="mt-4 text-sm text-muted-foreground">
-                                        Checking automatically every 5 seconds. Chat will open when this Bot is active
-                                        and its selected agent is online.
+                                        Chat will open when the server reports that this Bot is active and its selected
+                                        agent is online.
                                     </p>
                                 </section>
                             ) : state.kind === "failed" ? (

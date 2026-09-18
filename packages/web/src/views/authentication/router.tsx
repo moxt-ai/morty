@@ -3,6 +3,7 @@ import { createRootRoute, createRoute, createRouter, Link, Outlet } from "@tanst
 import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import { Button, reportApplicationError } from "../../index.ts";
+import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import { createContinueStore } from "../../view-models/authentication/continue-store.ts";
 import { Page } from "../application/app.tsx";
 
@@ -78,7 +79,8 @@ function LoginPage({ register = false }: { readonly register?: boolean }) {
 }
 
 function ContinuePage() {
-    const [store] = useState(createContinueStore);
+    const transport = useApiTransport();
+    const [store] = useState(() => createContinueStore(transport.fetch));
     const { continueSession, continueWorkspace, redeem, state } = useStore(store);
     useEffect(() => {
         if (state.kind !== "redeeming") {

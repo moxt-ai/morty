@@ -10,9 +10,11 @@ export class ChatBotApi {
     readonly #management: ManagementApi;
 
     constructor(options: {
+        readonly fetchRequest: (request: Request) => Promise<Response>;
         readonly origin: string;
         readonly projectId: string;
         readonly getToken: (signal: AbortSignal) => Promise<string | null>;
+        readonly waitForChange: (request: Request) => Promise<void>;
     }) {
         this.#chat = new BotChatApi(options);
         this.#management = new ManagementApi(options);

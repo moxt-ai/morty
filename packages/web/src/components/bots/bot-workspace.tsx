@@ -5,6 +5,7 @@ import { useStore } from "zustand";
 import { BotAvatar, BotInlineError, BotPageHeader, BotStatusBadge } from "@/components/bots/bot-page-header";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useApiTransport } from "@/services/api/api-transport-context";
 import {
     botConnectionsRoutePath,
     botConversationsRoutePath,
@@ -55,6 +56,7 @@ export function BotWorkspace({
     readonly onToggleDesktopSidebar: () => void;
 }) {
     const identity = useActiveIdentity();
+    const transport = useApiTransport();
     const botId = useParams<"botId">().botId ?? "";
     const [api] = useState(
         () =>
@@ -62,6 +64,8 @@ export function BotWorkspace({
                 origin: window.location.origin,
                 projectId: identity.projectId,
                 getToken: identity.getToken,
+                fetchRequest: transport.fetch,
+                waitForChange: transport.waitForChange,
             }),
     );
     const [store] = useState(() => createBotWorkspaceStore(api, botId));

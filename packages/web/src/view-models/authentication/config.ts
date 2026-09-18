@@ -7,10 +7,15 @@ const publicConfigSchema = v.pipe(
     v.readonly(),
 );
 
-export async function getPublicConfig(signal: AbortSignal): Promise<v.InferOutput<typeof publicConfigSchema>> {
-    const response = await fetch("/mobius-cloud/api/config", {
-        signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
-    });
+export async function getPublicConfig(
+    fetchRequest: (request: Request) => Promise<Response>,
+    signal: AbortSignal,
+): Promise<v.InferOutput<typeof publicConfigSchema>> {
+    const response = await fetchRequest(
+        new Request(new URL("/mobius-cloud/api/config", window.location.origin), {
+            signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+        }),
+    );
     if (!response.ok) {
         throw new Error("Sign-in configuration is unavailable.");
     }

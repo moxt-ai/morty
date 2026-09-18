@@ -1,10 +1,12 @@
 import { useMemo } from "react";
 import * as v from "valibot";
 import { useMobiusSlackIdentity, useMobiusSlackUrl } from "@/components/slack/mobius-slack-context";
+import { useApiTransport } from "@/services/api/api-transport-context";
 import { type GetToken, RequestError, request } from "./request";
 
 type ResolveUrl = (path: string) => string;
 interface ManagementContext {
+    readonly fetchRequest: (request: Request) => Promise<Response>;
     readonly getToken: GetToken;
     readonly resolve: ResolveUrl;
 }
@@ -66,7 +68,10 @@ function slackAuthorizationUrl(value: unknown): string {
 }
 
 async function listBots(cx: ManagementContext, signal: AbortSignal) {
-    return v.parse(botsSchema, await request(cx.resolve("/mobius-slack/api/slack/bots"), cx.getToken, signal)).bots;
+    return v.parse(
+        botsSchema,
+        await request(cx.resolve("/mobius-slack/api/slack/bots"), cx.getToken, cx.fetchRequest, signal),
+    ).bots;
 }
 
 async function getConnection(cx: ManagementContext, botId: string, signal: AbortSignal): Promise<Connection> {
@@ -75,6 +80,7 @@ async function getConnection(cx: ManagementContext, botId: string, signal: Abort
         await request(
             cx.resolve(`/mobius-slack/api/slack/status?slackBotId=${encodeURIComponent(botId)}`),
             cx.getToken,
+            cx.fetchRequest,
             signal,
         ),
     );
@@ -86,6 +92,7 @@ async function getManifest(cx: ManagementContext, name: string, signal: AbortSig
         await request(
             cx.resolve(`/mobius-slack/api/slack/manifest?name=${encodeURIComponent(name)}`),
             cx.getToken,
+            cx.fetchRequest,
             signal,
         ),
     );
@@ -99,16 +106,23 @@ async function registerApp(
 ): Promise<string> {
     const result = v.parse(
         v.object({ oauthAuthorizeUrl: v.string() }),
-        await request(cx.resolve("/mobius-slack/api/slack/apps/register"), cx.getToken, signal, "POST", {
-            ...v.parse(registrationSchema, input),
-            slackBotId: botId,
-        }),
+        await request(
+            cx.resolve("/mobius-slack/api/slack/apps/register"),
+            cx.getToken,
+            cx.fetchRequest,
+            signal,
+            "POST",
+            {
+                ...v.parse(registrationSchema, input),
+                slackBotId: botId,
+            },
+        ),
     );
     return slackAuthorizationUrl(result.oauthAuthorizeUrl);
 }
 
 async function saveConfigToken(cx: ManagementContext, refreshToken: string, signal: AbortSignal): Promise<void> {
-    await request(cx.resolve("/mobius-slack/api/slack/config-token"), cx.getToken, signal, "PUT", {
+    await request(cx.resolve("/mobius-slack/api/slack/config-token"), cx.getToken, cx.fetchRequest, signal, "PUT", {
         refreshToken,
     });
 }
@@ -116,7 +130,7 @@ async function saveConfigToken(cx: ManagementContext, refreshToken: string, sign
 async function createApp(cx: ManagementContext, botId: string, name: string, signal: AbortSignal): Promise<string> {
     const result = v.parse(
         v.object({ oauthAuthorizeUrl: v.string() }),
-        await request(cx.resolve("/mobius-slack/api/slack/apps"), cx.getToken, signal, "POST", {
+        await request(cx.resolve("/mobius-slack/api/slack/apps"), cx.getToken, cx.fetchRequest, signal, "POST", {
             slackBotId: botId,
             name,
         }),
@@ -130,6 +144,7 @@ async function getAuthorizationUrl(cx: ManagementContext, botId: string, signal:
         await request(
             cx.resolve(`/mobius-slack/api/slack/oauth/url?slackBotId=${encodeURIComponent(botId)}`),
             cx.getToken,
+            cx.fetchRequest,
             signal,
         ),
     );
@@ -140,22 +155,32 @@ async function disconnectApp(cx: ManagementContext, botId: string, signal: Abort
     await request(
         cx.resolve(`/mobius-slack/api/slack/apps/${encodeURIComponent(botId)}`),
         cx.getToken,
+        cx.fetchRequest,
         signal,
         "DELETE",
     );
 }
 
 export function useManagementRequests() {
+    const transport = useApiTransport();
     const { getToken } = useMobiusSlackIdentity();
     const resolve = useMobiusSlackUrl();
-    const cx = useMemo<ManagementContext>(() => Object.freeze({ getToken, resolve }), [getToken, resolve]);
+    const cx = useMemo<ManagementContext>(
+        () => Object.freeze({ fetchRequest: transport.fetch, getToken, resolve }),
+        [getToken, resolve, transport.fetch],
+    );
     return useMemo(
         () =>
             Object.freeze({
                 listBindableBots: async (signal: AbortSignal) => {
                     const result = v.parse(
                         v.object({ bots: v.array(v.object({ botId: v.string(), displayName: v.string() })) }),
-                        await request(cx.resolve("/mobius-slack/api/slack/chat-bots"), cx.getToken, signal),
+                        await request(
+                            cx.resolve("/mobius-slack/api/slack/chat-bots"),
+                            cx.getToken,
+                            cx.fetchRequest,
+                            signal,
+                        ),
                     );
                     return result.bots.map((bot) => ({ ...bot, projectId: "chat" }));
                 },
@@ -169,6 +194,7 @@ export function useManagementRequests() {
                         await request(
                             cx.resolve(`/mobius-slack/api/slack/bots/${encodeURIComponent(slackBotId)}/binding`),
                             cx.getToken,
+                            cx.fetchRequest,
                             signal,
                             "PUT",
                             { botId: input.botId },

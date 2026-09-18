@@ -29,6 +29,7 @@ const sessionSchema = v.pipe(
 );
 
 export async function verifySession(
+    fetchRequest: (request: Request) => Promise<Response>,
     expectedSessionId: string,
     activeSessionId: string | undefined,
     getToken: () => Promise<string | null>,
@@ -43,10 +44,12 @@ export async function verifySession(
     if (!token) {
         throw new SessionError("FORBIDDEN");
     }
-    const result = await fetch(`/mobius-cloud/api/projects/${encodeURIComponent(projectId)}/session`, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal,
-    });
+    const result = await fetchRequest(
+        new Request(
+            new URL(`/mobius-cloud/api/projects/${encodeURIComponent(projectId)}/session`, window.location.origin),
+            { headers: { Authorization: `Bearer ${token}` }, signal },
+        ),
+    );
     if (!result.ok) {
         throw new SessionError(result.status === 401 ? "FORBIDDEN" : "UNAVAILABLE");
     }

@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Popover } from "../../components/ui/popover.tsx";
-import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
+import { useApiTransport } from "../../services/api/api-transport-context.tsx";
+import { AnonymousIdentityApi, type IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import { createAnonymousTransferStore } from "../../view-models/authentication/anonymous-transfer-store.ts";
 
 export function AnonymousAccountActions({
@@ -15,8 +16,17 @@ export function AnonymousAccountActions({
     readonly signedIn?: boolean;
     readonly createTransfer?: (token: string, signal: AbortSignal) => Promise<IdentityTransfer>;
 }) {
+    const transport = useApiTransport();
+    const [identityApi] = useState(
+        () =>
+            new AnonymousIdentityApi({
+                fetchRequest: transport.fetch,
+                origin: window.location.origin,
+                storage: window.localStorage,
+            }),
+    );
     const [open, setOpen] = useState(false);
-    const [store] = useState(() => createAnonymousTransferStore(token, createTransfer));
+    const [store] = useState(() => createAnonymousTransferStore(token, createTransfer ?? identityApi.createTransfer));
     const { load, reset, state } = useStore(store);
     useEffect(() => {
         if (!open) {

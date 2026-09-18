@@ -25,7 +25,7 @@ export type ManagedProject = v.InferOutput<typeof projectSchema>;
 
 export interface ManagementApiOptions {
     readonly projectId: string;
-    readonly fetchRequest?: (request: Request) => Promise<Response>;
+    readonly fetchRequest: (request: Request) => Promise<Response>;
     readonly getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly origin: string;
 }
@@ -36,7 +36,7 @@ export class ManagementApi {
     readonly #origin: string;
     readonly #projectId: string;
     constructor(options: ManagementApiOptions) {
-        this.#fetchRequest = options.fetchRequest ?? ((request) => fetch(request));
+        this.#fetchRequest = options.fetchRequest;
         this.#getToken = options.getToken;
         this.#origin = options.origin;
         this.#projectId = v.parse(identifier, options.projectId);

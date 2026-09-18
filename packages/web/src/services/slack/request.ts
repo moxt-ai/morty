@@ -7,6 +7,7 @@ export class RequestError extends Error {}
 export const request = async (
     path: string,
     getToken: GetToken,
+    fetchRequest: (request: Request) => Promise<Response>,
     signal: AbortSignal,
     method = "GET",
     body?: unknown,
@@ -14,15 +15,17 @@ export const request = async (
     const deadline = AbortSignal.any([signal, AbortSignal.timeout(15_000)]);
     const token = await getToken(deadline);
     deadline.throwIfAborted();
-    const response = await fetch(path, {
-        method,
-        headers: {
-            ...(token === null ? {} : { Authorization: `Bearer ${token}` }),
-            "Content-Type": "application/json",
-        },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        signal: deadline,
-    });
+    const response = await fetchRequest(
+        new Request(path, {
+            method,
+            headers: {
+                ...(token === null ? {} : { Authorization: `Bearer ${token}` }),
+                "Content-Type": "application/json",
+            },
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+            signal: deadline,
+        }),
+    );
     if (response.status === 204) {
         return null;
     }

@@ -44,7 +44,7 @@ export type IdentityTransfer = v.InferOutput<typeof transferSchema>;
 export type ClerkBinding = v.InferOutput<typeof bindingSchema>;
 
 interface Options {
-    readonly fetchRequest?: (request: Request) => Promise<Response>;
+    readonly fetchRequest: (request: Request) => Promise<Response>;
     readonly origin: string;
     readonly storage: Storage;
 }
@@ -55,7 +55,7 @@ export class AnonymousIdentityApi {
     readonly #storage: Storage;
 
     constructor(options: Options) {
-        this.#fetchRequest = options.fetchRequest ?? ((request) => fetch(request));
+        this.#fetchRequest = options.fetchRequest;
         this.#origin = v.parse(v.pipe(v.string(), v.url()), options.origin);
         this.#storage = options.storage;
     }
