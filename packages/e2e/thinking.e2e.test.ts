@@ -13,9 +13,13 @@ test("Given a paired agent, When a user expands intermediate steps and reloads t
     await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toBeHidden();
     await thinking.locator("summary").click();
     await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toBeVisible();
-    await expect(thinking.getByText("Read package metadata", { exact: true })).toBeVisible();
-    await expect(thinking.getByText("Request", { exact: true })).toBeVisible();
-    await expect(thinking.getByText("Response", { exact: true })).toBeVisible();
+    const tool = thinking.getByRole("group", { name: "Tool: Read package metadata", exact: true });
+    await expect(tool.getByText("Read package metadata", { exact: true })).toBeVisible();
+    await expect(tool.getByText("Request", { exact: true })).toBeHidden();
+    await expect(tool.getByText("Response", { exact: true })).toBeHidden();
+    await tool.locator("summary").click();
+    await expect(tool.getByText("Request", { exact: true })).toBeVisible();
+    await expect(tool.getByText("Response", { exact: true })).toBeVisible();
     await expect(page.getByRole("status", { name: "Agent working" })).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath("thinking-completed-desktop.png"), animations: "disabled" });
     await page.reload();
