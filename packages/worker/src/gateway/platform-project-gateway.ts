@@ -234,6 +234,13 @@ export class PlatformProjectGateway {
             async (client) => await client.turns.submit(sessionId, request, signal),
         );
 
+    readonly steerChatTurn = async (projectId: string, sessionId: string, turnId: string, signal: AbortSignal) =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) => await client.turns.steer(sessionId, turnId, signal),
+        );
+
     readonly openAutomatedChatSession = async (
         projectId: string,
         selection: {

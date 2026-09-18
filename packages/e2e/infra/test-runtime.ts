@@ -3,8 +3,7 @@ import { join } from "node:path";
 import { mock } from "node:test";
 import { chromium } from "playwright-core";
 import { dataTestId } from "../../web/src/data-testid.ts";
-import { ANONYMOUS_CREDENTIAL_KEY } from "../../web/src/services/identity/anonymous-identity-api.ts";
-import { ChatApi, text } from "./chat-api.ts";
+import { ChatApi, object, text } from "./chat-api.ts";
 import type { E2EHarness } from "./harness.ts";
 import { LocalStack, repository } from "./local-stack.ts";
 import { followSetupInstructions } from "./setup-instructions.ts";
@@ -38,17 +37,44 @@ export async function createTestRuntime(harness: E2EHarness) {
         const chat = new ChatApi(stack.chatOrigin, harness.signal);
 
         const openChat = async () => {
-            await page.goto(stack.chatOrigin);
-            const stored = await page.waitForFunction((key) => localStorage.getItem(key), ANONYMOUS_CREDENTIAL_KEY);
-            const user = await chat.useBrowserIdentity(
-                JSON.parse(text(await stored.jsonValue(), "stored browser identity")),
+            const identity = page.waitForResponse(
+                (response) => new URL(response.url()).pathname === "/mobius-cloud/api/identity/anonymous-users",
             );
+            await page.goto(stack.chatOrigin);
+            const user = await chat.readBrowserIdentity(await identity);
             return { botId: user.botId, projectId: user.projectId };
         };
 
         const sendMessage = async (prompt: string) => {
             await page.getByTestId(dataTestId.messageComposer).fill(prompt);
-            await page.getByTestId(dataTestId.sendMessage).click();
+            const [request] = await Promise.all([
+                page.waitForRequest(
+                    (candidate) => {
+                        if (candidate.method() !== "POST") {
+                            return false;
+                        }
+                        const body: unknown = candidate.postDataJSON();
+                        return typeof body === "object" && body !== null && Reflect.get(body, "content") === prompt;
+                    },
+                    { timeout: 15_000 },
+                ),
+                page.getByTestId(dataTestId.sendMessage).click(),
+            ]);
+            const response = await request.response();
+            if (response === null) {
+                throw new Error("Turn request ended without an HTTP response");
+            }
+            if (response.status() !== 202) {
+                if (response.status() !== 200) {
+                    throw new Error(`Turn request failed with HTTP ${response.status()}`);
+                }
+            }
+            const accepted = object(await response.json(), "accepted turn");
+            const turn = "turn" in accepted ? object(accepted.turn, "turn") : accepted;
+            return {
+                turnId: text(accepted.turnId, "turn ID"),
+                sessionId: text(turn.sessionId, "session ID"),
+            };
         };
 
         return {

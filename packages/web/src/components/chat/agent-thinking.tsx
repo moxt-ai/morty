@@ -16,7 +16,7 @@ function WorkingIndicator() {
 
 function WorkingLabel({ status }: { readonly status: "working" | "thinking" }) {
     return (
-        <div className="flex min-h-8 items-center gap-2 px-2 text-xs text-muted-foreground">
+        <div className="flex min-h-8 items-center justify-end gap-2 px-2 text-xs text-muted-foreground">
             <WorkingIndicator />
             <span>{status === "thinking" ? "Thinking…" : "Working…"}</span>
         </div>

@@ -57,6 +57,7 @@ function AttachmentPreview({
 
 export function BotChatComposer({
     attachments,
+    actions,
     children,
     disabled,
     draft,
@@ -72,6 +73,7 @@ export function BotChatComposer({
     submitDisabled,
 }: {
     readonly attachments: readonly ComposerAttachment[];
+    readonly actions?: ReactNode;
     readonly children: ReactNode;
     readonly disabled: boolean;
     readonly draft: string;
@@ -249,45 +251,48 @@ export function BotChatComposer({
                         />
                         <div className="flex min-w-0 items-center gap-1 overflow-x-auto">{children}</div>
                     </div>
-                    <Button
-                        aria-busy={outputState === "sending"}
-                        aria-label={
-                            outputState === "sending"
-                                ? "Sending message"
-                                : outputState === "running"
-                                  ? "Stop agent output"
-                                  : outputState === "stopping"
-                                    ? "Stopping agent output"
-                                    : submitLabel
-                        }
-                        className={`size-10 rounded-full text-white ${outputState === "idle" || outputState === "sending" ? "bg-[#2fbd7a] hover:bg-[#28aa6c]" : "bg-[#e65c5c] hover:bg-[#d94d4d]"}`}
-                        data-testid={dataTestId.sendMessage}
-                        disabled={
-                            outputState === "sending" ||
-                            outputState === "stopping" ||
-                            (outputState === "idle" && submitDisabled)
-                        }
-                        onClick={outputState === "running" ? onStop : undefined}
-                        size="icon"
-                        type={outputState === "idle" ? "submit" : "button"}
-                    >
-                        {outputState === "idle" ? (
-                            <Send aria-hidden="true" className="size-[18px]" />
-                        ) : outputState === "running" ? (
-                            <Square aria-hidden="true" className="size-3.5 fill-current" />
-                        ) : outputState === "sending" ? (
-                            <LoaderCircle
-                                aria-label="Sending message"
-                                className="size-[18px] animate-spin motion-reduce:animate-none"
-                                role="status"
-                            />
-                        ) : (
-                            <LoaderCircle
-                                aria-hidden="true"
-                                className="size-[18px] animate-spin motion-reduce:animate-none"
-                            />
-                        )}
-                    </Button>
+                    <div className="flex shrink-0 items-center gap-1">
+                        {actions}
+                        <Button
+                            aria-busy={outputState === "sending"}
+                            aria-label={
+                                outputState === "sending"
+                                    ? "Sending message"
+                                    : outputState === "running"
+                                      ? "Stop agent output"
+                                      : outputState === "stopping"
+                                        ? "Stopping agent output"
+                                        : submitLabel
+                            }
+                            className={`size-10 rounded-full text-white ${outputState === "idle" || outputState === "sending" ? "bg-[#2fbd7a] hover:bg-[#28aa6c]" : "bg-[#e65c5c] hover:bg-[#d94d4d]"}`}
+                            data-testid={dataTestId.sendMessage}
+                            disabled={
+                                outputState === "sending" ||
+                                outputState === "stopping" ||
+                                (outputState === "idle" && submitDisabled)
+                            }
+                            onClick={outputState === "running" ? onStop : undefined}
+                            size="icon"
+                            type={outputState === "idle" ? "submit" : "button"}
+                        >
+                            {outputState === "idle" ? (
+                                <Send aria-hidden="true" className="size-[18px]" />
+                            ) : outputState === "running" ? (
+                                <Square aria-hidden="true" className="size-3.5 fill-current" />
+                            ) : outputState === "sending" ? (
+                                <LoaderCircle
+                                    aria-label="Sending message"
+                                    className="size-[18px] animate-spin motion-reduce:animate-none"
+                                    role="status"
+                                />
+                            ) : (
+                                <LoaderCircle
+                                    aria-hidden="true"
+                                    className="size-[18px] animate-spin motion-reduce:animate-none"
+                                />
+                            )}
+                        </Button>
+                    </div>
                 </div>
             </div>
             <span className="sr-only" id="chat-composer-keyboard-hint">

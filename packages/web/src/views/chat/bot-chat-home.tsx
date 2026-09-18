@@ -11,6 +11,7 @@ import { MessageSquare } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BotChatComposer, type ComposerAttachment } from "../../components/chat/bot-chat-composer.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
+import { Dialog } from "../../components/ui/dialog.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { type RecordedAgentActivity, recordAgentActivity } from "../../services/chat/agent-activities.ts";
 import type { BotChatApi, ChatDraftConfiguration, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
@@ -148,6 +149,7 @@ export function BotChatHome({
         | "nativeSession"
         | "managedSessions"
         | "managedSession"
+        | "steerTurn"
         | "continueNativeSession"
         | "connectSession"
         | "createPairingInstruction"
@@ -162,6 +164,7 @@ export function BotChatHome({
     const [conversationSessions] = useState(() => createConversationSessionStore(requests));
     const [state, setState] = useState<State>({ kind: "loading" });
     const [revision, retry] = useState(0);
+    const [pairingDialogOpen, setPairingDialogOpen] = useState(false);
     const [draft, setDraft] = useState("");
     const [attachments, setAttachments] = useState<readonly ComposerAttachment[]>([]);
     const [initialTarget] = useState<
@@ -214,6 +217,7 @@ export function BotChatHome({
         | { readonly kind: "conversation-access" }
         | {
               readonly kind: "session-access";
+              readonly initialActiveTurn: { readonly commandId: string; readonly turnId: string } | null;
               readonly session: OpenMobiusSession;
           }
     >({ kind: "conversation-access" });
@@ -323,14 +327,14 @@ export function BotChatHome({
                 window.history.replaceState(window.history.state, "", url);
                 target.current = { kind: "session-access", sessionId: session.result.ready.sessionId };
                 setState({ kind: "draft", bot });
-                setSessionView({ kind: "session-access", session });
+                setSessionView({ initialActiveTurn: null, kind: "session-access", session });
                 return;
             }
             if (target.current.kind === "session-access") {
                 const session = await requests.managedSession(bot.botId, target.current.sessionId, controller.signal);
                 controller.signal.throwIfAborted();
                 setState({ kind: "draft", bot });
-                setSessionView({ kind: "session-access", session });
+                setSessionView({ initialActiveTurn: null, kind: "session-access", session });
                 return;
             }
             const reason = target.current.kind === "draft" ? setupReason(workspace) : null;
@@ -351,7 +355,7 @@ export function BotChatHome({
                 throw new Error(opened.kind === "failed" ? opened.message : "The Session could not be opened.");
             }
             setState({ kind: "draft", bot });
-            setSessionView({ kind: "session-access", session: opened.session });
+            setSessionView({ initialActiveTurn: opened.activeTurn, kind: "session-access", session: opened.session });
         };
         const observe = async (bot: ManagedBot, session: MobiusBrowserClient, history: MobiusBrowserHistory) => {
             client = session;
@@ -482,6 +486,7 @@ export function BotChatHome({
                 window.history.replaceState(window.history.state, "", url);
                 target.current = { kind: "conversation-access", conversationId: createdId };
                 setSessionView({
+                    initialActiveTurn: opened.activeTurn,
                     kind: "session-access",
                     session: opened.session,
                 });
@@ -604,6 +609,7 @@ export function BotChatHome({
                     requests={requests}
                     key={sessionView.session.result.ready.sessionId}
                     session={sessionView.session}
+                    initialActiveTurn={sessionView.initialActiveTurn}
                     {...(remoteAccess ? { endRemoteAccess } : {})}
                 />
             ) : (
@@ -665,9 +671,22 @@ export function BotChatHome({
                                             Fork session instead
                                         </Button>
                                     ) : (
-                                        <Button onClick={() => retry((value) => value + 1)}>Reconnect</Button>
+                                        <div className="flex flex-wrap justify-center gap-2">
+                                            <Button onClick={() => retry((value) => value + 1)}>Reconnect</Button>
+                                            <Button variant="outline" onClick={() => setPairingDialogOpen(true)}>
+                                                Pair again
+                                            </Button>
+                                        </div>
                                     )}
-                                    <PairingInstruction requests={requests} />
+                                    {pairingDialogOpen && (
+                                        <Dialog
+                                            title="Pair agent again"
+                                            description="Paste this one-time instruction into your local agent, then return here after it connects."
+                                            onClose={() => setPairingDialogOpen(false)}
+                                        >
+                                            <PairingInstruction requests={requests} />
+                                        </Dialog>
+                                    )}
                                 </div>
                             ) : active === null ? null : active.kind === "draft" ||
                               active.history.turns.length === 0 ? (

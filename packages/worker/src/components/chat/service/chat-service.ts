@@ -247,6 +247,15 @@ export class ChatService {
         );
     };
 
+    readonly steerTurn = async (scope: ChatScope, sessionId: string, turnId: string) => {
+        if (
+            !(await this.#chatSessions.ownsSession(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal))
+        ) {
+            throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
+        }
+        return await this.#platform.steerChatTurn(scope.projectId, sessionId, turnId, scope.signal);
+    };
+
     readonly nativeSessions = async (scope: ChatScope, runtimeId: string, input: NativeListInput) => {
         const result = await this.#platform.nativeSessions(scope.projectId, runtimeId, input, scope.signal);
         if (result.action !== "list") {

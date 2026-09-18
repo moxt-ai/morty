@@ -33,6 +33,11 @@ export function ConversationSidebar({
     const [expanded, setExpanded] = useState(false);
     const [dialog, setDialog] = useState(false);
     const [sharing, setSharing] = useState(false);
+    const sessions =
+        directory.kind === "ready" || directory.kind === "refreshing" || directory.kind === "stale"
+            ? directory.sessions
+            : null;
+    const refreshing = directory.kind === "refreshing";
     // biome-ignore lint/correctness/useExhaustiveDependencies: Creation and explicit refresh reload the persisted directory.
     useEffect(() => {
         const controller = new AbortController();
@@ -77,10 +82,12 @@ export function ConversationSidebar({
                 <Button
                     variant="ghost"
                     size="icon"
-                    aria-label="Refresh conversations"
+                    aria-label={refreshing ? "Refreshing conversations" : "Refresh conversations"}
+                    aria-busy={refreshing}
+                    disabled={refreshing}
                     onClick={() => refresh((value) => value + 1)}
                 >
-                    <RefreshCw className="size-3.5" />
+                    <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin motion-reduce:animate-none" : ""}`} />
                 </Button>
             </div>
             <div
@@ -88,29 +95,28 @@ export function ConversationSidebar({
                 className={`${expanded ? "block" : "hidden"} max-h-48 min-h-0 flex-1 space-y-1 overflow-y-auto sm:block sm:max-h-none`}
             >
                 {directory.kind === "loading" && <p role="status">Loading conversations…</p>}
-                {directory.kind === "failed" && (
+                {(directory.kind === "failed" || directory.kind === "stale") && (
                     <p role="alert" className="text-sm text-destructive">
                         {directory.message}
                     </p>
                 )}
-                {directory.kind === "ready" && directory.sessions.length === 0 && (
+                {sessions !== null && sessions.length === 0 && (
                     <p className="px-2 py-3 text-xs text-muted-foreground">Your Chat conversations will appear here.</p>
                 )}
-                {directory.kind === "ready" &&
-                    directory.sessions.map((session) => (
-                        <button
-                            type="button"
-                            key={`${session.kind}:${session.id}`}
-                            aria-current={activeId === session.id ? "page" : undefined}
-                            onClick={() => {
-                                onOpen(session);
-                                setExpanded(false);
-                            }}
-                            className="w-full truncate rounded-xl border border-transparent px-3 py-3 text-left text-sm font-medium text-copy-secondary hover:bg-white/70 focus-visible:outline-ring aria-[current=page]:border-primary/15 aria-[current=page]:bg-white aria-[current=page]:text-primary"
-                        >
-                            {session.title}
-                        </button>
-                    ))}
+                {sessions?.map((session) => (
+                    <button
+                        type="button"
+                        key={`${session.kind}:${session.id}`}
+                        aria-current={activeId === session.id ? "page" : undefined}
+                        onClick={() => {
+                            onOpen(session);
+                            setExpanded(false);
+                        }}
+                        className="w-full truncate rounded-xl border border-transparent px-3 py-3 text-left text-sm font-medium text-copy-secondary hover:bg-white/70 focus-visible:outline-ring aria-[current=page]:border-primary/15 aria-[current=page]:bg-white aria-[current=page]:text-primary"
+                    >
+                        {session.title}
+                    </button>
+                ))}
             </div>
             {dialog && (
                 <NativeSessionDialog

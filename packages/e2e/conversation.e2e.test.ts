@@ -46,10 +46,11 @@ test("Given a paired workspace, When the user composes with keyboard shortcuts, 
     await expect(sent).toHaveText("First line\nSecond line\nThird line");
     await expect(sent.getByText("Second line", { exact: true })).toHaveAttribute("data-streamdown", "strong");
     await expect(composer).toHaveValue("");
-    await expect(page.getByRole("button", { name: "Compact context", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "More options", exact: true }).click();
+    await expect(page.getByRole("menuitem", { name: "Compact context", exact: true })).toBeVisible();
 });
 
-test("Given a normal Chat conversation, When an agent task is running, Then the Mobius Session controls can steer it", async ({
+test("Given a normal Chat conversation, When messages are queued behind an active task, Then each message can be steered or deleted from the queue", async ({
     runtime,
 }) => {
     await runtime.openPairedChat();
@@ -59,12 +60,21 @@ test("Given a normal Chat conversation, When an agent task is running, Then the 
     await composer.fill("wait for steering");
     await expect(page.getByTestId(dataTestId.sendMessage)).toBeEnabled();
     await page.getByTestId(dataTestId.sendMessage).click();
-    await expect(page.getByRole("button", { name: "Compact context", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Steer active task", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Steer active task", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "More options", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Stop agent output", exact: true })).toBeVisible();
 
-    const sessionComposer = page.getByTestId(dataTestId.messageComposer);
-    await sessionComposer.fill("focus on the public API");
-    await page.getByRole("button", { name: "Steer active task", exact: true }).click();
+    await composer.fill("focus on the public API");
+    await composer.press("Enter");
+    const queue = page.getByRole("region", { name: "Queued messages", exact: true });
+    await expect(queue.getByText("focus on the public API", { exact: true })).toBeVisible();
+    await composer.fill("discard this follow-up");
+    await composer.press("Enter");
+    await expect(queue.getByText("discard this follow-up", { exact: true })).toBeVisible();
+    await queue.getByRole("button", { name: "Delete queued message: discard this follow-up", exact: true }).click();
+    await expect(queue.getByText("discard this follow-up", { exact: true })).toHaveCount(0);
+
+    await queue.getByRole("button", { name: "Steer queued message: focus on the public API", exact: true }).click();
     await expect(page.getByTestId(dataTestId.agentResponse).last()).toContainText("Steered: focus on the public API");
 });
 
@@ -166,6 +176,11 @@ test("Given a full message viewport, When the user sends another prompt, Then th
     const latestMessage = page.getByTestId(dataTestId.userMessage).last();
     await expect(latestMessage).toBeVisible();
     await expect(page.getByRole("status", { name: "Agent working", exact: true })).toBeVisible();
+    const workingPosition = await page.getByText("Working…", { exact: true }).evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        return { center: bounds.left + bounds.width / 2, viewportCenter: window.innerWidth / 2 };
+    });
+    expect(workingPosition.center).toBeGreaterThan(workingPosition.viewportCenter);
     const position = await latestMessage.evaluate((element) => {
         const message = element.getBoundingClientRect();
         const log = element.closest('[role="log"]')?.getBoundingClientRect();
@@ -234,7 +249,7 @@ test("Given a paired workspace, When a user creates and reloads conversations, T
     await expect(page.getByTestId(dataTestId.agentResponse).nth(1)).toContainText(followUp);
     expect(page.url()).toBe(savedUrl);
     await expect(page.getByTestId(dataTestId.userMessage)).toHaveText(["Second conversation", followUp]);
-    await test.step("Given Chat-created conversations, When the user switches sessions, Then stale content is replaced by a spinner and local sessions can be previewed and forked", async () => {
+    await test.step("Given Chat-created conversations, When the user switches sessions, Then the directory remains visible while session content loads and local sessions can be previewed and forked", async () => {
         const sidebar = page.getByRole("complementary", { name: "Conversations", exact: true });
         await expect(sidebar.getByRole("button", { name: "First conversation", exact: true })).toBeVisible();
         const originalComposer = await page.getByTestId(dataTestId.messageComposer).elementHandle();
@@ -242,6 +257,8 @@ test("Given a paired workspace, When a user creates and reloads conversations, T
         assert.ok(originalComposer);
         assert.ok(originalSidebar);
         await sidebar.getByRole("button", { name: "First conversation", exact: true }).click();
+        await expect(sidebar.getByText("Loading conversations…", { exact: true })).toHaveCount(0);
+        await expect(sidebar.getByRole("button", { name: "Second conversation", exact: true })).toBeVisible();
         await expect(page.getByRole("status", { name: "Switching session", exact: true })).toBeVisible();
         await expect(page.getByText(followUp, { exact: true })).toHaveCount(0);
         expect(await originalComposer.evaluate((element) => element.isConnected)).toBe(false);
