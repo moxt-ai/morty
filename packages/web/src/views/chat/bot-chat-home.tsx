@@ -44,7 +44,7 @@ export function BotChatHome({
     const [store] = useState(() =>
         createBotChatHomeStore(requests, {
             url: window.location.href,
-            createId: crypto.randomUUID,
+            createId: () => crypto.randomUUID(),
             navigation: {
                 showDraft: () => {
                     const url = new URL(window.location.href);

@@ -51,7 +51,7 @@ These findings are a baseline, not completion of the quality requirements.
 2. Add user-visible acceptance scenarios for uncovered behavior until both targets
    are achieved. Chat's existing web-package tests exercise almost none of its UI.
 3. Enable Codecov uploads if the organization's Actions allowlist permits them.
-4. Obtain green `pnpm check` results before coordinated delivery.
+4. Obtain green `pnpm ci:check` results before coordinated delivery.
 
 GitHub inspection found existing required `check` and `title` statuses in both
 repositories; Mobius additionally has a merge-queue ruleset. Repository protection

@@ -58,14 +58,6 @@ test("Given a setup handoff, When a user continues remote work, Then setup, ACP 
         await expect(page.getByRole("log", { name: "Messages", exact: true })).toContainText("mobile-approval");
     });
 
-    await test.step("cancel active work", async () => {
-        await composer.fill("wait until cancelled");
-        await page.getByRole("button", { name: "Send message", exact: true }).click();
-        await expect(page.getByRole("status", { name: "Agent working", exact: true })).toBeVisible();
-        await page.getByRole("button", { name: "Stop agent output", exact: true }).click();
-        await expect(page.getByText("Response cancelled.", { exact: true })).toBeVisible();
-    });
-
     await test.step("generate media and recover it after reload", async () => {
         await composer.fill("generate media artifacts");
         await page.getByRole("button", { name: "Send message", exact: true }).click();

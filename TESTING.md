@@ -1,8 +1,8 @@
 # Testing Guide
 
-## Required quality gate
+## CI quality gate
 
-`pnpm check` includes `pnpm check:architecture` and `pnpm test:coverage`.
+`pnpm ci:check` is reserved for CI and includes `pnpm check:architecture` and `pnpm test:coverage`.
 The coverage command runs the Worker boundary suite and writes its Istanbul
 execution map to `coverage/lcov.info`, `coverage/coverage-summary.json`, and an
 HTML report in `coverage/`. It reports an informational 95% target for lines,
@@ -69,7 +69,10 @@ Do not test repository tooling or scaffolding. This includes CI workflows, lint 
 
 ## Required Test Levels
 
-Critical user paths must use end-to-end tests. Protocols and external boundaries must use integration or contract tests. End-to-end tests exercise supported public entrypoints; integration and contract tests exercise the production boundary contract. Use production components together with real temporary filesystems, subprocesses, sockets, and local protocol servers where the product path requires them.
+Only write end-to-end tests for representative happy paths. Business logic must be covered by integration tests, while protocols and external boundaries use integration or contract tests. End-to-end tests exercise supported public entrypoints; integration and contract tests exercise the production boundary contract. Use production components together with real temporary filesystems, subprocesses, sockets, and local protocol servers where the product path requires them.
+
+Integration tests exercise behavior through user-visible mouse and keyboard interactions. They must not read from, write to, or invoke application stores directly.
+They bootstrap the entire application and must not render individual React components or views.
 
 A lower-level test is not acceptance if the supported user path could break while the test still passes. Boundary tests may support a slice, but they cannot replace its user-visible acceptance scenario.
 
@@ -95,7 +98,7 @@ Do not use real sleeps, polling delays, implicit `Date.now()` values, or timing 
 
 For an operation that owns resources, test observable cleanup after success, failure, timeout, and cancellation when those outcomes are reachable. Retry tests must prove the attempt limit, cancellation during backoff, and the rule that unsafe or indeterminate operations are not retried. Error-contract tests assert stable codes and sanitized boundary messages, not incidental infrastructure wording.
 
-Coverage identifies untested code but does not decide which tests to write. Do not create impossible typed states or duplicate tests merely to increase coverage. If a branch is unreachable under current invariants, remove or simplify it. Cover critical user paths with end-to-end tests and protocol or external boundaries with integration or contract tests.
+Coverage identifies untested code but does not decide which tests to write. Do not create impossible typed states or duplicate tests merely to increase coverage. If a branch is unreachable under current invariants, remove or simplify it. Cover representative happy paths with end-to-end tests, business logic with integration tests, and protocol or external boundaries with integration or contract tests.
 
 ## Authentication verification
 
@@ -116,7 +119,9 @@ The TypeScript scenarios receive a `runtime` fixture from `infra/test.ts`.
 `createTestRuntime` owns agent setup, the local stack, browser startup, instruction
 execution and deterministic setup timers; the fixture owns diagnostics and cleanup.
 Scenarios describe user actions and assert visible results. The package's strict
-TypeScript check is included in `pnpm check`.
+TypeScript check is included in `pnpm ci:check`; run `pnpm typecheck` locally.
+Non-happy-path business behavior belongs to the Node-based Vitest integration
+suites. Browser automation is reserved for the representative happy paths above.
 The setup scenarios cover the standalone `setup.md` journey. They fetch the rendered
 document and generated bundle from the local Worker/R2 boundary, then execute the
 bundle's `runSetup` entrypoint with a real, isolated Runtime subprocess. Standalone
@@ -155,7 +160,7 @@ Given a browser that redeemed a setup entry, ending remote access revokes that e
 every credential redeemed from it while the owner's local identity and Runtime remain active.
 
 Run `pnpm test:e2e:opencode` for the OpenCode product journey. It is excluded from
-local `pnpm check` and PR/merge-queue CI and runs nightly in GitHub Actions. It uses
+`pnpm ci:check` and PR/merge-queue CI and runs nightly in GitHub Actions. It uses
 the latest OpenCode release with a local fake LLM provider. The journey starts at the
 unpaired browser, follows the displayed `pair.md` instruction through the downloaded
 production setup bundle, and continues through the paired Chat, image tool, artifact,

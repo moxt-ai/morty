@@ -18,3 +18,10 @@ These rules apply to `packages/web`. Repository-wide rules in the root `AGENTS.m
 - Components may own ephemeral DOM-only state such as focus targets, element measurements, disclosure/popover visibility, and uncontrolled input refs.
 - Keep API calls, domain validation, retries, polling, error translation, and business-state transitions out of `.tsx` files.
 - Routing remains in views, but route loading and route-level business state belong in view-model stores. Pass navigation as a callback when a completed workflow needs it.
+
+## Testing
+
+- Do not run `pnpm ci:check` on a local machine. Run `pnpm lint` and `pnpm typecheck`, plus only related test cases when needed.
+- Integration tests must exercise only user behavior through mouse or keyboard operations. Direct access to stores in tests is forbidden.
+- Integration tests must bootstrap and render the entire application. Rendering individual React components or views in an integration test is forbidden.
+- Tests must select elements with shared `data-testid.ts` constants and `getByTestId`. `getByRole`, `querySelector`, and ad hoc test IDs are forbidden.

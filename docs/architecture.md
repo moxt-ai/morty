@@ -27,5 +27,6 @@ One Cloud D1 and one Cloud R2 bucket serve the Slack component. Mobius remains a
 external service and owns its authorization and persistence. Cloud forwards only
 allowlisted headers and preserves cancellation, deadlines, streams, and upgrades.
 
-Run `pnpm check` to verify type safety, build output, linting, HTTP scenarios, browser
-journeys, coverage, and dependency boundaries.
+CI runs `pnpm ci:check` to verify type safety, build output, linting, HTTP scenarios,
+browser journeys, coverage, and dependency boundaries. Locally, run lint, type checks,
+and only related tests.

@@ -184,8 +184,8 @@ Start with a failing HTTP/browser acceptance scenario using a stateful Platform
 peer through the production SDK transport. Cover user isolation, pairing,
 credential issuance/rotation/revocation, messages, history, and event-stream
 cancellation. Existing tests exercise legacy contracts, so a passing baseline
-typecheck does not prove Platform compatibility. Run `pnpm check` after migration,
-then exercise the provisioned staging service with a real paired Runtime.
+typecheck does not prove Platform compatibility. Let CI run `pnpm ci:check` after
+migration, then exercise the provisioned staging service with a real paired Runtime.
 
 ### Agent setup skill
 

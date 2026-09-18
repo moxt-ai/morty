@@ -30,7 +30,7 @@
         "test:e2e:opencode": "node scripts/e2e/opencode-live.mjs",
         "knip": "knip",
         "check:static": "pnpm typecheck && pnpm build && pnpm lint && pnpm knip",
-        "check": "pnpm check:static && pnpm test:coverage",
+        "ci:check": "pnpm check:static && pnpm test:coverage",
         "postinstall": "simple-git-hooks",
         "typegen": "wrangler types worker-configuration.d.ts",
         "preview": "vite preview",
