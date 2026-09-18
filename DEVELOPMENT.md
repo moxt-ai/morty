@@ -47,6 +47,30 @@ and conversation access. Platform independently authorizes SDK operations.
 
 ## Worker structure
 
+### Web asset CDN
+
+Staging and production builds load content-addressed JavaScript and CSS from an
+append-only R2 bucket. Deployments upload the new assets before activating the
+new Worker, so an already-open page can continue loading its original chunks
+after later deployments. Do not delete objects from these buckets.
+
+Provision the buckets and their custom domains once, replacing each zone ID
+with the Cloudflare zone that owns the domain:
+
+```sh
+pnpm exec wrangler r2 bucket create mobius-chat-staging-web-assets
+pnpm exec wrangler r2 bucket domain add mobius-chat-staging-web-assets --domain assets.mobius-chat.paradev.biz --zone-id <PARADEV_ZONE_ID> --min-tls 1.2 --force
+pnpm exec wrangler r2 bucket cors set mobius-chat-staging-web-assets --file config/r2/staging-web-assets-cors.json --force
+
+pnpm exec wrangler r2 bucket create mobius-chat-production-web-assets
+pnpm exec wrangler r2 bucket domain add mobius-chat-production-web-assets --domain assets.mobius-chat.paraflow.biz --zone-id <PARAFLOW_ZONE_ID> --min-tls 1.2 --force
+pnpm exec wrangler r2 bucket cors set mobius-chat-production-web-assets --file config/r2/production-web-assets-cors.json --force
+```
+
+The deployment token needs R2 object-write permission for both web asset
+buckets. Objects are served with a one-year immutable browser cache policy;
+their content hashes make overwriting unnecessary.
+
 ### Setup download
 
 `packages/setup/src/setup.ts` owns the TypeScript setup implementation. Its CLI

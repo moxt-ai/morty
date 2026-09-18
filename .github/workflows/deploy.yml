@@ -86,6 +86,11 @@ jobs:
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
+      - name: Publish immutable web assets
+        run: pnpm publish:web-assets "${{ inputs.environment }}"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
       - name: Validate GitHub runtime configuration
         env:
           APP_ORIGIN: ${{ vars.APP_ORIGIN }}
