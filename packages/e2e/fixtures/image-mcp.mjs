@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { createInterface } from "node:readline";
 import { geometricPng } from "./geometric-png.mjs";
 
@@ -5,7 +7,7 @@ function reply(id, result) {
     process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`);
 }
 
-createInterface({ input: process.stdin }).on("line", (line) => {
+createInterface({ input: process.stdin }).on("line", async (line) => {
     const request = JSON.parse(line);
     if (request.id === undefined) {
         return;
@@ -31,6 +33,15 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         return;
     }
     if (request.method === "tools/call" && request.params?.name === "generate_geometric_png") {
+        const outputPath = process.env.MOBIUS_IMAGE_OUTPUT_PATH;
+        if (outputPath !== undefined) {
+            await mkdir(dirname(outputPath), { recursive: true });
+            await writeFile(outputPath, Buffer.from(geometricPng, "base64"));
+            reply(request.id, {
+                content: [{ type: "text", text: `Generated the geometric PNG at ${outputPath}` }],
+            });
+            return;
+        }
         reply(request.id, {
             content: [
                 { type: "image", data: geometricPng, mimeType: "image/png" },

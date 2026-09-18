@@ -68,8 +68,8 @@ export function MobiusSessionTurn({
     readonly requests: Pick<BotChatApi, "connectSession">;
 }) {
     const turnActivities = activitiesForTurn(activities, turn.sessionId, turn.commandId);
-    const media = turnActivities.flatMap((activity) =>
-        activity.content.filter((content) => content.type === "image" || content.type === "video"),
+    const media = [...turn.contents, ...turnActivities.flatMap((activity) => activity.content)].filter(
+        (content) => content.type === "image" || content.type === "video",
     );
     return (
         <div className="mx-auto grid min-w-0 w-full max-w-[1120px] gap-8 [overflow-wrap:anywhere]">

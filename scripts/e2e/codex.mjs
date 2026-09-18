@@ -9,6 +9,7 @@ export async function prepareCodex(harness, repository, provider) {
         publishableKey(repository),
     ]);
     const home = join(harness.workDirectory, "codex-home");
+    const generatedImage = join(home, "generated_images", "mobius-e2e", "geometric.png");
     await mkdir(home, { recursive: true });
     await writeFile(
         join(home, "config.toml"),
@@ -22,6 +23,8 @@ export async function prepareCodex(harness, repository, provider) {
             "[mcp_servers.mobius_image]",
             `command = ${JSON.stringify(process.execPath)}`,
             `args = [${JSON.stringify(imageMcp)}]`,
+            "[mcp_servers.mobius_image.env]",
+            `MOBIUS_IMAGE_OUTPUT_PATH = ${JSON.stringify(generatedImage)}`,
             "",
         ].join("\n"),
         { mode: 0o600 },
@@ -30,6 +33,15 @@ export async function prepareCodex(harness, repository, provider) {
     const acpVersion = (await harness.run(acpBinary, ["--version"])).stdout.trim();
     harness.record("codex", { version, acpVersion, model: provider.model, providerOrigin: provider.origin });
     harness.record("clerkPublishableKeyConfigured", true);
+    const runtimeEnvironment = {
+        CODEX_API_KEY: provider.apiKey,
+        CODEX_HOME: home,
+        CODEX_PATH: binary,
+        DEFAULT_AUTH_REQUEST: JSON.stringify({ methodId: "api-key" }),
+        HOME: harness.workDirectory,
+        INITIAL_AGENT_MODE: "agent-full-access",
+        MOBIUS_CODEX_PATH: binary,
+    };
     return {
         acpBinary,
         adapterOverrideVariable: "MOBIUS_CODEX_ACP_PATH",
@@ -37,14 +49,40 @@ export async function prepareCodex(harness, repository, provider) {
         id: "codex",
         label: "Codex",
         publishableKey: clerkPublishableKey,
-        runtimeEnvironment: {
-            CODEX_API_KEY: provider.apiKey,
-            CODEX_HOME: home,
-            CODEX_PATH: binary,
-            DEFAULT_AUTH_REQUEST: JSON.stringify({ methodId: "api-key" }),
-            HOME: harness.workDirectory,
-            INITIAL_AGENT_MODE: "agent-full-access",
-            MOBIUS_CODEX_PATH: binary,
+        runtimeEnvironment,
+        seedNativeSession: async (cwd) => {
+            const result = await harness.run(
+                "/bin/sh",
+                [
+                    "-c",
+                    'exec "$@" </dev/null',
+                    "mobius-codex-e2e",
+                    binary,
+                    "exec",
+                    "--json",
+                    "--disable",
+                    "apps",
+                    "--disable",
+                    "plugins",
+                    "--disable",
+                    "remote_plugin",
+                    "--dangerously-bypass-approvals-and-sandbox",
+                    "--skip-git-repo-check",
+                    "--cd",
+                    cwd,
+                    "Create an initial session for the Mobius end-to-end test.",
+                ],
+                { cwd, env: runtimeEnvironment, label: "codex exec (seed native session)" },
+            );
+            const started = result.stdout
+                .split("\n")
+                .filter((line) => line.trim().length > 0)
+                .map((line) => JSON.parse(line))
+                .find((event) => event.type === "thread.started");
+            if (started === undefined || typeof started.thread_id !== "string") {
+                throw new Error(`Codex did not report a native session ID: ${result.stdout}`);
+            }
+            return started.thread_id;
         },
     };
 }
