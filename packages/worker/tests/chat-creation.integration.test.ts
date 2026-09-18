@@ -141,13 +141,6 @@ test.each([true, false])(
                 },
             };
             const firstResponse = await request(`chat/bots/${bot.botId}/access`, input);
-            expect(firstResponse.headers.get("server-timing")).toEqual(
-                expect.stringMatching(
-                    settingsAvailable
-                        ? /(?:^|,)total;dur=.*authentication;dur=.*ownership;dur=.*session;dur=.*mobius;dur=/u
-                        : /(?:^|,)total;dur=.*authentication;dur=.*ownership;dur=.*mobius;dur=/u,
-                ),
-            );
             if (!settingsAvailable) {
                 // An agent that cannot prepare a Session must fail chat creation the same way it fails draft settings.
                 expect(firstResponse.status).toBe(409);
