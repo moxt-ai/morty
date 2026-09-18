@@ -9,13 +9,12 @@ import { fileURLToPath } from "node:url";
 import * as v from "valibot";
 import { afterAll, afterEach, beforeEach, expect, test, vi } from "vitest";
 import worker from "../src/application.ts";
-import { APP_ORIGIN, AUTH_TIME, IdentityProvider } from "./support/identity-provider.ts";
+import { APP_ORIGIN, AUTH_TIME, clerk as issuer } from "./support/clerk.ts";
 import { platformPeer } from "./support/platform-peer.ts";
 
 const platform = await platformPeer({ pairingLifetimeMilliseconds: 0 });
 afterAll(platform.close);
 
-const issuer = new IdentityProvider();
 class InMemoryD1Statement {
     readonly #query: string;
     readonly #database: DatabaseSync;
@@ -447,7 +446,7 @@ test.each(["anonymous", "clerk"])(
     async (kind) => {
         const database = new InMemoryD1Database();
         const anonymous = await createAnonymousUser(database);
-        const token = kind === "anonymous" ? anonymous.token : issuer.createSession("user_pair");
+        const token = kind === "anonymous" ? anonymous.token : issuer.createSession("user_pair", APP_ORIGIN);
         const environment = slackConfiguration(database);
         if (kind === "clerk") {
             const bound = await worker.fetch(
@@ -785,7 +784,7 @@ test("Given an expired anonymous transfer, When a device redeems it, Then no cre
 test("Given an unbound Clerk account, When the visitor binds their anonymous user, Then Clerk opens the same workspace", async () => {
     const database = new InMemoryD1Database();
     const identity = await createAnonymousUser(database);
-    const clerkToken = issuer.createSession("user_alice");
+    const clerkToken = issuer.createSession("user_alice", APP_ORIGIN);
     const status = await worker.fetch(
         new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/identity/clerk-binding`, {
             headers: { authorization: `Bearer ${clerkToken}` },
@@ -816,7 +815,7 @@ test("Given a Clerk account bound elsewhere, When the visitor overrides it, Then
     const database = new InMemoryD1Database();
     const first = await createAnonymousUser(database);
     const second = await createAnonymousUser(database);
-    const clerkToken = issuer.createSession("user_alice");
+    const clerkToken = issuer.createSession("user_alice", APP_ORIGIN);
     const resolve = (anonymousToken: string, action: "bind" | "override") =>
         worker.fetch(
             new Request(
@@ -851,7 +850,7 @@ test("Given a Clerk account bound elsewhere, When the visitor discards the local
     const database = new InMemoryD1Database();
     const account = await createAnonymousUser(database);
     const local = await createAnonymousUser(database);
-    const clerkToken = issuer.createSession("user_alice");
+    const clerkToken = issuer.createSession("user_alice", APP_ORIGIN);
     const request = (anonymousToken: string, action: "bind" | "discard-local") =>
         worker.fetch(
             new Request(
@@ -935,7 +934,7 @@ test("Given Project storage, When an authenticated user lists Slack bots, Then t
     const response = await worker.fetch(
         new Request(`${APP_ORIGIN}/mobius-slack/api/slack/bots?projectId=prj_ap_01_${"a".repeat(24)}`, {
             headers: {
-                Authorization: `Bearer ${issuer.createSession("user_alice")}`,
+                Authorization: `Bearer ${issuer.createSession("user_alice", APP_ORIGIN)}`,
             },
         }),
         slackConfiguration(),
@@ -949,7 +948,7 @@ test("Given a missing Project object namespace, When an authenticated user lists
     const response = await worker.fetch(
         new Request(`${APP_ORIGIN}/mobius-slack/api/slack/bots?projectId=prj_ap_01_${"a".repeat(24)}`, {
             headers: {
-                Authorization: `Bearer ${issuer.createSession("user_alice")}`,
+                Authorization: `Bearer ${issuer.createSession("user_alice", APP_ORIGIN)}`,
             },
         }),
         configuration,

@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import * as v from "valibot";
-import { AUTH_TIME } from "./identity-provider.ts";
+import { AUTH_TIME } from "./clerk.ts";
 
 function readySession(sessionId: string, currentValue = "model-one") {
     return {

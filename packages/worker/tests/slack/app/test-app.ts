@@ -1,3 +1,4 @@
+import { FakeClerk } from "@moxt-ai/mobius-test/clerk";
 import { createSlackDependencies } from "../../../src/components/slack/composition/create-dependencies";
 import { createSlackApplication } from "../../../src/components/slack/http";
 import { createSlackFileHandler } from "../../../src/components/slack/http/bot-tools/slack-file-handler";
@@ -7,9 +8,9 @@ import { SecretCipher } from "../../../src/components/slack/infra/util/secret-ci
 import { ClockService } from "../../../src/components/slack/service/identity/clock-service";
 import { tenantContext } from "../../../src/components/slack/service/identity/tenant-context";
 import { DatabaseSlackAppDirectory } from "../../../src/components/slack/storage/database-slack-app-directory";
+import { ClerkGateway } from "../../../src/gateway/clerk-gateway";
 import { managedBot } from "../../../src/schema/index.ts";
 import { InMemoryAttachments } from "./in-memory-attachments";
-import { InMemoryClerkGateway } from "./in-memory-clerk-gateway";
 import { InMemoryIdentityGateway } from "./in-memory-identity-gateway";
 import { InMemoryMobius } from "./in-memory-mobius-gateway";
 import { InMemorySlack } from "./in-memory-slack-gateway";
@@ -24,8 +25,6 @@ export async function createTestApplication(_singleDatabase = false) {
     const identity = new InMemoryIdentityGateway();
     const attachments = new InMemoryAttachments();
     const pending: SlackQueueMessage[] = [];
-    const clerk = new InMemoryClerkGateway();
-    const { humanToken } = clerk;
     const limiter = {
         mode: "admit",
         admit: async (): Promise<boolean> => {
@@ -40,17 +39,21 @@ export async function createTestApplication(_singleDatabase = false) {
             pending.push(message);
         },
     };
+    const fakeClerk = new FakeClerk({ issuer: "https://identity.clerk.accounts.dev" });
     const config = {
         authentication: {
             APP_ORIGIN: "https://slack.example.test",
-            CLERK_JWT_KEY: "test-jwt-key",
-            CLERK_PUBLISHABLE_KEY: "test-publishable-key",
+            CLERK_JWT_KEY: fakeClerk.publicKey,
+            CLERK_PUBLISHABLE_KEY: fakeClerk.publishableKey,
         },
         publicBaseUrl: "https://slack.example.test",
         projectId: `prj_ap_01_${"a".repeat(24)}`,
         mobiusBaseUrl: "https://mobius.test",
         signingKey: "state-signing-key",
     };
+    const clerk = new ClerkGateway();
+    const humanToken = async (userId = "tenant-1") =>
+        fakeClerk.createSession(`user_${userId}`, config.authentication.APP_ORIGIN);
     const gateways = {
         clock: new ClockService(),
         createNonce: () => "nonce-1",
@@ -67,7 +70,7 @@ export async function createTestApplication(_singleDatabase = false) {
         humanIdentity: {
             resolve: async (clerkUserId: string, signal: AbortSignal) => {
                 signal.throwIfAborted();
-                return clerkUserId;
+                return clerkUserId.startsWith("user_") ? clerkUserId.slice("user_".length) : clerkUserId;
             },
         },
         botTriggerLimiter: limiter,

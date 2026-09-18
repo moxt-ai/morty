@@ -1,6 +1,6 @@
+import { FakeClerk } from "@moxt-ai/mobius-test/clerk";
 import * as v from "valibot";
 import { describe, expect, it } from "vitest";
-import { InMemoryClerkGateway } from "./in-memory-clerk-gateway";
 import { createTestApplication } from "./test-app";
 
 async function authorization(app: Awaited<ReturnType<typeof createTestApplication>>) {
@@ -138,12 +138,12 @@ describe("Slack management journeys", () => {
     });
     it("Given a credential from another host, When a user opens their profile, Then access is rejected", async () => {
         const app = await createTestApplication();
-        const other = new InMemoryClerkGateway();
+        const other = new FakeClerk({ issuer: "https://identity.clerk.accounts.dev" });
         expect(
             (
                 await app.request("/mobius-slack/api/slack/me", {
                     headers: {
-                        authorization: `Bearer ${await other.humanToken()}`,
+                        authorization: `Bearer ${other.createSession("user_tenant-1", "https://slack.example.test")}`,
                     },
                 })
             ).status,

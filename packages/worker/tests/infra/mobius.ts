@@ -6,7 +6,7 @@ import {
     createTestMobiusPlatformApp,
     type PlatformRelayBindings,
 } from "@moxt-ai/mobius-test/app";
-import { TestDeveloperAuthenticator } from "@moxt-ai/mobius-test/identity";
+import { FakeClerk } from "@moxt-ai/mobius-test/clerk";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import * as v from "valibot";
@@ -17,6 +17,8 @@ const platformDirectory = new URL(
 );
 
 export async function createMobiusPlatformFixture() {
+    const clerk = new FakeClerk();
+    const developerToken = clerk.session("developer-1", clerk.defaultOrganizationId);
     const bundle = await build({
         entryPoints: [fileURLToPath(new URL("src/worker.ts", platformDirectory))],
         bundle: true,
@@ -63,14 +65,14 @@ export async function createMobiusPlatformFixture() {
         const app = createTestMobiusPlatformApp(
             {
                 bindings,
-                developerAuthenticator: new TestDeveloperAuthenticator(),
+                developerAuthenticator: clerk.authenticator,
                 operatorSubjects: new Set(["developer-1"]),
                 allowedOrigins: new Set(),
             },
             createPlatformGateways,
         );
         const headers = {
-            authorization: "Bearer developer-token",
+            authorization: `Bearer ${developerToken}`,
             "x-mobius-oidc-provider": "clerk",
             "content-type": "application/json",
         };
@@ -138,6 +140,7 @@ export async function createMobiusPlatformFixture() {
             attachments: bindings.R2_BUCKET_APAC,
             appId: application.appId,
             appCredential: application.defaultCredential.credential,
+            developerToken,
             baseUrl: `http://127.0.0.1:${address.port}`,
             close: async () => {
                 server.closeAllConnections();

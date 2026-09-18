@@ -6,7 +6,7 @@ import * as v from "valibot";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import worker from "../src/application.ts";
 import { InMemoryD1Database } from "./infra/database.ts";
-import { AUTH_TIME } from "./support/identity-provider.ts";
+import { AUTH_TIME } from "./support/clerk.ts";
 import { platformPeer } from "./support/platform-peer.ts";
 
 beforeEach(() => {
