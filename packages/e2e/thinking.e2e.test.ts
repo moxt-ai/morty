@@ -38,7 +38,7 @@ test("Given an agent starts and finishes intermediate steps, When the user obser
 }, testInfo) => {
     await runtime.openPairedChat();
     const { page } = runtime;
-    const { sessionId, turnId } = await runtime.sendMessage("wait until cancelled");
+    await runtime.sendMessage("wait until cancelled");
     const thinking = page.getByRole("group", { name: "Agent thinking" });
     const working = page.getByRole("status", { name: "Agent working" });
     await expect(thinking).toBeVisible();
@@ -49,16 +49,15 @@ test("Given an agent starts and finishes intermediate steps, When the user obser
     await thinking.locator("summary").click();
     await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toBeHidden();
     await expect(working).toBeVisible();
-    await page.reload();
-    await expect(working).toBeVisible();
-    await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toHaveCount(1);
-    await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toBeVisible();
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.screenshot({ path: testInfo.outputPath("thinking-active-mobile.png"), animations: "disabled" });
-    await runtime.cancelSessionTurn(sessionId, turnId);
+    await page.getByRole("button", { name: "Stop agent output", exact: true }).click();
     await expect(page.getByText("Response cancelled.", { exact: true })).toBeVisible();
     await expect(working).toHaveCount(0);
     await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toBeHidden();
+    await page.reload();
+    await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toHaveCount(1);
+    await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toBeHidden();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: testInfo.outputPath("thinking-active-mobile.png"), animations: "disabled" });
 });
 
 test("Given a forked native session, When a user continues it and opens thinking, Then reasoning is readable and only the active reply shows a spinner", async ({

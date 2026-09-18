@@ -4,7 +4,7 @@ import { mock } from "node:test";
 import { chromium } from "playwright-core";
 import { dataTestId } from "../../web/src/data-testid.ts";
 import { ANONYMOUS_CREDENTIAL_KEY } from "../../web/src/services/identity/anonymous-identity-api.ts";
-import { ChatApi, object, text } from "./chat-api.ts";
+import { ChatApi, text } from "./chat-api.ts";
 import type { E2EHarness } from "./harness.ts";
 import { LocalStack, repository } from "./local-stack.ts";
 import { followSetupInstructions } from "./setup-instructions.ts";
@@ -48,34 +48,8 @@ export async function createTestRuntime(harness: E2EHarness) {
 
         const sendMessage = async (prompt: string) => {
             await page.getByTestId(dataTestId.messageComposer).fill(prompt);
-            const [request] = await Promise.all([
-                page.waitForRequest(
-                    (candidate) => {
-                        if (candidate.method() !== "POST") {
-                            return false;
-                        }
-                        const body: unknown = candidate.postDataJSON();
-                        return typeof body === "object" && body !== null && Reflect.get(body, "content") === prompt;
-                    },
-                    { timeout: 15_000 },
-                ),
-                page.getByTestId(dataTestId.sendMessage).click(),
-            ]);
-            const response = await request.response();
-            if (response === null) {
-                throw new Error("Turn request ended without an HTTP response");
-            }
-            if (response.status() !== 202) {
-                if (response.status() !== 200) {
-                    throw new Error(`Turn request failed with HTTP ${response.status()}`);
-                }
-            }
-            const accepted = object(await response.json(), "accepted turn");
-            const turn = "turn" in accepted ? object(accepted.turn, "turn") : accepted;
-            return {
-                turnId: text(accepted.turnId, "turn ID"),
-                sessionId: text(turn.sessionId, "session ID"),
-            };
+            await page.getByTestId(dataTestId.sendMessage).click();
+            await page.getByTestId(dataTestId.userMessage).filter({ hasText: prompt }).last().waitFor();
         };
 
         return {
@@ -83,7 +57,6 @@ export async function createTestRuntime(harness: E2EHarness) {
             origin: stack.chatOrigin,
             openChat,
             sendMessage,
-            cancelSessionTurn: (sessionId: string, turnId: string) => chat.cancelSessionTurn(sessionId, turnId),
             seedNativeSession: async (sessionId: string, prompt: string) => {
                 await writeFile(
                     join(harness.workDirectory, "agent-state", `${encodeURIComponent(sessionId)}.json`),

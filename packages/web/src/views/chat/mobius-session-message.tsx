@@ -1,4 +1,4 @@
-import type { AgentDisplayContent, MobiusAttemptSummary, MobiusClient } from "@moxt-ai/mobius-sdk";
+import type { MobiusClient } from "@moxt-ai/mobius-sdk";
 import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
 import { AgentRichContent } from "../../components/agents/agent-rich-content.tsx";
 import { AgentReply } from "../../components/chat/agent-reply.tsx";
@@ -6,28 +6,7 @@ import { AgentWorkingIndicator } from "../../components/chat/agent-thinking.tsx"
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { activitiesForIds, type RecordedAgentActivity } from "../../services/chat/agent-activities.ts";
-
-export type SessionMessage =
-    | {
-          readonly role: "user";
-          readonly id: string;
-          readonly text: string;
-          readonly contents: readonly SessionMessageContent[];
-      }
-    | {
-          readonly role: "assistant";
-          readonly activityIds: readonly string[];
-          readonly id: string;
-          readonly text: string;
-          readonly commandId: string | null;
-          readonly attempt: MobiusAttemptSummary | null;
-          readonly contents: readonly SessionMessageContent[];
-      };
-
-export interface SessionMessageContent {
-    readonly contentId: string;
-    readonly content: AgentDisplayContent;
-}
+import type { SessionMessage } from "../../view-models/chat/session-presentation.ts";
 
 export function MobiusSessionMessage({
     message,

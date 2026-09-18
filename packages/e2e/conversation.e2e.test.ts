@@ -180,7 +180,7 @@ test("Given a full message viewport, When the user sends another prompt, Then th
     await messages.evaluate((element) => {
         element.scrollTop = 0;
     });
-    const pending = await runtime.sendMessage("wait until cancelled");
+    await runtime.sendMessage("wait until cancelled");
     const latestMessage = page.getByTestId(dataTestId.userMessage).last();
     await expect(latestMessage).toBeVisible();
     const working = page.getByRole("status", { name: "Agent working", exact: true });
@@ -221,7 +221,31 @@ test("Given a full message viewport, When the user sends another prompt, Then th
     expect(shellPosition.shellTop).toBe(0);
     expect(shellPosition.shellBottom).toBe(shellPosition.viewportHeight);
     expect(shellPosition.documentScrollHeight).toBe(shellPosition.viewportHeight);
-    await runtime.cancelSessionTurn(pending.sessionId, pending.turnId);
+    await page.getByRole("button", { name: "Stop agent output", exact: true }).click();
+});
+
+test("Given an active conversation already has assistant content, When the user switches away and back, Then its content remains visible", async ({
+    runtime,
+}) => {
+    await runtime.openPairedChat();
+    const { page } = runtime;
+    await runtime.sendMessage("Conversation to restore");
+    await expect(page.getByTestId(dataTestId.agentResponse).last()).toContainText("Conversation to restore");
+
+    await page.getByTestId(dataTestId.newConversation).click();
+    await runtime.sendMessage("Other conversation");
+    await expect(page.getByTestId(dataTestId.agentResponse).last()).toContainText("Other conversation");
+
+    const sidebar = page.getByRole("complementary", { name: "Conversations", exact: true });
+    await sidebar.getByRole("button", { name: "Conversation to restore", exact: true }).click();
+    await runtime.sendMessage("wait until cancelled");
+    await expect(page.getByTestId(dataTestId.agentResponse).last()).toContainText("Gathering context");
+    await expect(page.getByText("Inspecting the workspace", { exact: true })).toBeVisible();
+
+    await sidebar.getByRole("button", { name: "Other conversation", exact: true }).click();
+    await sidebar.getByRole("button", { name: "Conversation to restore", exact: true }).click();
+    await expect(page.getByTestId(dataTestId.agentResponse).last()).toContainText("Gathering context");
+    await expect(page.getByText("Inspecting the workspace", { exact: true })).toBeVisible();
 });
 
 test("Given a paired workspace, When a user creates and reloads conversations, Then prompts and replies stay in their selected conversation", async ({

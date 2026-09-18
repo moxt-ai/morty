@@ -1,6 +1,4 @@
 import {
-    type AgentDisplayContent,
-    decodeAgentContentEvent,
     decodeSessionCommandsUpdatedEvent,
     decodeSessionElicitationRequestedEvent,
     decodeSessionElicitationResolvedEvent,
@@ -12,7 +10,6 @@ import {
     MobiusElicitationResponseRequest,
     MobiusPermissionResponseRequest,
     MobiusRunningAttemptSummary,
-    type MobiusSessionEvent,
     MobiusTurnCompletedEvent,
     MobiusTurnFailedEvent,
     MobiusTurnStartedEvent,
@@ -43,8 +40,15 @@ import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 import { createRemoteAccessStore } from "../../view-models/chat/remote-access-store.ts";
 import { createSessionDeliveryStore } from "../../view-models/chat/session-delivery-store.ts";
 import { createSessionMessageQueueStore } from "../../view-models/chat/session-message-queue-store.ts";
+import {
+    applyRecordedContents,
+    historySessionMessages,
+    placeAgentActivity,
+    restoreSessionPresentation,
+    type SessionMessage,
+} from "../../view-models/chat/session-presentation.ts";
 import { createSessionTaskControlsStore, findCompactCommand } from "../../view-models/chat/session-task-controls.ts";
-import { MobiusSessionMessage, type SessionMessage, type SessionMessageContent } from "./mobius-session-message.tsx";
+import { MobiusSessionMessage } from "./mobius-session-message.tsx";
 
 type Operation =
     | { readonly kind: "idle" }
@@ -56,8 +60,6 @@ type ServiceInteraction = Awaited<ReturnType<MobiusClient["interactions"]["listP
 type LocalInteraction =
     | { readonly kind: "permission"; readonly permission: PermissionInteraction }
     | { readonly kind: "elicitation"; readonly elicitation: ElicitationInteraction };
-
-const ACTIVE_ATTEMPT_KINDS: ReadonlySet<string> = new Set(["none", "dispatching", "running", "waiting_input"]);
 
 function acceptedUrlInteraction(interaction: ServiceInteraction): boolean {
     if (
@@ -127,119 +129,6 @@ function replaceInteraction(
 ): readonly LocalInteraction[] {
     const remaining = current.filter((interaction) => interactionId(interaction) !== id);
     return replacement === null ? remaining : [...remaining, replacement];
-}
-
-function historyContents(
-    images: readonly { readonly data: string; readonly mimeType: string; readonly name: string }[] | undefined,
-): readonly SessionMessageContent[] {
-    return (images ?? []).map((image, index) => ({
-        contentId: `history-image-${index.toString()}`,
-        content: {
-            artifactId: "",
-            data: image.data,
-            mimeType: image.mimeType,
-            name: image.name,
-            newText: "",
-            oldText: "",
-            path: "",
-            terminalId: "",
-            text: "",
-            type: "image",
-            uri: "",
-        },
-    }));
-}
-
-function replaceMessageContent(
-    messages: readonly SessionMessage[],
-    commandId: string,
-    contentId: string,
-    content: AgentDisplayContent,
-): readonly SessionMessage[] {
-    const existing = messages.findIndex(
-        (message) =>
-            message.role === "assistant" &&
-            message.commandId === commandId &&
-            message.contents.some((candidate) => candidate.contentId === contentId),
-    );
-    const target =
-        existing >= 0
-            ? existing
-            : messages.findLastIndex((message) => message.role === "assistant" && message.commandId === commandId);
-    return messages.map((message, index) =>
-        index === target && message.role === "assistant"
-            ? {
-                  ...message,
-                  contents: [
-                      ...message.contents.filter((candidate) => candidate.contentId !== contentId),
-                      { contentId, content },
-                  ],
-              }
-            : message,
-    );
-}
-
-function placeAgentActivity(
-    messages: readonly SessionMessage[],
-    commandId: string,
-    activityId: string,
-): readonly SessionMessage[] {
-    if (
-        messages.some((message) => message.role === "assistant" && message.activityIds.some((id) => id === activityId))
-    ) {
-        return messages;
-    }
-    const lastIndex = messages.findLastIndex(
-        (message) => message.role === "assistant" && message.commandId === commandId,
-    );
-    const last = messages[lastIndex];
-    if (last === undefined || last.role !== "assistant") {
-        return messages;
-    }
-    if (last.text.length === 0 && last.contents.length === 0) {
-        return messages.map((message, index) =>
-            index === lastIndex && message.role === "assistant"
-                ? { ...message, activityIds: [...message.activityIds, activityId] }
-                : message,
-        );
-    }
-    return [
-        ...messages.slice(0, lastIndex + 1),
-        {
-            activityIds: [activityId],
-            attempt: last.attempt,
-            commandId,
-            contents: [],
-            id: `${commandId}-reply-${activityId}`,
-            role: "assistant",
-            text: "",
-        },
-        ...messages.slice(lastIndex + 1),
-    ];
-}
-
-function recordedContent(event: MobiusSessionEvent): {
-    readonly commandId: string;
-    readonly content: AgentDisplayContent;
-    readonly contentId: string;
-} | null {
-    if (!(event.payload instanceof MobiusControlEvent) || event.payload.kind !== "agent.content") {
-        return null;
-    }
-    const decoded = decodeAgentContentEvent(event.payload.encodedPayload);
-    return { commandId: decoded.commandId, content: decoded.content, contentId: decoded.contentId };
-}
-
-function applyRecordedContents(
-    messages: readonly SessionMessage[],
-    events: readonly MobiusSessionEvent[],
-): readonly SessionMessage[] {
-    return events.reduce((current, event) => {
-        const recorded = recordedContent(event);
-        return recorded === null
-            ? current
-            : replaceMessageContent(current, recorded.commandId, recorded.contentId, recorded.content);
-    }, messages);
 }
 
 export function MobiusSessionPane({
@@ -319,22 +208,7 @@ export function MobiusSessionPane({
     const messageQueue = useStore(messageQueueStore);
     const taskControls = useStore(taskControlsStore);
     const [messages, setMessages] = useState<readonly SessionMessage[]>(() =>
-        session.result.history.status === "available"
-            ? session.result.history.messages.map((message, index): SessionMessage => {
-                  const id = `history-${index}`;
-                  return message.role === "user"
-                      ? { id, role: "user", text: message.text, contents: historyContents(message.images) }
-                      : {
-                            activityIds: [],
-                            id,
-                            role: "assistant",
-                            text: message.text,
-                            attempt: null,
-                            commandId: null,
-                            contents: historyContents(message.images),
-                        };
-              })
-            : [],
+        historySessionMessages(session.result.history),
     );
     const [options, setOptions] = useState<readonly SessionConfigOption[]>(session.result.ready.configOptions);
     const [draft, setDraft] = useState("");
@@ -418,73 +292,30 @@ export function MobiusSessionPane({
                 }),
             );
             deliveryStore.getState().reconcile(saved.messages.map((message) => message.commandId));
-            lastSequence = BigInt(saved.lastCommittedSequence);
-            const activeMessage = saved.messages.find((message) => ACTIVE_ATTEMPT_KINDS.has(message.attempt.kind));
-            if (activeMessage === undefined) {
+            const restored = restoreSessionPresentation(saved, session.result.history);
+            lastSequence = restored.lastSequence;
+            if (restored.activeCommandId === null) {
                 const currentCommand = command.current;
                 if (currentCommand !== "") {
                     taskControlsStore.getState().finish(currentCommand);
                     command.current = "";
                 }
             } else {
-                command.current = activeMessage.commandId;
+                command.current = restored.activeCommandId;
             }
-            const history = session.result.history;
-            const initial: readonly SessionMessage[] =
-                history.status === "available"
-                    ? history.messages.map(
-                          (message, index): SessionMessage =>
-                              message.role === "user"
-                                  ? {
-                                        id: `history-${index}`,
-                                        role: "user",
-                                        text: message.text,
-                                        contents: historyContents(message.images),
-                                    }
-                                  : {
-                                        activityIds: [],
-                                        id: `history-${index}`,
-                                        role: "assistant",
-                                        text: message.text,
-                                        attempt: null,
-                                        commandId: null,
-                                        contents: historyContents(message.images),
-                                    },
-                      )
-                    : [];
-            const restoredMessages: readonly SessionMessage[] = [
-                ...initial,
-                ...[...saved.messages]
-                    .reverse()
-                    .filter(
-                        (message) =>
-                            history.status !== "available" || !history.coveredCommandIds.includes(message.commandId),
-                    )
-                    .flatMap((message): readonly SessionMessage[] => [
-                        { id: `${message.commandId}-user`, role: "user", text: message.prompt, contents: [] },
-                        {
-                            activityIds: [],
-                            id: `${message.commandId}-reply`,
-                            role: "assistant",
-                            text: message.response,
-                            attempt: message.attempt,
-                            commandId: message.commandId,
-                            contents: message.contents.map((content, index) => ({
-                                contentId: `saved-content-${index.toString()}`,
-                                content,
-                            })),
-                        },
-                    ]),
-            ];
             controller.signal.throwIfAborted();
-            setMessages(restoredMessages);
+            setActivities(restored.activities);
+            setMessages(restored.messages);
             const subscription = await client.events.subscribe(
                 sessionId,
-                saved.tailEventCursor,
+                restored.eventCursor,
                 {
                     receive: async (event) => {
                         const payload = event.payload;
                         if (payload instanceof MobiusAgentActivityEvent) {
+                            if (command.current !== "" && payload.commandId !== command.current) {
+                                return true;
+                            }
                             setActivities((current) => recordAgentActivity(current, event));
                             setMessages((current) =>
                                 placeAgentActivity(current, payload.commandId, agentActivityKey(payload)),
