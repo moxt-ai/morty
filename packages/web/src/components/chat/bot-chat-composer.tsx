@@ -1,4 +1,3 @@
-import type { PromptImage, PromptResource } from "@moxt-ai/mobius-sdk";
 import { FileText, LoaderCircle, Paperclip, Plus, Send, Square, X } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, type ReactNode, useRef, useState } from "react";
 import { dataTestId } from "../../data-testid.ts";
@@ -8,13 +7,12 @@ import {
     ReadPromptResource,
     readPromptAttachment,
 } from "../../services/chat/attachment-reader.ts";
+import type { ComposerAttachment } from "../../view-models/chat/composer-attachment.ts";
 import { Button } from "../ui/cloud-button.tsx";
 import { Popover } from "../ui/popover.tsx";
 import { Textarea } from "../ui/textarea.tsx";
 
-export type ComposerAttachment =
-    | { readonly kind: "image"; readonly image: PromptImage }
-    | { readonly kind: "resource"; readonly resource: PromptResource };
+export type { ComposerAttachment } from "../../view-models/chat/composer-attachment.ts";
 
 function attachmentName(attachment: ComposerAttachment): string {
     return attachment.kind === "image" ? attachment.image.name : attachment.resource.name;

@@ -21,17 +21,6 @@ export function activitiesForIds(
         .sort((left, right) => left.sequence - right.sequence);
 }
 
-export function activitiesForTurn(
-    activities: ReadonlyMap<string, RecordedAgentActivity>,
-    sessionId: string,
-    commandId: string,
-): readonly MobiusAgentActivityEvent[] {
-    return [...activities.values()]
-        .map((record) => record.activity)
-        .filter((activity) => activity.sessionId === sessionId && activity.commandId === commandId)
-        .sort((left, right) => left.sequence - right.sequence);
-}
-
 export function recordAgentActivity(
     current: ReadonlyMap<string, RecordedAgentActivity>,
     event: MobiusSessionEvent,

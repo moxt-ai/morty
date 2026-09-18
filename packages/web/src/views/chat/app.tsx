@@ -35,18 +35,16 @@ import {
     sessionRoutePath,
     sessionSettingsRoutePath,
 } from "@/services/application/app-routes";
-import { ChannelHistorySynchronizer } from "@/services/chat/channel-history-synchronizer";
-import { closeMobiusTransport, initializeMobiusTransport } from "@/services/chat/mobius-transport";
 import {
     type DesktopSidebarLayoutState,
     decodeSidebarLayoutPreference,
     encodeSidebarLayoutPreference,
     toggleSidebar,
 } from "@/services/chat/workspace-layout";
-import { readChannelHistoryForSynchronization } from "@/services/pairing/pairing-api";
 import type { ChannelConnection, ChannelHistory } from "@/view-models/chat/channel";
-import { isIdentifier, PairingApiError } from "@/view-models/chat/channel";
+import { isIdentifier } from "@/view-models/chat/channel";
 import { createChannelRouteStore } from "@/view-models/chat/channel-route-store";
+import { createChannelWorkspaceStore } from "@/view-models/chat/channel-workspace-store";
 import { useChatStore } from "@/view-models/chat-store";
 
 const SIDEBAR_LAYOUT_STORAGE_KEY = "mobius:conversation-sidebar-layout";
@@ -128,14 +126,20 @@ function ChannelWorkspace({
 }) {
     const params = useParams<"sessionId">();
     const [initialSessionId] = useState(() => params.sessionId ?? "");
-    const [workspaceReady, setWorkspaceReady] = useState(false);
     const agents = useChatStore((state) => state.agents);
     const channelConfigured = useChatStore((state) => state.channelConfigured);
-    const configureChannel = useChatStore((state) => state.configureChannel);
-    const createConversation = useChatStore((state) => state.createConversation);
     const sidebarOpen = useChatStore((state) => state.sidebarOpen);
     const location = useLocation();
     const navigate = useNavigate();
+    const [workspace] = useState(() =>
+        createChannelWorkspaceStore({
+            connection,
+            history,
+            initialSessionId,
+            navigateToSession: (sessionId) => void navigate(sessionRoutePath(connection.channelId, sessionId)),
+        }),
+    );
+    const workspaceState = useStore(workspace);
     const mainContentRef = useRef<HTMLElement>(null);
     const channelIndexMatch = useMatch("/channels/:channelId");
     const accessOpen = useMatch("/channels/:channelId/access") !== null;
@@ -156,40 +160,12 @@ function ChannelWorkspace({
     }, [sidebarLayout]);
 
     useEffect(() => {
-        configureChannel(connection, history, initialSessionId);
-        setWorkspaceReady(true);
-        const synchronizer = new ChannelHistorySynchronizer({
-            applyHistory: (latestHistory) => {
-                useChatStore.getState().reconcileHistory(latestHistory);
-            },
-            hasActiveTurns: () => useChatStore.getState().conversations.some((conversation) => conversation.isRunning),
-            readHistory: async (signal) => await readChannelHistoryForSynchronization(connection.channelId, signal),
-            reportFailure: (error) => {
-                const message =
-                    error instanceof PairingApiError
-                        ? `${error.code}: ${error.message}`
-                        : "The latest background task status could not be loaded.";
-                useChatStore.getState().reportHistorySyncFailure(message);
-            },
-        });
-        synchronizer.start();
-        initializeMobiusTransport(connection, synchronizer.notifyActivity);
-        return () => {
-            synchronizer.stop();
-            void closeMobiusTransport();
-        };
-    }, [configureChannel, connection, history, initialSessionId]);
+        const controller = new AbortController();
+        workspace.getState().start(controller.signal);
+        return () => controller.abort();
+    }, [workspace]);
 
-    const createAndOpenConversation = useCallback((): void => {
-        createConversation();
-        const store = useChatStore.getState();
-        for (const conversation of store.conversations) {
-            if (conversation.id === store.activeConversationId) {
-                void navigate(sessionRoutePath(connection.channelId, conversation.sessionId));
-                return;
-            }
-        }
-    }, [connection.channelId, createConversation, navigate]);
+    const createAndOpenConversation = workspace.getState().createConversation;
 
     useEffect(() => {
         const handleKeyDown = (event: globalThis.KeyboardEvent): void => {
@@ -209,12 +185,12 @@ function ChannelWorkspace({
     }, [createAndOpenConversation]);
 
     useEffect(() => {
-        if (workspaceReady && location.pathname.length > 0) {
+        if (workspaceState.state.kind === "ready" && location.pathname.length > 0) {
             mainContentRef.current?.focus({ preventScroll: true });
         }
-    }, [location.pathname, workspaceReady]);
+    }, [location.pathname, workspaceState.state.kind]);
 
-    if (!workspaceReady || !channelConfigured) {
+    if (workspaceState.state.kind !== "ready" || !channelConfigured) {
         return <ChannelLoadingPage />;
     }
     if (agents.length === 0 && channelIndexMatch !== null) {

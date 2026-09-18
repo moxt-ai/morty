@@ -1,39 +1,24 @@
-import type {
-    SessionElicitationField,
-    SessionElicitationRequestedEvent,
-    SessionPermissionRequestedEvent,
-} from "@moxt-ai/mobius-sdk";
+import type { SessionElicitationField } from "@moxt-ai/mobius-sdk";
 import type { ElicitationResponseRequest } from "@moxt-ai/mobius-sdk/channel";
 import { ExternalLink, HelpCircle, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { encodeElicitationForm, readMultiselectDefaults } from "@/services/chat/elicitation-form";
 import { respondToElicitation, respondToPermission } from "@/services/chat/mobius-transport";
+import type {
+    ElicitationInteraction,
+    ElicitationInteractionResponse,
+    PermissionInteraction,
+    PermissionInteractionResponse,
+} from "@/view-models/chat/session-pane-types";
 import { selectActiveConversation, useChatStore } from "@/view-models/chat-store";
 
-export type PermissionInteraction = Pick<
-    SessionPermissionRequestedEvent,
-    "interactionId" | "options" | "sessionId" | "title" | "toolCallId" | "toolKind"
->;
-
-export type ElicitationInteraction = Pick<
-    SessionElicitationRequestedEvent,
-    "accepted" | "fields" | "interactionId" | "message" | "mode" | "sessionId" | "url"
->;
-
-export interface PermissionInteractionResponse {
-    readonly interactionId: string;
-    readonly optionId: string;
-    readonly outcome: "cancelled" | "selected";
-    readonly sessionId: string;
-}
-
-export interface ElicitationInteractionResponse {
-    readonly action: ElicitationResponseRequest["action"];
-    readonly content: string;
-    readonly interactionId: string;
-    readonly sessionId: string;
-}
+export type {
+    ElicitationInteraction,
+    ElicitationInteractionResponse,
+    PermissionInteraction,
+    PermissionInteractionResponse,
+} from "@/view-models/chat/session-pane-types";
 
 type InteractionOperation =
     | { readonly kind: "idle" }
