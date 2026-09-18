@@ -816,9 +816,6 @@ export function MobiusSessionPane({
                 aria-label="Messages"
                 className="min-h-0 flex-1 space-y-8 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10"
             >
-                {session.result.history.status === "unavailable" && (
-                    <p className="text-sm text-muted-foreground">This agent does not expose saved message history.</p>
-                )}
                 {messages.map((message) => {
                     const workingOnly =
                         message.role === "assistant" &&

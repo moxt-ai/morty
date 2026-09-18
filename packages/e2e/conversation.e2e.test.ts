@@ -244,6 +244,7 @@ test("Given an active conversation already has assistant content, When the user 
 
     await sidebar.getByRole("button", { name: "Other conversation", exact: true }).click();
     await sidebar.getByRole("button", { name: "Conversation to restore", exact: true }).click();
+    await expect(page.getByText("This agent does not expose saved message history.", { exact: true })).toHaveCount(0);
     await expect(page.getByTestId(dataTestId.agentResponse).last()).toContainText("Gathering context");
     await expect(page.getByText("Inspecting the workspace", { exact: true })).toBeVisible();
 });
