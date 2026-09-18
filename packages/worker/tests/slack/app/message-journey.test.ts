@@ -1,5 +1,8 @@
+import { eq } from "drizzle-orm";
+import { sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { describe, expect, it, vi } from "vitest";
 import type { SlackEventCallbackPayload } from "../../../src/components/slack/service/events/events";
+import { processedSlackEvent, slackMessageDelivery } from "../../../src/schema/index.ts";
 import { createSignedRequest } from "./signed-request";
 import { createTestApplication } from "./test-app";
 
@@ -18,6 +21,10 @@ const event: SlackEventCallbackPayload = {
     team_id: "T123",
     type: "event_callback",
 };
+
+const sqliteMaster = sqliteTable("sqlite_master", {
+    name: text("name"),
+});
 
 type TestApplication = Awaited<ReturnType<typeof createTestApplication>>;
 
@@ -95,10 +102,12 @@ describe("Slack message journeys", () => {
             prompt: "# Channel history:\n[1.0] U123: channel context\n\n# Thread messages:\n[2.0] U123: private context\n\n<@U_BOT> investigate",
         });
         expect(
-            (await app.database.d1.prepare("SELECT name FROM sqlite_master WHERE name = 'slack_prompt_command'").all())
-                .results,
+            await app.database.orm
+                .select({ name: sqliteMaster.name })
+                .from(sqliteMaster)
+                .where(eq(sqliteMaster.name, "slack_prompt_command")),
         ).toEqual([]);
-        const deliveries = (await app.database.d1.prepare("SELECT * FROM slack_message_delivery").all()).results;
+        const deliveries = await app.database.orm.select().from(slackMessageDelivery);
         expect(deliveries).toHaveLength(1);
         expect(deliveries[0]).not.toHaveProperty("context_messages");
         expect(JSON.stringify(deliveries)).not.toContain("private context");
@@ -114,9 +123,11 @@ describe("Slack message journeys", () => {
         expect(app.mobius.runs).toHaveLength(1);
         expect(app.slack.messages).toHaveLength(1);
         expect(
-            await app.database.d1
-                .prepare("SELECT payload, status FROM processed_slack_event WHERE slack_event_id = 'Ev123'")
-                .first(),
+            await app.database.orm
+                .select({ payload: processedSlackEvent.payload, status: processedSlackEvent.status })
+                .from(processedSlackEvent)
+                .where(eq(processedSlackEvent.slackEventId, "Ev123"))
+                .get(),
         ).toMatchObject({ payload: "", status: "processed" });
 
         await send(app, {
@@ -284,9 +295,11 @@ describe("Slack message journeys", () => {
             event_id: "Ev124",
             event: { ...event.event, ts: "101.0", thread_ts: "100.0" },
         });
-        const stored = await app.database.d1
-            .prepare("SELECT payload FROM processed_slack_event WHERE slack_event_id = 'Ev124'")
-            .first<{ readonly payload: string }>();
+        const stored = await app.database.orm
+            .select({ payload: processedSlackEvent.payload })
+            .from(processedSlackEvent)
+            .where(eq(processedSlackEvent.slackEventId, "Ev124"))
+            .get();
         expect(stored?.payload).toContain("Ev124");
 
         gate.complete();
@@ -294,10 +307,9 @@ describe("Slack message journeys", () => {
         expect(app.slack.messages).toHaveLength(2);
         expect(app.slack.messages.every((message) => message.threadTs === "100.0")).toBe(true);
         expect(app.mobius.runs).toHaveLength(2);
-        expect((await app.database.d1.prepare("SELECT payload FROM processed_slack_event").all()).results).toEqual([
-            { payload: "" },
-            { payload: "" },
-        ]);
+        expect(
+            await app.database.orm.select({ payload: processedSlackEvent.payload }).from(processedSlackEvent),
+        ).toEqual([{ payload: "" }, { payload: "" }]);
     });
 
     it("suppresses NO_REPLY while still allowing authenticated tool delivery", async () => {

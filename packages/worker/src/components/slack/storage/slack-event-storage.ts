@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lte, ne, sql } from "drizzle-orm";
 import * as v from "valibot";
 import type { Database } from "../../../schema/database.ts";
 import {
@@ -218,7 +218,7 @@ export class SlackEventStorage {
                     .onConflictDoUpdate({
                         target: slackConversationLease.conversationKey,
                         set: { owner, expiresAt: now + 660_000 },
-                        setWhere: sql`${slackConversationLease.expiresAt} <= ${now}`,
+                        setWhere: lte(slackConversationLease.expiresAt, now),
                     })
                     .run(),
         );
@@ -769,8 +769,10 @@ export class SlackEventStorage {
                             eq(slackConversationMapping.tenantId, input.tenantId),
                             eq(slackApp.slackBotId, input.botId),
                             eq(slackConversationMapping.slackChannelId, input.channelId),
-                            sql`ifnull(${slackConversationMapping.threadTs}, '') = ifnull(${input.threadTs}, '')`,
-                            sql`${slackConversationMapping.connectionId} = coalesce(${connectionId ?? null}, ${slackChatBotBinding.connectionId})`,
+                            input.threadTs === null
+                                ? isNull(slackConversationMapping.threadTs)
+                                : eq(slackConversationMapping.threadTs, input.threadTs),
+                            eq(slackConversationMapping.connectionId, connectionId ?? slackChatBotBinding.connectionId),
                         ),
                     )
                     .orderBy(desc(slackConversationMapping.updatedAt))
@@ -867,7 +869,7 @@ export class SlackEventStorage {
                         and(
                             eq(processedSlackEvent.slackEventId, eventId),
                             eq(processedSlackEvent.tenantId, tenant.tenantId),
-                            or(ne(processedSlackEvent.status, "processed"), eq(sql`${status}`, "processed")),
+                            status === "processed" ? undefined : ne(processedSlackEvent.status, "processed"),
                         ),
                     )
                     .run(),

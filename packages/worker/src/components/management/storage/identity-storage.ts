@@ -411,32 +411,8 @@ export class IdentityStorage {
             }
             const result = await database
                 .insert(clerkUserBinding)
-                .select(
-                    database
-                        .select({
-                            clerkUserId: sql<string>`${clerkUserId}`.as("clerk_user_id"),
-                            userId: sql<string>`${localUserId}`.as("user_id"),
-                            createdAt: sql<number>`${now}`.as("created_at"),
-                            updatedAt: sql<number>`${now}`.as("updated_at"),
-                        })
-                        .from(sql`(select 1)`)
-                        .where(
-                            and(
-                                notExists(
-                                    database
-                                        .select({ userId: clerkUserBinding.userId })
-                                        .from(clerkUserBinding)
-                                        .where(eq(clerkUserBinding.clerkUserId, clerkUserId)),
-                                ),
-                                notExists(
-                                    database
-                                        .select({ userId: clerkUserBinding.userId })
-                                        .from(clerkUserBinding)
-                                        .where(eq(clerkUserBinding.userId, localUserId)),
-                                ),
-                            ),
-                        ),
-                )
+                .values({ clerkUserId, userId: localUserId, createdAt: now, updatedAt: now })
+                .onConflictDoNothing()
                 .run();
             signal.throwIfAborted();
             return result.meta.changes === 1 ? { kind: "bound", userId: localUserId } : { kind: "conflict" };
