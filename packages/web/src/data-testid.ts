@@ -1,5 +1,6 @@
 export const dataTestId = Object.freeze({
     messageComposer: "chat-message-composer",
+    queuedMessage: "chat-queued-message",
     sendMessage: "chat-send-message",
     userMessage: "chat-user-message",
     agentResponse: "chat-agent-response",

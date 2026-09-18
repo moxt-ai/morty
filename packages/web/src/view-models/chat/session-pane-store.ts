@@ -167,9 +167,8 @@ export function sessionPanePresentation(
         tasks.operation.kind === "running" ||
         tasks.operation.kind === "steering" ||
         tasks.operation.kind === "stopping";
-    const busy =
+    const composerDisabled =
         model.connection.kind !== "ready" ||
-        model.activeCommandId !== null ||
         delivery.state.kind === "submitting" ||
         delivery.state.kind === "delivery-unknown" ||
         model.operation.kind === "sending" ||
@@ -178,6 +177,7 @@ export function sessionPanePresentation(
         queue.operation.kind === "submitting" ||
         tasks.operation.kind === "steering" ||
         tasks.operation.kind === "stopping";
+    const busy = model.activeCommandId !== null || composerDisabled;
     const compactAvailable = findCompactCommand(tasks.commands) !== null;
     const activeMessageId =
         model.activeCommandId === null
@@ -193,6 +193,7 @@ export function sessionPanePresentation(
         activeMessageId,
         activeUserMessageId,
         busy,
+        composerDisabled,
         compactAvailable,
         compactDisabled:
             model.connection.kind !== "ready" ||

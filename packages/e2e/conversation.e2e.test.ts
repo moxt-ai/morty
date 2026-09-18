@@ -26,6 +26,25 @@ test("Given a paired workspace, When the user pastes an image into the chat box,
     await expect(page.getByRole("list", { name: "Attachments", exact: true })).toHaveCount(0);
 });
 
+test("Given an agent is working, When the user sends a follow-up, Then the follow-up is queued", async ({
+    runtime,
+}) => {
+    await runtime.openPairedChat();
+    const { page } = runtime;
+    const composer = page.getByTestId(dataTestId.messageComposer);
+    const send = page.getByTestId(dataTestId.sendMessage);
+
+    await composer.fill("wait for steering");
+    await send.click();
+    await expect(send).toHaveAttribute("aria-label", "Stop agent output");
+
+    await expect(composer).toBeEnabled();
+    await composer.fill("focus on the public API");
+    await composer.press("Enter");
+
+    await expect(page.getByTestId(dataTestId.queuedMessage)).toHaveText("focus on the public API");
+});
+
 test("Given a paired workspace, When a user creates and reloads conversations, Then prompts and replies stay in their selected conversation", async ({
     runtime,
 }) => {

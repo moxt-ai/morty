@@ -1,5 +1,6 @@
 import { CornerUpLeft, LoaderCircle, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
+import { dataTestId } from "../../data-testid.ts";
 import type { ChatQueuedMessage } from "../../view-models/chat/session-message-queue-store.ts";
 
 function QueueAction({
@@ -60,6 +61,7 @@ export function ChatMessageQueue({
                         return (
                             <li
                                 className="flex min-h-10 items-center gap-2 rounded-xl px-2 py-1"
+                                data-testid={dataTestId.queuedMessage}
                                 key={message.commandId}
                             >
                                 <span

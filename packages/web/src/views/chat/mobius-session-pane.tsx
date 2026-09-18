@@ -197,7 +197,7 @@ export function MobiusSessionPane({
                     />
                 }
                 attachments={model.attachments}
-                disabled={presentation.busy}
+                disabled={presentation.composerDisabled}
                 draft={model.draft}
                 error={presentation.composerError}
                 onAttachmentsChange={pane.store.getState().setAttachments}
