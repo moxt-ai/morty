@@ -12,6 +12,7 @@
         "dev": "vite",
         "build": "pnpm build:setup && vite build",
         "build:setup": "pnpm --filter @moxt-ai/mobius-chat-setup build",
+        "publish:web-assets": "bash scripts/publish-web-assets.sh",
         "typecheck": "pnpm typegen && pnpm --filter './packages/**' --recursive --if-present typecheck && pnpm --filter './packages/**' --recursive --if-present typecheck:tests",
         "check:no-chinese": "node scripts/check-no-chinese.ts",
         "lint": "biome ci --error-on-warnings && pnpm check:no-chinese && pnpm check:architecture",

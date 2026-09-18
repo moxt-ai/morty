@@ -15,8 +15,22 @@ const sentry = v.parse(
     }),
     process.env,
 );
+const cloudflareEnvironment = v.parse(v.optional(v.picklist(["staging", "production"])), process.env["CLOUDFLARE_ENV"]);
+const assetOrigin =
+    cloudflareEnvironment === "staging"
+        ? "https://assets.mobius-chat.paradev.biz"
+        : cloudflareEnvironment === "production"
+          ? "https://assets.mobius-chat.paraflow.biz"
+          : undefined;
 
 export default defineConfig({
+    ...(assetOrigin === undefined
+        ? {}
+        : {
+              experimental: {
+                  renderBuiltUrl: (filename: string) => `${assetOrigin}/${filename}`,
+              },
+          }),
     plugins: [
         react(),
         tailwindcss(),

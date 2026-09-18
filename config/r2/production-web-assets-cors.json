@@ -1,0 +1,12 @@
+{
+    "rules": [
+        {
+            "allowed": {
+                "origins": ["https://mobius-chat.paraflow.biz"],
+                "methods": ["GET"],
+                "headers": ["*"]
+            },
+            "maxAgeSeconds": 86400
+        }
+    ]
+}
