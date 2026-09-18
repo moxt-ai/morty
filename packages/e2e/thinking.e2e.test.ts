@@ -35,6 +35,9 @@ test("Given an agent still thinking, When a user expands, collapses and reloads 
     const working = page.getByRole("status", { name: "Agent working" });
     await expect(thinking).toBeVisible();
     await expect(working).toBeVisible();
+    await expect(
+        page.getByText("Agent updates stopped. Check your local agent or reconnect.", { exact: true }),
+    ).toHaveCount(0);
     await expect(thinking.locator("summary")).toContainText("Thinking…");
     await thinking.locator("summary").click();
     await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toBeVisible();
@@ -44,6 +47,9 @@ test("Given an agent still thinking, When a user expands, collapses and reloads 
     await expect(working).toBeVisible();
     await page.reload();
     await expect(working).toBeVisible();
+    await expect(
+        page.getByText("Agent updates stopped. Check your local agent or reconnect.", { exact: true }),
+    ).toHaveCount(0);
     await thinking.locator("summary").click();
     await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toHaveCount(1);
     await page.setViewportSize({ width: 390, height: 844 });

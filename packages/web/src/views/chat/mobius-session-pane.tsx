@@ -50,6 +50,8 @@ type LocalInteraction =
     | { readonly kind: "permission"; readonly permission: PermissionInteraction }
     | { readonly kind: "elicitation"; readonly elicitation: ElicitationInteraction };
 
+const ACTIVE_ATTEMPT_KINDS: ReadonlySet<string> = new Set(["none", "dispatching", "running", "waiting_input"]);
+
 function acceptedUrlInteraction(interaction: ServiceInteraction): boolean {
     if (
         interaction.request.kind !== "elicitation" ||
@@ -208,8 +210,8 @@ export function MobiusSessionPane({
         }),
     );
     const delivery = useStore(deliveryStore);
-    const [taskControlsStore] = useState(() =>
-        createSessionTaskControlsStore({
+    const [taskControlsStore] = useState(() => {
+        const store = createSessionTaskControlsStore({
             commands: session.result.ready.commands,
             steeringSupported: session.result.ready.capabilities.steering,
             port: {
@@ -228,8 +230,12 @@ export function MobiusSessionPane({
                     return await client.turns.submit(sessionId, request, signal);
                 },
             },
-        }),
-    );
+        });
+        if (session.result.action === "conversation" && session.result.activeTurn.kind === "running") {
+            store.getState().start(session.result.activeTurn.commandId, session.result.activeTurn.turnId);
+        }
+        return store;
+    });
     const [remoteAccessStore] = useState(() =>
         createRemoteAccessStore(endRemoteAccess ?? (async () => Promise.resolve())),
     );
@@ -259,7 +265,11 @@ export function MobiusSessionPane({
     const [interactions, setInteractions] = useState<readonly LocalInteraction[]>([]);
     const [operation, setOperation] = useState<Operation>({ kind: "idle" });
     const lifetime = useRef(new AbortController());
-    const command = useRef("");
+    const command = useRef(
+        session.result.action === "conversation" && session.result.activeTurn.kind === "running"
+            ? session.result.activeTurn.commandId
+            : "",
+    );
     const [connection, setConnection] = useState<
         | { readonly kind: "loading" }
         | { readonly kind: "ready"; readonly client: MobiusClient }
@@ -323,6 +333,16 @@ export function MobiusSessionPane({
             );
             deliveryStore.getState().reconcile(saved.messages.map((message) => message.commandId));
             lastSequence = BigInt(saved.lastCommittedSequence);
+            const activeMessage = saved.messages.find((message) => ACTIVE_ATTEMPT_KINDS.has(message.attempt.kind));
+            if (activeMessage === undefined) {
+                const currentCommand = command.current;
+                if (currentCommand !== "") {
+                    taskControlsStore.getState().finish(currentCommand);
+                    command.current = "";
+                }
+            } else {
+                command.current = activeMessage.commandId;
+            }
             const history = session.result.history;
             const initial: readonly SessionMessage[] =
                 history.status === "available"
@@ -726,6 +746,7 @@ export function MobiusSessionPane({
     const controlRunning = activeControl !== null;
     const busy =
         connection.kind !== "ready" ||
+        command.current !== "" ||
         delivery.state.kind === "submitting" ||
         delivery.state.kind === "delivery-unknown" ||
         operation.kind === "sending" ||
@@ -743,7 +764,7 @@ export function MobiusSessionPane({
                 ? activeControl.active.commandId
                 : taskControls.operation.kind === "compacting"
                   ? taskControls.operation.commandId
-                  : null;
+                  : command.current || null;
     const compactAvailable = findCompactCommand(taskControls.commands) !== null;
     const taskControlError = taskControls.feedback.kind === "failed" ? taskControls.feedback.message : "";
     if (endRemoteAccess !== undefined && remoteAccess.state.kind === "ended") {

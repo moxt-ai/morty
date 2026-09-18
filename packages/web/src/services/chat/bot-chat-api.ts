@@ -65,6 +65,9 @@ export interface ChatDraftConfiguration {
         readonly valueType: "select" | "boolean";
     };
 }
+export type ConversationActiveTurn =
+    | { readonly kind: "idle" }
+    | { readonly kind: "running"; readonly commandId: string; readonly turnId: string };
 const sessionAccessSchema = v.object({
     sessionId: identifier,
     projectId: identifier,
@@ -195,10 +198,11 @@ export class BotChatApi {
             v.object({ turnId: identifier }),
             await this.#request(botId, "turns", { sessionId: v.parse(identifier, sessionId), ...request }, signal),
         );
-    readonly conversationSession = (access: ChatAccess) => ({
+    readonly conversationSession = (access: ChatAccess, activeTurn: ConversationActiveTurn) => ({
         agentRef: access.agentRef,
         result: {
             action: "conversation" as const,
+            activeTurn,
             targetSessionId: access.sessionId,
             ready: decodeSessionReadyEvent(JSON.stringify(access.ready)),
             history: { status: "unavailable" as const },

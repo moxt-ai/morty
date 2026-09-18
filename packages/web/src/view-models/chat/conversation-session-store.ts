@@ -47,7 +47,7 @@ export function createConversationSessionStore(
                     state: {
                         kind: "ready",
                         conversationId: access.conversationId,
-                        session: requests.conversationSession(access),
+                        session: requests.conversationSession(access, { kind: "idle" }),
                     },
                 });
             } catch (cause) {
@@ -61,7 +61,7 @@ export function createConversationSessionStore(
             set({ state: { kind: "opening" } });
             try {
                 const access = await requests.createConversation(botId, conversationKey, settings, signal, title);
-                await requests.submitTurn(
+                const accepted = await requests.submitTurn(
                     botId,
                     access.sessionId,
                     {
@@ -83,7 +83,11 @@ export function createConversationSessionStore(
                     state: {
                         kind: "ready",
                         conversationId: access.conversationId,
-                        session: requests.conversationSession(access),
+                        session: requests.conversationSession(access, {
+                            kind: "running",
+                            commandId: conversationKey,
+                            turnId: accepted.turnId,
+                        }),
                     },
                 });
             } catch (cause) {
