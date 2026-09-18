@@ -4,6 +4,7 @@ import {
     decodeSessionElicitationResolvedEvent,
     decodeSessionPermissionRequestedEvent,
     decodeSessionPermissionResolvedEvent,
+    HttpTransport,
     MobiusAgentActivityEvent,
     MobiusAgentMessageEvent,
     MobiusApiError,
@@ -34,6 +35,7 @@ import {
     type SessionReadyEvent,
     StaticMobiusCredentialProvider,
     type WorkspaceEntriesEvent,
+    WsTransport,
 } from "@moxt-ai/mobius-sdk";
 import {
     type AgentInstallCancelRequest,
@@ -141,15 +143,18 @@ class RefreshingBrowserCredentialProvider {
 class BrowserServiceClients {
     readonly owner: MobiusClient;
     readonly scoped: MobiusClient;
+    readonly #transport: WsTransport;
 
-    constructor(owner: MobiusClient, scoped: MobiusClient) {
+    constructor(owner: MobiusClient, scoped: MobiusClient, transport: WsTransport) {
         this.owner = owner;
         this.scoped = scoped;
+        this.#transport = transport;
     }
 
     readonly close = (): void => {
         this.scoped.close();
         this.owner.close();
+        this.#transport.close();
     };
 }
 
@@ -183,11 +188,13 @@ async function sha256(bytes: Uint8Array, signal: AbortSignal): Promise<string> {
 }
 
 async function connectBrowserServiceClients(connection: ChannelConnection): Promise<BrowserServiceClients> {
+    const transport = new WsTransport();
+    const directTransport = new DirectMobiusTransport(connection.appId, transport, new HttpTransport());
     const owner = new MobiusClient({
         credentialProvider: new StaticMobiusCredentialProvider(connection.accessToken),
         endpoint: connection.mobiusBaseUrl,
         projectId: connection.projectId,
-        transport: new DirectMobiusTransport(connection.appId),
+        transport: directTransport,
     });
     const signal = AbortSignal.timeout(20_000);
     try {
@@ -201,11 +208,13 @@ async function connectBrowserServiceClients(connection: ChannelConnection): Prom
                 credentialProvider: new RefreshingBrowserCredentialProvider(owner, credential),
                 endpoint: connection.mobiusBaseUrl,
                 projectId: connection.projectId,
-                transport: new DirectMobiusTransport(connection.appId),
+                transport: directTransport,
             }),
+            transport,
         );
     } catch (error) {
         owner.close();
+        transport.close();
         throw error;
     }
 }
