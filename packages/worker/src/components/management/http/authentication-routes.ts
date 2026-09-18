@@ -1,13 +1,18 @@
 import * as v from "valibot";
 import { projectObject } from "../../../gateway/project-object-routing.ts";
 import { json } from "../../../infra/http.ts";
-import { bodyParser } from "../../../middleware/body-parser.ts";
+import { bodyParser, readJsonBody } from "../../../middleware/body-parser.ts";
 import { serverTiming } from "../../../middleware/server-timing.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { projectLocationHint } from "../util/project-location.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
 
 const transferInput = v.pipe(v.object({ code: v.string() }), v.readonly());
+const anonymousUserInput = v.strictObject({
+    locationHint: v.optional(
+        v.picklist(["wnam", "enam", "sam", "weur", "eeur", "apac", "apac-ne", "apac-se", "oc", "afr", "me"]),
+    ),
+});
 const pairingInput = v.object({ botId: v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u)) });
 const pairingRedemptionInput = v.object({ token: v.string() });
 const bindingInput = v.pipe(
@@ -60,7 +65,14 @@ export function createAuthenticationRoutes() {
             }),
         )
         .post("/identity/anonymous-users", async (context) => {
-            const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]);
+            const request = context.req.raw;
+            const signal = AbortSignal.any([request.signal, AbortSignal.timeout(45000)]);
+            const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+            const requestedLocation =
+                contentType === "application/json"
+                    ? v.parse(anonymousUserInput, await readJsonBody(request))
+                    : undefined;
+            signal.throwIfAborted();
             const userId = `usr_${crypto.randomUUID()}`;
             const timing = context.get("operationTiming");
             if (timing === undefined) {
@@ -74,7 +86,7 @@ export function createAuthenticationRoutes() {
                         userId,
                         "Personal workspace",
                         signal,
-                        projectLocationHint(context.req.raw),
+                        requestedLocation?.locationHint ?? projectLocationHint(request),
                     ),
             );
             const response = await timing.measure(

@@ -1,6 +1,17 @@
 import * as v from "valibot";
 
-export type ProjectLocationHint = "apac" | "apac-ne" | "apac-se" | "wnam";
+export type ProjectLocationHint =
+    | "wnam"
+    | "enam"
+    | "sam"
+    | "weur"
+    | "eeur"
+    | "apac"
+    | "apac-ne"
+    | "apac-se"
+    | "oc"
+    | "afr"
+    | "me";
 
 const northeastAsia = new Set(["CN", "HK", "JP", "KP", "KR", "MO", "MN", "TW"]);
 const southeastAsia = new Set(["BN", "ID", "KH", "LA", "MM", "MY", "PH", "SG", "TH", "TL", "VN"]);

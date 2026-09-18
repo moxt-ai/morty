@@ -42,6 +42,18 @@ const bindingSchema = v.variant("kind", [
 export type AnonymousIdentity = v.InferOutput<typeof identitySchema>;
 export type IdentityTransfer = v.InferOutput<typeof transferSchema>;
 export type ClerkBinding = v.InferOutput<typeof bindingSchema>;
+export type WorkspaceLocation =
+    | "wnam"
+    | "enam"
+    | "sam"
+    | "weur"
+    | "eeur"
+    | "apac"
+    | "apac-ne"
+    | "apac-se"
+    | "oc"
+    | "afr"
+    | "me";
 
 interface Options {
     readonly fetchRequest: (request: Request) => Promise<Response>;
@@ -92,6 +104,26 @@ export class AnonymousIdentityApi {
                 }
             }
         }
+        this.#saveIdentity(created);
+        return created;
+    };
+
+    readonly replaceWorkspace = async (
+        locationHint: WorkspaceLocation,
+        requestSignal: AbortSignal,
+    ): Promise<AnonymousIdentity> => {
+        const created = v.parse(
+            identitySchema,
+            await this.#request(
+                "/identity/anonymous-users",
+                {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ locationHint }),
+                },
+                requestSignal,
+            ),
+        );
         this.#saveIdentity(created);
         return created;
     };

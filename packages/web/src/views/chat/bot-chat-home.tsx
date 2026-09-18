@@ -6,17 +6,20 @@ import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
-import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
+import type { IdentityTransfer, WorkspaceLocation } from "../../services/identity/anonymous-identity-api.ts";
 import { createBotChatHomeStore, setupDescription } from "../../view-models/chat/bot-chat-home-store.ts";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
 import { MobiusSessionPane } from "./mobius-session-pane.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
+import { WorkspaceRegionSelector } from "./workspace-region-selector.tsx";
 
 export function BotChatHome({
     requests,
     createTransfer,
     endRemoteAccess,
+    projectId,
+    replaceWorkspace,
 }: {
     readonly requests: Pick<
         BotChatApi,
@@ -41,6 +44,8 @@ export function BotChatHome({
     >;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
     readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
+    readonly projectId: string;
+    readonly replaceWorkspace?: (location: WorkspaceLocation, signal: AbortSignal) => Promise<void>;
 }) {
     const [store] = useState(() =>
         createBotChatHomeStore(requests, {
@@ -214,6 +219,12 @@ export function BotChatHome({
                                     <p className="mt-3 text-sm leading-6 text-muted-foreground">
                                         {setupDescription(model.view.reason)}
                                     </p>
+                                    {model.view.reason === "unconfigured" && replaceWorkspace !== undefined && (
+                                        <WorkspaceRegionSelector
+                                            projectId={projectId}
+                                            replaceWorkspace={replaceWorkspace}
+                                        />
+                                    )}
                                     <PairingInstruction requests={requests} />
                                     <p role="status" className="mt-4 text-sm text-muted-foreground">
                                         Chat will open when the server reports that this Bot is active and its selected

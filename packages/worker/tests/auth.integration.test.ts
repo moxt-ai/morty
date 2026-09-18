@@ -148,6 +148,36 @@ test.each([
     },
 );
 
+test.each([
+    ["wnam", "wn"],
+    ["enam", "en"],
+    ["sam", "sa"],
+    ["weur", "we"],
+    ["eeur", "ee"],
+    ["apac", "ap"],
+    ["apac-ne", "an"],
+    ["apac-se", "as"],
+    ["oc", "oc"],
+    ["afr", "af"],
+    ["me", "me"],
+])(
+    "Given a fresh workspace, When the user selects %s, Then its replacement uses the %s Project location code",
+    async (locationHint, projectCode) => {
+        const response = await worker.fetch(
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/anonymous-users`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ locationHint }),
+            }),
+            slackConfiguration(),
+        );
+
+        expect(response.status).toBe(201);
+        const identity = v.parse(v.object({ projectId: v.string() }), await response.json());
+        expect(identity.projectId).toMatch(new RegExp(`^prj_${projectCode}_01_`, "u"));
+    },
+);
+
 test("Given Projects in separate regions, When users reopen and transfer their workspaces, Then Project objects retain their identities and reject another Project", async () => {
     const environment = slackConfiguration();
     class RegionalRequest extends Request {
