@@ -49,13 +49,18 @@ export function AgentThinking({ autoOpen, entries }: ThinkingPresentation) {
                                     </div>
                                 ) : (
                                     <details aria-label={`Tool: ${entry.title}`} className="group/tool min-w-0">
-                                        <summary className="flex min-h-8 w-fit cursor-pointer list-none items-center gap-2 rounded-lg px-1 text-sm text-copy-secondary outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+                                        <summary
+                                            className="flex min-h-8 w-full min-w-0 cursor-pointer list-none items-center gap-2 rounded-lg px-1 text-sm text-copy-secondary outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                                            title={entry.title}
+                                        >
                                             <ChevronDown
                                                 aria-hidden="true"
-                                                className="size-3.5 -rotate-90 transition-transform group-open/tool:rotate-0 motion-reduce:transition-none"
+                                                className="size-4 shrink-0 -rotate-90 transition-transform group-open/tool:rotate-0 motion-reduce:transition-none"
                                             />
-                                            <Wrench aria-hidden="true" className="size-4" />
-                                            <span>{entry.title}</span>
+                                            <Wrench aria-hidden="true" className="size-4 shrink-0" />
+                                            <span className="min-w-0 flex-1 truncate whitespace-nowrap">
+                                                {entry.title}
+                                            </span>
                                         </summary>
                                         <div className="mt-1 ml-5 grid min-w-0 gap-2 text-xs">
                                             {entry.input.length > 0 && (
