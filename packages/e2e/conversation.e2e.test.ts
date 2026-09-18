@@ -81,6 +81,25 @@ test("Given a paired workspace, When the user shares their machine, Then Chat pr
     await expect(share.getByText(/used up to five times/iu)).toBeVisible();
 
     await share.getByRole("button", { name: "Close dialog", exact: true }).click();
+    const browser = page.context().browser();
+    assert.ok(browser);
+    for (let use = 0; use < 5; use += 1) {
+        const context = await browser.newContext();
+        const transferred = await context.newPage();
+        await transferred.goto(firstUrl ?? "");
+        await transferred.getByRole("button", { name: "Use workspace", exact: true }).click();
+        await expect(transferred.getByRole("main", { name: "Chat", exact: true })).toBeVisible();
+        await context.close();
+    }
+    const exhaustedContext = await browser.newContext();
+    const exhausted = await exhaustedContext.newPage();
+    await exhausted.goto(firstUrl ?? "");
+    await exhausted.getByRole("button", { name: "Use workspace", exact: true }).click();
+    await expect(exhausted.getByRole("alert")).toHaveText(
+        "This transfer link has expired or reached its five-use limit.",
+    );
+    await exhaustedContext.close();
+
     await page.getByRole("button", { name: "Share My Machine", exact: true }).click();
     share = page.getByRole("dialog", { name: "Share My Machine", exact: true });
     const secondUrl = await share.getByRole("link", { name: "Open sharing link", exact: true }).getAttribute("href");
