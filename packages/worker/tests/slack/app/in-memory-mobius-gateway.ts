@@ -38,20 +38,6 @@ export class InMemoryMobius implements SlackPlatformGateway {
         return { status: "pending" };
     };
 
-    readonly migrateLegacyBot = async (_projectId: string, _botId: string, _userId: string, signal: AbortSignal) => {
-        signal.throwIfAborted();
-        return {
-            configuration: {
-                bindingId: "binding-1",
-                runtimeId: "runtime-1",
-                agentRef: "agent-1",
-                workspaceRef: "workspace-1",
-                agentConfigRevision: 1,
-            },
-            instructions: "Answer as the configured Chat Bot.",
-        };
-    };
-
     readonly openAutomatedChatSession = async (
         _projectId: string,
         selection: { readonly bindingId: string },

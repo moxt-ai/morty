@@ -33,16 +33,11 @@ export class ChatBotBindingService {
         botId: string,
         signal: AbortSignal,
     ): Promise<LocalSlackBot & { readonly configuration: BotConfiguration }> => {
-        let bot = await this.#storage.readOwnedBot(tenant, botId, signal);
+        const bot = await this.#storage.readOwnedBot(tenant, botId, signal);
         if (bot === null) {
             throw new SlackServiceError("CHAT_BOT_BINDING_NOT_CONFIGURED", "Choose a Bot owned by this Chat workspace");
         }
-        if (bot.legacyMigrationPending) {
-            const migrated = await this.#platform.migrateLegacyBot(this.#projectId, botId, tenant.tenantId, signal);
-            await this.#storage.completeLegacyBotMigration(tenant, botId, migrated, signal);
-            bot = await this.#storage.readOwnedBot(tenant, botId, signal);
-        }
-        if (bot === null || bot.configuration === null) {
+        if (bot.configuration === null) {
             throw new SlackServiceError(
                 "CHAT_BOT_BINDING_NOT_CONFIGURED",
                 "Configure this Chat Bot before using Slack",

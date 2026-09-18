@@ -91,28 +91,9 @@ export class ChatService {
     readonly workspace = async (scope: ChatScope) => await this.#localWorkspace(scope);
 
     readonly #bot = async (scope: ChatScope) => {
-        let bot = await this.#managedBots.readBot(scope.userId, scope.botId, scope.signal);
+        const bot = await this.#managedBots.readBot(scope.userId, scope.botId, scope.signal);
         if (bot === null) {
             throw new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);
-        }
-        if (bot.legacyMigrationPending) {
-            const migrated = await this.#platform.migrateLegacyBot(
-                scope.projectId,
-                scope.botId,
-                scope.userId,
-                scope.signal,
-            );
-            await this.#managedBots.completeLegacyMigration(
-                scope.userId,
-                scope.botId,
-                migrated,
-                Date.now(),
-                scope.signal,
-            );
-            bot = await this.#managedBots.readBot(scope.userId, scope.botId, scope.signal);
-            if (bot === null) {
-                throw new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);
-            }
         }
         return bot;
     };

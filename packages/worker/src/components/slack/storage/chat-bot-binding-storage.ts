@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
 import { managedBot, slackApp, slackChatBotBinding } from "../../../schema/index.ts";
-import { type BotConfiguration, botConfigurationSchema } from "../../management/entity/bot-configuration.ts";
+import { botConfigurationSchema } from "../../management/entity/bot-configuration.ts";
 import { type ChatBotBinding, chatBotBindingSchema } from "../entity/chat-bot-binding";
 import type { TenantContext } from "../entity/tenant-context";
 import type { DatabaseResolver } from "../infra/database-resolver";
@@ -12,7 +12,6 @@ const localBotSchema = v.pipe(
         botId: identifier,
         configuration: v.nullable(botConfigurationSchema),
         instructions: v.pipe(v.string(), v.maxLength(100000)),
-        legacyMigrationPending: v.boolean(),
     }),
     v.readonly(),
 );
@@ -43,7 +42,6 @@ export class ChatBotBindingStorage {
                         workspaceRef: managedBot.workspaceRef,
                         agentConfigRevision: managedBot.agentConfigRevision,
                         instructions: managedBot.instructions,
-                        legacyMigrationPending: managedBot.legacyMigrationPending,
                     })
                     .from(managedBot)
                     .where(and(eq(managedBot.userId, tenant.tenantId), eq(managedBot.botId, botId)))
@@ -57,44 +55,7 @@ export class ChatBotBindingStorage {
             botId: row.botId,
             configuration: configuration.success ? configuration.output : null,
             instructions: row.instructions,
-            legacyMigrationPending: row.legacyMigrationPending,
         });
-    };
-
-    readonly completeLegacyBotMigration = async (
-        tenant: TenantContext,
-        botId: string,
-        migrated: { readonly configuration: BotConfiguration | null; readonly instructions: string },
-        signal: AbortSignal,
-    ): Promise<void> => {
-        const configuration =
-            migrated.configuration === null ? null : v.parse(botConfigurationSchema, migrated.configuration);
-        await this.#database.resolve().execute(
-            "run",
-            1,
-            signal,
-            async (database) =>
-                await database
-                    .update(managedBot)
-                    .set({
-                        bindingId: configuration?.bindingId ?? null,
-                        runtimeId: configuration?.runtimeId ?? null,
-                        agentRef: configuration?.agentRef ?? null,
-                        workspaceRef: configuration?.workspaceRef ?? null,
-                        agentConfigRevision: configuration?.agentConfigRevision ?? null,
-                        instructions: migrated.instructions,
-                        legacyMigrationPending: false,
-                        updatedAt: Date.now(),
-                    })
-                    .where(
-                        and(
-                            eq(managedBot.userId, tenant.tenantId),
-                            eq(managedBot.botId, botId),
-                            eq(managedBot.legacyMigrationPending, true),
-                        ),
-                    )
-                    .run(),
-        );
     };
 
     readonly saveBinding = async (
@@ -113,7 +74,7 @@ export class ChatBotBindingStorage {
             async (database) =>
                 await database
                     .insert(slackChatBotBinding)
-                    .values({ ...value, legacyMigrationPending: false })
+                    .values(value)
                     .onConflictDoUpdate({
                         target: [slackChatBotBinding.tenantId, slackChatBotBinding.slackBotId],
                         set: {
@@ -126,7 +87,6 @@ export class ChatBotBindingStorage {
                             workspaceRef: value.workspaceRef,
                             agentConfigRevision: value.agentConfigRevision,
                             instructions: value.instructions,
-                            legacyMigrationPending: false,
                         },
                     })
                     .run(),
@@ -148,11 +108,7 @@ export class ChatBotBindingStorage {
                     .select()
                     .from(slackChatBotBinding)
                     .where(
-                        and(
-                            eq(slackChatBotBinding.tenantId, tenantId),
-                            eq(slackChatBotBinding.slackBotId, slackBotId),
-                            eq(slackChatBotBinding.legacyMigrationPending, false),
-                        ),
+                        and(eq(slackChatBotBinding.tenantId, tenantId), eq(slackChatBotBinding.slackBotId, slackBotId)),
                     )
                     .get(),
         );

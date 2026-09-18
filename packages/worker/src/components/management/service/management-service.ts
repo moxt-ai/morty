@@ -83,18 +83,9 @@ export class ManagementService {
     };
 
     readonly readBot = async (userId: string, botId: string, signal: AbortSignal) => {
-        let bot = await this.#managedBots.readBot(userId, botId, signal);
+        const bot = await this.#managedBots.readBot(userId, botId, signal);
         if (bot === null) {
             throw new ManagementError("BOT_NOT_FOUND", "Bot is unavailable.", 404);
-        }
-        if (bot.legacyMigrationPending) {
-            const project = await this.#requireProject(userId, signal);
-            const migrated = await this.#platform.migrateLegacyBot(project.projectId, botId, userId, signal);
-            await this.#managedBots.completeLegacyMigration(userId, botId, migrated, Date.now(), signal);
-            bot = await this.#managedBots.readBot(userId, botId, signal);
-            if (bot === null) {
-                throw new ManagementError("BOT_NOT_FOUND", "Bot is unavailable.", 404);
-            }
         }
         return {
             botId: bot.botId,

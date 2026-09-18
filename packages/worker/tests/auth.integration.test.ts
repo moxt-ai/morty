@@ -61,6 +61,9 @@ class InMemoryD1Database {
         this.#database.exec(
             readFileSync(new URL("../migrations/0011_slack_chat_bot_binding.sql", import.meta.url), "utf8"),
         );
+        this.#database.exec(
+            readFileSync(new URL("../migrations/0012_remove_legacy_bot_migration.sql", import.meta.url), "utf8"),
+        );
     }
     readonly close = () => this.#database.close();
     readonly prepare = (query: string) => new InMemoryD1Statement(query, this.#database);

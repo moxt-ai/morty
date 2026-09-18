@@ -14,6 +14,7 @@
     "devDependencies": {
         "@cloudflare/vitest-plugin": "^1.1.4",
         "@moxt-ai/mobius-test": "link:../../third-party/mobius/tests",
+        "drizzle-kit": "0.31.8",
         "esbuild": "0.25.12",
         "miniflare": "5.20260903.0-alpha"
     },

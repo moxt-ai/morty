@@ -9,6 +9,7 @@ import remoteAccess from "../../migrations/0008_remote_access.sql?raw";
 import managedSessionImport from "../../migrations/0009_chat_managed_import.sql?raw";
 import chatOwnedBot from "../../migrations/0010_chat_owned_bot.sql?raw";
 import slackChatBotBinding from "../../migrations/0011_slack_chat_bot_binding.sql?raw";
+import removeLegacyBotMigration from "../../migrations/0012_remove_legacy_bot_migration.sql?raw";
 
 const migrations = [
     management,
@@ -22,6 +23,7 @@ const migrations = [
     managedSessionImport,
     chatOwnedBot,
     slackChatBotBinding,
+    removeLegacyBotMigration,
 ];
 
 type BoundValue = ArrayBuffer | string | number | null;

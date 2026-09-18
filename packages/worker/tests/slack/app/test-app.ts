@@ -116,7 +116,6 @@ export async function createTestApplication(_singleDatabase = false) {
                 workspaceRef: "workspace-1",
                 agentConfigRevision: 1,
                 instructions: "Answer as the configured Chat Bot.",
-                legacyMigrationPending: false,
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
             }),

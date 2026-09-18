@@ -18,7 +18,7 @@ afterEach(() => vi.useRealTimers());
 test.each([true, false])(
     "Given a paired workspace with settings available=%s, When a draft loads models and sends, Then settings are discovered without retaining a Session and chat access reports its server timings",
     async (settingsAvailable) => {
-        const platform = await platformPeer({ activeBots: true, settingsAvailable });
+        const platform = await platformPeer({ agentsOnline: true, settingsAvailable });
         const database = new InMemoryD1Database();
         const storage = new Miniflare(
             convertV4MiniflareOptions({
@@ -79,16 +79,22 @@ test.each([true, false])(
             if (bot === undefined) {
                 throw new Error("Expected a Bot");
             }
-            platform.seedLegacyBot(identity.projectId, bot.botId);
-            await database
-                .prepare("UPDATE managed_bot SET legacy_migration_pending = 1 WHERE bot_id = ?")
-                .bind(bot.botId)
-                .run();
+            const profile = await app.request(
+                `https://cloud.test/mobius-cloud/api/projects/${identity.projectId}/management/bots/${bot.botId}`,
+                {
+                    method: "PATCH",
+                    headers: {
+                        authorization: `Bearer ${identity.token}`,
+                        "content-type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        displayName: "Test Bot",
+                        instructions: "Answer as the configured Chat Bot.",
+                    }),
+                },
+            );
+            expect(profile.status).toBe(200);
             expect((await request(`chat/bots/${bot.botId}/workspace`, {})).status).toBe(200);
-            const migrationRequests = platform.legacyBotRequestCount();
-            expect(migrationRequests).toBeGreaterThan(0);
-            expect((await request(`chat/bots/${bot.botId}/workspace`, {})).status).toBe(200);
-            expect(platform.legacyBotRequestCount()).toBe(migrationRequests);
             const configured = await request(`chat/bots/${bot.botId}/setup`, {
                 runtimeId: "runtime-1",
                 agentRef: "agent-one",
@@ -166,7 +172,7 @@ test.each([true, false])(
                             type: "embedded",
                             uri: "mobius-chat://bot/instructions",
                             name: "Bot instructions",
-                            text: "Answer as the migrated Bot.",
+                            text: "Answer as the configured Chat Bot.",
                         },
                     ],
                 },
