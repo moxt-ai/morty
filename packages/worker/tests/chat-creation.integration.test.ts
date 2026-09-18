@@ -16,7 +16,7 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 test.each([true, false])(
-    "Given a paired workspace with settings available=%s, When Chat configures a draft, Then available cwd and model settings create its Session and unavailable settings fail closed",
+    "Given a paired workspace with settings available=%s, When Chat configures a draft and sends a supported Turn, Then available settings deliver it and unavailable settings fail closed",
     async (settingsAvailable) => {
         const platform = await platformPeer({ agentsOnline: true, settingsAvailable });
         const database = new InMemoryD1Database();
@@ -183,18 +183,20 @@ test.each([true, false])(
                 (await projectClient.sessions.read(first.conversationId, AbortSignal.timeout(5000))).defaultBinding
                     .workspaceRef,
             ).toBe(input.workspaceRef);
+            const image = { data: "A".repeat(3_000_000), mimeType: "image/png", name: "large-screenshot.png" };
             const turn = await request(`chat/bots/${bot.botId}/turns`, {
                 sessionId: first.conversationId,
                 additionalDirectoryIds: [],
                 artifactIds: [],
                 content: "Hello",
                 idempotencyKey: "command-1",
-                images: [],
+                images: [image],
                 resources: [],
             });
             expect(turn.status).toBe(200);
             expect(platform.submittedTurns()).toMatchObject([
                 {
+                    images: [image],
                     resources: [
                         {
                             type: "embedded",

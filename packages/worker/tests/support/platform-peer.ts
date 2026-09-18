@@ -131,7 +131,12 @@ export async function platformPeer({
             const sessionId = v.parse(v.string(), turnPath[2]);
             if (sessions.has(`${projectId}:${sessionId}`)) {
                 const input = v.parse(
-                    v.object({ content: v.string(), idempotencyKey: v.string(), resources: v.array(v.unknown()) }),
+                    v.object({
+                        content: v.string(),
+                        idempotencyKey: v.string(),
+                        images: v.array(v.unknown()),
+                        resources: v.array(v.unknown()),
+                    }),
                     JSON.parse(body),
                 );
                 submittedTurns.push(input);

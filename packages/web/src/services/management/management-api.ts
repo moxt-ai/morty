@@ -109,6 +109,7 @@ export class ManagementApi {
             throw new CloudApiError(
                 parsed.success ? parsed.output.error.code : "MANAGEMENT_UNAVAILABLE",
                 parsed.success ? parsed.output.error.message : "Bot management is unavailable.",
+                response.status,
             );
         }
         return value;
@@ -117,9 +118,11 @@ export class ManagementApi {
 
 export class CloudApiError extends Error {
     readonly code: string;
-    constructor(code: string, message: string) {
+    readonly status: number | null;
+    constructor(code: string, message: string, status: number | null = null) {
         super(message);
         this.code = code;
+        this.status = status;
         this.name = "CloudApiError";
     }
 }

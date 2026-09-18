@@ -14,6 +14,8 @@ import { instrumentD1Database, RequestAccessMetrics } from "./infra/request-acce
 import { RequestError } from "./infra/request-error.ts";
 import { errorMiddleware, rethrowHttpError } from "./middleware/error-middleware.ts";
 
+const MAXIMUM_REQUEST_BODY_BYTES = 3 * 1_024 * 1_024;
+
 const notFound = (): never => {
     throw new RequestError("NOT_FOUND", "Not found.", 404);
 };
@@ -51,7 +53,7 @@ const application: Hono<{ readonly Bindings: CloudBindings }> = new Hono<{ reado
             (context) => createApplicationDependencies(context.env).logger,
         ),
     )
-    .use("/mobius-cloud/api/*", bodyLimit({ maxSize: 110000 }))
+    .use("/mobius-cloud/api/*", bodyLimit({ maxSize: MAXIMUM_REQUEST_BODY_BYTES }))
     .all("/mobius-cloud/api", notFound)
     .all("/mobius-slack/api", notFound)
     .route("/", instructionDocumentRoutes)

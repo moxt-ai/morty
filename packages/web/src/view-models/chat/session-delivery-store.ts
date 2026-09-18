@@ -1,6 +1,7 @@
 import { MobiusApiError, MobiusCancellationError, type MobiusClient } from "@moxt-ai/mobius-sdk/browser";
 import * as v from "valibot";
 import { createStore } from "zustand/vanilla";
+import { CloudApiError } from "../../services/management/management-api.ts";
 
 type SubmitRequest = Parameters<MobiusClient["turns"]["submit"]>[1];
 type AcceptedTurn = { readonly turnId: string };
@@ -72,7 +73,10 @@ function readJournal(storage: Storage, key: string): Journal | null {
 }
 
 function isAuthoritativeFailure(cause: unknown): boolean {
-    return cause instanceof MobiusApiError && cause.status >= 400 && cause.status < 500;
+    return (
+        (cause instanceof MobiusApiError && cause.status >= 400 && cause.status < 500) ||
+        (cause instanceof CloudApiError && cause.status !== null && cause.status >= 400 && cause.status < 500)
+    );
 }
 
 export const createSessionDeliveryStore = (options: {
