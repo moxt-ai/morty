@@ -22,11 +22,13 @@ export function MobiusSessionPane({
     botId,
     requests,
     endRemoteAccess,
+    onRunningChange,
 }: {
     readonly session: OpenMobiusSession;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession" | "steerTurn" | "submitTurn">;
     readonly endRemoteAccess?: (signal: AbortSignal) => Promise<void>;
+    readonly onRunningChange: (sessionId: string, running: boolean) => void;
 }) {
     const sessionId = session.result.ready.sessionId;
     const [pane] = useState(() =>
@@ -90,6 +92,11 @@ export function MobiusSessionPane({
         await pane.store.getState().respondToElicitation(response, controller.signal);
     };
     const presentation = sessionPanePresentation(model, delivery, taskControls, messageQueue);
+    const running = model.activeCommandId !== null && delivery.state.kind !== "delivery-unknown";
+    useEffect(() => {
+        onRunningChange(sessionId, running);
+        return () => onRunningChange(sessionId, false);
+    }, [onRunningChange, running, sessionId]);
     const configure = (option: SessionConfigOption, value: string) =>
         run(async (signal) => await pane.store.getState().configure(option, value, signal));
 
@@ -159,6 +166,8 @@ export function MobiusSessionPane({
                                 activeCommandId={model.activeCommandId}
                                 activeMessageId={presentation.activeMessageId}
                                 activeUserMessageId={presentation.activeUserMessageId}
+                                deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
+                                onRetryUnknownDelivery={() => run(pane.store.getState().retryUnknownDelivery)}
                                 sessionId={sessionId}
                                 botId={botId}
                                 client={model.connection.kind === "ready" ? model.connection.client : null}
@@ -214,18 +223,6 @@ export function MobiusSessionPane({
                 outputState={presentation.outputState}
                 submitDisabled={presentation.submitDisabled}
             >
-                {delivery.state.kind === "delivery-unknown" && (
-                    <div role="alert" className="flex items-center gap-2 text-sm">
-                        <span>Delivery unknown. This message will not be sent again automatically.</span>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => run(pane.store.getState().retryUnknownDelivery)}
-                        >
-                            Retry same message
-                        </Button>
-                    </div>
-                )}
                 <ChatConfigurationMenu
                     controls={[
                         {

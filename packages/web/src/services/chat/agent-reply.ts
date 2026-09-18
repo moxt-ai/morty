@@ -2,25 +2,48 @@ import type { MobiusAgentActivityEvent, MobiusAttemptSummary } from "@moxt-ai/mo
 
 export type ReplyPhase = "working" | "waiting" | "completed" | "cancelled" | "failed" | "interrupted";
 
-type ThinkingEntry =
-    | {
-          readonly id: string;
-          readonly kind: "reasoning";
-          readonly text: string;
-          readonly status: "streaming" | "recorded";
-      }
-    | {
-          readonly id: string;
-          readonly input: string;
-          readonly kind: "tool";
-          readonly output: string;
-          readonly status: "streaming" | "recorded";
-          readonly title: string;
-      };
+type ReasoningThinkingEntry = {
+    readonly id: string;
+    readonly kind: "reasoning";
+    readonly text: string;
+    readonly status: "streaming" | "recorded";
+};
+
+export type ToolThinkingEntry = {
+    readonly content: MobiusAgentActivityEvent["content"];
+    readonly id: string;
+    readonly input: string;
+    readonly kind: "tool";
+    readonly output: string;
+    readonly state: ToolCallState;
+    readonly title: string;
+};
+
+export type ToolCallState =
+    | { readonly kind: "running" }
+    | { readonly kind: "succeeded" }
+    | { readonly kind: "failed" }
+    | { readonly kind: "unknown" };
+
+export type ThinkingEntry = ReasoningThinkingEntry | ToolThinkingEntry;
 
 export interface ThinkingPresentation {
     readonly autoOpen: boolean;
     readonly entries: readonly ThinkingEntry[];
+}
+
+function toolCallState(status: string): ToolCallState {
+    switch (status) {
+        case "pending":
+        case "running":
+            return { kind: "running" };
+        case "completed":
+            return { kind: "succeeded" };
+        case "failed":
+            return { kind: "failed" };
+        default:
+            return { kind: "unknown" };
+    }
 }
 
 function replyPhase(attempt: MobiusAttemptSummary | null, active: boolean): ReplyPhase {
@@ -64,11 +87,12 @@ export function describeAgentReply(
         }
         return [
             {
+                content: activity.content,
                 id: activity.activityId,
                 input: activity.input,
                 kind: "tool",
                 output: activity.output,
-                status,
+                state: toolCallState(activity.status),
                 title: activity.title || activity.name || activity.toolKind || "Tool call",
             },
         ];

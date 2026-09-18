@@ -60,6 +60,7 @@ export interface ChatDraftConfiguration {
     readonly bindingId: string;
     readonly workspaceRef: string;
     readonly permissionMode: string;
+    readonly workspaceLabel: string;
     readonly configuration: {
         readonly additionalDirectoryIds: readonly string[];
         readonly booleanValue: boolean;
@@ -191,7 +192,21 @@ export class BotChatApi {
         signal: AbortSignal,
         title = "New chat",
     ): Promise<ChatAccess> =>
-        v.parse(accessSchema, await this.#request(botId, "access", { conversationKey, ...settings, title }, signal));
+        v.parse(
+            accessSchema,
+            await this.#request(
+                botId,
+                "access",
+                {
+                    bindingId: settings.bindingId,
+                    configuration: settings.configuration,
+                    conversationKey,
+                    title,
+                    workspaceRef: settings.workspaceRef,
+                },
+                signal,
+            ),
+        );
     readonly submitTurn = async (
         botId: string,
         sessionId: string,
@@ -215,7 +230,11 @@ export class BotChatApi {
             signal,
         );
     };
-    readonly conversationSession = (access: ChatAccess, activeTurn: ConversationActiveTurn) => ({
+    readonly conversationSession = (
+        access: ChatAccess,
+        activeTurn: ConversationActiveTurn,
+        directoryLabel = access.workspaceRef,
+    ) => ({
         agentRef: access.agentRef,
         result: {
             action: "conversation" as const,
@@ -228,7 +247,7 @@ export class BotChatApi {
             entryId: access.sessionId,
             title: "",
             directoryId: access.workspaceRef,
-            directoryLabel: access.workspaceRef,
+            directoryLabel,
             additionalDirectories: [],
             updatedAt: null,
         },

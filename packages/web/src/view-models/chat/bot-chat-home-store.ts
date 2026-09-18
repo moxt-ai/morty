@@ -136,6 +136,7 @@ export const createBotChatHomeStore = (
         | "submitTurn"
         | "waitForWorkspaceChange"
         | "workspace"
+        | "workspaceDirectory"
     >,
     options: {
         readonly url: string;

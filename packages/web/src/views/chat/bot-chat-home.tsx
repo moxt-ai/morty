@@ -1,5 +1,5 @@
 import { MessageSquare } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { BotChatComposer, type ComposerAttachment } from "../../components/chat/bot-chat-composer.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
@@ -13,6 +13,8 @@ import { DraftChatControls } from "./draft-chat-controls.tsx";
 import { MobiusSessionPane } from "./mobius-session-pane.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
 import { WorkspaceRegionSelector } from "./workspace-region-selector.tsx";
+
+type RunningSession = { readonly kind: "idle" } | { readonly kind: "running"; readonly sessionId: string };
 
 export function BotChatHome({
     requests,
@@ -87,6 +89,7 @@ export function BotChatHome({
     const [draft, setDraft] = useState("");
     const [pairingDialogOpen, setPairingDialogOpen] = useState(false);
     const [attachments, setAttachments] = useState<readonly ComposerAttachment[]>([]);
+    const [runningSession, setRunningSession] = useState<RunningSession>({ kind: "idle" });
     const lifetime = useRef<AbortController | null>(null);
     const messageList = useRef<HTMLDivElement | null>(null);
     const messageContent = useRef<HTMLDivElement | null>(null);
@@ -131,6 +134,25 @@ export function BotChatHome({
 
     const active = model.view.kind === "switching" ? model.view.view : model.view.kind === "draft" ? model.view : null;
     const switching = model.view.kind === "switching";
+    const onRunningChange = useCallback((sessionId: string, running: boolean): void => {
+        setRunningSession((current) => {
+            if (running) {
+                return { kind: "running", sessionId };
+            }
+            return current.kind === "running" && current.sessionId === sessionId ? { kind: "idle" } : current;
+        });
+    }, []);
+    const activeSession =
+        model.sessionView.kind === "session-access"
+            ? {
+                  kind: "active" as const,
+                  directoryLabel: model.sessionView.session.entry.directoryLabel,
+                  id: model.sessionView.session.result.ready.sessionId,
+                  running:
+                      runningSession.kind === "running" &&
+                      runningSession.sessionId === model.sessionView.session.result.ready.sessionId,
+              }
+            : { kind: "none" as const };
     const clearComposer = () => {
         setDraft("");
         setAttachments([]);
@@ -162,6 +184,7 @@ export function BotChatHome({
         >
             {active !== null && (
                 <ConversationSidebar
+                    activeSession={activeSession}
                     activeId={
                         model.target.kind === "conversation-access"
                             ? model.target.conversationId
@@ -183,6 +206,7 @@ export function BotChatHome({
                     requests={requests}
                     key={model.sessionView.session.result.ready.sessionId}
                     session={model.sessionView.session}
+                    onRunningChange={onRunningChange}
                     {...(remoteAccess ? { endRemoteAccess } : {})}
                 />
             ) : (

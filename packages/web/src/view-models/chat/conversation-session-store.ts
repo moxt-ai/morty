@@ -33,7 +33,10 @@ export interface ConversationSessionStore {
 }
 
 export function createConversationSessionStore(
-    requests: Pick<BotChatApi, "access" | "conversationSession" | "createConversation" | "submitTurn">,
+    requests: Pick<
+        BotChatApi,
+        "access" | "conversationSession" | "createConversation" | "submitTurn" | "workspaceDirectory"
+    >,
 ) {
     return createStore<ConversationSessionStore>()((set) => ({
         state: { kind: "idle" },
@@ -42,12 +45,13 @@ export function createConversationSessionStore(
             set({ state: { kind: "opening" } });
             try {
                 const access = await requests.access(botId, signal, conversationId);
+                const directory = await requests.workspaceDirectory(botId, access.workspaceRef, signal);
                 signal.throwIfAborted();
                 set({
                     state: {
                         kind: "ready",
                         conversationId: access.conversationId,
-                        session: requests.conversationSession(access, { kind: "idle" }),
+                        session: requests.conversationSession(access, { kind: "idle" }, directory.directoryLabel),
                     },
                 });
             } catch (cause) {
@@ -83,11 +87,15 @@ export function createConversationSessionStore(
                     state: {
                         kind: "ready",
                         conversationId: access.conversationId,
-                        session: requests.conversationSession(access, {
-                            kind: "running",
-                            commandId: conversationKey,
-                            turnId: accepted.turnId,
-                        }),
+                        session: requests.conversationSession(
+                            access,
+                            {
+                                kind: "running",
+                                commandId: conversationKey,
+                                turnId: accepted.turnId,
+                            },
+                            settings.workspaceLabel,
+                        ),
                     },
                 });
             } catch (cause) {
