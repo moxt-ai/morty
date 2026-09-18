@@ -56,43 +56,58 @@ function ArtifactMedia({
     useEffect(() => {
         const controller = new AbortController();
         let objectUrl = "";
-        const download =
-            content.type === "image" && content.uri.length > 0
-                ? serviceClient
-                    ? serviceClient.sessions.readFile(sessionId, content.uri, controller.signal).then((file) => ({
-                          bytes: file.bytes,
-                          mimeType: file.mediaType,
-                      }))
-                    : readFile(sessionId, content.uri, controller.signal).then((file) => ({
-                          bytes: file.bytes,
-                          mimeType: file.mediaType,
-                      }))
-                : serviceClient
-                  ? serviceClient.artifacts
-                        .download(sessionId, content.artifactId, controller.signal)
-                        .then((artifact) => ({ bytes: artifact.bytes, mimeType: artifact.artifact.mediaType }))
-                  : browserClient === undefined
-                    ? readSessionArtifactBytes(channelId, sessionId, content.artifactId, controller.signal)
-                    : browserClient.artifacts
-                          .download(content.artifactId, controller.signal)
-                          .then((artifact) => ({ bytes: artifact.bytes, mimeType: artifact.artifact.mediaType }));
-        void download
-            .then((artifact) => {
+        const load = async () => {
+            try {
+                let bytes: Uint8Array;
+                let mimeType: string;
+
+                if (content.type === "image" && content.uri.length > 0) {
+                    if (serviceClient) {
+                        const file = await serviceClient.sessions.readFile(sessionId, content.uri, controller.signal);
+                        bytes = file.bytes;
+                        mimeType = file.mediaType;
+                    } else {
+                        const file = await readFile(sessionId, content.uri, controller.signal);
+                        bytes = file.bytes;
+                        mimeType = file.mediaType;
+                    }
+                } else if (serviceClient) {
+                    const artifact = await serviceClient.artifacts.download(
+                        sessionId,
+                        content.artifactId,
+                        controller.signal,
+                    );
+                    bytes = artifact.bytes;
+                    mimeType = artifact.artifact.mediaType;
+                } else if (browserClient) {
+                    const artifact = await browserClient.artifacts.download(content.artifactId, controller.signal);
+                    bytes = artifact.bytes;
+                    mimeType = artifact.artifact.mediaType;
+                } else {
+                    const artifact = await readSessionArtifactBytes(
+                        channelId,
+                        sessionId,
+                        content.artifactId,
+                        controller.signal,
+                    );
+                    bytes = artifact.bytes;
+                    mimeType = artifact.mimeType;
+                }
+
                 const safeMime = content.type === "image" ? SAFE_IMAGE_MIME : SAFE_VIDEO_MIME;
-                if (controller.signal.aborted || !safeMime.test(artifact.mimeType)) {
+                if (controller.signal.aborted || !safeMime.test(mimeType)) {
                     return;
                 }
-                objectUrl = URL.createObjectURL(
-                    new Blob([Uint8Array.from(artifact.bytes)], { type: artifact.mimeType }),
-                );
+                objectUrl = URL.createObjectURL(new Blob([Uint8Array.from(bytes)], { type: mimeType }));
                 setSource(objectUrl);
-            })
-            .catch((error: unknown) => {
+            } catch (error: unknown) {
                 if (!controller.signal.aborted) {
                     console.error("Agent media could not be loaded", error);
                     setSource("");
                 }
-            });
+            }
+        };
+        void load();
         return () => {
             controller.abort();
             if (objectUrl.length > 0) {
