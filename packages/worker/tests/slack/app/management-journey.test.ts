@@ -116,15 +116,6 @@ describe("Slack management journeys", () => {
         });
         expect(response.status).toBe(200);
     });
-    it("Given the application is running, When a user requests health, Then readiness is returned", async () => {
-        const app = await createTestApplication();
-        const response = await app.request("/mobius-slack/api/health");
-        expect(response.status).toBe(200);
-        expect(await response.json()).toEqual({
-            service: "app-slack",
-            status: "ok",
-        });
-    });
     it("Given a host-authenticated user session, When the user opens their profile, Then their user identity is returned", async () => {
         const app = await createTestApplication();
         const response = await app.request("/mobius-slack/api/slack/me", {

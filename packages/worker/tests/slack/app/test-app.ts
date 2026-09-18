@@ -10,20 +10,17 @@ import { tenantContext } from "../../../src/components/slack/service/identity/te
 import { DatabaseSlackAppDirectory } from "../../../src/components/slack/storage/database-slack-app-directory";
 import { ClerkGateway } from "../../../src/gateway/clerk-gateway";
 import { managedBot } from "../../../src/schema/index.ts";
-import { InMemoryAttachments } from "./in-memory-attachments";
-import { InMemoryIdentityGateway } from "./in-memory-identity-gateway";
-import { InMemoryMobius } from "./in-memory-mobius-gateway";
-import { InMemorySlack } from "./in-memory-slack-gateway";
+import { FakeAttachments, FakeIdentityGateway, FakeMobius, FakeSlack } from "./fake-environment";
 import { createSignedRequest } from "./signed-request";
 import { createTestDatabase } from "./test-database";
 
 export async function createTestApplication(_singleDatabase = false) {
     const database = await createTestDatabase();
     const cipher = new SecretCipher(btoa("a".repeat(32)));
-    const slack = new InMemorySlack();
-    const mobius = new InMemoryMobius();
-    const identity = new InMemoryIdentityGateway();
-    const attachments = new InMemoryAttachments();
+    const slack = new FakeSlack();
+    const mobius = new FakeMobius();
+    const identity = new FakeIdentityGateway();
+    const attachments = new FakeAttachments();
     const pending: SlackQueueMessage[] = [];
     const limiter = {
         mode: "admit",

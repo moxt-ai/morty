@@ -1,89 +1,27 @@
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import * as v from "valibot";
 import { afterAll, afterEach, beforeEach, expect, test, vi } from "vitest";
 import worker from "../src/application.ts";
+import { InMemoryD1Database } from "./infra/database.ts";
 import { APP_ORIGIN, AUTH_TIME, clerk as issuer } from "./support/clerk.ts";
 import { platformPeer } from "./support/platform-peer.ts";
 
 const platform = await platformPeer({ pairingLifetimeMilliseconds: 0 });
 afterAll(platform.close);
 
-class InMemoryD1Statement {
-    readonly #query: string;
-    readonly #database: DatabaseSync;
-    readonly #values: readonly SQLInputValue[];
-    constructor(query: string, database: DatabaseSync, values: readonly SQLInputValue[] = []) {
-        this.#query = query;
-        this.#database = database;
-        this.#values = values;
-    }
-    readonly bind = (...values: readonly unknown[]) =>
-        new InMemoryD1Statement(
-            this.#query,
-            this.#database,
-            values.map((value) => v.parse(v.union([v.string(), v.number(), v.null()]), value)),
-        );
-    readonly first = async () => this.#database.prepare(this.#query).get(...this.#values) ?? null;
-    readonly all = async () => ({ results: this.#database.prepare(this.#query).all(...this.#values), success: true });
-    readonly raw = async () =>
-        this.#database
-            .prepare(this.#query)
-            .all(...this.#values)
-            .map((row) => Object.values(row));
-    readonly run = async () => {
-        const result = this.#database.prepare(this.#query).run(...this.#values);
-        return { meta: { changes: Number(result.changes) } };
-    };
-}
-class InMemoryD1Database {
-    readonly #database = new DatabaseSync(":memory:");
-    constructor() {
-        this.#database.exec(readFileSync(new URL("../migrations/0001_initial.sql", import.meta.url), "utf8"));
-        this.#database.exec(
-            readFileSync(new URL("../migrations/0002_anonymous_identity.sql", import.meta.url), "utf8"),
-        );
-        databases.push(this);
-        this.#database.exec(readFileSync(new URL("../migrations/0003_platform_project.sql", import.meta.url), "utf8"));
-        this.#database.exec(readFileSync(new URL("../migrations/0005_agent_pairing.sql", import.meta.url), "utf8"));
-        this.#database.exec(
-            readFileSync(new URL("../migrations/0007_identity_transfer_redemptions.sql", import.meta.url), "utf8"),
-        );
-        this.#database.exec(readFileSync(new URL("../migrations/0008_remote_access.sql", import.meta.url), "utf8"));
-        this.#database.exec(readFileSync(new URL("../migrations/0010_chat_owned_bot.sql", import.meta.url), "utf8"));
-        this.#database.exec(
-            readFileSync(new URL("../migrations/0011_slack_chat_bot_binding.sql", import.meta.url), "utf8"),
-        );
-        this.#database.exec(
-            readFileSync(new URL("../migrations/0012_remove_legacy_bot_migration.sql", import.meta.url), "utf8"),
-        );
-    }
-    readonly close = () => this.#database.close();
-    readonly prepare = (query: string) => new InMemoryD1Statement(query, this.#database);
-    readonly batch = async (statements: readonly InMemoryD1Statement[]) => {
-        this.#database.exec("BEGIN");
-        try {
-            const results = [];
-            for (const statement of statements) {
-                results.push(await statement.run());
-            }
-            this.#database.exec("COMMIT");
-            return results;
-        } catch (cause) {
-            this.#database.exec("ROLLBACK");
-            throw cause;
-        }
-    };
-}
 const databases: InMemoryD1Database[] = [];
+function createDatabase(): InMemoryD1Database {
+    const database = new InMemoryD1Database();
+    databases.push(database);
+    return database;
+}
 const baseConfiguration = { CLERK_PUBLISHABLE_KEY: issuer.publishableKey, CLERK_JWT_KEY: issuer.publicKey, APP_ORIGIN };
-function slackConfiguration(database = new InMemoryD1Database()) {
+function slackConfiguration(database = createDatabase()) {
     const attachments = { get: () => Promise.resolve(null), put: () => Promise.resolve() };
     const base = {
         ...baseConfiguration,
@@ -271,7 +209,7 @@ test("Given Projects in separate regions, When users reopen and transfer their w
 });
 
 test("Given a first-time visitor, When an anonymous identity is created, Then their Bot is already available without manual setup", async () => {
-    const database = new InMemoryD1Database();
+    const database = createDatabase();
     const identity = await createAnonymousUser(database);
     const response = await worker.fetch(
         accountRequest(identity.token, identity.projectId),
@@ -316,7 +254,7 @@ test("Given a first-time visitor, When an anonymous identity is created, Then th
 });
 
 test("Given a user with a Bot on a Project-scoped Platform, When setup checks the Bot workspace, Then the draft Bot and available agents are returned", async () => {
-    const database = new InMemoryD1Database();
+    const database = createDatabase();
     const environment = slackConfiguration(database);
     const identity = await createAnonymousUser(database);
     const listed = await worker.fetch(
@@ -345,7 +283,7 @@ test("Given a user with a Bot on a Project-scoped Platform, When setup checks th
 });
 
 test("Given an anonymous user, When a transfer is redeemed six times, Then five devices receive that identity", async () => {
-    const database = new InMemoryD1Database();
+    const database = createDatabase();
     const identity = await createAnonymousUser(database);
     const created = await worker.fetch(
         new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/identity/transfers`, {
@@ -388,7 +326,7 @@ test("Given an anonymous user, When a transfer is redeemed six times, Then five 
 });
 
 test("Given remote browsers redeemed one access link, When one browser ends remote access, Then every remote credential and the link stop while the owner remains connected", async () => {
-    const database = new InMemoryD1Database();
+    const database = createDatabase();
     const environment = slackConfiguration(database);
     const owner = await createAnonymousUser(database);
     const created = await worker.fetch(
@@ -444,7 +382,7 @@ test("Given remote browsers redeemed one access link, When one browser ends remo
 test.each(["anonymous", "clerk"])(
     "Given a %s web user with a Bot, When their pairing ticket is redeemed, Then the local agent receives the same user and Bot exactly once",
     async (kind) => {
-        const database = new InMemoryD1Database();
+        const database = createDatabase();
         const anonymous = await createAnonymousUser(database);
         const token = kind === "anonymous" ? anonymous.token : issuer.createSession("user_pair", APP_ORIGIN);
         const environment = slackConfiguration(database);
@@ -521,7 +459,7 @@ test.each(["anonymous", "clerk"])(
 );
 
 test("Given another user's Bot and an expired ticket, When pairing is requested, Then ownership and expiry prevent issuing a local credential", async () => {
-    const database = new InMemoryD1Database();
+    const database = createDatabase();
     const owner = await createAnonymousUser(database);
     const other = await createAnonymousUser(database);
     const environment = slackConfiguration(database);
@@ -583,7 +521,7 @@ test.each([
 ])(
     "Given $mode instructions with local conflict=$conflict and invalid configuration=$invalidConfig, When the command connects and setup reconnects, Then the selected identity is saved and reused with fresh Runtime credentials",
     async ({ mode, conflict, invalidConfig }) => {
-        const database = new InMemoryD1Database();
+        const database = createDatabase();
         const environment = slackConfiguration(database);
         const identity = await createAnonymousUser(database);
         const bots = await worker.fetch(
@@ -757,7 +695,7 @@ test.each([
 );
 
 test("Given an expired anonymous transfer, When a device redeems it, Then no credential is issued", async () => {
-    const database = new InMemoryD1Database();
+    const database = createDatabase();
     const identity = await createAnonymousUser(database);
     const created = await worker.fetch(
         new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/identity/transfers`, {
@@ -782,7 +720,7 @@ test("Given an expired anonymous transfer, When a device redeems it, Then no cre
 });
 
 test("Given an unbound Clerk account, When the visitor binds their anonymous user, Then Clerk opens the same workspace", async () => {
-    const database = new InMemoryD1Database();
+    const database = createDatabase();
     const identity = await createAnonymousUser(database);
     const clerkToken = issuer.createSession("user_alice", APP_ORIGIN);
     const status = await worker.fetch(
@@ -812,7 +750,7 @@ test("Given an unbound Clerk account, When the visitor binds their anonymous use
 });
 
 test("Given a Clerk account bound elsewhere, When the visitor overrides it, Then the local user becomes canonical and the old anonymous user remains usable", async () => {
-    const database = new InMemoryD1Database();
+    const database = createDatabase();
     const first = await createAnonymousUser(database);
     const second = await createAnonymousUser(database);
     const clerkToken = issuer.createSession("user_alice", APP_ORIGIN);
@@ -847,7 +785,7 @@ test("Given a Clerk account bound elsewhere, When the visitor overrides it, Then
 });
 
 test("Given a Clerk account bound elsewhere, When the visitor discards the local user, Then its anonymous credentials stop working", async () => {
-    const database = new InMemoryD1Database();
+    const database = createDatabase();
     const account = await createAnonymousUser(database);
     const local = await createAnonymousUser(database);
     const clerkToken = issuer.createSession("user_alice", APP_ORIGIN);
@@ -892,7 +830,7 @@ test("Given configured Clerk sign-in, When public configuration is loaded, Then 
 });
 
 test("Given an active Clerk user, When account data is requested, Then only user and session identity are returned", async () => {
-    const database = new InMemoryD1Database();
+    const database = createDatabase();
     const environment = slackConfiguration(database);
     const local = await createAnonymousUser(database);
     const clerkToken = issuer.createSession("user_alice", APP_ORIGIN, "active", "org_ignored");
