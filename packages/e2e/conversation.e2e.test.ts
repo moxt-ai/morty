@@ -2,6 +2,30 @@ import assert from "node:assert/strict";
 import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
+test("Given a paired workspace, When the user pastes an image into the chat box, Then the image can be sent", async ({
+    runtime,
+}) => {
+    await runtime.openPairedChat();
+    const { page } = runtime;
+    const composer = page.getByTestId(dataTestId.messageComposer);
+
+    await composer.evaluate((element) => {
+        const bytes = Uint8Array.from(
+            atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="),
+            (character) => character.charCodeAt(0),
+        );
+        const clipboard = new DataTransfer();
+        clipboard.items.add(new File([bytes], "pasted-image.png", { type: "image/png" }));
+        element.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, clipboardData: clipboard }));
+    });
+
+    await expect(page.getByRole("list", { name: "Attachments", exact: true })).toContainText("pasted-image.png");
+    await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect(page).toHaveURL(/\?conversationId=/u);
+    await expect(page.getByRole("list", { name: "Attachments", exact: true })).toHaveCount(0);
+});
+
 test("Given a paired workspace, When a user creates and reloads conversations, Then prompts and replies stay in their selected conversation", async ({
     runtime,
 }) => {

@@ -1,5 +1,5 @@
 import { FileText, LoaderCircle, Paperclip, Plus, Send, Square, X } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, type ReactNode, useRef, useState } from "react";
+import { type ClipboardEvent, type FormEvent, type KeyboardEvent, type ReactNode, useRef, useState } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import {
     AttachmentReadError,
@@ -93,13 +93,9 @@ export function BotChatComposer({
         { readonly kind: "idle" } | { readonly kind: "reading" } | { readonly kind: "failed"; readonly message: string }
     >({ kind: "idle" });
 
-    const attachFiles = (files: FileList): void => {
+    const attachFiles = (files: readonly File[]): void => {
         setAttachmentState({ kind: "reading" });
-        void Promise.all(
-            Array.from(files)
-                .slice(0, Math.max(0, 8 - attachments.length))
-                .map(readPromptAttachment),
-        )
+        void Promise.all(files.slice(0, Math.max(0, 8 - attachments.length)).map(readPromptAttachment))
             .then((read) => {
                 const added = read.map((attachment): ComposerAttachment => {
                     if (attachment instanceof ReadPromptImage) {
@@ -164,6 +160,14 @@ export function BotChatComposer({
         event.preventDefault();
         event.currentTarget.form?.requestSubmit();
     };
+    const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>): void => {
+        const images = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
+        if (images.length === 0 || disabled || attachmentState.kind === "reading" || attachments.length >= 8) {
+            return;
+        }
+        event.preventDefault();
+        attachFiles(images);
+    };
     const submitAction = outputState === "idle" || (outputState === "running" && !submitDisabled);
 
     return (
@@ -196,6 +200,7 @@ export function BotChatComposer({
                     disabled={disabled}
                     onChange={(event) => onDraftChange(event.target.value)}
                     onKeyDown={handleKeyDown}
+                    onPaste={handlePaste}
                     placeholder={placeholder}
                     value={draft}
                 />
@@ -249,7 +254,7 @@ export function BotChatComposer({
                             multiple
                             onChange={(event) => {
                                 if (event.currentTarget.files !== null) {
-                                    attachFiles(event.currentTarget.files);
+                                    attachFiles(Array.from(event.currentTarget.files));
                                 }
                             }}
                             ref={fileInput}

@@ -1,5 +1,13 @@
 import { FileText, Image as ImageIcon, LoaderCircle, Paperclip, Send, Square, X } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+    type ClipboardEvent,
+    type FormEvent,
+    type KeyboardEvent,
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState,
+} from "react";
 
 import { AgentPicker } from "@/components/agents/agent-picker";
 import { SessionConfigControls } from "@/components/chat/session-config-controls";
@@ -213,8 +221,8 @@ export function ChatComposer({ placement }: ChatComposerProps) {
         }
     };
 
-    const attachFiles = (files: FileList): void => {
-        const selected = Array.from(files).slice(0, 8);
+    const attachFiles = (files: readonly File[]): void => {
+        const selected = files.slice(0, 8);
         setAttaching(true);
         void Promise.all(selected.map(async (file) => await readPromptAttachment(file)))
             .then((attachments) => {
@@ -252,6 +260,14 @@ export function ChatComposer({ placement }: ChatComposerProps) {
                     fileInputRef.current.value = "";
                 }
             });
+    };
+    const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>): void => {
+        const images = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
+        if (images.length === 0 || !canAttach || conversation.isRunning || attaching) {
+            return;
+        }
+        event.preventDefault();
+        attachFiles(images);
     };
 
     return (
@@ -366,6 +382,7 @@ export function ChatComposer({ placement }: ChatComposerProps) {
                         setDraft(event.currentTarget.value);
                     }}
                     onKeyDown={handleKeyDown}
+                    onPaste={handlePaste}
                     placeholder={conversation.session.isReady ? "Ask the local agent…" : conversation.session.label}
                     ref={textareaRef}
                     rows={1}
@@ -431,7 +448,7 @@ export function ChatComposer({ placement }: ChatComposerProps) {
                             multiple
                             onChange={(event) => {
                                 if (event.currentTarget.files !== null) {
-                                    attachFiles(event.currentTarget.files);
+                                    attachFiles(Array.from(event.currentTarget.files));
                                 }
                             }}
                             ref={fileInputRef}
