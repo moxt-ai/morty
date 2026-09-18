@@ -3,6 +3,7 @@ import {
     decodeNativeSessionHistory,
     decodeNativeSessionResult,
     decodeSessionReadyEvent,
+    decodeWorkspaceEntriesEvent,
 } from "@moxt-ai/mobius-protocol";
 import { HttpTransport, MobiusClient, type MobiusHttpTransport, WsTransport } from "@moxt-ai/mobius-sdk/browser";
 import * as v from "valibot";
@@ -57,6 +58,7 @@ export type ChatWorkspace = v.InferOutput<typeof workspaceSchema>;
 export type ChatAgentSelection = v.InferOutput<typeof agentSelectionSchema>;
 export interface ChatDraftConfiguration {
     readonly bindingId: string;
+    readonly workspaceRef: string;
     readonly configuration: {
         readonly additionalDirectoryIds: readonly string[];
         readonly booleanValue: boolean;
@@ -108,7 +110,8 @@ class BrowserSessionTransport implements MobiusHttpTransport {
     readonly #webSocket = new WsTransport();
 
     readonly fetch = async (request: Request): Promise<Response> =>
-        await (request.headers.get("accept")?.startsWith("text/event-stream") === true
+        await (request.headers.get("accept")?.startsWith("text/event-stream") === true ||
+        request.headers.get("accept") === "application/octet-stream"
             ? this.#http
             : this.#webSocket
         ).fetch(request);
@@ -289,6 +292,10 @@ export class BotChatApi {
     };
     readonly workspace = async (botId: string, parent: AbortSignal): Promise<ChatWorkspace> =>
         v.parse(workspaceSchema, await this.#request(botId, "workspace", undefined, parent));
+    readonly workspaceDirectory = async (botId: string, directoryId: string, signal: AbortSignal) =>
+        decodeWorkspaceEntriesEvent(
+            JSON.stringify(await this.#request(botId, "workspace/directory", { directoryId }, signal)),
+        );
     readonly waitForWorkspaceChange = async (botId: string, parent: AbortSignal): Promise<void> => {
         const signal = AbortSignal.any([parent, AbortSignal.timeout(10 * 60 * 1000)]);
         const token = await this.#getToken(signal);

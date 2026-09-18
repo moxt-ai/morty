@@ -167,13 +167,16 @@ export function BotChatComposer({
     const submitAction = outputState === "idle" || (outputState === "running" && !submitDisabled);
 
     return (
-        <form className="mx-auto mt-5 mb-5 w-full max-w-[976px] shrink-0 px-4 sm:mt-6 sm:mb-6" onSubmit={submit}>
+        <form
+            className="mx-auto mt-4 mb-4 w-full max-w-[920px] shrink-0 px-3 sm:mt-5 sm:mb-5 sm:px-5"
+            onSubmit={submit}
+        >
             {(error.length > 0 || attachmentState.kind === "failed") && (
                 <p className="mb-2 px-1 text-sm text-destructive" role="alert">
                     {error.length > 0 ? error : attachmentState.kind === "failed" ? attachmentState.message : ""}
                 </p>
             )}
-            <div className="rounded-[24px] border border-[#d7dcdf] bg-white px-3 pt-3 pb-2.5 shadow-[0_5px_18px_rgba(23,30,36,0.04)] transition-[border-color,box-shadow] focus-within:border-[#b9c0c5] focus-within:shadow-[0_7px_22px_rgba(23,30,36,0.06)] sm:min-h-[148px] sm:px-5 sm:pt-4 sm:pb-3">
+            <div className="rounded-[22px] border border-border bg-surface-elevated px-3 pt-3 pb-2.5 shadow-[0_8px_28px_rgba(23,30,36,0.06)] transition-[border-color,box-shadow] focus-within:border-primary/35 focus-within:shadow-[0_10px_32px_rgba(23,30,36,0.08),0_0_0_3px_rgba(34,123,78,0.06)] sm:min-h-[128px] sm:px-4 sm:pt-3.5 sm:pb-3 motion-reduce:transition-none">
                 {attachments.length > 0 && (
                     <ul aria-label="Attachments" className="mb-2 flex list-none flex-wrap gap-2 p-0">
                         {attachments.map((attachment, index) => (
@@ -188,7 +191,7 @@ export function BotChatComposer({
                 <Textarea
                     aria-describedby="chat-composer-keyboard-hint"
                     aria-label={messageLabel}
-                    className="min-h-[62px] px-1 py-1 text-base sm:min-h-[72px]"
+                    className="min-h-[56px] px-1 py-1 text-base sm:min-h-[64px]"
                     data-testid={dataTestId.messageComposer}
                     disabled={disabled}
                     onChange={(event) => onDraftChange(event.target.value)}
@@ -202,7 +205,7 @@ export function BotChatComposer({
                             <Popover.Trigger asChild>
                                 <button
                                     aria-label="Add"
-                                    className="flex size-10 items-center justify-center rounded-full text-copy-secondary outline-none hover:bg-black/[0.045] focus-visible:ring-2 focus-visible:ring-ring/60 data-[state=open]:bg-black/[0.045]"
+                                    className="flex size-11 items-center justify-center rounded-full text-copy-secondary outline-none transition-colors duration-150 hover:bg-black/[0.045] focus-visible:ring-2 focus-visible:ring-ring/60 data-[state=open]:bg-black/[0.045] sm:size-10 motion-reduce:transition-none"
                                     title="Add"
                                     type="button"
                                 >
@@ -267,7 +270,7 @@ export function BotChatComposer({
                                         ? submitLabel
                                         : "Stop agent output"
                             }
-                            className={`size-10 rounded-full text-white ${submitAction || outputState === "sending" ? "bg-[#2fbd7a] hover:bg-[#28aa6c]" : "bg-[#e65c5c] hover:bg-[#d94d4d]"}`}
+                            className={`size-11 rounded-full text-white shadow-sm sm:size-10 ${submitAction || outputState === "sending" ? "bg-primary hover:bg-primary/90" : "bg-destructive hover:bg-destructive/90"}`}
                             data-testid={dataTestId.sendMessage}
                             disabled={
                                 outputState === "sending" ||

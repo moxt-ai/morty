@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import type { WorkspaceLocation } from "../../services/identity/anonymous-identity-api.ts";
 import { AnonymousIdentityApi } from "../../services/identity/anonymous-identity-api.ts";
 import { ManagementApi } from "../../services/management/management-api.ts";
 import { BrowserChannelConnection } from "../../view-models/channel-connection.ts";
@@ -67,5 +68,29 @@ export function MobiusManagement() {
         },
         [transport.fetch],
     );
-    return <BotChatHome requests={requests} createTransfer={createTransfer} endRemoteAccess={endRemoteAccess} />;
+    const replaceWorkspace = useCallback(
+        async (location: WorkspaceLocation, signal: AbortSignal) => {
+            if (identity.kind !== "anonymous") {
+                throw new Error("Only a fresh anonymous workspace can change region.");
+            }
+            const api = new AnonymousIdentityApi({
+                fetchRequest: transport.fetch,
+                origin: window.location.origin,
+                storage: window.localStorage,
+            });
+            await api.replaceWorkspace(location, signal);
+            signal.throwIfAborted();
+            window.location.reload();
+        },
+        [identity.kind, transport.fetch],
+    );
+    return (
+        <BotChatHome
+            requests={requests}
+            createTransfer={createTransfer}
+            endRemoteAccess={endRemoteAccess}
+            projectId={identity.projectId}
+            {...(identity.kind === "anonymous" ? { replaceWorkspace } : {})}
+        />
+    );
 }

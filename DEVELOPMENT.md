@@ -179,6 +179,9 @@ places the Project ID in the path for Durable Object routing. Deploy Chat's upda
 together with the corresponding Platform endpoint cutover.
 New Conversation opens a browser-local draft. Its Harness selector chooses a paired
 agent; Chat discovers that agent's settings directly without creating a temporary Session.
+The cwd selector beside the model controls browses the selected Runtime and accepts an
+absolute path. The Runtime resolves and authorizes that path, and Chat applies the selected
+canonical directory only to the new conversation.
 First Send materializes the draft as a Mobius Session with the selected
 model and approved Bot binding. The Conversation API is the creation and access path for
 these Sessions; it is not a separate user-facing chat type. Existing Sessions created by

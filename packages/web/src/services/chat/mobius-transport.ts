@@ -43,6 +43,7 @@ import {
     type CancelRequest,
     connectMobiusChannelClient,
     type ElicitationResponseRequest,
+    type FileReadResult,
     type MobiusChannelClient,
     MobiusChannelError,
     type PermissionResponseRequest,
@@ -220,6 +221,7 @@ async function connectBrowserServiceClients(connection: ChannelConnection): Prom
 }
 
 abstract class TransportConnection {
+    abstract readonly readFile: (sessionId: string, path: string, signal: AbortSignal) => Promise<FileReadResult>;
     abstract readonly nativeSession: (
         command: NativeSessionCommand,
         signal: AbortSignal,
@@ -243,6 +245,7 @@ abstract class TransportConnection {
 }
 
 class DisconnectedTransport extends TransportConnection {
+    readonly readFile = (): Promise<FileReadResult> => this.notInitialized();
     readonly nativeSession = (): Promise<NativeSessionResult> => this.notInitialized();
     readonly cancelAgentInstallation = (): Promise<void> => this.notInitialized();
     readonly cancel = (): Promise<void> =>
@@ -381,6 +384,11 @@ class ConnectedTransport extends TransportConnection {
             () => undefined,
         );
         await Promise.all([channelClose, serviceClose]);
+    };
+
+    readonly readFile = async (sessionId: string, path: string, signal: AbortSignal): Promise<FileReadResult> => {
+        const client = await this.#client;
+        return await client.readFile(sessionId, path, signal);
     };
 
     readonly nativeSession = async (
@@ -798,6 +806,10 @@ class ConnectedTransport extends TransportConnection {
 }
 
 let transport: TransportConnection = new DisconnectedTransport();
+
+export async function readFile(sessionId: string, path: string, signal: AbortSignal): Promise<FileReadResult> {
+    return await transport.readFile(sessionId, path, signal);
+}
 
 export function initializeMobiusTransport(connection: ChannelConnection, onActivity: () => void): void {
     void transport.close();

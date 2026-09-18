@@ -3,6 +3,7 @@ import type { MobiusBrowserClient } from "@moxt-ai/mobius-sdk/browser";
 import { ExternalLink, FileText, Image as ImageIcon, Terminal, Video } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AgentMarkdown } from "@/components/agents/agent-markdown";
+import { readFile } from "@/services/chat/mobius-transport";
 import { readSessionArtifactBytes } from "@/services/pairing/pairing-api";
 
 const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/;
@@ -48,48 +49,75 @@ function ArtifactMedia({
     readonly browserClient?: Pick<MobiusBrowserClient, "artifacts"> | undefined;
     readonly channelId: string;
     readonly content: AgentDisplayContent;
-    readonly serviceClient?: Pick<MobiusClient, "artifacts"> | undefined;
+    readonly serviceClient?: Pick<MobiusClient, "artifacts" | "sessions"> | undefined;
     readonly sessionId: string;
 }) {
     const [source, setSource] = useState<string | null>(null);
     useEffect(() => {
         const controller = new AbortController();
         let objectUrl = "";
-        const download = serviceClient
-            ? serviceClient.artifacts
-                  .download(sessionId, content.artifactId, controller.signal)
-                  .then((artifact) => ({ bytes: artifact.bytes, mimeType: artifact.artifact.mediaType }))
-            : browserClient === undefined
-              ? readSessionArtifactBytes(channelId, sessionId, content.artifactId, controller.signal)
-              : browserClient.artifacts
-                    .download(content.artifactId, controller.signal)
-                    .then((artifact) => ({ bytes: artifact.bytes, mimeType: artifact.artifact.mediaType }));
-        void download
-            .then((artifact) => {
+        const load = async () => {
+            try {
+                let bytes: Uint8Array;
+                let mimeType: string;
+
+                if (content.type === "image" && content.uri.length > 0) {
+                    if (serviceClient) {
+                        const file = await serviceClient.sessions.readFile(sessionId, content.uri, controller.signal);
+                        bytes = file.bytes;
+                        mimeType = file.mediaType;
+                    } else {
+                        const file = await readFile(sessionId, content.uri, controller.signal);
+                        bytes = file.bytes;
+                        mimeType = file.mediaType;
+                    }
+                } else if (serviceClient) {
+                    const artifact = await serviceClient.artifacts.download(
+                        sessionId,
+                        content.artifactId,
+                        controller.signal,
+                    );
+                    bytes = artifact.bytes;
+                    mimeType = artifact.artifact.mediaType;
+                } else if (browserClient) {
+                    const artifact = await browserClient.artifacts.download(content.artifactId, controller.signal);
+                    bytes = artifact.bytes;
+                    mimeType = artifact.artifact.mediaType;
+                } else {
+                    const artifact = await readSessionArtifactBytes(
+                        channelId,
+                        sessionId,
+                        content.artifactId,
+                        controller.signal,
+                    );
+                    bytes = artifact.bytes;
+                    mimeType = artifact.mimeType;
+                }
+
                 const safeMime = content.type === "image" ? SAFE_IMAGE_MIME : SAFE_VIDEO_MIME;
-                if (controller.signal.aborted || !safeMime.test(artifact.mimeType)) {
+                if (controller.signal.aborted || !safeMime.test(mimeType)) {
                     return;
                 }
-                objectUrl = URL.createObjectURL(
-                    new Blob([Uint8Array.from(artifact.bytes)], { type: artifact.mimeType }),
-                );
+                objectUrl = URL.createObjectURL(new Blob([Uint8Array.from(bytes)], { type: mimeType }));
                 setSource(objectUrl);
-            })
-            .catch(() => {
+            } catch (error: unknown) {
                 if (!controller.signal.aborted) {
+                    console.error("Agent media could not be loaded", error);
                     setSource("");
                 }
-            });
+            }
+        };
+        void load();
         return () => {
             controller.abort();
             if (objectUrl.length > 0) {
                 URL.revokeObjectURL(objectUrl);
             }
         };
-    }, [browserClient, channelId, content.artifactId, content.type, serviceClient, sessionId]);
+    }, [browserClient, channelId, content.artifactId, content.type, content.uri, serviceClient, sessionId]);
     if (source === null) {
         return (
-            <div className="rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
+            <div className="min-h-24 rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
                 Loading media…
             </div>
         );
@@ -140,12 +168,12 @@ function AgentRichContentItem({
     readonly browserClient?: Pick<MobiusBrowserClient, "artifacts"> | undefined;
     readonly channelId?: string | undefined;
     readonly content: AgentDisplayContent;
-    readonly serviceClient?: Pick<MobiusClient, "artifacts"> | undefined;
+    readonly serviceClient?: Pick<MobiusClient, "artifacts" | "sessions"> | undefined;
     readonly sessionId?: string | undefined;
 }) {
     if (content.type === "image" || content.type === "video") {
         if (
-            content.artifactId.length > 0 &&
+            (content.artifactId.length > 0 || (content.type === "image" && content.uri.length > 0)) &&
             (browserClient !== undefined ||
                 serviceClient !== undefined ||
                 (channelId !== undefined && sessionId !== undefined))
@@ -274,7 +302,7 @@ export function AgentRichContent({
     readonly browserClient?: Pick<MobiusBrowserClient, "artifacts"> | undefined;
     readonly channelId?: string | undefined;
     readonly contents: readonly AgentDisplayContent[];
-    readonly serviceClient?: Pick<MobiusClient, "artifacts"> | undefined;
+    readonly serviceClient?: Pick<MobiusClient, "artifacts" | "sessions"> | undefined;
     readonly sessionId?: string | undefined;
 }) {
     if (contents.length === 0) {

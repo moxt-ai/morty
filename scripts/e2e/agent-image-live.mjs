@@ -50,22 +50,24 @@ export async function runAgentImageE2E({ answer, expectedTool, model, name, prep
                 });
                 assert.equal(new URL(connected.ready.url).pathname, "/continue");
                 assert.equal(new URL(connected.ready.url).searchParams.get("sessionId"), nativeSessionId);
-                const continuation = page.waitForResponse(
-                    (response) =>
-                        response.request().method() === "POST" &&
-                        new URL(response.url()).pathname.endsWith("/continue-native-session"),
-                    { timeout: harness.timeoutMilliseconds },
-                );
                 await page.goto(connected.ready.url, {
                     waitUntil: "domcontentloaded",
                     timeout: harness.timeoutMilliseconds,
                 });
-                await page.getByRole("button", { name: "Import session", exact: true }).click();
-                assert.equal((await continuation).status(), 200);
+                await Promise.all([
+                    page.waitForURL(
+                        (url) =>
+                            url.pathname === "/" &&
+                            url.searchParams.get("sessionId") === nativeSessionId &&
+                            url.searchParams.get("nativeSessionAction") === "import",
+                        { timeout: 30_000 },
+                    ),
+                    page.getByRole("button", { name: "Import session", exact: true }).click(),
+                ]);
                 const composer = page.getByTestId(dataTestId.messageComposer);
                 await composer.waitFor({
                     state: "visible",
-                    timeout: harness.timeoutMilliseconds,
+                    timeout: 30_000,
                 });
                 await harness.waitFor("managed session composer readiness", () => composer.isEnabled(), Boolean);
                 assert.ok(new URL(page.url()).searchParams.get("sessionId"));
@@ -96,72 +98,38 @@ export async function runAgentImageE2E({ answer, expectedTool, model, name, prep
             await page.reload({ waitUntil: "domcontentloaded", timeout: harness.timeoutMilliseconds });
         });
 
-        const artifactDownload = () =>
-            page.waitForResponse(
-                (response) => {
-                    const path = new URL(response.url()).pathname;
-                    return (
-                        response.request().method() === "GET" &&
-                        response.status() === 200 &&
-                        path.includes("/artifacts/") &&
-                        path.endsWith("/content")
-                    );
-                },
-                { timeout: harness.timeoutMilliseconds },
-            );
+        const artifactContentRequests = [];
+        page.on("request", (request) => {
+            const path = new URL(request.url()).pathname;
+            if (path.includes("/artifacts/") && path.endsWith("/content")) {
+                artifactContentRequests.push(`${request.method()} ${path}`);
+            }
+        });
 
         await harness.stage("render-agent-generated-image", async () => {
             const toolResultsBeforePrompt = provider.diagnostics().filter((request) => request.hasToolResult).length;
-            const sessionIdFromUrl = new URL(page.url()).searchParams.get("sessionId");
             const messageBox = page.getByTestId(dataTestId.messageComposer);
             await messageBox.waitFor({ state: "visible", timeout: harness.timeoutMilliseconds });
             await messageBox.fill(prompt);
-            const liveDownload = artifactDownload();
-            const acceptedTurn = page.waitForResponse(
-                (response) => {
-                    const path = new URL(response.url()).pathname;
-                    return (
-                        response.request().method() === "POST" && response.status() === 202 && path.endsWith("/turns")
-                    );
-                },
-                { timeout: harness.timeoutMilliseconds },
-            );
             await page.getByRole("button", { name: "Send message", exact: true }).click({
                 timeout: harness.timeoutMilliseconds,
             });
-            const acceptedResponse = await acceptedTurn;
-            const accepted = await acceptedResponse.json();
-            let sessionId = sessionIdFromUrl;
-            if (sessionId === null) {
-                assert.ok(accepted !== null && typeof accepted === "object");
-                assert.ok("turn" in accepted && accepted.turn !== null && typeof accepted.turn === "object");
-                assert.ok("sessionId" in accepted.turn && typeof accepted.turn.sessionId === "string");
-                sessionId = accepted.turn.sessionId;
-            } else {
-                assert.ok(
-                    new URL(acceptedResponse.url()).pathname.includes(`/sessions/${encodeURIComponent(sessionId)}/`),
-                );
-            }
-
             await harness.waitFor(
                 `${agent.label} image tool result`,
                 async () => provider.diagnostics().filter((request) => request.hasToolResult).length,
                 (count) => count > toolResultsBeforePrompt,
             );
-            await liveDownload;
-
+            harness.log(`${agent.label} returned the image tool result`);
             const sessionUrl = new URL(page.url());
-            sessionUrl.searchParams.set("sessionId", sessionId);
-            const download = artifactDownload();
             await page.goto(sessionUrl.href, {
                 waitUntil: "domcontentloaded",
-                timeout: harness.timeoutMilliseconds,
+                timeout: 30_000,
             });
-            assert.equal(new URL(page.url()).searchParams.get("sessionId"), sessionId);
+            harness.log("Reloaded the managed session for persisted-image verification");
 
             const image = page.locator('img[src^="blob:"]').last();
             try {
-                await Promise.all([download, image.waitFor({ state: "attached", timeout: 30_000 })]);
+                await image.waitFor({ state: "attached", timeout: 30_000 });
             } catch (error) {
                 harness.record("pageTextAtImageFailure", await page.locator("body").innerText());
                 throw error;
@@ -176,6 +144,11 @@ export async function runAgentImageE2E({ answer, expectedTool, model, name, prep
             }));
             assert.equal(dimensions.complete, true);
             assert.ok(dimensions.height > 0 && dimensions.width > 0);
+            assert.deepEqual(
+                artifactContentRequests,
+                [],
+                "Agent-generated local images must be pulled from the daemon instead of uploaded to cloud artifacts",
+            );
 
             const providerRequests = provider.diagnostics();
             harness.record("fakeLlmProviderRequests", providerRequests);
@@ -192,7 +165,7 @@ export async function runAgentImageE2E({ answer, expectedTool, model, name, prep
                 providerRequests.some((request) => request.hasToolResult),
                 "The Agent did not return the image tool result to the fake LLM provider",
             );
-            harness.log(`PASS ${agent.label} image tool -> artifact -> browser (${agent.description})`);
+            harness.log(`PASS ${agent.label} image tool -> local daemon pull -> browser (${agent.description})`);
         });
     });
 }

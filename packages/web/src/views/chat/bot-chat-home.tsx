@@ -6,23 +6,27 @@ import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
-import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
+import type { IdentityTransfer, WorkspaceLocation } from "../../services/identity/anonymous-identity-api.ts";
 import { createBotChatHomeStore, setupDescription } from "../../view-models/chat/bot-chat-home-store.ts";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
 import { MobiusSessionPane } from "./mobius-session-pane.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
+import { WorkspaceRegionSelector } from "./workspace-region-selector.tsx";
 
 export function BotChatHome({
     requests,
     createTransfer,
     endRemoteAccess,
+    projectId,
+    replaceWorkspace,
 }: {
     readonly requests: Pick<
         BotChatApi,
         | "listBots"
         | "access"
         | "workspace"
+        | "workspaceDirectory"
         | "waitForWorkspaceChange"
         | "selectAgent"
         | "nativeSessions"
@@ -40,6 +44,8 @@ export function BotChatHome({
     >;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
     readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
+    readonly projectId: string;
+    readonly replaceWorkspace?: (location: WorkspaceLocation, signal: AbortSignal) => Promise<void>;
 }) {
     const [store] = useState(() =>
         createBotChatHomeStore(requests, {
@@ -152,7 +158,7 @@ export function BotChatHome({
         <main
             aria-label="Chat"
             data-chat-state={model.sessionView.kind === "session-access" ? "connected" : "disconnected"}
-            className="fixed inset-0 flex min-h-0 overflow-hidden bg-white text-foreground max-sm:flex-col sm:flex-row"
+            className="fixed inset-0 flex min-h-0 overflow-hidden bg-background text-foreground max-sm:flex-col sm:flex-row"
         >
             {active !== null && (
                 <ConversationSidebar
@@ -187,7 +193,7 @@ export function BotChatHome({
                             const element = event.currentTarget;
                             followLatest.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
                         }}
-                        className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-4 py-6 [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10"
+                        className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-4 py-6 [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10 lg:px-12"
                         role="log"
                         aria-label="Messages"
                     >
@@ -213,6 +219,12 @@ export function BotChatHome({
                                     <p className="mt-3 text-sm leading-6 text-muted-foreground">
                                         {setupDescription(model.view.reason)}
                                     </p>
+                                    {model.view.reason === "unconfigured" && replaceWorkspace !== undefined && (
+                                        <WorkspaceRegionSelector
+                                            projectId={projectId}
+                                            replaceWorkspace={replaceWorkspace}
+                                        />
+                                    )}
                                     <PairingInstruction requests={requests} />
                                     <p role="status" className="mt-4 text-sm text-muted-foreground">
                                         Chat will open when the server reports that this Bot is active and its selected
@@ -243,11 +255,19 @@ export function BotChatHome({
                                     )}
                                 </div>
                             ) : active === null ? null : (
-                                <div className="m-auto max-w-lg text-center">
-                                    <span className="mx-auto mb-5 flex size-16 items-center justify-center rounded-[22px] bg-[#f2e8ff] text-[#a855f7] shadow-[inset_0_0_0_1px_rgba(168,85,247,0.08)]">
-                                        <MessageSquare className="size-7" aria-hidden="true" />
+                                <div className="m-auto max-w-lg px-6 text-center">
+                                    <span className="mx-auto mb-5 flex size-14 items-center justify-center rounded-[18px] bg-primary-subtle text-primary shadow-[inset_0_0_0_1px_rgba(34,123,78,0.08)]">
+                                        <MessageSquare className="size-6" aria-hidden="true" />
                                     </span>
-                                    <h1 className="text-3xl font-semibold tracking-tight">{active.bot.displayName}</h1>
+                                    <p className="mb-2 text-[11px] font-semibold tracking-[0.1em] text-primary uppercase">
+                                        Ready to collaborate
+                                    </p>
+                                    <h1 className="text-[28px] leading-9 font-semibold tracking-[-0.025em]">
+                                        {active.bot.displayName}
+                                    </h1>
+                                    <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-muted-foreground">
+                                        Ask a question, explore the workspace, or start a task with your local agent.
+                                    </p>
                                 </div>
                             )}
                         </div>

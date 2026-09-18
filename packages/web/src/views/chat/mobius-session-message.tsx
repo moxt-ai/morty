@@ -25,7 +25,7 @@ export function MobiusSessionMessage({
     readonly activeUserMessageId: string | null;
     readonly sessionId: string;
     readonly botId: string;
-    readonly client: Pick<MobiusClient, "artifacts"> | null;
+    readonly client: Pick<MobiusClient, "artifacts" | "sessions"> | null;
 }) {
     if (message.role === "user") {
         return (

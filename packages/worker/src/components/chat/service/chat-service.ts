@@ -90,6 +90,29 @@ export class ChatService {
 
     readonly workspace = async (scope: ChatScope) => await this.#localWorkspace(scope);
 
+    readonly listWorkspace = async (scope: ChatScope, directoryId: string) => {
+        const bot = await this.#bot(scope);
+        if (bot.configuration === null) {
+            throw new PlatformProjectError("AGENT_REQUIRED", "Choose a connected harness.", 409);
+        }
+        const listing = await this.#platform.listChatWorkspace(
+            scope.projectId,
+            bot.configuration.runtimeId,
+            directoryId,
+            scope.signal,
+        );
+        this.#logger.info(
+            {
+                event: "chat-workspace-listed",
+                userId: scope.userId,
+                projectId: scope.projectId,
+                botId: scope.botId,
+            },
+            "Chat audit event",
+        );
+        return listing;
+    };
+
     readonly #bot = async (scope: ChatScope) => {
         const bot = await this.#managedBots.readBot(scope.userId, scope.botId, scope.signal);
         if (bot === null) {
@@ -158,10 +181,12 @@ export class ChatService {
                 409,
             );
         }
+        const selection =
+            "conversationKey" in input ? { ...configuration, workspaceRef: input.workspaceRef } : configuration;
         const access = await timing.measure("session", "Open Chat Session", async () =>
             this.#platform.openChatSession(
                 scope.projectId,
-                configuration,
+                selection,
                 "conversationKey" in input
                     ? { ...input, conversationKey: await chatSessionId(scope.botId, input.conversationKey) }
                     : input,

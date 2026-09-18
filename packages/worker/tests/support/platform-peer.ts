@@ -303,14 +303,26 @@ export async function platformPeer({
                     idempotencyKey: v.string(),
                     clientReference: v.string(),
                     displayName: v.string(),
-                    locationHint: v.picklist(["apac", "apac-ne", "apac-se", "wnam"]),
+                    locationHint: v.picklist([
+                        "wnam",
+                        "enam",
+                        "sam",
+                        "weur",
+                        "eeur",
+                        "apac",
+                        "apac-ne",
+                        "apac-se",
+                        "oc",
+                        "afr",
+                        "me",
+                    ]),
                 }),
                 JSON.parse(body),
             );
             let project = projects.get(input.idempotencyKey);
             if (project === undefined) {
                 project = {
-                    projectId: `prj_${{ apac: "ap", "apac-ne": "an", "apac-se": "as", wnam: "wn" }[input.locationHint]}_01_${String(projects.size + 1).padStart(24, "0")}`,
+                    projectId: `prj_${{ wnam: "wn", enam: "en", sam: "sa", weur: "we", eeur: "ee", apac: "ap", "apac-ne": "an", "apac-se": "as", oc: "oc", afr: "af", me: "me" }[input.locationHint]}_01_${String(projects.size + 1).padStart(24, "0")}`,
                     appId: "cloud-app",
                     tenantId: "tenant-test",
                     clientReference: input.clientReference,
@@ -352,6 +364,30 @@ export async function platformPeer({
                           }
                         : { error: { code: "agent_unavailable", message: "The settings agent is unavailable" } },
                 ),
+            );
+            return;
+        }
+        const workspacePath = request.url?.match(
+            /^\/mobius\/api\/v1\/projects\/([^/]+)\/runtimes\/([^/]+)\/workspace$/u,
+        );
+        if (request.method === "POST" && workspacePath !== undefined && workspacePath !== null) {
+            const input = v.parse(v.strictObject({ directoryId: v.string() }), JSON.parse(body));
+            const selectedDirectoryId = "path-L2hvbWUvYS9tb2JpdXMudDMvc2VsZWN0ZWQtcHJvamVjdA";
+            const directoryLabel =
+                input.directoryId === selectedDirectoryId ? "/home/a/mobius.t3/selected-project" : "/home/a/mobius.t3";
+            response.writeHead(200).end(
+                JSON.stringify({
+                    kind: "workspace.entries",
+                    requestId: "workspace-request",
+                    bindingId: "binding-1",
+                    directoryId: input.directoryId,
+                    directoryLabel,
+                    entries:
+                        input.directoryId === "default"
+                            ? [{ directoryId: selectedDirectoryId, name: "selected-project" }]
+                            : [],
+                    parentDirectoryId: "path-L2hvbWUvYQ",
+                }),
             );
             return;
         }
