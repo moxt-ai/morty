@@ -210,6 +210,7 @@ test("Given a full message viewport, When the user sends another prompt, Then th
     expect(position.messageTop).toBeGreaterThanOrEqual(position.logTop);
     expect(position.messageBottom).toBeLessThanOrEqual(position.logBottom);
     expect(workingPosition.top).toBeGreaterThanOrEqual(position.messageBottom);
+    expect(workingPosition.top - position.messageBottom).toBeLessThanOrEqual(12);
     expect(Math.abs(workingPosition.right - position.messageRight)).toBeLessThanOrEqual(1);
     await page.setViewportSize({ width: 390, height: 900 });
     const shellPosition = await page.getByRole("main", { name: "Chat", exact: true }).evaluate((element) => {

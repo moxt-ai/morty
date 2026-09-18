@@ -20,7 +20,6 @@ type ThinkingEntry =
 
 export interface ThinkingPresentation {
     readonly entries: readonly ThinkingEntry[];
-    readonly status: "thinking" | "working" | "idle";
 }
 
 function replyPhase(attempt: MobiusAttemptSummary | null, active: boolean): ReplyPhase {
@@ -73,11 +72,5 @@ export function describeAgentReply(
             },
         ];
     });
-    let status: ThinkingPresentation["status"] = "idle";
-    if (phase === "working" && latest) {
-        status = activities.some((activity) => activity.status === "running" || activity.status === "pending")
-            ? "thinking"
-            : "working";
-    }
-    return { phase, thinking: { entries, status } };
+    return { phase, thinking: { entries } };
 }

@@ -942,6 +942,8 @@ export function MobiusSessionPane({
             ? null
             : (messages.findLast((message) => message.role === "assistant" && message.commandId === activeCommandId)
                   ?.id ?? null);
+    const activeUserMessageId =
+        activeCommandId === null ? null : (messages.findLast((message) => message.role === "user")?.id ?? null);
     const compactAvailable = findCompactCommand(taskControls.commands) !== null;
     const taskControlError =
         taskControls.feedback.kind === "failed"
@@ -1000,19 +1002,31 @@ export function MobiusSessionPane({
                 {session.result.history.status === "unavailable" && (
                     <p className="text-sm text-muted-foreground">This agent does not expose saved message history.</p>
                 )}
-                {messages.map((message) => (
-                    <div key={message.id} className="mx-auto w-full min-w-0 max-w-[1120px]">
-                        <MobiusSessionMessage
-                            message={message}
-                            activities={activities}
-                            activeCommandId={activeCommandId}
-                            activeMessageId={activeMessageId}
-                            sessionId={sessionId}
-                            botId={botId}
-                            client={connection.kind === "ready" ? connection.client : null}
-                        />
-                    </div>
-                ))}
+                {messages.map((message) => {
+                    const workingOnly =
+                        message.role === "assistant" &&
+                        message.id === activeMessageId &&
+                        message.text.length === 0 &&
+                        message.activityIds.length === 0 &&
+                        message.contents.length === 0;
+                    return (
+                        <div
+                            key={message.id}
+                            className={`mx-auto w-full min-w-0 max-w-[1120px] ${workingOnly ? "hidden" : ""}`}
+                        >
+                            <MobiusSessionMessage
+                                message={message}
+                                activities={activities}
+                                activeCommandId={activeCommandId}
+                                activeMessageId={activeMessageId}
+                                activeUserMessageId={activeUserMessageId}
+                                sessionId={sessionId}
+                                botId={botId}
+                                client={connection.kind === "ready" ? connection.client : null}
+                            />
+                        </div>
+                    );
+                })}
                 <div className="mx-auto w-full min-w-0 max-w-[1120px]">
                     <SessionInteractionCards
                         elicitations={interactions.flatMap((interaction) =>

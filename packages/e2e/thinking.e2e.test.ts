@@ -38,7 +38,7 @@ test("Given an agent still thinking, When a user expands, collapses and reloads 
     const working = page.getByRole("status", { name: "Agent working" });
     await expect(thinking).toBeVisible();
     await expect(working).toBeVisible();
-    await expect(thinking.locator("summary")).toContainText("Thinking…");
+    await expect(thinking.locator("summary")).toHaveText("Show intermediate steps");
     await thinking.locator("summary").click();
     await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("thinking-active-desktop.png"), animations: "disabled" });

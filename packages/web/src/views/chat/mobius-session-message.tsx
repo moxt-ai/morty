@@ -2,6 +2,7 @@ import type { AgentDisplayContent, MobiusAttemptSummary, MobiusClient } from "@m
 import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
 import { AgentRichContent } from "../../components/agents/agent-rich-content.tsx";
 import { AgentReply } from "../../components/chat/agent-reply.tsx";
+import { AgentWorkingIndicator } from "../../components/chat/agent-thinking.tsx";
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { activitiesForIds, type RecordedAgentActivity } from "../../services/chat/agent-activities.ts";
@@ -33,6 +34,7 @@ export function MobiusSessionMessage({
     activities,
     activeCommandId,
     activeMessageId,
+    activeUserMessageId,
     sessionId,
     botId,
     client,
@@ -41,6 +43,7 @@ export function MobiusSessionMessage({
     readonly activities: ReadonlyMap<string, RecordedAgentActivity>;
     readonly activeCommandId: string | null;
     readonly activeMessageId: string | null;
+    readonly activeUserMessageId: string | null;
     readonly sessionId: string;
     readonly botId: string;
     readonly client: Pick<MobiusClient, "artifacts"> | null;
@@ -58,6 +61,11 @@ export function MobiusSessionMessage({
                     serviceClient={client ?? undefined}
                     sessionId={sessionId}
                 />
+                {message.id === activeUserMessageId && (
+                    <div className="flex min-h-6 items-end justify-end pt-1">
+                        <AgentWorkingIndicator />
+                    </div>
+                )}
             </div>
         );
     }

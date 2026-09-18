@@ -2,7 +2,7 @@ import { Brain, ChevronDown, LoaderCircle, Wrench } from "lucide-react";
 import type { ThinkingPresentation } from "../../services/chat/agent-reply.ts";
 import { AgentMarkdown } from "../agents/agent-markdown.tsx";
 
-function WorkingIndicator() {
+export function AgentWorkingIndicator() {
     return (
         <span role="status" aria-label="Agent working" className="inline-flex items-center gap-2">
             <LoaderCircle
@@ -14,20 +14,10 @@ function WorkingIndicator() {
     );
 }
 
-function WorkingLabel({ status }: { readonly status: "working" | "thinking" }) {
-    return (
-        <div className="flex min-h-6 items-end justify-end gap-2 pt-1 text-xs text-muted-foreground">
-            <WorkingIndicator />
-            {status === "thinking" && <span>Thinking…</span>}
-        </div>
-    );
-}
-
-export function AgentThinking({ entries, status }: ThinkingPresentation) {
+export function AgentThinking({ entries }: ThinkingPresentation) {
     if (entries.length === 0) {
-        return status === "idle" ? null : <WorkingLabel status={status} />;
+        return null;
     }
-    const thinking = status === "thinking";
     return (
         <div className="min-w-0 text-sm text-muted-foreground">
             <details aria-label="Agent thinking" className="group/thinking min-w-0">
@@ -36,8 +26,7 @@ export function AgentThinking({ entries, status }: ThinkingPresentation) {
                         aria-hidden="true"
                         className="size-3.5 -rotate-90 transition-transform group-open/thinking:rotate-0 motion-reduce:transition-none"
                     />
-                    <span>{thinking ? "Show intermediate steps · Thinking…" : "Show intermediate steps"}</span>
-                    {thinking && <WorkingIndicator />}
+                    <span>Show intermediate steps</span>
                 </summary>
                 <div className="mt-1 ml-1 min-w-0 border-l border-[#d9dde1] py-2 pl-5 [overflow-wrap:anywhere]">
                     <div className="grid min-w-0 gap-4 text-muted-foreground">
@@ -78,7 +67,6 @@ export function AgentThinking({ entries, status }: ThinkingPresentation) {
                     </div>
                 </div>
             </details>
-            {status === "working" && <WorkingLabel status="working" />}
         </div>
     );
 }
