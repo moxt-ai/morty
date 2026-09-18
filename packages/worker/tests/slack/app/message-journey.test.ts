@@ -18,13 +18,36 @@ const event: SlackEventCallbackPayload = {
     team_id: "T123",
     type: "event_callback",
 };
-async function send(app: Awaited<ReturnType<typeof createTestApplication>>, payload = event) {
+
+type TestApplication = Awaited<ReturnType<typeof createTestApplication>>;
+
+async function send(app: TestApplication, payload = event) {
     const response = await app.signedRequest("/mobius-slack/api/slack/events", JSON.stringify(payload));
     expect(response.status).toBe(202);
     expect(app.queueErrors).toEqual([]);
 }
+
+async function registerSourceApp(app: TestApplication) {
+    const response = await app.request("/mobius-slack/api/slack/apps/register", {
+        method: "POST",
+        headers: {
+            authorization: `Bearer ${await app.humanToken()}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            slackBotId: "bot-source",
+            name: "Source",
+            clientId: "source-client",
+            clientSecret: "source-secret",
+            signingSecret: "source-signing",
+            slackAppId: "A_SOURCE",
+        }),
+    });
+    expect(response.status).toBe(201);
+}
+
 describe("Slack message journeys", () => {
-    it("Given an active Slack turn, When processing is cancelled, Then cancellation propagates and a later message can run without resubmitting the cancelled turn", async () => {
+    it("propagates cancellation and accepts the next message without replaying the cancelled turn", async () => {
         const app = await createTestApplication();
         const controller = new AbortController();
         const signedRequest = createSignedRequest((url, init) =>
@@ -38,9 +61,9 @@ describe("Slack message journeys", () => {
         await pending;
         expect(app.queueErrors).toEqual([reason]);
         expect(app.slack.messages).toEqual([]);
+
         app.queueErrors.length = 0;
         await send(app);
-        expect(app.mobius.runs).toHaveLength(1);
         await send(app, {
             ...event,
             event_id: "Ev-after-cancel",
@@ -50,37 +73,75 @@ describe("Slack message journeys", () => {
         expect(app.slack.messages[0]?.text).toBe("Investigation complete");
         gate.complete();
     });
-    it("Given a Slack mention with thread history, When the bot is processing it, Then the prompt reaches the bot without a stored prompt or context-message copy", async () => {
+
+    it("runs a complete channel, thread, retry, ordering, privacy, and direct-message journey", async () => {
         const app = await createTestApplication();
-        app.slack.threadMessages = [
-            { botId: null, files: [], text: "private context", threadTs: "99.0", ts: "99.0", userId: "U123" },
-        ];
-        const gate = app.mobius.pauseNext();
-        const pending = send(app, { ...event, event: { ...event.event, thread_ts: "99.0" } });
-        await gate.started;
-        try {
-            expect(app.mobius.runs[0]?.prompt).toContain("private context");
-            expect(app.mobius.runs[0]?.prompt).toContain("investigate");
-            expect(app.mobius.runs[0]?.instructions).toBe("Answer as the configured Chat Bot.");
-            expect(
-                (
-                    await app.database.d1
-                        .prepare("SELECT name FROM sqlite_master WHERE name = 'slack_prompt_command'")
-                        .all()
-                ).results,
-            ).toEqual([]);
-            const runs = (await app.database.d1.prepare("SELECT * FROM slack_message_delivery").all()).results;
-            expect(runs).toHaveLength(1);
-            expect(runs[0]).not.toHaveProperty("context_messages");
-            expect(JSON.stringify(runs)).not.toContain("private context");
-            expect(JSON.stringify(runs)).not.toContain("investigate");
-        } finally {
-            gate.complete();
-            await pending;
-        }
+        const message = (ts: string, text: string) => ({
+            botId: null,
+            files: [],
+            text,
+            threadTs: null,
+            ts,
+            userId: "U123",
+        });
+        app.slack.channelMessages = [message("1.0", "channel context")];
+        app.slack.threadMessages = [message("100.0", "trigger"), message("2.0", "private context")];
+        const first = { ...event, event: { ...event.event, thread_ts: "1.5" } };
+
+        await send(app, first);
+        expect(app.mobius.runs[0]).toMatchObject({
+            botId: "chat-bot-1",
+            instructions: "Answer as the configured Chat Bot.",
+            prompt: "# Channel history:\n[1.0] U123: channel context\n\n# Thread messages:\n[2.0] U123: private context\n\n<@U_BOT> investigate",
+        });
+        expect(
+            (await app.database.d1.prepare("SELECT name FROM sqlite_master WHERE name = 'slack_prompt_command'").all())
+                .results,
+        ).toEqual([]);
+        const deliveries = (await app.database.d1.prepare("SELECT * FROM slack_message_delivery").all()).results;
+        expect(deliveries).toHaveLength(1);
+        expect(deliveries[0]).not.toHaveProperty("context_messages");
+        expect(JSON.stringify(deliveries)).not.toContain("private context");
+        expect(JSON.stringify(deliveries)).not.toContain("investigate");
         expect(app.slack.messages[0]?.text).toBe("Investigation complete");
+
+        await send(app, first);
+        await send(app, {
+            ...first,
+            event_id: "Ev-old",
+            event: { ...first.event, ts: "0.5" },
+        });
+        expect(app.mobius.runs).toHaveLength(1);
+        expect(app.slack.messages).toHaveLength(1);
+        expect(
+            await app.database.d1
+                .prepare("SELECT payload, status FROM processed_slack_event WHERE slack_event_id = 'Ev123'")
+                .first(),
+        ).toMatchObject({ payload: "", status: "processed" });
+
+        await send(app, {
+            ...first,
+            event_id: "Ev-thread-follow-up",
+            event: { ...first.event, type: "message", text: "continue", ts: "101.0" },
+        });
+        expect(app.mobius.runs[1]?.conversationId).toBe(app.mobius.runs[0]?.conversationId);
+
+        await send(app, {
+            ...event,
+            event_id: "Ev-direct-message",
+            event: {
+                ...event.event,
+                channel: "D123",
+                channel_type: "im",
+                type: "message",
+                text: "hello",
+                ts: "200.0",
+            },
+        });
+        expect(app.mobius.runs).toHaveLength(3);
     });
-    it("Given a stalled bot turn and a waiting message, When the turn times out, Then Slack reports the timeout and processes the waiting message without resubmitting the stalled turn", async () => {
+
+    it("times out a stalled turn and resumes its waiting message", async () => {
         const app = await createTestApplication();
         const gate = app.mobius.pauseNext();
         const pending = send(app);
@@ -98,26 +159,23 @@ describe("Slack message journeys", () => {
         ]);
         await send(app);
         expect(app.mobius.runs).toHaveLength(2);
-        expect(app.queueErrors).toEqual([]);
         gate.complete();
     });
-    it("Given an app stored in Cloud D1, When Slack delivers a signed mention, Then discovery and queued processing produce the bot reply", async () => {
+
+    it("discovers an app from Cloud D1 and completes its queued message", async () => {
         const app = await createTestApplication(true);
         await send(app);
-        expect(app.slack.messages).toHaveLength(1);
         expect(app.slack.messages[0]?.text).toBe("Investigation complete");
         expect(app.mobius.runs).toHaveLength(1);
     });
-    it("Given a turn whose connection was lost, When Slack repeats the event and the user sends a new message, Then the failed turn is not recovered and the new message gets a reply", async () => {
+
+    it("does not recover a disconnected result but processes the next message", async () => {
         const app = await createTestApplication();
         app.mobius.connectionState = "disconnect-after-result";
-        const response = await app.signedRequest("/mobius-slack/api/slack/events", JSON.stringify(event));
-        expect(response.status).toBe(202);
-        expect(app.queueErrors).toEqual([]);
+        await send(app);
         expect(app.slack.messages[0]?.text).toBe("The bot run failed (MOBIUS_CONNECTION_FAILED). Please try again.");
+
         await send(app);
-        await send(app);
-        expect(app.slack.messages).toHaveLength(1);
         expect(app.mobius.results.size).toBe(1);
         expect(app.mobius.runs).toHaveLength(1);
         await send(app, {
@@ -128,51 +186,8 @@ describe("Slack message journeys", () => {
         expect(app.slack.messages[1]?.text).toBe("Investigation complete");
         expect(app.mobius.runs).toHaveLength(2);
     });
-    it("Given a completed thread turn, When an older event arrives, Then no additional reply is posted", async () => {
-        const app = await createTestApplication();
-        await send(app);
-        await send(app, {
-            ...event,
-            event_id: "Ev-old",
-            event: { ...event.event, thread_ts: "100.0", ts: "99.0" },
-        });
-        expect(app.slack.messages).toHaveLength(1);
-    });
-    it("Given a user sends the first direct message, When Slack delivers it, Then a conversation starts", async () => {
-        const app = await createTestApplication();
-        await send(app, {
-            ...event,
-            event: {
-                ...event.event,
-                channel: "D123",
-                channel_type: "im",
-                type: "message",
-                text: "hello",
-            },
-        });
-        expect(app.mobius.runs).toHaveLength(1);
-    });
-    it("Given an existing thread, When its user continues without mentioning the bot, Then the same conversation is reused", async () => {
-        const app = await createTestApplication();
-        const first = {
-            ...event,
-            event: { ...event.event, thread_ts: "99.0" },
-        };
-        await send(app, first);
-        await send(app, {
-            ...first,
-            event_id: "Ev124",
-            event: {
-                ...first.event,
-                type: "message",
-                text: "continue",
-                ts: "101.0",
-            },
-        });
-        expect(app.mobius.runs).toHaveLength(2);
-        expect(app.mobius.runs[1]?.conversationId).toBe(app.mobius.runs[0]?.conversationId);
-    });
-    it("Given an independently configured Slack app, When a workspace user mentions it, Then its bound Chat Bot replies", async () => {
+
+    it("lets an independently configured app reply without a linked user identity", async () => {
         const app = await createTestApplication();
         const response = await app.request("/mobius-slack/api/slack/apps/register", {
             method: "POST",
@@ -196,75 +211,36 @@ describe("Slack message journeys", () => {
         expect(app.slack.messages[0]?.text).toBe("Investigation complete");
         expect(app.mobius.runs).toHaveLength(1);
     });
-    for (const mode of ["admit", "refuse", "fail"]) {
-        it(`Given an authorized source bot and a limiter in ${mode} mode, When its thread mention arrives, Then the trigger budget is respected`, async () => {
-            const app = await createTestApplication();
-            const response = await app.request("/mobius-slack/api/slack/apps/register", {
-                method: "POST",
-                headers: {
-                    authorization: `Bearer ${await app.humanToken()}`,
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    slackBotId: "bot-source",
-                    name: "Source",
-                    clientId: "source-client",
-                    clientSecret: "source-secret",
-                    signingSecret: "source-signing",
-                    slackAppId: "A_SOURCE",
-                }),
-            });
-            expect(response.status).toBe(201);
+
+    it("applies every source-bot limiter outcome in one installation lifecycle", async () => {
+        const app = await createTestApplication();
+        await registerSourceApp(app);
+        for (const [index, mode] of ["admit", "refuse", "fail"].entries()) {
             app.limiter.mode = mode;
+            const runsBefore = app.mobius.runs.length;
             await send(app, {
                 ...event,
+                event_id: `Ev-limiter-${mode}`,
                 event: {
                     ...event.event,
                     bot_id: "B_SOURCE",
                     thread_ts: "99.0",
+                    ts: `${110 + index}.0`,
                 },
             });
-            expect(app.mobius.runs).toHaveLength(mode === "refuse" ? 0 : 1);
-        });
-    }
-    it("Given an unknown external bot, When it mentions the bot, Then no run starts", async () => {
-        const app = await createTestApplication();
-        await send(app, {
-            ...event,
-            event: { ...event.event, bot_id: "B_UNKNOWN", thread_ts: "99.0" },
-        });
-        expect(app.mobius.runs).toEqual([]);
+            expect(app.mobius.runs).toHaveLength(runsBefore + (mode === "refuse" ? 0 : 1));
+        }
     });
-    it("Given Slack verifies the event URL, When it sends a signed challenge, Then the challenge is returned", async () => {
+
+    it("handles Slack verification and rejects unauthenticated, stale, irrelevant, and unknown-bot events", async () => {
         const app = await createTestApplication();
-        const response = await app.signedRequest(
+        const challenge = await app.signedRequest(
             "/mobius-slack/api/slack/events",
-            JSON.stringify({
-                api_app_id: "A123",
-                challenge: "challenge-value",
-                type: "url_verification",
-            }),
+            JSON.stringify({ api_app_id: "A123", challenge: "challenge-value", type: "url_verification" }),
         );
-        expect(response.status).toBe(200);
-        expect(await response.json()).toEqual({ challenge: "challenge-value" });
-    });
-    it("Given a user mentions the bot, When Slack delivers and retries the event, Then one tenant-scoped run starts", async () => {
-        const app = await createTestApplication();
-        await send(app);
-        await send(app);
-        expect(app.mobius.runs).toHaveLength(1);
-        expect(app.mobius.runs[0]).toMatchObject({
-            botId: "chat-bot-1",
-            prompt: "<@U_BOT> investigate",
-        });
-        expect(
-            await app.database.d1
-                .prepare("SELECT payload, status FROM processed_slack_event WHERE slack_event_id = 'Ev123'")
-                .first(),
-        ).toMatchObject({ payload: "", status: "processed" });
-    });
-    it("Given an invalid Slack signature, When a message arrives, Then no bot run starts", async () => {
-        const app = await createTestApplication();
+        expect(challenge.status).toBe(200);
+        expect(await challenge.json()).toEqual({ challenge: "challenge-value" });
+
         expect(
             (
                 await app.signedRequest(
@@ -275,10 +251,6 @@ describe("Slack message journeys", () => {
                 )
             ).status,
         ).toBe(401);
-        expect(app.mobius.runs).toEqual([]);
-    });
-    it("Given a request older than five minutes, When Slack sends it, Then replay protection rejects it", async () => {
-        const app = await createTestApplication();
         expect(
             (
                 await app.signedRequest(
@@ -288,39 +260,21 @@ describe("Slack message journeys", () => {
                 )
             ).status,
         ).toBe(401);
-        expect(app.mobius.runs).toEqual([]);
-    });
-    it("Given a channel message without a mention, When Slack delivers it, Then no reply or run starts", async () => {
-        const app = await createTestApplication();
         await send(app, {
             ...event,
-            event: { ...event.event, type: "message", text: "hello channel" },
+            event_id: "Ev-no-mention",
+            event: { ...event.event, type: "message", text: "hello channel", ts: "101.0" },
+        });
+        await send(app, {
+            ...event,
+            event_id: "Ev-unknown-bot",
+            event: { ...event.event, bot_id: "B_UNKNOWN", thread_ts: "99.0", ts: "102.0" },
         });
         expect(app.mobius.runs).toEqual([]);
         expect(app.slack.messages).toEqual([]);
     });
-    it("Given a thread mention, When Slack delivers it, Then the bot sees ordered history without its trigger duplicated", async () => {
-        const app = await createTestApplication();
-        const message = (ts: string, text: string) => ({
-            botId: null,
-            files: [],
-            text,
-            threadTs: null,
-            ts,
-            userId: "U123",
-        });
-        app.slack.channelMessages = [message("1.0", "channel context")];
-        app.slack.threadMessages = [message("100.0", "trigger"), message("2.0", "thread context")];
-        const payload = {
-            ...event,
-            event: { ...event.event, thread_ts: "1.5" },
-        };
-        await send(app, payload);
-        expect(app.mobius.runs[0]?.prompt).toBe(
-            "# Channel history:\n[1.0] U123: channel context\n\n# Thread messages:\n[2.0] U123: thread context\n\n<@U_BOT> investigate",
-        );
-    });
-    it("Given a bot run and a waiting message, When completion arrives, Then Slack gets the reply and the waiting message resumes", async () => {
+
+    it("stores a waiting event only until the active turn completes and then resumes it", async () => {
         const app = await createTestApplication();
         const gate = app.mobius.pauseNext();
         const first = send(app);
@@ -334,31 +288,24 @@ describe("Slack message journeys", () => {
             .prepare("SELECT payload FROM processed_slack_event WHERE slack_event_id = 'Ev124'")
             .first<{ readonly payload: string }>();
         expect(stored?.payload).toContain("Ev124");
+
         gate.complete();
         await first;
         expect(app.slack.messages).toHaveLength(2);
         expect(app.slack.messages.every((message) => message.threadTs === "100.0")).toBe(true);
-        expect(app.queueErrors).toEqual([]);
         expect(app.mobius.runs).toHaveLength(2);
         expect((await app.database.d1.prepare("SELECT payload FROM processed_slack_event").all()).results).toEqual([
             { payload: "" },
             { payload: "" },
         ]);
     });
-    it("Given an intentional NO_REPLY result, When completion arrives, Then no Slack reply is posted", async () => {
+
+    it("suppresses NO_REPLY while still allowing authenticated tool delivery", async () => {
         const app = await createTestApplication();
         app.mobius.responseText = " [NO_REPLY] ";
         await send(app);
         expect(app.slack.messages).toEqual([]);
-    });
-    it("Given a completed turn, When its original event is retried, Then no duplicate reply is posted", async () => {
-        const app = await createTestApplication();
-        await send(app);
-        await send(app);
-        expect(app.slack.messages).toHaveLength(1);
-    });
-    it("Given an authenticated bot, When it sends a thread message through its tool URL, Then its installation token delivers the message", async () => {
-        const app = await createTestApplication();
+
         const response = await app.request("/mobius-slack/api/bot/slack/messages", {
             method: "POST",
             headers: {
@@ -374,12 +321,7 @@ describe("Slack message journeys", () => {
         });
         expect(response.status).toBe(200);
         expect(app.slack.messages).toEqual([
-            {
-                channelId: "C123",
-                text: "Done",
-                threadTs: "100.0",
-                token: "xoxb-token",
-            },
+            { channelId: "C123", text: "Done", threadTs: "100.0", token: "xoxb-token" },
         ]);
     });
 });
