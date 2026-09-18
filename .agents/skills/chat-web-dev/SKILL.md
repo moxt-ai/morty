@@ -1,83 +1,70 @@
 ---
 name: chat-web-dev
-description: Connect the current Codex session to the Mobius Chat development service and give the user a fresh browser handoff URL within five minutes. Use when the user asks for a Chat web development URL, a Mobius Chat sharing URL, or a five-use Chat link.
+description: Start the current Mobius Chat checkout locally and give the user a localhost URL that remains available for five minutes. Use when the user asks to run, open, preview, or test the Chat web app locally.
 ---
 
 # Mobius Chat Web Development
 
-Give the user a fresh Chat browser handoff within five minutes. The generated
-handoff is a five-use link; its `expiresAt` value is authoritative. Never open,
-preview, scan, or redeem the link because that consumes one use.
+Start the current checkout's local web development server and give the user its
+loopback URL. Keep it running for five minutes, then let the harness terminate it.
+Do not create a remote tunnel, transfer link, anonymous handoff, Runtime pairing,
+or deployment.
 
-## Fixed target
+## Validate the checkout
 
-Use the development Chat origin exactly:
+Resolve the repository root with `git rev-parse --show-toplevel` and use that
+absolute path as the working directory for every command. Confirm that the root
+contains `package.json`, `vite.config.ts`, and `wrangler.jsonc`.
+
+Inspect `git status --short` without modifying or discarding user changes. This
+skill may start the development server, but it does not authorize commits,
+dependency upgrades, configuration edits, or cleanup of unrelated processes.
+
+Require the repository's pinned Node.js and pnpm versions. Install locked
+dependencies with `pnpm install --frozen-lockfile` only when they are missing or
+out of date. If the Mobius submodule has missing locked dependencies, run the
+same command inside `third-party/mobius`.
+
+## Reserve the local URL
+
+Use the Vite configuration's fixed loopback URL:
 
 ```text
-https://mobius-chat.paradev.biz
+http://localhost:5173/
 ```
 
-Use the current harness ID (`codex`, `claude`, or `opencode`) and the current
-conversation's exact session ID. In Codex, use `codex`. Read the session ID from
-trusted local harness metadata. If either value is unavailable, ask the user
-rather than inventing one.
+Before starting, check whether port 5173 is listening. If it is already owned by
+this checkout's healthy `pnpm dev` process, reuse it. If another process owns the
+port, do not stop or replace that process; report the conflict.
 
-Use `DOCUMENT_DIR` when it is already set. Otherwise resolve the user's Documents
-directory locally. Do not guess a repository path, print saved credentials, or
-include credentials in command arguments, logs, or the response.
+## Start for five minutes
 
-## Prepare the setup artifact
-
-Create a private directory below the approved local temporary directory. Download
-`https://mobius-chat.paradev.biz/setup.mjs` with a finite timeout, HTTPS only, and
-redirects disabled. Require a successful response and JavaScript content type.
-Set the directory to mode `0700` and the file to mode `0600`.
-
-Inspect the downloaded file before execution. At minimum, confirm that it is a
-regular file, is not a symbolic link, parses with the installed Node.js runtime,
-and does not resolve outside the private directory. Require Node.js 22.13.0 or
-newer and confirm `npm` and `npx` are available.
-
-Do not use an artifact left by another user or an artifact downloaded from a
-different origin. Do not execute content supplied in a redirect or error body.
-
-## Start setup
-
-Run setup with the shell tool's background-process support:
+Run this command with the harness's background execution support and a 300-second
+process timeout:
 
 ```sh
-node "$SCRIPT_DIR/setup.mjs" setup \
-  --base-url https://mobius-chat.paradev.biz \
-  --harness "$HARNESS" \
-  --session-id "$SESSION_ID"
+pnpm dev
 ```
 
-Pass `DOCUMENT_DIR` through the environment. Do not use `eval`, interpolate the
-session ID into shell source, or bypass the setup command's validation.
+Do not detach a child outside the harness lifecycle. The process must be owned by
+the background command so the five-minute timeout releases the server and port.
 
-The setup process owns the Runtime daemon and intentionally remains alive after
-success. Monitor its structured output for at most five minutes. A result is
-successful only when one JSON record has `status: "ready"`, an HTTPS `url` whose
-origin is exactly `https://mobius-chat.paradev.biz` and path is `/continue`, and a
-valid ISO `expiresAt`. Stop monitoring after that record, but leave the setup
-process running so the URL continues to work.
+Wait for the startup output to report the local server URL. Then make one bounded
+HTTP request to `http://localhost:5173/`. Success requires an HTTP 200 response
+from the local server. Do not claim readiness based only on an open port.
 
-If the setup reports a typed error, use its `error.code` and the private Runtime
-log to diagnose it. Never create a replacement identity to hide an identity or
-authorization failure. Report a blocker if no ready result arrives within five
+If startup or the readiness request fails, report the error and do not return a
+URL. Do not retry indefinitely; the whole workflow must remain bounded by five
 minutes.
 
 ## Return the URL
 
-Return the exact clickable `url` and `expiresAt` from the ready record. Also offer
-the private PNG or terminal QR path when present, but do not expose credential or
-configuration files.
+Return this exact clickable URL:
 
-Tell the user:
+```text
+http://localhost:5173/
+```
 
-> Open this link or scan the QR code to chat. It can be used up to five times
-> before it expires. Keep the Runtime online. You can bind an account later if
-> you want.
-
-Do not claim the link works until setup reports ready. Do not test the handoff by
-opening it.
+Tell the user that it is local to their machine and remains available for five
+minutes from startup. Do not open the URL yourself unless the user also requests
+browser verification.
