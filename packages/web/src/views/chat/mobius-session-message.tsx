@@ -1,4 +1,5 @@
 import type { AgentDisplayContent, MobiusAttemptSummary, MobiusClient } from "@moxt-ai/mobius-sdk";
+import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
 import { AgentRichContent } from "../../components/agents/agent-rich-content.tsx";
 import { AgentReply } from "../../components/chat/agent-reply.tsx";
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
@@ -45,8 +46,8 @@ export function MobiusSessionMessage({
         return (
             <div className="min-w-0 space-y-2">
                 {message.text.length > 0 && (
-                    <MessageBubble speaker="user" data-testid={dataTestId.userMessage}>
-                        {message.text}
+                    <MessageBubble copyText={message.text} speaker="user" data-testid={dataTestId.userMessage}>
+                        <AgentMarkdown className="[&_p]:my-0" markdown={message.text} streaming={false} />
                     </MessageBubble>
                 )}
                 <AgentRichContent

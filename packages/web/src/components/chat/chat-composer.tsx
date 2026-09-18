@@ -168,6 +168,17 @@ export function ChatComposer({ placement }: ChatComposerProps) {
     };
 
     const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
+        if (event.key === "Enter" && event.ctrlKey && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            event.currentTarget.setRangeText(
+                "\n",
+                event.currentTarget.selectionStart,
+                event.currentTarget.selectionEnd,
+                "end",
+            );
+            setDraft(event.currentTarget.value);
+            return;
+        }
         if (commandSuggestions.length > 0 && event.key === "ArrowDown") {
             event.preventDefault();
             setCommandIndex((current) => (current + 1) % commandSuggestions.length);
@@ -186,7 +197,14 @@ export function ChatComposer({ placement }: ChatComposerProps) {
                 return;
             }
         }
-        if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
+        if (
+            event.key !== "Enter" ||
+            event.shiftKey ||
+            event.ctrlKey ||
+            event.metaKey ||
+            event.altKey ||
+            event.nativeEvent.isComposing
+        ) {
             return;
         }
         event.preventDefault();
@@ -469,7 +487,7 @@ export function ChatComposer({ placement }: ChatComposerProps) {
                 </div>
             </form>
             <span className="sr-only" id="composer-hint">
-                Enter to send. Shift and Enter inserts a new line.
+                Enter to send. Shift or Control plus Enter inserts a new line.
             </span>
             <span className="sr-only" id="connection-hint">
                 {runtime.description}

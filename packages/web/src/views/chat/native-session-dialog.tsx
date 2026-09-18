@@ -1,5 +1,7 @@
 import type { NativeSessionEntry, NativeSessionResult } from "@moxt-ai/mobius-sdk/channel";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
@@ -101,6 +103,7 @@ export function NativeSessionDialog({
                     kind: "failed",
                     message: cause instanceof Error ? cause.message : "Native sessions are unavailable.",
                 });
+                setError(cause instanceof Error ? cause.message : "Native sessions are unavailable.");
             }
         });
         return () => {
@@ -140,6 +143,7 @@ export function NativeSessionDialog({
                     entry,
                     message: cause instanceof Error ? cause.message : "The preview could not be loaded.",
                 });
+                setError(cause instanceof Error ? cause.message : "The preview could not be loaded.");
             }
         }
     };
@@ -323,9 +327,13 @@ export function NativeSessionDialog({
                                         <div
                                             // biome-ignore lint/suspicious/noArrayIndexKey: Native history has no message IDs; this read-only snapshot never reorders messages.
                                             key={`${index}-${message.role}`}
-                                            className={`whitespace-pre-wrap break-words rounded-xl p-3 ${message.role === "user" ? "ml-6 bg-primary/10" : "mr-6 bg-muted"}`}
+                                            className={`break-words rounded-xl p-3 ${message.role === "user" ? "ml-6 bg-primary/10" : "mr-6 bg-muted"}`}
                                         >
-                                            {message.text}
+                                            <AgentMarkdown
+                                                className="[&_p]:my-0"
+                                                markdown={message.text}
+                                                streaming={false}
+                                            />
                                         </div>
                                     ))}
                                     {preview.content.history.truncated && (
@@ -337,11 +345,6 @@ export function NativeSessionDialog({
                     )}
                 </section>
             </div>
-            {error !== "" && (
-                <p role="alert" className="mt-3 text-destructive">
-                    {error}
-                </p>
-            )}
             <footer className="mt-5 flex justify-end gap-2">
                 <Button variant="outline" disabled={operation === "import" || operation === "fork"} onClick={onClose}>
                     Cancel
@@ -367,6 +370,16 @@ export function NativeSessionDialog({
                     {operation === "fork" ? "Forking…" : "Fork"}
                 </Button>
             </footer>
+            {error !== "" &&
+                createPortal(
+                    <div
+                        className="fixed right-4 bottom-4 z-[70] max-w-sm rounded-xl border border-destructive/20 bg-white px-4 py-3 text-sm text-destructive shadow-lg"
+                        role="alert"
+                    >
+                        {error}
+                    </div>,
+                    document.body,
+                )}
         </Dialog>
     );
 }

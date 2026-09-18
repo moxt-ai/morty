@@ -1,5 +1,6 @@
 import type { PromptImage, PromptResource } from "@moxt-ai/mobius-sdk";
 import { cn } from "@/lib/utils";
+import { AgentMarkdown } from "../agents/agent-markdown.tsx";
 
 const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/;
 
@@ -51,7 +52,7 @@ export function UserPromptMessage({ images, resources, text }: UserPromptMessage
                             ))}
                         </div>
                     )}
-                    {text.length > 0 && <span>{text}</span>}
+                    {text.length > 0 && <AgentMarkdown className="[&_p]:my-0" markdown={text} streaming={false} />}
                 </div>
             </div>
         </article>

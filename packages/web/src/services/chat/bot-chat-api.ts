@@ -347,11 +347,27 @@ export class BotChatApi {
     };
 
     readonly connectSession = async (botId: string, sessionId: string, signal: AbortSignal): Promise<MobiusClient> => {
-        const readAccess = async (parent: AbortSignal) =>
-            v.parse(
-                sessionAccessSchema,
-                await this.#request(botId, "session-access", { sessionId: v.parse(identifier, sessionId) }, parent),
-            );
+        const readAccess = async (parent: AbortSignal) => {
+            for (let attempt = 0; attempt < 2; attempt += 1) {
+                try {
+                    return v.parse(
+                        sessionAccessSchema,
+                        await this.#request(
+                            botId,
+                            "session-access",
+                            { sessionId: v.parse(identifier, sessionId) },
+                            parent,
+                        ),
+                    );
+                } catch (cause) {
+                    parent.throwIfAborted();
+                    if (!(cause instanceof CloudApiError) || cause.code !== "CHAT_UNAVAILABLE" || attempt === 1) {
+                        throw cause;
+                    }
+                }
+            }
+            throw new CloudApiError("CHAT_UNAVAILABLE", "Chat is unavailable.");
+        };
         let access = await readAccess(signal);
         const endpoint = sessionEndpoint(access.endpoint);
         const projectId = access.projectId;

@@ -32,11 +32,12 @@ function AgentMarkdownLink({ children, href }: ComponentProps<"a">) {
 const MARKDOWN_COMPONENTS = Object.freeze({ a: AgentMarkdownLink });
 
 export interface AgentMarkdownProps {
+    readonly className?: string;
     readonly markdown: string;
     readonly streaming: boolean;
 }
 
-export function AgentMarkdown({ markdown, streaming }: AgentMarkdownProps) {
+export function AgentMarkdown({ className, markdown, streaming }: AgentMarkdownProps) {
     return (
         <Streamdown
             animated={STREAM_ANIMATION}
@@ -54,6 +55,7 @@ export function AgentMarkdown({ markdown, streaming }: AgentMarkdownProps) {
                 "[&_a]:font-medium [&_a]:text-[#19764a] [&_a]:underline [&_a]:decoration-[#2fb872]/35 [&_a]:underline-offset-2 hover:[&_a]:decoration-[#2fb872]",
                 "[&_code]:font-mono",
                 "[&_table]:text-sm",
+                className,
             )}
             components={MARKDOWN_COMPONENTS}
             controls={STREAMDOWN_CONTROLS}

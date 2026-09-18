@@ -1,5 +1,6 @@
 import type { AgentDisplayContent, MobiusMessage } from "@moxt-ai/mobius-sdk";
 import { useEffect, useState } from "react";
+import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
 import { AgentRichContent } from "../../components/agents/agent-rich-content.tsx";
 import { AgentReply } from "../../components/chat/agent-reply.tsx";
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
@@ -73,8 +74,8 @@ export function MobiusSessionTurn({
     );
     return (
         <div className="mx-auto grid min-w-0 w-full max-w-[1120px] gap-8 [overflow-wrap:anywhere]">
-            <MessageBubble speaker="user" data-testid={dataTestId.userMessage}>
-                {turn.prompt}
+            <MessageBubble copyText={turn.prompt} speaker="user" data-testid={dataTestId.userMessage}>
+                <AgentMarkdown className="[&_p]:my-0" markdown={turn.prompt} streaming={false} />
             </MessageBubble>
             <AgentReply
                 text={turn.response}

@@ -866,7 +866,13 @@ export function MobiusSessionPane({
                         : send())
                 }
                 outputState={
-                    taskControls.operation.kind === "stopping" ? "stopping" : controlRunning ? "running" : "idle"
+                    taskControls.operation.kind === "stopping"
+                        ? "stopping"
+                        : operation.kind === "sending" || delivery.state.kind === "submitting"
+                          ? "sending"
+                          : controlRunning
+                            ? "running"
+                            : "idle"
                 }
                 submitDisabled={
                     (taskControls.operation.kind !== "running" && busy) ||

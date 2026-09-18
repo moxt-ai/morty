@@ -5,13 +5,15 @@ import { MessageCopyButton } from "./message-copy-button.tsx";
 export function MessageBubble({
     speaker,
     children,
+    copyText,
     "data-testid": testId,
 }: {
     readonly speaker: "user" | "assistant";
     readonly children: ReactNode;
+    readonly copyText?: string;
     readonly "data-testid"?: string | undefined;
 }) {
-    const copyText = speaker === "user" && typeof children === "string" ? children : null;
+    const messageCopyText = speaker === "user" ? (copyText ?? (typeof children === "string" ? children : null)) : null;
     return (
         <article
             data-testid={testId}
@@ -24,7 +26,7 @@ export function MessageBubble({
             )}
         >
             {children}
-            {copyText !== null && <MessageCopyButton text={copyText} />}
+            {messageCopyText !== null && <MessageCopyButton text={messageCopyText} />}
         </article>
     );
 }
