@@ -43,7 +43,7 @@ import {
     type CancelRequest,
     connectMobiusChannelClient,
     type ElicitationResponseRequest,
-    type LocalImageResult,
+    type FileReadResult,
     type MobiusChannelClient,
     MobiusChannelError,
     type PermissionResponseRequest,
@@ -221,11 +221,7 @@ async function connectBrowserServiceClients(connection: ChannelConnection): Prom
 }
 
 abstract class TransportConnection {
-    abstract readonly readLocalImage: (
-        sessionId: string,
-        uri: string,
-        signal: AbortSignal,
-    ) => Promise<LocalImageResult>;
+    abstract readonly readFile: (sessionId: string, path: string, signal: AbortSignal) => Promise<FileReadResult>;
     abstract readonly nativeSession: (
         command: NativeSessionCommand,
         signal: AbortSignal,
@@ -249,7 +245,7 @@ abstract class TransportConnection {
 }
 
 class DisconnectedTransport extends TransportConnection {
-    readonly readLocalImage = (): Promise<LocalImageResult> => this.notInitialized();
+    readonly readFile = (): Promise<FileReadResult> => this.notInitialized();
     readonly nativeSession = (): Promise<NativeSessionResult> => this.notInitialized();
     readonly cancelAgentInstallation = (): Promise<void> => this.notInitialized();
     readonly cancel = (): Promise<void> =>
@@ -390,13 +386,9 @@ class ConnectedTransport extends TransportConnection {
         await Promise.all([channelClose, serviceClose]);
     };
 
-    readonly readLocalImage = async (
-        sessionId: string,
-        uri: string,
-        signal: AbortSignal,
-    ): Promise<LocalImageResult> => {
+    readonly readFile = async (sessionId: string, path: string, signal: AbortSignal): Promise<FileReadResult> => {
         const client = await this.#client;
-        return await client.readLocalImage(sessionId, uri, signal);
+        return await client.readFile(sessionId, path, signal);
     };
 
     readonly nativeSession = async (
@@ -815,8 +807,8 @@ class ConnectedTransport extends TransportConnection {
 
 let transport: TransportConnection = new DisconnectedTransport();
 
-export async function readLocalImage(sessionId: string, uri: string, signal: AbortSignal): Promise<LocalImageResult> {
-    return await transport.readLocalImage(sessionId, uri, signal);
+export async function readFile(sessionId: string, path: string, signal: AbortSignal): Promise<FileReadResult> {
+    return await transport.readFile(sessionId, path, signal);
 }
 
 export function initializeMobiusTransport(connection: ChannelConnection, onActivity: () => void): void {

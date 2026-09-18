@@ -3,7 +3,7 @@ import type { MobiusBrowserClient } from "@moxt-ai/mobius-sdk/browser";
 import { ExternalLink, FileText, Image as ImageIcon, Terminal, Video } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AgentMarkdown } from "@/components/agents/agent-markdown";
-import { readLocalImage } from "@/services/chat/mobius-transport";
+import { readFile } from "@/services/chat/mobius-transport";
 import { readSessionArtifactBytes } from "@/services/pairing/pairing-api";
 
 const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/;
@@ -81,8 +81,14 @@ function ArtifactMedia({
         const download =
             content.type === "image" && content.uri.length > 0
                 ? serviceClient
-                    ? serviceClient.sessions.readLocalImage(sessionId, content.uri, controller.signal)
-                    : readLocalImage(sessionId, content.uri, controller.signal)
+                    ? serviceClient.sessions.readFile(sessionId, content.uri, controller.signal).then((file) => ({
+                          bytes: file.bytes,
+                          mimeType: file.mediaType,
+                      }))
+                    : readFile(sessionId, content.uri, controller.signal).then((file) => ({
+                          bytes: file.bytes,
+                          mimeType: file.mediaType,
+                      }))
                 : serviceClient
                   ? serviceClient.artifacts
                         .download(sessionId, content.artifactId, controller.signal)
