@@ -54,8 +54,8 @@ export function AgentReply({
     readonly children?: ReactNode;
     readonly "data-testid"?: string;
 }) {
-    const { phase, thinking } = describeAgentReply(attempt, activities, active, latest);
     const hasText = text.length > 0;
+    const { phase, thinking } = describeAgentReply(attempt, activities, active, latest && !hasText);
     return (
         <div className="min-w-0 space-y-3">
             <AgentThinking {...thinking} />

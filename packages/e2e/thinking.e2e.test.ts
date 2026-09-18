@@ -32,7 +32,7 @@ test("Given a paired agent, When a user expands intermediate steps and reloads t
     await page.screenshot({ path: testInfo.outputPath("thinking-completed-mobile.png"), animations: "disabled" });
 });
 
-test("Given an agent still thinking, When a user expands, collapses and reloads the conversation, Then thinking stays expandable with a visible working indicator", async ({
+test("Given an agent starts and finishes intermediate steps, When the user observes and collapses them, Then active steps auto-open and completed steps auto-close", async ({
     runtime,
 }, testInfo) => {
     await runtime.openPairedChat();
@@ -43,7 +43,6 @@ test("Given an agent still thinking, When a user expands, collapses and reloads 
     await expect(thinking).toBeVisible();
     await expect(working).toBeVisible();
     await expect(thinking.locator("summary")).toHaveText("Show intermediate steps");
-    await thinking.locator("summary").click();
     await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("thinking-active-desktop.png"), animations: "disabled" });
     await thinking.locator("summary").click();
@@ -51,14 +50,14 @@ test("Given an agent still thinking, When a user expands, collapses and reloads 
     await expect(working).toBeVisible();
     await page.reload();
     await expect(working).toBeVisible();
-    await thinking.locator("summary").click();
     await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toHaveCount(1);
+    await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: testInfo.outputPath("thinking-active-mobile.png"), animations: "disabled" });
     await runtime.cancelSessionTurn(sessionId, turnId);
     await expect(page.getByText("Response cancelled.", { exact: true })).toBeVisible();
     await expect(working).toHaveCount(0);
-    await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toBeVisible();
+    await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toBeHidden();
 });
 
 test("Given a forked native session, When a user continues it and opens thinking, Then reasoning is readable and only the active reply shows a spinner", async ({
@@ -89,7 +88,6 @@ test("Given a forked native session, When a user continues it and opens thinking
     await page.getByRole("textbox", { name: "Message" }).fill("wait until cancelled");
     await page.getByRole("button", { name: "Send message" }).click();
     await expect(thinking).toHaveCount(2);
-    await thinking.last().locator("summary").click();
     await expect(thinking.last().getByText("Inspecting the workspace", { exact: true })).toBeVisible();
     await expect(messages.getByRole("status", { name: "Agent working" })).toHaveCount(1);
     await page.screenshot({ path: testInfo.outputPath("local-thinking-active.png"), animations: "disabled" });

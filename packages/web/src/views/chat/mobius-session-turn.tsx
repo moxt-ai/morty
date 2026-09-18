@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
 import { AgentRichContent } from "../../components/agents/agent-rich-content.tsx";
 import { AgentReply } from "../../components/chat/agent-reply.tsx";
-import { AgentWorkingIndicator } from "../../components/chat/agent-thinking.tsx";
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { activitiesForTurn, type RecordedAgentActivity } from "../../services/chat/agent-activities.ts";
@@ -70,22 +69,14 @@ export function MobiusSessionTurn({
     readonly requests: Pick<BotChatApi, "connectSession">;
 }) {
     const turnActivities = activitiesForTurn(activities, turn.sessionId, turn.commandId);
-    const working = ["none", "dispatching", "running"].includes(turn.attempt.kind);
     const media = [...turn.contents, ...turnActivities.flatMap((activity) => activity.content)].filter(
         (content) => content.type === "image" || content.type === "video",
     );
     return (
         <div className="mx-auto grid min-w-0 w-full max-w-[1120px] gap-8 [overflow-wrap:anywhere]">
-            <div className="min-w-0 space-y-2">
-                <MessageBubble
-                    copyText={turn.prompt}
-                    speaker="user"
-                    status={working ? <AgentWorkingIndicator /> : undefined}
-                    data-testid={dataTestId.userMessage}
-                >
-                    <AgentMarkdown className="[&_p]:my-0" markdown={turn.prompt} streaming={false} />
-                </MessageBubble>
-            </div>
+            <MessageBubble copyText={turn.prompt} speaker="user" data-testid={dataTestId.userMessage}>
+                <AgentMarkdown className="[&_p]:my-0" markdown={turn.prompt} streaming={false} />
+            </MessageBubble>
             <AgentReply
                 text={turn.response}
                 attempt={turn.attempt}

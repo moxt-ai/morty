@@ -9,6 +9,7 @@ import {
 import { type MobiusBrowserClient, type MobiusBrowserHistory, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
 import { MessageSquare } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { AgentWorkingIndicator } from "../../components/chat/agent-thinking.tsx";
 import { BotChatComposer, type ComposerAttachment } from "../../components/chat/bot-chat-composer.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
@@ -712,46 +713,55 @@ export function BotChatHome({
                         </div>
                     </div>
                     {active !== null && !switching && (
-                        <BotChatComposer
-                            attachments={attachments}
-                            disabled={switching || sending.kind === "sending"}
-                            draft={draft}
-                            error={sending.kind === "failed" || sending.kind === "stop-failed" ? sending.message : ""}
-                            onAttachmentsChange={setAttachments}
-                            onDraftChange={setDraft}
-                            onStop={() => void stop()}
-                            onSubmit={() => void send()}
-                            outputState={
-                                sending.kind === "running" || sending.kind === "stop-failed"
-                                    ? "running"
-                                    : sending.kind === "stopping"
-                                      ? "stopping"
-                                      : "idle"
-                            }
-                            submitDisabled={
-                                switching ||
-                                (sending.kind !== "idle" && sending.kind !== "failed") ||
-                                (draft.trim().length === 0 && attachments.length === 0) ||
-                                (active.kind === "draft" && draftSettings === null)
-                            }
-                        >
-                            {active.kind === "draft" ? (
-                                <DraftChatControls
-                                    key={target.current.kind === "draft" ? target.current.key : "existing"}
-                                    botId={active.bot.botId}
-                                    requests={requests}
-                                    disabled={switching || sending.kind === "sending"}
-                                    onSettings={setDraftSettings}
-                                />
-                            ) : (
-                                <ChatControls
-                                    botId={active.bot.botId}
-                                    client={active.client}
-                                    requests={requests}
-                                    disabled={switching}
-                                />
+                        <>
+                            {(sending.kind === "running" || sending.kind === "stop-failed") && (
+                                <div className="mx-auto -mb-4 flex w-full max-w-[976px] shrink-0 justify-end px-7">
+                                    <AgentWorkingIndicator />
+                                </div>
                             )}
-                        </BotChatComposer>
+                            <BotChatComposer
+                                attachments={attachments}
+                                disabled={switching || sending.kind === "sending"}
+                                draft={draft}
+                                error={
+                                    sending.kind === "failed" || sending.kind === "stop-failed" ? sending.message : ""
+                                }
+                                onAttachmentsChange={setAttachments}
+                                onDraftChange={setDraft}
+                                onStop={() => void stop()}
+                                onSubmit={() => void send()}
+                                outputState={
+                                    sending.kind === "running" || sending.kind === "stop-failed"
+                                        ? "running"
+                                        : sending.kind === "stopping"
+                                          ? "stopping"
+                                          : "idle"
+                                }
+                                submitDisabled={
+                                    switching ||
+                                    (sending.kind !== "idle" && sending.kind !== "failed") ||
+                                    (draft.trim().length === 0 && attachments.length === 0) ||
+                                    (active.kind === "draft" && draftSettings === null)
+                                }
+                            >
+                                {active.kind === "draft" ? (
+                                    <DraftChatControls
+                                        key={target.current.kind === "draft" ? target.current.key : "existing"}
+                                        botId={active.bot.botId}
+                                        requests={requests}
+                                        disabled={switching || sending.kind === "sending"}
+                                        onSettings={setDraftSettings}
+                                    />
+                                ) : (
+                                    <ChatControls
+                                        botId={active.bot.botId}
+                                        client={active.client}
+                                        requests={requests}
+                                        disabled={switching}
+                                    />
+                                )}
+                            </BotChatComposer>
+                        </>
                     )}
                 </section>
             )}

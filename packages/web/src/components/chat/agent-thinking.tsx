@@ -1,4 +1,5 @@
 import { Brain, ChevronDown, LoaderCircle, Wrench } from "lucide-react";
+import { useEffect, useRef } from "react";
 import type { ThinkingPresentation } from "../../services/chat/agent-reply.ts";
 import { AgentMarkdown } from "../agents/agent-markdown.tsx";
 
@@ -14,13 +15,19 @@ export function AgentWorkingIndicator() {
     );
 }
 
-export function AgentThinking({ entries }: ThinkingPresentation) {
+export function AgentThinking({ autoOpen, entries }: ThinkingPresentation) {
+    const disclosure = useRef<HTMLDetailsElement>(null);
+    useEffect(() => {
+        if (disclosure.current !== null) {
+            disclosure.current.open = autoOpen;
+        }
+    }, [autoOpen]);
     if (entries.length === 0) {
         return null;
     }
     return (
         <div className="min-w-0 text-sm text-muted-foreground">
-            <details aria-label="Agent thinking" className="group/thinking min-w-0">
+            <details aria-label="Agent thinking" className="group/thinking min-w-0" ref={disclosure}>
                 <summary className="flex min-h-10 w-fit cursor-pointer list-none items-center gap-2 rounded-lg px-1 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
                     <ChevronDown
                         aria-hidden="true"

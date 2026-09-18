@@ -190,19 +190,15 @@ test("Given a full message viewport, When the user sends another prompt, Then th
         const bounds = element.getBoundingClientRect();
         return {
             bottom: bounds.bottom,
-            center: bounds.left + bounds.width / 2,
             right: bounds.right,
             top: bounds.top,
-            viewportCenter: window.innerWidth / 2,
         };
     });
-    expect(workingPosition.center).toBeGreaterThan(workingPosition.viewportCenter);
     const position = await latestMessage.evaluate((element) => {
         const message = element.getBoundingClientRect();
         const log = element.closest('[role="log"]')?.getBoundingClientRect();
         return {
             messageBottom: message.bottom,
-            messageRight: message.right,
             messageTop: message.top,
             logBottom: log?.bottom ?? 0,
             logTop: log?.top ?? 0,
@@ -210,10 +206,17 @@ test("Given a full message viewport, When the user sends another prompt, Then th
     });
     expect(position.messageTop).toBeGreaterThanOrEqual(position.logTop);
     expect(position.messageBottom).toBeLessThanOrEqual(position.logBottom);
-    expect(workingPosition.top).toBeGreaterThanOrEqual(position.messageTop);
-    expect(workingPosition.bottom).toBeLessThanOrEqual(position.messageBottom);
-    expect(position.messageRight - workingPosition.right).toBeGreaterThanOrEqual(0);
-    expect(position.messageRight - workingPosition.right).toBeLessThanOrEqual(16);
+    const composerPosition = await page.getByTestId(dataTestId.messageComposer).evaluate((element) => {
+        const composer = element.closest("form")?.getBoundingClientRect();
+        return { left: composer?.left ?? 0, right: composer?.right ?? 0, top: composer?.top ?? 0 };
+    });
+    expect(workingPosition.bottom).toBeLessThanOrEqual(composerPosition.top);
+    expect(composerPosition.top - workingPosition.bottom).toBeLessThanOrEqual(8);
+    expect(workingPosition.right).toBeGreaterThan(
+        composerPosition.left + (composerPosition.right - composerPosition.left) / 2,
+    );
+    expect(composerPosition.right - workingPosition.right).toBeGreaterThanOrEqual(0);
+    expect(composerPosition.right - workingPosition.right).toBeLessThanOrEqual(40);
     await page.setViewportSize({ width: 390, height: 900 });
     const shellPosition = await page.getByRole("main", { name: "Chat", exact: true }).evaluate((element) => {
         const shell = element.getBoundingClientRect();

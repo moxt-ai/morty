@@ -21,6 +21,7 @@ import {
 import { type MobiusClient, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
+import { AgentWorkingIndicator } from "../../components/chat/agent-thinking.tsx";
 import { BotChatComposer, type ComposerAttachment } from "../../components/chat/bot-chat-composer.tsx";
 import { ChatComposerMoreMenu } from "../../components/chat/chat-composer-more-menu.tsx";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
@@ -942,8 +943,6 @@ export function MobiusSessionPane({
             ? null
             : (messages.findLast((message) => message.role === "assistant" && message.commandId === activeCommandId)
                   ?.id ?? null);
-    const activeUserMessageId =
-        activeCommandId === null ? null : (messages.findLast((message) => message.role === "user")?.id ?? null);
     const compactAvailable = findCompactCommand(taskControls.commands) !== null;
     const taskControlError =
         taskControls.feedback.kind === "failed"
@@ -1019,7 +1018,6 @@ export function MobiusSessionPane({
                                 activities={activities}
                                 activeCommandId={activeCommandId}
                                 activeMessageId={activeMessageId}
-                                activeUserMessageId={activeUserMessageId}
                                 sessionId={sessionId}
                                 botId={botId}
                                 client={connection.kind === "ready" ? connection.client : null}
@@ -1048,6 +1046,11 @@ export function MobiusSessionPane({
                 }
                 onSteer={(commandId) => void steerQueued(commandId)}
             />
+            {activeCommandId !== null && (
+                <div className="mx-auto -mb-4 flex w-full max-w-[976px] shrink-0 justify-end px-7">
+                    <AgentWorkingIndicator />
+                </div>
+            )}
             <BotChatComposer
                 actions={
                     <ChatComposerMoreMenu

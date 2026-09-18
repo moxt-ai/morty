@@ -19,6 +19,7 @@ type ThinkingEntry =
       };
 
 export interface ThinkingPresentation {
+    readonly autoOpen: boolean;
     readonly entries: readonly ThinkingEntry[];
 }
 
@@ -48,11 +49,11 @@ export function describeAgentReply(
     attempt: MobiusAttemptSummary | null,
     activities: readonly MobiusAgentActivityEvent[],
     active: boolean,
-    latest: boolean,
+    stepsActive: boolean,
 ): { readonly phase: ReplyPhase; readonly thinking: ThinkingPresentation } {
     const phase = replyPhase(attempt, active);
     const entries = activities.flatMap((activity): readonly ThinkingEntry[] => {
-        const status = phase === "working" && latest && activity.status === "running" ? "streaming" : "recorded";
+        const status = stepsActive && activity.status === "running" ? "streaming" : "recorded";
         if (activity.activityType === "reasoning") {
             return activity.output.length === 0
                 ? []
@@ -72,5 +73,5 @@ export function describeAgentReply(
             },
         ];
     });
-    return { phase, thinking: { entries } };
+    return { phase, thinking: { autoOpen: stepsActive, entries } };
 }
