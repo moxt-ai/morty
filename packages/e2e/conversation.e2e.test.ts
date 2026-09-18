@@ -189,6 +189,7 @@ test("Given a full message viewport, When the user sends another prompt, Then th
     const workingPosition = await working.evaluate((element) => {
         const bounds = element.getBoundingClientRect();
         return {
+            bottom: bounds.bottom,
             center: bounds.left + bounds.width / 2,
             right: bounds.right,
             top: bounds.top,
@@ -209,9 +210,10 @@ test("Given a full message viewport, When the user sends another prompt, Then th
     });
     expect(position.messageTop).toBeGreaterThanOrEqual(position.logTop);
     expect(position.messageBottom).toBeLessThanOrEqual(position.logBottom);
-    expect(workingPosition.top).toBeGreaterThanOrEqual(position.messageBottom);
-    expect(workingPosition.top - position.messageBottom).toBeLessThanOrEqual(6);
-    expect(Math.abs(workingPosition.right - position.messageRight)).toBeLessThanOrEqual(1);
+    expect(workingPosition.top).toBeGreaterThanOrEqual(position.messageTop);
+    expect(workingPosition.bottom).toBeLessThanOrEqual(position.messageBottom);
+    expect(position.messageRight - workingPosition.right).toBeGreaterThanOrEqual(0);
+    expect(position.messageRight - workingPosition.right).toBeLessThanOrEqual(16);
     await page.setViewportSize({ width: 390, height: 900 });
     const shellPosition = await page.getByRole("main", { name: "Chat", exact: true }).evaluate((element) => {
         const shell = element.getBoundingClientRect();
