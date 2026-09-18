@@ -30,7 +30,9 @@ export function MessageBubble({
             {children}
             {messageCopyText !== null && <MessageCopyButton text={messageCopyText} />}
             {status !== undefined && (
-                <span className="absolute top-full left-0 flex -translate-x-1/2 -translate-y-1/2">{status}</span>
+                <span className="absolute top-full left-0 -mt-1 ml-1 flex -translate-x-1/2 -translate-y-1/2">
+                    {status}
+                </span>
             )}
         </article>
     );
