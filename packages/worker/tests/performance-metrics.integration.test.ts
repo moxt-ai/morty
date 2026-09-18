@@ -1,8 +1,6 @@
-import { createServer } from "node:http";
 import { sql } from "drizzle-orm";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { expect, test } from "vitest";
-import { MobiusAppService } from "../src/components/chat/service/mobius-app-service.ts";
 import { D1SqlDatabase } from "../src/components/slack/storage/d1-database.ts";
 
 class CapturedMetrics {
@@ -27,52 +25,6 @@ function sequenceClock(values: readonly number[]): () => number {
         return value;
     };
 }
-
-test("Given a Mobius Chat gateway request, When Mobius responds, Then operators receive its performance metric", async () => {
-    const server = createServer((_request, response) => {
-        response.writeHead(201, { "content-type": "application/json" });
-        response.end(JSON.stringify({ accessToken: "credential", accessTokenId: "token-1" }));
-    });
-    await new Promise<void>((resolve, reject) => {
-        server.once("error", reject);
-        server.listen(0, "127.0.0.1", resolve);
-    });
-    try {
-        const address = server.address();
-        if (address === null || typeof address === "string") {
-            throw new Error("Expected the Mobius test server address");
-        }
-        const metrics = new CapturedMetrics();
-        const gateway = new MobiusAppService({
-            appId: "app-1",
-            appSecret: "secret",
-            baseUrl: `http://127.0.0.1:${address.port}`,
-            forbiddenOrigin: "https://chat.example.test",
-            metrics,
-            nowMilliseconds: sequenceClock([100, 127]),
-        });
-
-        await expect(gateway.issueAccessToken("bot-1", null, new AbortController().signal)).resolves.toEqual({
-            accessToken: "credential",
-            accessTokenId: "token-1",
-        });
-        expect(metrics.entries).toEqual([
-            {
-                bindings: {
-                    durationMs: 27,
-                    event: "performance-metric",
-                    metric: "mobius-chat-gateway-request-duration",
-                    operation: "issue-access-token",
-                    outcome: "success",
-                },
-                message: "Performance metric",
-            },
-        ]);
-    } finally {
-        server.closeAllConnections();
-        await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
-    }
-});
 
 test("Given a D1 query, When the database returns, Then operators receive its performance metric", async () => {
     const runtime = new Miniflare(

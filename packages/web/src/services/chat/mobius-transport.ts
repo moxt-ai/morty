@@ -856,20 +856,6 @@ export async function listWorkspace(
     );
 }
 
-export async function prepareConversationSession(
-    request: SessionPrepareRequest,
-    signal: AbortSignal,
-): Promise<SessionReadyEvent> {
-    return await transport.prepare(request, signal);
-}
-
-export async function configureConversationSession(
-    request: SessionConfigureRequest,
-    signal: AbortSignal,
-): Promise<SessionConfigUpdatedEvent> {
-    return await transport.configure(request, signal);
-}
-
 type NativeSessionAction =
     | { readonly action: "list"; readonly cursor: string | null }
     | {

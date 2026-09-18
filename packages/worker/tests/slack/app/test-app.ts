@@ -7,7 +7,7 @@ import { SecretCipher } from "../../../src/components/slack/infra/util/secret-ci
 import { ClockService } from "../../../src/components/slack/service/identity/clock-service";
 import { tenantContext } from "../../../src/components/slack/service/identity/tenant-context";
 import { DatabaseSlackAppDirectory } from "../../../src/components/slack/storage/database-slack-app-directory";
-import { MobiusGateway } from "../../../src/gateway/mobius-gateway";
+import { managedBot } from "../../../src/schema/index.ts";
 import { InMemoryAttachments } from "./in-memory-attachments";
 import { InMemoryClerkGateway } from "./in-memory-clerk-gateway";
 import { InMemoryIdentityGateway } from "./in-memory-identity-gateway";
@@ -16,11 +16,7 @@ import { InMemorySlack } from "./in-memory-slack-gateway";
 import { createSignedRequest } from "./signed-request";
 import { createTestDatabase } from "./test-database";
 
-export async function createTestApplication(
-    _singleDatabase = false,
-    createMobiusGateway: (cx: ConstructorParameters<typeof MobiusGateway>[0]) => MobiusGateway = (cx) =>
-        new MobiusGateway(cx),
-) {
+export async function createTestApplication(_singleDatabase = false) {
     const database = await createTestDatabase();
     const cipher = new SecretCipher(btoa("a".repeat(32)));
     const slack = new InMemorySlack();
@@ -66,7 +62,6 @@ export async function createTestApplication(
         },
         attachmentStorageResolver: attachments,
         clerk,
-        mobiusTransport: mobius,
         slackWebApi: slack,
         identityGateway: identity,
         humanIdentity: {
@@ -83,14 +78,14 @@ export async function createTestApplication(
         ...infrastructure,
         gateways: {
             ...gateways,
-            mobius: createMobiusGateway(infrastructure),
+            platformProjects: mobius,
             slackAppDirectory: new DatabaseSlackAppDirectory(infrastructure),
         },
     });
     const storage = cx.storages.slackEventStorage;
     const signal = new AbortController().signal;
     const tenant = tenantContext("tenant-1");
-    const connections = cx.storages.mobiusConnectionStorage;
+    const connections = cx.storages.chatBotBindingStorage;
     await storage.registerApp(
         tenant,
         {
@@ -106,9 +101,41 @@ export async function createTestApplication(
         },
         signal,
     );
+    await database.execute(
+        "run",
+        1,
+        signal,
+        async (orm) =>
+            await orm.insert(managedBot).values({
+                userId: "tenant-1",
+                botId: "chat-bot-1",
+                displayName: "Test Chat Bot",
+                bindingId: "binding-1",
+                runtimeId: "runtime-1",
+                agentRef: "agent-1",
+                workspaceRef: "workspace-1",
+                agentConfigRevision: 1,
+                instructions: "Answer as the configured Chat Bot.",
+                legacyMigrationPending: false,
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+            }),
+    );
     await connections.saveBinding(
         tenant,
-        await cx.gateways.mobius.connectBot("tenant-1", "bot-1", mobius.ownBot("mobius-bot-1"), signal),
+        {
+            tenantId: "tenant-1",
+            slackBotId: "bot-1",
+            botId: "chat-bot-1",
+            connectionId: "connection-1",
+            projectId: config.projectId,
+            bindingId: "binding-1",
+            runtimeId: "runtime-1",
+            agentRef: "agent-1",
+            workspaceRef: "workspace-1",
+            agentConfigRevision: 1,
+            instructions: "Answer as the configured Chat Bot.",
+        },
         signal,
     );
     await storage.upsertInstallation(

@@ -1,17 +1,13 @@
 import { Hono } from "hono";
 import * as v from "valibot";
-import {
-    botBindingInputSchema,
-    botSetupCredentialSchema,
-    configureBotSchema,
-    createMobiusBotSchema,
-    pairingStatusInputSchema,
-} from "../../../../gateway/mobius-gateway";
 import { bodyParser } from "../../../../middleware/body-parser.ts";
 import { humanTenant } from "../../service/identity/tenant-context";
 import { authenticatedHuman } from "../authenticated-human";
 import type { SlackHttpEnvironment } from "../slack-http-environment";
 
+const chatBotBindingInputSchema = v.strictObject({
+    botId: v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u)),
+});
 const botQuerySchema = v.pipe(
     v.object({ slackBotId: v.pipe(v.string(), v.minLength(1)) }),
     v.readonly(),
@@ -45,106 +41,6 @@ const createAppBodySchema = v.pipe(
 
 export function createSlackManagementRoutes() {
     return new Hono<SlackHttpEnvironment>()
-        .post(
-            "/mobius/projects/:projectId/bots/:botId/setup/read",
-            authenticatedHuman,
-            bodyParser<SlackHttpEnvironment, typeof botSetupCredentialSchema>(botSetupCredentialSchema),
-            async (context) => {
-                const input = context.req.valid("json");
-                return context.json(
-                    await context.env.services.mobiusConnections.readBotSetup(
-                        context.req.param("projectId"),
-                        context.req.param("botId"),
-                        input.ownerCredential,
-                        context.get("forwardingToken"),
-                        context.req.raw.signal,
-                    ),
-                );
-            },
-        )
-        .post(
-            "/mobius/projects/:projectId/bots/:botId/setup",
-            authenticatedHuman,
-            bodyParser<SlackHttpEnvironment, typeof configureBotSchema>(configureBotSchema),
-            async (context) => {
-                const input = context.req.valid("json");
-                return context.json(
-                    await context.env.services.mobiusConnections.configureBot(
-                        context.req.param("projectId"),
-                        context.req.param("botId"),
-                        input,
-                        context.get("forwardingToken"),
-                        context.req.raw.signal,
-                    ),
-                    202,
-                );
-            },
-        )
-        .post("/mobius/pairings", authenticatedHuman, async (context) => {
-            const principal = context.get("principal");
-            const pairing = await context.env.services.mobiusConnections.createPairing(
-                context.get("forwardingToken"),
-                principal.tenantId,
-                context.req.raw.signal,
-            );
-            context.header("Cache-Control", "no-store");
-            return context.json(pairing, 201);
-        })
-        .post(
-            "/mobius/pairings/status",
-            authenticatedHuman,
-            bodyParser<SlackHttpEnvironment, typeof pairingStatusInputSchema>(pairingStatusInputSchema),
-            async (context) => {
-                const input = context.req.valid("json");
-                context.header("Cache-Control", "no-store");
-                return context.json(
-                    await context.env.services.mobiusConnections.pairingStatus(input, context.req.raw.signal),
-                );
-            },
-        )
-        .get("/mobius/projects/:projectId/status", authenticatedHuman, async (context) => {
-            return context.json(
-                await context.env.services.mobiusConnections.projectStatus(
-                    context.req.param("projectId"),
-                    context.get("forwardingToken"),
-                    context.req.raw.signal,
-                ),
-            );
-        })
-        .get("/mobius/projects", authenticatedHuman, async (context) => {
-            return context.json(
-                await context.env.services.mobiusConnections.listProjects(
-                    context.get("forwardingToken"),
-                    context.req.raw.signal,
-                ),
-            );
-        })
-        .get("/mobius/projects/:projectId/bots", authenticatedHuman, async (context) => {
-            return context.json(
-                await context.env.services.mobiusConnections.listProjectBots(
-                    context.req.param("projectId"),
-                    context.get("forwardingToken"),
-                    context.req.raw.signal,
-                ),
-            );
-        })
-        .post(
-            "/mobius/projects/:projectId/bots",
-            authenticatedHuman,
-            bodyParser<SlackHttpEnvironment, typeof createMobiusBotSchema>(createMobiusBotSchema),
-            async (context) => {
-                const input = context.req.valid("json");
-                return context.json(
-                    await context.env.services.mobiusConnections.createBot(
-                        context.req.param("projectId"),
-                        context.get("forwardingToken"),
-                        input,
-                        context.req.raw.signal,
-                    ),
-                    201,
-                );
-            },
-        )
         .get("/bots", authenticatedHuman, async (context) => {
             const { management } = context.env.services;
             const principal = context.get("principal");
@@ -152,16 +48,23 @@ export function createSlackManagementRoutes() {
                 bots: await management.listBots(humanTenant(principal), context.req.raw.signal),
             });
         })
+        .get("/chat-bots", authenticatedHuman, async (context) => {
+            const { management } = context.env.services;
+            const principal = context.get("principal");
+            return context.json({
+                bots: await management.listOwnedBots(humanTenant(principal), context.req.raw.signal),
+            });
+        })
         .put(
             "/bots/:slackBotId/binding",
             authenticatedHuman,
-            bodyParser<SlackHttpEnvironment, typeof botBindingInputSchema>(botBindingInputSchema),
+            bodyParser<SlackHttpEnvironment, typeof chatBotBindingInputSchema>(chatBotBindingInputSchema),
             async (context) => {
-                const { mobiusConnections: mobius } = context.env.services;
+                const { chatBotBindings } = context.env.services;
                 const principal = context.get("principal");
                 const body = context.req.valid("json");
                 return context.json(
-                    await mobius.bind(
+                    await chatBotBindings.bind(
                         humanTenant(principal),
                         principal,
                         context.req.param("slackBotId"),

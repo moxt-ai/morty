@@ -1,6 +1,5 @@
 import pino, { type Logger } from "pino";
 import { ChatService } from "../components/chat/service/chat-service.ts";
-import { MobiusAppService } from "../components/chat/service/mobius-app-service.ts";
 import { ManagedSessionStorage } from "../components/chat/storage/managed-session-storage.ts";
 import { AuthenticationService } from "../components/management/service/authentication-service.ts";
 import { ManagementService } from "../components/management/service/management-service.ts";
@@ -33,7 +32,6 @@ export interface ApplicationContext {
     readonly services: {
         readonly authentication: AuthenticationService;
         readonly chat: ChatService;
-        readonly mobiusApp: MobiusAppService;
         readonly management: ManagementService;
     };
 }
@@ -53,21 +51,12 @@ export function createApplicationDependencies(bindings: CloudBindings): Applicat
     });
     const cx = { ...infrastructure, storages };
     const authentication = new AuthenticationService(cx);
-    const mobiusApp = new MobiusAppService({
-        appId: bindings.MOBIUS_APP_ID,
-        appSecret: bindings.MOBIUS_APP_SECRET,
-        baseUrl: bindings.MOBIUS_BASE_URL,
-        forbiddenOrigin: bindings.APP_ORIGIN,
-        metrics: logger,
-        nowMilliseconds: () => performance.now(),
-    });
     const services = Object.freeze({
         authentication,
-        chat: new ChatService({ ...cx, services: { mobiusApp } }),
-        mobiusApp,
+        chat: new ChatService(cx),
         management: new ManagementService({
             ...cx,
-            services: { authentication, mobiusApp },
+            services: { authentication },
             scopeProject: async (projectId, signal): Promise<ManagementService> =>
                 createApplicationDependencies(await projectBindings(bindings, projectId, signal)).services.management,
         }),

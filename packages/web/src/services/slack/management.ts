@@ -1,8 +1,6 @@
 import { useMemo } from "react";
 import * as v from "valibot";
 import { useMobiusSlackIdentity, useMobiusSlackUrl } from "@/components/slack/mobius-slack-context";
-import { useMobiusBotsRequests } from "./mobius-bots";
-import { useProjectCredentials } from "./project-credentials";
 import { type GetToken, RequestError, request } from "./request";
 
 type ResolveUrl = (path: string) => string;
@@ -150,30 +148,16 @@ async function disconnectApp(cx: ManagementContext, botId: string, signal: Abort
 export function useManagementRequests() {
     const { getToken } = useMobiusSlackIdentity();
     const resolve = useMobiusSlackUrl();
-    const credentials = useProjectCredentials();
-    const mobius = useMobiusBotsRequests();
     const cx = useMemo<ManagementContext>(() => Object.freeze({ getToken, resolve }), [getToken, resolve]);
     return useMemo(
         () =>
             Object.freeze({
                 listBindableBots: async (signal: AbortSignal) => {
-                    const deadline = AbortSignal.any([signal, AbortSignal.timeout(15_000)]);
-                    const projects = await mobius.listProjects(deadline);
-                    const bots: { readonly projectId: string; readonly botId: string; readonly displayName: string }[] =
-                        [];
-                    for (const project of projects) {
-                        deadline.throwIfAborted();
-                        if (credentials.read(project.projectId) !== null) {
-                            for (const bot of await mobius.listBots(project.projectId, deadline)) {
-                                bots.push({
-                                    projectId: project.projectId,
-                                    botId: bot.botId,
-                                    displayName: `${project.displayName} / ${bot.displayName}`,
-                                });
-                            }
-                        }
-                    }
-                    return bots;
+                    const result = v.parse(
+                        v.object({ bots: v.array(v.object({ botId: v.string(), displayName: v.string() })) }),
+                        await request(cx.resolve("/mobius-slack/api/slack/chat-bots"), cx.getToken, signal),
+                    );
+                    return result.bots.map((bot) => ({ ...bot, projectId: "chat" }));
                 },
                 bindBot: async (
                     slackBotId: string,
@@ -187,7 +171,7 @@ export function useManagementRequests() {
                             cx.getToken,
                             signal,
                             "PUT",
-                            { botId: input.botId, ownerCredential: credentials.require(input.projectId) },
+                            { botId: input.botId },
                         ),
                     ),
                 listBots: (signal: AbortSignal) => listBots(cx, signal),
@@ -201,7 +185,7 @@ export function useManagementRequests() {
                 getAuthorizationUrl: (botId: string, signal: AbortSignal) => getAuthorizationUrl(cx, botId, signal),
                 disconnectApp: (botId: string, signal: AbortSignal) => disconnectApp(cx, botId, signal),
             }),
-        [cx, credentials, mobius],
+        [cx],
     );
 }
 export type ManagementRequests = ReturnType<typeof useManagementRequests>;

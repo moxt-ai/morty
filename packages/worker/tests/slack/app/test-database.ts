@@ -44,12 +44,18 @@ export async function createTestDatabase(): Promise<TestDatabase> {
         }),
     );
     const d1 = await runtime.getD1Database("DATABASE");
-    const migration = await readFile(new URL("../../../migrations/0001_initial.sql", import.meta.url), "utf8");
-    const statements = migration
-        .split(";")
-        .map((statement) => statement.trim())
-        .filter((statement) => statement.length > 0)
-        .map((statement) => d1.prepare(statement));
+    const migrations = await Promise.all(
+        ["0001_initial.sql", "0010_chat_owned_bot.sql", "0011_slack_chat_bot_binding.sql"].map(
+            async (name) => await readFile(new URL(`../../../migrations/${name}`, import.meta.url), "utf8"),
+        ),
+    );
+    const statements = migrations.flatMap((migration) =>
+        migration
+            .split(";")
+            .map((statement) => statement.trim())
+            .filter((statement) => statement.length > 0)
+            .map((statement) => d1.prepare(statement)),
+    );
     await d1.batch(statements);
     const database = new TestDatabase(runtime, d1);
     databases.push(database);

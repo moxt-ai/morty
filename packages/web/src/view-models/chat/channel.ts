@@ -45,7 +45,7 @@ export abstract class InstallableAgentOption {
     readonly label: string;
     abstract readonly status: string;
 
-    protected constructor(id: string, label: string) {
+    constructor(id: string, label: string) {
         this.id = id;
         this.label = label;
     }
@@ -53,10 +53,6 @@ export abstract class InstallableAgentOption {
 
 export class MissingAgentOption extends InstallableAgentOption {
     readonly status = "agent_not_installed";
-
-    constructor(id: string, label: string) {
-        super(id, label);
-    }
 }
 
 export class AgentIntegrationOption extends InstallableAgentOption {
@@ -77,7 +73,7 @@ export abstract class AgentInstallationViewState {
     abstract readonly message: string;
     abstract readonly status: string;
 
-    protected constructor(agentId: string) {
+    constructor(agentId: string) {
         this.agentId = agentId;
     }
 }
@@ -86,16 +82,12 @@ export class IdleAgentInstallationState extends AgentInstallationViewState {
     readonly canCancel = false;
     readonly message = "Integration is not installed.";
     readonly status = "idle";
-
-    constructor(agentId: string) {
-        super(agentId);
-    }
 }
 
 export abstract class RequestedAgentInstallationState extends AgentInstallationViewState {
     readonly requestId: string;
 
-    protected constructor(agentId: string, requestId: string) {
+    constructor(agentId: string, requestId: string) {
         super(agentId);
         this.requestId = requestId;
     }
@@ -105,20 +97,12 @@ export class RequestingAgentInstallationState extends RequestedAgentInstallation
     readonly canCancel = true;
     readonly message = "Checking the local Agent.";
     readonly status = "requesting";
-
-    constructor(agentId: string, requestId: string) {
-        super(agentId, requestId);
-    }
 }
 
 export class StartingAgentInstallationState extends RequestedAgentInstallationState {
     readonly canCancel = true;
     readonly message = "Starting integration installation.";
     readonly status = "starting";
-
-    constructor(agentId: string, requestId: string) {
-        super(agentId, requestId);
-    }
 }
 
 function installationStageMessage(stage: AgentInstallationStage): string {
@@ -185,10 +169,6 @@ export class CancelledAgentInstallationState extends RequestedAgentInstallationS
     readonly canCancel = false;
     readonly message = "Integration installation was cancelled.";
     readonly status = "cancelled";
-
-    constructor(agentId: string, requestId: string) {
-        super(agentId, requestId);
-    }
 }
 
 export class RecordedActivity {

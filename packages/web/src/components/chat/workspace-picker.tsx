@@ -116,7 +116,7 @@ interface WorkspacePickerControlProps {
     readonly onToggleAdditional: (directory: WorkspaceEntry) => void;
 }
 
-export function WorkspacePickerControl({
+function WorkspacePickerControl({
     additionalDirectories,
     canAddAdditionalDirectories,
     directoryId,

@@ -61,6 +61,7 @@ describe("Slack message journeys", () => {
         try {
             expect(app.mobius.runs[0]?.prompt).toContain("private context");
             expect(app.mobius.runs[0]?.prompt).toContain("investigate");
+            expect(app.mobius.runs[0]?.instructions).toBe("Answer as the configured Chat Bot.");
             expect(
                 (
                     await app.database.d1
@@ -171,7 +172,7 @@ describe("Slack message journeys", () => {
         expect(app.mobius.runs).toHaveLength(2);
         expect(app.mobius.runs[1]?.conversationId).toBe(app.mobius.runs[0]?.conversationId);
     });
-    it("Given an independently configured Slack bot, When a workspace user mentions it, Then its bound Mobius bot replies", async () => {
+    it("Given an independently configured Slack app, When a workspace user mentions it, Then its bound Chat Bot replies", async () => {
         const app = await createTestApplication();
         const response = await app.request("/mobius-slack/api/slack/apps/register", {
             method: "POST",
@@ -253,7 +254,7 @@ describe("Slack message journeys", () => {
         await send(app);
         expect(app.mobius.runs).toHaveLength(1);
         expect(app.mobius.runs[0]).toMatchObject({
-            botId: "mobius-bot-1",
+            botId: "chat-bot-1",
             prompt: "<@U_BOT> investigate",
         });
         expect(

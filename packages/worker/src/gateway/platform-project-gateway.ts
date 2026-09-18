@@ -6,12 +6,18 @@ import {
     MobiusTimeoutError,
 } from "@moxt-ai/mobius-sdk/platform";
 import {
-    type AgentExecutionConfiguration,
     MobiusActiveBotState,
+    MobiusAgentMessageEvent,
     MobiusBotOwnerClient,
+    MobiusCancelledTurnState,
     MobiusClient,
-    MobiusNoBotCompletionPolicy,
+    MobiusFailedTurnState,
+    MobiusIndeterminateTurnState,
+    MobiusRecordingPolicy,
     MobiusRuntimePairingRequest,
+    MobiusSucceededTurnState,
+    MobiusTurnCompletedEvent,
+    MobiusTurnFailedEvent,
 } from "@moxt-ai/mobius-sdk/server";
 import * as v from "valibot";
 import {
@@ -21,86 +27,20 @@ import {
 } from "../components/management/entity/platform-project.ts";
 import type { ProjectLocationHint } from "../components/management/util/project-location.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
-import type { OperationTiming } from "../infra/operation-timing.ts";
 
 export type ChatConversationInput =
     | { readonly conversationId: string }
     | {
           readonly conversationKey: string;
           readonly bindingId: string;
-          readonly configuration: NonNullable<
-              Parameters<MobiusBotOwnerClient["createProjectConversation"]>[0]["configuration"]
-          >;
+          readonly configuration: {
+              readonly additionalDirectoryIds: readonly string[];
+              readonly booleanValue: boolean;
+              readonly configId: string;
+              readonly value: string;
+              readonly valueType: "select" | "boolean";
+          };
       };
-
-type DiscoveredAgentSettings = Awaited<ReturnType<MobiusClient["runtimes"]["discoverAgentSettings"]>>;
-
-function executionConfiguration(settings: DiscoveredAgentSettings): AgentExecutionConfiguration {
-    const permission = settings.configOptions.find((option) => option.id === "permission_mode");
-    const model = settings.configOptions.find(
-        (option) => (option.id === "model" || option.category === "model") && option.type === "select",
-    );
-    const reasoningEffort = settings.configOptions.find(
-        (option) =>
-            (option.id === "reasoning_effort" || option.category === "thought_level") && option.type === "select",
-    );
-    if (
-        permission === undefined ||
-        permission.type !== "select" ||
-        model === undefined ||
-        reasoningEffort === undefined ||
-        !permission.values.some((value) => value.value === permission.currentValue) ||
-        !model.values.some((value) => value.value === model.currentValue) ||
-        !reasoningEffort.values.some((value) => value.value === reasoningEffort.currentValue)
-    ) {
-        throw new PlatformProjectError(
-            "PLATFORM_INVALID_RESPONSE",
-            "Platform returned incomplete Agent execution settings.",
-            502,
-        );
-    }
-    return {
-        model: {
-            booleanValue: false,
-            configId: model.id,
-            value: model.currentValue,
-            valueType: "select",
-        },
-        permissionMode: permission.currentValue,
-        reasoningEffort: {
-            booleanValue: false,
-            configId: reasoningEffort.id,
-            value: reasoningEffort.currentValue,
-            valueType: "select",
-        },
-    };
-}
-
-const platformTimingMetric = /^([a-z][a-z0-9-]{0,63});dur=(\d+(?:\.\d+)?);desc="([^"\\]{1,120})"$/u;
-
-function recordPlatformTiming(encoded: string | null, prefix: string, timing: OperationTiming): void {
-    if (encoded === null || encoded.length > 8_192) {
-        return;
-    }
-    for (const entry of encoded.split(",")) {
-        const match = platformTimingMetric.exec(entry.trim());
-        if (match === null) {
-            continue;
-        }
-        const [, name, duration, description] = match;
-        if (name === undefined || duration === undefined || description === undefined) {
-            continue;
-        }
-        const durationMilliseconds = Number(duration);
-        if (!Number.isFinite(durationMilliseconds) || durationMilliseconds < 0 || durationMilliseconds > 120_000) {
-            continue;
-        }
-        if (name === "total") {
-            timing.record("mobius", "Mobius access", durationMilliseconds);
-        }
-        timing.record(`platform-${prefix}-${name}`, `Platform: ${description}`, durationMilliseconds);
-    }
-}
 
 export class PlatformProjectGateway {
     readonly #bindings: CloudBindings;
@@ -152,167 +92,346 @@ export class PlatformProjectGateway {
             return { ...pairing, relayUrl: this.configuration().origin };
         });
 
-    readonly createBot = async (projectId: string, signal: AbortSignal) => {
-        const client = new MobiusBotOwnerClient({
-            endpoint: this.configuration().origin,
-            projectId,
-            credentialProvider: new MobiusAppCredentialProvider(v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET)),
-            observeResponse: this.#observeMobiusResponse,
-            operationTimeoutMilliseconds: 15000,
+    readonly chatAgents = async (projectId: string, signal: AbortSignal) =>
+        await this.#withProject(projectId, signal, async (client) => {
+            const runtimes = await client.runtimes.list(signal);
+            return runtimes.flatMap((runtime) =>
+                runtime.agents.map((agent) => ({
+                    runtimeId: runtime.runtimeId,
+                    agentRef: agent.id,
+                    label: agent.label,
+                    machineName: runtime.machineName,
+                    online: runtime.online,
+                })),
+            );
         });
-        try {
-            const bot = await client.createBot({ displayName: "My Bot", description: "", avatarRef: "" }, signal);
-            if (bot.projectId !== projectId) {
-                throw new PlatformProjectError("PLATFORM_INVALID_RESPONSE", "The Bot could not be verified.", 502);
-            }
-            return { botId: bot.botId, displayName: bot.displayName };
-        } catch (cause) {
-            signal.throwIfAborted();
-            if (cause instanceof MobiusCancellationError || cause instanceof PlatformProjectError) {
-                throw cause;
-            }
-            throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Your Bot could not be created.", 502, { cause });
-        }
-    };
 
-    readonly configureBot = async (
+    readonly discoverChatAgentSettings = async (
         projectId: string,
-        botId: string,
-        actorReference: string,
-        input: {
+        selection: { readonly runtimeId: string; readonly agentRef: string; readonly workspaceRef: string },
+        signal: AbortSignal,
+    ) =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) => {
+                const settings = await client.runtimes.discoverAgentSettings(
+                    selection.runtimeId,
+                    {
+                        additionalDirectoryIds: [],
+                        agentId: selection.agentRef,
+                        directoryId: selection.workspaceRef,
+                    },
+                    signal,
+                );
+                if (settings.agentId !== selection.agentRef || settings.directoryId !== selection.workspaceRef) {
+                    throw new PlatformProjectError(
+                        "PLATFORM_INVALID_RESPONSE",
+                        "Platform returned settings for an unexpected Agent.",
+                        502,
+                    );
+                }
+                return settings;
+            },
+            120000,
+        );
+
+    readonly openChatSession = async (
+        projectId: string,
+        selection: {
+            readonly bindingId: string;
             readonly runtimeId: string;
             readonly agentRef: string;
             readonly workspaceRef: string;
-            readonly agentConfigRevision: number;
         },
+        input: ChatConversationInput,
+        title: string,
         signal: AbortSignal,
-    ) => {
-        return await this.#withBot(projectId, botId, actorReference, signal, async (client, bot) => {
-            if (bot.state.kind !== "draft" && bot.state.kind !== "active") {
-                throw new PlatformProjectError("BOT_UNAVAILABLE", "Your Bot cannot be configured.", 409);
-            }
-            const [behaviors, bindings] = await Promise.all([
-                client.listBehaviors(botId, signal),
-                client.listBindings(botId, signal),
-            ]);
-            const activeState = bot.state;
-            const activeBinding =
-                activeState instanceof MobiusActiveBotState
-                    ? bindings.executionBindings.find((binding) => binding.bindingId === activeState.activeBindingId)
-                    : undefined;
-            if (
-                activeBinding !== undefined &&
-                activeBinding.runtimeId === input.runtimeId &&
-                activeBinding.agentRef === input.agentRef &&
-                activeBinding.workspaceRef === input.workspaceRef &&
-                activeBinding.agentConfigRevision === input.agentConfigRevision
-            ) {
-                return { status: "active" };
-            }
-            const runtimes = await this.#withProject(
-                projectId,
-                signal,
-                async (projectClient) => await projectClient.runtimes.list(signal),
-            );
-            const runtime = runtimes.find(
-                (candidate) => candidate.projectId === projectId && candidate.runtimeId === input.runtimeId,
-            );
-            if (runtime === undefined || !runtime.agents.some((agent) => agent.id === input.agentRef)) {
-                throw new PlatformProjectError(
-                    "AGENT_UNAVAILABLE",
-                    "Choose an available agent on your connected Runtime.",
-                    409,
-                );
-            }
-            const settings = await this.#withProject(
-                projectId,
-                signal,
-                async (projectClient) =>
-                    await projectClient.runtimes.discoverAgentSettings(
-                        input.runtimeId,
+    ) =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) => {
+                const sessionId = "conversationId" in input ? input.conversationId : input.conversationKey;
+                let session: Awaited<ReturnType<MobiusClient["sessions"]["read"]>>;
+                try {
+                    session = await client.sessions.read(sessionId, signal);
+                } catch (cause) {
+                    if (
+                        !(cause instanceof MobiusApiError) ||
+                        cause.code !== "session_not_found" ||
+                        "conversationId" in input
+                    ) {
+                        throw cause;
+                    }
+                    session = await client.sessions.create(
                         {
-                            additionalDirectoryIds: [],
-                            agentId: input.agentRef,
-                            directoryId: input.workspaceRef,
+                            agentId: selection.agentRef,
+                            bindingId: selection.bindingId,
+                            directoryId: selection.workspaceRef,
+                            policy: new MobiusRecordingPolicy("full", 30 * 24 * 60 * 60 * 1000, 1000, 6_000_000),
+                            runtimeId: selection.runtimeId,
+                            sessionId,
+                            title,
                         },
                         signal,
-                    ),
-                120000,
+                    );
+                }
+                if (
+                    session.projectId !== projectId ||
+                    session.sessionId !== sessionId ||
+                    session.runtimeId !== selection.runtimeId ||
+                    session.agentId !== selection.agentRef
+                ) {
+                    throw new PlatformProjectError(
+                        "PLATFORM_INVALID_RESPONSE",
+                        "Platform returned an unexpected Session.",
+                        502,
+                    );
+                }
+                const ready = await client.sessions.prepare(sessionId, signal);
+                if ("conversationKey" in input) {
+                    if (!ready.configOptions.some((option) => option.id === input.configuration.configId)) {
+                        throw new PlatformProjectError(
+                            "AGENT_CONFIGURATION_REJECTED",
+                            "The harness did not offer the selected model.",
+                            409,
+                        );
+                    }
+                    await client.sessions.updateConfiguration(
+                        sessionId,
+                        {
+                            configId: input.configuration.configId,
+                            value: input.configuration.value,
+                            booleanValue: input.configuration.booleanValue,
+                            valueType: input.configuration.valueType,
+                        },
+                        signal,
+                    );
+                }
+                const access = await client.sessions.createAccess(sessionId, 900, signal);
+                return {
+                    endpoint: this.configuration().origin,
+                    conversationId: sessionId,
+                    sessionId,
+                    credential: access.credential,
+                    expiresAt: access.expiresAt,
+                    ready,
+                    agentRef: selection.agentRef,
+                    workspaceRef: selection.workspaceRef,
+                };
+            },
+            120000,
+        );
+
+    readonly submitChatTurn = async (
+        projectId: string,
+        sessionId: string,
+        request: Parameters<MobiusClient["turns"]["submit"]>[1],
+        signal: AbortSignal,
+    ) =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) => await client.turns.submit(sessionId, request, signal),
+        );
+
+    readonly openAutomatedChatSession = async (
+        projectId: string,
+        selection: {
+            readonly bindingId: string;
+            readonly runtimeId: string;
+            readonly agentRef: string;
+            readonly workspaceRef: string;
+        },
+        sessionId: string,
+        title: string,
+        signal: AbortSignal,
+    ): Promise<string> =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) => {
+                let session: Awaited<ReturnType<MobiusClient["sessions"]["read"]>>;
+                try {
+                    session = await client.sessions.read(sessionId, signal);
+                } catch (cause) {
+                    if (!(cause instanceof MobiusApiError) || cause.code !== "session_not_found") {
+                        throw cause;
+                    }
+                    session = await client.sessions.create(
+                        {
+                            agentId: selection.agentRef,
+                            bindingId: selection.bindingId,
+                            directoryId: selection.workspaceRef,
+                            policy: new MobiusRecordingPolicy("full", 30 * 24 * 60 * 60 * 1000, 1000, 6_000_000),
+                            runtimeId: selection.runtimeId,
+                            sessionId,
+                            title,
+                        },
+                        signal,
+                    );
+                }
+                if (
+                    session.projectId !== projectId ||
+                    session.sessionId !== sessionId ||
+                    session.runtimeId !== selection.runtimeId ||
+                    session.agentId !== selection.agentRef ||
+                    session.defaultBinding.bindingId !== selection.bindingId ||
+                    session.defaultBinding.workspaceRef !== selection.workspaceRef
+                ) {
+                    throw new PlatformProjectError(
+                        "PLATFORM_INVALID_RESPONSE",
+                        "Platform returned an unexpected Session.",
+                        502,
+                    );
+                }
+                await client.sessions.prepare(sessionId, signal);
+                return sessionId;
+            },
+            120000,
+        );
+
+    readonly submitAutomatedChatTurn = async (
+        projectId: string,
+        sessionId: string,
+        input: {
+            readonly commandId: string;
+            readonly prompt: string;
+            readonly instructions: string;
+        },
+        signal: AbortSignal,
+    ): Promise<{ readonly text: string; readonly stopReason: string }> =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) => {
+                let text = "";
+                let outcome:
+                    | { readonly kind: "pending" }
+                    | { readonly kind: "completed"; readonly stopReason: string }
+                    | { readonly kind: "failed"; readonly code: string; readonly message: string } = {
+                    kind: "pending",
+                };
+                const subscription = await client.events.subscribe(
+                    sessionId,
+                    "",
+                    {
+                        receive: async (event) => {
+                            const payload = event.payload;
+                            if (payload instanceof MobiusAgentMessageEvent && payload.commandId === input.commandId) {
+                                text += payload.text;
+                            } else if (
+                                payload instanceof MobiusTurnCompletedEvent &&
+                                payload.commandId === input.commandId
+                            ) {
+                                outcome = { kind: "completed", stopReason: payload.stopReason };
+                                return false;
+                            } else if (
+                                payload instanceof MobiusTurnFailedEvent &&
+                                payload.commandId === input.commandId
+                            ) {
+                                outcome = { kind: "failed", code: payload.code, message: payload.message };
+                                return false;
+                            }
+                            return true;
+                        },
+                    },
+                    signal,
+                );
+                try {
+                    const turn = await client.turns.submit(
+                        sessionId,
+                        {
+                            additionalDirectoryIds: [],
+                            artifactIds: [],
+                            content: input.prompt,
+                            idempotencyKey: input.commandId,
+                            images: [],
+                            resources:
+                                input.instructions.trim().length === 0
+                                    ? []
+                                    : [
+                                          {
+                                              type: "embedded",
+                                              uri: "mobius-chat://bot/instructions",
+                                              name: "Bot instructions",
+                                              mimeType: "text/plain",
+                                              text: input.instructions,
+                                          },
+                                      ],
+                        },
+                        signal,
+                    );
+                    try {
+                        await subscription.completed;
+                    } catch (streamCause) {
+                        const current = await client.turns.read(sessionId, turn.turnId, signal);
+                        if (current.state instanceof MobiusSucceededTurnState) {
+                            outcome = { kind: "completed", stopReason: current.state.stopReason };
+                        } else if (current.state instanceof MobiusCancelledTurnState) {
+                            outcome = { kind: "completed", stopReason: "cancelled" };
+                        } else if (current.state instanceof MobiusFailedTurnState) {
+                            outcome = { kind: "failed", code: current.state.code, message: current.state.message };
+                        } else if (current.state instanceof MobiusIndeterminateTurnState) {
+                            throw new PlatformProjectError(
+                                "TURN_INDETERMINATE",
+                                "The agent Turn outcome is unavailable.",
+                                502,
+                                { cause: streamCause },
+                            );
+                        } else {
+                            throw streamCause;
+                        }
+                    }
+                    if (outcome.kind === "failed") {
+                        throw new PlatformProjectError(outcome.code, outcome.message, 502);
+                    }
+                    if (outcome.kind === "pending") {
+                        throw new PlatformProjectError(
+                            "TURN_OUTCOME_UNAVAILABLE",
+                            "The agent Turn ended without an outcome.",
+                            502,
+                        );
+                    }
+                    return { text, stopReason: outcome.stopReason };
+                } finally {
+                    subscription.close();
+                }
+            },
+            600000,
+        );
+
+    readonly migrateLegacyBot = async (projectId: string, botId: string, userId: string, signal: AbortSignal) =>
+        await this.#withBot(projectId, botId, userId, signal, async (client, bot) => {
+            if (!(bot.state instanceof MobiusActiveBotState)) {
+                return { configuration: null, instructions: "" };
+            }
+            const activeState = bot.state;
+            const [bindings, behaviors] = await Promise.all([
+                client.listBindings(botId, signal),
+                client.listBehaviors(botId, signal),
+            ]);
+            const binding = bindings.executionBindings.find((item) => item.bindingId === activeState.activeBindingId);
+            const behavior = behaviors.behaviorRevisions.find(
+                (item) => item.behaviorRevisionId === activeState.activeBehaviorRevisionId,
             );
-            if (settings.agentId !== input.agentRef || settings.directoryId !== input.workspaceRef) {
+            if (binding === undefined || behavior === undefined) {
                 throw new PlatformProjectError(
                     "PLATFORM_INVALID_RESPONSE",
-                    "Platform returned settings for an unexpected Agent.",
+                    "The legacy Bot configuration is incomplete.",
                     502,
                 );
             }
-            const activeBehavior =
-                activeState instanceof MobiusActiveBotState
-                    ? behaviors.behaviorRevisions.find(
-                          (revision) => revision.behaviorRevisionId === activeState.activeBehaviorRevisionId,
-                      )
-                    : undefined;
-            const behavior =
-                behaviors.behaviorRevisions.find((revision) => revision.state.kind === "proposed") ??
-                (await client.createBehavior(
-                    botId,
-                    {
-                        expectedRevision: Math.max(
-                            0,
-                            ...behaviors.behaviorRevisions.map((revision) => revision.revisionNumber),
-                        ),
-                        instructions: activeBehavior?.instructions ?? "Be a helpful assistant.",
-                        agentConfiguration: activeBehavior?.agentConfiguration ?? {},
-                        requiredCapabilities: activeBehavior?.requiredCapabilities ?? ["embedded-context"],
-                    },
-                    signal,
-                ));
-            return await client.createBinding(
-                botId,
-                {
-                    ...input,
-                    behaviorRevisionId: behavior.behaviorRevisionId,
-                    expectedRevision: bot.lifecycleRevision,
-                    allowedDeliveryTargetIds: [],
-                    completionPolicy: new MobiusNoBotCompletionPolicy(),
-                    executionConfiguration: executionConfiguration(settings),
-                },
-                signal,
-            );
-        });
-    };
-
-    readonly chatWorkspace = async (projectId: string, botId: string, userId: string, signal: AbortSignal) =>
-        await this.#withBot(projectId, botId, userId, signal, async (owner, bot) => {
-            const [runtimes, bindings] = await Promise.all([
-                this.#withProject(projectId, signal, (client) => client.runtimes.list(signal)),
-                owner.listBindings(botId, signal),
-            ]);
-            const state = bot.state;
-            const active =
-                state instanceof MobiusActiveBotState
-                    ? bindings.executionBindings.find((binding) => binding.bindingId === state.activeBindingId)
-                    : undefined;
             return {
-                status: bot.state.kind,
-                selected:
-                    active === undefined
-                        ? null
-                        : {
-                              runtimeId: active.runtimeId,
-                              agentRef: active.agentRef,
-                              workspaceRef: active.workspaceRef,
-                              agentConfigRevision: active.agentConfigRevision,
-                          },
-                agents: runtimes.flatMap((runtime) =>
-                    runtime.agents.map((agent) => ({
-                        runtimeId: runtime.runtimeId,
-                        agentRef: agent.id,
-                        label: agent.label,
-                        machineName: runtime.machineName,
-                        online: runtime.online,
-                    })),
-                ),
+                configuration: {
+                    bindingId: binding.bindingId,
+                    runtimeId: binding.runtimeId,
+                    agentRef: binding.agentRef,
+                    workspaceRef: binding.workspaceRef,
+                    agentConfigRevision: binding.agentConfigRevision,
+                },
+                instructions: behavior.instructions,
             };
         });
 
@@ -350,190 +469,6 @@ export class PlatformProjectGateway {
             120000,
         );
 
-    readonly openChat = async (
-        projectId: string,
-        botId: string,
-        userId: string,
-        signal: AbortSignal,
-        input: ChatConversationInput,
-        timing: OperationTiming,
-    ) =>
-        await this.#withBot(
-            projectId,
-            botId,
-            userId,
-            signal,
-            async (client, bot) => {
-                if (!(bot.state instanceof MobiusActiveBotState)) {
-                    throw new PlatformProjectError(
-                        "AGENT_REQUIRED",
-                        "Connect your local agent to start chatting.",
-                        409,
-                    );
-                }
-                if ("conversationKey" in input && input.bindingId !== bot.state.activeBindingId) {
-                    throw new PlatformProjectError(
-                        "AGENT_CHANGED",
-                        "Your selected harness changed. Reload its settings before sending.",
-                        409,
-                    );
-                }
-                const conversation =
-                    "conversationId" in input
-                        ? await timing.measure(
-                              "conversation",
-                              "Read Conversation",
-                              async () => await client.readProjectConversation(input.conversationId, signal),
-                          )
-                        : await timing.measure(
-                              "conversation",
-                              "Create and configure Conversation",
-                              async () =>
-                                  await client.createProjectConversation(
-                                      {
-                                          botId,
-                                          clientReference: input.conversationKey,
-                                          idempotencyKey: input.conversationKey,
-                                          title: "New chat",
-                                          configuration: input.configuration,
-                                      },
-                                      signal,
-                                  ),
-                          );
-                if (
-                    conversation.botId !== botId ||
-                    conversation.projectId !== projectId ||
-                    ("conversationKey" in input &&
-                        (conversation.bindingId !== input.bindingId ||
-                            conversation.clientReference !== input.conversationKey ||
-                            conversation.idempotencyKey !== input.conversationKey)) ||
-                    ("conversationId" in input && conversation.conversationId !== input.conversationId) ||
-                    conversation.lifecycle !== "active"
-                ) {
-                    throw new PlatformProjectError(
-                        "PLATFORM_INVALID_RESPONSE",
-                        "Platform returned an unexpected Conversation.",
-                        502,
-                    );
-                }
-                const configuration = this.configuration();
-                if ("conversationKey" in input) {
-                    const ready = conversation.ready;
-                    if (ready === null || ready.sessionId !== conversation.sessionId) {
-                        throw new PlatformProjectError(
-                            "PLATFORM_INVALID_RESPONSE",
-                            "Platform returned an unexpected Session.",
-                            502,
-                        );
-                    }
-                    const requested = input.configuration;
-                    if (
-                        !ready.configOptions.some(
-                            (option) => option.id === requested.configId && option.currentValue === requested.value,
-                        )
-                    ) {
-                        throw new PlatformProjectError(
-                            "AGENT_CONFIGURATION_REJECTED",
-                            "The harness did not confirm the selected model. Choose a model before retrying your message.",
-                            409,
-                        );
-                    }
-                }
-                const platform = new MobiusPlatformAppClient({
-                    endpoint: configuration.origin,
-                    credentialProvider: new MobiusAppCredentialProvider(
-                        v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET),
-                    ),
-                    observeResponse: ({ serverTiming }: { readonly serverTiming: string | null }) => {
-                        this.#observeMobiusResponse({ serverTiming });
-                        recordPlatformTiming(serverTiming, "credential", timing);
-                    },
-                    operationTimeoutMilliseconds: 15000,
-                });
-                const permissions = [
-                    "conversation:read",
-                    "conversation:event:read",
-                    "conversation:message:create",
-                    "conversation:turn:create",
-                    "conversation:configure",
-                ] as const;
-                const access = await timing.measure(
-                    "credential",
-                    "Issue Conversation access credential",
-                    async () =>
-                        await platform.issueConversationAccessCredential(
-                            projectId,
-                            conversation.conversationId,
-                            {
-                                actorRef: userId,
-                                expiresInSeconds: 900,
-                                permissions,
-                            },
-                            signal,
-                        ),
-                );
-                if (
-                    access.appId !== configuration.appId ||
-                    access.projectId !== projectId ||
-                    access.conversationId !== conversation.conversationId ||
-                    access.sessionId !== conversation.sessionId ||
-                    access.actorRef !== userId ||
-                    permissions.some((permission) => !access.permissions.includes(permission))
-                ) {
-                    throw new PlatformProjectError(
-                        "PLATFORM_INVALID_RESPONSE",
-                        "Platform returned unexpected Chat access.",
-                        502,
-                    );
-                }
-                return {
-                    endpoint: configuration.origin,
-                    conversationId: conversation.conversationId,
-                    credential: access.credential,
-                    expiresAt: access.expiresAt,
-                };
-            },
-            timing,
-            120000,
-        );
-
-    readonly agentSettings = async (projectId: string, botId: string, userId: string, signal: AbortSignal) =>
-        await this.#withBot(projectId, botId, userId, signal, async (owner, bot) => {
-            const state = bot.state;
-            if (!(state instanceof MobiusActiveBotState)) {
-                throw new PlatformProjectError("AGENT_REQUIRED", "Choose a connected harness.", 409);
-            }
-            const bindings = await owner.listBindings(botId, signal);
-            const binding = bindings.executionBindings.find((item) => item.bindingId === state.activeBindingId);
-            if (binding === undefined) {
-                throw new PlatformProjectError("AGENT_REQUIRED", "Choose a connected harness.", 409);
-            }
-            return await this.#withProject(
-                projectId,
-                signal,
-                async (client) => {
-                    const settings = await client.runtimes.discoverAgentSettings(
-                        binding.runtimeId,
-                        {
-                            additionalDirectoryIds: [],
-                            agentId: binding.agentRef,
-                            directoryId: binding.workspaceRef,
-                        },
-                        signal,
-                    );
-                    if (settings.agentId !== binding.agentRef || settings.directoryId !== binding.workspaceRef) {
-                        throw new PlatformProjectError(
-                            "PLATFORM_INVALID_RESPONSE",
-                            "Platform returned unexpected harness settings.",
-                            502,
-                        );
-                    }
-                    return { bindingId: binding.bindingId, settings };
-                },
-                120000,
-            );
-        });
-
     readonly #withBot = async <T>(
         projectId: string,
         botId: string,
@@ -543,8 +478,6 @@ export class PlatformProjectGateway {
             client: MobiusBotOwnerClient,
             bot: Awaited<ReturnType<MobiusBotOwnerClient["readBot"]>>,
         ) => Promise<T>,
-        timing?: OperationTiming,
-        operationTimeoutMilliseconds = 15000,
     ): Promise<T> => {
         signal.throwIfAborted();
         const client = new MobiusBotOwnerClient({
@@ -552,21 +485,11 @@ export class PlatformProjectGateway {
             projectId,
             actorReference,
             credentialProvider: new MobiusAppCredentialProvider(v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET)),
-            ...(timing === undefined
-                ? { observeResponse: this.#observeMobiusResponse }
-                : {
-                      observeResponse: ({ serverTiming }: { readonly serverTiming: string | null }) => {
-                          this.#observeMobiusResponse({ serverTiming });
-                          recordPlatformTiming(serverTiming, "conversation", timing);
-                      },
-                  }),
-            operationTimeoutMilliseconds,
+            observeResponse: this.#observeMobiusResponse,
+            operationTimeoutMilliseconds: 15000,
         });
         try {
-            const bot =
-                timing === undefined
-                    ? await client.readBot(botId, signal)
-                    : await timing.measure("bot", "Read Bot", async () => await client.readBot(botId, signal));
+            const bot = await client.readBot(botId, signal);
             if (bot.projectId !== projectId) {
                 throw new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);
             }

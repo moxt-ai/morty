@@ -4,11 +4,11 @@ import type { Database } from "../../../schema/database.ts";
 import {
     processedSlackEvent,
     slackApp,
+    slackChatBotBinding,
     slackConversationLease,
     slackConversationMapping,
     slackInstallation,
     slackMessageDelivery,
-    slackMobiusBinding,
     slackPendingMessage,
     slackUserConfigToken,
 } from "../../../schema/index.ts";
@@ -176,7 +176,12 @@ export class SlackEventStorage {
                             slackConversationMapping.slackChannelId,
                             sql`ifnull(${slackConversationMapping.threadTs}, '')`,
                         ],
-                        set: { latestEventTs: input.latestEventTs, lastActiveAt: now, updatedAt: now },
+                        set: {
+                            conversationId: input.conversationId,
+                            latestEventTs: input.latestEventTs,
+                            lastActiveAt: now,
+                            updatedAt: now,
+                        },
                     }),
                 database.insert(slackMessageDelivery).values({
                     tenantId: c.tenantId,
@@ -753,10 +758,10 @@ export class SlackEventStorage {
                     .from(slackConversationMapping)
                     .innerJoin(slackApp, eq(slackApp.id, slackConversationMapping.slackAppRecordId))
                     .innerJoin(
-                        slackMobiusBinding,
+                        slackChatBotBinding,
                         and(
-                            eq(slackMobiusBinding.tenantId, slackApp.tenantId),
-                            eq(slackMobiusBinding.slackBotId, slackApp.slackBotId),
+                            eq(slackChatBotBinding.tenantId, slackApp.tenantId),
+                            eq(slackChatBotBinding.slackBotId, slackApp.slackBotId),
                         ),
                     )
                     .where(
@@ -765,7 +770,7 @@ export class SlackEventStorage {
                             eq(slackApp.slackBotId, input.botId),
                             eq(slackConversationMapping.slackChannelId, input.channelId),
                             sql`ifnull(${slackConversationMapping.threadTs}, '') = ifnull(${input.threadTs}, '')`,
-                            sql`${slackConversationMapping.connectionId} = coalesce(${connectionId ?? null}, ${slackMobiusBinding.connectionId})`,
+                            sql`${slackConversationMapping.connectionId} = coalesce(${connectionId ?? null}, ${slackChatBotBinding.connectionId})`,
                         ),
                     )
                     .orderBy(desc(slackConversationMapping.updatedAt))

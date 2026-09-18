@@ -79,6 +79,23 @@ test.each([true, false])(
             if (bot === undefined) {
                 throw new Error("Expected a Bot");
             }
+            platform.seedLegacyBot(identity.projectId, bot.botId);
+            await database
+                .prepare("UPDATE managed_bot SET legacy_migration_pending = 1 WHERE bot_id = ?")
+                .bind(bot.botId)
+                .run();
+            expect((await request(`chat/bots/${bot.botId}/workspace`, {})).status).toBe(200);
+            const migrationRequests = platform.legacyBotRequestCount();
+            expect(migrationRequests).toBeGreaterThan(0);
+            expect((await request(`chat/bots/${bot.botId}/workspace`, {})).status).toBe(200);
+            expect(platform.legacyBotRequestCount()).toBe(migrationRequests);
+            const configured = await request(`chat/bots/${bot.botId}/setup`, {
+                runtimeId: "runtime-1",
+                agentRef: "agent-one",
+                workspaceRef: "default",
+                agentConfigRevision: 1,
+            });
+            expect(configured.status).toBe(settingsAvailable ? 202 : 409);
             expect(await (await request(`chat/bots/${bot.botId}/managed-sessions`, {})).json()).toEqual({
                 sessions: [],
             });
@@ -86,7 +103,7 @@ test.each([true, false])(
             expect(prepared.status).toBe(settingsAvailable ? 200 : 409);
             if (settingsAvailable) {
                 expect(await prepared.json()).toMatchObject({
-                    bindingId: "binding-1",
+                    bindingId: expect.stringMatching(/^binding[-_]/u),
                     settings: {
                         configOptions: expect.arrayContaining([
                             expect.objectContaining({ id: "model", currentValue: "model-one" }),
@@ -109,7 +126,12 @@ test.each([true, false])(
             }
             const input = {
                 conversationKey: "first-draft",
-                bindingId: "binding-1",
+                bindingId: settingsAvailable
+                    ? v.parse(
+                          v.object({ bindingId: v.string() }),
+                          await (await request(`chat/bots/${bot.botId}/agent-settings`, {})).json(),
+                      ).bindingId
+                    : "unconfigured",
                 configuration: {
                     additionalDirectoryIds: [],
                     booleanValue: false,
@@ -121,19 +143,41 @@ test.each([true, false])(
             const firstResponse = await request(`chat/bots/${bot.botId}/access`, input);
             expect(firstResponse.headers.get("server-timing")).toEqual(
                 expect.stringMatching(
-                    /(?:^|,)total;dur=.*authentication;dur=.*ownership;dur=.*bot;dur=.*platform-conversation-create-provision-session-runtime-context-read;dur=.*platform-conversation-create-provision-session-runtime-session-create;dur=.*platform-conversation-create-provision-session-runtime-context-insert;dur=.*platform-conversation-create-provision-session-runtime-boundary;dur=.*platform-conversation-create-provision-session-runtime;dur=.*platform-conversation-create-provision-directory-sync;dur=.*platform-conversation-create-provision;dur=.*platform-conversation-prepare-control-runtime;dur=.*platform-conversation-runtime-prepare-total;dur=.*platform-conversation-prepare-control-runtime-relay;dur=.*platform-conversation-daemon-access-total;dur=.*platform-conversation-daemon-access-count;dur=1\.0.*mobius;dur=[\d.]+;desc="Mobius access";count=[1-9]\d*.*d1;dur=[\d.]+;desc="D1 access";count=[1-9]\d*/u,
+                    settingsAvailable
+                        ? /(?:^|,)total;dur=.*authentication;dur=.*ownership;dur=.*session;dur=.*mobius;dur=/u
+                        : /(?:^|,)total;dur=.*authentication;dur=.*ownership;dur=.*mobius;dur=/u,
                 ),
             );
             if (!settingsAvailable) {
-                // Platform prepares the created Conversation's Session before returning it, so an
-                // agent that cannot prepare a Session must fail Conversation creation the same way
-                // it fails draft settings.
+                // An agent that cannot prepare a Session must fail chat creation the same way it fails draft settings.
                 expect(firstResponse.status).toBe(409);
                 return;
             }
             expect(firstResponse.status).toBe(200);
             const schema = v.object({ conversationId: v.string() });
             const first = v.parse(schema, await firstResponse.json());
+            const turn = await request(`chat/bots/${bot.botId}/turns`, {
+                sessionId: first.conversationId,
+                additionalDirectoryIds: [],
+                artifactIds: [],
+                content: "Hello",
+                idempotencyKey: "command-1",
+                images: [],
+                resources: [],
+            });
+            expect(turn.status).toBe(200);
+            expect(platform.submittedTurns()).toMatchObject([
+                {
+                    resources: [
+                        {
+                            type: "embedded",
+                            uri: "mobius-chat://bot/instructions",
+                            name: "Bot instructions",
+                            text: "Answer as the migrated Bot.",
+                        },
+                    ],
+                },
+            ]);
             expect(
                 (await request(`chat/bots/${bot.botId}/access`, { ...input, bindingId: "different-binding" })).status,
             ).toBe(409);

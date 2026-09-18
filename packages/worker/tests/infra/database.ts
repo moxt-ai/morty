@@ -39,6 +39,8 @@ export class InMemoryD1Database {
             "0006_chat_managed_session.sql",
             "0008_remote_access.sql",
             "0009_chat_managed_import.sql",
+            "0010_chat_owned_bot.sql",
+            "0011_slack_chat_bot_binding.sql",
         ]) {
             this.#database.exec(readFileSync(new URL(`../../migrations/${migration}`, import.meta.url), "utf8"));
         }

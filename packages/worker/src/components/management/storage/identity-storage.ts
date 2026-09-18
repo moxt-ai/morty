@@ -6,8 +6,6 @@ import {
     agentPairingTicket,
     anonymousCredential,
     appUser,
-    chatAccessToken,
-    chatSession,
     clerkUserBinding,
     identityTransfer,
     managedBot,
@@ -478,8 +476,6 @@ export class IdentityStorage {
             database.delete(agentPairingTicket).where(eq(agentPairingTicket.userId, localUserId)),
             database.delete(identityTransfer).where(eq(identityTransfer.userId, localUserId)),
             database.delete(anonymousCredential).where(eq(anonymousCredential.userId, localUserId)),
-            database.delete(chatAccessToken).where(eq(chatAccessToken.userId, localUserId)),
-            database.delete(chatSession).where(eq(chatSession.userId, localUserId)),
             database.delete(managedBot).where(eq(managedBot.userId, localUserId)),
             database.delete(appUser).where(eq(appUser.id, localUserId)),
         ]);

@@ -2,7 +2,7 @@ import * as v from "valibot";
 import { projectBindings } from "../../../composition/project-bindings.ts";
 import { ClerkGateway } from "../../../gateway/clerk-gateway.ts";
 import { IdentityGateway } from "../../../gateway/identity-gateway.ts";
-import { FetchMobiusTransport, MobiusGateway } from "../../../gateway/mobius-gateway.ts";
+import { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
 import { projectObject } from "../../../gateway/project-object-routing.ts";
 import { SlackWebApi } from "../../../gateway/slack-web-gateway.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
@@ -114,12 +114,6 @@ const slack = createSlackWorker<
         clerk: new ClerkGateway(),
         slackWebApi: new SlackWebApi(),
         botTriggerLimiter: new CloudflareBotTriggerLimiter(bindings.BOT_TRIGGER_RATE_LIMITER),
-        mobiusTransport: new FetchMobiusTransport({
-            appId: bindings.MOBIUS_APP_ID,
-            appSecret: bindings.MOBIUS_APP_SECRET,
-            baseUrl: bindings.MOBIUS_BASE_URL,
-            forbiddenOrigin: bindings.APP_ORIGIN,
-        }),
         slackAppDatabase: new D1SqlDatabase({ database, metrics: slackLogger, nowMilliseconds }),
     };
     const infrastructure = { config, gateways, logger: slackLogger };
@@ -127,7 +121,7 @@ const slack = createSlackWorker<
         ...infrastructure,
         gateways: {
             ...gateways,
-            mobius: new MobiusGateway(infrastructure),
+            platformProjects: new PlatformProjectGateway(bindings),
             identityGateway: new IdentityGateway(infrastructure),
             humanIdentity: {
                 resolve: (clerkUserId: string, signal: AbortSignal) =>

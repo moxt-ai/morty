@@ -1,65 +1,50 @@
-import { MobiusApiError, type MobiusBot, type MobiusBotOwnerClient } from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
-import { createBotOwnerClient } from "@/services/bots/bot-api";
-import type { ChannelConnection } from "@/view-models/chat/channel";
-import { isIdentifier } from "@/view-models/chat/channel";
+import type { ChatBotApi, ChatBotDetail } from "@/services/bots/bot-api";
 
 type BotWorkspaceState =
     | { readonly kind: "loading" }
-    | { readonly kind: "ready"; readonly bot: MobiusBot }
-    | { readonly kind: "linked-device" }
+    | { readonly kind: "ready"; readonly bot: ChatBotDetail; readonly configured: boolean }
     | { readonly kind: "failed"; readonly message: string };
 
 export interface BotWorkspaceStore {
-    readonly client: MobiusBotOwnerClient;
-    readonly refreshing: boolean;
     readonly state: BotWorkspaceState;
+    readonly refreshing: boolean;
     readonly load: (signal: AbortSignal) => Promise<void>;
-    readonly refresh: (signal: AbortSignal) => Promise<MobiusBot>;
+    readonly refresh: (signal: AbortSignal) => Promise<ChatBotDetail>;
 }
 
-function botLoadFailure(error: unknown): string {
-    return error instanceof MobiusApiError ? `${error.code}: ${error.message}` : "The Bot could not be loaded.";
-}
-
-export const createBotWorkspaceStore = (connection: ChannelConnection, botId: string) =>
-    createStore<BotWorkspaceStore>()((set, get) => {
-        const client = createBotOwnerClient(connection);
-        const refresh = async (signal: AbortSignal): Promise<MobiusBot> => {
+export const createBotWorkspaceStore = (api: ChatBotApi, botId: string) =>
+    createStore<BotWorkspaceStore>()((set) => {
+        const refresh = async (signal: AbortSignal): Promise<ChatBotDetail> => {
             set({ refreshing: true });
             try {
-                const bot = await client.readBot(botId, signal);
+                const [bot, workspace] = await Promise.all([api.readBot(botId, signal), api.workspace(botId, signal)]);
                 signal.throwIfAborted();
-                set({ state: { bot, kind: "ready" } });
+                set({ state: { kind: "ready", bot, configured: workspace.selected !== null }, refreshing: false });
                 return bot;
             } catch (error) {
-                if (!signal.aborted) {
-                    set({
-                        state:
-                            error instanceof MobiusApiError && error.code === "owner_access_required"
-                                ? { kind: "linked-device" }
-                                : { kind: "failed", message: botLoadFailure(error) },
-                    });
-                }
+                signal.throwIfAborted();
+                set({ refreshing: false });
                 throw error;
-            } finally {
-                if (!signal.aborted) {
-                    set({ refreshing: false });
-                }
             }
         };
         return {
-            client,
-            refreshing: false,
             state: { kind: "loading" },
+            refreshing: false,
             load: async (signal) => {
-                if (!isIdentifier(botId)) {
-                    set({ state: { kind: "failed", message: "The Bot route is malformed." } });
-                    return;
+                try {
+                    await refresh(signal);
+                } catch (error) {
+                    if (!signal.aborted) {
+                        set({
+                            state: {
+                                kind: "failed",
+                                message: error instanceof Error ? error.message : "The Chat Bot could not be loaded.",
+                            },
+                            refreshing: false,
+                        });
+                    }
                 }
-                await get()
-                    .refresh(signal)
-                    .catch(() => undefined);
             },
             refresh,
         };

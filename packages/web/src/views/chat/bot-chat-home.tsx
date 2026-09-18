@@ -17,6 +17,7 @@ import type { BotChatApi, ChatDraftConfiguration, ChatWorkspace } from "../../se
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
+import { createConversationSessionStore } from "../../view-models/chat/conversation-session-store.ts";
 import { ChatControls } from "./chat-controls.tsx";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
@@ -140,7 +141,6 @@ export function BotChatHome({
         BotChatApi,
         | "listBots"
         | "access"
-        | "connectConversation"
         | "workspace"
         | "selectAgent"
         | "nativeSessions"
@@ -151,11 +151,14 @@ export function BotChatHome({
         | "connectSession"
         | "createPairingInstruction"
         | "createConversation"
+        | "conversationSession"
+        | "submitTurn"
         | "agentSettings"
     >;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
     readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
 }) {
+    const [conversationSessions] = useState(() => createConversationSessionStore(requests));
     const [state, setState] = useState<State>({ kind: "loading" });
     const [revision, retry] = useState(0);
     const [draft, setDraft] = useState("");
@@ -208,7 +211,10 @@ export function BotChatHome({
     const followLatest = useRef(true);
     const [sessionView, setSessionView] = useState<
         | { readonly kind: "conversation-access" }
-        | { readonly kind: "session-access"; readonly session: OpenMobiusSession }
+        | {
+              readonly kind: "session-access";
+              readonly session: OpenMobiusSession;
+          }
     >({ kind: "conversation-access" });
     const newConversation = useCallback(() => {
         lifetime.current?.controller.abort();
@@ -335,12 +341,13 @@ export function BotChatHome({
                 setState({ kind: "draft", bot });
                 return;
             }
-            const access = await requests.access(bot.botId, controller.signal, target.current.conversationId);
-            controller.signal.throwIfAborted();
-            const session = await requests.connectConversation(bot.botId, controller.signal, access);
-            client = session;
-            const history = await session.history.read(new MobiusPageRequest(100, ""), controller.signal);
-            await observe(bot, session, history);
+            await conversationSessions.getState().open(bot.botId, target.current.conversationId, controller.signal);
+            const opened = conversationSessions.getState().state;
+            if (opened.kind !== "ready") {
+                throw new Error(opened.kind === "failed" ? opened.message : "The Session could not be opened.");
+            }
+            setState({ kind: "draft", bot });
+            setSessionView({ kind: "session-access", session: opened.session });
         };
         const observe = async (bot: ManagedBot, session: MobiusBrowserClient, history: MobiusBrowserHistory) => {
             client = session;
@@ -427,8 +434,6 @@ export function BotChatHome({
         }
         setSending({ kind: "sending" });
         followLatest.current = true;
-        let createdClient: MobiusBrowserClient | null = null;
-        let createdId: string | null = null;
         try {
             const attempt =
                 messageAttempt.current?.content === draft.trim()
@@ -440,24 +445,44 @@ export function BotChatHome({
                 if (target.current.kind !== "draft" || draftSettings === null) {
                     return;
                 }
-                const access = await requests.createConversation(
-                    state.bot.botId,
-                    target.current.key,
-                    draftSettings,
-                    controller.signal,
-                    (
-                        draft.trim() ||
-                        attachments
-                            .map((attachment) =>
-                                attachment.kind === "image" ? attachment.image.name : attachment.resource.name,
-                            )
-                            .join(", ")
-                    ).slice(0, 500),
-                );
+                await conversationSessions
+                    .getState()
+                    .create(
+                        state.bot.botId,
+                        target.current.key,
+                        draftSettings,
+                        (
+                            draft.trim() ||
+                            attachments
+                                .map((attachment) =>
+                                    attachment.kind === "image" ? attachment.image.name : attachment.resource.name,
+                                )
+                                .join(", ")
+                        ).slice(0, 500),
+                        attempt.content,
+                        attachments,
+                        controller.signal,
+                    );
+                const opened = conversationSessions.getState().state;
+                if (opened.kind !== "ready") {
+                    throw new Error(opened.kind === "failed" ? opened.message : "The Session could not be created.");
+                }
                 controller.signal.throwIfAborted();
-                createdId = access.conversationId;
-                createdClient = await requests.connectConversation(state.bot.botId, controller.signal, access);
-                client = createdClient;
+                const createdId = opened.conversationId;
+                const url = new URL(window.location.href);
+                url.searchParams.delete("conversation");
+                url.searchParams.set("conversationId", createdId);
+                window.history.replaceState(window.history.state, "", url);
+                target.current = { kind: "conversation-access", conversationId: createdId };
+                setSessionView({
+                    kind: "session-access",
+                    session: opened.session,
+                });
+                setDraft("");
+                setAttachments([]);
+                messageAttempt.current = null;
+                setSending({ kind: "idle" });
+                return;
             } else {
                 client = state.client;
             }
@@ -480,17 +505,7 @@ export function BotChatHome({
             setSending({ kind: "running", turnId: turn.turnId });
             const history = await client.history.read(new MobiusPageRequest(100, ""), controller.signal);
             if (!controller.signal.aborted) {
-                if (createdId !== null) {
-                    const url = new URL(window.location.href);
-                    url.searchParams.delete("conversation");
-                    url.searchParams.set("conversationId", createdId);
-                    window.history.replaceState(window.history.state, "", url);
-                    target.current = { kind: "conversation-access", conversationId: createdId };
-                    connection.adopt(state.bot, client, history);
-                    createdClient = null;
-                } else {
-                    setState((current) => updateHistory(current, client, history));
-                }
+                setState((current) => updateHistory(current, client, history));
                 setDraft("");
                 setAttachments([]);
                 messageAttempt.current = null;
@@ -508,8 +523,6 @@ export function BotChatHome({
                     turn === null ? { kind: "failed", message } : { kind: "stop-failed", turnId: turn.turnId, message },
                 );
             }
-        } finally {
-            createdClient?.close();
         }
     };
 

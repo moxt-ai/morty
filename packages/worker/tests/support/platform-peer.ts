@@ -83,8 +83,12 @@ export async function platformPeer({
     readonly settingsAvailable?: boolean;
 } = {}) {
     const projects = new Map<string, object>();
-    const bots = new Map<string, { readonly botId: string; readonly projectId: string }>();
+    const bots = new Map<
+        string,
+        Readonly<Record<string, unknown>> & { readonly botId: string; readonly projectId: string }
+    >();
     const sessions = new Map<string, object>();
+    const submittedTurns: unknown[] = [];
     const conversations = new Map<
         string,
         {
@@ -114,6 +118,7 @@ export async function platformPeer({
             readonly expiresAt: string;
         }
     >();
+    let legacyBotRequestCount = 0;
     const credential = `mapp_${"a".repeat(22)}_${"b".repeat(43)}`;
     const server = createServer(async (request, response) => {
         response.setHeader("content-type", "application/json");
@@ -142,8 +147,32 @@ export async function platformPeer({
             body += chunk;
         }
         const timestamp = AUTH_TIME.toISOString();
+        const turnPath = request.url?.match(/^\/mobius\/api\/v1\/projects\/([^/]+)\/sessions\/([^/]+)\/turns$/u);
+        if (request.method === "POST" && turnPath !== undefined && turnPath !== null) {
+            const projectId = v.parse(v.string(), turnPath[1]);
+            const sessionId = v.parse(v.string(), turnPath[2]);
+            if (sessions.has(`${projectId}:${sessionId}`)) {
+                const input = v.parse(
+                    v.object({ content: v.string(), idempotencyKey: v.string(), resources: v.array(v.unknown()) }),
+                    JSON.parse(body),
+                );
+                submittedTurns.push(input);
+                response.writeHead(202).end(
+                    JSON.stringify({
+                        acceptedAt: timestamp,
+                        bindingId: "binding-1",
+                        idempotencyKey: input.idempotencyKey,
+                        request: { kind: "prompt", content: input.content },
+                        sessionId,
+                        state: { kind: "queued" },
+                        turnId: `turn-${submittedTurns.length}`,
+                    }),
+                );
+                return;
+            }
+        }
         const sessionPath = request.url?.match(
-            /^\/mobius\/api\/v1\/projects\/([^/]+)\/sessions(?:\/([^/?]+)(?:\/(prepare))?)?(?:\?.*)?$/u,
+            /^\/mobius\/api\/v1\/projects\/([^/]+)\/sessions(?:\/([^/?]+)(?:\/(prepare|configuration|access-credentials))?)?(?:\?.*)?$/u,
         );
         if (sessionPath !== undefined && sessionPath !== null) {
             const projectId = v.parse(v.string(), sessionPath[1]);
@@ -196,6 +225,10 @@ export async function platformPeer({
                 return;
             }
             const key = `${projectId}:${sessionId}`;
+            if (sessions.has(key) && request.method === "GET" && sessionPath[3] === undefined) {
+                response.writeHead(200).end(JSON.stringify(sessions.get(key)));
+                return;
+            }
             if (sessions.has(key) && request.method === "POST" && sessionPath[3] === "prepare") {
                 response.setHeader(
                     "server-timing",
@@ -215,10 +248,36 @@ export async function platformPeer({
                 );
                 return;
             }
+            if (sessions.has(key) && request.method === "POST" && sessionPath[3] === "configuration") {
+                response.writeHead(200).end(
+                    JSON.stringify({
+                        kind: "session.config.updated",
+                        sessionId,
+                        requestId: "configure-1",
+                        configOptions: readySession(v.parse(v.string(), sessionId)).configOptions,
+                    }),
+                );
+                return;
+            }
+            if (sessions.has(key) && request.method === "POST" && sessionPath[3] === "access-credentials") {
+                const input = v.parse(v.object({ expiresInSeconds: v.number() }), JSON.parse(body));
+                response.writeHead(201).end(
+                    JSON.stringify({
+                        credential: `msession_${"a".repeat(22)}_${"b".repeat(43)}`,
+                        credentialId: "credential-1",
+                        projectId,
+                        sessionId,
+                        expiresAt: new Date(AUTH_TIME.getTime() + input.expiresInSeconds * 1000).toISOString(),
+                    }),
+                );
+                return;
+            }
             if (request.method === "DELETE" && sessions.delete(key)) {
                 response.writeHead(200).end(JSON.stringify({ kind: "deleted", completedAt: timestamp }));
                 return;
             }
+            response.writeHead(404).end(JSON.stringify({ error: { code: "session_not_found", message: "Not found" } }));
+            return;
         }
         const conversationPath = request.url?.match(
             /^\/mobius\/api\/v1\/projects\/([^/]+)\/conversations(?:\/([^/]+))?$/u,
@@ -443,51 +502,71 @@ export async function platformPeer({
             return;
         }
         const botPath = request.url?.match(
-            /^\/mobius\/api\/v1\/projects\/([^/]+)\/bots\/([^/]+)(?:\/(execution-bindings))?$/u,
+            /^\/mobius\/api\/v1\/projects\/([^/]+)\/bots\/([^/]+)(?:\/(execution-bindings|behavior-revisions))?$/u,
         );
         if (request.method === "GET" && botPath !== undefined && botPath !== null) {
             const bot = bots.get(v.parse(v.string(), botPath[2]));
             if (bot !== undefined && bot.projectId === botPath[1]) {
+                legacyBotRequestCount += 1;
                 response.writeHead(200).end(
                     JSON.stringify(
                         botPath[3] === undefined
                             ? bot
-                            : {
-                                  executionBindings: activeBots
-                                      ? [
-                                            {
-                                                agentConfigRevision: 1,
-                                                agentRef: "agent-one",
-                                                allowedDeliveryTargetIds: [],
-                                                behaviorRevisionId: "behavior-1",
-                                                bindingId: "binding-1",
-                                                bindingRevision: 1,
-                                                botId: bot.botId,
-                                                completionPolicy: { kind: "none" },
-                                                createdAt: timestamp,
-                                                executionConfiguration: {
-                                                    model: {
-                                                        booleanValue: false,
-                                                        configId: "model",
-                                                        value: "agent_default",
-                                                        valueType: "select",
-                                                    },
-                                                    permissionMode: "agent_default",
-                                                    reasoningEffort: {
-                                                        booleanValue: false,
-                                                        configId: "reasoning_effort",
-                                                        value: "agent_default",
-                                                        valueType: "select",
-                                                    },
-                                                },
-                                                activatedAt: timestamp,
-                                                lifecycle: "active",
-                                                runtimeId: "runtime-1",
-                                                workspaceRef: "default",
-                                            },
-                                        ]
-                                      : [],
-                              },
+                            : botPath[3] === "behavior-revisions"
+                              ? {
+                                    behaviorRevisions: activeBots
+                                        ? [
+                                              {
+                                                  agentConfiguration: {},
+                                                  behaviorRevisionId: "behavior-1",
+                                                  botId: bot.botId,
+                                                  contentDigest: "digest-1",
+                                                  createdAt: timestamp,
+                                                  instructions: "Answer as the migrated Bot.",
+                                                  lifecycle: "active",
+                                                  activatedAt: timestamp,
+                                                  requiredCapabilities: [],
+                                                  revisionNumber: 1,
+                                              },
+                                          ]
+                                        : [],
+                                }
+                              : {
+                                    executionBindings: activeBots
+                                        ? [
+                                              {
+                                                  agentConfigRevision: 1,
+                                                  agentRef: "agent-one",
+                                                  allowedDeliveryTargetIds: [],
+                                                  behaviorRevisionId: "behavior-1",
+                                                  bindingId: "binding-1",
+                                                  bindingRevision: 1,
+                                                  botId: bot.botId,
+                                                  completionPolicy: { kind: "none" },
+                                                  createdAt: timestamp,
+                                                  executionConfiguration: {
+                                                      model: {
+                                                          booleanValue: false,
+                                                          configId: "model",
+                                                          value: "agent_default",
+                                                          valueType: "select",
+                                                      },
+                                                      permissionMode: "agent_default",
+                                                      reasoningEffort: {
+                                                          booleanValue: false,
+                                                          configId: "reasoning_effort",
+                                                          value: "agent_default",
+                                                          valueType: "select",
+                                                      },
+                                                  },
+                                                  activatedAt: timestamp,
+                                                  lifecycle: "active",
+                                                  runtimeId: "runtime-1",
+                                                  workspaceRef: "default",
+                                              },
+                                          ]
+                                        : [],
+                                },
                     ),
                 );
                 return;
@@ -527,9 +606,36 @@ export async function platformPeer({
             request.method === "GET" &&
             runtimePath !== undefined &&
             runtimePath !== null &&
-            [...bots.values()].some((bot) => bot.projectId === runtimePath[1])
+            [...projects.values()].some(
+                (project) => v.parse(v.object({ projectId: v.string() }), project).projectId === runtimePath[1],
+            )
         ) {
-            response.writeHead(200).end(JSON.stringify({ runtimes: [] }));
+            response.writeHead(200).end(
+                JSON.stringify({
+                    runtimes: activeBots
+                        ? [
+                              {
+                                  runtimeId: "runtime-1",
+                                  projectId: runtimePath[1],
+                                  channelId: "channel-1",
+                                  machineName: "Local machine",
+                                  workspaceName: "Workspace",
+                                  online: true,
+                                  agents: [
+                                      {
+                                          id: "agent-one",
+                                          label: "Agent One",
+                                          agentPath: "/agents/agent-one",
+                                          agentVersion: "1",
+                                          capabilities: readySession("descriptor").capabilities,
+                                      },
+                                  ],
+                                  installableAgents: [],
+                              },
+                          ]
+                        : [],
+                }),
+            );
             return;
         }
         response.writeHead(404).end(JSON.stringify({ error: { code: "not_found", message: "Not found" } }));
@@ -548,6 +654,25 @@ export async function platformPeer({
             MOBIUS_APP_SECRET: credential,
             MOBIUS_BASE_URL: `http://localhost:${address.port}`,
         },
+        seedLegacyBot: (projectId: string, botId: string) => {
+            bots.set(botId, {
+                botId,
+                projectId,
+                displayName: "Legacy Bot",
+                description: "",
+                avatarRef: "",
+                createdAt: AUTH_TIME.toISOString(),
+                updatedAt: AUTH_TIME.toISOString(),
+                currentProfileRevisionId: "profile-legacy",
+                lifecycle: "active",
+                activeBindingId: "binding-1",
+                activeBehaviorRevisionId: "behavior-1",
+                lifecycleRevision: 1,
+                profileRevision: 1,
+            });
+        },
+        legacyBotRequestCount: () => legacyBotRequestCount,
+        submittedTurns: () => [...submittedTurns],
         close: async () => {
             server.closeAllConnections();
             await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));

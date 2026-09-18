@@ -57,6 +57,10 @@ class InMemoryD1Database {
             readFileSync(new URL("../migrations/0007_identity_transfer_redemptions.sql", import.meta.url), "utf8"),
         );
         this.#database.exec(readFileSync(new URL("../migrations/0008_remote_access.sql", import.meta.url), "utf8"));
+        this.#database.exec(readFileSync(new URL("../migrations/0010_chat_owned_bot.sql", import.meta.url), "utf8"));
+        this.#database.exec(
+            readFileSync(new URL("../migrations/0011_slack_chat_bot_binding.sql", import.meta.url), "utf8"),
+        );
     }
     readonly close = () => this.#database.close();
     readonly prepare = (query: string) => new InMemoryD1Statement(query, this.#database);

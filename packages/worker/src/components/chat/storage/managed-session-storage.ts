@@ -113,4 +113,28 @@ export class ManagedSessionStorage {
         const data: unknown = JSON.parse(v.parse(v.object({ data: v.string() }), result).data);
         return data;
     };
+
+    readonly ownsSession = async (
+        projectId: string,
+        userId: string,
+        botId: string,
+        id: string,
+        signal: AbortSignal,
+    ): Promise<boolean> => {
+        signal.throwIfAborted();
+        const result = await this.#requireDatabase()
+            .select({ id: chatManagedSession.resourceId })
+            .from(chatManagedSession)
+            .where(
+                and(
+                    eq(chatManagedSession.projectId, projectId),
+                    eq(chatManagedSession.userId, userId),
+                    eq(chatManagedSession.botId, botId),
+                    eq(chatManagedSession.resourceId, v.parse(platformIdentifier, id)),
+                ),
+            )
+            .get();
+        signal.throwIfAborted();
+        return result !== undefined;
+    };
 }

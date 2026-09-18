@@ -182,8 +182,8 @@ active Turn. Continued Sessions persist the command ID before submission. If a t
 failure leaves acceptance uncertain, Chat displays **Delivery unknown**, never resubmits
 automatically, and offers an explicit retry that reuses the original idempotency key. Reload
 reconciliation clears that warning when the command is already present in saved messages.
-Slack's `MobiusGateway` also calls Mobius
-directly and rejects recursive configuration and redirects.
+Slack resolves its locally owned Chat Bot binding and uses the same generic Project,
+Session, and turn APIs. Bot instructions are injected as trusted Chat-owned context.
 
 ## Verification
 

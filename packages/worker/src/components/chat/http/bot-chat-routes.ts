@@ -5,10 +5,9 @@ import * as v from "valibot";
 import { json } from "../../../infra/http.ts";
 import { bodyParser } from "../../../middleware/body-parser.ts";
 import type { Session } from "../../management/entity/authentication/session.ts";
-import { platformIdentifier } from "../../management/entity/platform-project.ts";
+import { PlatformProjectError, platformIdentifier } from "../../management/entity/platform-project.ts";
 import { authenticatedSession } from "../../management/http/authenticated-session.ts";
 import type { ChatScope } from "../service/chat-service.ts";
-import { MobiusAppError } from "../service/mobius-app-service.ts";
 import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
 
 const setupInput = v.strictObject({
@@ -37,6 +36,37 @@ const nativeContinuationInput = v.strictObject({
     sessionId: platformIdentifier,
 });
 const nativeSessionInput = v.strictObject({ sessionId: platformIdentifier });
+const turnInput = v.strictObject({
+    sessionId: platformIdentifier,
+    additionalDirectoryIds: v.pipe(v.array(nativeDirectoryId), v.maxLength(16)),
+    artifactIds: v.pipe(v.array(platformIdentifier), v.maxLength(100)),
+    content: v.pipe(v.string(), v.maxLength(100000)),
+    disposition: v.optional(v.pipe(v.string(), v.maxLength(64))),
+    idempotencyKey: platformIdentifier,
+    images: v.pipe(
+        v.array(
+            v.strictObject({
+                data: v.pipe(v.string(), v.maxLength(4000000)),
+                mimeType: v.picklist(["image/png", "image/jpeg", "image/gif", "image/webp"]),
+                name: v.pipe(v.string(), v.minLength(1), v.maxLength(500)),
+            }),
+        ),
+        v.maxLength(8),
+    ),
+    resources: v.pipe(
+        v.array(
+            v.strictObject({
+                type: v.picklist(["embedded", "link"]),
+                uri: v.pipe(v.string(), v.minLength(1), v.maxLength(4096)),
+                name: v.pipe(v.string(), v.minLength(1), v.maxLength(500)),
+                mimeType: v.pipe(v.string(), v.minLength(1), v.maxLength(255)),
+                text: v.pipe(v.string(), v.maxLength(100000)),
+            }),
+        ),
+        v.maxLength(32),
+    ),
+    targetCommandId: v.optional(platformIdentifier),
+});
 const accessInput = v.union([
     v.strictObject({ conversationId: platformIdentifier }),
     v.strictObject({
@@ -86,9 +116,9 @@ export function createBotChatRoutes() {
         .use(
             "*",
             bodyLimit({
-                maxSize: 110000,
+                maxSize: 6500000,
                 onError: () => {
-                    throw new MobiusAppError("INVALID_REQUEST", "The message is too large.", 413);
+                    throw new PlatformProjectError("INVALID_REQUEST", "The message is too large.", 413);
                 },
             }),
         )
@@ -113,6 +143,28 @@ export function createBotChatRoutes() {
                         context.req.valid("json"),
                         context.get("operationTiming"),
                     ),
+                );
+            },
+        )
+        .post(
+            "/bots/:botId/turns",
+            authenticatedSession,
+            authorizedChat(120000),
+            bodyParser<AuthorizedChatEnvironment, typeof turnInput>(turnInput),
+            async (context) => {
+                const input = context.req.valid("json");
+                return privateJson(
+                    await context.env.services.chat.submitTurn(context.get("chatScope"), {
+                        sessionId: input.sessionId,
+                        additionalDirectoryIds: input.additionalDirectoryIds,
+                        artifactIds: input.artifactIds,
+                        content: input.content,
+                        idempotencyKey: input.idempotencyKey,
+                        images: input.images,
+                        resources: input.resources,
+                        ...(input.disposition === undefined ? {} : { disposition: input.disposition }),
+                        ...(input.targetCommandId === undefined ? {} : { targetCommandId: input.targetCommandId }),
+                    }),
                 );
             },
         )

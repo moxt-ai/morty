@@ -1,12 +1,12 @@
-import type { MobiusBot } from "@moxt-ai/mobius-sdk";
 import { ArrowLeft, Bot, Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { ChatBot } from "@/services/bots/bot-api";
 import { useChatStore } from "@/view-models/chat-store";
 
-export function BotAvatar({ bot, className }: { readonly bot: MobiusBot; readonly className?: string }) {
+export function BotAvatar({ bot, className }: { readonly bot: ChatBot; readonly className?: string }) {
     const initials = bot.displayName.trim().slice(0, 2).toUpperCase();
     return (
         <span
@@ -21,34 +21,15 @@ export function BotAvatar({ bot, className }: { readonly bot: MobiusBot; readonl
     );
 }
 
-function statusLabel(bot: MobiusBot): string {
-    if (bot.state.kind === "draft") {
-        return "Draft";
-    }
-    if (bot.state.kind === "active") {
-        return "Active";
-    }
-    if (bot.state.kind === "suspended") {
-        return "Suspended";
-    }
-    if (bot.state.kind === "archived") {
-        return "Archived";
-    }
-    return "Unknown";
-}
-
-export function BotStatusBadge({ bot }: { readonly bot: MobiusBot }) {
+export function BotStatusBadge({ configured = false }: { readonly configured?: boolean }) {
     return (
         <span
             className={cn(
                 "inline-flex min-h-6 items-center rounded-full px-2.5 text-[11px] font-semibold",
-                bot.state.kind === "active" && "bg-[#e8f8ef] text-[#187747]",
-                bot.state.kind === "draft" && "bg-[#f1f3f5] text-[#59636e]",
-                bot.state.kind === "suspended" && "bg-[#fff5e6] text-[#9a5b00]",
-                bot.state.kind === "archived" && "bg-[#fff0f0] text-[#9b2c32]",
+                configured ? "bg-[#e8f8ef] text-[#187747]" : "bg-[#f1f3f5] text-[#59636e]",
             )}
         >
-            {statusLabel(bot)}
+            {configured ? "Configured" : "Chat Bot"}
         </span>
     );
 }

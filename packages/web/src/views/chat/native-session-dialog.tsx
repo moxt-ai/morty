@@ -5,12 +5,10 @@ import { Dialog } from "../../components/ui/dialog.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
+import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 
-export interface OpenMobiusSession {
-    readonly agentRef: string;
-    readonly result: Extract<NativeSessionResult, { readonly ready: unknown }>;
-    readonly entry: NativeSessionEntry;
-}
+export type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
+
 type Directory =
     | { readonly kind: "loading" }
     | { readonly kind: "empty" }

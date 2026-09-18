@@ -33,11 +33,11 @@ import { Button } from "../../components/ui/cloud-button.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
 import { type RecordedAgentActivity, recordAgentActivity } from "../../services/chat/agent-activities.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 import { createRemoteAccessStore } from "../../view-models/chat/remote-access-store.ts";
 import { createSessionDeliveryStore } from "../../view-models/chat/session-delivery-store.ts";
 import { createSessionTaskControlsStore, findCompactCommand } from "../../view-models/chat/session-task-controls.ts";
 import { MobiusSessionMessage, type SessionMessage, type SessionMessageContent } from "./mobius-session-message.tsx";
-import type { OpenMobiusSession } from "./native-session-dialog.tsx";
 
 type Operation =
     | { readonly kind: "idle" }
@@ -193,7 +193,7 @@ export function MobiusSessionPane({
 }: {
     readonly session: OpenMobiusSession;
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "connectSession">;
+    readonly requests: Pick<BotChatApi, "connectSession" | "submitTurn">;
     readonly endRemoteAccess?: (signal: AbortSignal) => Promise<void>;
 }) {
     const sessionId = session.result.ready.sessionId;
@@ -203,11 +203,7 @@ export function MobiusSessionPane({
             sessionId,
             storage: window.localStorage,
             submit: async (request, signal) => {
-                const client = clientReference.current;
-                if (client === null) {
-                    throw new Error("The Session is not connected.");
-                }
-                return await client.turns.submit(sessionId, request, signal);
+                return await requests.submitTurn(botId, sessionId, request, signal);
             },
         }),
     );
