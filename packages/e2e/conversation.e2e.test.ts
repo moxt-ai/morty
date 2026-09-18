@@ -2,6 +2,20 @@ import assert from "node:assert/strict";
 import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
+test("Given a paired desktop workspace, When Chat opens, Then workspace navigation and conversation are clearly identified", async ({
+    runtime,
+}) => {
+    await runtime.openPairedChat();
+    const { page } = runtime;
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    const workspace = page.getByRole("complementary", { name: "Workspace navigation", exact: true });
+    await expect(workspace.getByRole("heading", { name: "Mobius Chat", exact: true })).toBeVisible();
+    await expect(workspace.getByRole("button", { name: "New Conversation", exact: true })).toBeVisible();
+    await expect(page.getByRole("log", { name: "Messages", exact: true })).toBeVisible();
+    await expect(page.getByTestId(dataTestId.messageComposer)).toBeVisible();
+});
+
 test("Given a paired workspace, When a user clicks outside the attachment menu, Then it closes and can be reopened", async ({
     runtime,
 }) => {

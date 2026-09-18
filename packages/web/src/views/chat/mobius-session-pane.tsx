@@ -138,7 +138,7 @@ export function MobiusSessionPane({
                     followLatest.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
                 }}
                 aria-label="Messages"
-                className="min-h-0 flex-1 space-y-8 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10"
+                className="min-h-0 flex-1 space-y-8 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10 lg:px-12"
             >
                 {model.messages.map((message) => {
                     const workingOnly =
@@ -150,7 +150,7 @@ export function MobiusSessionPane({
                     return (
                         <div
                             key={message.id}
-                            className={`mx-auto w-full min-w-0 max-w-[1120px] ${workingOnly ? "hidden" : ""}`}
+                            className={`mx-auto w-full min-w-0 max-w-[920px] ${workingOnly ? "hidden" : ""}`}
                         >
                             <MobiusSessionMessage
                                 message={message}
@@ -165,7 +165,7 @@ export function MobiusSessionPane({
                         </div>
                     );
                 })}
-                <div className="mx-auto w-full min-w-0 max-w-[1120px]">
+                <div className="mx-auto w-full min-w-0 max-w-[920px]">
                     <SessionInteractionCards
                         elicitations={model.interactions.flatMap((interaction) =>
                             interaction.kind === "elicitation" ? [interaction.elicitation] : [],

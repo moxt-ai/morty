@@ -16,7 +16,9 @@
     --success: #227b4e;
     --copy-secondary: #454959;
     --surface-subtle: #f7f8f9;
-    --sidebar: #f4f5f7;
+    --sidebar: #f1f4f2;
+    --surface-elevated: #ffffff;
+    --primary-subtle: #eaf5ef;
 }
 
 @theme inline {
@@ -46,6 +48,8 @@
     --color-copy-secondary: var(--copy-secondary);
     --color-surface-subtle: var(--surface-subtle);
     --color-sidebar: var(--sidebar);
+    --color-surface-elevated: var(--surface-elevated);
+    --color-primary-subtle: var(--primary-subtle);
 }
 
 .pairing-card {

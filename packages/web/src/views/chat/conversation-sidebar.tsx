@@ -1,4 +1,4 @@
-import { ChevronDown, Laptop, RefreshCw, Share2, SquarePen } from "lucide-react";
+import { ChevronDown, Laptop, MessageSquare, RefreshCw, Share2, SquarePen } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
@@ -46,32 +46,41 @@ export function ConversationSidebar({
     }, [activeId, load, revision]);
     return (
         <aside
-            aria-label="Conversations"
-            className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-b border-border bg-[#edf2ef] p-4 sm:w-64 sm:border-r sm:border-b-0 sm:pb-20"
+            aria-label="Workspace navigation"
+            className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-b border-border/80 bg-sidebar px-3 py-3 sm:w-[280px] sm:border-r sm:border-b-0 sm:px-3.5 sm:py-4"
         >
+            <div className="mb-4 flex items-center gap-3 px-1.5 sm:mb-6">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_4px_12px_rgba(34,123,78,0.18)]">
+                    <MessageSquare className="size-[18px]" aria-hidden="true" />
+                </span>
+                <span className="min-w-0">
+                    <h1 className="truncate text-[15px] leading-5 font-semibold tracking-[-0.015em]">Mobius Chat</h1>
+                    <span className="block text-[11px] leading-4 text-muted-foreground">Local workspace</span>
+                </span>
+            </div>
             <Button
-                className="mb-2 justify-start shadow-sm"
+                className="mb-2 min-h-10 justify-start rounded-xl shadow-[0_3px_10px_rgba(34,123,78,0.14)]"
                 onClick={onNewConversation}
                 data-testid={dataTestId.newConversation}
             >
                 <SquarePen className="size-4" aria-hidden="true" />
                 New Conversation
             </Button>
-            <Button variant="outline" className="mb-2 justify-start" onClick={() => setDialog(true)}>
+            <Button
+                variant="ghost"
+                className="mb-4 min-h-10 justify-start rounded-xl px-3 text-copy-secondary hover:bg-white/70 sm:mb-6"
+                onClick={() => setDialog(true)}
+            >
                 <Laptop className="size-4" aria-hidden="true" />
                 Native Sessions
             </Button>
-            <Button variant="outline" className="mb-5 justify-start" onClick={() => setSharing(true)}>
-                <Share2 className="size-4" aria-hidden="true" />
-                Share My Machine
-            </Button>
-            <div className="mb-3 flex items-center justify-between">
-                <h2 className="hidden text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:block">
+            <div className="mb-2 flex items-center justify-between px-1">
+                <h2 className="hidden text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground sm:block">
                     Conversations
                 </h2>
                 <Button
                     variant="ghost"
-                    className="sm:hidden"
+                    className="justify-start sm:hidden"
                     aria-expanded={expanded}
                     aria-controls="chat-conversations"
                     onClick={() => setExpanded((value) => !value)}
@@ -82,6 +91,7 @@ export function ConversationSidebar({
                 <Button
                     variant="ghost"
                     size="icon"
+                    className="size-8 rounded-lg"
                     aria-label={refreshing ? "Refreshing conversations" : "Refresh conversations"}
                     aria-busy={refreshing}
                     disabled={refreshing}
@@ -92,7 +102,7 @@ export function ConversationSidebar({
             </div>
             <div
                 id="chat-conversations"
-                className={`${expanded ? "block" : "hidden"} max-h-48 min-h-0 flex-1 space-y-1 overflow-y-auto sm:block sm:max-h-none`}
+                className={`${expanded ? "block" : "hidden"} max-h-48 min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5 sm:block sm:max-h-none`}
             >
                 {directory.kind === "loading" && <p role="status">Loading conversations…</p>}
                 {(directory.kind === "failed" || directory.kind === "stale") && (
@@ -112,11 +122,21 @@ export function ConversationSidebar({
                             onOpen(session);
                             setExpanded(false);
                         }}
-                        className="w-full truncate rounded-xl border border-transparent px-3 py-3 text-left text-sm font-medium text-copy-secondary hover:bg-white/70 focus-visible:outline-ring aria-[current=page]:border-primary/15 aria-[current=page]:bg-white aria-[current=page]:text-primary"
+                        className="w-full truncate rounded-xl border border-transparent px-3 py-2.5 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color,box-shadow] duration-150 hover:bg-white/70 focus-visible:ring-2 focus-visible:ring-ring/60 aria-[current=page]:bg-white aria-[current=page]:text-foreground aria-[current=page]:shadow-[0_1px_4px_rgba(17,24,20,0.08),inset_3px_0_0_var(--primary)] motion-reduce:transition-none"
                     >
                         {session.title}
                     </button>
                 ))}
+            </div>
+            <div className="mt-3 border-t border-black/[0.06] pt-3">
+                <Button
+                    variant="ghost"
+                    className="w-full min-h-10 justify-start rounded-xl px-3 text-copy-secondary hover:bg-white/70"
+                    onClick={() => setSharing(true)}
+                >
+                    <Share2 className="size-4" aria-hidden="true" />
+                    Share My Machine
+                </Button>
             </div>
             {dialog && (
                 <NativeSessionDialog
