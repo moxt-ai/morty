@@ -6,11 +6,13 @@ export function MessageBubble({
     speaker,
     children,
     copyText,
+    status,
     "data-testid": testId,
 }: {
     readonly speaker: "user" | "assistant";
     readonly children: ReactNode;
     readonly copyText?: string;
+    readonly status?: ReactNode;
     readonly "data-testid"?: string | undefined;
 }) {
     const messageCopyText = speaker === "user" ? (copyText ?? (typeof children === "string" ? children : null)) : null;
@@ -27,6 +29,7 @@ export function MessageBubble({
         >
             {children}
             {messageCopyText !== null && <MessageCopyButton text={messageCopyText} />}
+            {status !== undefined && <span className="absolute top-full left-0 mt-1 flex">{status}</span>}
         </article>
     );
 }

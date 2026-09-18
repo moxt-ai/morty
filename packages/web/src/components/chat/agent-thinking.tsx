@@ -17,12 +17,13 @@ export function AgentWorkingIndicator() {
 
 export function AgentThinking({ autoOpen, entries }: ThinkingPresentation) {
     const disclosure = useRef<HTMLDetailsElement>(null);
+    const hasEntries = entries.length > 0;
     useEffect(() => {
-        if (disclosure.current !== null) {
+        if (hasEntries && disclosure.current !== null) {
             disclosure.current.open = autoOpen;
         }
-    }, [autoOpen]);
-    if (entries.length === 0) {
+    }, [autoOpen, hasEntries]);
+    if (!hasEntries) {
         return null;
     }
     return (
