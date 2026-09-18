@@ -59,6 +59,7 @@ export type ChatAgentSelection = v.InferOutput<typeof agentSelectionSchema>;
 export interface ChatDraftConfiguration {
     readonly bindingId: string;
     readonly workspaceRef: string;
+    readonly permissionMode: string;
     readonly configuration: {
         readonly additionalDirectoryIds: readonly string[];
         readonly booleanValue: boolean;

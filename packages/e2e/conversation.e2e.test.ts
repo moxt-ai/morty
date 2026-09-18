@@ -26,6 +26,21 @@ test("Given a paired workspace, When the user pastes an image into the chat box,
     await expect(page.getByRole("list", { name: "Attachments", exact: true })).toHaveCount(0);
 });
 
+test("Given a paired workspace, When the user selects a permission mode, Then Chat displays that mode", async ({
+    runtime,
+}) => {
+    await runtime.openPairedChat();
+    const { page } = runtime;
+
+    await page.getByTestId(dataTestId.agentConfiguration).click();
+    const permission = page.getByTestId(dataTestId.permissionMode);
+    await permission.click();
+    await permission.press("ArrowDown");
+    await permission.press("Enter");
+
+    await expect(permission).toHaveText("Read only");
+});
+
 test("Given an agent is working, When the user sends a follow-up, Then the follow-up is queued", async ({
     runtime,
 }) => {

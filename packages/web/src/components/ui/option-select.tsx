@@ -7,6 +7,7 @@ export function Select({
     onValueChange,
     options,
     disabled = false,
+    testId,
 }: {
     readonly label: string;
     readonly value: string;
@@ -14,12 +15,14 @@ export function Select({
     readonly options: readonly { readonly value: string; readonly label: string }[];
     readonly disabled?: boolean;
     readonly compact?: boolean;
+    readonly testId?: string | undefined;
 }) {
     return (
         <Primitive.Root value={value} onValueChange={onValueChange} disabled={disabled}>
             <Primitive.Trigger
                 aria-label={label}
                 className={`flex h-9 min-w-0 items-center justify-between gap-1.5 rounded-lg text-left text-[13px] outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50 motion-reduce:transition-none ${compact ? "w-auto max-w-48 border-transparent bg-transparent px-2" : "w-full gap-2 border border-border bg-background px-3"}`}
+                data-testid={testId}
             >
                 <span className="min-w-0 truncate">
                     <Primitive.Value placeholder={`Select ${label.toLowerCase()}`} />

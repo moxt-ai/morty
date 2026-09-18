@@ -32,6 +32,7 @@ export type ChatConversationInput =
           readonly conversationKey: string;
           readonly bindingId: string;
           readonly workspaceRef: string;
+          readonly permissionMode: string;
           readonly configuration: {
               readonly additionalDirectoryIds: readonly string[];
               readonly booleanValue: boolean;
@@ -202,24 +203,59 @@ export class PlatformProjectGateway {
                     );
                 }
                 const ready = await client.sessions.prepare(sessionId, signal);
+                let configOptions = ready.configOptions;
                 if ("conversationKey" in input) {
-                    if (!ready.configOptions.some((option) => option.id === input.configuration.configId)) {
+                    const permission = configOptions.find((option) => option.id === "permission_mode");
+                    if (
+                        permission === undefined ||
+                        permission.type !== "select" ||
+                        !permission.values.some((value) => value.value === input.permissionMode)
+                    ) {
+                        throw new PlatformProjectError(
+                            "AGENT_CONFIGURATION_REJECTED",
+                            "The harness did not offer the selected permission mode.",
+                            409,
+                        );
+                    }
+                    if (permission.currentValue !== input.permissionMode) {
+                        configOptions = (
+                            await client.sessions.updateConfiguration(
+                                sessionId,
+                                {
+                                    configId: permission.id,
+                                    value: input.permissionMode,
+                                    booleanValue: false,
+                                    valueType: "select",
+                                },
+                                signal,
+                            )
+                        ).configOptions;
+                    }
+                    const model = configOptions.find((option) => option.id === input.configuration.configId);
+                    if (
+                        model === undefined ||
+                        model.type !== input.configuration.valueType ||
+                        (model.type === "select" &&
+                            !model.values.some((value) => value.value === input.configuration.value))
+                    ) {
                         throw new PlatformProjectError(
                             "AGENT_CONFIGURATION_REJECTED",
                             "The harness did not offer the selected model.",
                             409,
                         );
                     }
-                    await client.sessions.updateConfiguration(
-                        sessionId,
-                        {
-                            configId: input.configuration.configId,
-                            value: input.configuration.value,
-                            booleanValue: input.configuration.booleanValue,
-                            valueType: input.configuration.valueType,
-                        },
-                        signal,
-                    );
+                    configOptions = (
+                        await client.sessions.updateConfiguration(
+                            sessionId,
+                            {
+                                configId: input.configuration.configId,
+                                value: input.configuration.value,
+                                booleanValue: input.configuration.booleanValue,
+                                valueType: input.configuration.valueType,
+                            },
+                            signal,
+                        )
+                    ).configOptions;
                 }
                 const access = await client.sessions.createAccess(sessionId, 900, signal);
                 return {
@@ -228,7 +264,7 @@ export class PlatformProjectGateway {
                     sessionId,
                     credential: access.credential,
                     expiresAt: access.expiresAt,
-                    ready,
+                    ready: { ...ready, configOptions },
                     agentRef: selection.agentRef,
                     workspaceRef: session.defaultBinding.workspaceRef,
                 };
