@@ -189,6 +189,13 @@ export function sessionPanePresentation(
         model.activeCommandId === null
             ? null
             : (model.messages.findLast((message) => message.role === "user")?.id ?? null);
+    const deliveryUnknownCommandId =
+        delivery.state.kind === "delivery-unknown" ? delivery.state.journal.commandId : null;
+    const deliveryUnknownUserMessageId =
+        deliveryUnknownCommandId === null
+            ? null
+            : (model.messages.findLast((message) => message.role === "user" && message.id === deliveryUnknownCommandId)
+                  ?.id ?? null);
     return {
         activeMessageId,
         activeUserMessageId,
@@ -211,6 +218,7 @@ export function sessionPanePresentation(
                       ? queue.feedback.message
                       : "",
         controlRunning,
+        deliveryUnknownUserMessageId,
         outputState:
             queue.operation.kind === "submitting"
                 ? "sending"
@@ -226,6 +234,17 @@ export function sessionPanePresentation(
             (tasks.operation.kind === "running" ? queue.operation.kind !== "idle" : busy) ||
             (model.draft.trim() === "" && model.attachments.length === 0),
     } as const;
+}
+
+function includePendingUserMessage(
+    messages: readonly SessionMessage[],
+    commandId: string,
+    displayPrompt: string,
+): readonly SessionMessage[] {
+    if (messages.some((message) => message.role === "user" && message.id === commandId)) {
+        return messages;
+    }
+    return [...messages, { contents: [], id: commandId, role: "user", text: displayPrompt }];
 }
 
 export function createSessionPaneModel(options: {
@@ -247,6 +266,16 @@ export function createSessionPaneModel(options: {
         storage: options.storage,
         submit: async (request, signal) => await requests.submitTurn(botId, sessionId, request, signal),
     });
+    const initialDelivery = delivery.getState().state;
+    const savedMessages = historySessionMessages(session.result.history);
+    const initialMessages =
+        initialDelivery.kind === "delivery-unknown"
+            ? includePendingUserMessage(
+                  savedMessages,
+                  initialDelivery.journal.commandId,
+                  initialDelivery.journal.displayPrompt,
+              )
+            : savedMessages;
     const tasks = createSessionTaskControlsStore({
         commands: session.result.ready.commands,
         steeringSupported: session.result.ready.capabilities.steering,
@@ -320,7 +349,7 @@ export function createSessionPaneModel(options: {
         };
         return {
             connection: { kind: "loading" },
-            messages: historySessionMessages(session.result.history),
+            messages: initialMessages,
             options: session.result.ready.configOptions,
             draft: "",
             attachments: [],
@@ -382,6 +411,15 @@ export function createSessionPaneModel(options: {
                     });
                     delivery.getState().reconcile(saved.messages.map((message) => message.commandId));
                     const restored = restoreSessionPresentation(saved, session.result.history);
+                    const reconciledDelivery = delivery.getState().state;
+                    const restoredMessages =
+                        reconciledDelivery.kind === "delivery-unknown"
+                            ? includePendingUserMessage(
+                                  restored.messages,
+                                  reconciledDelivery.journal.commandId,
+                                  reconciledDelivery.journal.displayPrompt,
+                              )
+                            : restored.messages;
                     lastSequence = restored.lastSequence;
                     if (restored.activeCommandId === null) {
                         if (command !== "") {
@@ -394,7 +432,7 @@ export function createSessionPaneModel(options: {
                     signal.throwIfAborted();
                     set({
                         activities: restored.activities,
-                        messages: restored.messages,
+                        messages: restoredMessages,
                         activeCommandId: command || null,
                     });
                     const subscription = await connected.events.subscribe(
@@ -676,31 +714,39 @@ export function createSessionPaneModel(options: {
                 }
                 const pending = state.journal;
                 command = pending.commandId;
-                set((current) => ({
-                    activeCommandId: pending.commandId,
-                    messages: current.messages.some(
-                        (message) => message.role === "assistant" && message.commandId === pending.commandId,
-                    )
-                        ? current.messages
-                        : [
-                              ...current.messages,
-                              {
-                                  id: `${pending.commandId}-user`,
-                                  role: "user",
-                                  text: pending.displayPrompt,
-                                  contents: [],
-                              },
-                              {
-                                  activityIds: [],
-                                  id: `${pending.commandId}-reply`,
-                                  role: "assistant",
-                                  text: "",
-                                  attempt: null,
-                                  commandId: pending.commandId,
-                                  contents: [],
-                              },
-                          ],
-                }));
+                set((current) => {
+                    let messages: readonly SessionMessage[] = current.messages;
+                    if (!messages.some((message) => message.role === "user" && message.id === pending.commandId)) {
+                        messages = [
+                            ...messages,
+                            {
+                                id: pending.commandId,
+                                role: "user",
+                                text: pending.displayPrompt,
+                                contents: [],
+                            },
+                        ];
+                    }
+                    if (
+                        !messages.some(
+                            (message) => message.role === "assistant" && message.commandId === pending.commandId,
+                        )
+                    ) {
+                        messages = [
+                            ...messages,
+                            {
+                                activityIds: [],
+                                id: `${pending.commandId}-reply`,
+                                role: "assistant",
+                                text: "",
+                                attempt: null,
+                                commandId: pending.commandId,
+                                contents: [],
+                            },
+                        ];
+                    }
+                    return { activeCommandId: pending.commandId, messages };
+                });
                 const accepted = await delivery.getState().retry(signal);
                 signal.throwIfAborted();
                 if (accepted !== null) {

@@ -1,4 +1,4 @@
-import { ChevronDown, Laptop, MessageSquare, RefreshCw, Share2, SquarePen } from "lucide-react";
+import { ChevronDown, Laptop, LoaderCircle, MessageSquare, RefreshCw, Share2, SquarePen } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
@@ -18,6 +18,7 @@ export function ConversationSidebar({
     onOpenSession,
     onNewConversation,
     createTransfer,
+    activeSession,
 }: {
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "workspace" | "nativeSessions" | "nativeSession" | "managedSessions">;
@@ -26,6 +27,14 @@ export function ConversationSidebar({
     readonly onOpenSession: (session: OpenMobiusSession) => void;
     readonly onNewConversation: () => void;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
+    readonly activeSession:
+        | { readonly kind: "none" }
+        | {
+              readonly kind: "active";
+              readonly directoryLabel: string;
+              readonly id: string;
+              readonly running: boolean;
+          };
 }) {
     const [store] = useState(() => createConversationDirectoryStore(botId, requests));
     const { load, state: directory } = useStore(store);
@@ -122,9 +131,29 @@ export function ConversationSidebar({
                             onOpen(session);
                             setExpanded(false);
                         }}
-                        className="w-full truncate rounded-xl border border-transparent px-3 py-2.5 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color,box-shadow] duration-150 hover:bg-white/70 focus-visible:ring-2 focus-visible:ring-ring/60 aria-[current=page]:bg-white aria-[current=page]:text-foreground aria-[current=page]:shadow-[0_1px_4px_rgba(17,24,20,0.08),inset_3px_0_0_var(--primary)] motion-reduce:transition-none"
+                        className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-transparent px-3 py-2.5 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color,box-shadow] duration-150 hover:bg-white/70 focus-visible:ring-2 focus-visible:ring-ring/60 aria-[current=page]:bg-white aria-[current=page]:text-foreground aria-[current=page]:shadow-[0_1px_4px_rgba(17,24,20,0.08),inset_3px_0_0_var(--primary)] motion-reduce:transition-none"
                     >
-                        {session.title}
+                        <span className="min-w-0">
+                            <span className="block truncate">{session.title}</span>
+                            {activeSession.kind === "active" && activeSession.id === session.id && (
+                                <span
+                                    className="block truncate text-[11px] leading-4 font-normal text-copy-secondary"
+                                    title={activeSession.directoryLabel}
+                                >
+                                    {activeSession.directoryLabel}
+                                </span>
+                            )}
+                        </span>
+                        {activeSession.kind === "active" &&
+                            activeSession.id === session.id &&
+                            activeSession.running && (
+                                <span aria-label="Session working" className="inline-flex text-primary" role="status">
+                                    <LoaderCircle
+                                        aria-hidden="true"
+                                        className="size-4 animate-spin motion-reduce:animate-none"
+                                    />
+                                </span>
+                            )}
                     </button>
                 ))}
             </div>

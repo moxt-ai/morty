@@ -82,6 +82,7 @@ export const createDraftControlsStore = (
                           bindingId: settings.bindingId,
                           permissionMode: permission.currentValue,
                           workspaceRef: settings.cwd.directoryId,
+                          workspaceLabel: settings.cwd.directoryLabel,
                           configuration: {
                               additionalDirectoryIds: [],
                               booleanValue: false,
