@@ -145,6 +145,7 @@ export interface SessionPaneStore {
     readonly setDraft: (draft: string) => void;
     readonly setAttachments: (attachments: readonly ComposerAttachment[]) => void;
     readonly send: (signal: AbortSignal) => Promise<void>;
+    readonly removeUnknownDelivery: () => void;
     readonly retryUnknownDelivery: (signal: AbortSignal) => Promise<void>;
     readonly queueDraft: (signal: AbortSignal) => Promise<void>;
     readonly steerQueued: (commandId: string, signal: AbortSignal) => Promise<void>;
@@ -706,6 +707,21 @@ export function createSessionPaneModel(options: {
                         },
                     });
                 }
+            },
+            removeUnknownDelivery: () => {
+                const commandId = delivery.getState().discardUnknown();
+                if (commandId === null) {
+                    return;
+                }
+                if (command === commandId) {
+                    command = "";
+                }
+                set((current) => ({
+                    activeCommandId: current.activeCommandId === commandId ? null : current.activeCommandId,
+                    messages: current.messages.filter((message) =>
+                        message.role === "user" ? message.id !== commandId : message.commandId !== commandId,
+                    ),
+                }));
             },
             retryUnknownDelivery: async (signal) => {
                 const state = delivery.getState().state;

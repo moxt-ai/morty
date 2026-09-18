@@ -1,5 +1,5 @@
 import type { MobiusClient } from "@moxt-ai/mobius-sdk";
-import { CircleAlert } from "lucide-react";
+import { CircleAlert, X } from "lucide-react";
 import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
 import { AgentRichContent } from "../../components/agents/agent-rich-content.tsx";
 import { AgentReply } from "../../components/chat/agent-reply.tsx";
@@ -16,6 +16,7 @@ export function MobiusSessionMessage({
     activeMessageId,
     activeUserMessageId,
     deliveryUnknownUserMessageId,
+    onRemoveUnknownDelivery,
     onRetryUnknownDelivery,
     sessionId,
     botId,
@@ -27,6 +28,7 @@ export function MobiusSessionMessage({
     readonly activeMessageId: string | null;
     readonly activeUserMessageId: string | null;
     readonly deliveryUnknownUserMessageId: string | null;
+    readonly onRemoveUnknownDelivery: () => void;
     readonly onRetryUnknownDelivery: () => void;
     readonly sessionId: string;
     readonly botId: string;
@@ -66,12 +68,23 @@ export function MobiusSessionMessage({
                     sessionId={sessionId}
                 />
                 {deliveryUnknown && (
-                    <p
-                        className="ml-auto max-w-[82%] rounded-lg border border-destructive/15 bg-destructive/5 px-3 py-2 text-xs leading-5 text-destructive"
+                    <div
+                        className="ml-auto flex max-w-[82%] items-center gap-3 rounded-lg border border-destructive/15 bg-destructive/5 py-2 pr-2 pl-3 text-xs leading-5 text-destructive"
                         role="alert"
                     >
-                        Delivery wasn’t confirmed. This message won’t be sent again unless you retry it.
-                    </p>
+                        <span className="min-w-0 flex-1">
+                            Delivery wasn’t confirmed. This message won’t be sent again unless you retry it.
+                        </span>
+                        <button
+                            aria-label="Remove failed message"
+                            className="inline-flex size-7 shrink-0 items-center justify-center rounded-md outline-none hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-destructive/40"
+                            onClick={onRemoveUnknownDelivery}
+                            title="Remove failed message"
+                            type="button"
+                        >
+                            <X aria-hidden="true" className="size-4" />
+                        </button>
+                    </div>
                 )}
             </div>
         );
