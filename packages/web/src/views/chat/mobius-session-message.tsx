@@ -52,7 +52,12 @@ export function MobiusSessionMessage({
         return (
             <div className="min-w-0 space-y-2">
                 {message.text.length > 0 && (
-                    <MessageBubble copyText={message.text} speaker="user" data-testid={dataTestId.userMessage}>
+                    <MessageBubble
+                        copyText={message.text}
+                        speaker="user"
+                        status={message.id === activeUserMessageId ? <AgentWorkingIndicator /> : undefined}
+                        data-testid={dataTestId.userMessage}
+                    >
                         <AgentMarkdown className="[&_p]:my-0" markdown={message.text} streaming={false} />
                     </MessageBubble>
                 )}
@@ -61,11 +66,6 @@ export function MobiusSessionMessage({
                     serviceClient={client ?? undefined}
                     sessionId={sessionId}
                 />
-                {message.id === activeUserMessageId && (
-                    <div className="flex min-h-6 items-end justify-end pt-1">
-                        <AgentWorkingIndicator />
-                    </div>
-                )}
             </div>
         );
     }

@@ -77,14 +77,14 @@ export function MobiusSessionTurn({
     return (
         <div className="mx-auto grid min-w-0 w-full max-w-[1120px] gap-8 [overflow-wrap:anywhere]">
             <div className="min-w-0 space-y-2">
-                <MessageBubble copyText={turn.prompt} speaker="user" data-testid={dataTestId.userMessage}>
+                <MessageBubble
+                    copyText={turn.prompt}
+                    speaker="user"
+                    status={working ? <AgentWorkingIndicator /> : undefined}
+                    data-testid={dataTestId.userMessage}
+                >
                     <AgentMarkdown className="[&_p]:my-0" markdown={turn.prompt} streaming={false} />
                 </MessageBubble>
-                {working && (
-                    <div className="flex min-h-6 items-end justify-end pt-1">
-                        <AgentWorkingIndicator />
-                    </div>
-                )}
             </div>
             <AgentReply
                 text={turn.response}
