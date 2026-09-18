@@ -26,7 +26,7 @@ export type SessionMessage =
           readonly contents: readonly SessionMessageContent[];
       };
 
-export interface SessionMessageContent {
+interface SessionMessageContent {
     readonly contentId: string;
     readonly content: AgentDisplayContent;
 }
