@@ -47,6 +47,12 @@ export class WebSocketApiTransport {
         this.#origin = new URL(origin).origin;
     }
 
+    readonly open = (): void => {
+        if (this.#state.kind === "closed") {
+            this.#state = { kind: "disconnected" };
+        }
+    };
+
     readonly fetch = async (request: Request): Promise<Response> => {
         request.signal.throwIfAborted();
         const url = new URL(request.url);

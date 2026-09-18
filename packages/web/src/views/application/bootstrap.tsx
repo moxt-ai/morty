@@ -15,7 +15,10 @@ export function Bootstrap() {
         createBootstrapStore(transport.fetch, (error) => reportApplicationError(error, "authentication-bootstrap")),
     );
     const { load, state } = useStore(store);
-    useEffect(() => () => transport.close(), [transport]);
+    useEffect(() => {
+        transport.open();
+        return () => transport.close();
+    }, [transport]);
     useEffect(() => {
         const controller = new AbortController();
         void load(controller.signal);
