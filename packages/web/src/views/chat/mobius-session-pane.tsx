@@ -33,7 +33,11 @@ import {
     SessionInteractionCards,
 } from "../../components/chat/session-interactions.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
-import { type RecordedAgentActivity, recordAgentActivity } from "../../services/chat/agent-activities.ts";
+import {
+    agentActivityKey,
+    type RecordedAgentActivity,
+    recordAgentActivity,
+} from "../../services/chat/agent-activities.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 import { createRemoteAccessStore } from "../../view-models/chat/remote-access-store.ts";
@@ -152,18 +156,66 @@ function replaceMessageContent(
     contentId: string,
     content: AgentDisplayContent,
 ): readonly SessionMessage[] {
-    return messages.map((message) => {
-        if (message.role !== "assistant" || message.commandId !== commandId) {
-            return message;
-        }
-        return {
-            ...message,
-            contents: [
-                ...message.contents.filter((candidate) => candidate.contentId !== contentId),
-                { contentId, content },
-            ],
-        };
-    });
+    const existing = messages.findIndex(
+        (message) =>
+            message.role === "assistant" &&
+            message.commandId === commandId &&
+            message.contents.some((candidate) => candidate.contentId === contentId),
+    );
+    const target =
+        existing >= 0
+            ? existing
+            : messages.findLastIndex((message) => message.role === "assistant" && message.commandId === commandId);
+    return messages.map((message, index) =>
+        index === target && message.role === "assistant"
+            ? {
+                  ...message,
+                  contents: [
+                      ...message.contents.filter((candidate) => candidate.contentId !== contentId),
+                      { contentId, content },
+                  ],
+              }
+            : message,
+    );
+}
+
+function placeAgentActivity(
+    messages: readonly SessionMessage[],
+    commandId: string,
+    activityId: string,
+): readonly SessionMessage[] {
+    if (
+        messages.some((message) => message.role === "assistant" && message.activityIds.some((id) => id === activityId))
+    ) {
+        return messages;
+    }
+    const lastIndex = messages.findLastIndex(
+        (message) => message.role === "assistant" && message.commandId === commandId,
+    );
+    const last = messages[lastIndex];
+    if (last === undefined || last.role !== "assistant") {
+        return messages;
+    }
+    if (last.text.length === 0 && last.contents.length === 0) {
+        return messages.map((message, index) =>
+            index === lastIndex && message.role === "assistant"
+                ? { ...message, activityIds: [...message.activityIds, activityId] }
+                : message,
+        );
+    }
+    return [
+        ...messages.slice(0, lastIndex + 1),
+        {
+            activityIds: [activityId],
+            attempt: last.attempt,
+            commandId,
+            contents: [],
+            id: `${commandId}-reply-${activityId}`,
+            role: "assistant",
+            text: "",
+        },
+        ...messages.slice(lastIndex + 1),
+    ];
 }
 
 function recordedContent(event: MobiusSessionEvent): {
@@ -275,6 +327,7 @@ export function MobiusSessionPane({
                   return message.role === "user"
                       ? { id, role: "user", text: message.text, contents: historyContents(message.images) }
                       : {
+                            activityIds: [],
                             id,
                             role: "assistant",
                             text: message.text,
@@ -331,13 +384,21 @@ export function MobiusSessionPane({
             if (message === undefined || command.current !== currentCommand) {
                 return;
             }
-            setMessages((current) =>
-                current.map((item) =>
+            setMessages((current) => {
+                const replies = current.filter(
+                    (item) => item.role === "assistant" && item.commandId === currentCommand,
+                );
+                const onlyReplyId = replies.length === 1 ? replies[0]?.id : undefined;
+                return current.map((item) =>
                     item.role === "assistant" && item.commandId === currentCommand
-                        ? { ...item, text: message.response, attempt: message.attempt }
+                        ? {
+                              ...item,
+                              attempt: message.attempt,
+                              text: item.id === onlyReplyId ? message.response : item.text,
+                          }
                         : item,
-                ),
-            );
+                );
+            });
             if (["succeeded", "failed", "cancelled", "indeterminate"].includes(message.attempt.kind)) {
                 setOperation({ kind: "idle" });
                 taskControlsStore.getState().finish(currentCommand);
@@ -395,6 +456,7 @@ export function MobiusSessionPane({
                                         contents: historyContents(message.images),
                                     }
                                   : {
+                                        activityIds: [],
                                         id: `history-${index}`,
                                         role: "assistant",
                                         text: message.text,
@@ -415,6 +477,7 @@ export function MobiusSessionPane({
                     .flatMap((message): readonly SessionMessage[] => [
                         { id: `${message.commandId}-user`, role: "user", text: message.prompt, contents: [] },
                         {
+                            activityIds: [],
                             id: `${message.commandId}-reply`,
                             role: "assistant",
                             text: message.response,
@@ -437,6 +500,9 @@ export function MobiusSessionPane({
                         const payload = event.payload;
                         if (payload instanceof MobiusAgentActivityEvent) {
                             setActivities((current) => recordAgentActivity(current, event));
+                            setMessages((current) =>
+                                placeAgentActivity(current, payload.commandId, agentActivityKey(payload)),
+                            );
                             return true;
                         }
                         if (payload instanceof MobiusControlEvent) {
@@ -507,6 +573,7 @@ export function MobiusSessionPane({
                                         contents: [],
                                     },
                                     {
+                                        activityIds: [],
                                         id: `${queued.commandId}-reply`,
                                         role: "assistant",
                                         text: "",
@@ -529,19 +596,21 @@ export function MobiusSessionPane({
                             return true;
                         }
                         lastSequence = BigInt(event.sequence);
-                        const replyId = `${command.current}-reply`;
                         if (payload instanceof MobiusAgentMessageEvent) {
-                            setMessages((current) =>
-                                current.map((item) =>
-                                    item.role === "assistant" && item.id === replyId
+                            setMessages((current) => {
+                                const target = current.findLastIndex(
+                                    (item) => item.role === "assistant" && item.commandId === command.current,
+                                );
+                                return current.map((item, index) =>
+                                    index === target && item.role === "assistant"
                                         ? { ...item, text: item.text + payload.text }
                                         : item,
-                                ),
-                            );
+                                );
+                            });
                         } else if (payload instanceof MobiusTurnStartedEvent) {
                             setMessages((current) =>
                                 current.map((item) =>
-                                    item.role === "assistant" && item.id === replyId
+                                    item.role === "assistant" && item.commandId === command.current
                                         ? {
                                               ...item,
                                               attempt: new MobiusRunningAttemptSummary(
@@ -620,7 +689,15 @@ export function MobiusSessionPane({
         setMessages((current) => [
             ...current,
             { id: commandId, role: "user", text: displayPrompt, contents: [] },
-            { id: `${commandId}-reply`, role: "assistant", text: "", attempt: null, commandId, contents: [] },
+            {
+                activityIds: [],
+                id: `${commandId}-reply`,
+                role: "assistant",
+                text: "",
+                attempt: null,
+                commandId,
+                contents: [],
+            },
         ]);
         setOperation({ kind: "sending", commandId });
         try {
@@ -668,6 +745,7 @@ export function MobiusSessionPane({
                       ...current,
                       { id: `${pending.commandId}-user`, role: "user", text: pending.displayPrompt, contents: [] },
                       {
+                          activityIds: [],
                           id: `${pending.commandId}-reply`,
                           role: "assistant",
                           text: "",
@@ -737,7 +815,15 @@ export function MobiusSessionPane({
                 setMessages((current) => [
                     ...current,
                     { id: `${commandId}-user`, role: "user", text: prompt, contents: [] },
-                    { id: `${commandId}-reply`, role: "assistant", text: "", attempt: null, commandId, contents: [] },
+                    {
+                        activityIds: [],
+                        id: `${commandId}-reply`,
+                        role: "assistant",
+                        text: "",
+                        attempt: null,
+                        commandId,
+                        contents: [],
+                    },
                 ]);
             },
             lifetime.current.signal,
@@ -851,6 +937,11 @@ export function MobiusSessionPane({
                 : taskControls.operation.kind === "compacting"
                   ? taskControls.operation.commandId
                   : command.current || null;
+    const activeMessageId =
+        activeCommandId === null
+            ? null
+            : (messages.findLast((message) => message.role === "assistant" && message.commandId === activeCommandId)
+                  ?.id ?? null);
     const compactAvailable = findCompactCommand(taskControls.commands) !== null;
     const taskControlError =
         taskControls.feedback.kind === "failed"
@@ -915,6 +1006,7 @@ export function MobiusSessionPane({
                             message={message}
                             activities={activities}
                             activeCommandId={activeCommandId}
+                            activeMessageId={activeMessageId}
                             sessionId={sessionId}
                             botId={botId}
                             client={connection.kind === "ready" ? connection.client : null}

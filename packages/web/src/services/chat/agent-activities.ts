@@ -5,6 +5,22 @@ export interface RecordedAgentActivity {
     readonly activity: MobiusAgentActivityEvent;
 }
 
+export function agentActivityKey(activity: MobiusAgentActivityEvent): string {
+    return JSON.stringify([activity.sessionId, activity.commandId, activity.activityId]);
+}
+
+export function activitiesForIds(
+    activities: ReadonlyMap<string, RecordedAgentActivity>,
+    activityIds: readonly string[],
+): readonly MobiusAgentActivityEvent[] {
+    return activityIds
+        .flatMap((activityId) => {
+            const recorded = activities.get(activityId);
+            return recorded === undefined ? [] : [recorded.activity];
+        })
+        .sort((left, right) => left.sequence - right.sequence);
+}
+
 export function activitiesForTurn(
     activities: ReadonlyMap<string, RecordedAgentActivity>,
     sessionId: string,
@@ -24,7 +40,7 @@ export function recordAgentActivity(
     if (!(activity instanceof MobiusAgentActivityEvent)) {
         return current;
     }
-    const key = JSON.stringify([activity.sessionId, activity.commandId, activity.activityId]);
+    const key = agentActivityKey(activity);
     const sequence = BigInt(event.sequence);
     const previous = current.get(key);
     if (previous !== undefined && previous.sequence >= sequence) {

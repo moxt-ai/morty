@@ -2,11 +2,21 @@ import type { MobiusAgentActivityEvent, MobiusAttemptSummary } from "@moxt-ai/mo
 
 export type ReplyPhase = "working" | "waiting" | "completed" | "cancelled" | "failed" | "interrupted";
 
-interface ThinkingEntry {
-    readonly id: string;
-    readonly text: string;
-    readonly status: "streaming" | "recorded";
-}
+type ThinkingEntry =
+    | {
+          readonly id: string;
+          readonly kind: "reasoning";
+          readonly text: string;
+          readonly status: "streaming" | "recorded";
+      }
+    | {
+          readonly id: string;
+          readonly input: string;
+          readonly kind: "tool";
+          readonly output: string;
+          readonly status: "streaming" | "recorded";
+          readonly title: string;
+      };
 
 export interface ThinkingPresentation {
     readonly entries: readonly ThinkingEntry[];
@@ -39,21 +49,33 @@ export function describeAgentReply(
     attempt: MobiusAttemptSummary | null,
     activities: readonly MobiusAgentActivityEvent[],
     active: boolean,
+    latest: boolean,
 ): { readonly phase: ReplyPhase; readonly thinking: ThinkingPresentation } {
     const phase = replyPhase(attempt, active);
-    const reasoning = activities.filter((activity) => activity.activityType === "reasoning");
-    const entries = reasoning
-        .filter((activity) => activity.output.length > 0)
-        .map(
-            (activity): ThinkingEntry => ({
+    const entries = activities.flatMap((activity): readonly ThinkingEntry[] => {
+        const status = phase === "working" && latest && activity.status === "running" ? "streaming" : "recorded";
+        if (activity.activityType === "reasoning") {
+            return activity.output.length === 0
+                ? []
+                : [{ id: activity.activityId, kind: "reasoning", status, text: activity.output }];
+        }
+        if (activity.activityType !== "tool") {
+            return [];
+        }
+        return [
+            {
                 id: activity.activityId,
-                text: activity.output,
-                status: phase === "working" && activity.status === "running" ? "streaming" : "recorded",
-            }),
-        );
+                input: activity.input,
+                kind: "tool",
+                output: activity.output,
+                status,
+                title: activity.title || activity.name || activity.toolKind || "Tool call",
+            },
+        ];
+    });
     let status: ThinkingPresentation["status"] = "idle";
-    if (phase === "working") {
-        status = reasoning.some((activity) => activity.status === "running" || activity.status === "pending")
+    if (phase === "working" && latest) {
+        status = activities.some((activity) => activity.status === "running" || activity.status === "pending")
             ? "thinking"
             : "working";
     }

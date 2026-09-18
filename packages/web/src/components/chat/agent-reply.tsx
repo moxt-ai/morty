@@ -40,6 +40,7 @@ export function AgentReply({
     attempt,
     activities,
     active,
+    latest,
     botId,
     children,
     "data-testid": testId,
@@ -48,18 +49,19 @@ export function AgentReply({
     readonly attempt: MobiusAttemptSummary | null;
     readonly activities: readonly MobiusAgentActivityEvent[];
     readonly active: boolean;
+    readonly latest: boolean;
     readonly botId: string;
     readonly children?: ReactNode;
     readonly "data-testid"?: string;
 }) {
-    const { phase, thinking } = describeAgentReply(attempt, activities, active);
+    const { phase, thinking } = describeAgentReply(attempt, activities, active, latest);
     const hasText = text.length > 0;
     return (
         <div className="min-w-0 space-y-3">
             <AgentThinking {...thinking} />
             {hasText && (
                 <MessageBubble speaker="assistant" data-testid={testId}>
-                    <AgentMarkdown markdown={text} streaming={phase === "working"} />
+                    <AgentMarkdown markdown={text} streaming={phase === "working" && latest} />
                 </MessageBubble>
             )}
             {children}

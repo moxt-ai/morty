@@ -1,7 +1,7 @@
 import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
-test("Given a paired agent, When a user expands thinking and reloads the reply, Then recorded reasoning remains readable without a working spinner", async ({
+test("Given a paired agent, When a user expands intermediate steps and reloads the reply, Then reasoning and tool activity remain readable without a working spinner", async ({
     runtime,
 }, testInfo) => {
     await runtime.openPairedChat();
@@ -13,6 +13,9 @@ test("Given a paired agent, When a user expands thinking and reloads the reply, 
     await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toBeHidden();
     await thinking.locator("summary").click();
     await expect(thinking.getByText("Inspecting the workspace", { exact: true })).toBeVisible();
+    await expect(thinking.getByText("Read package metadata", { exact: true })).toBeVisible();
+    await expect(thinking.getByText("Request", { exact: true })).toBeVisible();
+    await expect(thinking.getByText("Response", { exact: true })).toBeVisible();
     await expect(page.getByRole("status", { name: "Agent working" })).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath("thinking-completed-desktop.png"), animations: "disabled" });
     await page.reload();

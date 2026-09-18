@@ -4,7 +4,7 @@ import { AgentRichContent } from "../../components/agents/agent-rich-content.tsx
 import { AgentReply } from "../../components/chat/agent-reply.tsx";
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { dataTestId } from "../../data-testid.ts";
-import { activitiesForTurn, type RecordedAgentActivity } from "../../services/chat/agent-activities.ts";
+import { activitiesForIds, type RecordedAgentActivity } from "../../services/chat/agent-activities.ts";
 
 export type SessionMessage =
     | {
@@ -15,6 +15,7 @@ export type SessionMessage =
       }
     | {
           readonly role: "assistant";
+          readonly activityIds: readonly string[];
           readonly id: string;
           readonly text: string;
           readonly commandId: string | null;
@@ -31,6 +32,7 @@ export function MobiusSessionMessage({
     message,
     activities,
     activeCommandId,
+    activeMessageId,
     sessionId,
     botId,
     client,
@@ -38,6 +40,7 @@ export function MobiusSessionMessage({
     readonly message: SessionMessage;
     readonly activities: ReadonlyMap<string, RecordedAgentActivity>;
     readonly activeCommandId: string | null;
+    readonly activeMessageId: string | null;
     readonly sessionId: string;
     readonly botId: string;
     readonly client: Pick<MobiusClient, "artifacts"> | null;
@@ -58,14 +61,14 @@ export function MobiusSessionMessage({
             </div>
         );
     }
-    const turnActivities =
-        message.commandId === null ? [] : activitiesForTurn(activities, sessionId, message.commandId);
+    const turnActivities = activitiesForIds(activities, message.activityIds);
     return (
         <AgentReply
             text={message.text}
             attempt={message.attempt}
             activities={turnActivities}
             active={activeCommandId !== null && message.commandId === activeCommandId}
+            latest={activeMessageId === message.id}
             botId={botId}
             data-testid={dataTestId.agentResponse}
         >

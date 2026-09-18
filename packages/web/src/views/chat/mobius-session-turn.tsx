@@ -82,6 +82,7 @@ export function MobiusSessionTurn({
                 attempt={turn.attempt}
                 activities={turnActivities}
                 active={true}
+                latest={true}
                 botId={botId}
                 data-testid={dataTestId.agentResponse}
             >

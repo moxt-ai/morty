@@ -1,4 +1,4 @@
-import { Brain, ChevronDown, LoaderCircle } from "lucide-react";
+import { Brain, ChevronDown, LoaderCircle, Wrench } from "lucide-react";
 import type { ThinkingPresentation } from "../../services/chat/agent-reply.ts";
 import { AgentMarkdown } from "../agents/agent-markdown.tsx";
 
@@ -40,17 +40,40 @@ export function AgentThinking({ entries, status }: ThinkingPresentation) {
                     {thinking && <WorkingIndicator />}
                 </summary>
                 <div className="mt-1 ml-1 min-w-0 border-l border-[#d9dde1] py-2 pl-5 [overflow-wrap:anywhere]">
-                    <div className="mb-3 flex items-center gap-2 text-sm text-copy-secondary">
-                        <Brain aria-hidden="true" className="size-4" />
-                        <span>Thinking</span>
-                    </div>
-                    <div className="grid min-w-0 gap-3 text-muted-foreground">
+                    <div className="grid min-w-0 gap-4 text-muted-foreground">
                         {entries.map((entry) => (
-                            <AgentMarkdown
-                                key={entry.id}
-                                markdown={entry.text}
-                                streaming={entry.status === "streaming"}
-                            />
+                            <section className="grid min-w-0 gap-2" key={entry.id}>
+                                <div className="flex items-center gap-2 text-sm text-copy-secondary">
+                                    {entry.kind === "reasoning" ? (
+                                        <Brain aria-hidden="true" className="size-4" />
+                                    ) : (
+                                        <Wrench aria-hidden="true" className="size-4" />
+                                    )}
+                                    <span>{entry.kind === "reasoning" ? "Thinking" : entry.title}</span>
+                                </div>
+                                {entry.kind === "reasoning" ? (
+                                    <AgentMarkdown markdown={entry.text} streaming={entry.status === "streaming"} />
+                                ) : (
+                                    <div className="grid min-w-0 gap-2 text-xs">
+                                        {entry.input.length > 0 && (
+                                            <div className="grid gap-1">
+                                                <span className="font-medium text-copy-tertiary">Request</span>
+                                                <pre className="overflow-x-auto rounded-lg bg-black/[0.035] p-2 whitespace-pre-wrap">
+                                                    {entry.input}
+                                                </pre>
+                                            </div>
+                                        )}
+                                        {entry.output.length > 0 && (
+                                            <div className="grid gap-1">
+                                                <span className="font-medium text-copy-tertiary">Response</span>
+                                                <pre className="overflow-x-auto rounded-lg bg-black/[0.035] p-2 whitespace-pre-wrap">
+                                                    {entry.output}
+                                                </pre>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </section>
                         ))}
                     </div>
                 </div>
