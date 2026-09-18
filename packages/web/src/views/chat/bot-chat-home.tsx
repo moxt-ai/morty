@@ -217,7 +217,6 @@ export function BotChatHome({
         | { readonly kind: "conversation-access" }
         | {
               readonly kind: "session-access";
-              readonly initialActiveTurn: { readonly commandId: string; readonly turnId: string } | null;
               readonly session: OpenMobiusSession;
           }
     >({ kind: "conversation-access" });
@@ -327,14 +326,14 @@ export function BotChatHome({
                 window.history.replaceState(window.history.state, "", url);
                 target.current = { kind: "session-access", sessionId: session.result.ready.sessionId };
                 setState({ kind: "draft", bot });
-                setSessionView({ initialActiveTurn: null, kind: "session-access", session });
+                setSessionView({ kind: "session-access", session });
                 return;
             }
             if (target.current.kind === "session-access") {
                 const session = await requests.managedSession(bot.botId, target.current.sessionId, controller.signal);
                 controller.signal.throwIfAborted();
                 setState({ kind: "draft", bot });
-                setSessionView({ initialActiveTurn: null, kind: "session-access", session });
+                setSessionView({ kind: "session-access", session });
                 return;
             }
             const reason = target.current.kind === "draft" ? setupReason(workspace) : null;
@@ -355,7 +354,7 @@ export function BotChatHome({
                 throw new Error(opened.kind === "failed" ? opened.message : "The Session could not be opened.");
             }
             setState({ kind: "draft", bot });
-            setSessionView({ initialActiveTurn: opened.activeTurn, kind: "session-access", session: opened.session });
+            setSessionView({ kind: "session-access", session: opened.session });
         };
         const observe = async (bot: ManagedBot, session: MobiusBrowserClient, history: MobiusBrowserHistory) => {
             client = session;
@@ -486,7 +485,6 @@ export function BotChatHome({
                 window.history.replaceState(window.history.state, "", url);
                 target.current = { kind: "conversation-access", conversationId: createdId };
                 setSessionView({
-                    initialActiveTurn: opened.activeTurn,
                     kind: "session-access",
                     session: opened.session,
                 });
@@ -609,7 +607,6 @@ export function BotChatHome({
                     requests={requests}
                     key={sessionView.session.result.ready.sessionId}
                     session={sessionView.session}
-                    initialActiveTurn={sessionView.initialActiveTurn}
                     {...(remoteAccess ? { endRemoteAccess } : {})}
                 />
             ) : (

@@ -246,13 +246,11 @@ export function MobiusSessionPane({
     session,
     botId,
     requests,
-    initialActiveTurn,
     endRemoteAccess,
 }: {
     readonly session: OpenMobiusSession;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession" | "steerTurn" | "submitTurn">;
-    readonly initialActiveTurn: { readonly commandId: string; readonly turnId: string } | null;
     readonly endRemoteAccess?: (signal: AbortSignal) => Promise<void>;
 }) {
     const sessionId = session.result.ready.sessionId;
@@ -420,18 +418,6 @@ export function MobiusSessionPane({
                 }),
             );
             deliveryStore.getState().reconcile(saved.messages.map((message) => message.commandId));
-            if (initialActiveTurn !== null) {
-                const initialMessage = saved.messages.find(
-                    (message) => message.commandId === initialActiveTurn.commandId,
-                );
-                if (
-                    initialMessage !== undefined &&
-                    ["succeeded", "failed", "cancelled", "indeterminate"].includes(initialMessage.attempt.kind)
-                ) {
-                    taskControlsStore.getState().finish(initialActiveTurn.commandId);
-                    command.current = "";
-                }
-            }
             lastSequence = BigInt(saved.lastCommittedSequence);
             const activeMessage = saved.messages.find((message) => ACTIVE_ATTEMPT_KINDS.has(message.attempt.kind));
             if (activeMessage === undefined) {
@@ -654,7 +640,7 @@ export function MobiusSessionPane({
             client?.close();
             clientReference.current = null;
         };
-    }, [session, sessionId, botId, requests, initialActiveTurn, taskControlsStore, deliveryStore, messageQueueStore]);
+    }, [session, sessionId, botId, requests, taskControlsStore, deliveryStore, messageQueueStore]);
     useEffect(() => {
         if (remoteAccess.state.kind === "ended") {
             lifetime.current.abort();

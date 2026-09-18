@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { mock } from "node:test";
 import { chromium } from "playwright-core";
 import { dataTestId } from "../../web/src/data-testid.ts";
+import { ANONYMOUS_CREDENTIAL_KEY } from "../../web/src/services/identity/anonymous-identity-api.ts";
 import { ChatApi, object, text } from "./chat-api.ts";
 import type { E2EHarness } from "./harness.ts";
 import { LocalStack, repository } from "./local-stack.ts";
@@ -37,11 +38,11 @@ export async function createTestRuntime(harness: E2EHarness) {
         const chat = new ChatApi(stack.chatOrigin, harness.signal);
 
         const openChat = async () => {
-            const identity = page.waitForResponse(
-                (response) => new URL(response.url()).pathname === "/mobius-cloud/api/identity/anonymous-users",
-            );
             await page.goto(stack.chatOrigin);
-            const user = await chat.readBrowserIdentity(await identity);
+            const stored = await page.waitForFunction((key) => localStorage.getItem(key), ANONYMOUS_CREDENTIAL_KEY);
+            const user = await chat.useBrowserIdentity(
+                JSON.parse(text(await stored.jsonValue(), "stored browser identity")),
+            );
             return { botId: user.botId, projectId: user.projectId };
         };
 
