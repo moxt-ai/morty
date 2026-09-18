@@ -43,6 +43,7 @@ import {
     type CancelRequest,
     connectMobiusChannelClient,
     type ElicitationResponseRequest,
+    type LocalImageResult,
     type MobiusChannelClient,
     MobiusChannelError,
     type PermissionResponseRequest,
@@ -220,6 +221,11 @@ async function connectBrowserServiceClients(connection: ChannelConnection): Prom
 }
 
 abstract class TransportConnection {
+    abstract readonly readLocalImage: (
+        sessionId: string,
+        uri: string,
+        signal: AbortSignal,
+    ) => Promise<LocalImageResult>;
     abstract readonly nativeSession: (
         command: NativeSessionCommand,
         signal: AbortSignal,
@@ -243,6 +249,7 @@ abstract class TransportConnection {
 }
 
 class DisconnectedTransport extends TransportConnection {
+    readonly readLocalImage = (): Promise<LocalImageResult> => this.notInitialized();
     readonly nativeSession = (): Promise<NativeSessionResult> => this.notInitialized();
     readonly cancelAgentInstallation = (): Promise<void> => this.notInitialized();
     readonly cancel = (): Promise<void> =>
@@ -381,6 +388,15 @@ class ConnectedTransport extends TransportConnection {
             () => undefined,
         );
         await Promise.all([channelClose, serviceClose]);
+    };
+
+    readonly readLocalImage = async (
+        sessionId: string,
+        uri: string,
+        signal: AbortSignal,
+    ): Promise<LocalImageResult> => {
+        const client = await this.#client;
+        return await client.readLocalImage(sessionId, uri, signal);
     };
 
     readonly nativeSession = async (
@@ -798,6 +814,10 @@ class ConnectedTransport extends TransportConnection {
 }
 
 let transport: TransportConnection = new DisconnectedTransport();
+
+export async function readLocalImage(sessionId: string, uri: string, signal: AbortSignal): Promise<LocalImageResult> {
+    return await transport.readLocalImage(sessionId, uri, signal);
+}
 
 export function initializeMobiusTransport(connection: ChannelConnection, onActivity: () => void): void {
     void transport.close();

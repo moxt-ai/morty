@@ -1,8 +1,9 @@
 import type { AgentDisplayContent, MobiusClient } from "@moxt-ai/mobius-sdk";
 import type { MobiusBrowserClient } from "@moxt-ai/mobius-sdk/browser";
 import { ExternalLink, FileText, Image as ImageIcon, Terminal, Video } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AgentMarkdown } from "@/components/agents/agent-markdown";
+import { readLocalImage } from "@/services/chat/mobius-transport";
 import { readSessionArtifactBytes } from "@/services/pairing/pairing-api";
 
 const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/;
@@ -48,22 +49,49 @@ function ArtifactMedia({
     readonly browserClient?: Pick<MobiusBrowserClient, "artifacts"> | undefined;
     readonly channelId: string;
     readonly content: AgentDisplayContent;
-    readonly serviceClient?: Pick<MobiusClient, "artifacts"> | undefined;
+    readonly serviceClient?: Pick<MobiusClient, "artifacts" | "sessions"> | undefined;
     readonly sessionId: string;
 }) {
     const [source, setSource] = useState<string | null>(null);
+    const [visible, setVisible] = useState(false);
+    const placeholderRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
+        const target = placeholderRef.current;
+        if (target === null || visible) {
+            return;
+        }
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries.some((entry) => entry.isIntersecting)) {
+                    setVisible(true);
+                    observer.disconnect();
+                }
+            },
+            { rootMargin: "320px" },
+        );
+        observer.observe(target);
+        return () => observer.disconnect();
+    }, [visible]);
+    useEffect(() => {
+        if (!visible) {
+            return;
+        }
         const controller = new AbortController();
         let objectUrl = "";
-        const download = serviceClient
-            ? serviceClient.artifacts
-                  .download(sessionId, content.artifactId, controller.signal)
-                  .then((artifact) => ({ bytes: artifact.bytes, mimeType: artifact.artifact.mediaType }))
-            : browserClient === undefined
-              ? readSessionArtifactBytes(channelId, sessionId, content.artifactId, controller.signal)
-              : browserClient.artifacts
-                    .download(content.artifactId, controller.signal)
-                    .then((artifact) => ({ bytes: artifact.bytes, mimeType: artifact.artifact.mediaType }));
+        const download =
+            content.type === "image" && content.uri.length > 0
+                ? serviceClient
+                    ? serviceClient.sessions.readLocalImage(sessionId, content.uri, controller.signal)
+                    : readLocalImage(sessionId, content.uri, controller.signal)
+                : serviceClient
+                  ? serviceClient.artifacts
+                        .download(sessionId, content.artifactId, controller.signal)
+                        .then((artifact) => ({ bytes: artifact.bytes, mimeType: artifact.artifact.mediaType }))
+                  : browserClient === undefined
+                    ? readSessionArtifactBytes(channelId, sessionId, content.artifactId, controller.signal)
+                    : browserClient.artifacts
+                          .download(content.artifactId, controller.signal)
+                          .then((artifact) => ({ bytes: artifact.bytes, mimeType: artifact.artifact.mediaType }));
         void download
             .then((artifact) => {
                 const safeMime = content.type === "image" ? SAFE_IMAGE_MIME : SAFE_VIDEO_MIME;
@@ -75,8 +103,9 @@ function ArtifactMedia({
                 );
                 setSource(objectUrl);
             })
-            .catch(() => {
+            .catch((error: unknown) => {
                 if (!controller.signal.aborted) {
+                    console.error("Agent media could not be loaded", error);
                     setSource("");
                 }
             });
@@ -86,11 +115,14 @@ function ArtifactMedia({
                 URL.revokeObjectURL(objectUrl);
             }
         };
-    }, [browserClient, channelId, content.artifactId, content.type, serviceClient, sessionId]);
+    }, [browserClient, channelId, content.artifactId, content.type, content.uri, serviceClient, sessionId, visible]);
     if (source === null) {
         return (
-            <div className="rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
-                Loading media…
+            <div
+                className="min-h-24 rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground"
+                ref={placeholderRef}
+            >
+                {visible ? "Loading media…" : "Media preview"}
             </div>
         );
     }
@@ -140,12 +172,12 @@ function AgentRichContentItem({
     readonly browserClient?: Pick<MobiusBrowserClient, "artifacts"> | undefined;
     readonly channelId?: string | undefined;
     readonly content: AgentDisplayContent;
-    readonly serviceClient?: Pick<MobiusClient, "artifacts"> | undefined;
+    readonly serviceClient?: Pick<MobiusClient, "artifacts" | "sessions"> | undefined;
     readonly sessionId?: string | undefined;
 }) {
     if (content.type === "image" || content.type === "video") {
         if (
-            content.artifactId.length > 0 &&
+            (content.artifactId.length > 0 || (content.type === "image" && content.uri.length > 0)) &&
             (browserClient !== undefined ||
                 serviceClient !== undefined ||
                 (channelId !== undefined && sessionId !== undefined))
@@ -274,7 +306,7 @@ export function AgentRichContent({
     readonly browserClient?: Pick<MobiusBrowserClient, "artifacts"> | undefined;
     readonly channelId?: string | undefined;
     readonly contents: readonly AgentDisplayContent[];
-    readonly serviceClient?: Pick<MobiusClient, "artifacts"> | undefined;
+    readonly serviceClient?: Pick<MobiusClient, "artifacts" | "sessions"> | undefined;
     readonly sessionId?: string | undefined;
 }) {
     if (contents.length === 0) {

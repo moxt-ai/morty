@@ -110,7 +110,8 @@ class BrowserSessionTransport implements MobiusHttpTransport {
     readonly #webSocket = new WsTransport();
 
     readonly fetch = async (request: Request): Promise<Response> =>
-        await (request.headers.get("accept")?.startsWith("text/event-stream") === true
+        await (request.headers.get("accept")?.startsWith("text/event-stream") === true ||
+        request.headers.get("accept") === "image/*"
             ? this.#http
             : this.#webSocket
         ).fetch(request);
