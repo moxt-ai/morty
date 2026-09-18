@@ -22,7 +22,7 @@ export function ChatConfigurationMenu({ controls }: { readonly controls: readonl
             <Popover.Trigger asChild>
                 <button
                     aria-label="Configure agent"
-                    className="flex h-9 min-w-0 max-w-[30rem] items-center gap-2 rounded-lg px-2 text-[13px] text-copy-secondary outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent motion-reduce:transition-none"
+                    className="flex h-9 min-w-0 max-w-[200px] items-center gap-2 rounded-lg px-2 text-[13px] text-copy-secondary outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent motion-reduce:transition-none"
                     title={selections.join(" · ")}
                     type="button"
                 >

@@ -355,6 +355,30 @@ export async function platformPeer({
             );
             return;
         }
+        const workspacePath = request.url?.match(
+            /^\/mobius\/api\/v1\/projects\/([^/]+)\/runtimes\/([^/]+)\/workspace$/u,
+        );
+        if (request.method === "POST" && workspacePath !== undefined && workspacePath !== null) {
+            const input = v.parse(v.strictObject({ directoryId: v.string() }), JSON.parse(body));
+            const selectedDirectoryId = "path-L2hvbWUvYS9tb2JpdXMudDMvc2VsZWN0ZWQtcHJvamVjdA";
+            const directoryLabel =
+                input.directoryId === selectedDirectoryId ? "/home/a/mobius.t3/selected-project" : "/home/a/mobius.t3";
+            response.writeHead(200).end(
+                JSON.stringify({
+                    kind: "workspace.entries",
+                    requestId: "workspace-request",
+                    bindingId: "binding-1",
+                    directoryId: input.directoryId,
+                    directoryLabel,
+                    entries:
+                        input.directoryId === "default"
+                            ? [{ directoryId: selectedDirectoryId, name: "selected-project" }]
+                            : [],
+                    parentDirectoryId: "path-L2hvbWUvYQ",
+                }),
+            );
+            return;
+        }
         const runtimePath = request.url?.match(/^\/mobius\/api\/v1\/projects\/([^/]+)\/runtimes$/u);
         if (
             request.method === "GET" &&

@@ -16,7 +16,7 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 test.each([true, false])(
-    "Given a paired workspace with settings available=%s, When a draft loads models and sends, Then settings are discovered without retaining a Session and chat access reports its server timings",
+    "Given a paired workspace with settings available=%s, When Chat configures a draft, Then available cwd and model settings create its Session and unavailable settings fail closed",
     async (settingsAvailable) => {
         const platform = await platformPeer({ agentsOnline: true, settingsAvailable });
         const database = new InMemoryD1Database();
@@ -116,6 +116,29 @@ test.each([true, false])(
                         ]),
                     },
                 });
+                expect(
+                    await (
+                        await request(`chat/bots/${bot.botId}/workspace/directory`, { directoryId: "default" })
+                    ).json(),
+                ).toMatchObject({
+                    directoryLabel: "/home/a/mobius.t3",
+                    entries: [
+                        {
+                            directoryId: "path-L2hvbWUvYS9tb2JpdXMudDMvc2VsZWN0ZWQtcHJvamVjdA",
+                            name: "selected-project",
+                        },
+                    ],
+                });
+                expect(
+                    await (
+                        await request(`chat/bots/${bot.botId}/workspace/directory`, {
+                            directoryId: "path-L2hvbWUvYS9tb2JpdXMudDMvc2VsZWN0ZWQtcHJvamVjdA",
+                        })
+                    ).json(),
+                ).toMatchObject({
+                    directoryId: "path-L2hvbWUvYS9tb2JpdXMudDMvc2VsZWN0ZWQtcHJvamVjdA",
+                    directoryLabel: "/home/a/mobius.t3/selected-project",
+                });
             }
             const projectClient = new MobiusClient({
                 endpoint: platform.bindings.MOBIUS_BASE_URL,
@@ -132,6 +155,7 @@ test.each([true, false])(
             }
             const input = {
                 conversationKey: "first-draft",
+                workspaceRef: "path-L2hvbWUvYS9tb2JpdXMudDMvc2VsZWN0ZWQtcHJvamVjdA",
                 bindingId: settingsAvailable
                     ? v.parse(
                           v.object({ bindingId: v.string() }),
@@ -155,6 +179,10 @@ test.each([true, false])(
             expect(firstResponse.status).toBe(200);
             const schema = v.object({ conversationId: v.string() });
             const first = v.parse(schema, await firstResponse.json());
+            expect(
+                (await projectClient.sessions.read(first.conversationId, AbortSignal.timeout(5000))).defaultBinding
+                    .workspaceRef,
+            ).toBe(input.workspaceRef);
             const turn = await request(`chat/bots/${bot.botId}/turns`, {
                 sessionId: first.conversationId,
                 additionalDirectoryIds: [],

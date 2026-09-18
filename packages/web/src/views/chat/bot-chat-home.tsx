@@ -23,6 +23,7 @@ export function BotChatHome({
         | "listBots"
         | "access"
         | "workspace"
+        | "workspaceDirectory"
         | "waitForWorkspaceChange"
         | "selectAgent"
         | "nativeSessions"

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
+import { CwdSelector } from "../../components/chat/cwd-selector.tsx";
 import type { BotChatApi, ChatDraftConfiguration } from "../../services/chat/bot-chat-api.ts";
 import { createDraftControlsStore } from "../../view-models/chat/draft-controls-store.ts";
 
@@ -11,7 +12,7 @@ export function DraftChatControls({
     onSettings,
 }: {
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "workspace" | "selectAgent" | "agentSettings">;
+    readonly requests: Pick<BotChatApi, "workspace" | "workspaceDirectory" | "selectAgent" | "agentSettings">;
     readonly disabled: boolean;
     readonly onSettings: (settings: ChatDraftConfiguration | null) => void;
 }) {
@@ -84,6 +85,11 @@ export function DraftChatControls({
                         value: model?.currentValue ?? "",
                     },
                 ]}
+            />
+            <CwdSelector
+                disabled={disabled}
+                signal={operation.current?.signal ?? AbortSignal.abort()}
+                viewModel={viewModel}
             />
             {model === undefined && <span className="sr-only">This harness has not reported any model choices.</span>}
         </div>

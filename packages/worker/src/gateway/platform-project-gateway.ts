@@ -31,6 +31,7 @@ export type ChatConversationInput =
     | {
           readonly conversationKey: string;
           readonly bindingId: string;
+          readonly workspaceRef: string;
           readonly configuration: {
               readonly additionalDirectoryIds: readonly string[];
               readonly booleanValue: boolean;
@@ -103,6 +104,19 @@ export class PlatformProjectGateway {
                 })),
             );
         });
+
+    readonly listChatWorkspace = async (
+        projectId: string,
+        runtimeId: string,
+        directoryId: string,
+        signal: AbortSignal,
+    ) =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) => await client.runtimes.listWorkspace(runtimeId, directoryId, signal),
+            120000,
+        );
 
     readonly discoverChatAgentSettings = async (
         projectId: string,
@@ -216,7 +230,7 @@ export class PlatformProjectGateway {
                     expiresAt: access.expiresAt,
                     ready,
                     agentRef: selection.agentRef,
-                    workspaceRef: selection.workspaceRef,
+                    workspaceRef: session.defaultBinding.workspaceRef,
                 };
             },
             120000,
