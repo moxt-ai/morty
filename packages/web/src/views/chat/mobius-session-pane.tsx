@@ -1,6 +1,7 @@
 import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
+import { dataTestId } from "@/data-testid";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import { ChatComposerMoreMenu } from "../../components/chat/chat-composer-more-menu.tsx";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
@@ -238,15 +239,23 @@ export function MobiusSessionPane({
                         ...model.options
                             .filter(
                                 (option) =>
-                                    ["model", "thought_level", "model_config"].includes(option.category) &&
-                                    option.type !== "boolean",
+                                    ["model", "thought_level", "model_config", "_mobius_permission"].includes(
+                                        option.category,
+                                    ) && option.type !== "boolean",
                             )
                             .map((option) => ({
                                 disabled: presentation.busy,
                                 id: option.id,
-                                label: option.category === "model" ? "Model" : "Variant",
+                                label:
+                                    option.category === "model"
+                                        ? "Model"
+                                        : option.category === "_mobius_permission"
+                                          ? "Permissions"
+                                          : "Variant",
                                 onValueChange: (value: string) => configure(option, value),
                                 options: option.values.map((value) => ({ value: value.value, label: value.name })),
+                                testId:
+                                    option.category === "_mobius_permission" ? dataTestId.permissionMode : undefined,
                                 value: option.currentValue,
                             })),
                     ]}

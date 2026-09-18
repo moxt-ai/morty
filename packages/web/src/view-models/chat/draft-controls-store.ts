@@ -33,7 +33,7 @@ export interface DraftControlsStore {
     readonly openCwd: () => void;
     readonly saveCwd: (signal: AbortSignal) => Promise<void>;
     readonly selectHarness: (value: string, disabled: boolean, signal: AbortSignal) => Promise<void>;
-    readonly selectModel: (configId: string, value: string) => void;
+    readonly selectOption: (configId: string, value: string) => void;
     readonly setCwdPath: (path: string) => void;
 }
 
@@ -72,11 +72,15 @@ export const createDraftControlsStore = (
         let selectedHarness = "";
         const publishSettings = (settings: Extract<DraftSettingsState, { readonly kind: "ready" }>): void => {
             const model = settings.options.find((option) => option.category === "model" && option.type !== "boolean");
+            const permission = settings.options.find(
+                (option) => option.category === "_mobius_permission" && option.type !== "boolean",
+            );
             onSettings(
-                model === undefined
+                model === undefined || permission === undefined
                     ? null
                     : {
                           bindingId: settings.bindingId,
+                          permissionMode: permission.currentValue,
                           workspaceRef: settings.cwd.directoryId,
                           configuration: {
                               additionalDirectoryIds: [],
@@ -272,7 +276,7 @@ export const createDraftControlsStore = (
                     }
                 }
             },
-            selectModel: (configId, value) => {
+            selectOption: (configId, value) => {
                 const settings = get().settings;
                 if (settings.kind !== "ready") {
                     return;

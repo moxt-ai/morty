@@ -74,6 +74,7 @@ const accessInput = v.union([
     v.strictObject({
         conversationKey: platformIdentifier,
         bindingId: platformIdentifier,
+        permissionMode: v.pipe(v.string(), v.minLength(1), v.maxLength(500)),
         title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)), "New chat"),
         configuration: v.strictObject({
             additionalDirectoryIds: v.pipe(v.array(nativeDirectoryId), v.maxLength(16)),

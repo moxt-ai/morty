@@ -1,5 +1,6 @@
 import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
+import { dataTestId } from "@/data-testid";
 import { Select } from "../ui/option-select.tsx";
 import { Popover } from "../ui/popover.tsx";
 
@@ -9,6 +10,7 @@ export interface ChatConfigurationControl {
     readonly label: string;
     readonly onValueChange: (value: string) => void;
     readonly options: readonly { readonly label: string; readonly value: string }[];
+    readonly testId?: string | undefined;
     readonly value: string;
 }
 
@@ -23,6 +25,7 @@ export function ChatConfigurationMenu({ controls }: { readonly controls: readonl
                 <button
                     aria-label="Configure agent"
                     className="flex h-9 min-w-0 max-w-[200px] items-center gap-2 rounded-lg px-2 text-[13px] text-copy-secondary outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent motion-reduce:transition-none"
+                    data-testid={dataTestId.agentConfiguration}
                     title={selections.join(" · ")}
                     type="button"
                 >
@@ -50,6 +53,7 @@ export function ChatConfigurationMenu({ controls }: { readonly controls: readonl
                                 label={control.label}
                                 onValueChange={control.onValueChange}
                                 options={control.options}
+                                testId={control.testId}
                                 value={control.value}
                             />
                         </div>

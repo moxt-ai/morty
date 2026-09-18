@@ -162,6 +162,7 @@ test.each([true, false])(
                           await (await request(`chat/bots/${bot.botId}/agent-settings`, {})).json(),
                       ).bindingId
                     : "unconfigured",
+                permissionMode: "read-only",
                 configuration: {
                     additionalDirectoryIds: [],
                     booleanValue: false,
@@ -177,6 +178,20 @@ test.each([true, false])(
                 return;
             }
             expect(firstResponse.status).toBe(200);
+            expect(platform.configuredSettings()).toEqual([
+                {
+                    booleanValue: false,
+                    configId: "permission_mode",
+                    value: "read-only",
+                    valueType: "select",
+                },
+                {
+                    booleanValue: false,
+                    configId: "model",
+                    value: "model-one",
+                    valueType: "select",
+                },
+            ]);
             const schema = v.object({ conversationId: v.string() });
             const first = v.parse(schema, await firstResponse.json());
             expect(

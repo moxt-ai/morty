@@ -39,6 +39,7 @@ function readySession(sessionId: string, currentValue = "model-one") {
                 type: "select",
                 currentValue: "workspace-write",
                 values: [
+                    { name: "Read only", value: "read-only", description: "", groupId: "", groupName: "" },
                     { name: "Workspace write", value: "workspace-write", description: "", groupId: "", groupName: "" },
                 ],
             },
@@ -85,6 +86,7 @@ export async function platformPeer({
     const projects = new Map<string, object>();
     const sessions = new Map<string, object>();
     const submittedTurns: unknown[] = [];
+    const configuredSettings: unknown[] = [];
     const pairings = new Map<
         string,
         {
@@ -227,6 +229,7 @@ export async function platformPeer({
                 return;
             }
             if (sessions.has(key) && request.method === "POST" && sessionPath[3] === "configuration") {
+                configuredSettings.push(JSON.parse(body));
                 response.writeHead(200).end(
                     JSON.stringify({
                         kind: "session.config.updated",
@@ -444,6 +447,7 @@ export async function platformPeer({
             MOBIUS_APP_SECRET: credential,
             MOBIUS_BASE_URL: `http://localhost:${address.port}`,
         },
+        configuredSettings: () => [...configuredSettings],
         submittedTurns: () => [...submittedTurns],
         close: async () => {
             server.closeAllConnections();
