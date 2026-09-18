@@ -63,6 +63,8 @@ Make illegal states unrepresentable.
 ## Database schema
 
 - Do not define foreign-key constraints. Enforce relationships and deletion behavior explicitly in application logic.
+- Generate schema migrations with the repository's pinned Drizzle CLI. Never create or edit migration SQL manually.
+- Treat committed migration files as immutable history; make subsequent schema changes with a new generated migration.
 
 ## Verification
 
