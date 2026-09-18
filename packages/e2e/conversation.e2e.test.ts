@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
-test("Given a paired workspace, When a user adds a file from the composer menu, Then the attachment and chat controls remain visible in the composer", async ({
+test("Given a paired workspace, When a user clicks outside the attachment menu, Then it closes and can be reopened", async ({
     runtime,
 }) => {
     await runtime.openPairedChat();
@@ -10,8 +10,12 @@ test("Given a paired workspace, When a user adds a file from the composer menu, 
     const composer = page.getByTestId(dataTestId.messageComposer);
     await expect(composer).toHaveAttribute("placeholder", "Ask me anything");
     await page.getByRole("button", { name: "Add", exact: true }).click();
-    const addAttachment = page.getByRole("menuitem", { name: "Add attachment", exact: true });
+    let addAttachment = page.getByRole("menuitem", { name: "Add attachment", exact: true });
     await expect(addAttachment).toBeVisible();
+    await composer.click();
+    await expect(addAttachment).toHaveCount(0);
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    addAttachment = page.getByRole("menuitem", { name: "Add attachment", exact: true });
     const fileChooser = page.waitForEvent("filechooser");
     await addAttachment.click();
     await (await fileChooser).setFiles({
@@ -20,6 +24,8 @@ test("Given a paired workspace, When a user adds a file from the composer menu, 
         buffer: Buffer.from("# Project notes\nKeep the reply brief."),
     });
     await expect(page.getByText("project-notes.md", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Configure agent", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Agent configuration", exact: true })).toBeVisible();
     await expect(page.getByRole("combobox", { name: "Harness", exact: true })).toBeEnabled();
     await expect(page.getByRole("combobox", { name: "Model", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeVisible();
@@ -65,9 +71,11 @@ test("Given a normal Chat conversation, When messages are queued behind an activ
     await expect(page.getByRole("button", { name: "Stop agent output", exact: true })).toBeVisible();
 
     await composer.fill("focus on the public API");
-    await composer.press("Enter");
+    await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Send message", exact: true }).click();
     const queue = page.getByRole("region", { name: "Queued messages", exact: true });
     await expect(queue.getByText("focus on the public API", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Stop agent output", exact: true })).toBeVisible();
     await composer.fill("discard this follow-up");
     await composer.press("Enter");
     await expect(queue.getByText("discard this follow-up", { exact: true })).toBeVisible();

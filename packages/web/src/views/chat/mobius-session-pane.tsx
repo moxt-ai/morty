@@ -23,6 +23,7 @@ import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { BotChatComposer, type ComposerAttachment } from "../../components/chat/bot-chat-composer.tsx";
 import { ChatComposerMoreMenu } from "../../components/chat/chat-composer-more-menu.tsx";
+import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
 import { ChatMessageQueue } from "../../components/chat/chat-message-queue.tsx";
 import {
     type ElicitationInteraction,
@@ -32,7 +33,6 @@ import {
     SessionInteractionCards,
 } from "../../components/chat/session-interactions.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
-import { Select } from "../../components/ui/option-select.tsx";
 import { type RecordedAgentActivity, recordAgentActivity } from "../../services/chat/agent-activities.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
@@ -973,13 +973,15 @@ export function MobiusSessionPane({
                 onStop={() => void taskControlsStore.getState().stop(lifetime.current.signal)}
                 onSubmit={() => void (taskControls.operation.kind === "running" ? queueDraft() : send())}
                 outputState={
-                    taskControls.operation.kind === "stopping"
-                        ? "stopping"
-                        : operation.kind === "sending" || delivery.state.kind === "submitting"
-                          ? "sending"
-                          : controlRunning
-                            ? "running"
-                            : "idle"
+                    messageQueue.operation.kind === "submitting"
+                        ? "sending"
+                        : taskControls.operation.kind === "stopping"
+                          ? "stopping"
+                          : operation.kind === "sending" || delivery.state.kind === "submitting"
+                            ? "sending"
+                            : controlRunning
+                              ? "running"
+                              : "idle"
                 }
                 submitDisabled={
                     (taskControls.operation.kind === "running" ? messageQueue.operation.kind !== "idle" : busy) ||
@@ -994,31 +996,32 @@ export function MobiusSessionPane({
                         </Button>
                     </div>
                 )}
-                <Select
-                    compact
-                    label="Harness"
-                    value={session.agentRef}
-                    disabled
-                    options={[{ value: session.agentRef, label: session.agentRef }]}
-                    onValueChange={() => {}}
+                <ChatConfigurationMenu
+                    controls={[
+                        {
+                            disabled: true,
+                            id: "harness",
+                            label: "Harness",
+                            onValueChange: () => {},
+                            options: [{ value: session.agentRef, label: session.agentRef }],
+                            value: session.agentRef,
+                        },
+                        ...options
+                            .filter(
+                                (option) =>
+                                    ["model", "thought_level", "model_config"].includes(option.category) &&
+                                    option.type !== "boolean",
+                            )
+                            .map((option) => ({
+                                disabled: busy,
+                                id: option.id,
+                                label: option.category === "model" ? "Model" : "Variant",
+                                onValueChange: (value: string) => void configure(option, value),
+                                options: option.values.map((value) => ({ value: value.value, label: value.name })),
+                                value: option.currentValue,
+                            })),
+                    ]}
                 />
-                {options
-                    .filter(
-                        (option) =>
-                            ["model", "thought_level", "model_config"].includes(option.category) &&
-                            option.type !== "boolean",
-                    )
-                    .map((option) => (
-                        <Select
-                            compact
-                            key={option.id}
-                            label={option.category === "model" ? "Model" : "Variant"}
-                            value={option.currentValue}
-                            options={option.values.map((value) => ({ value: value.value, label: value.name }))}
-                            disabled={busy}
-                            onValueChange={(value) => void configure(option, value)}
-                        />
-                    ))}
                 {operation.kind === "configuring" && (
                     <span role="status" className="sr-only">
                         Applying agent settings…

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
-import { Select } from "../../components/ui/option-select.tsx";
+import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
 import type { BotChatApi, ChatDraftConfiguration } from "../../services/chat/bot-chat-api.ts";
 import { createDraftControlsStore } from "../../view-models/chat/draft-controls-store.ts";
 
@@ -48,43 +48,43 @@ export function DraftChatControls({
     const model = settings.options.find((option) => option.category === "model" && option.type !== "boolean");
     return (
         <div className="flex min-w-0 items-center gap-1">
-            <div className="flex min-w-0 items-center gap-1">
-                <Select
-                    compact
-                    label="Harness"
-                    value={selected === null ? "" : `${selected.runtimeId}:${selected.agentRef}`}
-                    disabled={disabled}
-                    options={settings.workspace.agents
-                        .filter((agent) => agent.online)
-                        .map((agent) => ({
-                            value: `${agent.runtimeId}:${agent.agentRef}`,
-                            label: `${agent.label} · ${agent.machineName}`,
-                        }))}
-                    onValueChange={(value) => {
-                        const controller = operation.current;
-                        if (controller !== null) {
-                            void viewModel.selectHarness(value, disabled, controller.signal);
-                        }
-                    }}
-                />
-                <Select
-                    compact
-                    label="Model"
-                    value={model?.currentValue ?? ""}
-                    disabled={disabled || model === undefined}
-                    options={
-                        model?.type !== "boolean"
-                            ? (model?.values.map((value) => ({ value: value.value, label: value.name })) ?? [])
-                            : []
-                    }
-                    onValueChange={(value) => {
-                        if (model === undefined) {
-                            return;
-                        }
-                        viewModel.selectModel(model.id, value);
-                    }}
-                />
-            </div>
+            <ChatConfigurationMenu
+                controls={[
+                    {
+                        disabled,
+                        id: "harness",
+                        label: "Harness",
+                        onValueChange: (value) => {
+                            const controller = operation.current;
+                            if (controller !== null) {
+                                void viewModel.selectHarness(value, disabled, controller.signal);
+                            }
+                        },
+                        options: settings.workspace.agents
+                            .filter((agent) => agent.online)
+                            .map((agent) => ({
+                                value: `${agent.runtimeId}:${agent.agentRef}`,
+                                label: `${agent.label} · ${agent.machineName}`,
+                            })),
+                        value: selected === null ? "" : `${selected.runtimeId}:${selected.agentRef}`,
+                    },
+                    {
+                        disabled: disabled || model === undefined,
+                        id: "model",
+                        label: "Model",
+                        onValueChange: (value) => {
+                            if (model !== undefined) {
+                                viewModel.selectModel(model.id, value);
+                            }
+                        },
+                        options:
+                            model?.type !== "boolean"
+                                ? (model?.values.map((value) => ({ value: value.value, label: value.name })) ?? [])
+                                : [],
+                        value: model?.currentValue ?? "",
+                    },
+                ]}
+            />
             {model === undefined && <span className="sr-only">This harness has not reported any model choices.</span>}
         </div>
     );

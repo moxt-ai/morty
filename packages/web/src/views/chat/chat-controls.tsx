@@ -1,7 +1,7 @@
 import type { MobiusBrowserClient } from "@moxt-ai/mobius-sdk/browser";
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
-import { Select } from "../../components/ui/option-select.tsx";
+import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { createChatControlsStore } from "../../view-models/chat/chat-controls-store.ts";
 
@@ -48,43 +48,45 @@ export function ChatControls({
     );
     return (
         <div className="flex min-w-0 items-center gap-1">
-            <div className="flex min-w-0 items-center gap-1">
-                <Select
-                    compact
-                    label="Harness"
-                    value={inventory.harness}
-                    disabled
-                    options={inventory.workspace.agents.map((agent) => ({
-                        value: `${agent.runtimeId}:${agent.agentRef}`,
-                        label: `${agent.label} · ${agent.machineName}`,
-                    }))}
-                    onValueChange={() => {}}
-                />
-                <Select
-                    compact
-                    label="Model"
-                    value={model?.currentValue ?? ""}
-                    disabled={disabled || busy || model === undefined}
-                    options={model?.values.map((value) => ({ value: value.value, label: value.name })) ?? []}
-                    onValueChange={(value) => {
-                        if (model !== undefined) {
-                            void viewModel.select(value, model.id, disabled, lifetime.current.signal);
-                        }
-                    }}
-                />
-                <Select
-                    compact
-                    label="Variant"
-                    value={variant?.currentValue ?? ""}
-                    disabled={disabled || busy || variant === undefined}
-                    options={variant?.values.map((value) => ({ value: value.value, label: value.name })) ?? []}
-                    onValueChange={(value) => {
-                        if (variant !== undefined) {
-                            void viewModel.select(value, variant.id, disabled, lifetime.current.signal);
-                        }
-                    }}
-                />
-            </div>
+            <ChatConfigurationMenu
+                controls={[
+                    {
+                        disabled: true,
+                        id: "harness",
+                        label: "Harness",
+                        onValueChange: () => {},
+                        options: inventory.workspace.agents.map((agent) => ({
+                            value: `${agent.runtimeId}:${agent.agentRef}`,
+                            label: `${agent.label} · ${agent.machineName}`,
+                        })),
+                        value: inventory.harness,
+                    },
+                    {
+                        disabled: disabled || busy || model === undefined,
+                        id: "model",
+                        label: "Model",
+                        onValueChange: (value) => {
+                            if (model !== undefined) {
+                                void viewModel.select(value, model.id, disabled, lifetime.current.signal);
+                            }
+                        },
+                        options: model?.values.map((value) => ({ value: value.value, label: value.name })) ?? [],
+                        value: model?.currentValue ?? "",
+                    },
+                    {
+                        disabled: disabled || busy || variant === undefined,
+                        id: "variant",
+                        label: "Variant",
+                        onValueChange: (value) => {
+                            if (variant !== undefined) {
+                                void viewModel.select(value, variant.id, disabled, lifetime.current.signal);
+                            }
+                        },
+                        options: variant?.values.map((value) => ({ value: value.value, label: value.name })) ?? [],
+                        value: variant?.currentValue ?? "",
+                    },
+                ]}
+            />
             {busy && <span className="sr-only">Waiting for your agent to apply the selection…</span>}
             <p className="sr-only">
                 The harness is fixed for this conversation. Start a new conversation to choose another harness.

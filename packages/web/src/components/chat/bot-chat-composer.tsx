@@ -9,6 +9,7 @@ import {
     readPromptAttachment,
 } from "../../services/chat/attachment-reader.ts";
 import { Button } from "../ui/cloud-button.tsx";
+import { Popover } from "../ui/popover.tsx";
 import { Textarea } from "../ui/textarea.tsx";
 
 export type ComposerAttachment =
@@ -165,6 +166,7 @@ export function BotChatComposer({
         event.preventDefault();
         event.currentTarget.form?.requestSubmit();
     };
+    const submitAction = outputState === "idle" || (outputState === "running" && !submitDisabled);
 
     return (
         <form className="mx-auto mt-5 mb-5 w-full max-w-[976px] shrink-0 px-4 sm:mt-6 sm:mb-6" onSubmit={submit}>
@@ -198,25 +200,28 @@ export function BotChatComposer({
                 />
                 <div className="mt-1 flex min-h-10 items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-1">
-                        <div className="relative">
-                            <button
-                                aria-label="Add"
-                                aria-expanded={addMenuOpen}
-                                className="flex size-10 items-center justify-center rounded-full text-copy-secondary outline-none hover:bg-black/[0.045] focus-visible:ring-2 focus-visible:ring-ring/60 aria-expanded:bg-black/[0.045]"
-                                onClick={() => setAddMenuOpen((open) => !open)}
-                                title="Add"
-                                type="button"
-                            >
-                                {attachmentState.kind === "reading" ? (
-                                    <LoaderCircle className="size-5 animate-spin motion-reduce:animate-none" />
-                                ) : (
-                                    <Plus className="size-5" />
-                                )}
-                            </button>
-                            {addMenuOpen && (
-                                <div
-                                    className="absolute bottom-[calc(100%+10px)] left-0 z-30 w-56 rounded-2xl border border-[#d5d9dc] bg-white p-1.5 shadow-[0_16px_42px_rgba(0,0,0,0.14)]"
+                        <Popover.Root onOpenChange={setAddMenuOpen} open={addMenuOpen}>
+                            <Popover.Trigger asChild>
+                                <button
+                                    aria-label="Add"
+                                    className="flex size-10 items-center justify-center rounded-full text-copy-secondary outline-none hover:bg-black/[0.045] focus-visible:ring-2 focus-visible:ring-ring/60 data-[state=open]:bg-black/[0.045]"
+                                    title="Add"
+                                    type="button"
+                                >
+                                    {attachmentState.kind === "reading" ? (
+                                        <LoaderCircle className="size-5 animate-spin motion-reduce:animate-none" />
+                                    ) : (
+                                        <Plus className="size-5" />
+                                    )}
+                                </button>
+                            </Popover.Trigger>
+                            <Popover.Portal>
+                                <Popover.Content
+                                    align="start"
+                                    className="z-50 w-56 rounded-2xl border border-[#d5d9dc] bg-white p-1.5 shadow-[0_16px_42px_rgba(0,0,0,0.14)]"
                                     role="menu"
+                                    side="top"
+                                    sideOffset={10}
                                 >
                                     <button
                                         className="flex min-h-10 w-full items-center gap-3 rounded-xl bg-black/[0.035] px-3 text-left text-sm hover:bg-black/[0.06] focus-visible:ring-2 focus-visible:ring-ring/60"
@@ -233,9 +238,9 @@ export function BotChatComposer({
                                         <Paperclip aria-hidden="true" className="size-4 text-copy-secondary" />
                                         Add attachment
                                     </button>
-                                </div>
-                            )}
-                        </div>
+                                </Popover.Content>
+                            </Popover.Portal>
+                        </Popover.Root>
                         <input
                             accept="image/png,image/jpeg,image/gif,image/webp,text/*,.md,.json,.csv,.yaml,.yml,.xml"
                             className="sr-only"
@@ -258,24 +263,24 @@ export function BotChatComposer({
                             aria-label={
                                 outputState === "sending"
                                     ? "Sending message"
-                                    : outputState === "running"
-                                      ? "Stop agent output"
-                                      : outputState === "stopping"
-                                        ? "Stopping agent output"
-                                        : submitLabel
+                                    : outputState === "stopping"
+                                      ? "Stopping agent output"
+                                      : submitAction
+                                        ? submitLabel
+                                        : "Stop agent output"
                             }
-                            className={`size-10 rounded-full text-white ${outputState === "idle" || outputState === "sending" ? "bg-[#2fbd7a] hover:bg-[#28aa6c]" : "bg-[#e65c5c] hover:bg-[#d94d4d]"}`}
+                            className={`size-10 rounded-full text-white ${submitAction || outputState === "sending" ? "bg-[#2fbd7a] hover:bg-[#28aa6c]" : "bg-[#e65c5c] hover:bg-[#d94d4d]"}`}
                             data-testid={dataTestId.sendMessage}
                             disabled={
                                 outputState === "sending" ||
                                 outputState === "stopping" ||
                                 (outputState === "idle" && submitDisabled)
                             }
-                            onClick={outputState === "running" ? onStop : undefined}
+                            onClick={outputState === "running" && !submitAction ? onStop : undefined}
                             size="icon"
-                            type={outputState === "idle" ? "submit" : "button"}
+                            type={submitAction ? "submit" : "button"}
                         >
-                            {outputState === "idle" ? (
+                            {submitAction ? (
                                 <Send aria-hidden="true" className="size-[18px]" />
                             ) : outputState === "running" ? (
                                 <Square aria-hidden="true" className="size-3.5 fill-current" />
