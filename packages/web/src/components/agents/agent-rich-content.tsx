@@ -1,7 +1,7 @@
 import type { AgentDisplayContent, MobiusClient } from "@moxt-ai/mobius-sdk";
 import type { MobiusBrowserClient } from "@moxt-ai/mobius-sdk/browser";
 import { ExternalLink, FileText, Image as ImageIcon, Terminal, Video } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { AgentMarkdown } from "@/components/agents/agent-markdown";
 import { readFile } from "@/services/chat/mobius-transport";
 import { readSessionArtifactBytes } from "@/services/pairing/pairing-api";
@@ -53,29 +53,7 @@ function ArtifactMedia({
     readonly sessionId: string;
 }) {
     const [source, setSource] = useState<string | null>(null);
-    const [visible, setVisible] = useState(false);
-    const placeholderRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
-        const target = placeholderRef.current;
-        if (target === null || visible) {
-            return;
-        }
-        const observer = new IntersectionObserver(
-            (entries) => {
-                if (entries.some((entry) => entry.isIntersecting)) {
-                    setVisible(true);
-                    observer.disconnect();
-                }
-            },
-            { rootMargin: "320px" },
-        );
-        observer.observe(target);
-        return () => observer.disconnect();
-    }, [visible]);
-    useEffect(() => {
-        if (!visible) {
-            return;
-        }
         const controller = new AbortController();
         let objectUrl = "";
         const download =
@@ -121,14 +99,11 @@ function ArtifactMedia({
                 URL.revokeObjectURL(objectUrl);
             }
         };
-    }, [browserClient, channelId, content.artifactId, content.type, content.uri, serviceClient, sessionId, visible]);
+    }, [browserClient, channelId, content.artifactId, content.type, content.uri, serviceClient, sessionId]);
     if (source === null) {
         return (
-            <div
-                className="min-h-24 rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground"
-                ref={placeholderRef}
-            >
-                {visible ? "Loading media…" : "Media preview"}
+            <div className="min-h-24 rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
+                Loading media…
             </div>
         );
     }
