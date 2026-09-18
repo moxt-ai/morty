@@ -1,16 +1,15 @@
-import type { MobiusBot } from "@moxt-ai/mobius-sdk";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import { useStore } from "zustand";
-import { createBotOwnerClient } from "@/services/bots/bot-api";
-import type { ChannelConnection } from "@/view-models/chat/channel";
+import { type ChatBot, ChatBotApi } from "@/services/bots/bot-api";
 import {
     type BotTargetDirectoryState,
     createConversationTargetStore,
 } from "@/view-models/chat/conversation-target-store";
+import { useActiveIdentity } from "@/views/authentication/identity-context";
 
 interface ConversationTargetContextValue {
     readonly botDirectory: BotTargetDirectoryState;
-    readonly createBotConversation: (bot: MobiusBot) => Promise<void>;
+    readonly createBotConversation: (bot: ChatBot) => Promise<void>;
     readonly refreshBots: () => Promise<void>;
 }
 
@@ -28,14 +27,20 @@ const ConversationTargetContext = createContext<ConversationTargetContextValue>(
 
 export function ConversationTargetProvider({
     children,
-    connection,
     onOpenBotConversation,
 }: {
     readonly children: ReactNode;
-    readonly connection: ChannelConnection;
-    readonly onOpenBotConversation: (botId: string, conversationId: string) => void;
+    readonly onOpenBotConversation: (botId: string) => void;
 }) {
-    const [client] = useState(() => createBotOwnerClient(connection));
+    const identity = useActiveIdentity();
+    const [client] = useState(
+        () =>
+            new ChatBotApi({
+                origin: window.location.origin,
+                projectId: identity.projectId,
+                getToken: identity.getToken,
+            }),
+    );
     const [controller] = useState(() => new AbortController());
     const [store] = useState(() => createConversationTargetStore(client, onOpenBotConversation));
     const viewModel = useStore(store);
@@ -46,7 +51,7 @@ export function ConversationTargetProvider({
         <ConversationTargetContext.Provider
             value={{
                 botDirectory: viewModel.botDirectory,
-                createBotConversation: async (bot) => await viewModel.createBotConversation(bot, controller.signal),
+                createBotConversation: async (bot) => await viewModel.openBot(bot, controller.signal),
                 refreshBots: async () => await viewModel.refreshBots(controller.signal),
             }}
         >

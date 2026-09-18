@@ -12,28 +12,28 @@ import { SlackEventIntakeService } from "../service/events/slack-event-intake-se
 import { SlackEventsService } from "../service/events/slack-events-service";
 import { ExternalIdentityService } from "../service/identity/external-identity-service";
 import { SlackTokenService } from "../service/identity/slack-token-service";
-import { MobiusConnectionService } from "../service/installation/mobius-connection-service";
+import { ChatBotBindingService } from "../service/installation/chat-bot-binding-service";
 import { SlackInstallationService } from "../service/installation/slack-installation-service";
 import { SlackManagementService } from "../service/installation/slack-management-service";
-import { MobiusConnectionStorage, SlackEventStorage } from "../storage/index";
+import { ChatBotBindingStorage, SlackEventStorage } from "../storage/index";
 import type { SlackInfrastructure } from "./slack-infrastructure";
 export type SlackContext = ReturnType<typeof createSlackDependencies>;
 
 export function createSlackDependencies(infrastructure: SlackInfrastructure) {
     const storages = Object.freeze({
-        mobiusConnectionStorage: new MobiusConnectionStorage(infrastructure),
+        chatBotBindingStorage: new ChatBotBindingStorage(infrastructure),
         slackEventStorage: new SlackEventStorage(infrastructure),
     });
     const cx = { ...infrastructure, storages };
     const slackTokens = new SlackTokenService(cx);
     const identities = new ExternalIdentityService(cx);
     const intake = new SlackEventIntakeService(cx);
-    const mobiusConnections = new MobiusConnectionService(cx);
+    const chatBotBindings = new ChatBotBindingService(cx);
     const installations = new SlackInstallationService({ ...cx, services: { identities, slackTokens } });
     const botTools = new SlackBotToolService({ ...cx, services: { identities } });
     const management = new SlackManagementService({
         ...cx,
-        services: { installations, mobiusConnections, slackTokens },
+        services: { installations, chatBotBindings, slackTokens },
     });
     const replies = new SlackReplyDeliveryService(cx);
     const slackMessageRenderer = new SlackMessageRenderer(cx);
@@ -41,7 +41,7 @@ export function createSlackDependencies(infrastructure: SlackInfrastructure) {
     const slackContextLoader = new SlackContextLoader({ ...cx, services: { slackMessageRenderer } });
     const slackConversations = new SlackConversationService({
         ...cx,
-        services: { slackContextLoader, slackMessageRenderer, replies, mobiusConnections },
+        services: { slackContextLoader, slackMessageRenderer, replies, chatBotBindings },
     });
     const slackEventContext = new SlackEventContextService(cx);
     const eventProcessor = new SlackEventProcessor({
@@ -53,7 +53,7 @@ export function createSlackDependencies(infrastructure: SlackInfrastructure) {
         slackTokens,
         identities,
         intake,
-        mobiusConnections,
+        chatBotBindings,
         installations,
         botTools,
         management,

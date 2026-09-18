@@ -1,7 +1,7 @@
 import type { HumanPrincipal } from "../identity/identity-service";
 import type { SlackTokenService } from "../identity/slack-token-service";
 import { type TenantContext, tenantContext } from "../identity/tenant-context";
-import type { MobiusConnectionService } from "./mobius-connection-service";
+import type { ChatBotBindingService } from "./chat-bot-binding-service";
 import type { SlackInstallationService } from "./slack-installation-service";
 
 export type SlackConnectionStatus =
@@ -81,14 +81,14 @@ export class SlackManagementService {
     readonly #publicBaseUrl: string;
     readonly #projectId: string;
     readonly #secrets: SecretCipher;
-    readonly #mobius: MobiusConnectionService;
+    readonly #bindings: ChatBotBindingService;
     readonly #installationService: SlackInstallationService;
     readonly #tokens: SlackTokenService;
     constructor(cx: {
         readonly storages: { readonly slackEventStorage: SlackEventStorage };
         readonly services: {
             readonly installations: SlackInstallationService;
-            readonly mobiusConnections: MobiusConnectionService;
+            readonly chatBotBindings: ChatBotBindingService;
             readonly slackTokens: SlackTokenService;
         };
         readonly gateways: {
@@ -99,10 +99,10 @@ export class SlackManagementService {
         readonly config: { readonly publicBaseUrl: string; readonly projectId: string };
     }) {
         const { slackEventStorage: storage } = cx.storages;
-        const { installations, mobiusConnections: mobius, slackTokens } = cx.services;
+        const { installations, chatBotBindings, slackTokens } = cx.services;
         const { slackWebApi: manifestApi, secretEncryption: secrets, nowEpochMilliseconds } = cx.gateways;
         const { publicBaseUrl } = cx.config;
-        this.#mobius = mobius;
+        this.#bindings = chatBotBindings;
         this.#installationService = installations;
         this.#tokens = slackTokens;
         this.#apps = storage;
@@ -156,7 +156,10 @@ export class SlackManagementService {
     };
 
     readonly listBots = async (tenant: TenantContext, signal: AbortSignal) =>
-        await this.#mobius.listBots(tenant, signal);
+        await this.#bindings.listBots(tenant, signal);
+
+    readonly listOwnedBots = async (tenant: TenantContext, signal: AbortSignal) =>
+        await this.#bindings.listOwnedBots(tenant, signal);
 
     readonly authorizationUrl = async (
         tenant: TenantContext,

@@ -7,6 +7,16 @@ const botSchema = v.pipe(
 );
 
 export type ManagedBot = v.InferOutput<typeof botSchema>;
+const managedBotDetailSchema = v.pipe(
+    v.object({
+        botId: identifier,
+        displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(80)),
+        configured: v.boolean(),
+        instructions: v.pipe(v.string(), v.maxLength(100000)),
+    }),
+    v.readonly(),
+);
+export type ManagedBotDetail = v.InferOutput<typeof managedBotDetailSchema>;
 const projectSchema = v.pipe(
     v.object({ projectId: identifier, displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(120)) }),
     v.readonly(),
@@ -45,14 +55,28 @@ export class ManagementApi {
         v.parse(v.object({ project: projectSchema }), await this.#request("/project", "POST", { displayName }, signal))
             .project;
 
-    readonly claimBot = async (
-        input: { readonly botId: string; readonly displayName: string; readonly ownerCredential: string },
+    readonly createBot = async (displayName: string, signal: AbortSignal): Promise<ManagedBot> =>
+        v.parse(botSchema, await this.#request("/bots", "POST", { displayName }, signal));
+
+    readonly readBot = async (botId: string, signal: AbortSignal): Promise<ManagedBotDetail> =>
+        v.parse(
+            managedBotDetailSchema,
+            await this.#request(`/bots/${encodeURIComponent(v.parse(identifier, botId))}`, "GET", undefined, signal),
+        );
+
+    readonly updateBot = async (
+        botId: string,
+        input: { readonly displayName: string; readonly instructions: string },
         signal: AbortSignal,
-    ): Promise<ManagedBot> => v.parse(botSchema, await this.#request("/bots/claims", "POST", input, signal));
+    ): Promise<ManagedBotDetail> =>
+        v.parse(
+            managedBotDetailSchema,
+            await this.#request(`/bots/${encodeURIComponent(v.parse(identifier, botId))}`, "PATCH", input, signal),
+        );
 
     readonly #request = async (
         path: string,
-        method: "GET" | "POST",
+        method: "GET" | "PATCH" | "POST",
         body: object | undefined,
         requestSignal: AbortSignal,
     ): Promise<unknown> => {

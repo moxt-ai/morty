@@ -1,2 +1,2 @@
-export { MobiusConnectionStorage } from "./mobius-connection-storage";
+export { ChatBotBindingStorage } from "./chat-bot-binding-storage";
 export { SlackEventStorage } from "./slack-event-storage";

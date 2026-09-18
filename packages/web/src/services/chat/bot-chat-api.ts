@@ -2,8 +2,9 @@ import {
     decodeAgentSettingsDiscoveredEvent,
     decodeNativeSessionHistory,
     decodeNativeSessionResult,
+    decodeSessionReadyEvent,
 } from "@moxt-ai/mobius-protocol";
-import { createMobiusConversationSession, MobiusBrowserAccessToken, MobiusClient } from "@moxt-ai/mobius-sdk/browser";
+import { MobiusClient } from "@moxt-ai/mobius-sdk/browser";
 import * as v from "valibot";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 
@@ -12,8 +13,12 @@ const accessSchema = v.pipe(
     v.strictObject({
         endpoint: v.pipe(v.string(), v.url()),
         conversationId: identifier,
-        credential: v.pipe(v.string(), v.regex(/^mconv_[a-zA-Z0-9_-]{22}_[a-zA-Z0-9_-]{43}$/u)),
+        sessionId: identifier,
+        credential: v.pipe(v.string(), v.regex(/^msession_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}$/u)),
         expiresAt: v.pipe(v.string(), v.isoTimestamp()),
+        ready: v.unknown(),
+        agentRef: identifier,
+        workspaceRef: v.pipe(v.string(), v.minLength(1), v.maxLength(2048)),
     }),
     v.readonly(),
 );
@@ -126,6 +131,33 @@ export class BotChatApi {
         title = "New chat",
     ): Promise<ChatAccess> =>
         v.parse(accessSchema, await this.#request(botId, "access", { conversationKey, ...settings, title }, signal));
+    readonly submitTurn = async (
+        botId: string,
+        sessionId: string,
+        request: Parameters<MobiusClient["turns"]["submit"]>[1],
+        signal: AbortSignal,
+    ): Promise<{ readonly turnId: string }> =>
+        v.parse(
+            v.object({ turnId: identifier }),
+            await this.#request(botId, "turns", { sessionId: v.parse(identifier, sessionId), ...request }, signal),
+        );
+    readonly conversationSession = (access: ChatAccess) => ({
+        agentRef: access.agentRef,
+        result: {
+            action: "conversation" as const,
+            targetSessionId: access.sessionId,
+            ready: decodeSessionReadyEvent(JSON.stringify(access.ready)),
+            history: { status: "unavailable" as const },
+        },
+        entry: {
+            entryId: access.sessionId,
+            title: "",
+            directoryId: access.workspaceRef,
+            directoryLabel: access.workspaceRef,
+            additionalDirectories: [],
+            updatedAt: null,
+        },
+    });
     readonly managedSessions = async (botId: string, signal: AbortSignal) =>
         v.parse(
             v.object({ sessions: v.array(managedSessionSchema) }),
@@ -183,31 +215,6 @@ export class BotChatApi {
             throw new CloudApiError("INVALID_PAIRING_INSTRUCTION", "Pairing instruction is invalid.");
         }
         return ticket;
-    };
-    readonly connectConversation = (botId: string, signal: AbortSignal, access: ChatAccess) => {
-        signal.throwIfAborted();
-        const conversationId = access.conversationId;
-        let initial = true;
-        let current = access;
-        return createMobiusConversationSession({
-            projectId: this.#projectId,
-            endpoint: current.endpoint,
-            streamConnectionTimeoutMilliseconds: 45000,
-            accessTokenProvider: {
-                accessToken: async (parent) => {
-                    const token = initial ? current : await this.access(botId, parent, conversationId);
-                    initial = false;
-                    current = token;
-                    if (token.endpoint !== access.endpoint || token.conversationId !== access.conversationId) {
-                        throw new CloudApiError(
-                            "CONVERSATION_CHANGED",
-                            "The conversation identity changed. Reconnect to continue.",
-                        );
-                    }
-                    return new MobiusBrowserAccessToken(token.credential, token.expiresAt);
-                },
-            },
-        });
     };
     readonly workspace = async (botId: string, parent: AbortSignal): Promise<ChatWorkspace> =>
         v.parse(workspaceSchema, await this.#request(botId, "workspace", undefined, parent));

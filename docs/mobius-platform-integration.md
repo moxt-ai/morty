@@ -70,8 +70,8 @@ resource identifiers are maintained in deployment configuration and Platform
 storage rather than this document.
 
 `POST /mobius-cloud/api/identity/anonymous-users` creates the identity, provisions
-its internal Project, creates a Bot through `MobiusBotOwnerClient`, and persists
-ownership before returning `{ token, userId, bot }`. The Worker uses
+its internal Project, creates a Chat-owned Bot locally, and persists ownership
+before returning `{ token, userId, bot }`. The Worker uses
 `MobiusPlatformAppClient` with its server-held AppCredential. Users never configure
 Projects in the web application: the browser opens headerless Chat directly.
 Slack navigation and the manual Bot claim/Project setup screens are hidden or removed.
@@ -96,17 +96,16 @@ Platform resolves storage placement. Bindings are recorded
 in `wrangler.jsonc`. The deployment workflow applies Cloud D1 migrations before
 deploying each environment. Staging anonymous provisioning and persistence after
 reload were verified with `agent-browser` against the deployed services.
-Subsequent Bot operations must authorize the user's saved Project
-and Bot before calling Mobius with the AppCredential.
+Subsequent Bot operations authorize the user's saved Project and locally owned Bot.
+Runtime, Session, and turn operations call Mobius with the AppCredential.
 
 ### 2. Worker SDK and authentication
 
 The Worker now depends on the local `third-party/mobius/packages/mobius-sdk` package
 and uses `@moxt-ai/mobius-sdk/platform` for Project provisioning. The Platform
-subpath is configured in TypeScript and Vite. Use `@moxt-ai/mobius-sdk/server` for Bot, Runtime,
-Session, and Conversation operations, and `@moxt-ai/mobius-sdk/platform` for
-conversation credential lifecycle. Add the server and browser subpath aliases
-as those consumers migrate.
+subpath is configured in TypeScript and Vite. Use `@moxt-ai/mobius-sdk/server` for
+generic Project, Runtime, Session, and turn operations. Mobius Chat does not use
+Mobius Bot resources during normal operation.
 
 Replace `x-mobius-app-id` / `x-mobius-app-secret` authentication with
 `Authorization: Bearer mapp_...`. Keep the AppCredential server-side. Retain
@@ -120,7 +119,7 @@ Chat now exposes `POST /mobius-cloud/api/management/runtime-pairings` with an
 Both authenticate the Cloud user, resolve their persisted Project mapping, and
 call the server SDK with Chat's AppCredential. Responses include the actual
 Runtime pairing identifiers and relay URL; AppCredentials are never returned.
-An anonymous user receives their Bot automatically and can request pairing without Clerk.
+An anonymous user receives their locally owned Chat Bot automatically and can request pairing without Clerk.
 Staging pairing issuance was verified through the browser against the deployed
 Platform. CLI completion and the Bot/conversation journey still need verification.
 
@@ -136,27 +135,17 @@ The renamed staging Worker has the required runtime settings and owns the existi
 Slack queue consumer. The Chat landing view resolves its Bot from the authenticated
 backend and does not require browser build-time App configuration.
 
-`packages/worker/src/gateway/mobius-gateway.ts` still uses the legacy `/pairings`
-bootstrap, which Platform explicitly returns 404 for. Use the SDK's
-Project-scoped `runtimePairings.create/read` and `runtimes.list` operations.
-Provision a Project first, show the returned pairing code, and retain the returned
-Runtime ID and online state independently.
-
-Move browser Bot-owner operations and browser-local owner credentials behind
-authorized Cloud management routes. Use the server Bot client for creation,
-behavior, execution binding, and connector operations. Adapt Slack's setup and
-pairing responses to the current resource contracts.
+Chat uses the SDK's Project-scoped `runtimePairings.create/read` and
+`runtimes.list` operations. It provisions a Project first, shows the returned
+pairing code, and retains Runtime identity and online state independently.
+Bot profile, instructions, Runtime, Agent, and workspace selections are owned by
+Chat management routes. Slack binds directly to those Chat Bot IDs.
 
 ### 4. Conversation-scoped browser access
 
-`packages/worker/src/components/chat/mobius-app-service.ts` calls
-`/mobius/api/v1/access-tokens`, which is not a Platform API. First create or reopen
-an authorized Conversation and Session, then issue its short-lived `mconv_...`
-credential with `MobiusPlatformAppClient.issueConversationAccessCredential`.
-
-Persist the actual Project, Bot, Conversation, Session, credential ID, and expiry
-associations. Rotation returns a new credential ID; the current regeneration path
-assumes the ID stays unchanged and must be migrated along with storage.
+Chat creates or reopens an authorized generic Session, then issues short-lived
+Session access. Chat persists the Project, Chat Bot, Session, and access-path
+associations needed to reopen it.
 
 Use `@moxt-ai/mobius-sdk/browser` and `createMobiusConversationSession` in web for
 messages, turns, history, configuration, interactions, artifacts, and events.

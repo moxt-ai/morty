@@ -175,34 +175,34 @@ test("Given an anonymous user, When they provision a Platform Project and reload
     expect((await request(`management/runtime-pairings/${pairing.pairingId}`, bob)).status).toBe(404);
 });
 
-test("Given a user-owned Platform Bot, When session records are managed, Then changes persist and another user cannot access or delete them", async () => {
+test("Given a user-owned Chat Bot, When its profile and instructions are managed, Then changes persist and another user cannot access them", async () => {
     const { request, anonymous } = await fixture();
     const alice = await anonymous();
     const bob = await anonymous();
-    const { bots } = v.parse(botsSchema, await (await request("management/bots", alice)).json());
-    const bot = bots[0];
-    if (bot === undefined) {
-        throw new Error("Expected a provisioned Bot");
-    }
-    const input = { botId: bot.botId, sessionId: "session-one", title: "Planning" };
-    expect((await request("chat/sessions", bob, "POST", input)).status).toBe(404);
-    expect((await request("chat/sessions", alice, "POST", input)).status).toBe(201);
-    expect((await request("chat/sessions/session-one", alice, "PATCH", { title: "Project planning" })).status).toBe(
-        200,
+    const created = v.parse(
+        v.object({ botId: v.string(), displayName: v.string() }),
+        await (await request("management/bots", alice, "POST", { displayName: "Research Bot" })).json(),
     );
-    expect(await (await request("chat/sessions", alice)).json()).toEqual({
-        sessions: [{ ...input, title: "Project planning" }],
+    const { bots } = v.parse(botsSchema, await (await request("management/bots", alice)).json());
+    expect(bots).toContainEqual(created);
+    expect((await request(`management/bots/${created.botId}`, bob)).status).toBe(404);
+    const updated = await request(`management/bots/${created.botId}`, alice, "PATCH", {
+        displayName: "Research Assistant",
+        instructions: "Cite the source for every factual claim.",
     });
-    expect(await (await request("chat/sessions", bob)).json()).toEqual({ sessions: [] });
-    expect((await request("chat/sessions/session-one", bob, "DELETE")).status).toBe(404);
-    expect((await request("chat/sessions/session-one", alice, "DELETE")).status).toBe(204);
-    expect(await (await request("chat/sessions", alice)).json()).toEqual({ sessions: [] });
-    for (const operation of ["access", "workspace", "native-sessions", "session-access"]) {
-        expect(
-            (await request(`chat/bots/${bot.botId}/${operation}`, bob, "POST", { runtimeId: "runtime-1" })).status,
-        ).toBe(404);
-    }
-    expect((await request(`chat/bots/${bot.botId}/access`, alice, "POST")).status).toBe(400);
+    expect(updated.status).toBe(200);
+    expect(await updated.json()).toEqual({
+        botId: created.botId,
+        configured: false,
+        displayName: "Research Assistant",
+        instructions: "Cite the source for every factual claim.",
+    });
+    expect(await (await request(`management/bots/${created.botId}`, alice)).json()).toEqual({
+        botId: created.botId,
+        configured: false,
+        displayName: "Research Assistant",
+        instructions: "Cite the source for every factual claim.",
+    });
 });
 
 test("Given a workspace, When unauthenticated or malformed setup requests arrive, Then the HTTP boundary rejects them", async () => {

@@ -26,10 +26,6 @@ export function botConversationsRoutePath(channelId: string, botId: string): str
     return `${botRoutePath(channelId, botId)}/conversations`;
 }
 
-export function botConversationRoutePath(channelId: string, botId: string, conversationId: string): string {
-    return `${botConversationsRoutePath(channelId, botId)}/${encodeURIComponent(conversationId)}`;
-}
-
 export function botConnectionsRoutePath(channelId: string, botId: string): string {
     return `${botRoutePath(channelId, botId)}/connections`;
 }

@@ -3,7 +3,7 @@ import * as v from "valibot";
 import { createStore } from "zustand/vanilla";
 
 type SubmitRequest = Parameters<MobiusClient["turns"]["submit"]>[1];
-type AcceptedTurn = Awaited<ReturnType<MobiusClient["turns"]["submit"]>>;
+type AcceptedTurn = { readonly turnId: string };
 const stringListSchema = v.pipe(v.array(v.string()), v.readonly());
 const submitRequestSchema = v.pipe(
     v.object({

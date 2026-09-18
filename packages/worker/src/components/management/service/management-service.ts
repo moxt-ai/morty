@@ -1,5 +1,4 @@
 import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
-import type { MobiusAppService } from "../../chat/service/mobius-app-service.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { type PlatformProject, PlatformProjectError } from "../entity/platform-project.ts";
 import type { ManagedBotStorage } from "../storage/managed-bot-storage.ts";
@@ -16,14 +15,13 @@ interface AuditLogger {
 export class ManagementService {
     readonly #authentication: AuthenticationService;
     readonly #managedBots: ManagedBotStorage;
-    readonly #mobiusApp: MobiusAppService;
     readonly #platformProjects: PlatformProjectStorage;
     readonly #platform: PlatformProjectGateway;
     readonly #logger: AuditLogger;
     readonly #scopeProject: (projectId: string, signal: AbortSignal) => Promise<ManagementService>;
 
     constructor(cx: {
-        readonly services: { readonly authentication: AuthenticationService; readonly mobiusApp: MobiusAppService };
+        readonly services: { readonly authentication: AuthenticationService };
         readonly storages: {
             readonly managedBots: ManagedBotStorage;
             readonly platformProjects: PlatformProjectStorage;
@@ -34,7 +32,6 @@ export class ManagementService {
     }) {
         this.#authentication = cx.services.authentication;
         this.#managedBots = cx.storages.managedBots;
-        this.#mobiusApp = cx.services.mobiusApp;
         this.#platformProjects = cx.storages.platformProjects;
         this.#platform = cx.gateways.platformProjects;
         this.#logger = cx.logger;
@@ -66,7 +63,8 @@ export class ManagementService {
             (await this.#platformProjects.read(userId, origin, appId, signal)) ??
             (await this.#platform.create(userId, "Personal workspace", signal, location));
         await this.#platformProjects.save(userId, origin, appId, project, signal);
-        const bot = await this.#platform.createBot(project.projectId, signal);
+        signal.throwIfAborted();
+        const bot = { botId: `bot_${crypto.randomUUID()}`, displayName: "My Bot" };
         await this.#managedBots.saveClaim(userId, bot, Date.now(), signal);
         this.#logger.info({ event: "user-bot-created", userId, botId: bot.botId }, "Bot audit event");
         return bot;
@@ -77,31 +75,47 @@ export class ManagementService {
         return await this.#managedBots.listBots(userId, signal);
     };
 
-    readonly claimBot = async (
-        userId: string,
-        input: { readonly botId: string; readonly displayName: string; readonly ownerCredential: string },
-        signal: AbortSignal,
-    ) => {
-        const accessToken = await this.#mobiusApp.issueAccessToken(input.botId, input.ownerCredential, signal);
-        try {
-            await this.#managedBots.saveClaim(
-                userId,
-                { botId: input.botId, displayName: input.displayName },
-                Date.now(),
-                signal,
-            );
-        } finally {
-            await this.#mobiusApp.revokeAccessToken(accessToken.accessTokenId, AbortSignal.timeout(10_000));
-            signal.throwIfAborted();
-        }
-        return { botId: input.botId, displayName: input.displayName };
+    readonly createBot = async (userId: string, displayName: string, signal: AbortSignal) => {
+        const bot = { botId: `bot_${crypto.randomUUID()}`, displayName };
+        await this.#managedBots.saveClaim(userId, bot, Date.now(), signal);
+        this.#logger.info({ event: "user-bot-created", userId, botId: bot.botId }, "Bot audit event");
+        return bot;
     };
 
-    readonly regenerateAccessToken = async (userId: string, accessTokenId: string, signal: AbortSignal) => {
-        if ((await this.#managedBots.accessTokenBot(userId, accessTokenId, signal)) === null) {
-            throw new ManagementError("NOT_FOUND", "Not found.", 404);
+    readonly readBot = async (userId: string, botId: string, signal: AbortSignal) => {
+        let bot = await this.#managedBots.readBot(userId, botId, signal);
+        if (bot === null) {
+            throw new ManagementError("BOT_NOT_FOUND", "Bot is unavailable.", 404);
         }
-        return await this.#mobiusApp.regenerateAccessToken(accessTokenId, signal);
+        if (bot.legacyMigrationPending) {
+            const project = await this.#requireProject(userId, signal);
+            const migrated = await this.#platform.migrateLegacyBot(project.projectId, botId, userId, signal);
+            await this.#managedBots.completeLegacyMigration(userId, botId, migrated, Date.now(), signal);
+            bot = await this.#managedBots.readBot(userId, botId, signal);
+            if (bot === null) {
+                throw new ManagementError("BOT_NOT_FOUND", "Bot is unavailable.", 404);
+            }
+        }
+        return {
+            botId: bot.botId,
+            displayName: bot.displayName,
+            instructions: bot.instructions,
+            configured: bot.configuration !== null,
+        };
+    };
+
+    readonly updateBot = async (
+        userId: string,
+        botId: string,
+        input: { readonly displayName: string; readonly instructions: string },
+        signal: AbortSignal,
+    ) => {
+        await this.readBot(userId, botId, signal);
+        if (!(await this.#managedBots.updateBot(userId, botId, input, Date.now(), signal))) {
+            throw new ManagementError("BOT_NOT_FOUND", "Bot is unavailable.", 404);
+        }
+        this.#logger.info({ event: "user-bot-updated", userId, botId }, "Bot audit event");
+        return await this.readBot(userId, botId, signal);
     };
 
     readonly readProject = async (userId: string, signal: AbortSignal) => {

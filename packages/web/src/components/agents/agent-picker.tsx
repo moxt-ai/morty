@@ -1,10 +1,11 @@
-import { MobiusApiError, type MobiusBot } from "@moxt-ai/mobius-sdk";
 import { Check, ChevronDown, LoaderCircle, LockKeyhole, RefreshCw } from "lucide-react";
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { AgentProductIcon } from "@/components/agents/agent-product-icon";
 import { BotAvatar } from "@/components/bots/bot-page-header";
 import { useConversationTargets } from "@/components/chat/conversation-target-provider";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { ChatBot } from "@/services/bots/bot-api";
 import { selectActiveConversation, useChatStore } from "@/view-models/chat-store";
 
 abstract class ConversationTargetTab {}
@@ -35,23 +36,11 @@ class FailedBotConversationLaunchState extends BotConversationLaunchState {
     }
 }
 
-function botStatusLabel(bot: MobiusBot): string {
-    if (bot.state.kind === "active") {
-        return "Active";
-    }
-    if (bot.state.kind === "draft") {
-        return "Draft";
-    }
-    if (bot.state.kind === "suspended") {
-        return "Suspended";
-    }
-    return "Archived";
+function botStatusLabel(_bot: ChatBot): string {
+    return "Chat Bot";
 }
 
 function botLaunchFailure(error: unknown): FailedBotConversationLaunchState {
-    if (error instanceof MobiusApiError) {
-        return new FailedBotConversationLaunchState(`${error.code}: ${error.message}`);
-    }
     if (error instanceof Error) {
         return new FailedBotConversationLaunchState(error.message);
     }
@@ -140,8 +129,8 @@ export function AgentPicker() {
         target?.focus({ preventScroll: true });
     };
 
-    const launchBot = async (bot: MobiusBot): Promise<void> => {
-        if (bot.state.kind !== "active" || launch instanceof LaunchingBotConversationState) {
+    const launchBot = async (bot: ChatBot): Promise<void> => {
+        if (launch instanceof LaunchingBotConversationState) {
             return;
         }
         setLaunch(new LaunchingBotConversationState(bot.botId));
@@ -173,7 +162,7 @@ export function AgentPicker() {
                     <LockKeyhole aria-hidden="true" className="size-3.5 shrink-0 text-copy-tertiary" />
                 </span>
             ) : (
-                <button
+                <Button
                     aria-controls={pickerId}
                     aria-expanded={open}
                     aria-haspopup="dialog"
@@ -206,7 +195,7 @@ export function AgentPicker() {
                             open && "rotate-180",
                         )}
                     />
-                </button>
+                </Button>
             )}
 
             {open && !locked && (
@@ -221,7 +210,7 @@ export function AgentPicker() {
                         className="grid grid-cols-2 gap-1 border-b-[0.5px] border-black/8 bg-surface-subtle p-1.5"
                         role="tablist"
                     >
-                        <button
+                        <Button
                             aria-controls={localAgentsPanelId}
                             aria-selected={selectedTab instanceof LocalAgentsTargetTab}
                             className={cn(
@@ -238,8 +227,8 @@ export function AgentPicker() {
                             type="button"
                         >
                             Local Agents
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             aria-controls={botsPanelId}
                             aria-selected={selectedTab instanceof BotsTargetTab}
                             className={cn(
@@ -258,7 +247,7 @@ export function AgentPicker() {
                             type="button"
                         >
                             Bots
-                        </button>
+                        </Button>
                     </div>
 
                     <div
@@ -269,7 +258,7 @@ export function AgentPicker() {
                         role="tabpanel"
                     >
                         {agents.map((agent) => (
-                            <button
+                            <Button
                                 aria-current={agent.id === conversation.agentId ? "true" : undefined}
                                 className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-xs outline-none transition-colors duration-150 motion-reduce:transition-none hover:bg-black/5 focus-visible:ring-2 focus-visible:ring-ring/70"
                                 key={agent.id}
@@ -286,7 +275,7 @@ export function AgentPicker() {
                                 {agent.id === conversation.agentId && (
                                     <Check aria-hidden="true" className="size-3.5 shrink-0 text-success" />
                                 )}
-                            </button>
+                            </Button>
                         ))}
                     </div>
 
@@ -316,13 +305,13 @@ export function AgentPicker() {
                                 <p className="text-xs leading-5 text-[#9b2c32]" role="alert">
                                     {botDirectory.message}
                                 </p>
-                                <button
+                                <Button
                                     className="mx-auto mt-2 inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-xs font-semibold text-foreground outline-none hover:bg-black/5 focus-visible:ring-2 focus-visible:ring-ring/70"
                                     onClick={() => void refreshBots()}
                                     type="button"
                                 >
                                     <RefreshCw aria-hidden="true" className="size-3.5" /> Retry
-                                </button>
+                                </Button>
                             </div>
                         )}
                         {botDirectory.kind === "ready" && listedBots.length === 0 && (
@@ -332,12 +321,12 @@ export function AgentPicker() {
                         )}
                         {botDirectory.kind === "ready" &&
                             listedBots.map((bot) => {
-                                const active = bot.state.kind === "active";
+                                const active = true;
                                 const launching =
                                     launch instanceof LaunchingBotConversationState && launch.botId === bot.botId;
                                 const status = botStatusLabel(bot);
                                 return (
-                                    <button
+                                    <Button
                                         aria-busy={launching}
                                         aria-label={`${bot.displayName}, ${status}`}
                                         className="flex min-h-14 w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left outline-none transition-colors duration-150 motion-reduce:transition-none hover:bg-black/5 focus-visible:ring-2 focus-visible:ring-ring/70 disabled:cursor-not-allowed disabled:opacity-55"
@@ -367,7 +356,7 @@ export function AgentPicker() {
                                                 {status}
                                             </span>
                                         )}
-                                    </button>
+                                    </Button>
                                 );
                             })}
                         {launch instanceof FailedBotConversationLaunchState && (

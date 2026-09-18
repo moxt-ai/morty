@@ -30,7 +30,7 @@ import { PairingPage } from "@/components/pairing/pairing-page";
 import { RuntimeManagementPage } from "@/components/pairing/runtime-management-page";
 import { Button } from "@/components/ui/button";
 import {
-    botConversationRoutePath,
+    botConversationsRoutePath,
     channelRoutePath,
     sessionRoutePath,
     sessionSettingsRoutePath,
@@ -380,13 +380,13 @@ function ConversationRoutePage() {
     const context = useOutletContext<ChatProps>();
     const navigate = useNavigate();
     const openBotConversation = useCallback(
-        (botId: string, conversationId: string): void => {
-            void navigate(botConversationRoutePath(context.channelId, botId, conversationId));
+        (botId: string): void => {
+            void navigate(botConversationsRoutePath(context.channelId, botId));
         },
         [context.channelId, navigate],
     );
     return (
-        <ConversationTargetProvider connection={context.connection} onOpenBotConversation={openBotConversation}>
+        <ConversationTargetProvider onOpenBotConversation={openBotConversation}>
             <Chat {...context} />
         </ConversationTargetProvider>
     );

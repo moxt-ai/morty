@@ -41,7 +41,7 @@ describe("Slack management journeys", () => {
         expect(bots.status).toBe(200);
         expect(await bots.json()).toMatchObject({
             bots: expect.arrayContaining([
-                { id: "bot-1", name: "Test", binding: { kind: "bound", botId: "mobius-bot-1" } },
+                { id: "bot-1", name: "Test", binding: { kind: "bound", botId: "chat-bot-1" } },
             ]),
         });
         const start = await app.request("/mobius-slack/api/slack/oauth/url?slackBotId=bot-1", { headers });
@@ -56,21 +56,21 @@ describe("Slack management journeys", () => {
         const status = await app.request("/mobius-slack/api/slack/status?slackBotId=bot-1", { headers });
         expect(status.status).toBe(200);
     });
-    it("Given an existing Slack bot, When an invalid connection grant is supplied, Then the binding request is rejected", async () => {
+    it("Given an existing Slack app, When an unknown Chat Bot is selected, Then the binding request is rejected", async () => {
         const app = await createTestApplication();
         const response = await app.request("/mobius-slack/api/slack/bots/bot-1/binding", {
             method: "PUT",
             headers: { ...(await authorization(app)), "Content-Type": "application/json" },
-            body: JSON.stringify({ botId: "bot-1", ownerCredential: "s".repeat(32) }),
+            body: JSON.stringify({ botId: "unknown-chat-bot" }),
         });
-        expect(response.status).toBe(502);
+        expect(response.status).toBe(400);
     });
     it("Given an authenticated user, When a Slack API body is not JSON media, Then the request is rejected", async () => {
         const app = await createTestApplication();
         const response = await app.request("/mobius-slack/api/slack/bots/bot-1/binding", {
             method: "PUT",
             headers: { ...(await authorization(app)), "content-type": "text/plain" },
-            body: JSON.stringify({ botId: "bot-1", ownerCredential: "s".repeat(32) }),
+            body: JSON.stringify({ botId: "bot-1" }),
         });
         expect(response.status).toBe(400);
         expect(await response.json()).toEqual({
@@ -82,7 +82,7 @@ describe("Slack management journeys", () => {
         const response = await app.request("/mobius-slack/api/slack/bots", { headers: await authorization(app) });
         expect(response.status).toBe(200);
         expect(await response.json()).toEqual({
-            bots: [{ id: "bot-1", name: "Test", binding: { kind: "bound", botId: "mobius-bot-1" } }],
+            bots: [{ id: "bot-1", name: "Test", binding: { kind: "bound", botId: "chat-bot-1" } }],
         });
     });
     it("Given a signed-in user, When they register and disconnect a bot's Slack app, Then both operations succeed", async () => {

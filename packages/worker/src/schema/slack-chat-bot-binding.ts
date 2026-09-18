@@ -1,0 +1,20 @@
+import { integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+export const slackChatBotBinding = sqliteTable(
+    "slack_chat_bot_binding",
+    {
+        tenantId: text("tenant_id").notNull(),
+        slackBotId: text("slack_bot_id").notNull(),
+        botId: text("bot_id").notNull(),
+        connectionId: text("connection_id").notNull(),
+        projectId: text("project_id"),
+        bindingId: text("binding_id"),
+        runtimeId: text("runtime_id"),
+        agentRef: text("agent_ref"),
+        workspaceRef: text("workspace_ref"),
+        agentConfigRevision: integer("agent_config_revision"),
+        instructions: text("instructions").notNull().default(""),
+        legacyMigrationPending: integer("legacy_migration_pending", { mode: "boolean" }).notNull().default(true),
+    },
+    (table) => [primaryKey({ columns: [table.tenantId, table.slackBotId] })],
+);

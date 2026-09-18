@@ -1,9 +1,9 @@
 import type { BotTriggerLimiter } from "../../../gateway/bot-trigger-limiter";
 import type { ClerkGateway } from "../../../gateway/clerk-gateway.ts";
 import type { IdentityGateway } from "../../../gateway/identity-gateway";
-import type { MobiusGateway } from "../../../gateway/mobius-gateway";
 import type { SlackWebApi } from "../../../gateway/slack-web-gateway";
 import type { AuthenticationConfiguration } from "../../management/storage/authentication-configuration.ts";
+import type { SlackPlatformGateway } from "../entity/slack-platform-gateway.ts";
 import type { DatabaseResolver } from "../infra/database-resolver";
 import type { SlackQueue } from "../infra/slack-queue";
 import type { SlackLogger } from "../infra/util/logger";
@@ -18,7 +18,7 @@ export interface HumanIdentityResolver {
 
 interface SlackGateways {
     readonly clerk: ClerkGateway;
-    readonly mobius: MobiusGateway;
+    readonly platformProjects: SlackPlatformGateway;
     readonly identityGateway: IdentityGateway;
     readonly humanIdentity: HumanIdentityResolver;
     readonly slackWebApi: SlackWebApi;

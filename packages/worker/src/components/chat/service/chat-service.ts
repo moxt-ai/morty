@@ -4,7 +4,6 @@ import { PlatformProjectError } from "../../management/entity/platform-project.t
 import type { IdentityStorage } from "../../management/storage/identity-storage.ts";
 import type { ManagedBotStorage } from "../../management/storage/managed-bot-storage.ts";
 import type { ManagedSessionStorage } from "../storage/managed-session-storage.ts";
-import type { MobiusAppService } from "./mobius-app-service.ts";
 
 interface AuditLogger {
     readonly info: (value: Readonly<Record<string, unknown>>, message: string) => void;
@@ -31,14 +30,23 @@ type NativeEntryInput = {
     readonly additionalDirectoryIds: readonly string[];
     readonly discoveryId: string;
 };
-type OpenChatInput = Parameters<PlatformProjectGateway["openChat"]>[4] & { readonly title?: string };
-type ConfigureBotInput = Parameters<PlatformProjectGateway["configureBot"]>[3];
+type OpenChatInput = Parameters<PlatformProjectGateway["openChatSession"]>[2] & { readonly title?: string };
+type ConfigureBotInput = {
+    readonly runtimeId: string;
+    readonly agentRef: string;
+    readonly workspaceRef: string;
+    readonly agentConfigRevision: number;
+};
+
+async function chatSessionId(botId: string, conversationKey: string): Promise<string> {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${botId}\u0000${conversationKey}`));
+    return `chat_${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
 
 export class ChatService {
     readonly #chatSessions: ManagedSessionStorage;
     readonly #identities: IdentityStorage;
     readonly #managedBots: ManagedBotStorage;
-    readonly #mobiusApp: MobiusAppService;
     readonly #platform: PlatformProjectGateway;
     readonly #logger: AuditLogger;
 
@@ -49,13 +57,11 @@ export class ChatService {
             readonly identities: IdentityStorage;
             readonly managedBots: ManagedBotStorage;
         };
-        readonly services: { readonly mobiusApp: MobiusAppService };
         readonly logger: AuditLogger;
     }) {
         this.#chatSessions = cx.storages.chatSessions;
         this.#identities = cx.storages.identities;
         this.#managedBots = cx.storages.managedBots;
-        this.#mobiusApp = cx.services.mobiusApp;
         this.#platform = cx.gateways.platformProjects;
         this.#logger = cx.logger;
     }
@@ -82,15 +88,67 @@ export class ChatService {
         return { userId, projectId, botId, signal };
     };
 
-    readonly workspace = async (scope: ChatScope) =>
-        await this.#platform.chatWorkspace(scope.projectId, scope.botId, scope.userId, scope.signal);
+    readonly workspace = async (scope: ChatScope) => await this.#localWorkspace(scope);
+
+    readonly #bot = async (scope: ChatScope) => {
+        let bot = await this.#managedBots.readBot(scope.userId, scope.botId, scope.signal);
+        if (bot === null) {
+            throw new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);
+        }
+        if (bot.legacyMigrationPending) {
+            const migrated = await this.#platform.migrateLegacyBot(
+                scope.projectId,
+                scope.botId,
+                scope.userId,
+                scope.signal,
+            );
+            await this.#managedBots.completeLegacyMigration(
+                scope.userId,
+                scope.botId,
+                migrated,
+                Date.now(),
+                scope.signal,
+            );
+            bot = await this.#managedBots.readBot(scope.userId, scope.botId, scope.signal);
+            if (bot === null) {
+                throw new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);
+            }
+        }
+        return bot;
+    };
+
+    readonly #localWorkspace = async (scope: ChatScope) => {
+        const bot = await this.#bot(scope);
+        return {
+            status: bot.configuration === null ? "draft" : "active",
+            selected:
+                bot.configuration === null
+                    ? null
+                    : {
+                          runtimeId: bot.configuration.runtimeId,
+                          agentRef: bot.configuration.agentRef,
+                          workspaceRef: bot.configuration.workspaceRef,
+                          agentConfigRevision: bot.configuration.agentConfigRevision,
+                      },
+            agents: await this.#platform.chatAgents(scope.projectId, scope.signal),
+        };
+    };
 
     readonly managedSessions = async (scope: ChatScope) => ({
         sessions: await this.#chatSessions.list(scope.projectId, scope.userId, scope.botId, scope.signal),
     });
 
     readonly agentSettings = async (scope: ChatScope) => {
-        const settings = await this.#platform.agentSettings(scope.projectId, scope.botId, scope.userId, scope.signal);
+        const bot = await this.#bot(scope);
+        if (bot?.configuration === null || bot === null) {
+            throw new PlatformProjectError("AGENT_REQUIRED", "Choose a connected harness.", 409);
+        }
+        const discovered = await this.#platform.discoverChatAgentSettings(
+            scope.projectId,
+            bot.configuration,
+            scope.signal,
+        );
+        const settings = { bindingId: bot.configuration.bindingId, settings: discovered };
         this.#logger.info(
             {
                 event: "chat-agent-settings-discovered",
@@ -104,13 +162,31 @@ export class ChatService {
     };
 
     readonly openChat = async (scope: ChatScope, input: OpenChatInput, timing: OperationTiming) => {
-        const access = await this.#platform.openChat(
-            scope.projectId,
-            scope.botId,
-            scope.userId,
-            scope.signal,
-            input,
-            timing,
+        const bot = await this.#bot(scope);
+        if (bot?.configuration === null || bot === null) {
+            throw new PlatformProjectError("AGENT_REQUIRED", "Connect your local agent to start chatting.", 409);
+        }
+        const configuration = bot.configuration;
+        if (configuration === null) {
+            throw new PlatformProjectError("AGENT_REQUIRED", "Connect your local agent to start chatting.", 409);
+        }
+        if ("conversationKey" in input && input.bindingId !== configuration.bindingId) {
+            throw new PlatformProjectError(
+                "AGENT_CHANGED",
+                "Your selected harness changed. Reload its settings before sending.",
+                409,
+            );
+        }
+        const access = await timing.measure("session", "Open Chat Session", async () =>
+            this.#platform.openChatSession(
+                scope.projectId,
+                configuration,
+                "conversationKey" in input
+                    ? { ...input, conversationKey: await chatSessionId(scope.botId, input.conversationKey) }
+                    : input,
+                input.title ?? "New chat",
+                scope.signal,
+            ),
         );
         if ("conversationKey" in input) {
             await timing.measure("session-save", "Save managed Chat session", async () =>
@@ -153,6 +229,42 @@ export class ChatService {
 
     readonly managedSession = async (scope: ChatScope, sessionId: string) =>
         await this.#chatSessions.readLocalSession(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal);
+
+    readonly submitTurn = async (
+        scope: ChatScope,
+        input: Parameters<PlatformProjectGateway["submitChatTurn"]>[2] & { readonly sessionId: string },
+    ) => {
+        const { sessionId, ...request } = input;
+        const bot = await this.#bot(scope);
+        if (
+            !(await this.#chatSessions.ownsSession(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal))
+        ) {
+            throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
+        }
+        const instructionUri = "mobius-chat://bot/instructions";
+        return await this.#platform.submitChatTurn(
+            scope.projectId,
+            sessionId,
+            {
+                ...request,
+                resources: [
+                    ...request.resources.filter((resource) => resource.uri !== instructionUri),
+                    ...(bot.instructions.trim().length === 0
+                        ? []
+                        : [
+                              {
+                                  type: "embedded" as const,
+                                  uri: instructionUri,
+                                  name: "Bot instructions",
+                                  mimeType: "text/plain",
+                                  text: bot.instructions,
+                              },
+                          ]),
+                ],
+            },
+            scope.signal,
+        );
+    };
 
     readonly nativeSessions = async (scope: ChatScope, runtimeId: string, input: NativeListInput) => {
         const result = await this.#platform.nativeSessions(scope.projectId, runtimeId, input, scope.signal);
@@ -362,55 +474,35 @@ export class ChatService {
     };
 
     readonly configureBot = async (scope: ChatScope, input: ConfigureBotInput) => {
-        const result = await this.#platform.configureBot(
-            scope.projectId,
-            scope.botId,
+        const agents = await this.#platform.chatAgents(scope.projectId, scope.signal);
+        if (
+            !agents.some(
+                (agent) => agent.runtimeId === input.runtimeId && agent.agentRef === input.agentRef && agent.online,
+            )
+        ) {
+            throw new PlatformProjectError(
+                "AGENT_UNAVAILABLE",
+                "Choose an available agent on your connected Runtime.",
+                409,
+            );
+        }
+        await this.#platform.discoverChatAgentSettings(scope.projectId, input, scope.signal);
+        const current = await this.#bot(scope);
+        const bindingId = current.configuration?.bindingId ?? `binding_${crypto.randomUUID()}`;
+        const saved = await this.#managedBots.configureBot(
             scope.userId,
-            input,
+            scope.botId,
+            { ...input, bindingId },
+            Date.now(),
             scope.signal,
         );
+        if (!saved) {
+            throw new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);
+        }
         this.#logger.info(
             { event: "bot-setup-requested", userId: scope.userId, projectId: scope.projectId, botId: scope.botId },
             "Bot audit event",
         );
-        return result;
+        return { status: "active" };
     };
-
-    readonly issueAccessToken = async (userId: string, botId: string, signal: AbortSignal) => {
-        if (!(await this.#managedBots.ownsBot(userId, botId, signal))) {
-            throw new PlatformProjectError("NOT_FOUND", "Not found.", 404);
-        }
-        const accessToken = await this.#mobiusApp.issueAccessToken(botId, null, signal);
-        try {
-            await this.#managedBots.saveAccessToken(userId, botId, accessToken.accessTokenId, Date.now(), signal);
-        } catch (cause) {
-            await this.#mobiusApp.revokeAccessToken(accessToken.accessTokenId, AbortSignal.timeout(10_000));
-            signal.throwIfAborted();
-            throw cause;
-        }
-        return accessToken;
-    };
-
-    readonly revokeAccessToken = async (userId: string, accessTokenId: string, signal: AbortSignal) => {
-        if (!(await this.#managedBots.ownsAccessToken(userId, accessTokenId, signal))) {
-            throw new PlatformProjectError("NOT_FOUND", "Not found.", 404);
-        }
-        await this.#mobiusApp.revokeAccessToken(accessTokenId, signal);
-        await this.#managedBots.deleteAccessToken(userId, accessTokenId, signal);
-    };
-
-    readonly listSessions = async (userId: string, signal: AbortSignal) =>
-        await this.#managedBots.listSessions(userId, signal);
-
-    readonly saveSession = async (
-        userId: string,
-        input: { readonly botId: string; readonly sessionId: string; readonly title: string },
-        signal: AbortSignal,
-    ) => await this.#managedBots.saveSession(userId, input, Date.now(), signal);
-
-    readonly renameSession = async (userId: string, sessionId: string, title: string, signal: AbortSignal) =>
-        await this.#managedBots.renameSession(userId, sessionId, title, Date.now(), signal);
-
-    readonly deleteSession = async (userId: string, sessionId: string, signal: AbortSignal) =>
-        await this.#managedBots.deleteSession(userId, sessionId, signal);
 }
