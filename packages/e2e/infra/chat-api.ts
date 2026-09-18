@@ -1,4 +1,3 @@
-import type { Response as BrowserResponse } from "playwright-core";
 import { MobiusClient } from "../../../third-party/mobius/packages/mobius-sdk/src/browser.ts";
 import type { E2EHarness } from "./harness.ts";
 
@@ -77,16 +76,23 @@ export class ChatApi {
         this.signal = signal;
     }
 
-    async readBrowserIdentity(response: BrowserResponse) {
-        const raw = await response.text();
-        if (!response.ok()) {
-            throw new Error(`Anonymous identity creation failed (${response.status()}): ${raw.slice(0, 1_000)}`);
+    async useBrowserIdentity(value: unknown) {
+        const identity = object(value, "anonymous identity");
+        const projectId = text(identity.projectId, "projectId");
+        const token = text(identity.token, "anonymous token");
+        const directory = await jsonRequest(this.origin, "/mobius-cloud/api/management/bots", {
+            project: projectId,
+            token,
+            signal: this.signal,
+        });
+        if (!Array.isArray(directory.bots) || directory.bots.length !== 1) {
+            throw new Error(`Expected exactly one browser bot, received ${String(directory.bots)}`);
         }
-        const value = object(JSON.parse(raw), "anonymous identity");
+        const bot = object(directory.bots[0], "browser bot");
         this.identity = {
-            botId: text(object(value.bot, "bot").botId, "botId"),
-            projectId: text(value.projectId, "projectId"),
-            token: text(value.token, "anonymous token"),
+            botId: text(bot.botId, "botId"),
+            projectId,
+            token,
         };
         return this.identity;
     }

@@ -7,7 +7,14 @@
         "binding": "ASSETS",
         "directory": "../../../dist/client",
         "not_found_handling": "single-page-application",
-        "run_worker_first": ["/mobius-cloud/api/*", "/mobius-slack/api/*", "/pair.md", "/setup.md", "/setup.mjs"]
+        "run_worker_first": [
+            "/mobius-cloud/api/*",
+            "/mobius-cloud/ws",
+            "/mobius-slack/api/*",
+            "/pair.md",
+            "/setup.md",
+            "/setup.mjs"
+        ]
     },
     "r2_buckets": [
         { "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "mobius-chat-local-e2e-attachments" },
