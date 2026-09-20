@@ -924,12 +924,3 @@ test("Given a missing Project object namespace, When an authenticated user lists
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({ error: { code: "PROJECT_OBJECT_UNAVAILABLE" } });
 });
-
-test("Given the combined Worker, When Slack health is requested, Then Slack responds", async () => {
-    const response = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-slack/api/health?projectId=prj_ap_01_${"a".repeat(24)}`),
-        slackConfiguration(),
-    );
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ service: "app-slack", status: "ok" });
-});

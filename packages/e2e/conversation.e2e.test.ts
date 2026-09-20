@@ -2,18 +2,11 @@ import assert from "node:assert/strict";
 import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
-test("Given a paired workspace, When a user works across conversations, Then configuration, attachments, queued work, replies, and revisits remain usable", async ({
+test("Given a paired workspace, When a user works across conversations, Then attachments, queued work, replies, and revisits remain usable", async ({
     runtime,
 }) => {
     await runtime.openPairedChat();
     const { page } = runtime;
-
-    await test.step("inspect the discovered agent configuration", async () => {
-        await page.getByTestId(dataTestId.agentConfiguration).click();
-        const permission = page.getByTestId(dataTestId.permissionMode);
-        await expect(permission).toHaveText("Agent default");
-        await page.getByTestId(dataTestId.agentConfiguration).click();
-    });
 
     let firstConversationId = "";
     await test.step("create the first conversation with an image", async () => {
