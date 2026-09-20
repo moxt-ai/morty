@@ -21,7 +21,7 @@ function createDatabase(): InMemoryD1Database {
     return database;
 }
 const baseConfiguration = { CLERK_PUBLISHABLE_KEY: issuer.publishableKey, CLERK_JWT_KEY: issuer.publicKey, APP_ORIGIN };
-function slackConfiguration(database = createDatabase()) {
+function slackConfiguration(database = createDatabase(), platformBindings = platform.bindings) {
     const attachments = { get: () => Promise.resolve(null), put: () => Promise.resolve() };
     const base = {
         ...baseConfiguration,
@@ -31,7 +31,7 @@ function slackConfiguration(database = createDatabase()) {
         CHAT_ATTACHMENTS_WNAM: attachments,
         AUTHENTICATION_BASE_URL: "https://identity.test",
         EVENTS: { send: () => Promise.resolve() },
-        ...platform.bindings,
+        ...platformBindings,
         SLACK_MOBIUS_AUTH_TOKEN: "service-token",
         SLACK_OAUTH_STATE_SIGNING_KEY: "state-signing-key",
         SLACK_SERVER_BASE_URL: APP_ORIGIN,
@@ -723,6 +723,166 @@ test.each([
         }
     },
 );
+
+test("Given a saved Runtime for the same Chat Bot, When the user pairs again, Then setup reconnects that Runtime identity", async () => {
+    const pairedPlatform = await platformPeer({ agentsOnline: true, pairingsPaired: true });
+    const database = createDatabase();
+    const environment = slackConfiguration(database, pairedPlatform.bindings);
+    const identity = v.parse(
+        v.object({ token: v.string(), userId: v.string(), projectId: v.string() }),
+        await (
+            await worker.fetch(
+                new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/anonymous-users`, { method: "POST" }),
+                environment,
+            )
+        ).json(),
+    );
+    const { bots } = v.parse(
+        v.object({ bots: v.array(v.object({ botId: v.string() })) }),
+        await (
+            await worker.fetch(
+                new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/bots`, {
+                    headers: { authorization: `Bearer ${identity.token}` },
+                }),
+                environment,
+            )
+        ).json(),
+    );
+    const botId = v.parse(v.string(), bots[0]?.botId);
+    const pairing = v.parse(
+        v.object({
+            pairingId: v.string(),
+            projectId: v.string(),
+            runtimeId: v.string(),
+            channelId: v.string(),
+            pairingCode: v.string(),
+            relayUrl: v.string(),
+        }),
+        await (
+            await worker.fetch(
+                new Request(
+                    `${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/runtime-pairings`,
+                    {
+                        method: "POST",
+                        headers: {
+                            authorization: `Bearer ${identity.token}`,
+                            "content-type": "application/json",
+                        },
+                        body: JSON.stringify({ idempotencyKey: "saved-runtime" }),
+                    },
+                ),
+                environment,
+            )
+        ).json(),
+    );
+    const issued = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/identity/pairings`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+            body: JSON.stringify({ botId }),
+        }),
+        environment,
+    );
+    const ticket = new URL(v.parse(v.object({ url: v.string() }), await issued.json()).url).searchParams.get("token");
+    const server = createServer(async (incoming, outgoing) => {
+        let body = "";
+        for await (const chunk of incoming) {
+            body += chunk;
+        }
+        const headers = new Headers();
+        for (const [key, value] of Object.entries(incoming.headers)) {
+            if (typeof value === "string") {
+                headers.set(key, value);
+            }
+        }
+        const response = await worker.fetch(
+            new Request(new URL(incoming.url ?? "/", APP_ORIGIN), {
+                method: incoming.method ?? "GET",
+                headers,
+                ...(body === "" ? {} : { body }),
+            }),
+            environment,
+        );
+        outgoing.writeHead(response.status, Object.fromEntries(response.headers));
+        outgoing.end(await response.text());
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (address === null || typeof address === "string" || ticket === null) {
+        throw new Error("Setup fixture unavailable");
+    }
+    const base = `http://127.0.0.1:${address.port}`;
+    const directory = await mkdtemp(join(tmpdir(), "mobius-setup-reconnect-"));
+    const executableDirectory = join(directory, "bin");
+    await mkdir(executableDirectory, { mode: 0o700 });
+    await writeFile(join(executableDirectory, "npx"), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+    await mkdir(join(directory, "mobius-chat"), { mode: 0o700 });
+    await writeFile(
+        join(directory, "mobius-chat", "config.json"),
+        JSON.stringify({
+            base_url: base,
+            user_token: identity.token,
+            user_id: identity.userId,
+            bot_id: botId,
+            project_id: identity.projectId,
+            pairing_key: "saved-runtime",
+            pairing,
+            agent_ref: "agent-one",
+            agent_config_revision: 1,
+        }),
+        { mode: 0o600 },
+    );
+    try {
+        const result = await new Promise<{ readonly code: number | null; readonly output: string }>(
+            (resolve, reject) => {
+                const child = spawn(
+                    process.execPath,
+                    [
+                        fileURLToPath(new URL("../../setup/src/cli.ts", import.meta.url)),
+                        "pair",
+                        "--base-url",
+                        base,
+                        "--harness",
+                        "agent-one",
+                        `--token=${ticket}`,
+                    ],
+                    {
+                        env: {
+                            ...process.env,
+                            DOCUMENT_DIR: directory,
+                            PATH: `${executableDirectory}:${process.env["PATH"] ?? ""}`,
+                        },
+                        signal: AbortSignal.timeout(15000),
+                        stdio: ["pipe", "pipe", "pipe"],
+                    },
+                );
+                let output = "";
+                child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+                    output += chunk;
+                });
+                child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
+                    output += chunk;
+                });
+                child.once("error", reject);
+                child.once("close", (code) => resolve({ code, output }));
+                child.stdin.end();
+            },
+        );
+        expect(result.code, result.output).toBe(0);
+        expect(result.output).toContain(`"status":"runtime_reused"`);
+        expect(result.output).toContain(`"runtimeId":"${pairing.runtimeId}"`);
+        expect(pairedPlatform.createdPairings()).toBe(1);
+        expect(JSON.parse(await readFile(join(directory, "mobius-chat", "config.json"), "utf8"))).toMatchObject({
+            pairing_key: "saved-runtime",
+            pairing: { runtimeId: pairing.runtimeId, channelId: pairing.channelId },
+        });
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+        server.closeAllConnections();
+        await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+        await pairedPlatform.close();
+    }
+});
 
 test("Given an expired anonymous transfer, When a device redeems it, Then no credential is issued", async () => {
     const database = createDatabase();

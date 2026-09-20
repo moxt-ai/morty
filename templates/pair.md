@@ -8,10 +8,12 @@ description: Connect this agent to the existing user and Bot from a Mobius Chat 
 The user supplied `follow <origin>/pair.md?token=...`. That token is a one-use
 ticket, valid for **10 minutes**, for their existing user, Bot, and workspace.
 Fetching this document does not consume it. Do not create another user or Bot.
-Pairing takes its identity and Bot only from the supplied ticket. It does not load
-the saved local configuration. The previous file is backed up, then the redeemed
-identity and new Runtime connection state are saved to `config.json`, replacing the
-previous configuration. Do not ask for an additional replacement confirmation.
+Pairing takes its identity and Bot only from the supplied ticket. After redemption,
+it may reconnect saved Runtime state only when that state belongs to the exact same
+Chat origin, user, workspace, and Bot and Platform confirms that the pairing remains
+active. Otherwise it creates a fresh Runtime pairing. The previous file is backed up,
+then the verified identity and Runtime connection state are saved to `config.json`.
+Do not ask for an additional replacement confirmation.
 
 ## Run
 
@@ -38,8 +40,9 @@ this conversation stops the Runtime it started.
 node "$SCRIPT_DIR/setup.mjs" pair --base-url "$BASE_URL" --token="$TOKEN" --harness "$HARNESS"
 ```
 
-This single command exchanges the ticket, saves private credentials, launches the
-Runtime attached to this agent session, waits for the requested harness, requests
+This single command exchanges the ticket, reconnects a matching saved Runtime or
+creates a fresh pairing, saves private credentials, launches the Runtime attached to
+this agent session, waits for the requested harness, requests
 its Bot binding, and checks readiness. It does not stop any other local Mobius
 Runtime process. The Runtime exits when your agent session ends.
 

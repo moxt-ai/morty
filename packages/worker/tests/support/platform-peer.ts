@@ -74,12 +74,14 @@ function readySession(sessionId: string, currentValue = "model-one") {
 // suitable for deterministic tests. Projects and Sessions are retained by this peer.
 export async function platformPeer({
     pairingLifetimeMilliseconds = 300000,
+    pairingsPaired = false,
     redirectPlacement = false,
     agentsOnline = false,
     settingsAvailable = true,
     settingsFailure = "api-error",
 }: {
     readonly pairingLifetimeMilliseconds?: number;
+    readonly pairingsPaired?: boolean;
     readonly redirectPlacement?: boolean;
     readonly agentsOnline?: boolean;
     readonly settingsAvailable?: boolean;
@@ -300,15 +302,32 @@ export async function platformPeer({
                 (value) => value.projectId === projectId && value.pairingId === pairingPath[2],
             );
             if (pairing !== undefined) {
-                response
-                    .writeHead(200)
-                    .end(
-                        JSON.stringify(
-                            Date.parse(pairing.expiresAt) <= Date.now()
-                                ? { status: "expired" }
-                                : { status: "pending", expiresAt: pairing.expiresAt },
-                        ),
-                    );
+                response.writeHead(200).end(
+                    JSON.stringify(
+                        pairingsPaired
+                            ? {
+                                  status: "paired",
+                                  agents: [
+                                      {
+                                          id: "agent-one",
+                                          label: "Agent One",
+                                          agentPath: "/agents/agent-one",
+                                          agentVersion: "1",
+                                          capabilities: readySession("descriptor").capabilities,
+                                      },
+                                  ],
+                                  channelId: pairing.channelId,
+                                  installableAgents: [],
+                                  machineName: "Local machine",
+                                  projectId: pairing.projectId,
+                                  runtimeId: pairing.runtimeId,
+                                  workspaceName: "Workspace",
+                              }
+                            : Date.parse(pairing.expiresAt) <= Date.now()
+                              ? { status: "expired" }
+                              : { status: "pending", expiresAt: pairing.expiresAt },
+                    ),
+                );
                 return;
             }
         }
@@ -470,6 +489,7 @@ export async function platformPeer({
             MOBIUS_BASE_URL: `http://localhost:${address.port}`,
         },
         configuredSettings: () => [...configuredSettings],
+        createdPairings: () => pairings.size,
         submittedTurns: () => [...submittedTurns],
         close: async () => {
             server.closeAllConnections();

@@ -68,6 +68,7 @@ test("Given Mobius Chat pairing instructions, When a user reads what will be pai
     expect(response.status).toBe(200);
     const document = await response.text();
     expect(document).toContain("existing user, Bot, and workspace");
+    expect(document).toContain("reconnect saved Runtime state");
 });
 
 test("Given rendered pairing instructions at the edge, When users fetch different tickets, Then the CDN shares a token-free document cache", async () => {
