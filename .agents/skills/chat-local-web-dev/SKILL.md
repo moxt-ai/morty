@@ -27,10 +27,11 @@ Use the staging Platform endpoint documented by this checkout, currently
 Require an HTTP 200 response from `/mobius/api/dashboard/health` before starting
 Chat.
 
-Use an existing staging `MOBIUS_APP_ID` and `MOBIUS_APP_SECRET` from the local
-developer environment, preferring an owner-only, ignored `.dev.vars.staging`
-credential source over the general `.dev.vars`. Validate their presence without
-printing either value.
+Read the staging App credential from `MOBIUS_CHAT_LOCAL_APP_ID` and
+`MOBIUS_CHAT_LOCAL_APP_SECRET` in the process environment. Require both values
+to be non-empty and validate their presence without printing either value. Map
+them to the local Chat Worker's `MOBIUS_APP_ID` and `MOBIUS_APP_SECRET` bindings;
+do not fall back to credentials stored in `.dev.vars*`.
 Never provision a production App, copy deployed Worker secrets, or write secrets
 to command output. Treat `PLATFORM_APP_UNAUTHORIZED` as evidence that the local
 credential belongs to another Platform environment: stop the new local processes,
@@ -38,8 +39,9 @@ remove the private runtime snapshot, and report the missing staging credential
 instead of falling back to another Platform.
 
 Reuse existing owner-only `.dev.vars` values for Clerk and local-only Slack
-configuration, and take the App credential from `.dev.vars.staging` when present;
-do not trust stale `MOBIUS_BASE_URL` or `APP_ORIGIN` values in either file.
+configuration, and take the App credential only from the two process environment
+variables above; do not trust stale `MOBIUS_BASE_URL`, `MOBIUS_APP_ID`,
+`MOBIUS_APP_SECRET`, or `APP_ORIGIN` values in `.dev.vars*`.
 Ordinary shell variable overrides do not supersede `.dev.vars`
 bindings in Cloudflare's Vite plugin, and selecting `CLOUDFLARE_ENV=staging`
 filters out local-only bindings that are not declared in the deployed environment.
@@ -55,10 +57,10 @@ submodule before linking them; never upgrade. A linked root `node_modules` cause
 pnpm's task-state safety check to reject filtered scripts, so invoke the pinned
 Vite and Wrangler JavaScript entrypoints directly from the snapshot instead of
 running `pnpm` there. Create an owner-only `.dev.vars` only inside that snapshot by
-combining non-Platform local values with the preferred staging credential source,
-then replace `MOBIUS_BASE_URL` with the staging
-Platform origin and `APP_ORIGIN` with the selected Chat callback origin. Build,
-seed local R2, and start Vite from the snapshot without `CLOUDFLARE_ENV`.
+combining non-Platform local values with the staging App credential from the
+process environment, then replace `MOBIUS_BASE_URL` with the staging Platform
+origin and `APP_ORIGIN` with the selected Chat callback origin. Build, seed local
+R2, and start Vite from the snapshot without `CLOUDFLARE_ENV`.
 
 If the local Chat must receive an HTTPS callback, start or reuse a tunnel that
 targets the selected local Chat port and use that tunnel only as `APP_ORIGIN`;

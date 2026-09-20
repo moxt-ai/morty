@@ -1,17 +1,39 @@
 import { ChevronDown, Laptop, LoaderCircle, MessageSquare, RefreshCw, Share2, SquarePen } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Tooltip } from "radix-ui";
+import { type ReactNode, useEffect, useState } from "react";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
+import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
 import { createConversationDirectoryStore } from "../../view-models/chat/conversation-directory-store.ts";
 import { MachineSharing } from "./machine-sharing.tsx";
 import { NativeSessionDialog, type OpenMobiusSession } from "./native-session-dialog.tsx";
 
+function SidebarActionTooltip({ children, label }: { readonly children: ReactNode; readonly label: string }) {
+    return (
+        <Tooltip.Root>
+            <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
+            <Tooltip.Portal>
+                <Tooltip.Content
+                    className="z-[70] rounded-lg bg-foreground px-2.5 py-1.5 text-xs text-background shadow-lg"
+                    side="bottom"
+                    sideOffset={6}
+                >
+                    {label}
+                    <Tooltip.Arrow className="fill-foreground" />
+                </Tooltip.Content>
+            </Tooltip.Portal>
+        </Tooltip.Root>
+    );
+}
+
 export function ConversationSidebar({
     botId,
+    connectionStatus,
+    onConnectionStatusClick,
     requests,
     activeId,
     onOpen,
@@ -21,6 +43,8 @@ export function ConversationSidebar({
     activeSession,
 }: {
     readonly botId: string;
+    readonly connectionStatus: BotConnectionStatus;
+    readonly onConnectionStatusClick: () => void;
     readonly requests: Pick<BotChatApi, "workspace" | "nativeSessions" | "nativeSession" | "managedSessions">;
     readonly activeId: string;
     readonly onOpen: (session: ManagedChatSession) => void;
@@ -58,7 +82,7 @@ export function ConversationSidebar({
             aria-label="Workspace navigation"
             className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-b border-border/80 bg-sidebar px-3 py-3 sm:w-[280px] sm:border-r sm:border-b-0 sm:px-3.5 sm:py-4"
         >
-            <div className="mb-4 flex items-center gap-3 px-1.5 sm:mb-6">
+            <div className="mb-3 flex items-center gap-3 px-1.5">
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_4px_12px_rgba(34,123,78,0.18)]">
                     <MessageSquare className="size-[18px]" aria-hidden="true" />
                 </span>
@@ -67,22 +91,37 @@ export function ConversationSidebar({
                     <span className="block text-[11px] leading-4 text-muted-foreground">Local workspace</span>
                 </span>
             </div>
-            <Button
-                className="mb-2 min-h-10 justify-start rounded-xl shadow-[0_3px_10px_rgba(34,123,78,0.14)]"
-                onClick={onNewConversation}
-                data-testid={dataTestId.newConversation}
-            >
-                <SquarePen className="size-4" aria-hidden="true" />
-                New Conversation
-            </Button>
-            <Button
-                variant="ghost"
-                className="mb-4 min-h-10 justify-start rounded-xl px-3 text-copy-secondary hover:bg-white/70 sm:mb-6"
-                onClick={() => setDialog(true)}
-            >
-                <Laptop className="size-4" aria-hidden="true" />
-                Native Sessions
-            </Button>
+            {connectionStatus.kind === "connected" ? (
+                <div
+                    aria-live="polite"
+                    className="mb-4 flex items-center gap-1.5 px-1.5 text-[11px] leading-4 text-muted-foreground sm:mb-6"
+                    data-connection-status={connectionStatus.kind}
+                    data-testid={dataTestId.botConnectionStatus}
+                    role="status"
+                >
+                    <span aria-hidden="true" className="size-1.5 rounded-full bg-primary" />
+                    {connectionStatus.label}
+                </div>
+            ) : (
+                <button
+                    aria-label={`${connectionStatus.label}. Pair agent again`}
+                    className="mb-4 flex items-center gap-1.5 rounded px-1.5 text-[11px] leading-4 text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 sm:mb-6"
+                    data-connection-status={connectionStatus.kind}
+                    data-testid={dataTestId.botConnectionStatus}
+                    onClick={onConnectionStatusClick}
+                    type="button"
+                >
+                    <span
+                        aria-hidden="true"
+                        className={`size-1.5 rounded-full ${
+                            connectionStatus.kind === "connecting"
+                                ? "animate-pulse bg-amber-500 motion-reduce:animate-none"
+                                : "bg-muted-foreground/60"
+                        }`}
+                    />
+                    {connectionStatus.label}
+                </button>
+            )}
             <div className="mb-2 flex items-center justify-between px-1">
                 <h2 className="hidden text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground sm:block">
                     Conversations
@@ -97,17 +136,48 @@ export function ConversationSidebar({
                     Conversations
                     <ChevronDown className="size-4" />
                 </Button>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 rounded-lg"
-                    aria-label={refreshing ? "Refreshing conversations" : "Refresh conversations"}
-                    aria-busy={refreshing}
-                    disabled={refreshing}
-                    onClick={() => refresh((value) => value + 1)}
-                >
-                    <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin motion-reduce:animate-none" : ""}`} />
-                </Button>
+                <Tooltip.Provider delayDuration={150}>
+                    <div className="flex items-center gap-0.5">
+                        <SidebarActionTooltip label="New Conversation">
+                            <Button
+                                aria-label="New Conversation"
+                                className="size-8 rounded-lg"
+                                data-testid={dataTestId.newConversation}
+                                onClick={onNewConversation}
+                                size="icon"
+                                variant="ghost"
+                            >
+                                <SquarePen aria-hidden="true" className="size-3.5" />
+                            </Button>
+                        </SidebarActionTooltip>
+                        <SidebarActionTooltip label="Native Sessions">
+                            <Button
+                                aria-label="Native Sessions"
+                                className="size-8 rounded-lg"
+                                onClick={() => setDialog(true)}
+                                size="icon"
+                                variant="ghost"
+                            >
+                                <Laptop aria-hidden="true" className="size-3.5" />
+                            </Button>
+                        </SidebarActionTooltip>
+                        <SidebarActionTooltip label={refreshing ? "Refreshing conversations" : "Refresh conversations"}>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 rounded-lg"
+                                aria-label={refreshing ? "Refreshing conversations" : "Refresh conversations"}
+                                aria-busy={refreshing}
+                                disabled={refreshing}
+                                onClick={() => refresh((value) => value + 1)}
+                            >
+                                <RefreshCw
+                                    className={`size-3.5 ${refreshing ? "animate-spin motion-reduce:animate-none" : ""}`}
+                                />
+                            </Button>
+                        </SidebarActionTooltip>
+                    </div>
+                </Tooltip.Provider>
             </div>
             <div
                 id="chat-conversations"

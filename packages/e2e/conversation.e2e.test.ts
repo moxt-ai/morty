@@ -7,6 +7,7 @@ test("Given a paired workspace, When a user works across conversations, Then att
 }) => {
     await runtime.openPairedChat();
     const { page } = runtime;
+    await expect(page.getByTestId(dataTestId.botConnectionStatus)).toHaveText("Connected");
     const workingDirectory = await page.getByTestId(dataTestId.workingDirectory).textContent();
     assert.ok(workingDirectory);
 

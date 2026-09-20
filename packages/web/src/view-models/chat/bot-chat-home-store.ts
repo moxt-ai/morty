@@ -26,12 +26,30 @@ type Target =
       };
 
 type ActiveView = { readonly kind: "draft"; readonly bot: ManagedBot };
-type BotChatHomeView =
+export type BotChatHomeView =
     | { readonly kind: "loading" }
     | { readonly kind: "switching"; readonly view: ActiveView }
     | ActiveView
-    | { readonly kind: "setup"; readonly reason: SetupReason }
+    | { readonly kind: "setup"; readonly bot: ManagedBot; readonly reason: SetupReason }
     | { readonly kind: "failed"; readonly message: string };
+
+export type BotConnectionStatus =
+    | { readonly kind: "connecting"; readonly label: "Connecting" }
+    | { readonly kind: "connected"; readonly label: "Connected" }
+    | { readonly kind: "disconnected"; readonly label: "Disconnected" };
+
+export function botConnectionStatus(view: BotChatHomeView): BotConnectionStatus {
+    switch (view.kind) {
+        case "loading":
+        case "switching":
+            return { kind: "connecting", label: "Connecting" };
+        case "draft":
+            return { kind: "connected", label: "Connected" };
+        case "setup":
+        case "failed":
+            return { kind: "disconnected", label: "Disconnected" };
+    }
+}
 
 type SessionView =
     | { readonly kind: "conversation-access" }
@@ -165,13 +183,13 @@ export const createBotChatHomeStore = (
                           ? current.view
                           : { kind: "loading" },
             }));
-            let openedBotId: string | null = null;
+            let openedBot: ManagedBot | null = null;
             try {
                 const bot = (await requests.listBots(signal))[0];
                 if (bot === undefined) {
                     throw new Error("Your Bot is unavailable.");
                 }
-                openedBotId = bot.botId;
+                openedBot = bot;
                 const workspace = await requests.workspace(bot.botId, signal);
                 signal.throwIfAborted();
                 const currentTarget = get().target;
@@ -200,7 +218,7 @@ export const createBotChatHomeStore = (
                 }
                 const reason = currentTarget.kind === "draft" ? setupReason(workspace) : null;
                 if (reason !== null) {
-                    set({ view: { kind: "setup", reason } });
+                    set({ view: { kind: "setup", bot, reason } });
                     await requests.waitForWorkspaceChange(bot.botId, signal);
                     signal.throwIfAborted();
                     set((current) => ({ revision: current.revision + 1 }));
@@ -219,12 +237,14 @@ export const createBotChatHomeStore = (
             } catch (cause) {
                 signal.throwIfAborted();
                 if (cause instanceof CloudApiError && cause.code === "AGENT_REQUIRED") {
-                    set({ view: { kind: "setup", reason: "agent-required" } });
-                    if (openedBotId !== null) {
-                        await requests.waitForWorkspaceChange(openedBotId, signal);
-                        signal.throwIfAborted();
-                        set((current) => ({ revision: current.revision + 1 }));
+                    if (openedBot === null) {
+                        set({ view: { kind: "failed", message: "Your Bot is unavailable." } });
+                        return;
                     }
+                    set({ view: { kind: "setup", bot: openedBot, reason: "agent-required" } });
+                    await requests.waitForWorkspaceChange(openedBot.botId, signal);
+                    signal.throwIfAborted();
+                    set((current) => ({ revision: current.revision + 1 }));
                     return;
                 }
                 set({

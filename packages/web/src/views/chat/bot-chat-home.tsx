@@ -7,7 +7,11 @@ import { Dialog } from "../../components/ui/dialog.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer, WorkspaceLocation } from "../../services/identity/anonymous-identity-api.ts";
-import { createBotChatHomeStore, setupDescription } from "../../view-models/chat/bot-chat-home-store.ts";
+import {
+    botConnectionStatus,
+    createBotChatHomeStore,
+    setupDescription,
+} from "../../view-models/chat/bot-chat-home-store.ts";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
 import { MobiusSessionPane } from "./mobius-session-pane.tsx";
@@ -94,7 +98,12 @@ export function BotChatHome({
     const messageList = useRef<HTMLDivElement | null>(null);
     const messageContent = useRef<HTMLDivElement | null>(null);
     const followLatest = useRef(true);
+    const entryConnectionResolved = useRef(false);
     const [remoteAccess] = useState(() => new URL(window.location.href).searchParams.get("remoteAccess") === "1");
+    const connectionStatus = botConnectionStatus(model.view);
+    const disconnectedBot =
+        model.view.kind === "setup" &&
+        (model.view.reason === "agent-offline" || model.view.reason === "agent-required");
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: Store revision explicitly restarts route loading.
     useEffect(() => {
@@ -108,6 +117,19 @@ export function BotChatHome({
             }
         };
     }, [model.revision, store]);
+
+    useEffect(() => {
+        if (connectionStatus.kind === "connected") {
+            setPairingDialogOpen(false);
+        }
+        if (entryConnectionResolved.current || model.view.kind === "loading" || model.view.kind === "switching") {
+            return;
+        }
+        entryConnectionResolved.current = true;
+        if (disconnectedBot) {
+            setPairingDialogOpen(true);
+        }
+    }, [connectionStatus.kind, disconnectedBot, model.view.kind]);
 
     useLayoutEffect(() => {
         if (model.view.kind === "draft" && followLatest.current && messageList.current !== null) {
@@ -132,7 +154,12 @@ export function BotChatHome({
         return () => observer.disconnect();
     }, [model.sessionView]);
 
-    const active = model.view.kind === "switching" ? model.view.view : model.view.kind === "draft" ? model.view : null;
+    const active =
+        model.view.kind === "switching"
+            ? model.view.view
+            : model.view.kind === "draft" || model.view.kind === "setup"
+              ? model.view
+              : null;
     const switching = model.view.kind === "switching";
     const onRunningChange = useCallback((sessionId: string, running: boolean): void => {
         setRunningSession((current) => {
@@ -193,6 +220,8 @@ export function BotChatHome({
                               : ""
                     }
                     botId={active.bot.botId}
+                    connectionStatus={connectionStatus}
+                    onConnectionStatusClick={() => setPairingDialogOpen(true)}
                     requests={requests}
                     createTransfer={createTransfer}
                     onOpen={(session) => openManaged(session.kind, session.id)}
@@ -232,7 +261,7 @@ export function BotChatHome({
                                         }
                                     />
                                 </div>
-                            ) : model.view.kind === "setup" ? (
+                            ) : model.view.kind === "setup" && !disconnectedBot ? (
                                 <section className="m-auto w-full max-w-lg animate-cloud-enter rounded-2xl border border-border bg-card p-8 shadow-sm motion-reduce:animate-none">
                                     <MessageSquare className="mb-5 size-8 text-primary" aria-hidden="true" />
                                     <h1 className="text-2xl font-semibold tracking-tight">
@@ -268,15 +297,6 @@ export function BotChatHome({
                                             </Button>
                                         </div>
                                     )}
-                                    {pairingDialogOpen && (
-                                        <Dialog
-                                            title="Pair agent again"
-                                            description="Paste this one-time instruction into your local agent, then return here after it connects."
-                                            onClose={() => setPairingDialogOpen(false)}
-                                        >
-                                            <PairingInstruction requests={requests} />
-                                        </Dialog>
-                                    )}
                                 </div>
                             ) : active === null ? null : (
                                 <div className="m-auto max-w-lg px-6 text-center">
@@ -296,7 +316,7 @@ export function BotChatHome({
                             )}
                         </div>
                     </div>
-                    {active !== null && !switching && (
+                    {model.view.kind === "draft" && !switching && (
                         <BotChatComposer
                             attachments={attachments}
                             disabled={model.submission.kind === "sending"}
@@ -315,7 +335,7 @@ export function BotChatHome({
                         >
                             <DraftChatControls
                                 key={model.target.kind === "draft" ? model.target.key : "existing"}
-                                botId={active.bot.botId}
+                                botId={model.view.bot.botId}
                                 requests={requests}
                                 disabled={model.submission.kind === "sending"}
                                 onSettings={store.getState().setDraftSettings}
@@ -323,6 +343,19 @@ export function BotChatHome({
                         </BotChatComposer>
                     )}
                 </section>
+            )}
+            {pairingDialogOpen && (
+                <Dialog
+                    title={disconnectedBot ? "Bot disconnected" : "Pair agent again"}
+                    description={
+                        disconnectedBot
+                            ? "Your Bot cannot reach its local agent. Paste this one-time instruction into your local agent to pair again."
+                            : "Paste this one-time instruction into your local agent, then return here after it connects."
+                    }
+                    onClose={() => setPairingDialogOpen(false)}
+                >
+                    <PairingInstruction requests={requests} />
+                </Dialog>
             )}
         </main>
     );
