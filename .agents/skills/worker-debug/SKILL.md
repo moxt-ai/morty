@@ -56,12 +56,20 @@ Use Cloudflare's official Workers Observability Telemetry API:
 POST /accounts/{account_id}/workers/observability/telemetry/query
 ```
 
-Use an authenticated Cloudflare client or a private temporary script. A token may
-come from `CLOUDFLARE_API_TOKEN` or Wrangler's owner-only local credential store,
-but load it inside the process and never place it in source files, command output,
-or generated diagnostics. Send credentials only to `api.cloudflare.com` over
-HTTPS. Delete temporary scripts and raw responses after extracting sanitized
-evidence.
+Use an authenticated Cloudflare client or a private temporary script. Prefer the
+dedicated `MOBIUS_CF_LOG_API_TOKEN`, then `CLOUDFLARE_API_TOKEN`. The token needs
+**Account → Workers Observability → Edit** for the account in `wrangler.jsonc`;
+the telemetry query API currently calls this permission Workers Observability
+Write. Wrangler OAuth credentials do not include this permission by default, so
+do not use one until a bounded API probe proves it is authorized.
+
+Check only whether the selected environment variable is nonempty; never print its
+value. If the user configured it in `.zshrc`, run the diagnostic process through
+an interactive Zsh invocation so the process inherits it without copying the
+secret into a command argument or repository file. Load the token inside the
+process, send it only to `api.cloudflare.com` over HTTPS, and never place it in
+source files, shell history, command output, or generated diagnostics. Delete
+temporary scripts and raw responses after extracting sanitized evidence.
 
 Start with an `events` query over a narrow window and filter by
 `$metadata.service` equal to the exact Worker name. Add the strongest known
