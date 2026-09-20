@@ -1,4 +1,4 @@
-name: OpenCode nightly E2E
+name: OpenCode nightly compatibility
 
 on:
   schedule:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: opencode-nightly-e2e
+  group: opencode-nightly-compatibility
   cancel-in-progress: false
 
 jobs:
@@ -32,8 +32,8 @@ jobs:
           npm install --global opencode-ai@latest
           opencode --version
 
-      - name: Run live browser flow
-        run: pnpm test:e2e:opencode
+      - name: Run OpenCode compatibility journey
+        run: pnpm test:compatibility:opencode
         env:
           MOBIUS_E2E_ARTIFACT_ROOT: ${{ runner.temp }}/mobius-chat-opencode-e2e
           MOBIUS_E2E_CLERK_PUBLISHABLE_KEY: ${{ vars.CLERK_PUBLISHABLE_KEY }}

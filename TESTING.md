@@ -1,225 +1,137 @@
 # Testing Guide
 
-## CI quality gate
+## Purpose
 
-`pnpm ci:check` is reserved for CI and includes `pnpm check:architecture` and `pnpm test:coverage`.
-The coverage command runs the Worker boundary suite and writes its Istanbul
-execution map to `coverage/lcov.info`, `coverage/coverage-summary.json`, and an
-HTML report in `coverage/`. It reports an informational 95% target for lines,
-statements, functions, and branches using exact covered/total counts. A failing
-suite or missing or empty report fails the command; unmet coverage targets do not.
+Tests are the executable control surface for Mobius Chat. Each supported behavior
+has one primary owner:
 
-Scope includes unexecuted production `.ts` in the Worker package. Tests,
-stateful test fakes and declarations are excluded.
-The Mobius submodule has its own report and informational 100% target. Code executed only in a
-separate subprocess or externally bundled Worker is not credited by the parent
-runner; its source remains in the denominator until instrumented coverage exists.
+- a browser E2E journey owns a critical successful user path;
+- a Worker integration test owns one HTTP, Durable Object, Slack, or storage
+  boundary;
+- Mobius owns its protocol, Runtime, daemon, Relay, and Agent boundaries.
 
-On pull requests and merge-queue events, CI installs the workspace once for static
-verification and once for tests. The `static` job runs type checking, build,
-lint/architecture, unused-code checks, and local D1 migration validation. The `tests`
-job runs the Worker suite once and saves its report as a non-blocking
-`coverage-report` artifact for 14 days. Run it directly with `pnpm test:worker`. The required `check`
-status only combines the two job results; it does not check out the repository or
-install dependencies again.
+Prefer a few long journeys over many E2E cases. Repeat an assertion at another
+level only for a distinct high-impact risk such as authorization, data integrity,
+cancellation, cleanup, or external compatibility. Coverage does not justify a
+duplicate scenario.
 
-Main pushes and manual deployments skip these checks and deploy after Worker
-configuration validation; checks are not repeated after merging.
+## Organization
 
-## Architecture enforcement
+### Browser product journeys
 
-`pnpm check:architecture` resolves TypeScript imports, including type-only imports,
-and checks dependency direction. Shared Slack records and event schemas belong in
-`components/slack/entity`; storage and infrastructure cannot import services,
-composition, HTTP, or gateways. Browser and Worker implementations cannot import
-one another. See `dependency-cruiser.config.cjs` for the executable rules.
+`packages/e2e/conversation.e2e.test.ts` covers an already-paired workspace.
+`packages/e2e/setup.e2e.test.ts` covers setup handoff, native-session import,
+remote work, media, reload, and revocation. These two Playwright scenarios are the
+product E2E suite:
 
-These boundaries apply the information-hiding approach in
-[Business logic decomposition patterns](https://github.com/taowen/modularization-examples).
-Private persisted records stay with their storage owner; shared records describe
-the contract consumed by storage and services. Reuse requires an explicit purpose
-and applicability scope. Interface churn and state visibility inform design review;
-the checker enforces the concrete dependency directions.
+```bash
+pnpm test:e2e
+```
 
-## Executable Product Specifications
+They start real local Chat, Platform, Mobius, Runtime, browser, HTTP, WebSocket,
+filesystem, and database boundaries. A deterministic stateful ACP Agent replaces
+only the third-party Agent. Extend an existing journey before adding another file.
+See `packages/e2e/README.md` for scenario ownership.
 
-Deliver each behavior change as the smallest end-to-end path a user can run and observe. Before implementation, state the slice in one sentence:
+### Third-party Agent compatibility
 
-> After this, a user can ... and see ...
+Compatibility journeys use the same local product stack, a real Codex or OpenCode
+executable, and a local fake LLM provider:
 
-The slice should cross the necessary input, runtime, adapter, and output boundaries. Do not build complete horizontal layers that provide no runnable behavior. Extend the existing working path and implement only what the current slice requires.
+```bash
+pnpm test:compatibility:opencode
+pnpm test:compatibility:codex
+```
 
-Behavior changes start with a failing BDD acceptance scenario before production code changes. The scenario must fail because the promised behavior is absent, prove the slice through the first supported product boundary that can observe it, and pass after the smallest implementation of that behavior. Add narrower scenarios afterward only for distinct boundary-owned risks.
+These are release canaries, not a second product specification suite. OpenCode
+runs nightly with the latest release. Agent-specific files own only installation
+and configuration; shared browser and image behavior stays in
+`packages/e2e/live/agent-image.mjs`.
 
-BDD scenarios are executable product specifications and the living documentation of supported behavior. Every test title uses this form:
+### Worker integration
+
+`packages/worker/tests` enters through the production Worker HTTP, WebSocket,
+Durable Object, queue, or storage boundary. Run it with:
+
+```bash
+pnpm test:worker
+```
+
+The shared fixtures own application composition, migrations, credentials, external
+fakes, and cleanup. Slack tests start empty and create app registration, binding,
+OAuth, and connection state through production HTTP operations. Direct persistence
+setup is reserved for storage and migration behavior or state owned by an upstream
+component outside the test.
+
+### Mobius
+
+`third-party/mobius` has its own product E2E, protocol contracts, boundary
+integration suites, and real Agent-daemon compatibility matrix. Its `TESTING.md`
+is authoritative for those tests. Do not reproduce Mobius behavior in Chat tests
+unless the Chat integration itself could break while Mobius remains correct.
+
+## Scenario rules
+
+Write titles as executable specifications:
 
 ```text
 Given [observable context], When [an actor performs an action], Then [an observable result occurs]
 ```
 
-User-path titles describe product behavior in domain language. Protocol and external-boundary titles describe the contract owned by that boundary. Keep fixtures, helpers, framework terminology, internal modules, and implementation details out of titles and in the test body.
+Use the same supported entrypoint and production composition as the level being
+tested. Assert observable results: HTTP responses, events, persisted state,
+filesystem effects, accessible DOM, process status, and typed errors. Do not assert
+private calls, incidental ordering, or internal implementation details.
 
-Documentation-only changes and mechanical refactors with no behavior change do not need new tests.
+Prepare state through the cheapest production business operation available at the
+tested boundary. Harnesses may hide startup, ports, credentials, waiting,
+diagnostics, and cleanup; they must not hide the business action or bypass a
+participating production layer.
 
-## Test Scope
+Unit tests are prohibited by default. Naming a direct helper or class test
+`integration` does not make it one. Move the assertion to its owning boundary or
+delete it when a stronger journey already owns the behavior.
 
-Give each supported product promise one primary acceptance scenario and each boundary contract one primary owning test at the boundary that provides the clearest stable failure. Add a narrower test or repeat an invariant at another level only when it covers a distinct high-impact risk or delivery failure, such as authorization, destructive side effects, data integrity, protocol compatibility, cancellation, or resource cleanup.
+Mocks, spies, module replacement, monkey patching, and canned request interceptors
+are prohibited. A dependency outside the product may use one stateful fake through
+its production port when the real service cannot run safely or deterministically.
 
-Do not test repository tooling or scaffolding. This includes CI workflows, lint and formatter configuration, Git hooks, dependency-management configuration, build scripts, and other development-only automation. Verify those concerns by running the tools themselves. Do not test third-party library behavior or add tests solely to increase coverage.
+Time-sensitive tests use a fixed fake clock and explicit advancement. Do not use
+real sleeps, polling loops, or timing tolerances. Async tests wait for the event or
+visible state that proves progress; a bounded scenario timeout is only failure
+containment.
 
-## Required Test Levels
+## CI and coverage
 
-End-to-end tests are a deliberately small set of representative journeys. They
-start at a supported public entrypoint, use the same production composition as a
-user, and prove a long path through its observable result. Browser journeys use
-mouse and keyboard interactions; API-oriented products may use their supported
-public client instead. Extend an existing journey before adding another one.
+Pull requests and merge-queue revisions run two parallel jobs:
 
-Integration tests exercise one production boundary with its real collaborators:
-for example Worker HTTP, a Durable Object, a Runtime process, a protocol client,
-or a browser application boundary. They may use APIs, temporary filesystems,
-subprocesses, sockets, and local protocol servers. They must not invoke private
-helpers or mutate application stores to arrange the behavior under assertion.
+- `static`: typecheck, build, lint, architecture checks, migrations, and Knip;
+- `tests`: the Worker boundary suite and its Istanbul report.
 
-Prepare state through the cheapest production business operation available at
-that boundary. Each composition level has one shared journey harness that owns
-startup, credentials, and cleanup; tests vary only the business state they need.
-Direct persistence setup is reserved for storage and migration boundaries, or for
-state owned by an upstream component outside the test, and must remain explicit.
+The required `check` job only combines those results. Main pushes do not repeat
+them; they validate deployment configuration and deploy the merge-queue-verified
+revision. Deterministic browser E2E is intentionally outside PR CI. The real
+OpenCode compatibility journey runs nightly.
 
-Contract tests own serialization, schema, authentication, and external-boundary
-compatibility where composing the larger product would reduce diagnostic signal.
+`pnpm test:coverage` covers production Worker TypeScript and writes LCOV, JSON,
+and HTML output. The 95% target is advisory; failed tests and missing or empty
+reports are blocking. Code executed in a separately bundled Worker or subprocess
+is not credited to the parent runner, so percentages cannot prove a product path.
 
-A lower-level test is not acceptance if the supported user path could break while the test still passes. Boundary tests may support a slice, but they cannot replace its user-visible acceptance scenario.
+Run `pnpm typecheck`, `pnpm lint`, and only the affected suites locally. Reserve
+`pnpm ci:check` for CI.
 
-Unit tests are prohibited by default. The default Vitest configuration only
-discovers `*.contract.test.ts`, `*.integration.test.ts`, and
-`*.e2e.test.ts`. Renaming an isolated helper or class test does not make it a
-boundary test: move the assertion to the owning protocol, runtime, or product
-entrypoint, or remove it when a stronger scenario already owns the behavior.
+## Authentication and visual checks
 
-Assert observable contracts, including returned results, emitted events, protocol messages, state transitions, filesystem effects, process exit status, and typed errors.
+Worker authentication scenarios use the shared fake Clerk, which issues real
+RSA-signed tokens at a fixed clock. Hosted Clerk sign-in and sign-up remain manual
+because the external hosted UI is outside the product boundary.
 
-Do not write isolated tests for private helpers, internal control flow, incidental ordering, or implementation details. Do not assert that an internal collaborator was called. A refactor that preserves the product contract should not break the test.
+Browser-specific layout and appearance remain manual unless they become a critical
+supported behavior. Functional browser journeys use accessible roles, labels, and
+visible results rather than screenshots or private application state.
 
-Except for the deterministic fake timers required below, mocks are prohibited. Do not use mock functions, mocking frameworks, spies, stubs, monkey patching, module replacement, or canned request interceptors.
-
-When a real external harness or provider cannot be used safely or deterministically, a stateful fake injected through the production port is the only permitted substitute. Keep the fake at that external boundary, make it implement the real contract instead of returning per-test canned answers, and explain why the real dependency cannot be used. Do not add test-only branches or hooks to production code.
-
-## Deterministic Time
-
-Tests involving time must use fake timers with an explicit fixed system time and restore timer state during cleanup. Advance the fake clock explicitly to exercise deadlines, retries, heartbeats, and cancellation.
-
-Do not use real sleeps, polling delays, implicit `Date.now()` values, or timing tolerances. Time-sensitive production code must accept a clock or timer dependency at its real boundary so tests can inject deterministic time. Do not replace time with any other mocking mechanism.
-
-For an operation that owns resources, test observable cleanup after success, failure, timeout, and cancellation when those outcomes are reachable. Retry tests must prove the attempt limit, cancellation during backoff, and the rule that unsafe or indeterminate operations are not retried. Error-contract tests assert stable codes and sanitized boundary messages, not incidental infrastructure wording.
-
-Coverage identifies untested code but does not decide which tests to write. Do not create impossible typed states or duplicate tests merely to increase coverage. If a branch is unreachable under current invariants, remove or simplify it. Cover representative happy paths with end-to-end tests, business logic with integration tests, and protocol or external boundaries with integration or contract tests.
-
-## Authentication verification
-
-Run `pnpm test` for the Worker HTTP contract scenarios. They use an in-memory
-identity provider that issues real RSA-signed session tokens, with an explicit
-fixed clock. No live Clerk account or credentials are required in CI.
-
-Clerk's hosted sign-in and sign-up flows are checked manually; this project
-does not automate those flows with Playwright. Open the app, confirm both
-account dialogs are available, and verify that an account can sign in, see its
-bots, Chat, Slack integration, and sign out when manually validating an auth change.
-
-## Browser verification
-
-All Chat end-to-end journeys and their shared infrastructure live in
-`packages/e2e`. Run `pnpm test:e2e` to execute the deterministic journeys with
-Playwright Test and real Chrome. Run `pnpm test:e2e:opencode` or
-`pnpm test:e2e:codex` for the same local product stack with a real third-party
-Agent and a local fake LLM provider.
-The TypeScript scenarios receive a `runtime` fixture from `infra/test.ts`.
-`createTestRuntime` owns agent setup, the local stack, browser startup, instruction
-execution and deterministic setup timers; the fixture owns diagnostics and cleanup.
-Scenarios describe user actions and assert visible results. The package's strict
-TypeScript check is included in `pnpm ci:check`; run `pnpm typecheck` locally.
-Non-happy-path business behavior belongs to the Node-based Vitest integration
-suites. Browser automation is reserved for the representative happy paths above.
-The setup scenarios cover the standalone `setup.md` journey. They fetch the rendered
-document and generated bundle from the local Worker/R2 boundary, then execute the
-bundle's `runSetup` entrypoint with a real, isolated Runtime subprocess. Standalone
-setup opens its five-use browser handoff, finds the supplied harness session
-by its native ID, emits a private PNG and terminal QR containing the exact handoff URL,
-returns a forked continuation, and displays its history. The setup acceptance scenario
-decodes the PNG instead of relying on a file-existence or screenshot assertion.
-Agent inference uses the stateful ACP test agent; Platform provisioning uses the
-shared local developer-authentication fixture. The browser still loads Clerk's
-hosted SDK, so the suite requires internet access but no Clerk login. Setup
-waits use explicitly advanced fake timers with a fixed system time.
-
-These tests require Chrome and the checked-out Mobius submodule. They share the
-local-stack runner and diagnostics used by the conversation scenarios. Playwright
-global setup builds Mobius, Chat, and the setup bundle once before three workers
-run individual journeys in parallel, including scenarios in the same file. Each
-journey owns temporary storage, Runtime state, dynamic HTTP and inspector ports,
-and its browser. Run these journeys locally with `pnpm test:e2e`; failed journeys
-retain their own diagnostics directories. The `Verify browser journeys` job is no
-longer scheduled in CI. HTTP integration
-coverage additionally runs the TypeScript CLI as a subprocess to verify identity
-reuse, ticket consumption, private configuration, and Runtime replacement failures.
-
-Given an open Mobius Session, including one imported or forked from a native session, When an agent streams
-a reply, Then text appears incrementally without a message/history snapshot request
-for each text or activity event. When the turn finishes, Then its final response
-and status match the saved history. When the conversation is idle, Then no
-five-second browser polling continues. Inspect Network in DevTools; Chat application
-API traffic and workspace-change notifications share the `/mobius-cloud/ws` WebSocket.
-Given an interrupted event connection, When the SDK reconnects and replays events,
-Then the reply contains each text delta once. Given exhausted stream recovery,
-Then Chat shows a connection failure instead of silently remaining live.
-Given a Session command whose delivery cannot be confirmed, Chat retains its command ID,
-shows **Delivery unknown** after reload, and only retries after the user chooses the retry.
-Given a browser that redeemed a setup entry, ending remote access revokes that entry and
-every credential redeemed from it while the owner's local identity and Runtime remain active.
-
-The real OpenCode journey is excluded from `pnpm ci:check` and PR/merge-queue CI
-and runs nightly in GitHub Actions with the latest OpenCode release. It starts at
-the unpaired browser, follows the displayed `pair.md` instruction through the
-downloaded production setup bundle, and continues through paired Chat, a real
-Agent tool call, daemon-backed local-image retrieval, reload, and browser
-rendering. The deterministic setup journey owns the setup and remote-handoff
-contract; the live journey proves third-party Agent compatibility over the same
-product path.
-Verify other visual details
-manually with the `agent-browser` CLI against the running application. A first-time
-visitor should
-receive a browser-held anonymous identity and Bot, then see a current-origin
-`follow .../pair.md?token=...` instruction. After local-agent pairing, the same page
-opens headerless Chat without Project controls or Slack navigation. Reload and
-confirm the same identity and Bot are retained. No web instruction points to
-`setup.md`; verify its browser handoff separately as the externally shared flow.
-Given a previously paired workspace whose selected Runtime is offline, When the
-user revisits Chat with their saved identity, Then the page explains that the
-selected agent is offline, asks them to restart it, and says it checks automatically
-every five seconds. The pairing instruction remains available for recovery.
-Given a workspace whose selected agent is no longer available, When the user
-revisits Chat, Then the page explains that the selected agent is unavailable and
-offers pairing instructions. If the Bot is inactive, the page explains that instead.
-Reconnect the selected Runtime and confirm the same page opens Chat automatically.
-HTTP integration tests cover identity creation, Bot ownership, and authorization.
-
-### New conversation drafts
-
-Given a paired workspace, When the user opens Chat or clicks New Conversation,
-Then the composer opens a local draft with Harness to the left of Model. Loading
-the model inventory discovers the selected Agent's settings directly; it must not
-create a Session or Conversation or issue Conversation access.
-
-Given a draft with a selected harness, model, and prompt, When the user sends,
-Then a new Conversation is created with that configuration and the prompt is
-submitted. Harness becomes disabled while Model remains editable. Reload the
-resulting URL and confirm the same Conversation and history reopen. Click New
-Conversation again and confirm Harness is editable and the next send creates a
-distinct Conversation. Verify with `agent-browser` and the browser network log.
-
-`pnpm test:e2e` also covers the conversation browser regression against local Chat,
-Platform and Runtime with the stateful ACP test agent. First Send must retain the
-page and composer while the draft becomes a conversation and the reply appears.
-The scenario also creates a distinct second conversation, sends a follow-up and
-reloads its saved URL to verify history.
+Architecture rules are executable in `dependency-cruiser.config.cjs`. Shared Slack
+records live with their owning entity boundary; storage and infrastructure cannot
+depend on services, HTTP, composition, or gateways; browser and Worker
+implementations cannot import each other.
