@@ -45,6 +45,7 @@ export interface DraftControlsStore {
     readonly selectRecentCwd: (directoryId: string, signal: AbortSignal) => Promise<void>;
     readonly selectHarness: (value: string, disabled: boolean, signal: AbortSignal) => Promise<void>;
     readonly selectOption: (configId: string, value: string) => void;
+    readonly toggleOption: (configId: string) => void;
     readonly setCwdPath: (path: string, signal: AbortSignal) => void;
 }
 
@@ -102,28 +103,21 @@ export const createDraftControlsStore = (
     createStore<DraftControlsStore>()((set, get) => {
         let cwdOperation: AbortController | null = null;
         let selectedHarness = "";
+        const changedOptionIds = new Set<string>();
         const publishSettings = (settings: Extract<DraftSettingsState, { readonly kind: "ready" }>): void => {
-            const model = settings.options.find((option) => option.category === "model" && option.type !== "boolean");
-            const permission = settings.options.find(
-                (option) => option.category === "_mobius_permission" && option.type !== "boolean",
-            );
-            onSettings(
-                model === undefined || permission === undefined
-                    ? null
-                    : {
-                          bindingId: settings.bindingId,
-                          permissionMode: permission.currentValue,
-                          workspaceRef: settings.cwd.directoryId,
-                          workspaceLabel: settings.cwd.directoryLabel,
-                          configuration: {
-                              additionalDirectoryIds: [],
-                              booleanValue: false,
-                              configId: model.id,
-                              value: model.currentValue,
-                              valueType: "select",
-                          },
-                      },
-            );
+            onSettings({
+                bindingId: settings.bindingId,
+                workspaceRef: settings.cwd.directoryId,
+                workspaceLabel: settings.cwd.directoryLabel,
+                configurations: settings.options
+                    .filter((option) => option.category === "model" || changedOptionIds.has(option.id))
+                    .map((option) => ({
+                        booleanValue: option.type === "boolean" ? option.booleanValue : false,
+                        configId: option.id,
+                        value: option.type === "select" ? option.currentValue : "",
+                        valueType: option.type,
+                    })),
+            });
         };
         const rememberDirectory = (
             settings: Extract<DraftSettingsState, { readonly kind: "ready" }>,
@@ -267,6 +261,7 @@ export const createDraftControlsStore = (
                             }
                         }
                         const ready = { kind: "ready" as const, workspace, cwd, ...result };
+                        changedOptionIds.clear();
                         const existingRecentCwds = readRecentCwdPreferences(
                             storage,
                             botId,
@@ -474,6 +469,24 @@ export const createDraftControlsStore = (
                         option.id === configId ? { ...option, currentValue: value } : option,
                     ),
                 };
+                changedOptionIds.add(configId);
+                set({ settings: ready });
+                publishSettings(ready);
+            },
+            toggleOption: (configId) => {
+                const settings = get().settings;
+                if (settings.kind !== "ready") {
+                    return;
+                }
+                const ready = {
+                    ...settings,
+                    options: settings.options.map((option) =>
+                        option.id === configId && option.type === "boolean"
+                            ? { ...option, booleanValue: !option.booleanValue }
+                            : option,
+                    ),
+                };
+                changedOptionIds.add(configId);
                 set({ settings: ready });
                 publishSettings(ready);
             },

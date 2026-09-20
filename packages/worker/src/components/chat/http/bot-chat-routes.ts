@@ -38,6 +38,20 @@ const nativeContinuationInput = v.strictObject({
 });
 const nativeSessionInput = v.strictObject({ sessionId: platformIdentifier });
 const steerTurnInput = v.strictObject({ sessionId: platformIdentifier, turnId: platformIdentifier });
+const sessionConfiguration = v.strictObject({
+    booleanValue: v.boolean(),
+    configId: platformIdentifier,
+    value: v.pipe(v.string(), v.maxLength(500)),
+    valueType: v.picklist(["select", "boolean"]),
+});
+const sessionConfigurations = v.pipe(
+    v.array(sessionConfiguration),
+    v.maxLength(100),
+    v.check(
+        (selections) => new Set(selections.map((selection) => selection.configId)).size === selections.length,
+        "Session configuration identifiers must be unique.",
+    ),
+);
 const turnInput = v.strictObject({
     sessionId: platformIdentifier,
     additionalDirectoryIds: v.pipe(v.array(nativeDirectoryId), v.maxLength(16)),
@@ -71,6 +85,13 @@ const turnInput = v.strictObject({
 });
 const accessInput = v.union([
     v.strictObject({ conversationId: platformIdentifier }),
+    v.strictObject({
+        conversationKey: platformIdentifier,
+        bindingId: platformIdentifier,
+        configurations: sessionConfigurations,
+        title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)), "New chat"),
+        workspaceRef: nativeDirectoryId,
+    }),
     v.strictObject({
         conversationKey: platformIdentifier,
         bindingId: platformIdentifier,
