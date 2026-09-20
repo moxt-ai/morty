@@ -1,8 +1,14 @@
 import { createStore } from "zustand/vanilla";
-import type { BotChatApi, ChatDraftConfiguration, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
+import type {
+    BotChatApi,
+    ChatAccess,
+    ChatDraftConfiguration,
+    ChatWorkspace,
+} from "../../services/chat/bot-chat-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
+import { type ConversationCreationState, transitionConversationCreation } from "./conversation-creation-machine.ts";
 import { createConversationSessionStore } from "./conversation-session-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 
@@ -55,11 +61,6 @@ type SessionView =
     | { readonly kind: "conversation-access" }
     | { readonly kind: "session-access"; readonly session: OpenMobiusSession };
 
-type Submission =
-    | { readonly kind: "idle" }
-    | { readonly kind: "sending" }
-    | { readonly kind: "failed"; readonly message: string };
-
 export interface BotChatNavigation {
     readonly showDraft: () => void;
     readonly showManaged: (kind: "conversation" | "fork" | "import", id: string) => void;
@@ -71,7 +72,7 @@ export interface BotChatHomeStore {
     readonly view: BotChatHomeView;
     readonly target: Target;
     readonly sessionView: SessionView;
-    readonly submission: Submission;
+    readonly creation: ConversationCreationState;
     readonly revision: number;
     readonly draftSettings: ChatDraftConfiguration | null;
     readonly load: (signal: AbortSignal) => Promise<void>;
@@ -168,7 +169,7 @@ export const createBotChatHomeStore = (
         view: { kind: "loading" },
         target,
         sessionView: { kind: "conversation-access" },
-        submission: { kind: "idle" },
+        creation: { kind: "draft" },
         revision: 0,
         draftSettings: null,
         load: async (signal) => {
@@ -257,7 +258,7 @@ export const createBotChatHomeStore = (
             set((current) => ({
                 target: { kind: "draft", key: options.createId() },
                 sessionView: { kind: "conversation-access" },
-                submission: { kind: "idle" },
+                creation: transitionConversationCreation(current.creation, { kind: "reset" }),
                 draftSettings: null,
                 revision: current.revision + 1,
             }));
@@ -270,7 +271,7 @@ export const createBotChatHomeStore = (
                         ? { kind: "conversation-access", conversationId: id }
                         : { kind: "session-access", sessionId: id },
                 sessionView: { kind: "conversation-access" },
-                submission: { kind: "idle" },
+                creation: transitionConversationCreation(current.creation, { kind: "reset" }),
                 draftSettings: null,
                 revision: current.revision + 1,
             }));
@@ -289,47 +290,120 @@ export const createBotChatHomeStore = (
             if (current.view.kind !== "draft" || current.target.kind !== "draft" || current.draftSettings === null) {
                 return false;
             }
-            set({ submission: { kind: "sending" } });
+            const botId = current.view.bot.botId;
+            const commandId = current.target.key;
+            const settings = current.draftSettings;
             const content = draft.trim();
-            try {
-                await conversations
-                    .getState()
-                    .create(
-                        current.view.bot.botId,
-                        current.target.key,
-                        current.draftSettings,
-                        (
-                            content ||
-                            attachments
-                                .map((attachment) =>
-                                    attachment.kind === "image" ? attachment.image.name : attachment.resource.name,
-                                )
-                                .join(", ")
-                        ).slice(0, 500),
-                        content,
-                        attachments,
-                        signal,
-                    );
-                const opened = conversations.getState().state;
-                if (opened.kind !== "ready") {
-                    throw new Error(opened.kind === "failed" ? opened.message : "The Session could not be created.");
+            const title = (
+                content ||
+                attachments
+                    .map((attachment) =>
+                        attachment.kind === "image" ? attachment.image.name : attachment.resource.name,
+                    )
+                    .join(", ")
+            ).slice(0, 500);
+            const queuedMessage = {
+                attachments,
+                commandId,
+                content,
+                summary: title,
+            };
+            let access: ChatAccess;
+            if (
+                current.creation.kind === "draft-message-send-failed" &&
+                current.creation.message.commandId === commandId
+            ) {
+                access = current.creation.access;
+                set((state) => ({
+                    creation: transitionConversationCreation(state.creation, {
+                        commandId,
+                        kind: "draft-message-retry-requested",
+                    }),
+                }));
+            } else {
+                set((state) => ({
+                    creation: transitionConversationCreation(state.creation, {
+                        kind: "draft-message-queued",
+                        message: queuedMessage,
+                    }),
+                }));
+                try {
+                    access = await requests.createConversation(botId, commandId, settings, signal, title);
+                    signal.throwIfAborted();
+                    set((state) => ({
+                        creation: transitionConversationCreation(state.creation, {
+                            access,
+                            commandId,
+                            kind: "session-created",
+                        }),
+                    }));
+                } catch (cause) {
+                    signal.throwIfAborted();
+                    set((state) => ({
+                        creation: transitionConversationCreation(state.creation, {
+                            commandId,
+                            error: cause instanceof Error ? cause.message : "The Session could not be created.",
+                            kind: "session-create-failed",
+                        }),
+                    }));
+                    return false;
                 }
+            }
+            const sending = get().creation;
+            if (sending.kind !== "draft-message-sending" || sending.message.commandId !== commandId) {
+                return false;
+            }
+            try {
+                const accepted = await requests.submitTurn(
+                    botId,
+                    access.sessionId,
+                    {
+                        additionalDirectoryIds: [],
+                        artifactIds: [],
+                        content: sending.message.content,
+                        idempotencyKey: sending.message.commandId,
+                        images: sending.message.attachments.flatMap((attachment) =>
+                            attachment.kind === "image" ? [attachment.image] : [],
+                        ),
+                        resources: sending.message.attachments.flatMap((attachment) =>
+                            attachment.kind === "resource" ? [attachment.resource] : [],
+                        ),
+                    },
+                    signal,
+                );
                 signal.throwIfAborted();
-                options.navigation.showManaged("conversation", opened.conversationId);
+                const session = requests.conversationSession(
+                    access,
+                    { kind: "running", commandId: sending.message.commandId, turnId: accepted.turnId },
+                    settings.workspaceLabel,
+                );
+                set((state) => ({
+                    creation: transitionConversationCreation(state.creation, {
+                        commandId,
+                        conversationId: access.conversationId,
+                        kind: "draft-message-sent",
+                        session,
+                    }),
+                }));
+                const sent = get().creation;
+                if (sent.kind !== "draft-message-sent") {
+                    return false;
+                }
+                options.navigation.showManaged("conversation", sent.conversationId);
                 set({
-                    target: { kind: "conversation-access", conversationId: opened.conversationId },
-                    sessionView: { kind: "session-access", session: opened.session },
-                    submission: { kind: "idle" },
+                    target: { kind: "conversation-access", conversationId: sent.conversationId },
+                    sessionView: { kind: "session-access", session: sent.session },
                 });
                 return true;
             } catch (cause) {
                 signal.throwIfAborted();
-                set({
-                    submission: {
-                        kind: "failed",
-                        message: cause instanceof Error ? cause.message : "The message could not be sent.",
-                    },
-                });
+                set((state) => ({
+                    creation: transitionConversationCreation(state.creation, {
+                        commandId,
+                        error: cause instanceof Error ? cause.message : "The message could not be sent.",
+                        kind: "draft-message-send-failed",
+                    }),
+                }));
                 return false;
             }
         },

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
-test("Given a paired workspace, When a user works across conversations, Then attachments, queued work, replies, render inspection, and revisits remain usable", async ({
+test("Given a paired workspace, When a user works across conversations, Then session creation, queued work, replies, render inspection, and revisits remain visible", async ({
     runtime,
 }) => {
     await runtime.openPairedChat();
@@ -32,9 +32,12 @@ test("Given a paired workspace, When a user works across conversations, Then att
         await expect(page.getByRole("list", { name: "Attachments", exact: true })).toContainText("pasted-image.png");
         await composer.fill("First conversation");
         await page.getByRole("button", { name: "Send message", exact: true }).click();
+        await expect(page.getByTestId(dataTestId.queuedMessage)).toHaveText("First conversation");
+        await expect(page.getByTestId(dataTestId.initialMessageStatus)).toHaveText("Creating session");
         await expect(page).toHaveURL(/\?conversationId=/u);
         await expect(page.getByRole("list", { name: "Attachments", exact: true })).toHaveCount(0);
         await expect(page.getByTestId(dataTestId.agentResponse).first()).toContainText("First conversation");
+        await expect(page.getByTestId(dataTestId.sessionStatus)).toHaveText("Idle");
         const renderBlocks: unknown = await page.evaluate(() => {
             const bridge: unknown = Reflect.get(globalThis, "_mobiusChat");
             if (typeof bridge !== "object" || bridge === null) {

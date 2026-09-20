@@ -2,9 +2,11 @@ import { MessageSquare } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { BotChatComposer, type ComposerAttachment } from "../../components/chat/bot-chat-composer.tsx";
+import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
+import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer, WorkspaceLocation } from "../../services/identity/anonymous-identity-api.ts";
 import {
@@ -12,13 +14,23 @@ import {
     createBotChatHomeStore,
     setupDescription,
 } from "../../view-models/chat/bot-chat-home-store.ts";
+import {
+    conversationComposerLocked,
+    conversationCreationBusy,
+    conversationCreationError,
+    conversationCreationStatus,
+    queuedDraftMessage,
+} from "../../view-models/chat/conversation-creation-machine.ts";
+import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
 import { MobiusSessionPane } from "./mobius-session-pane.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
 import { WorkspaceRegionSelector } from "./workspace-region-selector.tsx";
 
-type RunningSession = { readonly kind: "idle" } | { readonly kind: "running"; readonly sessionId: string };
+type ActiveSessionStatus =
+    | { readonly kind: "none" }
+    | { readonly kind: "status"; readonly sessionId: string; readonly status: SessionActivityState };
 
 export function BotChatHome({
     requests,
@@ -93,7 +105,7 @@ export function BotChatHome({
     const [draft, setDraft] = useState("");
     const [pairingDialogOpen, setPairingDialogOpen] = useState(false);
     const [attachments, setAttachments] = useState<readonly ComposerAttachment[]>([]);
-    const [runningSession, setRunningSession] = useState<RunningSession>({ kind: "idle" });
+    const [activeSessionStatus, setActiveSessionStatus] = useState<ActiveSessionStatus>({ kind: "none" });
     const lifetime = useRef<AbortController | null>(null);
     const messageList = useRef<HTMLDivElement | null>(null);
     const messageContent = useRef<HTMLDivElement | null>(null);
@@ -101,6 +113,11 @@ export function BotChatHome({
     const entryConnectionResolved = useRef(false);
     const [remoteAccess] = useState(() => new URL(window.location.href).searchParams.get("remoteAccess") === "1");
     const connectionStatus = botConnectionStatus(model.view);
+    const creationBusy = conversationCreationBusy(model.creation);
+    const composerLocked = conversationComposerLocked(model.creation);
+    const creationError = conversationCreationError(model.creation);
+    const creationStatus = conversationCreationStatus(model.creation);
+    const queuedInitialMessage = queuedDraftMessage(model.creation);
     const disconnectedBot =
         model.view.kind === "setup" &&
         (model.view.reason === "agent-offline" || model.view.reason === "agent-required");
@@ -161,13 +178,8 @@ export function BotChatHome({
               ? model.view
               : null;
     const switching = model.view.kind === "switching";
-    const onRunningChange = useCallback((sessionId: string, running: boolean): void => {
-        setRunningSession((current) => {
-            if (running) {
-                return { kind: "running", sessionId };
-            }
-            return current.kind === "running" && current.sessionId === sessionId ? { kind: "idle" } : current;
-        });
+    const onStatusChange = useCallback((sessionId: string, status: SessionActivityState): void => {
+        setActiveSessionStatus({ kind: "status", sessionId, status });
     }, []);
     const activeSession =
         model.sessionView.kind === "session-access"
@@ -175,9 +187,11 @@ export function BotChatHome({
                   kind: "active" as const,
                   directoryLabel: model.sessionView.session.entry.directoryLabel,
                   id: model.sessionView.session.result.ready.sessionId,
-                  running:
-                      runningSession.kind === "running" &&
-                      runningSession.sessionId === model.sessionView.session.result.ready.sessionId,
+                  status:
+                      activeSessionStatus.kind === "status" &&
+                      activeSessionStatus.sessionId === model.sessionView.session.result.ready.sessionId
+                          ? activeSessionStatus.status.kind
+                          : "idle",
               }
             : { kind: "none" as const };
     const clearComposer = () => {
@@ -235,7 +249,7 @@ export function BotChatHome({
                     requests={requests}
                     key={model.sessionView.session.result.ready.sessionId}
                     session={model.sessionView.session}
-                    onRunningChange={onRunningChange}
+                    onStatusChange={onStatusChange}
                     {...(remoteAccess ? { endRemoteAccess } : {})}
                 />
             ) : (
@@ -298,6 +312,28 @@ export function BotChatHome({
                                         </div>
                                     )}
                                 </div>
+                            ) : queuedInitialMessage !== null && creationStatus !== null ? (
+                                <div className="mx-auto mt-auto w-full min-w-0 max-w-[920px]">
+                                    <div data-testid={dataTestId.queuedMessage}>
+                                        <UserPromptMessage
+                                            images={queuedInitialMessage.attachments.flatMap((attachment) =>
+                                                attachment.kind === "image" ? [attachment.image] : [],
+                                            )}
+                                            resources={queuedInitialMessage.attachments.flatMap((attachment) =>
+                                                attachment.kind === "resource" ? [attachment.resource] : [],
+                                            )}
+                                            text={queuedInitialMessage.content}
+                                        />
+                                    </div>
+                                    <p
+                                        aria-live="polite"
+                                        className="text-right text-xs text-muted-foreground"
+                                        data-testid={dataTestId.initialMessageStatus}
+                                        role="status"
+                                    >
+                                        {creationStatus}
+                                    </p>
+                                </div>
                             ) : active === null ? null : (
                                 <div className="m-auto max-w-lg px-6 text-center">
                                     <span className="mx-auto mb-5 flex size-14 items-center justify-center rounded-[18px] bg-primary-subtle text-primary shadow-[inset_0_0_0_1px_rgba(34,123,78,0.08)]">
@@ -319,16 +355,16 @@ export function BotChatHome({
                     {model.view.kind === "draft" && !switching && (
                         <BotChatComposer
                             attachments={attachments}
-                            disabled={model.submission.kind === "sending"}
+                            disabled={composerLocked}
                             draft={draft}
-                            error={model.submission.kind === "failed" ? model.submission.message : ""}
+                            error={creationError}
                             onAttachmentsChange={setAttachments}
                             onDraftChange={setDraft}
                             onStop={() => {}}
                             onSubmit={() => void send()}
                             outputState="idle"
                             submitDisabled={
-                                model.submission.kind === "sending" ||
+                                creationBusy ||
                                 (draft.trim().length === 0 && attachments.length === 0) ||
                                 model.draftSettings === null
                             }
@@ -337,7 +373,7 @@ export function BotChatHome({
                                 key={model.target.kind === "draft" ? model.target.key : "existing"}
                                 botId={model.view.bot.botId}
                                 requests={requests}
-                                disabled={model.submission.kind === "sending"}
+                                disabled={composerLocked}
                                 onSettings={store.getState().setDraftSettings}
                             />
                         </BotChatComposer>

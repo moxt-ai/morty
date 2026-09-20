@@ -57,7 +57,7 @@ export function ConversationSidebar({
               readonly kind: "active";
               readonly directoryLabel: string;
               readonly id: string;
-              readonly running: boolean;
+              readonly status: "idle" | "working" | "failed";
           };
 }) {
     const [store] = useState(() => createConversationDirectoryStore(botId, requests));
@@ -217,14 +217,32 @@ export function ConversationSidebar({
                         </span>
                         {activeSession.kind === "active" &&
                             activeSession.id === session.id &&
-                            activeSession.running && (
-                                <span aria-label="Session working" className="inline-flex text-primary" role="status">
+                            (activeSession.status === "working" ? (
+                                <span
+                                    aria-label="Session working"
+                                    className="inline-flex text-primary"
+                                    data-testid={dataTestId.sessionStatus}
+                                    role="status"
+                                >
                                     <LoaderCircle
                                         aria-hidden="true"
                                         className="size-4 animate-spin motion-reduce:animate-none"
                                     />
                                 </span>
-                            )}
+                            ) : (
+                                <span
+                                    aria-label={`Session ${activeSession.status}`}
+                                    className={
+                                        activeSession.status === "failed"
+                                            ? "text-xs text-destructive"
+                                            : "text-xs text-copy-tertiary"
+                                    }
+                                    data-testid={dataTestId.sessionStatus}
+                                    role="status"
+                                >
+                                    {activeSession.status === "failed" ? "Failed" : "Idle"}
+                                </span>
+                            ))}
                     </button>
                 ))}
             </div>

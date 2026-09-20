@@ -11,6 +11,8 @@ export const dataTestId = Object.freeze({
     workingDirectoryPreview: "chat-working-directory-preview",
     saveWorkingDirectory: "chat-save-working-directory",
     managedConversation: "chat-managed-conversation",
+    initialMessageStatus: "chat-initial-message-status",
+    sessionStatus: "chat-session-status",
     queuedMessage: "chat-queued-message",
     sendMessage: "chat-send-message",
     workingIndicator: "chat-working-indicator",

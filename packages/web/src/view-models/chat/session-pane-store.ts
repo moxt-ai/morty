@@ -9,6 +9,8 @@ import {
     type MobiusClient,
     MobiusControlEvent,
     MobiusElicitationResponseRequest,
+    MobiusFailedAttemptSummary,
+    MobiusFailedBeforeStartAttemptSummary,
     MobiusPageRequest,
     MobiusPermissionResponseRequest,
     MobiusRunningAttemptSummary,
@@ -27,6 +29,7 @@ import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { createRemoteAccessStore } from "./remote-access-store.ts";
+import { type SessionActivityState, transitionSessionActivity, workingCommandId } from "./session-activity-machine.ts";
 import { createSessionDeliveryStore, type SessionDeliveryStore } from "./session-delivery-store.ts";
 import { createSessionMessageQueueStore, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
 import type {
@@ -141,7 +144,7 @@ export interface SessionPaneStore {
     readonly activities: ReadonlyMap<string, RecordedAgentActivity>;
     readonly interactions: readonly LocalInteraction[];
     readonly operation: Operation;
-    readonly activeCommandId: string | null;
+    readonly activity: SessionActivityState;
     readonly connect: (signal: AbortSignal) => Promise<void>;
     readonly setDraft: (draft: string) => void;
     readonly setAttachments: (attachments: readonly ComposerAttachment[]) => void;
@@ -184,18 +187,17 @@ export function sessionPanePresentation(
         queue.operation.kind === "submitting" ||
         tasks.operation.kind === "steering" ||
         tasks.operation.kind === "stopping";
-    const busy = model.activeCommandId !== null || composerDisabled;
+    const activeCommandId = workingCommandId(model.activity);
+    const busy = activeCommandId !== null || composerDisabled;
     const compactAvailable = findCompactCommand(tasks.commands) !== null;
     const activeMessageId =
-        model.activeCommandId === null
+        activeCommandId === null
             ? null
             : (model.messages.findLast(
-                  (message) => message.role === "assistant" && message.commandId === model.activeCommandId,
+                  (message) => message.role === "assistant" && message.commandId === activeCommandId,
               )?.id ?? null);
     const activeUserMessageId =
-        model.activeCommandId === null
-            ? null
-            : (model.messages.findLast((message) => message.role === "user")?.id ?? null);
+        activeCommandId === null ? null : (model.messages.findLast((message) => message.role === "user")?.id ?? null);
     const deliveryUnknownCommandId =
         delivery.state.kind === "delivery-unknown" ? delivery.state.journal.commandId : null;
     const deliveryUnknownUserMessageId =
@@ -215,15 +217,17 @@ export function sessionPanePresentation(
             tasks.operation.kind !== "idle" ||
             !compactAvailable,
         composerError:
-            model.operation.kind === "failed"
-                ? model.operation.message
-                : delivery.state.kind === "failed"
-                  ? delivery.state.message
-                  : tasks.feedback.kind === "failed"
-                    ? tasks.feedback.message
-                    : queue.feedback.kind === "failed"
-                      ? queue.feedback.message
-                      : "",
+            model.activity.kind === "failed"
+                ? model.activity.message
+                : model.operation.kind === "failed"
+                  ? model.operation.message
+                  : delivery.state.kind === "failed"
+                    ? delivery.state.message
+                    : tasks.feedback.kind === "failed"
+                      ? tasks.feedback.message
+                      : queue.feedback.kind === "failed"
+                        ? queue.feedback.message
+                        : "",
         controlRunning,
         deliveryUnknownUserMessageId,
         outputState:
@@ -252,6 +256,22 @@ function includePendingUserMessage(
         return messages;
     }
     return [...messages, { contents: [], id: commandId, role: "user", text: displayPrompt }];
+}
+
+function restoredSessionActivity(messages: readonly SessionMessage[]): SessionActivityState {
+    const lastAssistant = messages.findLast((message) => message.role === "assistant");
+    const attempt = lastAssistant?.role === "assistant" ? lastAssistant.attempt : null;
+    if (
+        lastAssistant?.role === "assistant" &&
+        (attempt instanceof MobiusFailedAttemptSummary || attempt instanceof MobiusFailedBeforeStartAttemptSummary)
+    ) {
+        return {
+            commandId: lastAssistant.commandId,
+            kind: "failed",
+            message: attempt.message,
+        };
+    }
+    return { kind: "idle" };
 }
 
 export function createSessionPaneModel(options: {
@@ -363,7 +383,7 @@ export function createSessionPaneModel(options: {
             activities: new Map(),
             interactions: [],
             operation: { kind: "idle" },
-            activeCommandId: command || null,
+            activity: command === "" ? { kind: "idle" } : { commandId: command, kind: "working" },
             connect: async (signal) => {
                 let lastSequence = 0n;
                 const refresh = async () => {
@@ -396,7 +416,28 @@ export function createSessionPaneModel(options: {
                         };
                     });
                     if (["succeeded", "failed", "cancelled", "indeterminate"].includes(message.attempt.kind)) {
-                        set({ operation: { kind: "idle" }, activeCommandId: null });
+                        const completedAttempt = message.attempt;
+                        set((current) => ({
+                            activity:
+                                completedAttempt instanceof MobiusFailedAttemptSummary ||
+                                completedAttempt instanceof MobiusFailedBeforeStartAttemptSummary
+                                    ? transitionSessionActivity(current.activity, {
+                                          commandId: currentCommand,
+                                          kind: "work-failed",
+                                          message: completedAttempt.message,
+                                      })
+                                    : completedAttempt.kind === "indeterminate"
+                                      ? transitionSessionActivity(current.activity, {
+                                            commandId: currentCommand,
+                                            kind: "work-failed",
+                                            message: "The Session result could not be determined.",
+                                        })
+                                      : transitionSessionActivity(current.activity, {
+                                            commandId: currentCommand,
+                                            kind: "work-completed",
+                                        }),
+                            operation: { kind: "idle" },
+                        }));
                         tasks.getState().finish(currentCommand);
                         command = "";
                     }
@@ -440,7 +481,10 @@ export function createSessionPaneModel(options: {
                     set({
                         activities: restored.activities,
                         messages: restoredMessages,
-                        activeCommandId: command || null,
+                        activity:
+                            command === ""
+                                ? restoredSessionActivity(restoredMessages)
+                                : { commandId: command, kind: "working" },
                     });
                     const subscription = await connected.events.subscribe(
                         sessionId,
@@ -543,7 +587,10 @@ export function createSessionPaneModel(options: {
                                         command = queued.commandId;
                                         tasks.getState().start(queued.commandId, queued.turnId);
                                         set((current) => ({
-                                            activeCommandId: queued.commandId,
+                                            activity: transitionSessionActivity(current.activity, {
+                                                commandId: queued.commandId,
+                                                kind: "work-started",
+                                            }),
                                             messages: [
                                                 ...current.messages,
                                                 {
@@ -627,6 +674,10 @@ export function createSessionPaneModel(options: {
                     if (!signal.aborted) {
                         set({
                             connection: { kind: "failed" },
+                            activity: transitionSessionActivity(get().activity, {
+                                kind: "session-failed",
+                                message: cause instanceof Error ? cause.message : "The Session could not be opened.",
+                            }),
                             operation: {
                                 kind: "failed",
                                 message: cause instanceof Error ? cause.message : "The Session could not be opened.",
@@ -665,7 +716,7 @@ export function createSessionPaneModel(options: {
                 set((state) => ({
                     draft: "",
                     attachments: [],
-                    activeCommandId: commandId,
+                    activity: transitionSessionActivity(state.activity, { commandId, kind: "work-started" }),
                     operation: { kind: "sending", commandId },
                     messages: [
                         ...state.messages,
@@ -705,13 +756,19 @@ export function createSessionPaneModel(options: {
                     set({ operation: { kind: "idle" } });
                 } catch (cause) {
                     signal.throwIfAborted();
-                    set({
+                    set((current) => ({
+                        activity: transitionSessionActivity(current.activity, {
+                            commandId,
+                            kind: "work-failed",
+                            message:
+                                cause instanceof Error ? cause.message : "The agent could not complete the message.",
+                        }),
                         operation: {
                             kind: "failed",
                             message:
                                 cause instanceof Error ? cause.message : "The agent could not complete the message.",
                         },
-                    });
+                    }));
                 }
             },
             removeUnknownDelivery: () => {
@@ -723,7 +780,7 @@ export function createSessionPaneModel(options: {
                     command = "";
                 }
                 set((current) => ({
-                    activeCommandId: current.activeCommandId === commandId ? null : current.activeCommandId,
+                    activity: transitionSessionActivity(current.activity, { commandId, kind: "work-completed" }),
                     messages: current.messages.filter((message) =>
                         message.role === "user" ? message.id !== commandId : message.commandId !== commandId,
                     ),
@@ -767,7 +824,13 @@ export function createSessionPaneModel(options: {
                             },
                         ];
                     }
-                    return { activeCommandId: pending.commandId, messages };
+                    return {
+                        activity: transitionSessionActivity(current.activity, {
+                            commandId: pending.commandId,
+                            kind: "work-started",
+                        }),
+                        messages,
+                    };
                 });
                 const accepted = await delivery.getState().retry(signal);
                 signal.throwIfAborted();
@@ -839,7 +902,7 @@ export function createSessionPaneModel(options: {
                     (commandId, prompt) => {
                         command = commandId;
                         set((state) => ({
-                            activeCommandId: commandId,
+                            activity: transitionSessionActivity(state.activity, { commandId, kind: "work-started" }),
                             messages: [
                                 ...state.messages,
                                 { id: `${commandId}-user`, role: "user", text: prompt, contents: [] },

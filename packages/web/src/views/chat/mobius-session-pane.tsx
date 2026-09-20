@@ -18,6 +18,7 @@ import { registerMobiusChatDebugSession } from "../../debug-bridge.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { createBrowserFilePreviewStore } from "../../view-models/chat/file-preview-store.ts";
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
+import { type SessionActivityState, workingCommandId } from "../../view-models/chat/session-activity-machine.ts";
 import { sessionDebugBlocks } from "../../view-models/chat/session-debug-blocks.ts";
 import { createSessionPaneModel, sessionPanePresentation } from "../../view-models/chat/session-pane-store.ts";
 import { MobiusSessionMessage } from "./mobius-session-message.tsx";
@@ -27,13 +28,13 @@ export function MobiusSessionPane({
     botId,
     requests,
     endRemoteAccess,
-    onRunningChange,
+    onStatusChange,
 }: {
     readonly session: OpenMobiusSession;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession" | "steerTurn" | "submitTurn">;
     readonly endRemoteAccess?: (signal: AbortSignal) => Promise<void>;
-    readonly onRunningChange: (sessionId: string, running: boolean) => void;
+    readonly onStatusChange: (sessionId: string, status: SessionActivityState) => void;
 }) {
     const sessionId = session.result.ready.sessionId;
     const [pane] = useState(() =>
@@ -123,11 +124,10 @@ export function MobiusSessionPane({
         await pane.store.getState().respondToElicitation(response, controller.signal);
     };
     const presentation = sessionPanePresentation(model, delivery, taskControls, messageQueue);
-    const running = model.activeCommandId !== null && delivery.state.kind !== "delivery-unknown";
     useEffect(() => {
-        onRunningChange(sessionId, running);
-        return () => onRunningChange(sessionId, false);
-    }, [onRunningChange, running, sessionId]);
+        onStatusChange(sessionId, model.activity);
+    }, [model.activity, onStatusChange, sessionId]);
+    const activeCommandId = workingCommandId(model.activity);
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
         run(async (signal) => await pane.store.getState().configure(option, value, booleanValue, signal));
     const openLocalFile = useCallback(
@@ -204,7 +204,7 @@ export function MobiusSessionPane({
                                 <MobiusSessionMessage
                                     message={message}
                                     activities={model.activities}
-                                    activeCommandId={model.activeCommandId}
+                                    activeCommandId={activeCommandId}
                                     activeMessageId={presentation.activeMessageId}
                                     activeUserMessageId={presentation.activeUserMessageId}
                                     deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
