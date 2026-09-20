@@ -69,7 +69,7 @@ export function createConversationSessionStore(
                     botId,
                     access.sessionId,
                     {
-                        additionalDirectoryIds: settings.configuration.additionalDirectoryIds,
+                        additionalDirectoryIds: [],
                         artifactIds: [],
                         content: initialPrompt,
                         idempotencyKey: conversationKey,

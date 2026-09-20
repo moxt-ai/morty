@@ -113,8 +113,8 @@ export function MobiusSessionPane({
         onRunningChange(sessionId, running);
         return () => onRunningChange(sessionId, false);
     }, [onRunningChange, running, sessionId]);
-    const configure = (option: SessionConfigOption, value: string) =>
-        run(async (signal) => await pane.store.getState().configure(option, value, signal));
+    const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
+        run(async (signal) => await pane.store.getState().configure(option, value, booleanValue, signal));
 
     if (endRemoteAccess !== undefined && remoteAccess.state.kind === "ended") {
         return (
@@ -245,35 +245,37 @@ export function MobiusSessionPane({
                         {
                             disabled: true,
                             id: "harness",
+                            kind: "select" as const,
                             label: "Harness",
                             onValueChange: () => {},
                             options: [{ value: session.agentRef, label: session.agentRef }],
                             value: session.agentRef,
                         },
-                        ...model.options
-                            .filter(
-                                (option) =>
-                                    ["model", "thought_level", "model_config", "mode", "_mobius_permission"].includes(
-                                        option.category,
-                                    ) && option.type !== "boolean",
-                            )
-                            .map((option) => ({
-                                disabled: presentation.busy,
-                                id: option.id,
-                                label:
-                                    option.category === "model"
-                                        ? "Model"
-                                        : option.category === "mode" || option.category === "_mobius_permission"
-                                          ? "Permissions"
-                                          : "Variant",
-                                onValueChange: (value: string) => configure(option, value),
-                                options: option.values.map((value) => ({ value: value.value, label: value.name })),
-                                testId:
-                                    option.category === "mode" || option.category === "_mobius_permission"
-                                        ? dataTestId.permissionMode
-                                        : undefined,
-                                value: option.currentValue,
-                            })),
+                        ...model.options.map((option) =>
+                            option.type === "boolean"
+                                ? {
+                                      checked: option.booleanValue,
+                                      disabled: presentation.busy,
+                                      id: option.id,
+                                      kind: "boolean" as const,
+                                      label: option.name,
+                                      onCheckedChange: () => configure(option, "", !option.booleanValue),
+                                      testId: dataTestId.agentSetting(option.id),
+                                  }
+                                : {
+                                      disabled: presentation.busy,
+                                      id: option.id,
+                                      kind: "select" as const,
+                                      label: option.name,
+                                      onValueChange: (value: string) => configure(option, value, false),
+                                      options: option.values.map((value) => ({
+                                          value: value.value,
+                                          label: value.name,
+                                      })),
+                                      testId: dataTestId.agentSetting(option.id),
+                                      value: option.currentValue,
+                                  },
+                        ),
                     ]}
                 />
                 {model.operation.kind === "configuring" && (

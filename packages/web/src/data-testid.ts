@@ -1,6 +1,7 @@
 export const dataTestId = Object.freeze({
     messageComposer: "chat-message-composer",
     agentConfiguration: "chat-agent-configuration",
+    agentSetting: (configId: string) => `chat-agent-setting-${configId}`,
     permissionMode: "chat-permission-mode",
     workingDirectory: "chat-working-directory",
     workingDirectoryPath: "chat-working-directory-path",

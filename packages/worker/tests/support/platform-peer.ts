@@ -66,6 +66,16 @@ function readySession(sessionId: string, currentValue = "model-one") {
                 currentValue: "high",
                 values: [{ name: "High", value: "high", description: "", groupId: "", groupName: "" }],
             },
+            {
+                id: "fast_mode",
+                name: "Fast mode",
+                description: "Use the lower latency execution path",
+                booleanValue: false,
+                category: "model_config",
+                type: "boolean",
+                currentValue: "",
+                values: [],
+            },
         ],
     };
 }
@@ -140,6 +150,7 @@ export async function platformPeer({
                         idempotencyKey: v.string(),
                         images: v.array(v.unknown()),
                         resources: v.array(v.unknown()),
+                        sessionConfigurations: v.optional(v.array(v.unknown())),
                     }),
                     JSON.parse(body),
                 );
