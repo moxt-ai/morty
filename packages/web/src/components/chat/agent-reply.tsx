@@ -1,6 +1,7 @@
 import type { MobiusAgentActivityEvent, MobiusAttemptSummary } from "@moxt-ai/mobius-sdk";
 import type { ReactNode } from "react";
 import { describeAgentReply, type ReplyPhase } from "../../services/chat/agent-reply.ts";
+import type { MarkdownImageReader } from "../agents/agent-markdown.tsx";
 import { AgentMarkdown } from "../agents/agent-markdown.tsx";
 import { AgentThinking } from "./agent-thinking.tsx";
 import { AttemptFailure } from "./attempt-failure.tsx";
@@ -43,6 +44,8 @@ export function AgentReply({
     latest,
     botId,
     children,
+    openLocalFile,
+    readImage,
     "data-testid": testId,
 }: {
     readonly text: string;
@@ -52,6 +55,8 @@ export function AgentReply({
     readonly latest: boolean;
     readonly botId: string;
     readonly children?: ReactNode;
+    readonly openLocalFile?: ((path: string) => void) | undefined;
+    readonly readImage?: MarkdownImageReader | undefined;
     readonly "data-testid"?: string;
 }) {
     const hasText = text.length > 0;
@@ -61,7 +66,12 @@ export function AgentReply({
             <AgentThinking {...thinking} />
             {hasText && (
                 <MessageBubble speaker="assistant" data-testid={testId}>
-                    <AgentMarkdown markdown={text} streaming={phase === "working" && latest} />
+                    <AgentMarkdown
+                        markdown={text}
+                        openLocalFile={openLocalFile}
+                        readImage={readImage}
+                        streaming={phase === "working" && latest}
+                    />
                 </MessageBubble>
             )}
             {children}

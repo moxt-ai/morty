@@ -931,5 +931,17 @@ export function createSessionPaneModel(options: {
         messageQueue,
         tasks,
         remoteAccess,
+        readFile: async (path: string, signal: AbortSignal) => {
+            signal.throwIfAborted();
+            if (client === null) {
+                throw new Error("The Session is not connected.");
+            }
+            return await client.sessions.readFile(
+                sessionId,
+                path,
+                AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
+                32 * 1024 * 1024,
+            );
+        },
     };
 }

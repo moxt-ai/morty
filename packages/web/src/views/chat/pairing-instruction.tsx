@@ -1,7 +1,8 @@
-import { Check, Copy } from "lucide-react";
+import { Copy } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
+import { useToast } from "../../components/ui/toast.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { createPairingInstructionStore } from "../../view-models/chat/pairing-instruction-store.ts";
@@ -14,13 +15,21 @@ export function PairingInstruction({
     const [store] = useState(() => createPairingInstructionStore(requests));
     const { copy, copyInstruction, load, resetCopy, state } = useStore(store);
     const [revision, refresh] = useState(0);
+    const showToast = useToast();
     useEffect(() => {
         if (copy === "idle") {
             return;
         }
-        const timeout = window.setTimeout(resetCopy, 3000);
-        return () => window.clearTimeout(timeout);
-    }, [copy, resetCopy]);
+        showToast(
+            copy === "copied"
+                ? { title: "Copied", variant: "success" }
+                : {
+                      description: "Select the instruction and copy it manually.",
+                      title: "Could not copy",
+                      variant: "error",
+                  },
+        );
+    }, [copy, showToast]);
     // biome-ignore lint/correctness/useExhaustiveDependencies: Refresh explicitly issues a new one-time ticket.
     useEffect(() => {
         const controller = new AbortController();
@@ -77,15 +86,6 @@ export function PairingInstruction({
             >
                 Refresh pairing instruction
             </button>
-            {copy !== "idle" && (
-                <div
-                    role="status"
-                    className="fixed bottom-6 left-1/2 z-50 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-2 rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground shadow-lg"
-                >
-                    {copy === "copied" && <Check aria-hidden="true" className="size-4 shrink-0 text-primary" />}
-                    {copy === "copied" ? "Copied" : "Could not copy. Select the instruction and copy it manually."}
-                </div>
-            )}
         </div>
     );
 }

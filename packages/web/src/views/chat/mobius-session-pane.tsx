@@ -7,6 +7,7 @@ import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import { ChatComposerMoreMenu } from "../../components/chat/chat-composer-more-menu.tsx";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
 import { ChatMessageQueue } from "../../components/chat/chat-message-queue.tsx";
+import { FilePreview } from "../../components/chat/file-preview.tsx";
 import {
     type ElicitationInteractionResponse,
     type PermissionInteractionResponse,
@@ -15,6 +16,7 @@ import {
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { registerMobiusChatDebugSession } from "../../debug-bridge.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import { createBrowserFilePreviewStore } from "../../view-models/chat/file-preview-store.ts";
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 import { sessionDebugBlocks } from "../../view-models/chat/session-debug-blocks.ts";
 import { createSessionPaneModel, sessionPanePresentation } from "../../view-models/chat/session-pane-store.ts";
@@ -44,6 +46,8 @@ export function MobiusSessionPane({
         }),
     );
     const model = useStore(pane.store);
+    const [filePreview] = useState(() => createBrowserFilePreviewStore(pane.readFile));
+    const preview = useStore(filePreview);
     const delivery = useStore(pane.delivery);
     const messageQueue = useStore(pane.messageQueue);
     const taskControls = useStore(pane.tasks);
@@ -72,12 +76,13 @@ export function MobiusSessionPane({
         lifetime.current = controller;
         void pane.store.getState().connect(controller.signal);
         return () => {
+            filePreview.getState().close();
             controller.abort();
             if (lifetime.current === controller) {
                 lifetime.current = null;
             }
         };
-    }, [pane]);
+    }, [filePreview, pane]);
     useEffect(
         () =>
             registerMobiusChatDebugSession({
@@ -125,6 +130,15 @@ export function MobiusSessionPane({
     }, [onRunningChange, running, sessionId]);
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
         run(async (signal) => await pane.store.getState().configure(option, value, booleanValue, signal));
+    const openLocalFile = useCallback(
+        (path: string) => {
+            const controller = lifetime.current;
+            if (controller !== null) {
+                void filePreview.getState().open(path, controller.signal);
+            }
+        },
+        [filePreview],
+    );
 
     if (endRemoteAccess !== undefined && remoteAccess.state.kind === "ended") {
         return (
@@ -135,165 +149,169 @@ export function MobiusSessionPane({
         );
     }
     return (
-        <section className="flex min-h-0 min-w-0 flex-1 animate-cloud-enter flex-col motion-reduce:animate-none">
-            {endRemoteAccess !== undefined && (
-                <div className="flex items-center justify-end gap-2 border-b border-border px-4 py-2">
-                    {remoteAccess.state.kind === "confirming" ? (
-                        <>
-                            <span className="text-sm">End access for every remote browser?</span>
+        <>
+            <section className="flex min-h-0 min-w-0 flex-1 animate-cloud-enter flex-col motion-reduce:animate-none">
+                {endRemoteAccess !== undefined && (
+                    <div className="flex items-center justify-end gap-2 border-b border-border px-4 py-2">
+                        {remoteAccess.state.kind === "confirming" ? (
+                            <>
+                                <span className="text-sm">End access for every remote browser?</span>
+                                <Button
+                                    variant="destructive"
+                                    disabled={false}
+                                    onClick={() => run(pane.store.getState().endRemoteAccess)}
+                                >
+                                    Confirm end access
+                                </Button>
+                                <Button variant="ghost" onClick={pane.remoteAccess.getState().cancelEnd}>
+                                    Cancel
+                                </Button>
+                            </>
+                        ) : (
                             <Button
-                                variant="destructive"
-                                disabled={false}
-                                onClick={() => run(pane.store.getState().endRemoteAccess)}
+                                variant="outline"
+                                disabled={remoteAccess.state.kind === "ending"}
+                                onClick={pane.remoteAccess.getState().requestEnd}
                             >
-                                Confirm end access
+                                {remoteAccess.state.kind === "ending" ? "Ending remote access…" : "End remote access"}
                             </Button>
-                            <Button variant="ghost" onClick={pane.remoteAccess.getState().cancelEnd}>
-                                Cancel
-                            </Button>
-                        </>
-                    ) : (
-                        <Button
-                            variant="outline"
-                            disabled={remoteAccess.state.kind === "ending"}
-                            onClick={pane.remoteAccess.getState().requestEnd}
-                        >
-                            {remoteAccess.state.kind === "ending" ? "Ending remote access…" : "End remote access"}
-                        </Button>
-                    )}
-                    {remoteAccess.state.kind === "failed" && <p role="alert">{remoteAccess.state.message}</p>}
-                </div>
-            )}
-            <div
-                role="log"
-                ref={messageList}
-                onScroll={(event) => {
-                    const element = event.currentTarget;
-                    followLatest.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
-                }}
-                aria-label="Messages"
-                className="min-h-0 flex-1 space-y-8 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10 lg:px-12"
-            >
-                {model.messages.map((message) => {
-                    const workingOnly =
-                        message.role === "assistant" &&
-                        message.id === presentation.activeMessageId &&
-                        message.text.length === 0 &&
-                        message.activityIds.length === 0 &&
-                        message.contents.length === 0;
-                    return (
-                        <div
-                            key={message.id}
-                            className={`mx-auto w-full min-w-0 max-w-[920px] ${workingOnly ? "hidden" : ""}`}
-                        >
-                            <MobiusSessionMessage
-                                message={message}
-                                activities={model.activities}
-                                activeCommandId={model.activeCommandId}
-                                activeMessageId={presentation.activeMessageId}
-                                activeUserMessageId={presentation.activeUserMessageId}
-                                deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
-                                onRemoveUnknownDelivery={pane.store.getState().removeUnknownDelivery}
-                                onRetryUnknownDelivery={() => run(pane.store.getState().retryUnknownDelivery)}
-                                sessionId={sessionId}
-                                botId={botId}
-                                readImage={readImage}
-                            />
-                        </div>
-                    );
-                })}
-                <div className="mx-auto w-full min-w-0 max-w-[920px]">
-                    <SessionInteractionCards
-                        elicitations={model.interactions.flatMap((interaction) =>
-                            interaction.kind === "elicitation" ? [interaction.elicitation] : [],
                         )}
-                        permissions={model.interactions.flatMap((interaction) =>
-                            interaction.kind === "permission" ? [interaction.permission] : [],
-                        )}
-                        onElicitationResponse={respondToElicitation}
-                        onPermissionResponse={respondToPermission}
-                    />
-                </div>
-            </div>
-            <ChatMessageQueue
-                messages={messageQueue.messages}
-                steeringSupported={taskControls.steeringSupported}
-                onDelete={(commandId) =>
-                    run(async (signal) => await pane.store.getState().deleteQueued(commandId, signal))
-                }
-                onSteer={(commandId) =>
-                    runAndFollow(async (signal) => await pane.store.getState().steerQueued(commandId, signal))
-                }
-            />
-            <BotChatComposer
-                actions={
-                    <ChatComposerMoreMenu
-                        compactAvailable={presentation.compactAvailable}
-                        compactDisabled={presentation.compactDisabled}
-                        onCompact={() => runAndFollow(pane.store.getState().compact)}
-                    />
-                }
-                attachments={model.attachments}
-                disabled={presentation.composerDisabled}
-                draft={model.draft}
-                error={presentation.composerError}
-                onAttachmentsChange={pane.store.getState().setAttachments}
-                onDraftChange={pane.store.getState().setDraft}
-                onStop={() => run(pane.store.getState().stop)}
-                onSubmit={() =>
-                    runAndFollow(
-                        presentation.shouldQueueOnSubmit
-                            ? pane.store.getState().queueDraft
-                            : pane.store.getState().send,
-                    )
-                }
-                outputState={presentation.outputState}
-                submitDisabled={presentation.submitDisabled}
-            >
-                <ChatConfigurationMenu
-                    controls={[
-                        {
-                            disabled: true,
-                            id: "harness",
-                            kind: "select" as const,
-                            label: "Harness",
-                            onValueChange: () => {},
-                            options: [{ value: session.agentRef, label: session.agentRef }],
-                            value: session.agentRef,
-                        },
-                        ...model.options.map((option) =>
-                            option.type === "boolean"
-                                ? {
-                                      checked: option.booleanValue,
-                                      disabled: presentation.busy,
-                                      id: option.id,
-                                      kind: "boolean" as const,
-                                      label: option.name,
-                                      onCheckedChange: () => configure(option, "", !option.booleanValue),
-                                      testId: dataTestId.agentSetting(option.id),
-                                  }
-                                : {
-                                      disabled: presentation.busy,
-                                      id: option.id,
-                                      kind: "select" as const,
-                                      label: option.name,
-                                      onValueChange: (value: string) => configure(option, value, false),
-                                      options: option.values.map((value) => ({
-                                          value: value.value,
-                                          label: value.name,
-                                      })),
-                                      testId: dataTestId.agentSetting(option.id),
-                                      value: option.currentValue,
-                                  },
-                        ),
-                    ]}
-                />
-                {model.operation.kind === "configuring" && (
-                    <span role="status" className="sr-only">
-                        Applying agent settings…
-                    </span>
+                        {remoteAccess.state.kind === "failed" && <p role="alert">{remoteAccess.state.message}</p>}
+                    </div>
                 )}
-            </BotChatComposer>
-        </section>
+                <div
+                    role="log"
+                    ref={messageList}
+                    onScroll={(event) => {
+                        const element = event.currentTarget;
+                        followLatest.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+                    }}
+                    aria-label="Messages"
+                    className="min-h-0 flex-1 space-y-8 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10 lg:px-12"
+                >
+                    {model.messages.map((message) => {
+                        const workingOnly =
+                            message.role === "assistant" &&
+                            message.id === presentation.activeMessageId &&
+                            message.text.length === 0 &&
+                            message.activityIds.length === 0 &&
+                            message.contents.length === 0;
+                        return (
+                            <div
+                                key={message.id}
+                                className={`mx-auto w-full min-w-0 max-w-[920px] ${workingOnly ? "hidden" : ""}`}
+                            >
+                                <MobiusSessionMessage
+                                    message={message}
+                                    activities={model.activities}
+                                    activeCommandId={model.activeCommandId}
+                                    activeMessageId={presentation.activeMessageId}
+                                    activeUserMessageId={presentation.activeUserMessageId}
+                                    deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
+                                    onRemoveUnknownDelivery={pane.store.getState().removeUnknownDelivery}
+                                    onRetryUnknownDelivery={() => run(pane.store.getState().retryUnknownDelivery)}
+                                    sessionId={sessionId}
+                                    botId={botId}
+                                    readImage={readImage}
+                                    openLocalFile={openLocalFile}
+                                />
+                            </div>
+                        );
+                    })}
+                    <div className="mx-auto w-full min-w-0 max-w-[920px]">
+                        <SessionInteractionCards
+                            elicitations={model.interactions.flatMap((interaction) =>
+                                interaction.kind === "elicitation" ? [interaction.elicitation] : [],
+                            )}
+                            permissions={model.interactions.flatMap((interaction) =>
+                                interaction.kind === "permission" ? [interaction.permission] : [],
+                            )}
+                            onElicitationResponse={respondToElicitation}
+                            onPermissionResponse={respondToPermission}
+                        />
+                    </div>
+                </div>
+                <ChatMessageQueue
+                    messages={messageQueue.messages}
+                    steeringSupported={taskControls.steeringSupported}
+                    onDelete={(commandId) =>
+                        run(async (signal) => await pane.store.getState().deleteQueued(commandId, signal))
+                    }
+                    onSteer={(commandId) =>
+                        runAndFollow(async (signal) => await pane.store.getState().steerQueued(commandId, signal))
+                    }
+                />
+                <BotChatComposer
+                    actions={
+                        <ChatComposerMoreMenu
+                            compactAvailable={presentation.compactAvailable}
+                            compactDisabled={presentation.compactDisabled}
+                            onCompact={() => runAndFollow(pane.store.getState().compact)}
+                        />
+                    }
+                    attachments={model.attachments}
+                    disabled={presentation.composerDisabled}
+                    draft={model.draft}
+                    error={presentation.composerError}
+                    onAttachmentsChange={pane.store.getState().setAttachments}
+                    onDraftChange={pane.store.getState().setDraft}
+                    onStop={() => run(pane.store.getState().stop)}
+                    onSubmit={() =>
+                        runAndFollow(
+                            presentation.shouldQueueOnSubmit
+                                ? pane.store.getState().queueDraft
+                                : pane.store.getState().send,
+                        )
+                    }
+                    outputState={presentation.outputState}
+                    submitDisabled={presentation.submitDisabled}
+                >
+                    <ChatConfigurationMenu
+                        controls={[
+                            {
+                                disabled: true,
+                                id: "harness",
+                                kind: "select" as const,
+                                label: "Harness",
+                                onValueChange: () => {},
+                                options: [{ value: session.agentRef, label: session.agentRef }],
+                                value: session.agentRef,
+                            },
+                            ...model.options.map((option) =>
+                                option.type === "boolean"
+                                    ? {
+                                          checked: option.booleanValue,
+                                          disabled: presentation.busy,
+                                          id: option.id,
+                                          kind: "boolean" as const,
+                                          label: option.name,
+                                          onCheckedChange: () => configure(option, "", !option.booleanValue),
+                                          testId: dataTestId.agentSetting(option.id),
+                                      }
+                                    : {
+                                          disabled: presentation.busy,
+                                          id: option.id,
+                                          kind: "select" as const,
+                                          label: option.name,
+                                          onValueChange: (value: string) => configure(option, value, false),
+                                          options: option.values.map((value) => ({
+                                              value: value.value,
+                                              label: value.name,
+                                          })),
+                                          testId: dataTestId.agentSetting(option.id),
+                                          value: option.currentValue,
+                                      },
+                            ),
+                        ]}
+                    />
+                    {model.operation.kind === "configuring" && (
+                        <span role="status" className="sr-only">
+                            Applying agent settings…
+                        </span>
+                    )}
+                </BotChatComposer>
+            </section>
+            <FilePreview onClose={filePreview.getState().close} state={preview.state} />
+        </>
     );
 }

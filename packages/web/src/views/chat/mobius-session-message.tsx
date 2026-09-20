@@ -20,6 +20,7 @@ export function MobiusSessionMessage({
     sessionId,
     botId,
     readImage,
+    openLocalFile,
 }: {
     readonly message: SessionMessage;
     readonly activities: ReadonlyMap<string, RecordedAgentActivity>;
@@ -32,6 +33,7 @@ export function MobiusSessionMessage({
     readonly sessionId: string;
     readonly botId: string;
     readonly readImage: MarkdownImageReader;
+    readonly openLocalFile: (path: string) => void;
 }) {
     if (message.role === "user") {
         const deliveryUnknown = message.id === deliveryUnknownUserMessageId;
@@ -61,6 +63,7 @@ export function MobiusSessionMessage({
                         <AgentMarkdown
                             className="[&_p]:my-0"
                             markdown={message.text}
+                            openLocalFile={openLocalFile}
                             readImage={readImage}
                             streaming={false}
                         />
@@ -69,6 +72,7 @@ export function MobiusSessionMessage({
                 <AgentRichContent
                     contents={message.contents.map((entry) => entry.content)}
                     readImage={readImage}
+                    openLocalFile={openLocalFile}
                     sessionId={sessionId}
                 />
                 {deliveryUnknown && (
@@ -103,10 +107,13 @@ export function MobiusSessionMessage({
             latest={activeMessageId === message.id}
             botId={botId}
             data-testid={dataTestId.agentResponse}
+            openLocalFile={openLocalFile}
+            readImage={readImage}
         >
             <AgentRichContent
                 contents={message.contents.map((entry) => entry.content)}
                 readImage={readImage}
+                openLocalFile={openLocalFile}
                 sessionId={sessionId}
             />
         </AgentReply>

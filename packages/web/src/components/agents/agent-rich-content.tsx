@@ -103,12 +103,14 @@ function LocalImage({
 function AgentRichContentItem({
     channelId,
     content,
+    openLocalFile,
     readImage,
     sessionId,
 }: {
     readonly channelId?: string | undefined;
     readonly content: AgentDisplayContent;
     readonly readImage?: MarkdownImageReader | undefined;
+    readonly openLocalFile?: ((path: string) => void) | undefined;
     readonly sessionId?: string | undefined;
 }) {
     if (content.type === "image" && content.uri.length > 0) {
@@ -208,7 +210,7 @@ function AgentRichContentItem({
     if (content.type === "text") {
         return (
             <div className="rounded-lg border-[0.5px] border-black/8 bg-white px-3 py-2">
-                <AgentMarkdown markdown={content.text} streaming={false} />
+                <AgentMarkdown markdown={content.text} openLocalFile={openLocalFile} streaming={false} />
             </div>
         );
     }
@@ -231,11 +233,13 @@ export function AgentRichContent({
     channelId,
     contents,
     readImage,
+    openLocalFile,
     sessionId,
 }: {
     readonly channelId?: string | undefined;
     readonly contents: readonly AgentDisplayContent[];
     readonly readImage?: MarkdownImageReader | undefined;
+    readonly openLocalFile?: ((path: string) => void) | undefined;
     readonly sessionId?: string | undefined;
 }) {
     if (contents.length === 0) {
@@ -249,6 +253,7 @@ export function AgentRichContent({
                     content={content}
                     key={`${content.type}:${content.name}:${content.uri}:${index.toString()}`}
                     readImage={readImage}
+                    openLocalFile={openLocalFile}
                     sessionId={sessionId}
                 />
             ))}

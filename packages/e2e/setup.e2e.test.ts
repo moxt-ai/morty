@@ -112,6 +112,44 @@ test("Given a setup handoff, When a user continues remote work, Then setup, ACP 
         ).toBeVisible();
     });
 
+    await test.step("open local text and image links over the conversation", async () => {
+        await page.setViewportSize({ width: 1280, height: 800 });
+        const textPath = join(runtime.workspace, "preview-notes.txt");
+        const imagePath = join(runtime.workspace, "preview-image.png");
+        const binaryPath = join(runtime.workspace, "preview-data.bin");
+        await writeFile(textPath, "Local preview from the Runtime\n");
+        await writeFile(binaryPath, Buffer.from([0, 1, 2, 3]));
+        await writeFile(
+            imagePath,
+            Buffer.from(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+                "base64",
+            ),
+        );
+        const prompt = `Open [preview-notes.txt](<${textPath}>), [preview-image.png](<${imagePath}>), or [preview-data.bin](<${binaryPath}>).`;
+        await composer.fill(prompt);
+        await page.getByTestId(dataTestId.sendMessage).click();
+        const composerBeforePreview = await page.getByTestId(dataTestId.messageComposer).boundingBox();
+
+        await page.getByTestId(dataTestId.localFileLink).filter({ hasText: "preview-notes.txt" }).first().click();
+        await expect(page.getByTestId(dataTestId.filePreview)).toBeVisible();
+        await expect(page.getByTestId(dataTestId.filePreviewContent)).toHaveText("Local preview from the Runtime");
+        await expect(page.getByTestId(dataTestId.filePreview)).toHaveCSS("width", "640px");
+        expect(await page.getByTestId(dataTestId.messageComposer).boundingBox()).toEqual(composerBeforePreview);
+        await page.getByTestId(dataTestId.closeFilePreview).click();
+        await expect(page.getByTestId(dataTestId.filePreview)).toHaveCount(0);
+
+        await page.getByTestId(dataTestId.localFileLink).filter({ hasText: "preview-image.png" }).first().click();
+        await expect(page.getByTestId(dataTestId.filePreviewContent)).toHaveAttribute("src", /^blob:/u);
+        await page.getByTestId(dataTestId.closeFilePreview).click();
+        await expect(page.getByTestId(dataTestId.filePreview)).toHaveCount(0);
+
+        const downloadPromise = page.waitForEvent("download");
+        await page.getByTestId(dataTestId.localFileLink).filter({ hasText: "preview-data.bin" }).first().click();
+        const download = await downloadPromise;
+        expect(download.suggestedFilename()).toBe("preview-data.bin");
+    });
+
     await test.step("preserve active work across reload and end remote access", async () => {
         await composer.fill("wait until cancelled");
         await page.getByRole("button", { name: "Send message", exact: true }).click();

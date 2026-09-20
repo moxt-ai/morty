@@ -22,4 +22,8 @@ export const dataTestId = Object.freeze({
     localSessionEntry: "chat-local-session-entry",
     importLocalSession: "chat-import-local-session",
     forkLocalSession: "chat-fork-local-session",
+    localFileLink: "chat-local-file-link",
+    filePreview: "chat-file-preview",
+    filePreviewContent: "chat-file-preview-content",
+    closeFilePreview: "chat-close-file-preview",
 });

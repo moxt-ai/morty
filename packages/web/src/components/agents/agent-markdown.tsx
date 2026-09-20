@@ -2,7 +2,7 @@ import { code } from "@streamdown/code";
 import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
 import { type ComponentProps, useEffect, useMemo, useState } from "react";
-
+import { dataTestId } from "@/data-testid";
 import { cn } from "@/lib/utils";
 
 const STREAM_ANIMATION = Object.freeze({ duration: 180, stagger: 0 });
@@ -18,7 +18,41 @@ function isSafeLink(href: string): boolean {
     );
 }
 
-function AgentMarkdownLink({ children, href }: ComponentProps<"a">) {
+function localFilePath(href: string): string | null {
+    if (href.startsWith("file:")) {
+        try {
+            const url = new URL(href);
+            return url.protocol === "file:" && url.host.length === 0 ? href : null;
+        } catch {
+            return null;
+        }
+    }
+    try {
+        const decoded = decodeURI(href);
+        return decoded.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(decoded) ? decoded : null;
+    } catch {
+        return null;
+    }
+}
+
+function AgentMarkdownLink({
+    children,
+    href,
+    openLocalFile,
+}: ComponentProps<"a"> & { readonly openLocalFile?: ((path: string) => void) | undefined }) {
+    const path = href === undefined ? null : localFilePath(href);
+    if (path !== null && openLocalFile !== undefined) {
+        return (
+            <button
+                className="cursor-pointer font-inherit font-medium text-[#19764a] underline decoration-[#2fb872]/35 underline-offset-2 hover:decoration-[#2fb872]"
+                data-testid={dataTestId.localFileLink}
+                onClick={() => openLocalFile(path)}
+                type="button"
+            >
+                {children}
+            </button>
+        );
+    }
     if (href === undefined || !isSafeLink(href)) {
         return <span>{children}</span>;
     }
@@ -100,17 +134,18 @@ function AgentMarkdownImage({
 export interface AgentMarkdownProps {
     readonly className?: string;
     readonly markdown: string;
+    readonly openLocalFile?: ((path: string) => void) | undefined;
     readonly readImage?: MarkdownImageReader | undefined;
     readonly streaming: boolean;
 }
 
-export function AgentMarkdown({ className, markdown, readImage, streaming }: AgentMarkdownProps) {
+export function AgentMarkdown({ className, markdown, openLocalFile, readImage, streaming }: AgentMarkdownProps) {
     const components = useMemo(
         () => ({
-            a: AgentMarkdownLink,
+            a: (properties: ComponentProps<"a">) => <AgentMarkdownLink {...properties} openLocalFile={openLocalFile} />,
             img: (properties: ComponentProps<"img">) => <AgentMarkdownImage {...properties} readImage={readImage} />,
         }),
-        [readImage],
+        [openLocalFile, readImage],
     );
     return (
         <Streamdown
