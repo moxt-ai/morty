@@ -11,6 +11,10 @@ The local execution boundary is the only authority allowed to approve local side
 - Validate both the requested representation and the resolved representation of paths, URLs, commands, and other security-sensitive targets.
 - Never let a remote assertion, prior validation result, or user-interface approval bypass authorization at the execution boundary.
 
+## Deployment topology
+
+- Staging Chat (`mobius-chat.paradev.biz`) is configured to call the production Platform relay (`mobius.moxt.ai`). For cross-service staging incidents, inspect `mobius-platform-production`, not the staging Platform Worker.
+
 ## State Modeling
 
 Make illegal states unrepresentable.
