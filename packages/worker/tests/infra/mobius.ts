@@ -10,6 +10,7 @@ import { FakeClerk } from "@moxt-ai/mobius-test/clerk";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import * as v from "valibot";
+import { miniflareDurableObjects } from "../support/miniflare-durable-objects.ts";
 
 const platformDirectory = new URL(
     "../../../../third-party/mobius/packages/relay-cloudflare-platform/",
@@ -44,11 +45,7 @@ export async function createMobiusPlatformFixture() {
                 MOBIUS_PLATFORM_OIDC_PROVIDERS: "[]",
                 MOBIUS_PLATFORM_OPERATOR_SUBJECTS: "[]",
             },
-            durableObjects: {
-                RUNTIME_RELAY: { className: "RuntimeRelay", useSQLite: true },
-                SESSION_RELAY: { className: "PlatformSessionRelay", useSQLite: true },
-                PROJECT_RELAY: { className: "ProjectRelay", useSQLite: true },
-            },
+            durableObjects: miniflareDurableObjects(new URL("wrangler.jsonc", platformDirectory)),
         }),
     );
     try {

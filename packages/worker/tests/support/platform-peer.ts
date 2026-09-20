@@ -177,6 +177,7 @@ export async function platformPeer({
                 );
                 const session = {
                     ...input,
+                    cloudRetention: true,
                     projectId,
                     createdAt: timestamp,
                     updatedAt: timestamp,
@@ -351,13 +352,17 @@ export async function platformPeer({
         );
         if (request.method === "POST" && agentSettingsPath !== undefined && agentSettingsPath !== null) {
             v.parse(v.strictObject({}), JSON.parse(body));
+            const agentId = agentSettingsPath[3];
+            if (agentId === undefined) {
+                throw new Error("Expected Agent settings identity");
+            }
             response.writeHead(settingsAvailable ? 200 : 409).end(
                 JSON.stringify(
                     settingsAvailable
                         ? {
                               kind: "agent.settings.discovered",
                               requestId: "discover-settings",
-                              agentId: v.parse(v.string(), agentSettingsPath[3]),
+                              agentId,
                               agentName: "Agent One",
                               agentVersion: "1",
                               modelEffort: {

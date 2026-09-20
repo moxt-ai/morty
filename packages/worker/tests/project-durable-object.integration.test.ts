@@ -3,6 +3,7 @@ import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import * as v from "valibot";
 import { expect, test } from "vitest";
+import { miniflareDurableObjects } from "./support/miniflare-durable-objects.ts";
 import { platformPeer } from "./support/platform-peer.ts";
 
 const identitySchema = v.pipe(v.object({ projectId: v.string(), token: v.string(), userId: v.string() }), v.readonly());
@@ -28,10 +29,7 @@ test("Given project-scoped Chat requests, When users create and reopen workspace
             bindings: { APP_ORIGIN: "https://chat.test", ...platform.bindings },
             compatibilityDate: "2026-09-07",
             compatibilityFlags: ["nodejs_compat"],
-            durableObjects: {
-                BOT_TRIGGER_RATE_LIMITER: { className: "BotTriggerRateLimiter", useSQLite: true },
-                CHAT_PROJECTS: { className: "ProjectDurableObject", useSQLite: true },
-            },
+            durableObjects: miniflareDurableObjects(new URL("../../../wrangler.jsonc", import.meta.url)),
             modules: true,
             r2Buckets: ["CHAT_ATTACHMENTS_APAC", "CHAT_ATTACHMENTS_WNAM"],
             script: output.text,
