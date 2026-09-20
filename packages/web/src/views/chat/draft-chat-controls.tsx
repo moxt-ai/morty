@@ -1,3 +1,5 @@
+import { CircleAlert, CircleHelp, RefreshCw } from "lucide-react";
+import { Tooltip } from "radix-ui";
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
@@ -38,11 +40,42 @@ export function DraftChatControls({
     }
     if (settings.kind === "failed") {
         return (
-            <div>
-                <p role="alert">{settings.message}</p>
-                <button type="button" onClick={() => retry((value) => value + 1)}>
-                    Retry settings
+            <div className="flex min-w-0 items-center gap-1">
+                <span className="sr-only" role="alert">
+                    {settings.message}
+                </span>
+                <button
+                    className="flex h-9 min-w-0 max-w-48 items-center gap-1.5 rounded-lg px-2 text-[13px] text-destructive outline-none transition-colors hover:bg-destructive/8 focus-visible:ring-2 focus-visible:ring-destructive/30 motion-reduce:transition-none"
+                    onClick={() => retry((value) => value + 1)}
+                    type="button"
+                >
+                    <CircleAlert aria-hidden="true" className="size-4 shrink-0" />
+                    <span className="truncate">Retry settings</span>
+                    <RefreshCw aria-hidden="true" className="size-3.5 shrink-0 opacity-70" />
                 </button>
+                <Tooltip.Provider delayDuration={150}>
+                    <Tooltip.Root>
+                        <Tooltip.Trigger asChild>
+                            <button
+                                aria-label="Why settings are unavailable"
+                                className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:transition-none"
+                                type="button"
+                            >
+                                <CircleHelp aria-hidden="true" className="size-4" />
+                            </button>
+                        </Tooltip.Trigger>
+                        <Tooltip.Portal>
+                            <Tooltip.Content
+                                className="z-[70] max-w-80 rounded-lg bg-foreground px-3 py-2 text-xs leading-5 text-background shadow-lg"
+                                side="top"
+                                sideOffset={8}
+                            >
+                                {settings.message}
+                                <Tooltip.Arrow className="fill-foreground" />
+                            </Tooltip.Content>
+                        </Tooltip.Portal>
+                    </Tooltip.Root>
+                </Tooltip.Provider>
             </div>
         );
     }
