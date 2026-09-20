@@ -23,7 +23,8 @@ confirms the Runtime pairing is still active;
 otherwise it creates a fresh Runtime identity.
 `/setup.md` is reserved for standalone testing and external sharing, including
 social posts. That flow requires the current harness session ID, creates or reuses a
-local identity, and returns a browser handoff carrying the validated harness and native
+local identity, reconnects its matching active Runtime or creates a fresh one, and
+returns a browser handoff carrying the validated harness and native
 session ID. The ready result includes the exact URL, its expiry, an owner-only PNG QR
 code, and the path to a private temporary text file containing a terminal-safe QR
 rendering. The bundled setup CLI decodes the PNG before returning it so the QR payload

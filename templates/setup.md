@@ -10,8 +10,9 @@ Reuse the user's saved identity or create an anonymous identity and personal Bot
 No Clerk registration is required. Web-generated instructions use `/pair.md?token=...`.
 Only setup loads local configuration before connecting. It reuses the saved user
 token and Bot selection for this origin, including an identity saved by pair, or
-creates an identity if none is available. The previous file is backed up; fresh
-Runtime pairing and binding state are saved with the identity to `config.json`.
+creates an identity if none is available. It first reconnects a matching saved Runtime
+when Platform confirms its pairing is active; otherwise it creates a fresh Runtime.
+The previous file is backed up, and the selected Runtime state is saved with the identity to `config.json`.
 Configuration from another environment is backed up and replaced for this origin.
 Do not ask for an additional replacement confirmation.
 
@@ -45,7 +46,7 @@ node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --harness "$HARNESS" -
 ```
 
 The command handles identity, Runtime pairing, Runtime launch, Bot binding, and
-readiness. The new Runtime uses `~/.mobius/workspace` and stays attached to this
+readiness. The selected Runtime uses `~/.mobius/workspace` and stays attached to this
 agent session; it exits when your session ends. It does not stop any other local
 Mobius Runtime process. No separate prepare, bind, or finish commands are needed.
 
@@ -71,7 +72,7 @@ preview, scan, or redeem it yourself because doing so consumes one use. Tell the
 expires. Keep the Runtime online. You can bind an account later if you want.**
 
 On failure, use `error.code` and the private Runtime log, fix the problem, and rerun
-the same command. It reuses the saved user identity and starts Runtime pairing fresh. Preserve `$DOCUMENT_DIR/mobius-chat`
+the same command. It reuses the saved user identity and reconnects its active Runtime when possible. Preserve `$DOCUMENT_DIR/mobius-chat`
 credentials on network errors, cancellation, and timeouts. An unavailable identity
 requires user resolution; creating another user does not recover conversations.
 Existing configuration is backed up to `config-backup-<id>.json` automatically.

@@ -375,6 +375,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     async function reuseSavedRuntime(
         context: Context,
         saved: Readonly<Record<string, unknown>> | null,
+        mode: Options["mode"],
     ): Promise<Context> {
         if (
             saved === null ||
@@ -382,7 +383,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             saved.user_id !== context.config.user_id ||
             saved.project_id !== context.config.project_id ||
             saved.bot_id !== context.config.bot_id ||
-            context.config.expected_runtime_id === null
+            (mode === "pair" && context.config.expected_runtime_id === null)
         ) {
             return context;
         }
@@ -398,7 +399,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             if (pairing.projectId !== context.config.project_id) {
                 return context;
             }
-            if (pairing.runtimeId !== identifier(context.config.expected_runtime_id)) {
+            if (mode === "pair" && pairing.runtimeId !== identifier(context.config.expected_runtime_id)) {
                 return context;
             }
             const candidate = {
@@ -700,16 +701,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const directory = await prepareDirectory(host.documents);
         const lock = await acquireLock(directory);
         try {
-            const pairCandidate = options.mode === "pair" ? await loadPairCandidate(directory) : null;
+            const runtimeCandidate = await loadPairCandidate(directory);
             let context: Context =
                 options.mode === "setup" ? await loadConfiguration(directory, base) : { directory, base, config: {} };
             await backupConfiguration(directory);
             context = await prepareIdentity(context, options);
             context = await verifyIdentityAndBot(context, options.mode);
             emit({ status: "identity_ready", userId: context.config.user_id, botId: context.config.bot_id });
-            if (options.mode === "pair") {
-                context = await reuseSavedRuntime(context, pairCandidate);
-            }
+            context = await reuseSavedRuntime(context, runtimeCandidate, options.mode);
             context = await prepareRuntimePairing(context);
             context = await startRuntime(context, await runtimeArguments(context));
             await waitForRuntime(context, options.harness);

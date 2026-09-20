@@ -21,10 +21,11 @@ function createDatabase(): InMemoryD1Database {
     return database;
 }
 const baseConfiguration = { CLERK_PUBLISHABLE_KEY: issuer.publishableKey, CLERK_JWT_KEY: issuer.publicKey, APP_ORIGIN };
-function slackConfiguration(database = createDatabase(), platformBindings = platform.bindings) {
+function slackConfiguration(database = createDatabase(), platformBindings = platform.bindings, appOrigin = APP_ORIGIN) {
     const attachments = { get: () => Promise.resolve(null), put: () => Promise.resolve() };
     const base = {
         ...baseConfiguration,
+        APP_ORIGIN: appOrigin,
         BOT_TRIGGER_RATE_LIMITER: { get: () => undefined, idFromName: () => undefined },
         ASSETS: { fetch: () => Promise.resolve(new Response()) },
         CHAT_ATTACHMENTS_APAC: attachments,
@@ -34,7 +35,7 @@ function slackConfiguration(database = createDatabase(), platformBindings = plat
         ...platformBindings,
         SLACK_MOBIUS_AUTH_TOKEN: "service-token",
         SLACK_OAUTH_STATE_SIGNING_KEY: "state-signing-key",
-        SLACK_SERVER_BASE_URL: APP_ORIGIN,
+        SLACK_SERVER_BASE_URL: appOrigin,
         SLACK_TOKEN_ENCRYPTION_KEY: btoa("a".repeat(32)),
     };
     const projects = {
@@ -726,11 +727,12 @@ test.each([
 );
 
 test.each([
-    { savedRuntime: "selected", reusesRuntime: true },
-    { savedRuntime: "different", reusesRuntime: false },
+    { flow: "pair", savedRuntime: "selected", reusesRuntime: true },
+    { flow: "pair", savedRuntime: "different", reusesRuntime: false },
+    { flow: "setup", savedRuntime: "selected", reusesRuntime: true },
 ])(
-    "Given a $savedRuntime saved Runtime for the same Chat Bot, When the user pairs again, Then setup reuses only the Runtime selected by the ticket",
-    async ({ savedRuntime, reusesRuntime }) => {
+    "Given a $savedRuntime saved Runtime, When the user runs $flow instructions, Then setup reuses only the authorized Runtime",
+    async ({ flow, savedRuntime, reusesRuntime }) => {
         const pairedPlatform = await platformPeer({ agentsOnline: true, pairingsPaired: true });
         const database = createDatabase();
         const environment = slackConfiguration(database, pairedPlatform.bindings);
@@ -813,6 +815,7 @@ test.each([
         );
         const savedPairing =
             savedRuntime === "selected" ? selectedPairing : await createPairing("different-saved-runtime");
+        let runtimeEnvironment = environment;
         const server = createServer(async (incoming, outgoing) => {
             let body = "";
             for await (const chunk of incoming) {
@@ -830,7 +833,7 @@ test.each([
                     headers,
                     ...(body === "" ? {} : { body }),
                 }),
-                environment,
+                runtimeEnvironment,
             );
             outgoing.writeHead(response.status, Object.fromEntries(response.headers));
             outgoing.end(await response.text());
@@ -841,6 +844,7 @@ test.each([
             throw new Error("Setup fixture unavailable");
         }
         const base = `http://127.0.0.1:${address.port}`;
+        runtimeEnvironment = slackConfiguration(database, pairedPlatform.bindings, base);
         const directory = await mkdtemp(join(tmpdir(), "mobius-setup-reconnect-"));
         const executableDirectory = join(directory, "bin");
         await mkdir(executableDirectory, { mode: 0o700 });
@@ -868,12 +872,12 @@ test.each([
                         process.execPath,
                         [
                             fileURLToPath(new URL("../../setup/src/cli.ts", import.meta.url)),
-                            "pair",
+                            flow,
                             "--base-url",
                             base,
                             "--harness",
                             "agent-one",
-                            `--token=${ticket}`,
+                            ...(flow === "pair" ? [`--token=${ticket}`] : ["--session-id", "native-session"]),
                         ],
                         {
                             env: {
