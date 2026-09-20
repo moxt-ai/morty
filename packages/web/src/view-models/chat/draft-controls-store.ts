@@ -1,6 +1,7 @@
 import type { SessionConfigOption, WorkspaceEntriesEvent } from "@moxt-ai/mobius-protocol";
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ChatDraftConfiguration, ChatWorkspace } from "@/services/chat/bot-chat-api";
+import { readLastCwdPreference, saveLastCwdPreference } from "@/services/chat/last-cwd-preference";
 
 type DraftSettingsState =
     | { readonly kind: "loading" }
@@ -66,6 +67,7 @@ export const createDraftControlsStore = (
     botId: string,
     requests: Pick<BotChatApi, "workspace" | "workspaceDirectory" | "selectAgent" | "agentSettings">,
     onSettings: (settings: ChatDraftConfiguration | null) => void,
+    storage: Storage,
 ) =>
     createStore<DraftControlsStore>()((set, get) => {
         let cwdOperation: AbortController | null = null;
@@ -144,11 +146,26 @@ export const createDraftControlsStore = (
                         selected !== null &&
                         (selectedHarness === "" || `${selected.runtimeId}:${selected.agentRef}` === selectedHarness)
                     ) {
-                        const [result, cwd] = await Promise.all([
+                        const [result, defaultCwd] = await Promise.all([
                             requests.agentSettings(botId, signal),
                             requests.workspaceDirectory(botId, selected.workspaceRef, signal),
                         ]);
                         signal.throwIfAborted();
+                        const savedDirectoryId = readLastCwdPreference(
+                            storage,
+                            botId,
+                            selected.runtimeId,
+                            selected.agentRef,
+                        );
+                        let cwd = defaultCwd;
+                        if (savedDirectoryId !== null && savedDirectoryId !== defaultCwd.directoryId) {
+                            try {
+                                cwd = await requests.workspaceDirectory(botId, savedDirectoryId, signal);
+                                signal.throwIfAborted();
+                            } catch {
+                                signal.throwIfAborted();
+                            }
+                        }
                         const ready = { kind: "ready" as const, workspace, cwd, ...result };
                         set({ settings: ready });
                         publishSettings(ready);
@@ -237,6 +254,10 @@ export const createDraftControlsStore = (
                 }
                 const ready = { ...settings, cwd: directory };
                 set({ settings: ready, cwdBrowser: { kind: "closed" } });
+                const selected = ready.workspace.selected;
+                if (selected !== null) {
+                    saveLastCwdPreference(storage, botId, selected.runtimeId, selected.agentRef, directory.directoryId);
+                }
                 publishSettings(ready);
             },
             selectHarness: async (value, disabled, signal) => {

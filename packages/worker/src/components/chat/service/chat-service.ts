@@ -138,9 +138,32 @@ export class ChatService {
         };
     };
 
-    readonly managedSessions = async (scope: ChatScope) => ({
-        sessions: await this.#chatSessions.list(scope.projectId, scope.userId, scope.botId, scope.signal),
-    });
+    readonly managedSessions = async (scope: ChatScope) => {
+        const sessions = await this.#chatSessions.list(scope.projectId, scope.userId, scope.botId, scope.signal);
+        return {
+            sessions: await Promise.all(
+                sessions.map(async (session) => {
+                    try {
+                        const target = await this.#platform.chatSessionDirectory(
+                            scope.projectId,
+                            session.id,
+                            scope.signal,
+                        );
+                        const directory = await this.#platform.listChatWorkspace(
+                            scope.projectId,
+                            target.runtimeId,
+                            target.directoryId,
+                            scope.signal,
+                        );
+                        return { ...session, directoryLabel: directory.directoryLabel };
+                    } catch {
+                        scope.signal.throwIfAborted();
+                        return { ...session, directoryLabel: "" };
+                    }
+                }),
+            ),
+        };
+    };
 
     readonly agentSettings = async (scope: ChatScope) => {
         const bot = await this.#bot(scope);
@@ -200,7 +223,11 @@ export class ChatService {
                     scope.projectId,
                     scope.userId,
                     scope.botId,
-                    { kind: "conversation", id: access.conversationId, title: input.title ?? "New chat" },
+                    {
+                        kind: "conversation",
+                        id: access.conversationId,
+                        title: input.title ?? "New chat",
+                    },
                     scope.signal,
                 ),
             );

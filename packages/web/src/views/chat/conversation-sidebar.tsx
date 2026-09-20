@@ -124,6 +124,7 @@ export function ConversationSidebar({
                 )}
                 {sessions?.map((session) => (
                     <button
+                        data-testid={dataTestId.managedConversation}
                         type="button"
                         key={`${session.kind}:${session.id}`}
                         aria-current={activeId === session.id ? "page" : undefined}
@@ -135,12 +136,12 @@ export function ConversationSidebar({
                     >
                         <span className="min-w-0">
                             <span className="block truncate">{session.title}</span>
-                            {activeSession.kind === "active" && activeSession.id === session.id && (
+                            {session.directoryLabel.length > 0 && (
                                 <span
                                     className="block truncate text-[11px] leading-4 font-normal text-copy-secondary"
-                                    title={activeSession.directoryLabel}
+                                    title={session.directoryLabel}
                                 >
-                                    {activeSession.directoryLabel}
+                                    {session.directoryLabel}
                                 </span>
                             )}
                         </span>

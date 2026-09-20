@@ -7,6 +7,8 @@ test("Given a paired workspace, When a user works across conversations, Then att
 }) => {
     await runtime.openPairedChat();
     const { page } = runtime;
+    const workingDirectory = await page.getByTestId(dataTestId.workingDirectory).textContent();
+    assert.ok(workingDirectory);
 
     let firstConversationId = "";
     await test.step("create the first conversation with an image", async () => {
@@ -32,6 +34,9 @@ test("Given a paired workspace, When a user works across conversations, Then att
 
     await test.step("create, continue, reload, and revisit conversations", async () => {
         await page.getByTestId(dataTestId.newConversation).click();
+        await expect(
+            page.getByTestId(dataTestId.managedConversation).filter({ hasText: "First conversation" }),
+        ).toContainText(workingDirectory);
         const originalDocument = await page.locator("html").elementHandle();
         assert.ok(originalDocument);
         await runtime.sendMessage("Second conversation");
@@ -68,4 +73,20 @@ test("Given a paired workspace, When a user works across conversations, Then att
         await composer.press("Enter");
         await expect(page.getByTestId(dataTestId.queuedMessage)).toHaveText("focus on the public API");
     });
+});
+
+test("Given a paired workspace, When the user saves a working directory, Then Chat restores it after reload", async ({
+    runtime,
+}) => {
+    await runtime.openPairedChat();
+    const { page } = runtime;
+    const directory = page.getByTestId(dataTestId.workingDirectory);
+
+    await directory.click();
+    await page.getByTestId(dataTestId.workingDirectoryPath).fill("/");
+    await page.getByTestId(dataTestId.saveWorkingDirectory).click();
+    await expect(directory).toHaveText("/");
+
+    await page.reload();
+    await expect(directory).toHaveText("/");
 });

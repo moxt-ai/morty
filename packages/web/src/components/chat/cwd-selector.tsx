@@ -1,4 +1,5 @@
 import { ChevronRight, Folder, FolderOpen, LoaderCircle } from "lucide-react";
+import { dataTestId } from "@/data-testid";
 import type { DraftControlsStore } from "@/view-models/chat/draft-controls-store";
 import { Button } from "../ui/cloud-button.tsx";
 import { Dialog } from "../ui/dialog.tsx";
@@ -24,6 +25,7 @@ export function CwdSelector({
             <button
                 aria-label={`Working directory: ${workingDirectory}`}
                 className="flex h-9 min-w-0 max-w-[200px] items-center gap-2 rounded-lg px-2 text-[13px] text-copy-secondary outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
+                data-testid={dataTestId.workingDirectory}
                 disabled={disabled}
                 onClick={viewModel.openCwd}
                 title={workingDirectory}
@@ -44,6 +46,7 @@ export function CwdSelector({
                             <input
                                 aria-label="Working directory path"
                                 className="h-10 rounded-lg border border-border bg-white px-3 text-[13px] outline-none focus:border-ring focus:ring-2 focus:ring-ring/15"
+                                data-testid={dataTestId.workingDirectoryPath}
                                 disabled={browser.kind === "loading"}
                                 onChange={(event) => viewModel.setCwdPath(event.currentTarget.value)}
                                 value={browser.path}
@@ -117,7 +120,11 @@ export function CwdSelector({
                         <Button onClick={viewModel.closeCwd} variant="outline">
                             Cancel
                         </Button>
-                        <Button disabled={browser.kind === "loading"} onClick={() => void viewModel.saveCwd(signal)}>
+                        <Button
+                            data-testid={dataTestId.saveWorkingDirectory}
+                            disabled={browser.kind === "loading"}
+                            onClick={() => void viewModel.saveCwd(signal)}
+                        >
                             Save
                         </Button>
                     </footer>

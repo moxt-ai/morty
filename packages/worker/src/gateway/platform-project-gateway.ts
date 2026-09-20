@@ -284,6 +284,24 @@ export class PlatformProjectGateway {
             async (client) => await client.turns.submit(sessionId, request, signal),
         );
 
+    readonly chatSessionDirectory = async (projectId: string, sessionId: string, signal: AbortSignal) =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) => {
+                const session = await client.sessions.read(sessionId, signal);
+                if (session.projectId !== projectId || session.sessionId !== sessionId) {
+                    throw new PlatformProjectError(
+                        "PLATFORM_INVALID_RESPONSE",
+                        "Platform returned an unexpected Session.",
+                        502,
+                    );
+                }
+                return { directoryId: session.defaultBinding.workspaceRef, runtimeId: session.runtimeId };
+            },
+            120000,
+        );
+
     readonly steerChatTurn = async (projectId: string, sessionId: string, turnId: string, signal: AbortSignal) =>
         await this.#withProject(
             projectId,

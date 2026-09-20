@@ -33,6 +33,7 @@ const managedSessionSchema = v.pipe(
         kind: v.picklist(["conversation", "fork", "import"]),
         id: identifier,
         title: v.string(),
+        directoryLabel: v.string(),
         projectId: identifier,
         userId: identifier,
     }),

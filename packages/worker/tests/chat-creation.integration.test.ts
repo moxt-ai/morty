@@ -249,6 +249,7 @@ test.each([true, false])(
             expect(await listed.json()).toMatchObject({
                 sessions: expect.arrayContaining([
                     {
+                        directoryLabel: "/home/a/mobius.t3/selected-project",
                         kind: "conversation",
                         id: first.conversationId,
                         title: "New chat",
@@ -256,6 +257,7 @@ test.each([true, false])(
                         projectId: identity.projectId,
                     },
                     {
+                        directoryLabel: "/home/a/mobius.t3/selected-project",
                         kind: "conversation",
                         id: second.conversationId,
                         title: "New chat",
