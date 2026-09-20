@@ -457,7 +457,7 @@ test.each(["anonymous", "clerk"])(
         );
         expect(created.status).toBe(201);
         const ticket = v.parse(v.object({ url: v.string(), expiresAt: v.string() }), await created.json());
-        expect(ticket.expiresAt).toBe(new Date(AUTH_TIME.getTime() + 24 * 60 * 60 * 1000).toISOString());
+        expect(ticket.expiresAt).toBe(new Date(AUTH_TIME.getTime() + 10 * 60 * 1000).toISOString());
         const url = new URL(ticket.url);
         expect(url.pathname).toBe("/pair.md");
         const redeem = () =>
@@ -469,7 +469,7 @@ test.each(["anonymous", "clerk"])(
                 }),
                 environment,
             );
-        vi.advanceTimersByTime(23 * 60 * 60 * 1000);
+        vi.advanceTimersByTime(9 * 60 * 1000);
         const response = await redeem();
         expect(response.status).toBe(200);
         const identity = v.parse(

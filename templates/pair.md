@@ -6,7 +6,7 @@ description: Connect this agent to the existing user and Bot from a Mobius Chat 
 # Pair Mobius Chat
 
 The user supplied `follow <origin>/pair.md?token=...`. That token is a one-use
-ticket, valid for **24 hours**, for their existing user, Bot, and workspace.
+ticket, valid for **10 minutes**, for their existing user, Bot, and workspace.
 Fetching this document does not consume it. Do not create another user or Bot.
 Pairing takes its identity and Bot only from the supplied ticket. It does not load
 the saved local configuration. The previous file is backed up, then the redeemed

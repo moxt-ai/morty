@@ -15,7 +15,8 @@ import { createProjectCredential, readProjectCredential } from "../entity/projec
 
 const anonymousToken = v.pipe(v.string(), v.regex(/^mobius_anon_v2_[A-Za-z0-9_-]{43}$/u));
 const userRow = v.pipe(v.object({ userId: v.string() }), v.readonly());
-const oneTimeCredentialLifetime = 24 * 60 * 60 * 1000;
+const identityTransferLifetime = 24 * 60 * 60 * 1000;
+const agentPairingLifetime = 10 * 60 * 1000;
 
 function randomSecret(): string {
     const bytes = new Uint8Array(32);
@@ -124,7 +125,7 @@ export class IdentityStorage {
     readonly createTransfer = async (userId: string, now: number, signal: AbortSignal): Promise<IdentityTransfer> => {
         signal.throwIfAborted();
         const code = createProjectCredential("mobius_transfer_v2", v.parse(v.string(), this.#projectId));
-        const expiresAt = now + oneTimeCredentialLifetime;
+        const expiresAt = now + identityTransferLifetime;
         await this.#requireDatabase()
             .insert(identityTransfer)
             .values({
@@ -295,7 +296,7 @@ export class IdentityStorage {
     ): Promise<IdentityTransfer> => {
         signal.throwIfAborted();
         const code = createProjectCredential("mobius_pair_v2", v.parse(v.string(), this.#projectId));
-        const expiresAt = now + oneTimeCredentialLifetime;
+        const expiresAt = now + agentPairingLifetime;
         await this.#requireDatabase()
             .insert(agentPairingTicket)
             .values({ codeHash: await digest(code), userId, botId, expiresAt })
