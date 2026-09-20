@@ -77,11 +77,13 @@ export async function platformPeer({
     redirectPlacement = false,
     agentsOnline = false,
     settingsAvailable = true,
+    settingsFailure = "api-error",
 }: {
     readonly pairingLifetimeMilliseconds?: number;
     readonly redirectPlacement?: boolean;
     readonly agentsOnline?: boolean;
     readonly settingsAvailable?: boolean;
+    readonly settingsFailure?: "api-error" | "invalid-json";
 } = {}) {
     const projects = new Map<string, object>();
     const sessions = new Map<string, object>();
@@ -220,6 +222,10 @@ export async function platformPeer({
                     "server-timing",
                     'total;dur=9.0;desc="Total Platform operation time",control-runtime;dur=7.0;desc="Wait for Runtime control response"',
                 );
+                if (!settingsAvailable && settingsFailure === "invalid-json") {
+                    response.writeHead(502).end("{");
+                    return;
+                }
                 response.writeHead(settingsAvailable ? 200 : 409).end(
                     JSON.stringify(
                         settingsAvailable
@@ -355,6 +361,10 @@ export async function platformPeer({
             const agentId = agentSettingsPath[3];
             if (agentId === undefined) {
                 throw new Error("Expected Agent settings identity");
+            }
+            if (!settingsAvailable && settingsFailure === "invalid-json") {
+                response.writeHead(502).end("{");
+                return;
             }
             response.writeHead(settingsAvailable ? 200 : 409).end(
                 JSON.stringify(

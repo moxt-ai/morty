@@ -15,10 +15,40 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-test.each([true, false])(
-    "Given a paired workspace with settings available=%s, When Chat configures a draft and sends a supported Turn, Then available settings deliver it and unavailable settings retain Platform's error details",
-    async (settingsAvailable) => {
-        const platform = await platformPeer({ agentsOnline: true, settingsAvailable });
+test.each([
+    {
+        description: "available",
+        settingsAvailable: true,
+        expectedStatus: 202,
+        expectedError: null,
+    },
+    {
+        description: "rejected by the agent",
+        settingsAvailable: false,
+        expectedStatus: 409,
+        expectedError: {
+            code: "agent_unavailable",
+            message: "Platform could not complete Runtime setup. Cause: The settings agent is unavailable",
+        },
+    },
+    {
+        description: "an invalid Platform response",
+        settingsAvailable: false,
+        settingsFailure: "invalid-json" as const,
+        expectedStatus: 502,
+        expectedError: {
+            code: "invalid_service_response",
+            message: "Platform could not complete Runtime setup. Cause: The service returned invalid JSON",
+        },
+    },
+])(
+    "Given a paired workspace with $description settings, When Chat configures a draft, Then it retains the detailed Platform result",
+    async ({ settingsAvailable, settingsFailure, expectedStatus, expectedError }) => {
+        const platform = await platformPeer({
+            agentsOnline: true,
+            settingsAvailable,
+            ...(settingsFailure === undefined ? {} : { settingsFailure }),
+        });
         const database = new InMemoryD1Database();
         const storage = new Miniflare(
             convertV4MiniflareOptions({
@@ -101,13 +131,10 @@ test.each([true, false])(
                 workspaceRef: "default",
                 agentConfigRevision: 1,
             });
-            expect(configured.status).toBe(settingsAvailable ? 202 : 409);
-            if (!settingsAvailable) {
+            expect(configured.status).toBe(expectedStatus);
+            if (expectedError !== null) {
                 expect(await configured.json()).toEqual({
-                    error: {
-                        code: "agent_unavailable",
-                        message: "Platform could not complete Runtime setup. Cause: The settings agent is unavailable",
-                    },
+                    error: expectedError,
                 });
             }
             expect(await (await request(`chat/bots/${bot.botId}/managed-sessions`, {})).json()).toEqual({

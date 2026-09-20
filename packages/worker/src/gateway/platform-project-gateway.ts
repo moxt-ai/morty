@@ -2,6 +2,7 @@ import {
     MobiusApiError,
     MobiusAppCredentialProvider,
     MobiusCancellationError,
+    MobiusError,
     MobiusPlatformAppClient,
     MobiusTimeoutError,
 } from "@moxt-ai/mobius-sdk/platform";
@@ -543,11 +544,11 @@ export class PlatformProjectGateway {
             if (cause instanceof MobiusApiError && cause.status === 404) {
                 throw new PlatformProjectError("NOT_FOUND", "The Runtime pairing was not found.", 404, { cause });
             }
-            if (cause instanceof MobiusApiError) {
+            if (cause instanceof MobiusError) {
                 throw new PlatformProjectError(
                     cause.code,
                     `Platform could not complete Runtime setup. Cause: ${cause.message}`,
-                    cause.status,
+                    cause instanceof MobiusApiError ? cause.status : 502,
                     { cause },
                 );
             }
