@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
-test("Given a paired workspace, When a user works across conversations, Then attachments, queued work, replies, and revisits remain usable", async ({
+test("Given a paired workspace, When a user works across conversations, Then attachments, queued work, replies, render inspection, and revisits remain usable", async ({
     runtime,
 }) => {
     await runtime.openPairedChat();
@@ -28,6 +28,40 @@ test("Given a paired workspace, When a user works across conversations, Then att
         await expect(page).toHaveURL(/\?conversationId=/u);
         await expect(page.getByRole("list", { name: "Attachments", exact: true })).toHaveCount(0);
         await expect(page.getByTestId(dataTestId.agentResponse).first()).toContainText("First conversation");
+        const renderBlocks: unknown = await page.evaluate(() => {
+            const bridge: unknown = Reflect.get(globalThis, "_mobiusChat");
+            if (typeof bridge !== "object" || bridge === null) {
+                return null;
+            }
+            const currentSession = Reflect.get(bridge, "currentSession");
+            if (typeof currentSession !== "function") {
+                return null;
+            }
+            const session: unknown = Reflect.apply(currentSession, bridge, []);
+            if (typeof session !== "object" || session === null) {
+                return null;
+            }
+            const blocks = Reflect.get(session, "blocks");
+            return typeof blocks === "function" ? Reflect.apply(blocks, session, []) : null;
+        });
+        assert.ok(Array.isArray(renderBlocks));
+        assert.equal(
+            renderBlocks.some(
+                (block: unknown) =>
+                    typeof block === "object" &&
+                    block !== null &&
+                    Reflect.get(block, "role") === "user" &&
+                    Reflect.get(block, "text") === "First conversation",
+            ),
+            true,
+        );
+        assert.equal(
+            renderBlocks.some(
+                (block: unknown) =>
+                    typeof block === "object" && block !== null && Reflect.get(block, "role") === "assistant",
+            ),
+            true,
+        );
         await page.getByTestId(dataTestId.agentConfiguration).click();
         const permissions = page.getByTestId(dataTestId.permissionMode);
         await permissions.click();
