@@ -1,5 +1,5 @@
 ---
-name: chat-web-dev
+name: chat-local-web-dev
 description: Start the current Mobius Chat checkout locally, pair it with the current harness session, and return a localhost handoff URL that can be redeemed up to five times. Use when the user asks to run, preview, pair, or share the local Chat web app.
 ---
 
