@@ -81,6 +81,12 @@ or a browser application boundary. They may use APIs, temporary filesystems,
 subprocesses, sockets, and local protocol servers. They must not invoke private
 helpers or mutate application stores to arrange the behavior under assertion.
 
+Prepare state through the cheapest production business operation available at
+that boundary. Each composition level has one shared journey harness that owns
+startup, credentials, and cleanup; tests vary only the business state they need.
+Direct persistence setup is reserved for storage and migration boundaries, or for
+state owned by an upstream component outside the test, and must remain explicit.
+
 Contract tests own serialization, schema, authentication, and external-boundary
 compatibility where composing the larger product would reduce diagnostic signal.
 

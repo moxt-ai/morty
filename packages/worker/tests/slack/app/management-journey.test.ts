@@ -19,7 +19,17 @@ describe("Slack management journeys", () => {
     it("takes an owner from project-aware setup through OAuth, app replacement, and disconnect", async () => {
         const app = await createTestApplication();
         const headers = await authorization(app);
+        const jsonHeaders = { ...headers, "Content-Type": "application/json" };
         const projectId = `prj_ap_01_${"a".repeat(24)}`;
+
+        await app.createChatBot();
+        await app.registerSlackApp();
+        const bound = await app.request("/mobius-slack/api/slack/bots/bot-1/binding", {
+            method: "PUT",
+            headers: jsonHeaders,
+            body: JSON.stringify({ botId: "chat-bot-1" }),
+        });
+        expect(bound.status).toBe(200);
 
         const manifestResponse = await app.request("/mobius-slack/api/slack/manifest?name=Project%20bot", {
             headers,
@@ -75,7 +85,6 @@ describe("Slack management journeys", () => {
             ).status,
         ).toBe(200);
 
-        const jsonHeaders = { ...headers, "Content-Type": "application/json" };
         const registered = await app.request("/mobius-slack/api/slack/apps/register", {
             method: "POST",
             headers: jsonHeaders,
@@ -142,6 +151,7 @@ describe("Slack management journeys", () => {
 
     it("rejects tampered OAuth state without installing or welcoming", async () => {
         const app = await createTestApplication();
+        await app.registerSlackApp();
         const url = await oauthUrl(app);
         const response = await app.request(
             `/mobius-slack/api/slack/oauth/callback?code=oauth-code&state=${encodeURIComponent(`${url.searchParams.get("state")}tampered`)}`,

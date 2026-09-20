@@ -1,4 +1,5 @@
 import { FakeClerk } from "@moxt-ai/mobius-test/clerk";
+import { ManagedBotStorage } from "../../../src/components/management/storage/managed-bot-storage";
 import { createSlackDependencies } from "../../../src/components/slack/composition/create-dependencies";
 import { createSlackApplication } from "../../../src/components/slack/http";
 import { createSlackFileHandler } from "../../../src/components/slack/http/bot-tools/slack-file-handler";
@@ -6,15 +7,13 @@ import type { SlackQueueMessage } from "../../../src/components/slack/infra/queu
 import { slackLogger } from "../../../src/components/slack/infra/util/logger";
 import { SecretCipher } from "../../../src/components/slack/infra/util/secret-cipher";
 import { ClockService } from "../../../src/components/slack/service/identity/clock-service";
-import { tenantContext } from "../../../src/components/slack/service/identity/tenant-context";
 import { DatabaseSlackAppDirectory } from "../../../src/components/slack/storage/database-slack-app-directory";
 import { ClerkGateway } from "../../../src/gateway/clerk-gateway";
-import { managedBot } from "../../../src/schema/d1/index.ts";
 import { FakeAttachments, FakeIdentityGateway, FakeMobius, FakeSlack } from "./fake-environment";
 import { createSignedRequest } from "./signed-request";
 import { createTestDatabase } from "./test-database";
 
-export async function createTestApplication(_singleDatabase = false) {
+export async function createTestApplication() {
     const database = await createTestDatabase();
     const cipher = new SecretCipher(btoa("a".repeat(32)));
     const slack = new FakeSlack();
@@ -88,74 +87,7 @@ export async function createTestApplication(_singleDatabase = false) {
             slackAppDirectory: new DatabaseSlackAppDirectory(database, cipher),
         },
     });
-    const storage = cx.storages.slackEventStorage;
     const signal = new AbortController().signal;
-    const tenant = tenantContext("tenant-1");
-    const connections = cx.storages.chatBotBindingStorage;
-    await storage.registerApp(
-        tenant,
-        {
-            botId: "bot-1",
-            appName: "Test",
-            clientId: "client-1",
-            clientSecretEncrypted: await cipher.encrypt("client-secret", signal),
-            oauthRedirectUri: "https://slack.example.test/mobius-slack/api/slack/oauth/callback",
-            signingSecretEncrypted: await cipher.encrypt("signing-secret", signal),
-            slackAppId: "A123",
-            tenantId: "tenant-1",
-            timestamp: Date.now(),
-        },
-        signal,
-    );
-    await database.execute(
-        "run",
-        1,
-        signal,
-        async (orm) =>
-            await orm.insert(managedBot).values({
-                userId: "tenant-1",
-                botId: "chat-bot-1",
-                displayName: "Test Chat Bot",
-                bindingId: "binding-1",
-                runtimeId: "runtime-1",
-                agentRef: "agent-1",
-                workspaceRef: "workspace-1",
-                agentConfigRevision: 1,
-                instructions: "Answer as the configured Chat Bot.",
-                createdAt: Date.now(),
-                updatedAt: Date.now(),
-            }),
-    );
-    await connections.saveBinding(
-        tenant,
-        {
-            tenantId: "tenant-1",
-            slackBotId: "bot-1",
-            botId: "chat-bot-1",
-            connectionId: "connection-1",
-            projectId: config.projectId,
-            bindingId: "binding-1",
-            runtimeId: "runtime-1",
-            agentRef: "agent-1",
-            workspaceRef: "workspace-1",
-            agentConfigRevision: 1,
-            instructions: "Answer as the configured Chat Bot.",
-        },
-        signal,
-    );
-    await storage.upsertInstallation(
-        tenant,
-        {
-            botTokenEncrypted: await cipher.encrypt("xoxb-token", signal),
-            installedAt: Date.now(),
-            slackAppRecordId: 1,
-            slackBotUserId: "U_BOT",
-            slackTeamId: "T123",
-            slackTeamName: "Example",
-            tenantId: "tenant-1",
-        },
-        signal,
-    );
     const application = createSlackApplication();
     const fetchFile = createSlackFileHandler(cx.services.slackFiles);
     const consumer = cx.services.queueConsumer;
@@ -177,6 +109,83 @@ export async function createTestApplication(_singleDatabase = false) {
         }
         return response;
     };
+    const createChatBot = async (): Promise<void> => {
+        // Chat owns this prerequisite; every Slack-owned transition below uses Slack HTTP.
+        const bots = new ManagedBotStorage(database.binding);
+        const now = Date.now();
+        await bots.saveClaim("tenant-1", { botId: "chat-bot-1", displayName: "Test Chat Bot" }, now, signal);
+        await bots.updateBot(
+            "tenant-1",
+            "chat-bot-1",
+            { displayName: "Test Chat Bot", instructions: "Answer as the configured Chat Bot." },
+            now,
+            signal,
+        );
+        await bots.configureBot(
+            "tenant-1",
+            "chat-bot-1",
+            {
+                bindingId: "binding-1",
+                runtimeId: "runtime-1",
+                agentRef: "agent-1",
+                workspaceRef: "workspace-1",
+                agentConfigRevision: 1,
+            },
+            now,
+            signal,
+        );
+    };
+    const authorize = async (): Promise<Record<string, string>> => ({
+        authorization: `Bearer ${await humanToken()}`,
+        "Content-Type": "application/json",
+    });
+    const registerSlackApp = async (): Promise<string> => {
+        const headers = await authorize();
+        const registered = await request("/mobius-slack/api/slack/apps/register", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+                slackBotId: "bot-1",
+                name: "Test",
+                clientId: "client-1",
+                clientSecret: "client-secret",
+                signingSecret: "signing-secret",
+                slackAppId: "A123",
+            }),
+        });
+        if (registered.status !== 201) {
+            throw new Error(`Failed to register the test Slack app: ${registered.status}`);
+        }
+        const registration = (await registered.json()) as { readonly oauthAuthorizeUrl?: unknown };
+        if (typeof registration.oauthAuthorizeUrl !== "string") {
+            throw new Error("The test Slack app did not return an OAuth URL");
+        }
+        return registration.oauthAuthorizeUrl;
+    };
+    const connectSlackBot = async (): Promise<void> => {
+        await createChatBot();
+        const oauthAuthorizeUrl = await registerSlackApp();
+        const headers = await authorize();
+        const bound = await request("/mobius-slack/api/slack/bots/bot-1/binding", {
+            method: "PUT",
+            headers,
+            body: JSON.stringify({ botId: "chat-bot-1" }),
+        });
+        if (bound.status !== 200) {
+            throw new Error(`Failed to bind the test Slack app: ${bound.status}`);
+        }
+        const state = new URL(oauthAuthorizeUrl).searchParams.get("state");
+        if (state === null) {
+            throw new Error("The test Slack OAuth URL did not contain state");
+        }
+        const installed = await request(
+            `/mobius-slack/api/slack/oauth/callback?code=oauth-code&state=${encodeURIComponent(state)}`,
+        );
+        if (installed.status !== 302) {
+            throw new Error(`Failed to install the test Slack app: ${installed.status}`);
+        }
+        slack.messages.length = 0;
+    };
     return {
         database,
         request,
@@ -188,5 +197,14 @@ export async function createTestApplication(_singleDatabase = false) {
         limiter,
         attachments,
         queueErrors,
+        createChatBot,
+        registerSlackApp,
+        connectSlackBot,
     };
+}
+
+export async function createConnectedTestApplication() {
+    const application = await createTestApplication();
+    await application.connectSlackBot();
+    return application;
 }
