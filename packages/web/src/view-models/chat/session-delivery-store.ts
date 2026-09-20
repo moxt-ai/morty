@@ -49,6 +49,7 @@ type DeliveryState =
 
 export interface SessionDeliveryStore {
     readonly state: DeliveryState;
+    readonly discardUnknown: () => string | null;
     readonly reconcile: (commandIds: readonly string[]) => void;
     readonly submit: (
         commandId: string,
@@ -133,6 +134,15 @@ export const createSessionDeliveryStore = (options: {
     };
     return createStore<SessionDeliveryStore>()((set, get) => ({
         state: restored === null ? { kind: "idle" } : { kind: "delivery-unknown", journal: restored },
+        discardUnknown: () => {
+            const state = get().state;
+            if (state.kind !== "delivery-unknown") {
+                return null;
+            }
+            options.storage.removeItem(storageKey);
+            set({ state: { kind: "idle" } });
+            return state.journal.commandId;
+        },
         reconcile: (commandIds) => {
             const state = get().state;
             if (
