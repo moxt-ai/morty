@@ -175,9 +175,11 @@ function AgentMessage({
 export function NativeSessionHistoryView({
     history,
     agentLabel,
+    sessionId,
 }: {
     readonly history: NativeSessionHistory;
     readonly agentLabel: string;
+    readonly sessionId?: string | undefined;
 }) {
     if (history.status === "unavailable") {
         return (
@@ -202,6 +204,7 @@ export function NativeSessionHistoryView({
                         key={index.toString()}
                         images={[...(entry.images ?? []), ...parsed.images]}
                         resources={[]}
+                        sessionId={sessionId}
                         text={parsed.text}
                     />
                 ) : (
@@ -230,10 +233,17 @@ function Message({
     readonly sessionId: string;
 }) {
     if (message instanceof NativeHistoryChatMessage) {
-        return <NativeSessionHistoryView history={message.history} agentLabel={agentLabel} />;
+        return <NativeSessionHistoryView history={message.history} agentLabel={agentLabel} sessionId={sessionId} />;
     }
     if (message instanceof UserChatMessage) {
-        return <UserPromptMessage images={message.images} resources={message.resources} text={message.text} />;
+        return (
+            <UserPromptMessage
+                images={message.images}
+                resources={message.resources}
+                sessionId={sessionId}
+                text={message.text}
+            />
+        );
     }
     if (message instanceof AgentChatMessage) {
         return <AgentMessage agentLabel={agentLabel} channelId={channelId} message={message} sessionId={sessionId} />;

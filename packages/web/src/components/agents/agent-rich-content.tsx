@@ -1,9 +1,9 @@
-import type { AgentDisplayContent, MobiusClient } from "@moxt-ai/mobius-sdk";
+import type { AgentDisplayContent } from "@moxt-ai/mobius-sdk";
 import { ExternalLink, FileText, Image as ImageIcon, Terminal, Video } from "lucide-react";
 import { useEffect, useState } from "react";
+import type { MarkdownImageReader } from "@/components/agents/agent-markdown";
 import { AgentMarkdown } from "@/components/agents/agent-markdown";
 import { readFile } from "@/services/chat/mobius-transport";
-import { readSessionArtifactBytes } from "@/services/pairing/pairing-api";
 
 const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/;
 const SAFE_VIDEO_MIME = /^video\/(?:mp4|webm)$/;
@@ -38,16 +38,12 @@ function ContentHeader({ content }: { readonly content: AgentDisplayContent }) {
     );
 }
 
-function ArtifactMedia({
-    channelId,
+function LocalImage({
     content,
-    serviceClient,
-    sessionId,
+    readImage,
 }: {
-    readonly channelId: string;
     readonly content: AgentDisplayContent;
-    readonly serviceClient?: Pick<MobiusClient, "artifacts" | "sessions"> | undefined;
-    readonly sessionId: string;
+    readonly readImage: MarkdownImageReader;
 }) {
     const [source, setSource] = useState<string | null>(null);
     useEffect(() => {
@@ -55,43 +51,12 @@ function ArtifactMedia({
         let objectUrl = "";
         const load = async () => {
             try {
-                let bytes: Uint8Array;
-                let mimeType: string;
+                const file = await readImage(content.uri, controller.signal);
 
-                if (content.type === "image" && content.uri.length > 0) {
-                    if (serviceClient) {
-                        const file = await serviceClient.sessions.readFile(sessionId, content.uri, controller.signal);
-                        bytes = file.bytes;
-                        mimeType = file.mediaType;
-                    } else {
-                        const file = await readFile(sessionId, content.uri, controller.signal);
-                        bytes = file.bytes;
-                        mimeType = file.mediaType;
-                    }
-                } else if (serviceClient) {
-                    const artifact = await serviceClient.artifacts.download(
-                        sessionId,
-                        content.artifactId,
-                        controller.signal,
-                    );
-                    bytes = artifact.bytes;
-                    mimeType = artifact.artifact.mediaType;
-                } else {
-                    const artifact = await readSessionArtifactBytes(
-                        channelId,
-                        sessionId,
-                        content.artifactId,
-                        controller.signal,
-                    );
-                    bytes = artifact.bytes;
-                    mimeType = artifact.mimeType;
-                }
-
-                const safeMime = content.type === "image" ? SAFE_IMAGE_MIME : SAFE_VIDEO_MIME;
-                if (controller.signal.aborted || !safeMime.test(mimeType)) {
+                if (controller.signal.aborted || !SAFE_IMAGE_MIME.test(file.mediaType)) {
                     return;
                 }
-                objectUrl = URL.createObjectURL(new Blob([Uint8Array.from(bytes)], { type: mimeType }));
+                objectUrl = URL.createObjectURL(new Blob([Uint8Array.from(file.bytes)], { type: file.mediaType }));
                 setSource(objectUrl);
             } catch (error: unknown) {
                 if (!controller.signal.aborted) {
@@ -107,7 +72,7 @@ function ArtifactMedia({
                 URL.revokeObjectURL(objectUrl);
             }
         };
-    }, [channelId, content.artifactId, content.type, content.uri, serviceClient, sessionId]);
+    }, [content.uri, readImage]);
     if (source === null) {
         return (
             <div className="min-h-24 rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
@@ -120,22 +85,6 @@ function ArtifactMedia({
             <div className="rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
                 Media content could not be loaded.
             </div>
-        );
-    }
-    if (content.type === "video") {
-        return (
-            <figure className="m-0 overflow-hidden rounded-xl border-[0.5px] border-black/9 bg-white p-2">
-                <ContentHeader content={content} />
-                <video
-                    aria-label={content.name.length > 0 ? content.name : "Agent-provided video"}
-                    className="max-h-[480px] w-auto max-w-full rounded-lg bg-black object-contain"
-                    controls
-                    muted
-                    playsInline
-                    preload="metadata"
-                    src={source}
-                />
-            </figure>
         );
     }
     return (
@@ -154,28 +103,26 @@ function ArtifactMedia({
 function AgentRichContentItem({
     channelId,
     content,
-    serviceClient,
+    readImage,
     sessionId,
 }: {
     readonly channelId?: string | undefined;
     readonly content: AgentDisplayContent;
-    readonly serviceClient?: Pick<MobiusClient, "artifacts" | "sessions"> | undefined;
+    readonly readImage?: MarkdownImageReader | undefined;
     readonly sessionId?: string | undefined;
 }) {
-    if (content.type === "image" || content.type === "video") {
-        if (
-            (content.artifactId.length > 0 || (content.type === "image" && content.uri.length > 0)) &&
-            (serviceClient !== undefined || (channelId !== undefined && sessionId !== undefined))
-        ) {
-            return (
-                <ArtifactMedia
-                    channelId={channelId ?? ""}
-                    content={content}
-                    serviceClient={serviceClient}
-                    sessionId={sessionId ?? ""}
-                />
-            );
+    if (content.type === "image" && content.uri.length > 0) {
+        if (sessionId !== undefined && (readImage !== undefined || channelId !== undefined)) {
+            const reader = readImage ?? (async (path, signal) => await readFile(sessionId, path, signal));
+            return <LocalImage content={content} readImage={reader} />;
         }
+        return (
+            <div className="rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
+                Media content could not be loaded.
+            </div>
+        );
+    }
+    if (content.type === "image" || content.type === "video") {
         const safeMime = content.type === "image" ? SAFE_IMAGE_MIME : SAFE_VIDEO_MIME;
         if (!safeMime.test(content.mimeType) || content.data.length === 0) {
             return (
@@ -283,12 +230,12 @@ function AgentRichContentItem({
 export function AgentRichContent({
     channelId,
     contents,
-    serviceClient,
+    readImage,
     sessionId,
 }: {
     readonly channelId?: string | undefined;
     readonly contents: readonly AgentDisplayContent[];
-    readonly serviceClient?: Pick<MobiusClient, "artifacts" | "sessions"> | undefined;
+    readonly readImage?: MarkdownImageReader | undefined;
     readonly sessionId?: string | undefined;
 }) {
     if (contents.length === 0) {
@@ -300,8 +247,8 @@ export function AgentRichContent({
                 <AgentRichContentItem
                     channelId={channelId}
                     content={content}
-                    key={`${content.type}:${content.name}:${content.uri}:${content.artifactId}:${index.toString()}`}
-                    serviceClient={serviceClient}
+                    key={`${content.type}:${content.name}:${content.uri}:${index.toString()}`}
+                    readImage={readImage}
                     sessionId={sessionId}
                 />
             ))}

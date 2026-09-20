@@ -8,7 +8,6 @@ import {
     MobiusAgentActivityEvent,
     MobiusAgentMessageEvent,
     MobiusApiError,
-    MobiusArtifactUploadRequest,
     MobiusAttemptEventSource,
     type MobiusBrowserCredential,
     MobiusBrowserCredentialRequest,
@@ -29,7 +28,6 @@ import {
     mobiusApiUrl,
     type NativeSessionCommand,
     type NativeSessionResult,
-    type PromptResource,
     type SessionConfigOption,
     type SessionConfigUpdatedEvent,
     type SessionReadyEvent,
@@ -157,35 +155,6 @@ class BrowserServiceClients {
         this.owner.close();
         this.#transport.close();
     };
-}
-
-class UploadedPromptAttachments {
-    readonly artifactIds: readonly string[];
-    readonly resources: PromptRequest["resources"];
-
-    constructor(artifactIds: readonly string[], resources: PromptRequest["resources"]) {
-        this.artifactIds = artifactIds;
-        this.resources = resources;
-    }
-}
-
-function decodeImageBytes(data: string): Uint8Array {
-    let binary: string;
-    try {
-        binary = atob(data);
-    } catch (cause) {
-        throw new MobiusChannelError("attachment_encoding_invalid", "The image attachment is not valid base64", {
-            cause,
-        });
-    }
-    return Uint8Array.from(binary, (character) => character.charCodeAt(0));
-}
-
-async function sha256(bytes: Uint8Array, signal: AbortSignal): Promise<string> {
-    signal.throwIfAborted();
-    const digest = await crypto.subtle.digest("SHA-256", Uint8Array.from(bytes));
-    signal.throwIfAborted();
-    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 async function connectBrowserServiceClients(connection: ChannelConnection): Promise<BrowserServiceClients> {
@@ -544,7 +513,6 @@ class ConnectedTransport extends TransportConnection {
         const sessionId = request.sessionId ?? crypto.randomUUID();
         const commandId = request.commandId ?? crypto.randomUUID();
         await this.ensureSession(clients.scoped, request, sessionId, signal);
-        const attachments = await this.uploadAttachments(clients.scoped, sessionId, request, signal);
         let attemptId = "";
         let failureCode = "";
         let failureMessage = "";
@@ -617,11 +585,11 @@ class ConnectedTransport extends TransportConnection {
                 sessionId,
                 {
                     additionalDirectoryIds: request.additionalDirectoryIds ?? [],
-                    artifactIds: attachments.artifactIds,
+                    artifactIds: [],
                     content: request.prompt,
                     idempotencyKey: commandId,
-                    images: [],
-                    resources: attachments.resources ?? [],
+                    images: request.images ?? [],
+                    resources: request.resources ?? [],
                 },
                 signal,
             );
@@ -740,57 +708,6 @@ class ConnectedTransport extends TransportConnection {
                 signal,
             );
         }
-    };
-
-    private readonly uploadAttachments = async (
-        client: MobiusClient,
-        sessionId: string,
-        request: PromptRequest,
-        signal: AbortSignal,
-    ): Promise<UploadedPromptAttachments> => {
-        const artifactIds: string[] = [];
-        const resources: PromptResource[] = [];
-        for (const image of request.images ?? []) {
-            const bytes = decodeImageBytes(image.data);
-            artifactIds.push(await this.uploadAttachment(client, sessionId, image.name, image.mimeType, bytes, signal));
-        }
-        for (const resource of request.resources ?? []) {
-            if (resource.type !== "embedded") {
-                resources.push(resource);
-                continue;
-            }
-            artifactIds.push(
-                await this.uploadAttachment(
-                    client,
-                    sessionId,
-                    resource.name,
-                    resource.mimeType,
-                    new TextEncoder().encode(resource.text),
-                    signal,
-                ),
-            );
-        }
-        return new UploadedPromptAttachments(artifactIds, resources);
-    };
-
-    private readonly uploadAttachment = async (
-        client: MobiusClient,
-        sessionId: string,
-        name: string,
-        mediaType: string,
-        bytes: Uint8Array,
-        signal: AbortSignal,
-    ): Promise<string> => {
-        if (bytes.byteLength === 0) {
-            throw new MobiusChannelError("attachment_empty", "An empty attachment cannot be uploaded");
-        }
-        const upload = await client.artifacts.createUpload(
-            sessionId,
-            new MobiusArtifactUploadRequest(name, mediaType, bytes.byteLength, await sha256(bytes, signal)),
-            signal,
-        );
-        await client.artifacts.uploadContent(sessionId, upload, bytes, signal);
-        return upload.artifactId;
     };
 
     private readonly turnKey = (sessionId: string, commandId: string): string => `${sessionId}\u0000${commandId}`;

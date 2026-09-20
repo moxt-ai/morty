@@ -1,6 +1,8 @@
-import { readFile, stat } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
+import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
 test("Given a setup handoff, When a user continues remote work, Then setup, ACP controls, media, persistence, and revocation form one working journey", async ({
@@ -62,15 +64,49 @@ test("Given a setup handoff, When a user continues remote work, Then setup, ACP 
         await composer.fill("generate media artifacts");
         await page.getByRole("button", { name: "Send message", exact: true }).click();
         await expect(page.getByRole("img", { name: "generated-image.png", exact: true })).toBeVisible();
-        await expect(page.locator('video[aria-label="generated-video.mp4"]')).toHaveAttribute("src", /^blob:/u);
+        await expect(page.locator('video[aria-label="generated-video.mp4"]')).toHaveAttribute(
+            "src",
+            /^data:video\/mp4;base64,/u,
+        );
         const conversationUrl = page.url();
         await page.reload();
         expect(page.url()).toBe(conversationUrl);
         await expect(page.getByRole("img", { name: "generated-image.png", exact: true })).toBeVisible();
-        await expect(page.locator('video[aria-label="generated-video.mp4"]')).toHaveAttribute("src", /^blob:/u);
+        await expect(page.locator('video[aria-label="generated-video.mp4"]')).toHaveAttribute(
+            "src",
+            /^data:video\/mp4;base64,/u,
+        );
         await expect(page.getByRole("log", { name: "Messages", exact: true })).toContainText(
             "Hello from the setup journey",
         );
+    });
+
+    await test.step("pull a local image referenced by the user message", async () => {
+        const path = join(runtime.workspace, "user-local-image.png");
+        await writeFile(
+            path,
+            Buffer.from(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+                "base64",
+            ),
+        );
+        const prompt = `Show this local image: ![User local image](<${path}>)`;
+        await composer.fill(prompt);
+        await page.getByRole("button", { name: "Send message", exact: true }).click();
+        const userMessage = page
+            .getByTestId(dataTestId.userMessage)
+            .filter({ hasText: "Show this local image:" })
+            .last();
+        await expect(userMessage.getByRole("img", { name: "User local image", exact: true })).toBeVisible();
+        await expect(userMessage.getByText("Image not available", { exact: true })).toHaveCount(0);
+        await page.reload();
+        await expect(
+            page
+                .getByTestId(dataTestId.userMessage)
+                .filter({ hasText: "Show this local image:" })
+                .last()
+                .getByRole("img", { name: "User local image", exact: true }),
+        ).toBeVisible();
     });
 
     await test.step("preserve active work across reload and end remote access", async () => {

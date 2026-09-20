@@ -1,5 +1,7 @@
 import type { PromptImage, PromptResource } from "@moxt-ai/mobius-sdk";
+import { useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { readFile } from "@/services/chat/mobius-transport";
 import { AgentMarkdown } from "../agents/agent-markdown.tsx";
 
 const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/;
@@ -7,10 +9,21 @@ const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/;
 interface UserPromptMessageProps {
     readonly images: readonly PromptImage[];
     readonly resources: readonly PromptResource[];
+    readonly sessionId?: string | undefined;
     readonly text: string;
 }
 
-export function UserPromptMessage({ images, resources, text }: UserPromptMessageProps) {
+export function UserPromptMessage({ images, resources, sessionId, text }: UserPromptMessageProps) {
+    const readImage = useCallback(
+        async (path: string, signal: AbortSignal) => {
+            if (sessionId === undefined) {
+                throw new Error("The session is unavailable");
+            }
+            const file = await readFile(sessionId, path, signal);
+            return { bytes: file.bytes, mediaType: file.mediaType };
+        },
+        [sessionId],
+    );
     return (
         <article
             aria-label="Message from you"
@@ -52,7 +65,14 @@ export function UserPromptMessage({ images, resources, text }: UserPromptMessage
                             ))}
                         </div>
                     )}
-                    {text.length > 0 && <AgentMarkdown className="[&_p]:my-0" markdown={text} streaming={false} />}
+                    {text.length > 0 && (
+                        <AgentMarkdown
+                            className="[&_p]:my-0"
+                            markdown={text}
+                            readImage={sessionId === undefined ? undefined : readImage}
+                            streaming={false}
+                        />
+                    )}
                 </div>
             </div>
         </article>

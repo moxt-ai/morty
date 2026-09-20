@@ -1,7 +1,8 @@
 import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
+import type { MarkdownImageReader } from "../../components/agents/agent-markdown.tsx";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import { ChatComposerMoreMenu } from "../../components/chat/chat-composer-more-menu.tsx";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
@@ -48,6 +49,21 @@ export function MobiusSessionPane({
     const lifetime = useRef<AbortController | null>(null);
     const messageList = useRef<HTMLDivElement | null>(null);
     const followLatest = useRef(true);
+    const readImage = useCallback<MarkdownImageReader>(
+        async (path, signal) => {
+            for (let attempt = 0; attempt < 10; attempt += 1) {
+                signal.throwIfAborted();
+                const connection = pane.store.getState().connection;
+                if (connection.kind === "ready") {
+                    const file = await connection.client.sessions.readFile(sessionId, path, signal);
+                    return { bytes: file.bytes, mediaType: file.mediaType };
+                }
+                await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+            throw new Error("The Session is not connected.");
+        },
+        [pane, sessionId],
+    );
 
     useEffect(() => {
         const controller = new AbortController();
@@ -171,7 +187,7 @@ export function MobiusSessionPane({
                                 onRetryUnknownDelivery={() => run(pane.store.getState().retryUnknownDelivery)}
                                 sessionId={sessionId}
                                 botId={botId}
-                                client={model.connection.kind === "ready" ? model.connection.client : null}
+                                readImage={readImage}
                             />
                         </div>
                     );

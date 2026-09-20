@@ -1,6 +1,5 @@
-import type { MobiusClient } from "@moxt-ai/mobius-sdk";
 import { CircleAlert, X } from "lucide-react";
-import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
+import { AgentMarkdown, type MarkdownImageReader } from "../../components/agents/agent-markdown.tsx";
 import { AgentRichContent } from "../../components/agents/agent-rich-content.tsx";
 import { AgentReply } from "../../components/chat/agent-reply.tsx";
 import { AgentWorkingIndicator } from "../../components/chat/agent-thinking.tsx";
@@ -20,7 +19,7 @@ export function MobiusSessionMessage({
     onRetryUnknownDelivery,
     sessionId,
     botId,
-    client,
+    readImage,
 }: {
     readonly message: SessionMessage;
     readonly activities: ReadonlyMap<string, RecordedAgentActivity>;
@@ -32,7 +31,7 @@ export function MobiusSessionMessage({
     readonly onRetryUnknownDelivery: () => void;
     readonly sessionId: string;
     readonly botId: string;
-    readonly client: Pick<MobiusClient, "artifacts" | "sessions"> | null;
+    readonly readImage: MarkdownImageReader;
 }) {
     if (message.role === "user") {
         const deliveryUnknown = message.id === deliveryUnknownUserMessageId;
@@ -59,12 +58,17 @@ export function MobiusSessionMessage({
                         }
                         data-testid={dataTestId.userMessage}
                     >
-                        <AgentMarkdown className="[&_p]:my-0" markdown={message.text} streaming={false} />
+                        <AgentMarkdown
+                            className="[&_p]:my-0"
+                            markdown={message.text}
+                            readImage={readImage}
+                            streaming={false}
+                        />
                     </MessageBubble>
                 )}
                 <AgentRichContent
                     contents={message.contents.map((entry) => entry.content)}
-                    serviceClient={client ?? undefined}
+                    readImage={readImage}
                     sessionId={sessionId}
                 />
                 {deliveryUnknown && (
@@ -102,7 +106,7 @@ export function MobiusSessionMessage({
         >
             <AgentRichContent
                 contents={message.contents.map((entry) => entry.content)}
-                serviceClient={client ?? undefined}
+                readImage={readImage}
                 sessionId={sessionId}
             />
         </AgentReply>

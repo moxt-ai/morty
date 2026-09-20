@@ -1,7 +1,7 @@
 import { code } from "@streamdown/code";
 import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
-import type { ComponentProps } from "react";
+import { type ComponentProps, useEffect, useMemo, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -29,15 +29,89 @@ function AgentMarkdownLink({ children, href }: ComponentProps<"a">) {
     );
 }
 
-const MARKDOWN_COMPONENTS = Object.freeze({ a: AgentMarkdownLink });
+export type MarkdownImageReader = (
+    path: string,
+    signal: AbortSignal,
+) => Promise<{ readonly bytes: Uint8Array; readonly mediaType: string }>;
+
+const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/u;
+
+function directImageSource(value: string): string {
+    if (value.startsWith("https://") || value.startsWith("http://") || value.startsWith("data:image/")) {
+        return value;
+    }
+    return "";
+}
+
+function AgentMarkdownImage({
+    alt,
+    className,
+    readImage,
+    src,
+    title,
+}: ComponentProps<"img"> & {
+    readonly readImage?: MarkdownImageReader | undefined;
+}) {
+    const directSource = typeof src === "string" ? directImageSource(src) : "";
+    const [source, setSource] = useState<string | null>(directSource || null);
+
+    useEffect(() => {
+        if (directSource.length > 0) {
+            setSource(directSource);
+            return;
+        }
+        if (typeof src !== "string" || src.length === 0 || readImage === undefined) {
+            setSource("");
+            return;
+        }
+        const controller = new AbortController();
+        let objectUrl = "";
+        setSource(null);
+        void readImage(src, controller.signal)
+            .then((file) => {
+                if (controller.signal.aborted || !SAFE_IMAGE_MIME.test(file.mediaType)) {
+                    return;
+                }
+                objectUrl = URL.createObjectURL(new Blob([Uint8Array.from(file.bytes)], { type: file.mediaType }));
+                setSource(objectUrl);
+            })
+            .catch(() => {
+                if (!controller.signal.aborted) {
+                    setSource("");
+                }
+            });
+        return () => {
+            controller.abort();
+            if (objectUrl.length > 0) {
+                URL.revokeObjectURL(objectUrl);
+            }
+        };
+    }, [directSource, readImage, src]);
+
+    if (source === null) {
+        return <span className="text-xs text-muted-foreground">Loading image…</span>;
+    }
+    if (source.length === 0) {
+        return <span className="text-xs text-muted-foreground">Image not available</span>;
+    }
+    return <img alt={alt ?? ""} className={className} loading="lazy" src={source} title={title} />;
+}
 
 export interface AgentMarkdownProps {
     readonly className?: string;
     readonly markdown: string;
+    readonly readImage?: MarkdownImageReader | undefined;
     readonly streaming: boolean;
 }
 
-export function AgentMarkdown({ className, markdown, streaming }: AgentMarkdownProps) {
+export function AgentMarkdown({ className, markdown, readImage, streaming }: AgentMarkdownProps) {
+    const components = useMemo(
+        () => ({
+            a: AgentMarkdownLink,
+            img: (properties: ComponentProps<"img">) => <AgentMarkdownImage {...properties} readImage={readImage} />,
+        }),
+        [readImage],
+    );
     return (
         <Streamdown
             animated={STREAM_ANIMATION}
@@ -57,7 +131,7 @@ export function AgentMarkdown({ className, markdown, streaming }: AgentMarkdownP
                 "[&_table]:text-sm",
                 className,
             )}
-            components={MARKDOWN_COMPONENTS}
+            components={components}
             controls={STREAMDOWN_CONTROLS}
             isAnimating={streaming}
             lineNumbers={false}

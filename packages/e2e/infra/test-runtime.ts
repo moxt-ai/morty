@@ -55,6 +55,7 @@ export async function createTestRuntime(harness: E2EHarness) {
         return {
             page,
             origin: stack.chatOrigin,
+            workspace: stack.directories.workspace,
             openChat,
             sendMessage,
             seedNativeSession: async (sessionId: string, prompt: string) => {
