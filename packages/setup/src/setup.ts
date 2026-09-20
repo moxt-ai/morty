@@ -9,11 +9,6 @@ import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
 import QRCode from "qrcode";
 
-// Pairing is a strict protocol boundary. Keep the Runtime version aligned with
-// the deployed Relay instead of allowing npm's mutable latest tag to select an
-// incompatible Agent catalog schema.
-const MOBIUS_RUNTIME_PACKAGE = "@moxt-ai/mobius@0.0.57";
-
 export interface SetupRuntime {
     readonly start: (
         directory: string,
@@ -400,7 +395,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         );
         let child: ChildProcess | undefined;
         try {
-            child = spawn("npx", ["--yes", MOBIUS_RUNTIME_PACKAGE, ...args], {
+            child = spawn("npx", ["--yes", "@moxt-ai/mobius@latest", ...args], {
                 stdio: ["ignore", log.fd, log.fd],
             });
             await once(child, "spawn", { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) });

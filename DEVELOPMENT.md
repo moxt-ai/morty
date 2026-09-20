@@ -79,9 +79,7 @@ generated JavaScript is not checked in. `pnpm build` builds it before the applic
 QR encoding, PNG reading, and QR decoding are included in that bundle and do not require
 packages to be installed separately on the user's machine.
 The bundle also exports `runSetup(args, host)` for integrations, with cancellable
-Runtime and clock ports. The CLI supplies the local OS Runtime implementation and
-pins its Mobius Runtime package version to the Relay-compatible Agent catalog
-protocol; do not replace that pin with npm's mutable `latest` tag.
+Runtime and clock ports. The CLI supplies the local OS Runtime implementation.
 
 The Worker serves `/setup.mjs` from the fixed `artifacts/setup.mjs` object in the
 existing `CHAT_ATTACHMENTS_APAC` bucket.
