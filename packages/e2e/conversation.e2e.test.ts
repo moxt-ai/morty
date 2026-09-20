@@ -11,6 +11,12 @@ test("Given a paired workspace, When a user works across conversations, Then ses
     const workingDirectory = await page.getByTestId(dataTestId.workingDirectory).textContent();
     assert.ok(workingDirectory);
 
+    await test.step("share the machine from the unobstructed sidebar action", async () => {
+        await page.getByTestId(dataTestId.shareMachine).click();
+        await expect(page.getByTestId(dataTestId.machineSharing)).toBeVisible();
+        await page.keyboard.press("Escape");
+    });
+
     await page.getByTestId(dataTestId.agentConfiguration).click();
     await expect(page.getByTestId(dataTestId.agentSetting("model"))).toBeVisible();
     await expect(page.getByTestId(dataTestId.agentSetting("reasoning_effort"))).toBeVisible();

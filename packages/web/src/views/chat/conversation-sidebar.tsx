@@ -250,6 +250,7 @@ export function ConversationSidebar({
                 <Button
                     variant="ghost"
                     className="w-full min-h-10 justify-start rounded-xl px-3 text-copy-secondary hover:bg-white/70"
+                    data-testid={dataTestId.shareMachine}
                     onClick={() => setSharing(true)}
                 >
                     <Share2 className="size-4" aria-hidden="true" />

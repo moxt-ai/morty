@@ -8,9 +8,8 @@ import {
     IdentityApiError,
 } from "../../services/identity/anonymous-identity-api.ts";
 import { verifySession, waitForClerk } from "../../view-models/authentication/session.ts";
-import { AccountActions, App, Page } from "../application/app.tsx";
+import { App, Page } from "../application/app.tsx";
 import { MobiusManagement, userBotConnection } from "../applications/mobius-management.tsx";
-import { AnonymousAccountActions } from "./anonymous-account-actions.tsx";
 import { type ActiveIdentity, ActiveIdentityProvider } from "./identity-context.tsx";
 import { router as authRouter } from "./router.tsx";
 
@@ -28,45 +27,16 @@ type IdentityState =
     | { readonly kind: "failed" };
 
 type WorkspaceApplicationProps = {
+    readonly activeIdentity: ActiveIdentity;
     readonly authorize: (signal: AbortSignal) => Promise<void>;
     readonly userId: string;
-} & (
-    | {
-          readonly activeIdentity: Extract<ActiveIdentity, { readonly kind: "anonymous" }>;
-          readonly localIdentity: AnonymousIdentity;
-      }
-    | {
-          readonly activeIdentity: Extract<ActiveIdentity, { readonly kind: "clerk" }>;
-          readonly localIdentity: AnonymousIdentity | null;
-      }
-);
+};
 
 function WorkspaceApplication(props: WorkspaceApplicationProps) {
     const transport = useApiTransport();
-    const { activeIdentity, authorize, localIdentity, userId } = props;
+    const { activeIdentity, authorize, userId } = props;
     const router = useMemo(() => {
-        let account: ReactNode;
-        if (activeIdentity.kind === "anonymous") {
-            if (localIdentity === null) {
-                throw new Error("Anonymous identity is unavailable.");
-            }
-            account = <AnonymousAccountActions token={localIdentity.token} />;
-        } else {
-            account = (
-                <div className="flex items-center gap-3">
-                    {localIdentity !== null && <AnonymousAccountActions token={localIdentity.token} signedIn />}
-                    <AccountActions />
-                </div>
-            );
-        }
-        const Standard = ({ children }: { readonly children: ReactNode }) => (
-            <div className="contents [&:has([data-chat-state=disconnected])>footer]:hidden">
-                {children}
-                <footer className="fixed bottom-0 left-0 z-10 hidden h-16 w-64 items-center gap-2 border-t border-border bg-background px-4 sm:flex">
-                    {account}
-                </footer>
-            </div>
-        );
+        const Standard = ({ children }: { readonly children: ReactNode }) => <>{children}</>;
         return createApplicationRouter(
             authorize,
             userId,
@@ -74,7 +44,7 @@ function WorkspaceApplication(props: WorkspaceApplicationProps) {
             userBotConnection(userId, activeIdentity.projectId, activeIdentity.getToken, transport.fetch),
             { Application: Standard, Standard },
         );
-    }, [activeIdentity, authorize, localIdentity, transport.fetch, userId]);
+    }, [activeIdentity, authorize, transport.fetch, userId]);
     return (
         <ActiveIdentityProvider value={activeIdentity}>
             <App state={{ kind: "signed-in", router }} />
@@ -299,7 +269,6 @@ export function SessionApplication() {
         return (
             <WorkspaceApplication
                 activeIdentity={activeIdentity}
-                localIdentity={state.identity}
                 userId={state.identity.userId}
                 authorize={async (signal) => {
                     const current = await api.loadOrCreate(signal);
@@ -322,7 +291,6 @@ export function SessionApplication() {
     return (
         <WorkspaceApplication
             activeIdentity={activeIdentity}
-            localIdentity={state.localIdentity}
             userId={state.userId}
             authorize={(signal) =>
                 verifySession(
