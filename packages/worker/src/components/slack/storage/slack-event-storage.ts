@@ -277,13 +277,15 @@ export class SlackEventStorage {
     readonly #events: SlackQueue;
 
     constructor(cx: {
-        readonly gateways: {
+        readonly gateways: { readonly queue: SlackQueue };
+        readonly storages: {
             readonly databaseResolver: DatabaseResolver;
-            readonly secretEncryption: SecretCipher;
-            readonly queue: SlackQueue;
         };
+        readonly utilities: { readonly secretEncryption: SecretCipher };
     }) {
-        const { databaseResolver: databases, secretEncryption: cipher, queue: events } = cx.gateways;
+        const { queue: events } = cx.gateways;
+        const { databaseResolver: databases } = cx.storages;
+        const { secretEncryption: cipher } = cx.utilities;
         this.#database = databases;
         this.#cipher = cipher;
         this.#events = events;

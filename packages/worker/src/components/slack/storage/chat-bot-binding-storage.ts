@@ -19,8 +19,8 @@ export type LocalSlackBot = v.InferOutput<typeof localBotSchema>;
 
 export class ChatBotBindingStorage {
     readonly #database: DatabaseResolver;
-    constructor(cx: { readonly gateways: { readonly databaseResolver: DatabaseResolver } }) {
-        this.#database = cx.gateways.databaseResolver;
+    constructor(cx: { readonly storages: { readonly databaseResolver: DatabaseResolver } }) {
+        this.#database = cx.storages.databaseResolver;
     }
 
     readonly readOwnedBot = async (

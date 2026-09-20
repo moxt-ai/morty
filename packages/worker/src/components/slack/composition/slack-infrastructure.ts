@@ -20,17 +20,23 @@ interface SlackGateways {
     readonly clerk: ClerkGateway;
     readonly platformProjects: SlackPlatformGateway;
     readonly identityGateway: IdentityGateway;
-    readonly humanIdentity: HumanIdentityResolver;
     readonly slackWebApi: SlackWebApi;
     readonly botTriggerLimiter: BotTriggerLimiter;
+    readonly queue: SlackQueue;
+}
+
+interface SlackStorages {
+    readonly databaseResolver: DatabaseResolver;
+    readonly attachmentStorageResolver: AttachmentStorageResolver;
+    readonly slackAppDirectory: SlackAppDirectory;
+    readonly humanIdentity: HumanIdentityResolver;
+}
+
+interface SlackUtilities {
     readonly clock: ClockService;
     readonly createNonce: () => string;
     readonly nowEpochMilliseconds: () => number;
     readonly secretEncryption: SecretCipher;
-    readonly queue: SlackQueue;
-    readonly databaseResolver: DatabaseResolver;
-    readonly attachmentStorageResolver: AttachmentStorageResolver;
-    readonly slackAppDirectory: SlackAppDirectory;
 }
 
 interface SlackConfig {
@@ -46,4 +52,6 @@ export interface SlackInfrastructure {
     readonly config: SlackConfig;
     readonly gateways: SlackGateways;
     readonly logger: SlackLogger;
+    readonly storages: SlackStorages;
+    readonly utilities: SlackUtilities;
 }

@@ -10,13 +10,12 @@ export class SlackMessageRenderer {
     private readonly publicBaseUrl: string;
     private readonly projectId: string;
     constructor(cx: {
-        readonly gateways: {
-            readonly slackWebApi: SlackWebApi;
-            readonly attachmentStorageResolver: AttachmentStorageResolver;
-        };
+        readonly gateways: { readonly slackWebApi: SlackWebApi };
+        readonly storages: { readonly attachmentStorageResolver: AttachmentStorageResolver };
         readonly config: { readonly publicBaseUrl: string; readonly projectId: string };
     }) {
-        const { slackWebApi: slack, attachmentStorageResolver: attachments } = cx.gateways;
+        const { slackWebApi: slack } = cx.gateways;
+        const { attachmentStorageResolver: attachments } = cx.storages;
         const { publicBaseUrl } = cx.config;
         this.slack = slack;
         this.attachments = attachments;

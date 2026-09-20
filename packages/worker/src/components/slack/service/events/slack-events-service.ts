@@ -31,10 +31,12 @@ export class SlackEventsService {
     readonly #apps: SlackAppDirectory;
     readonly #intake: SlackEventIntakeService;
     constructor(cx: {
-        readonly gateways: { readonly clock: ClockService; readonly slackAppDirectory: SlackAppDirectory };
+        readonly storages: { readonly slackAppDirectory: SlackAppDirectory };
+        readonly utilities: { readonly clock: ClockService };
         readonly services: { readonly intake: SlackEventIntakeService };
     }) {
-        const { clock, slackAppDirectory: apps } = cx.gateways;
+        const { slackAppDirectory: apps } = cx.storages;
+        const { clock } = cx.utilities;
         const { intake } = cx.services;
         this.#clock = clock;
         this.#apps = apps;

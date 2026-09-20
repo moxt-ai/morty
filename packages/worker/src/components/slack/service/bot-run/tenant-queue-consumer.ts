@@ -10,10 +10,10 @@ export class TenantQueueConsumer {
     readonly #apps: SlackAppDirectory;
     constructor(cx: {
         readonly services: { readonly queueProcessor: SlackQueueConsumer };
-        readonly gateways: { readonly slackAppDirectory: SlackAppDirectory };
+        readonly storages: { readonly slackAppDirectory: SlackAppDirectory };
     }) {
         this.#processor = cx.services.queueProcessor;
-        this.#apps = cx.gateways.slackAppDirectory;
+        this.#apps = cx.storages.slackAppDirectory;
     }
     readonly consume = async (value: unknown, signal: AbortSignal): Promise<void> => {
         const message = v.parse(queueMessageSchema, value);

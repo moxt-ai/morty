@@ -71,15 +71,16 @@ export class SlackInstallationService {
     constructor(cx: {
         readonly storages: { readonly slackEventStorage: SlackEventStorage };
         readonly services: { readonly identities: ExternalIdentityService; readonly slackTokens: SlackTokenService };
-        readonly gateways: {
-            readonly slackWebApi: SlackWebApi;
+        readonly gateways: { readonly slackWebApi: SlackWebApi };
+        readonly utilities: {
             readonly secretEncryption: SecretCipher;
             readonly nowEpochMilliseconds: () => number;
         };
     }) {
         const { slackEventStorage: storage } = cx.storages;
         const { identities, slackTokens: tokens } = cx.services;
-        const { slackWebApi: oauth, secretEncryption: secrets, nowEpochMilliseconds } = cx.gateways;
+        const { slackWebApi: oauth } = cx.gateways;
+        const { secretEncryption: secrets, nowEpochMilliseconds } = cx.utilities;
         this.#apps = storage;
         this.#identities = identities;
         this.#installations = storage;

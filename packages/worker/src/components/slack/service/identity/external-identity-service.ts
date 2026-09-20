@@ -32,9 +32,9 @@ export class ExternalIdentityService implements IdentityService {
     constructor(cx: {
         readonly gateways: {
             readonly clerk: ClerkGateway;
-            readonly humanIdentity: HumanIdentityResolver;
             readonly identityGateway: IdentityGateway;
         };
+        readonly storages: { readonly humanIdentity: HumanIdentityResolver };
         readonly config: {
             readonly authentication: AuthenticationConfiguration;
             readonly mobiusBaseUrl: string;
@@ -45,7 +45,7 @@ export class ExternalIdentityService implements IdentityService {
         this.#authentication = cx.config.authentication;
         this.#clerk = clerk;
         this.#gateway = gateway;
-        this.#humanIdentity = cx.gateways.humanIdentity;
+        this.#humanIdentity = cx.storages.humanIdentity;
         this.#mobiusBaseUrl = normalizeBaseUrl(mobiusBaseUrl);
     }
 

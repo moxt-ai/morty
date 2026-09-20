@@ -104,30 +104,37 @@ const slack = createSlackWorker<
         signingKey: bindings.SLACK_OAUTH_STATE_SIGNING_KEY,
     };
     const gateways = {
+        queue: new CloudflareSlackQueue(bindings.EVENTS, bindings.CHAT_PROJECT_ID),
+        clerk: new ClerkGateway(),
+        slackWebApi: new SlackWebApi(),
+        botTriggerLimiter: new CloudflareBotTriggerLimiter(bindings.BOT_TRIGGER_RATE_LIMITER),
+    };
+    const utilities = {
         clock: new ClockService(),
         createNonce: () => crypto.randomUUID(),
         nowEpochMilliseconds: () => Date.now(),
         secretEncryption: cipher,
-        queue: new CloudflareSlackQueue(bindings.EVENTS, bindings.CHAT_PROJECT_ID),
+    };
+    const storages = {
         databaseResolver: new CloudDatabaseResolver(host),
         attachmentStorageResolver: new CloudAttachmentStorageResolver(host),
-        clerk: new ClerkGateway(),
-        slackWebApi: new SlackWebApi(),
-        botTriggerLimiter: new CloudflareBotTriggerLimiter(bindings.BOT_TRIGGER_RATE_LIMITER),
-        slackAppDatabase: new D1SqlDatabase({ database, metrics: slackLogger, nowMilliseconds }),
     };
-    const infrastructure = { config, gateways, logger: slackLogger };
+    const slackAppDatabase = new D1SqlDatabase({ database, metrics: slackLogger, nowMilliseconds });
+    const infrastructure = { config, gateways, logger: slackLogger, storages, utilities };
     const cx = createSlackDependencies({
         ...infrastructure,
         gateways: {
             ...gateways,
             platformProjects: new PlatformProjectGateway(bindings),
             identityGateway: new IdentityGateway(infrastructure),
+        },
+        storages: {
+            ...storages,
             humanIdentity: {
                 resolve: (clerkUserId: string, signal: AbortSignal) =>
                     identities.resolveOrCreateClerk(clerkUserId, Date.now(), signal),
             },
-            slackAppDirectory: new DatabaseSlackAppDirectory(infrastructure),
+            slackAppDirectory: new DatabaseSlackAppDirectory(slackAppDatabase, cipher),
         },
     });
     return {

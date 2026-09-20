@@ -91,8 +91,8 @@ export class SlackManagementService {
             readonly chatBotBindings: ChatBotBindingService;
             readonly slackTokens: SlackTokenService;
         };
-        readonly gateways: {
-            readonly slackWebApi: SlackWebApi;
+        readonly gateways: { readonly slackWebApi: SlackWebApi };
+        readonly utilities: {
             readonly secretEncryption: SecretCipher;
             readonly nowEpochMilliseconds: () => number;
         };
@@ -100,7 +100,8 @@ export class SlackManagementService {
     }) {
         const { slackEventStorage: storage } = cx.storages;
         const { installations, chatBotBindings, slackTokens } = cx.services;
-        const { slackWebApi: manifestApi, secretEncryption: secrets, nowEpochMilliseconds } = cx.gateways;
+        const { slackWebApi: manifestApi } = cx.gateways;
+        const { secretEncryption: secrets, nowEpochMilliseconds } = cx.utilities;
         const { publicBaseUrl } = cx.config;
         this.#bindings = chatBotBindings;
         this.#installationService = installations;

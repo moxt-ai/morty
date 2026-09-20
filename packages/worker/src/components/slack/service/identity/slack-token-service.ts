@@ -49,10 +49,10 @@ export class SlackTokenService {
     readonly #createNonce: () => string;
     readonly #signingKey: string;
     constructor(cx: {
-        readonly gateways: { readonly clock: ClockService; readonly createNonce: () => string };
+        readonly utilities: { readonly clock: ClockService; readonly createNonce: () => string };
         readonly config: { readonly signingKey: string };
     }) {
-        const { clock, createNonce } = cx.gateways;
+        const { clock, createNonce } = cx.utilities;
         const { signingKey } = cx.config;
         this.#clock = clock;
         this.#createNonce = createNonce;

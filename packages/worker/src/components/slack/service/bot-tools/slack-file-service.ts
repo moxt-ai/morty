@@ -4,8 +4,8 @@ import type { TenantContext } from "../identity/tenant-context";
 export class SlackFileService {
     readonly #storage: AttachmentStorageResolver;
 
-    constructor(cx: { readonly gateways: { readonly attachmentStorageResolver: AttachmentStorageResolver } }) {
-        const { attachmentStorageResolver: storage } = cx.gateways;
+    constructor(cx: { readonly storages: { readonly attachmentStorageResolver: AttachmentStorageResolver } }) {
+        const { attachmentStorageResolver: storage } = cx.storages;
         this.#storage = storage;
     }
 

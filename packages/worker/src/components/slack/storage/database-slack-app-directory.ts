@@ -12,11 +12,9 @@ const rowSchema = v.object({ tenant_id: v.pipe(v.string(), v.minLength(1)), sign
 export class DatabaseSlackAppDirectory implements SlackAppDirectory {
     readonly #database: SqlDatabase;
     readonly #cipher: SecretCipher;
-    constructor(cx: {
-        readonly gateways: { readonly slackAppDatabase: SqlDatabase; readonly secretEncryption: SecretCipher };
-    }) {
-        this.#database = cx.gateways.slackAppDatabase;
-        this.#cipher = cx.gateways.secretEncryption;
+    constructor(database: SqlDatabase, cipher: SecretCipher) {
+        this.#database = database;
+        this.#cipher = cipher;
     }
     readonly find: SlackAppDirectory["find"] = async (slackAppId, signal) => {
         const value = await this.#database.execute(

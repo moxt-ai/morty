@@ -52,34 +52,40 @@ export async function createTestApplication(_singleDatabase = false) {
     const humanToken = async (userId = "tenant-1") =>
         fakeClerk.createSession(`user_${userId}`, config.authentication.APP_ORIGIN);
     const gateways = {
+        queue,
+        clerk,
+        slackWebApi: slack,
+        identityGateway: identity,
+        botTriggerLimiter: limiter,
+    };
+    const utilities = {
         clock: new ClockService(),
         createNonce: () => "nonce-1",
         nowEpochMilliseconds: () => Date.now(),
         secretEncryption: cipher,
-        queue,
+    };
+    const storages = {
         databaseResolver: {
             resolve: () => database,
         },
         attachmentStorageResolver: attachments,
-        clerk,
-        slackWebApi: slack,
-        identityGateway: identity,
         humanIdentity: {
             resolve: async (clerkUserId: string, signal: AbortSignal) => {
                 signal.throwIfAborted();
                 return clerkUserId.startsWith("user_") ? clerkUserId.slice("user_".length) : clerkUserId;
             },
         },
-        botTriggerLimiter: limiter,
-        slackAppDatabase: database,
     };
-    const infrastructure = { config, gateways, logger: slackLogger };
+    const infrastructure = { config, gateways, logger: slackLogger, storages, utilities };
     const cx = createSlackDependencies({
         ...infrastructure,
         gateways: {
             ...gateways,
             platformProjects: mobius,
-            slackAppDirectory: new DatabaseSlackAppDirectory(infrastructure),
+        },
+        storages: {
+            ...storages,
+            slackAppDirectory: new DatabaseSlackAppDirectory(database, cipher),
         },
     });
     const storage = cx.storages.slackEventStorage;

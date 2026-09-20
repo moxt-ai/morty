@@ -21,6 +21,7 @@ export type SlackContext = ReturnType<typeof createSlackDependencies>;
 
 export function createSlackDependencies(infrastructure: SlackInfrastructure) {
     const storages = Object.freeze({
+        ...infrastructure.storages,
         chatBotBindingStorage: new ChatBotBindingStorage(infrastructure),
         slackEventStorage: new SlackEventStorage(infrastructure),
     });
