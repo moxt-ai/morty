@@ -10,8 +10,8 @@ import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer, WorkspaceLocation } from "../../services/identity/anonymous-identity-api.ts";
 import {
-    botConnectionStatus,
     createBotChatHomeStore,
+    type SessionConnectionKind,
     setupDescription,
 } from "../../view-models/chat/bot-chat-home-store.ts";
 import {
@@ -113,7 +113,7 @@ export function BotChatHome({
     const followLatest = useRef(true);
     const entryConnectionResolved = useRef(false);
     const [remoteAccess] = useState(() => new URL(window.location.href).searchParams.get("remoteAccess") === "1");
-    const connectionStatus = botConnectionStatus(model.view);
+    const connectionStatus = model.connectionStatus;
     const creationBusy = conversationCreationBusy(model.creation);
     const composerLocked = conversationComposerLocked(model.creation);
     const creationError = conversationCreationError(model.creation);
@@ -137,7 +137,7 @@ export function BotChatHome({
     }, [model.revision, store]);
 
     useEffect(() => {
-        if (connectionStatus.kind === "connected") {
+        if (model.view.kind === "draft") {
             setPairingDialogOpen(false);
             setFailureDialogOpen(false);
         }
@@ -155,7 +155,7 @@ export function BotChatHome({
         } else if (setupView !== null) {
             setPairingDialogOpen(true);
         }
-    }, [connectionStatus.kind, model.view.kind, setupView]);
+    }, [model.view.kind, setupView]);
 
     useLayoutEffect(() => {
         if (model.view.kind === "draft" && followLatest.current && messageList.current !== null) {
@@ -193,6 +193,12 @@ export function BotChatHome({
     const onStatusChange = useCallback((sessionId: string, status: SessionActivityState): void => {
         setActiveSessionStatus({ kind: "status", sessionId, status });
     }, []);
+    const onConnectionStatusChange = useCallback(
+        (sessionId: string, connection: SessionConnectionKind) => {
+            store.getState().setSessionConnectionStatus(sessionId, connection);
+        },
+        [store],
+    );
     const activeSession =
         model.sessionView.kind === "session-access"
             ? {
@@ -261,6 +267,7 @@ export function BotChatHome({
                     requests={requests}
                     key={model.sessionView.session.result.ready.sessionId}
                     session={model.sessionView.session}
+                    onConnectionStatusChange={onConnectionStatusChange}
                     onStatusChange={onStatusChange}
                     {...(remoteAccess ? { endRemoteAccess } : {})}
                 />

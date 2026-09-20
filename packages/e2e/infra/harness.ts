@@ -178,7 +178,7 @@ export class E2EHarness {
         return child;
     }
 
-    async terminate(name: string) {
+    async terminate(name: string, signal: NodeJS.Signals = "SIGTERM") {
         const processRecord = this.children.find((candidate) => candidate.name === name);
         if (
             processRecord === undefined ||
@@ -188,7 +188,7 @@ export class E2EHarness {
         ) {
             throw new Error(`${name} is not running`);
         }
-        process.kill(-processRecord.child.pid, "SIGTERM");
+        process.kill(-processRecord.child.pid, signal);
         await Promise.race([
             new Promise((resolveExit) => processRecord.child.once("exit", resolveExit)),
             new Promise((_, reject) => setTimeout(() => reject(new Error(`${name} did not stop in time`)), 2_000)),

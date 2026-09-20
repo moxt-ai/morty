@@ -16,6 +16,7 @@ import {
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { registerMobiusChatDebugSession } from "../../debug-bridge.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import type { SessionConnectionKind } from "../../view-models/chat/bot-chat-home-store.ts";
 import { createBrowserFilePreviewStore } from "../../view-models/chat/file-preview-store.ts";
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 import { type SessionActivityState, workingCommandId } from "../../view-models/chat/session-activity-machine.ts";
@@ -28,12 +29,14 @@ export function MobiusSessionPane({
     botId,
     requests,
     endRemoteAccess,
+    onConnectionStatusChange,
     onStatusChange,
 }: {
     readonly session: OpenMobiusSession;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession" | "steerTurn" | "submitTurn">;
     readonly endRemoteAccess?: (signal: AbortSignal) => Promise<void>;
+    readonly onConnectionStatusChange: (sessionId: string, connection: SessionConnectionKind) => void;
     readonly onStatusChange: (sessionId: string, status: SessionActivityState) => void;
 }) {
     const sessionId = session.result.ready.sessionId;
@@ -127,6 +130,9 @@ export function MobiusSessionPane({
     useEffect(() => {
         onStatusChange(sessionId, model.activity);
     }, [model.activity, onStatusChange, sessionId]);
+    useEffect(() => {
+        onConnectionStatusChange(sessionId, model.connection.kind);
+    }, [model.connection.kind, onConnectionStatusChange, sessionId]);
     const activeCommandId = workingCommandId(model.activity);
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
         run(async (signal) => await pane.store.getState().configure(option, value, booleanValue, signal));

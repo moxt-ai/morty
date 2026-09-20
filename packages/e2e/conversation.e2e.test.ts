@@ -134,7 +134,7 @@ test("Given a paired workspace, When a user works across conversations, Then ses
     });
 });
 
-test("Given a new workspace, When the user enters, pairs, changes directories, and reconnects, Then Chat stays visible", async ({
+test("Given a new workspace, When the user enters, pairs, changes directories, and loses Runtime health, Then Chat stays visible", async ({
     runtime,
 }) => {
     await runtime.openChat();
@@ -179,9 +179,12 @@ test("Given a new workspace, When the user enters, pairs, changes directories, a
         await page.keyboard.press("Escape");
         await runtime.sendMessage("Conversation to reopen");
         await page.reload();
-        await expect(page.getByTestId(dataTestId.botConnectionStatus)).toHaveText("Connecting");
-        await expect(page.getByTestId(dataTestId.chatLanding)).toBeVisible();
         await expect(page.getByTestId(dataTestId.botConnectionStatus)).toHaveText("Connected");
+    });
+
+    await test.step("show disconnected when the Runtime WebSocket goes offline", async () => {
+        await runtime.disconnectRuntime();
+        await expect(page.getByTestId(dataTestId.botConnectionStatus)).toHaveText("Disconnected");
     });
 
     await test.step("show Runtime setup failure without replacing Chat when the user returns", async () => {

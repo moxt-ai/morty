@@ -32,7 +32,7 @@ type Target =
       };
 
 type ActiveView = { readonly kind: "draft"; readonly bot: ManagedBot };
-export type BotChatHomeView =
+type BotChatHomeView =
     | { readonly kind: "loading" }
     | { readonly kind: "connecting"; readonly bot: ManagedBot }
     | { readonly kind: "switching"; readonly view: ActiveView }
@@ -45,17 +45,35 @@ export type BotConnectionStatus =
     | { readonly kind: "connecting"; readonly label: "Connecting" }
     | { readonly kind: "connected"; readonly label: "Connected" }
     | { readonly kind: "disconnected"; readonly label: "Disconnected" };
+export type SessionConnectionKind = "loading" | "ready" | "failed";
 
-export function botConnectionStatus(view: BotChatHomeView): BotConnectionStatus {
-    switch (view.kind) {
+function runtimeConnectionStatus(workspace: ChatWorkspace): BotConnectionStatus {
+    const selected = workspace.selected;
+    const agent =
+        selected === null
+            ? undefined
+            : workspace.agents.find(
+                  (candidate) => candidate.runtimeId === selected.runtimeId && candidate.agentRef === selected.agentRef,
+              );
+    return agent?.online === true
+        ? { kind: "connected", label: "Connected" }
+        : { kind: "disconnected", label: "Disconnected" };
+}
+
+function isRuntimeConnectionFailure(cause: unknown): boolean {
+    return cause instanceof CloudApiError && isRuntimeConnectionCode(cause.code);
+}
+
+function isRuntimeConnectionCode(code: string | null): boolean {
+    return code !== null && ["connection_closed", "runtime_offline"].includes(code.toLowerCase());
+}
+
+function sessionConnectionStatus(connection: SessionConnectionKind): BotConnectionStatus {
+    switch (connection) {
         case "loading":
-        case "connecting":
-        case "switching":
             return { kind: "connecting", label: "Connecting" };
-        case "draft":
+        case "ready":
             return { kind: "connected", label: "Connected" };
-        case "setup":
-        case "connection-failed":
         case "failed":
             return { kind: "disconnected", label: "Disconnected" };
     }
@@ -74,6 +92,7 @@ export interface BotChatNavigation {
 
 export interface BotChatHomeStore {
     readonly view: BotChatHomeView;
+    readonly connectionStatus: BotConnectionStatus;
     readonly target: Target;
     readonly sessionView: SessionView;
     readonly creation: ConversationCreationState;
@@ -83,6 +102,7 @@ export interface BotChatHomeStore {
     readonly newConversation: () => void;
     readonly openManaged: (kind: "conversation" | "fork" | "import", id: string) => void;
     readonly retry: () => void;
+    readonly setSessionConnectionStatus: (sessionId: string, connection: SessionConnectionKind) => void;
     readonly forkInstead: () => void;
     readonly setDraftSettings: (settings: ChatDraftConfiguration | null) => void;
     readonly createConversation: (
@@ -171,6 +191,7 @@ export const createBotChatHomeStore = (
     const target = initialTarget(options.url, options.createId);
     return createStore<BotChatHomeStore>()((set, get) => ({
         view: { kind: "loading" },
+        connectionStatus: { kind: "connecting", label: "Connecting" },
         target,
         sessionView: { kind: "conversation-access" },
         creation: { kind: "draft" },
@@ -200,7 +221,18 @@ export const createBotChatHomeStore = (
                 }
                 const workspace = await requests.workspace(bot.botId, signal);
                 signal.throwIfAborted();
+                set({ connectionStatus: runtimeConnectionStatus(workspace) });
                 const currentTarget = get().target;
+                const reloadAfterWorkspaceChange = async (): Promise<void> => {
+                    await requests.waitForWorkspaceChange(bot.botId, signal);
+                    signal.throwIfAborted();
+                    const changedWorkspace = await requests.workspace(bot.botId, signal);
+                    signal.throwIfAborted();
+                    set((current) => ({
+                        connectionStatus: runtimeConnectionStatus(changedWorkspace),
+                        revision: current.revision + 1,
+                    }));
+                };
                 if (currentTarget.kind === "continue") {
                     const session = await requests.continueNativeSession(
                         bot.botId,
@@ -216,34 +248,43 @@ export const createBotChatHomeStore = (
                         view: { kind: "draft", bot },
                         sessionView: { kind: "session-access", session },
                     });
+                    await reloadAfterWorkspaceChange();
                     return;
                 }
                 if (currentTarget.kind === "session-access") {
                     const session = await requests.managedSession(bot.botId, currentTarget.sessionId, signal);
                     signal.throwIfAborted();
                     set({ view: { kind: "draft", bot }, sessionView: { kind: "session-access", session } });
+                    await reloadAfterWorkspaceChange();
                     return;
                 }
                 const reason = currentTarget.kind === "draft" ? setupReason(workspace) : null;
                 if (reason !== null) {
                     set({ view: { kind: "setup", bot, reason } });
-                    await requests.waitForWorkspaceChange(bot.botId, signal);
-                    signal.throwIfAborted();
-                    set((current) => ({ revision: current.revision + 1 }));
+                    await reloadAfterWorkspaceChange();
                     return;
                 }
                 if (currentTarget.kind === "draft") {
                     set({ view: { kind: "draft", bot } });
+                    await reloadAfterWorkspaceChange();
                     return;
                 }
                 await conversations.getState().open(bot.botId, currentTarget.conversationId, signal);
                 const opened = conversations.getState().state;
                 if (opened.kind !== "ready") {
+                    if (opened.kind === "failed" && isRuntimeConnectionCode(opened.code)) {
+                        set({ connectionStatus: { kind: "disconnected", label: "Disconnected" } });
+                    }
                     throw new Error(opened.kind === "failed" ? opened.message : "The Session could not be opened.");
                 }
                 set({ view: { kind: "draft", bot }, sessionView: { kind: "session-access", session: opened.session } });
+                await reloadAfterWorkspaceChange();
             } catch (cause) {
                 signal.throwIfAborted();
+                if (cause instanceof DOMException && cause.name === "TimeoutError") {
+                    set((current) => ({ revision: current.revision + 1 }));
+                    return;
+                }
                 if (cause instanceof CloudApiError && cause.code === "AGENT_REQUIRED") {
                     if (openedBot === null) {
                         set({ view: { kind: "failed", message: "Your Bot is unavailable." } });
@@ -256,12 +297,16 @@ export const createBotChatHomeStore = (
                     return;
                 }
                 const message = cause instanceof Error ? cause.message : "Chat is unavailable.";
-                set({
+                set((current) => ({
+                    connectionStatus:
+                        current.connectionStatus.kind === "connecting" || isRuntimeConnectionFailure(cause)
+                            ? { kind: "disconnected", label: "Disconnected" }
+                            : current.connectionStatus,
                     view:
                         openedBot === null
                             ? { kind: "failed", message }
                             : { kind: "connection-failed", bot: openedBot, message },
-                });
+                }));
             }
         },
         newConversation: () => {
@@ -288,6 +333,13 @@ export const createBotChatHomeStore = (
             }));
         },
         retry: () => set((current) => ({ revision: current.revision + 1 })),
+        setSessionConnectionStatus: (sessionId, connection) =>
+            set((current) =>
+                current.sessionView.kind === "session-access" &&
+                current.sessionView.session.result.ready.sessionId === sessionId
+                    ? { connectionStatus: sessionConnectionStatus(connection) }
+                    : current,
+            ),
         forkInstead: () => {
             const current = get().target;
             if (current.kind === "continue") {
