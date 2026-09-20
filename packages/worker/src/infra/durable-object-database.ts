@@ -1,15 +1,15 @@
-import management from "../../migrations/0001_initial.sql?raw";
-import anonymousIdentity from "../../migrations/0002_anonymous_identity.sql?raw";
-import platformProject from "../../migrations/0003_platform_project.sql?raw";
-import platformOrigin from "../../migrations/0004_platform_origin.sql?raw";
-import agentPairing from "../../migrations/0005_agent_pairing.sql?raw";
-import managedSession from "../../migrations/0006_chat_managed_session.sql?raw";
-import transferRedemptions from "../../migrations/0007_identity_transfer_redemptions.sql?raw";
-import remoteAccess from "../../migrations/0008_remote_access.sql?raw";
-import managedSessionImport from "../../migrations/0009_chat_managed_import.sql?raw";
-import chatOwnedBot from "../../migrations/0010_chat_owned_bot.sql?raw";
-import slackChatBotBinding from "../../migrations/0011_slack_chat_bot_binding.sql?raw";
-import removeLegacyBotMigration from "../../migrations/0012_remove_legacy_bot_migration.sql?raw";
+import management from "../../migrations/project-do/0001_initial.sql?raw";
+import anonymousIdentity from "../../migrations/project-do/0002_anonymous_identity.sql?raw";
+import platformProject from "../../migrations/project-do/0003_platform_project.sql?raw";
+import platformOrigin from "../../migrations/project-do/0004_platform_origin.sql?raw";
+import agentPairing from "../../migrations/project-do/0005_agent_pairing.sql?raw";
+import managedSession from "../../migrations/project-do/0006_chat_managed_session.sql?raw";
+import transferRedemptions from "../../migrations/project-do/0007_identity_transfer_redemptions.sql?raw";
+import remoteAccess from "../../migrations/project-do/0008_remote_access.sql?raw";
+import managedSessionImport from "../../migrations/project-do/0009_chat_managed_import.sql?raw";
+import chatOwnedBot from "../../migrations/project-do/0010_chat_owned_bot.sql?raw";
+import slackChatBotBinding from "../../migrations/project-do/0011_slack_chat_bot_binding.sql?raw";
+import removeLegacyBotMigration from "../../migrations/project-do/0012_remove_legacy_bot_migration.sql?raw";
 
 const migrations = [
     management,

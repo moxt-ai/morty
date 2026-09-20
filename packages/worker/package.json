@@ -4,6 +4,12 @@
     "private": true,
     "type": "module",
     "scripts": {
+        "db:generate:d1": "drizzle-kit generate --config ../../drizzle/drizzle.d1.config.ts",
+        "db:generate:project-do": "drizzle-kit generate --config ../../drizzle/drizzle.project-do.config.ts",
+        "mobius:codegen": "node ../../third-party/mobius/scripts/generate-sql-modules.ts",
+        "pretest": "pnpm mobius:codegen",
+        "pretypecheck": "pnpm mobius:codegen",
+        "pretypecheck:tests": "pnpm mobius:codegen",
         "typecheck": "tsc --project tsconfig.json",
         "typecheck:tests": "tsc --project tests/tsconfig.json",
         "test": "vitest run --config vitest.config.ts --passWithNoTests",

@@ -66,7 +66,10 @@ Make illegal states unrepresentable.
 ## Database schema
 
 - Do not define foreign-key constraints. Enforce relationships and deletion behavior explicitly in application logic.
+- Keep the authoritative Drizzle schema for each SQLite target under `src/schema/<target>` (for example, `schema/d1` or `schema/project-do`). Never place Durable Object tables in `schema/d1`, and never use one target's schema as the implicit schema for another target.
+- Keep Drizzle configuration in the repository-level `drizzle/` directory and generate each target's migrations into `migrations/<target>`.
 - Generate schema migrations with the repository's pinned Drizzle CLI. Never create or edit migration SQL manually.
+- Durable Object runtime code must execute committed `.sql` migrations generated for its target; do not embed application-table DDL or migration SQL in TypeScript. Prefer importing the SQL directly with `?raw`. Where the build pipeline cannot import SQL, use a committed code-generation script that copies the generated SQL verbatim into a gitignored module and keep `.sql` as the source of truth.
 - Treat committed migration files as immutable history; make subsequent schema changes with a new generated migration.
 
 ## Verification

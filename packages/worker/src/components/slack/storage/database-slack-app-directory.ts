@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
-import { slackApp } from "../../../schema/index.ts";
+import { slackApp } from "../../../schema/d1/index.ts";
 import { tenantContext } from "../entity/tenant-context.ts";
 import type { SqlDatabase } from "../infra/sql-database.ts";
 import type { SecretCipher } from "../infra/util/secret-cipher.ts";

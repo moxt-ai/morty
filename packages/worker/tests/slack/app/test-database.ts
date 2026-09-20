@@ -4,8 +4,8 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { afterEach, beforeEach, vi } from "vitest";
 import type { SqlDatabase } from "../../../src/components/slack/infra/sql-database.ts";
 import { D1SqlDatabase } from "../../../src/components/slack/storage/d1-database.ts";
-import type { Database } from "../../../src/schema/database.ts";
-import * as schema from "../../../src/schema/index.ts";
+import type { Database } from "../../../src/schema/d1/database.ts";
+import * as schema from "../../../src/schema/d1/index.ts";
 
 class TestDatabase implements SqlDatabase {
     readonly orm: Database;
@@ -53,7 +53,7 @@ export async function createTestDatabase(): Promise<TestDatabase> {
             "0010_chat_owned_bot.sql",
             "0011_slack_chat_bot_binding.sql",
             "0012_remove_legacy_bot_migration.sql",
-        ].map(async (name) => await readFile(new URL(`../../../migrations/${name}`, import.meta.url), "utf8")),
+        ].map(async (name) => await readFile(new URL(`../../../migrations/d1/${name}`, import.meta.url), "utf8")),
     );
     const statements = migrations.flatMap((migration) =>
         migration

@@ -1,7 +1,7 @@
 import { and, eq, exists, gt, isNull, lt, notExists, or, sql } from "drizzle-orm";
 import * as v from "valibot";
 import type { HttpError } from "../../../infra/http-error.ts";
-import { createDatabase, type Database } from "../../../schema/database.ts";
+import { createDatabase, type Database } from "../../../schema/d1/database.ts";
 import {
     agentPairingTicket,
     anonymousCredential,
@@ -10,7 +10,7 @@ import {
     identityTransfer,
     managedBot,
     platformProjectMapping,
-} from "../../../schema/index.ts";
+} from "../../../schema/d1/index.ts";
 import { createProjectCredential, readProjectCredential } from "../entity/project-credential.ts";
 
 const anonymousToken = v.pipe(v.string(), v.regex(/^mobius_anon_v2_[A-Za-z0-9_-]{43}$/u));

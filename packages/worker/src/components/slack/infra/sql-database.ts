@@ -1,4 +1,4 @@
-import type { Database } from "../../../schema/database.ts";
+import type { Database } from "../../../schema/d1/database.ts";
 
 export interface SqlDatabase {
     readonly execute: <T>(

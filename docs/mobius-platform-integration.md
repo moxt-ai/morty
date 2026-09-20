@@ -89,7 +89,7 @@ the hint to its storage resources and persists the resolved placement. The retur
 Project mapping is persisted by Cloud user, Platform origin, and App; it survives
 reloads and is isolated from other users. AppCredentials stay server-side.
 
-Before running this flow, apply `packages/worker/migrations/0003_platform_project.sql`
+Before running this flow, apply `packages/worker/migrations/d1/0003_platform_project.sql`
 through Wrangler D1 migrations.
 Cloudflare request metadata selects placement, with an `apac` fallback defined in code;
 Platform resolves storage placement. Bindings are recorded

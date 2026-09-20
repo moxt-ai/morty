@@ -3,6 +3,9 @@
     "ignore": ["third-party/**"],
     "ignoreDependencies": ["cloudflare", "drizzle-kit"],
     "workspaces": {
+        ".": {
+            "entry": ["drizzle/*.config.ts"]
+        },
         "packages/e2e": {
             "entry": ["*.e2e.test.ts", "fixtures/local-platform-worker.ts", "infra/acp-proxy.ts", "live/*.mjs"]
         },
@@ -15,7 +18,7 @@
             ]
         },
         "packages/worker": {
-            "entry": ["src/index.ts", "src/schema/index.ts"]
+            "entry": ["src/index.ts", "src/schema/*/index.ts"]
         }
     }
 }

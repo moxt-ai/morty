@@ -52,7 +52,7 @@ export async function createMobiusPlatformFixture() {
         await platform.ready;
         const bindings = await platform.getBindings<PlatformRelayBindings>();
         for (const [database, directory] of [
-            [bindings.PLATFORM_DIRECTORY_DATABASE, new URL("migrations/dashboard", platformDirectory)],
+            [bindings.PLATFORM_DIRECTORY_DATABASE, new URL("migrations/d1", platformDirectory)],
         ] as const) {
             for (const migration of await readD1Migrations(fileURLToPath(directory))) {
                 await database.batch(migration.queries.map((query) => database.prepare(query)));

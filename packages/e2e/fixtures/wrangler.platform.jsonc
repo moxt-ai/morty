@@ -30,7 +30,7 @@
             "binding": "PLATFORM_DIRECTORY_DATABASE",
             "database_name": "mobius-platform-e2e-directory",
             "database_id": "00000000-0000-0000-0000-000000000102",
-            "migrations_dir": "../../../third-party/mobius/packages/relay-cloudflare-platform/migrations/dashboard"
+            "migrations_dir": "../../../third-party/mobius/packages/relay-cloudflare-platform/migrations/d1"
         }
     ],
     "r2_buckets": [

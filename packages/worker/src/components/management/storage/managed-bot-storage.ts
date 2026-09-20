@@ -1,8 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
 import type { HttpError } from "../../../infra/http-error.ts";
-import { createDatabase, type Database } from "../../../schema/database.ts";
-import { managedBot } from "../../../schema/index.ts";
+import { createDatabase, type Database } from "../../../schema/d1/database.ts";
+import { managedBot } from "../../../schema/d1/index.ts";
 import { type BotConfiguration, botConfigurationSchema } from "../entity/bot-configuration.ts";
 
 const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));

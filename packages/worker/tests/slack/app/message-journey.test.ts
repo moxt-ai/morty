@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { describe, expect, it, vi } from "vitest";
 import type { SlackEventCallbackPayload } from "../../../src/components/slack/service/events/events";
-import { processedSlackEvent, slackMessageDelivery } from "../../../src/schema/index.ts";
+import { processedSlackEvent, slackMessageDelivery } from "../../../src/schema/d1/index.ts";
 import { createSignedRequest } from "./signed-request";
 import { createTestApplication } from "./test-app";
 

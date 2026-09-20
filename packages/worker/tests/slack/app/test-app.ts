@@ -9,7 +9,7 @@ import { ClockService } from "../../../src/components/slack/service/identity/clo
 import { tenantContext } from "../../../src/components/slack/service/identity/tenant-context";
 import { DatabaseSlackAppDirectory } from "../../../src/components/slack/storage/database-slack-app-directory";
 import { ClerkGateway } from "../../../src/gateway/clerk-gateway";
-import { managedBot } from "../../../src/schema/index.ts";
+import { managedBot } from "../../../src/schema/d1/index.ts";
 import { FakeAttachments, FakeIdentityGateway, FakeMobius, FakeSlack } from "./fake-environment";
 import { createSignedRequest } from "./signed-request";
 import { createTestDatabase } from "./test-database";

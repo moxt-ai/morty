@@ -4,6 +4,9 @@
     "private": true,
     "type": "module",
     "scripts": {
+        "mobius:codegen": "node ../../third-party/mobius/scripts/generate-sql-modules.ts",
+        "pretest": "pnpm mobius:codegen",
+        "pretypecheck": "pnpm mobius:codegen",
         "test": "playwright test",
         "test:codex": "node live/codex.mjs",
         "test:opencode": "node live/opencode.mjs",

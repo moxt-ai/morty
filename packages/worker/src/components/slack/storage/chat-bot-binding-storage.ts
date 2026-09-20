@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
-import { managedBot, slackApp, slackChatBotBinding } from "../../../schema/index.ts";
+import { managedBot, slackApp, slackChatBotBinding } from "../../../schema/d1/index.ts";
 import { botConfigurationSchema } from "../../management/entity/bot-configuration.ts";
 import { type ChatBotBinding, chatBotBindingSchema } from "../entity/chat-bot-binding";
 import type { TenantContext } from "../entity/tenant-context";

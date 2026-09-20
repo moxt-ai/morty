@@ -1,4 +1,4 @@
-import { createDatabase, type Database } from "../../../schema/database.ts";
+import { createDatabase, type Database } from "../../../schema/d1/database.ts";
 
 interface DatabaseMetricsLogger {
     readonly info: (bindings: Readonly<Record<string, unknown>>, message: string) => void;

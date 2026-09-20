@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import * as v from "valibot";
-import { createDatabase, type Database } from "../../../schema/database.ts";
-import { chatManagedSession } from "../../../schema/index.ts";
+import { createDatabase, type Database } from "../../../schema/d1/database.ts";
+import { chatManagedSession } from "../../../schema/d1/index.ts";
 import { PlatformProjectError, platformIdentifier } from "../../management/entity/platform-project.ts";
 
 const summarySchema = v.pipe(
