@@ -409,6 +409,7 @@ export async function platformPeer({
                                   effortSettingId: "",
                                   modelSettingId: "model",
                                   resolution: "unavailable",
+                                  unsupportedModelIds: ["retired-model"],
                                   valuesByModel: {},
                               },
                               settings: readySession("settings").configOptions.map(({ currentValue, ...option }) => ({
