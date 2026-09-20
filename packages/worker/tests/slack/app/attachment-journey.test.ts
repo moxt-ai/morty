@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
-import { createTestApplication } from "./test-app";
+import { createConnectedTestApplication, createTestApplication } from "./test-app";
 
 test("Given a Slack message with an attachment, When the bot receives its file link, Then the file is downloadable from the three-day retention namespace", async () => {
-    const app = await createTestApplication(true);
+    const app = await createConnectedTestApplication();
     app.slack.files.set("https://files.slack.test/report", "Report contents");
     const response = await app.signedRequest(
         "/mobius-slack/api/slack/events",

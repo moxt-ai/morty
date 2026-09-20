@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { SlackEventCallbackPayload } from "../../../src/components/slack/service/events/events";
 import { processedSlackEvent, slackMessageDelivery } from "../../../src/schema/d1/index.ts";
 import { createSignedRequest } from "./signed-request";
-import { createTestApplication } from "./test-app";
+import { createConnectedTestApplication } from "./test-app";
 
 const event: SlackEventCallbackPayload = {
     api_app_id: "A123",
@@ -26,7 +26,7 @@ const sqliteMaster = sqliteTable("sqlite_master", {
     name: text("name"),
 });
 
-type TestApplication = Awaited<ReturnType<typeof createTestApplication>>;
+type TestApplication = Awaited<ReturnType<typeof createConnectedTestApplication>>;
 
 async function send(app: TestApplication, payload = event) {
     const response = await app.signedRequest("/mobius-slack/api/slack/events", JSON.stringify(payload));
@@ -55,7 +55,7 @@ async function registerSourceApp(app: TestApplication) {
 
 describe("Slack message journeys", () => {
     it("propagates cancellation and accepts the next message without replaying the cancelled turn", async () => {
-        const app = await createTestApplication();
+        const app = await createConnectedTestApplication();
         const controller = new AbortController();
         const signedRequest = createSignedRequest((url, init) =>
             app.request(url, { ...init, signal: controller.signal }),
@@ -82,7 +82,7 @@ describe("Slack message journeys", () => {
     });
 
     it("runs a complete channel, thread, retry, ordering, privacy, and direct-message journey", async () => {
-        const app = await createTestApplication();
+        const app = await createConnectedTestApplication();
         const message = (ts: string, text: string) => ({
             botId: null,
             files: [],
@@ -153,7 +153,7 @@ describe("Slack message journeys", () => {
     });
 
     it("times out a stalled turn and resumes its waiting message", async () => {
-        const app = await createTestApplication();
+        const app = await createConnectedTestApplication();
         const gate = app.mobius.pauseNext();
         const pending = send(app);
         await gate.started;
@@ -174,14 +174,14 @@ describe("Slack message journeys", () => {
     });
 
     it("discovers an app from Cloud D1 and completes its queued message", async () => {
-        const app = await createTestApplication(true);
+        const app = await createConnectedTestApplication();
         await send(app);
         expect(app.slack.messages[0]?.text).toBe("Investigation complete");
         expect(app.mobius.runs).toHaveLength(1);
     });
 
     it("does not recover a disconnected result but processes the next message", async () => {
-        const app = await createTestApplication();
+        const app = await createConnectedTestApplication();
         app.mobius.connectionState = "disconnect-after-result";
         await send(app);
         expect(app.slack.messages[0]?.text).toBe("The bot run failed (MOBIUS_CONNECTION_FAILED). Please try again.");
@@ -199,7 +199,7 @@ describe("Slack message journeys", () => {
     });
 
     it("lets an independently configured app reply without a linked user identity", async () => {
-        const app = await createTestApplication();
+        const app = await createConnectedTestApplication();
         const response = await app.request("/mobius-slack/api/slack/apps/register", {
             method: "POST",
             headers: {
@@ -224,7 +224,7 @@ describe("Slack message journeys", () => {
     });
 
     it("applies every source-bot limiter outcome in one installation lifecycle", async () => {
-        const app = await createTestApplication();
+        const app = await createConnectedTestApplication();
         await registerSourceApp(app);
         for (const [index, mode] of ["admit", "refuse", "fail"].entries()) {
             app.limiter.mode = mode;
@@ -244,7 +244,7 @@ describe("Slack message journeys", () => {
     });
 
     it("handles Slack verification and rejects unauthenticated, stale, irrelevant, and unknown-bot events", async () => {
-        const app = await createTestApplication();
+        const app = await createConnectedTestApplication();
         const challenge = await app.signedRequest(
             "/mobius-slack/api/slack/events",
             JSON.stringify({ api_app_id: "A123", challenge: "challenge-value", type: "url_verification" }),
@@ -286,7 +286,7 @@ describe("Slack message journeys", () => {
     });
 
     it("stores a waiting event only until the active turn completes and then resumes it", async () => {
-        const app = await createTestApplication();
+        const app = await createConnectedTestApplication();
         const gate = app.mobius.pauseNext();
         const first = send(app);
         await gate.started;
@@ -313,7 +313,7 @@ describe("Slack message journeys", () => {
     });
 
     it("suppresses NO_REPLY while still allowing authenticated tool delivery", async () => {
-        const app = await createTestApplication();
+        const app = await createConnectedTestApplication();
         app.mobius.responseText = " [NO_REPLY] ";
         await send(app);
         expect(app.slack.messages).toEqual([]);
