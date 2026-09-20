@@ -8,6 +8,8 @@ export const dataTestId = Object.freeze({
     managedConversation: "chat-managed-conversation",
     queuedMessage: "chat-queued-message",
     sendMessage: "chat-send-message",
+    workingIndicator: "chat-working-indicator",
+    workingSpinner: "chat-working-spinner",
     userMessage: "chat-user-message",
     agentResponse: "chat-agent-response",
     pairingInstruction: "chat-pairing-instruction",

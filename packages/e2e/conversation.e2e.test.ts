@@ -74,6 +74,8 @@ test("Given a paired workspace, When a user works across conversations, Then att
         await composer.fill("wait for steering");
         await send.click();
         await expect(send).toHaveAttribute("aria-label", "Stop agent output");
+        await expect(page.getByTestId(dataTestId.workingIndicator)).toContainText("Working for");
+        await expect(page.getByTestId(dataTestId.workingSpinner)).toBeVisible();
         await expect(composer).toBeEnabled();
         await composer.fill("focus on the public API");
         await composer.press("Enter");
