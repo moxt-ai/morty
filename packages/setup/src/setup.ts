@@ -9,6 +9,11 @@ import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
 import QRCode from "qrcode";
 
+// Pairing is a strict protocol boundary. Keep this version aligned with the
+// Mobius submodule so npm cannot reuse a stale `latest` resolution with an
+// incompatible Agent catalog descriptor.
+const MOBIUS_RUNTIME_PACKAGE = "@moxt-ai/mobius@0.0.58";
+
 export interface SetupRuntime {
     readonly start: (
         directory: string,
@@ -395,7 +400,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         );
         let child: ChildProcess | undefined;
         try {
-            child = spawn("npx", ["--yes", "@moxt-ai/mobius@latest", ...args], {
+            child = spawn("npx", ["--yes", MOBIUS_RUNTIME_PACKAGE, ...args], {
                 stdio: ["ignore", log.fd, log.fd],
             });
             await once(child, "spawn", { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) });
