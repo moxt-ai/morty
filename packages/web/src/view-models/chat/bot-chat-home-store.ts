@@ -34,6 +34,7 @@ type Target =
 type ActiveView = { readonly kind: "draft"; readonly bot: ManagedBot };
 export type BotChatHomeView =
     | { readonly kind: "loading" }
+    | { readonly kind: "connecting"; readonly bot: ManagedBot }
     | { readonly kind: "switching"; readonly view: ActiveView }
     | ActiveView
     | { readonly kind: "setup"; readonly bot: ManagedBot; readonly reason: SetupReason }
@@ -48,6 +49,7 @@ export type BotConnectionStatus =
 export function botConnectionStatus(view: BotChatHomeView): BotConnectionStatus {
     switch (view.kind) {
         case "loading":
+        case "connecting":
         case "switching":
             return { kind: "connecting", label: "Connecting" };
         case "draft":
@@ -193,6 +195,9 @@ export const createBotChatHomeStore = (
                     throw new Error("Your Bot is unavailable.");
                 }
                 openedBot = bot;
+                if (get().view.kind === "loading") {
+                    set({ view: { kind: "connecting", bot } });
+                }
                 const workspace = await requests.workspace(bot.botId, signal);
                 signal.throwIfAborted();
                 const currentTarget = get().target;

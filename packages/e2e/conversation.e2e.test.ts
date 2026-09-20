@@ -134,7 +134,7 @@ test("Given a paired workspace, When a user works across conversations, Then ses
     });
 });
 
-test("Given a new workspace, When the user enters, pairs, and changes working directories, Then Chat uses dialogs and remembers recent locations", async ({
+test("Given a new workspace, When the user enters, pairs, changes directories, and reconnects, Then Chat stays visible", async ({
     runtime,
 }) => {
     await runtime.openChat();
@@ -174,6 +174,15 @@ test("Given a new workspace, When the user enters, pairs, and changes working di
     await page.reload();
     await directory.click();
     await expect(page.getByTestId(dataTestId.recentWorkingDirectory)).toHaveText([originalDirectory]);
+
+    await test.step("keep Chat visible while conversation access opens", async () => {
+        await page.keyboard.press("Escape");
+        await runtime.sendMessage("Conversation to reopen");
+        await page.reload();
+        await expect(page.getByTestId(dataTestId.botConnectionStatus)).toHaveText("Connecting");
+        await expect(page.getByTestId(dataTestId.chatLanding)).toBeVisible();
+        await expect(page.getByTestId(dataTestId.botConnectionStatus)).toHaveText("Connected");
+    });
 
     await test.step("show Runtime setup failure without replacing Chat when the user returns", async () => {
         await runtime.disconnectPlatform();

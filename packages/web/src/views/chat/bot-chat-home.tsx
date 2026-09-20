@@ -141,7 +141,12 @@ export function BotChatHome({
             setPairingDialogOpen(false);
             setFailureDialogOpen(false);
         }
-        if (entryConnectionResolved.current || model.view.kind === "loading" || model.view.kind === "switching") {
+        if (
+            entryConnectionResolved.current ||
+            model.view.kind === "loading" ||
+            model.view.kind === "connecting" ||
+            model.view.kind === "switching"
+        ) {
             return;
         }
         entryConnectionResolved.current = true;
@@ -178,7 +183,10 @@ export function BotChatHome({
     const active =
         model.view.kind === "switching"
             ? model.view.view
-            : model.view.kind === "draft" || model.view.kind === "setup" || model.view.kind === "connection-failed"
+            : model.view.kind === "connecting" ||
+                model.view.kind === "draft" ||
+                model.view.kind === "setup" ||
+                model.view.kind === "connection-failed"
               ? model.view
               : null;
     const switching = model.view.kind === "switching";
@@ -321,13 +329,17 @@ export function BotChatHome({
                                         <MessageSquare className="size-6" aria-hidden="true" />
                                     </span>
                                     <p className="mb-2 text-[11px] font-semibold tracking-[0.1em] text-primary uppercase">
-                                        Ready to collaborate
+                                        {model.view.kind === "connecting"
+                                            ? "Connecting to agent"
+                                            : "Ready to collaborate"}
                                     </p>
                                     <h1 className="text-[28px] leading-9 font-semibold tracking-[-0.025em]">
                                         {active.bot.displayName}
                                     </h1>
                                     <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-muted-foreground">
-                                        Ask a question, explore the workspace, or start a task with your local agent.
+                                        {model.view.kind === "connecting"
+                                            ? "Chat is restoring access to this conversation."
+                                            : "Ask a question, explore the workspace, or start a task with your local agent."}
                                     </p>
                                 </div>
                             )}
