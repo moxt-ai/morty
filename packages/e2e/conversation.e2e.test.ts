@@ -117,18 +117,38 @@ test("Given a paired workspace, When a user works across conversations, Then att
     });
 });
 
-test("Given a paired workspace, When the user saves a working directory, Then Chat restores it after reload", async ({
+test("Given a paired workspace, When the user changes working directories, Then Chat previews paths and offers recent locations", async ({
     runtime,
 }) => {
     await runtime.openPairedChat();
     const { page } = runtime;
     const directory = page.getByTestId(dataTestId.workingDirectory);
+    const originalDirectory = await directory.textContent();
+    assert.ok(originalDirectory);
 
     await directory.click();
+    await expect(page.getByTestId(dataTestId.recentWorkingDirectory)).toHaveText([originalDirectory]);
+    await page.getByTestId(dataTestId.changeWorkingDirectory).click();
+    await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
     await page.getByTestId(dataTestId.workingDirectoryPath).fill("/");
+    await page.clock.fastForward(1_000);
+    await expect(page.getByTestId(dataTestId.workingDirectoryPreview)).toHaveAttribute("aria-label", "Folders in /");
     await page.getByTestId(dataTestId.saveWorkingDirectory).click();
     await expect(directory).toHaveText("/");
 
     await page.reload();
     await expect(directory).toHaveText("/");
+    await directory.click();
+    await expect(page.getByTestId(dataTestId.recentWorkingDirectory)).toHaveText(["/", originalDirectory]);
+    await page.getByTestId(dataTestId.recentWorkingDirectory).filter({ hasText: originalDirectory }).click();
+    await expect(directory).toHaveText(originalDirectory);
+
+    await directory.click();
+    await expect(page.getByTestId(dataTestId.recentWorkingDirectory)).toHaveText([originalDirectory, "/"]);
+    await page.getByTestId(dataTestId.forgetRecentWorkingDirectory).nth(1).click();
+    await expect(page.getByTestId(dataTestId.recentWorkingDirectory)).toHaveText([originalDirectory]);
+
+    await page.reload();
+    await directory.click();
+    await expect(page.getByTestId(dataTestId.recentWorkingDirectory)).toHaveText([originalDirectory]);
 });

@@ -19,11 +19,39 @@ modifying or discarding user changes.
 Require the repository's pinned Node.js and pnpm versions. Install locked
 dependencies only when missing or stale. Do not upgrade dependencies.
 
+Inspect `git submodule status` before using the local Platform fixture. A leading
+`+` means the checked-out Mobius source does not match the revision recorded by
+the superproject, and the fixture can fail with missing exports, dependencies, or
+generated migration modules. Never repair or replace a user's modified submodule.
+Instead, create a detached temporary worktree at the current superproject `HEAD`,
+initialize its recorded Mobius submodule, install both frozen lockfiles when
+needed, and generate the committed-revision SQL modules there. Use that temporary
+worktree only for the Platform process; keep Chat and the session CWD in the
+requested checkout.
+
 ## Prepare local services
 
 The Chat Worker requires a configured Mobius Platform. If an existing healthy
 local Platform and valid `.dev.vars` already configure this checkout, reuse them.
 Never overwrite an existing `.dev.vars`.
+
+A Platform health response validates only that the Worker is live; it does not
+prove that its persisted applications match `MOBIUS_APP_ID` and
+`MOBIUS_APP_SECRET`. Before treating an existing Platform persistence directory
+as reusable, require the saved application credential to be accepted. A
+`PLATFORM_APP_UNAUTHORIZED` setup failure means the persistence directory and
+`.dev.vars` do not match. Do not retry against arbitrary persistence directories
+or overwrite `.dev.vars`; locate the matching local persistence state, or report
+the conflict and ask before replacing the local configuration with newly
+provisioned credentials.
+
+The setup configuration under the resolved Documents directory preserves its
+identity whenever `base_url` remains the same. Fresh temporary Platform and Chat
+state at the same localhost origin therefore must not reuse an identity created
+for older persistence. Never delete or rewrite the user's saved setup
+configuration to fix this. For a user-approved temporary configuration workflow,
+use a new private temporary Documents directory so setup creates isolated local
+identity and Runtime state.
 
 Otherwise use the repository's local Platform fixture on `127.0.0.1:8788`:
 
@@ -78,10 +106,13 @@ directory and parses with `node --check`. Set the directory to mode `0700` and
 the file to mode `0600`.
 
 Use `DOCUMENT_DIR` when set; otherwise resolve the user's Documents directory
-locally. Run the setup bundle with background execution support:
+locally. Always export the resolved absolute path for the setup process. Merely
+running the command with the Documents directory as its CWD is insufficient and
+causes the bundle to reject an empty `DOCUMENT_DIR`. Run the setup bundle with
+background execution support:
 
 ```sh
-node "$SCRIPT_DIR/setup.mjs" setup \
+DOCUMENT_DIR="$RESOLVED_DOCUMENTS_DIR" node "$SCRIPT_DIR/setup.mjs" setup \
   --base-url http://localhost:5173 \
   --harness "$HARNESS" \
   --session-id "$SESSION_ID"
@@ -97,12 +128,30 @@ requires a URL whose origin is exactly `http://localhost:5173`, whose path is
 `expiresAt`. Do not open, preview, scan, or redeem the URL because that consumes
 one of its five uses.
 
+## Capture requested previews
+
+Skip this section unless the user explicitly asks to open, preview, or capture
+the local app. In that case, redeem the ready handoff exactly once in the browser,
+confirm the resulting page remains on the `http://localhost:5173` origin, and
+capture only the requested states. Write screenshots or other requested artifacts
+to the user's requested repository-relative directory, creating it when needed;
+do not place credentials, the transfer URL, or configuration files there. Report
+the artifact paths and that the handoff has at most four successful redemptions
+remaining. Do not return or separately open the handoff again after redeeming it.
+If the continuation page asks whether to import or fork the native harness
+session, choose **Fork session** for preview work so the original session is not
+continued or mutated. Choose **Import session** only when the user explicitly
+requests that behavior.
+
 ## Return the handoff
 
-Return the exact clickable `url` and `expiresAt` from the ready record. Mention
-that it can be successfully opened up to five times and works only while the
-local app and paired Runtime remain online. Include QR paths when setup returns
-them, but never expose saved credentials or configuration files.
+When the handoff was not redeemed for a requested preview, return the exact
+clickable `url` and `expiresAt` from the ready record. Mention that it can be
+successfully opened up to five times and works only while the local app and
+paired Runtime remain online. Include QR paths when setup returns them. When the
+preview workflow already redeemed the handoff, return the captured artifact paths
+instead and do not expose the transfer URL. Never expose saved credentials or
+configuration files.
 
 If setup returns a typed error or does not become ready within five minutes,
 report the error instead of returning the unpaired homepage URL.
