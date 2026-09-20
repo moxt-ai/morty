@@ -523,9 +523,12 @@ export class PlatformProjectGateway {
                 throw new PlatformProjectError("NOT_FOUND", "The Runtime pairing was not found.", 404, { cause });
             }
             if (cause instanceof MobiusApiError) {
-                throw new PlatformProjectError(cause.code, "Platform could not complete Runtime setup.", cause.status, {
-                    cause,
-                });
+                throw new PlatformProjectError(
+                    cause.code,
+                    `Platform could not complete Runtime setup. Cause: ${cause.message}`,
+                    cause.status,
+                    { cause },
+                );
             }
             throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Platform could not complete Runtime setup.", 502, {
                 cause,
