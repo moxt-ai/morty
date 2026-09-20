@@ -35,6 +35,7 @@ export default createPlatformWorker(
 );
 
 export {
+    NonCloudRetentionSessionRelayDO,
     PlatformSessionRelay,
     ProjectRelay,
     RuntimeRelay,
