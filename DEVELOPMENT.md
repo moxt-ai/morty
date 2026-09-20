@@ -18,7 +18,8 @@ Bot; returning visitors restore their saved identity automatically. Every web
 workspace copies `/pair.md?token=...`, a one-time ticket that connects the local
 Runtime to its current user and Bot and directs the user back to Chat. Pairing
 reconnects saved Runtime state only after the ticket proves the same Chat origin,
-user, Project, and Bot and Platform confirms the Runtime pairing is still active;
+user, Project, and Bot, names that Runtime as its expected target, and Platform
+confirms the Runtime pairing is still active;
 otherwise it creates a fresh Runtime identity.
 `/setup.md` is reserved for standalone testing and external sharing, including
 social posts. That flow requires the current harness session ID, creates or reuses a

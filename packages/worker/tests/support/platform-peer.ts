@@ -447,11 +447,12 @@ export async function platformPeer({
             response.writeHead(200).end(
                 JSON.stringify({
                     runtimes: agentsOnline
-                        ? [
-                              {
-                                  runtimeId: "runtime-1",
-                                  projectId: runtimePath[1],
-                                  channelId: "channel-1",
+                        ? [...pairings.values()]
+                              .filter((pairing) => pairing.projectId === runtimePath[1])
+                              .map((pairing) => ({
+                                  runtimeId: pairing.runtimeId,
+                                  projectId: pairing.projectId,
+                                  channelId: pairing.channelId,
                                   machineName: "Local machine",
                                   workspaceName: "Workspace",
                                   online: true,
@@ -465,8 +466,7 @@ export async function platformPeer({
                                       },
                                   ],
                                   installableAgents: [],
-                              },
-                          ]
+                              }))
                         : [],
                 }),
             );

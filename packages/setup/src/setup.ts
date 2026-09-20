@@ -295,6 +295,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             user_id: identifier(identity.userId),
             bot_id: identifier(identity.botId),
             project_id: identifier(identity.projectId),
+            expected_runtime_id: identity.expectedRuntimeId === null ? null : identifier(identity.expectedRuntimeId),
             entry: "pair",
         };
         return await saveConfiguration(context, updates);
@@ -380,7 +381,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             saved.base_url !== context.base ||
             saved.user_id !== context.config.user_id ||
             saved.project_id !== context.config.project_id ||
-            saved.bot_id !== context.config.bot_id
+            saved.bot_id !== context.config.bot_id ||
+            context.config.expected_runtime_id === null
         ) {
             return context;
         }
@@ -394,6 +396,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 relayUrl: origin(savedPairing.relayUrl),
             };
             if (pairing.projectId !== context.config.project_id) {
+                return context;
+            }
+            if (pairing.runtimeId !== identifier(context.config.expected_runtime_id)) {
                 return context;
             }
             const candidate = {

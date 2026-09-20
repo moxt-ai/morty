@@ -10,8 +10,8 @@ ticket, valid for **10 minutes**, for their existing user, Bot, and workspace.
 Fetching this document does not consume it. Do not create another user or Bot.
 Pairing takes its identity and Bot only from the supplied ticket. After redemption,
 it may reconnect saved Runtime state only when that state belongs to the exact same
-Chat origin, user, workspace, and Bot and Platform confirms that the pairing remains
-active. Otherwise it creates a fresh Runtime pairing. The previous file is backed up,
+Chat origin, user, workspace, and Bot, matches the Runtime selected by the ticket, and
+Platform confirms that the pairing remains active. Otherwise it creates a fresh Runtime pairing. The previous file is backed up,
 then the verified identity and Runtime connection state are saved to `config.json`.
 Do not ask for an additional replacement confirmation.
 
