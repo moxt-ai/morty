@@ -104,6 +104,7 @@ export function BotChatHome({
     const model = useStore(store);
     const [draft, setDraft] = useState("");
     const [pairingDialogOpen, setPairingDialogOpen] = useState(false);
+    const [failureDialogOpen, setFailureDialogOpen] = useState(false);
     const [attachments, setAttachments] = useState<readonly ComposerAttachment[]>([]);
     const [activeSessionStatus, setActiveSessionStatus] = useState<ActiveSessionStatus>({ kind: "none" });
     const lifetime = useRef<AbortController | null>(null);
@@ -118,9 +119,9 @@ export function BotChatHome({
     const creationError = conversationCreationError(model.creation);
     const creationStatus = conversationCreationStatus(model.creation);
     const queuedInitialMessage = queuedDraftMessage(model.creation);
+    const setupView = model.view.kind === "setup" ? model.view : null;
     const disconnectedBot =
-        model.view.kind === "setup" &&
-        (model.view.reason === "agent-offline" || model.view.reason === "agent-required");
+        setupView !== null && (setupView.reason === "agent-offline" || setupView.reason === "agent-required");
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: Store revision explicitly restarts route loading.
     useEffect(() => {
@@ -138,15 +139,18 @@ export function BotChatHome({
     useEffect(() => {
         if (connectionStatus.kind === "connected") {
             setPairingDialogOpen(false);
+            setFailureDialogOpen(false);
         }
         if (entryConnectionResolved.current || model.view.kind === "loading" || model.view.kind === "switching") {
             return;
         }
         entryConnectionResolved.current = true;
-        if (disconnectedBot) {
+        if (model.view.kind === "connection-failed") {
+            setFailureDialogOpen(true);
+        } else if (setupView !== null) {
             setPairingDialogOpen(true);
         }
-    }, [connectionStatus.kind, disconnectedBot, model.view.kind]);
+    }, [connectionStatus.kind, model.view.kind, setupView]);
 
     useLayoutEffect(() => {
         if (model.view.kind === "draft" && followLatest.current && messageList.current !== null) {
@@ -174,7 +178,7 @@ export function BotChatHome({
     const active =
         model.view.kind === "switching"
             ? model.view.view
-            : model.view.kind === "draft" || model.view.kind === "setup"
+            : model.view.kind === "draft" || model.view.kind === "setup" || model.view.kind === "connection-failed"
               ? model.view
               : null;
     const switching = model.view.kind === "switching";
@@ -275,29 +279,6 @@ export function BotChatHome({
                                         }
                                     />
                                 </div>
-                            ) : model.view.kind === "setup" && !disconnectedBot ? (
-                                <section className="m-auto w-full max-w-lg animate-cloud-enter rounded-2xl border border-border bg-card p-8 shadow-sm motion-reduce:animate-none">
-                                    <MessageSquare className="mb-5 size-8 text-primary" aria-hidden="true" />
-                                    <h1 className="text-2xl font-semibold tracking-tight">
-                                        {model.view.reason === "unconfigured"
-                                            ? "Your Chat is ready to connect"
-                                            : "Chat is waiting to reconnect"}
-                                    </h1>
-                                    <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                                        {setupDescription(model.view.reason)}
-                                    </p>
-                                    {model.view.reason === "unconfigured" && replaceWorkspace !== undefined && (
-                                        <WorkspaceRegionSelector
-                                            projectId={projectId}
-                                            replaceWorkspace={replaceWorkspace}
-                                        />
-                                    )}
-                                    <PairingInstruction requests={requests} />
-                                    <p role="status" className="mt-4 text-sm text-muted-foreground">
-                                        Chat will open when the server reports that this Bot is active and its selected
-                                        agent is online.
-                                    </p>
-                                </section>
                             ) : model.view.kind === "failed" ? (
                                 <div className="m-auto grid justify-items-center gap-4 text-center">
                                     <p role="alert">{model.view.message}</p>
@@ -335,7 +316,7 @@ export function BotChatHome({
                                     </p>
                                 </div>
                             ) : active === null ? null : (
-                                <div className="m-auto max-w-lg px-6 text-center">
+                                <div className="m-auto max-w-lg px-6 text-center" data-testid={dataTestId.chatLanding}>
                                     <span className="mx-auto mb-5 flex size-14 items-center justify-center rounded-[18px] bg-primary-subtle text-primary shadow-[inset_0_0_0_1px_rgba(34,123,78,0.08)]">
                                         <MessageSquare className="size-6" aria-hidden="true" />
                                     </span>
@@ -382,15 +363,48 @@ export function BotChatHome({
             )}
             {pairingDialogOpen && (
                 <Dialog
-                    title={disconnectedBot ? "Bot disconnected" : "Pair agent again"}
+                    title={
+                        disconnectedBot ? "Bot disconnected" : setupView === null ? "Pair agent again" : "Connect agent"
+                    }
                     description={
-                        disconnectedBot
-                            ? "Your Bot cannot reach its local agent. Paste this one-time instruction into your local agent to pair again."
-                            : "Paste this one-time instruction into your local agent, then return here after it connects."
+                        setupView === null
+                            ? "Paste this one-time instruction into your local agent, then return here after it connects."
+                            : setupDescription(setupView.reason)
                     }
                     onClose={() => setPairingDialogOpen(false)}
                 >
+                    {setupView?.reason === "unconfigured" && replaceWorkspace !== undefined && (
+                        <WorkspaceRegionSelector projectId={projectId} replaceWorkspace={replaceWorkspace} />
+                    )}
                     <PairingInstruction requests={requests} />
+                </Dialog>
+            )}
+            {failureDialogOpen && model.view.kind === "connection-failed" && (
+                <Dialog
+                    title="Runtime connection unavailable"
+                    description={model.view.message}
+                    onClose={() => setFailureDialogOpen(false)}
+                    testId={dataTestId.runtimeSetupFailure}
+                >
+                    <div className="flex flex-wrap gap-2">
+                        <Button
+                            onClick={() => {
+                                setFailureDialogOpen(false);
+                                store.getState().retry();
+                            }}
+                        >
+                            Reconnect
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                setFailureDialogOpen(false);
+                                setPairingDialogOpen(true);
+                            }}
+                        >
+                            Pair again
+                        </Button>
+                    </div>
                 </Dialog>
             )}
         </main>

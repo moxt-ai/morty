@@ -37,6 +37,7 @@ export type BotChatHomeView =
     | { readonly kind: "switching"; readonly view: ActiveView }
     | ActiveView
     | { readonly kind: "setup"; readonly bot: ManagedBot; readonly reason: SetupReason }
+    | { readonly kind: "connection-failed"; readonly bot: ManagedBot; readonly message: string }
     | { readonly kind: "failed"; readonly message: string };
 
 export type BotConnectionStatus =
@@ -52,6 +53,7 @@ export function botConnectionStatus(view: BotChatHomeView): BotConnectionStatus 
         case "draft":
             return { kind: "connected", label: "Connected" };
         case "setup":
+        case "connection-failed":
         case "failed":
             return { kind: "disconnected", label: "Disconnected" };
     }
@@ -248,8 +250,12 @@ export const createBotChatHomeStore = (
                     set((current) => ({ revision: current.revision + 1 }));
                     return;
                 }
+                const message = cause instanceof Error ? cause.message : "Chat is unavailable.";
                 set({
-                    view: { kind: "failed", message: cause instanceof Error ? cause.message : "Chat is unavailable." },
+                    view:
+                        openedBot === null
+                            ? { kind: "failed", message }
+                            : { kind: "connection-failed", bot: openedBot, message },
                 });
             }
         },

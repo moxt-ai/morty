@@ -92,6 +92,7 @@ export async function createTestRuntime(harness: E2EHarness) {
                 await chat.waitForBinding(harness, stack.agent.id, stack.agent.label);
                 await page.reload();
             },
+            disconnectPlatform: async () => await stack.harness.terminate("mobius-platform"),
             followInstructions: async (instructionUrl: string, sessionId?: string) => {
                 const url = new URL(instructionUrl, stack.chatOrigin);
                 mock.timers.enable({ apis: ["Date", "setTimeout"], now: new Date("2026-09-15T12:00:00Z") });

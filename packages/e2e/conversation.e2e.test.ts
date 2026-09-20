@@ -134,9 +134,15 @@ test("Given a paired workspace, When a user works across conversations, Then ses
     });
 });
 
-test("Given a paired workspace, When the user changes working directories, Then Chat previews paths and offers recent locations", async ({
+test("Given a new workspace, When the user enters, pairs, and changes working directories, Then Chat uses dialogs and remembers recent locations", async ({
     runtime,
 }) => {
+    await runtime.openChat();
+    await expect(runtime.page.getByTestId(dataTestId.chatLanding)).toBeVisible();
+    await expect(runtime.page.getByTestId(dataTestId.botConnectionStatus)).toHaveText("Disconnected");
+    await expect(runtime.page.getByTestId(dataTestId.pairingInstruction)).toBeVisible();
+    await runtime.page.keyboard.press("Escape");
+
     await runtime.openPairedChat();
     const { page } = runtime;
     const directory = page.getByTestId(dataTestId.workingDirectory);
@@ -168,4 +174,13 @@ test("Given a paired workspace, When the user changes working directories, Then 
     await page.reload();
     await directory.click();
     await expect(page.getByTestId(dataTestId.recentWorkingDirectory)).toHaveText([originalDirectory]);
+
+    await test.step("show Runtime setup failure without replacing Chat when the user returns", async () => {
+        await runtime.disconnectPlatform();
+        await page.reload();
+        await expect(page.getByTestId(dataTestId.botConnectionStatus)).toHaveText("Disconnected");
+        await expect(page.getByTestId(dataTestId.runtimeSetupFailure)).toContainText(
+            "Platform could not complete Runtime setup",
+        );
+    });
 });

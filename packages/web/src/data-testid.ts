@@ -21,6 +21,8 @@ export const dataTestId = Object.freeze({
     agentResponse: "chat-agent-response",
     pairingInstruction: "chat-pairing-instruction",
     botConnectionStatus: "chat-bot-connection-status",
+    runtimeSetupFailure: "chat-runtime-setup-failure",
+    chatLanding: "chat-landing",
     newConversation: "chat-new-conversation",
     shareMachine: "chat-share-machine",
     machineSharing: "chat-machine-sharing",
