@@ -26,6 +26,12 @@ test("Given a paired workspace, When a user works across conversations, Then att
         await expect(page).toHaveURL(/\?conversationId=/u);
         await expect(page.getByRole("list", { name: "Attachments", exact: true })).toHaveCount(0);
         await expect(page.getByTestId(dataTestId.agentResponse).first()).toContainText("First conversation");
+        await page.getByTestId(dataTestId.agentConfiguration).click();
+        const permissions = page.getByTestId(dataTestId.permissionMode);
+        await permissions.click();
+        await permissions.press("ArrowDown");
+        await permissions.press("Enter");
+        await expect(permissions).toHaveText("Plan");
         firstConversationId = new URL(page.url()).searchParams.get("conversationId") ?? "";
         assert.notEqual(firstConversationId, "");
     });

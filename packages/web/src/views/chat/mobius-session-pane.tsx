@@ -253,7 +253,7 @@ export function MobiusSessionPane({
                         ...model.options
                             .filter(
                                 (option) =>
-                                    ["model", "thought_level", "model_config", "_mobius_permission"].includes(
+                                    ["model", "thought_level", "model_config", "mode", "_mobius_permission"].includes(
                                         option.category,
                                     ) && option.type !== "boolean",
                             )
@@ -263,13 +263,15 @@ export function MobiusSessionPane({
                                 label:
                                     option.category === "model"
                                         ? "Model"
-                                        : option.category === "_mobius_permission"
+                                        : option.category === "mode" || option.category === "_mobius_permission"
                                           ? "Permissions"
                                           : "Variant",
                                 onValueChange: (value: string) => configure(option, value),
                                 options: option.values.map((value) => ({ value: value.value, label: value.name })),
                                 testId:
-                                    option.category === "_mobius_permission" ? dataTestId.permissionMode : undefined,
+                                    option.category === "mode" || option.category === "_mobius_permission"
+                                        ? dataTestId.permissionMode
+                                        : undefined,
                                 value: option.currentValue,
                             })),
                     ]}
