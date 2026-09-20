@@ -114,6 +114,7 @@ background execution support:
 ```sh
 DOCUMENT_DIR="$RESOLVED_DOCUMENTS_DIR" node "$SCRIPT_DIR/setup.mjs" setup \
   --base-url http://localhost:5173 \
+  --cwd "$PWD" \
   --harness "$HARNESS" \
   --session-id "$SESSION_ID"
 ```

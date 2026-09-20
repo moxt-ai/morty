@@ -11,6 +11,7 @@ function isSetupModule(value: unknown): value is { readonly runSetup: typeof set
 
 export async function followSetupInstructions(options: {
     readonly clock?: SetupHost["clock"];
+    readonly cwd: string;
     readonly documents: string;
     readonly harness: string;
     readonly instructionUrl: string;
@@ -29,6 +30,7 @@ export async function followSetupInstructions(options: {
         argument
             .replaceAll('"', "")
             .replaceAll("$BASE_URL", url.origin)
+            .replaceAll("$PWD", options.cwd)
             .replaceAll("$HARNESS", options.harness)
             .replaceAll("$SESSION_ID", options.sessionId ?? "")
             .replaceAll("$TOKEN", url.searchParams.get("token") ?? ""),
@@ -57,6 +59,7 @@ export async function followSetupInstructions(options: {
         "local configuration",
     );
     return {
+        events,
         ready,
         identity: {
             botId: text(configuration.bot_id, "saved Bot"),

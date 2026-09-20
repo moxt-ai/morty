@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -644,6 +644,8 @@ test.each([
                         command,
                         "--base-url",
                         base,
+                        "--cwd",
+                        directory,
                         "--harness",
                         "codex",
                         ...(command === "setup" ? ["--session-id", "test-session"] : []),
@@ -846,6 +848,7 @@ test.each([
         const base = `http://127.0.0.1:${address.port}`;
         runtimeEnvironment = slackConfiguration(database, pairedPlatform.bindings, base);
         const directory = await mkdtemp(join(tmpdir(), "mobius-setup-reconnect-"));
+        const workspace = await realpath(directory);
         const executableDirectory = join(directory, "bin");
         await mkdir(executableDirectory, { mode: 0o700 });
         await writeFile(join(executableDirectory, "npx"), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
@@ -858,6 +861,7 @@ test.each([
                 user_id: identity.userId,
                 bot_id: botId,
                 project_id: identity.projectId,
+                workspace,
                 pairing_key: `${savedRuntime}-runtime`,
                 pairing: savedPairing,
                 agent_ref: "agent-one",
@@ -875,6 +879,8 @@ test.each([
                             flow,
                             "--base-url",
                             base,
+                            "--cwd",
+                            workspace,
                             "--harness",
                             "agent-one",
                             ...(flow === "pair" ? [`--token=${ticket}`] : ["--session-id", "native-session"]),

@@ -32,18 +32,21 @@ Do not ask for an additional replacement confirmation.
    `codex` when running in Codex, `claude` in Claude Code, or `opencode` in OpenCode.
    Honor an explicit user choice instead. Do not ask the user to choose when your
    own harness is available. Complete its installation/authentication if needed.
+5. Run the command from the user's current working directory. The script resolves and
+   validates `$PWD`, then uses it as the paired Runtime's default Mobius Chat workspace.
 
 Run this command in the background so it keeps running after this reply. Closing
 this conversation stops the Runtime it started.
 
 ```sh
-node "$SCRIPT_DIR/setup.mjs" pair --base-url "$BASE_URL" --token="$TOKEN" --harness "$HARNESS"
+node "$SCRIPT_DIR/setup.mjs" pair --base-url "$BASE_URL" --cwd "$PWD" --token="$TOKEN" --harness "$HARNESS"
 ```
 
 This single command exchanges the ticket, reconnects a matching saved Runtime or
-creates a fresh pairing, saves private credentials, launches the Runtime attached to
-this agent session, waits for the requested harness, requests
-its Bot binding, and checks readiness. It does not stop any other local Mobius
+creates a fresh pairing for the current working directory, saves private credentials,
+and launches the Runtime attached to this agent session. After Runtime pairing reports
+the requested harness, the script immediately requests
+its Bot binding and checks readiness. It does not stop any other local Mobius
 Runtime process. The Runtime exits when your agent session ends.
 
 ## Observe and finish
@@ -54,11 +57,11 @@ progress; only `status: "ready"` confirms
 an active binding and online Runtime. A successful chat reply is a separate check.
 
 When ready, tell the user: **Your Bot is connected. Return to your Mobius Chat page
-to start chatting. Keep the Runtime online.** Include the returned URL and Bot ID.
+to start chatting. Keep the Runtime online.** Include the returned URL, Bot ID, and workspace.
 
 On failure, use `error.code` and the private Runtime log to resolve the problem.
 If `identity_ready` was emitted, set `SESSION_ID` to this current harness session's
-exact ID and reconnect using `node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --harness "$HARNESS" --session-id "$SESSION_ID"`.
+exact ID and reconnect using `node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --cwd "$PWD" --harness "$HARNESS" --session-id "$SESSION_ID"`.
 Setup loads the saved user and Bot and starts Runtime
 pairing fresh; its ready result includes a browser handoff as described in `/setup.md`.
 `HARNESS_UNAVAILABLE` reports the advertised alternatives; repair authentication or

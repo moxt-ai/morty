@@ -32,6 +32,8 @@ Do not ask for an additional replacement confirmation.
    `SESSION_ID` to this current harness session's exact ID. Both values are required.
    Honor an explicit user choice instead. Complete that harness's installation and
    authentication if needed; do not ask the user to choose when your own harness is available.
+5. Run the command from the user's current working directory. The script resolves and
+   validates `$PWD`, then uses it as the paired Runtime's default Mobius Chat workspace.
 
 Start this command with your harness's background execution support, then poll its
 output every five seconds until it reports `status: "ready"` or an error. A successful
@@ -42,11 +44,11 @@ forever while the Runtime is online, and do not terminate it, which would stop t
 Runtime. Closing this conversation stops the Runtime it started.
 
 ```sh
-node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --harness "$HARNESS" --session-id "$SESSION_ID"
+node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --cwd "$PWD" --harness "$HARNESS" --session-id "$SESSION_ID"
 ```
 
 The command handles identity, Runtime pairing, Runtime launch, Bot binding, and
-readiness. The selected Runtime uses `~/.mobius/workspace` and stays attached to this
+readiness. The selected Runtime uses the command's current working directory and stays attached to this
 agent session; it exits when your session ends. It does not stop any other local
 Mobius Runtime process. No separate prepare, bind, or finish commands are needed.
 
@@ -57,7 +59,7 @@ log path. Waits are cancellable and bounded to five minutes. Only `status: "read
 means the binding is active and the selected Runtime/agent is online; it does not
 claim a successful test message.
 
-Return the exact clickable browser `url`, QR code, and `expiresAt` from the ready result.
+Return the exact clickable browser `url`, resolved `workspace`, QR code, and `expiresAt` from the ready result.
 The QR payload is the exact same URL, and the ready result provides both QR forms:
 a terminal-safe QR code in the private text file at `qrTextPath` and an owner-only PNG
 at `qrPath`. In a TUI, read `qrTextPath` and show its contents in a plain-text block

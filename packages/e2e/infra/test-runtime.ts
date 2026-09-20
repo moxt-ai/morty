@@ -98,6 +98,7 @@ export async function createTestRuntime(harness: E2EHarness) {
                 try {
                     const result = await followSetupInstructions({
                         instructionUrl: url.href,
+                        cwd: stack.directories.workspace,
                         documents: harness.workDirectory,
                         harness: stack.agent.id,
                         signal: harness.signal,
@@ -116,10 +117,12 @@ export async function createTestRuntime(harness: E2EHarness) {
                     });
                     return {
                         botId: text(result.ready.botId, "ready Bot"),
+                        events: result.events,
                         url: text(result.ready.url, "Chat URL"),
                         expiresAt: result.ready.expiresAt,
                         qrPath: text(result.ready.qrPath, "QR path"),
                         qrTextPath: text(result.ready.qrTextPath, "terminal QR path"),
+                        workspace: text(result.ready.workspace, "Runtime workspace"),
                         message: text(result.ready.message, "ready message"),
                         identity: result.identity,
                     };

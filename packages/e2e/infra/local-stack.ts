@@ -228,9 +228,9 @@ export class LocalStack {
 
     setupRuntime(): SetupRuntime {
         return {
-            start: async (_directory, args, signal) => {
+            start: async (_directory, args, cwd, signal) => {
                 signal.throwIfAborted();
-                const child = await this.startRuntime(args);
+                const child = await this.startRuntime(args, cwd);
                 if (child.pid === undefined) {
                     throw new Error("Runtime process did not start");
                 }
@@ -239,20 +239,16 @@ export class LocalStack {
         };
     }
 
-    async startRuntime(args: readonly string[]) {
+    async startRuntime(args: readonly string[], workspace = this.directories.workspace) {
         return await this.harness.start(
             "mobius",
             process.execPath,
-            [
-                join(mobiusRepository, "packages", "cli", "dist", "cli.js"),
-                ...args,
-                "--workspace",
-                this.directories.workspace,
-            ],
+            [join(mobiusRepository, "packages", "cli", "dist", "cli.js"), ...args],
             {
                 env: {
                     MOBIUS_E2E_ACP_TRACE_DIRECTORY: join(this.harness.artifactDirectory, "acp"),
                     MOBIUS_E2E_ACP_REAL_BIN: this.agent.acpBinary,
+                    MOBIUS_DEFAULT_WORKSPACE: workspace,
                     [this.agent.adapterOverrideVariable]: acpProxy,
                     MOBIUS_STATE_DIRECTORY: this.directories.runtime,
                     XDG_CACHE_HOME: this.directories["xdg-cache"],

@@ -13,6 +13,7 @@ export interface SetupRuntime {
     readonly start: (
         directory: string,
         args: readonly string[],
+        cwd: string,
         signal: AbortSignal,
     ) => Promise<{
         readonly pid: number;
@@ -38,8 +39,20 @@ interface Context {
 }
 
 type Options =
-    | { readonly mode: "pair"; readonly base: string; readonly harness: string; readonly token: string }
-    | { readonly mode: "setup"; readonly base: string; readonly harness: string; readonly sessionId: string };
+    | {
+          readonly mode: "pair";
+          readonly base: string;
+          readonly cwd: string;
+          readonly harness: string;
+          readonly token: string;
+      }
+    | {
+          readonly mode: "setup";
+          readonly base: string;
+          readonly cwd: string;
+          readonly harness: string;
+          readonly sessionId: string;
+      };
 
 function errorCode(cause: unknown): unknown {
     return cause !== null && typeof cause === "object" && "code" in cause ? cause.code : undefined;
@@ -117,6 +130,25 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         await mkdir(directory, { mode: 0o700, recursive: true });
         await privatePath(directory, true);
         return directory;
+    }
+
+    async function resolveWorkingDirectory(requested: string) {
+        if (!isAbsolute(requested)) {
+            fail("WORKING_DIRECTORY_REQUIRED");
+        }
+        try {
+            const resolved = await realpath(requested);
+            const stat = await lstat(resolved);
+            if (!stat.isDirectory() || process.getuid === undefined || stat.uid !== process.getuid()) {
+                fail("UNSAFE_WORKING_DIRECTORY");
+            }
+            return resolved;
+        } catch (cause) {
+            if (errorCode(cause) === "UNSAFE_WORKING_DIRECTORY") {
+                throw cause;
+            }
+            fail("WORKING_DIRECTORY_UNAVAILABLE");
+        }
     }
 
     async function acquireLock(directory: string) {
@@ -248,6 +280,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             allowPositionals: true,
             options: {
                 token: { type: "string" },
+                cwd: { type: "string" },
                 harness: { type: "string" },
                 "base-url": { type: "string" },
                 "session-id": { type: "string" },
@@ -262,7 +295,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (values["base-url"] === undefined) {
             fail("BASE_URL_REQUIRED");
         }
+        if (values.cwd === undefined) {
+            fail("WORKING_DIRECTORY_REQUIRED");
+        }
         const base = origin(values["base-url"]);
+        const cwd = text(values.cwd);
         const harness = identifier(values.harness);
         if (positionals[0] === "pair") {
             if (values.token === undefined) {
@@ -274,6 +311,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             return {
                 mode: "pair",
                 base,
+                cwd,
                 harness,
                 token: text(values.token, /^mobius_pair_v2\.[A-Za-z0-9_-]{1,128}\.[A-Za-z0-9_-]{43}$/u),
             };
@@ -284,7 +322,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (values["session-id"] === undefined) {
             fail("SESSION_ID_REQUIRED");
         }
-        return { mode: "setup", base, harness, sessionId: identifier(values["session-id"]) };
+        return { mode: "setup", base, cwd, harness, sessionId: identifier(values["session-id"]) };
     }
 
     async function preparePairIdentity(context: Context, ticket: string) {
@@ -376,6 +414,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         context: Context,
         saved: Readonly<Record<string, unknown>> | null,
         mode: Options["mode"],
+        cwd: string,
     ): Promise<Context> {
         if (
             saved === null ||
@@ -383,6 +422,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             saved.user_id !== context.config.user_id ||
             saved.project_id !== context.config.project_id ||
             saved.bot_id !== context.config.bot_id ||
+            saved.workspace !== cwd ||
             (mode === "pair" && context.config.expected_runtime_id === null)
         ) {
             return context;
@@ -434,7 +474,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
-    async function runtimeArguments(context: Context) {
+    async function runtimeArguments(context: Context, cwd: string) {
         const pairing = object(context.config.pairing);
         identifier(pairing.runtimeId);
         const relay = origin(pairing.relayUrl);
@@ -452,15 +492,18 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                   identifier(pairing.pairingId),
                   "--code",
                   text(pairing.pairingCode, /^[A-Za-z0-9-]+$/u),
+                  "--workspace",
+                  cwd,
               ];
     }
 
-    async function startRuntime(context: Context, args: string[]) {
+    async function startRuntime(context: Context, args: string[], cwd: string) {
         signal.throwIfAborted();
         if (host.runtime !== undefined) {
-            const started = await host.runtime.start(context.directory, args, signal);
+            const started = await host.runtime.start(context.directory, args, cwd, signal);
             const saved = await saveConfiguration(context, {
                 runtime_process: { pid: started.pid, log_path: started.logPath },
+                workspace: cwd,
             });
             emit({ status: "runtime_started", ...started });
             return saved;
@@ -474,13 +517,17 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         let child: ChildProcess | undefined;
         try {
             child = spawn("npx", ["--yes", "@moxt-ai/mobius@latest", ...args], {
+                cwd,
                 stdio: ["ignore", log.fd, log.fd],
             });
             await once(child, "spawn", { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) });
             if (child.pid === undefined || !Number.isSafeInteger(child.pid) || child.pid < 2) {
                 fail("RUNTIME_START_FAILED");
             }
-            const saved = await saveConfiguration(context, { runtime_process: { pid: child.pid, log_path: logPath } });
+            const saved = await saveConfiguration(context, {
+                runtime_process: { pid: child.pid, log_path: logPath },
+                workspace: cwd,
+            });
             signal.throwIfAborted();
             // The Runtime stays attached to this process. It exits with the agent
             // conversation instead of surviving as a background daemon.
@@ -531,23 +578,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     });
                     fail("HARNESS_UNAVAILABLE");
                 }
-                const workspace = await request(
-                    context,
-                    `/chat/projects/${context.config.project_id}/bots/${context.config.bot_id}/workspace`,
-                    {},
-                );
-                if (
-                    Array.isArray(workspace.agents) &&
-                    workspace.agents.some(
-                        (agent) =>
-                            object(agent).runtimeId === runtimeId &&
-                            object(agent).agentRef === harness &&
-                            object(agent).online === true,
-                    )
-                ) {
-                    emit({ status: "runtime_online", runtimeId, harness });
-                    return;
-                }
+                emit({ status: "runtime_paired", runtimeId, harness });
+                return;
             }
             await clock.wait(1000, signal);
         }
@@ -662,11 +694,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     async function finishSetup(context: Context, options: Options) {
         await waitForReadiness(context);
         const botId = context.config.bot_id;
+        const workspace = text(context.config.workspace);
         if (options.mode === "pair") {
             emit({
                 status: "ready",
                 botId,
                 url: context.base,
+                workspace,
                 message: "Return to your Mobius Chat page to start chatting. Keep the Runtime online.",
             });
             return;
@@ -690,6 +724,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             botId,
             url: handoffUrl,
             expiresAt: text(transfer.expiresAt),
+            workspace,
             ...qr,
             message: "Open the link or scan the QR code to chat. Keep the Runtime online.",
         });
@@ -698,6 +733,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     async function main() {
         const options = readOptions();
         const base = options.base;
+        const cwd = await resolveWorkingDirectory(options.cwd);
         const directory = await prepareDirectory(host.documents);
         const lock = await acquireLock(directory);
         try {
@@ -708,9 +744,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             context = await prepareIdentity(context, options);
             context = await verifyIdentityAndBot(context, options.mode);
             emit({ status: "identity_ready", userId: context.config.user_id, botId: context.config.bot_id });
-            context = await reuseSavedRuntime(context, runtimeCandidate, options.mode);
+            context = await reuseSavedRuntime(context, runtimeCandidate, options.mode, cwd);
             context = await prepareRuntimePairing(context);
-            context = await startRuntime(context, await runtimeArguments(context));
+            context = await startRuntime(context, await runtimeArguments(context, cwd), cwd);
             await waitForRuntime(context, options.harness);
             context = await bindAgent(context, options.harness);
             await finishSetup(context, options);

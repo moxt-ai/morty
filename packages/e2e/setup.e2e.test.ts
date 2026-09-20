@@ -1,4 +1,4 @@
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
@@ -21,6 +21,9 @@ test("Given a setup handoff, When a user continues remote work, Then setup, ACP 
         expect(new URL(connected.url).pathname).toBe("/continue");
         expect(new URL(connected.url).searchParams.get("harness")).toBe("opencode");
         expect(new URL(connected.url).searchParams.get("sessionId")).toBe(sessionId);
+        expect(connected.workspace).toBe(await realpath(runtime.workspace));
+        const statuses = connected.events.map((event) => event.status);
+        expect(statuses.indexOf("runtime_paired")).toBeLessThan(statuses.indexOf("binding_activated"));
         expect((await stat(connected.qrTextPath)).mode & 0o777).toBe(0o600);
         expect(await readFile(connected.qrTextPath, "utf8")).toContain("█");
         expect((await stat(connected.qrPath)).mode & 0o777).toBe(0o600);
