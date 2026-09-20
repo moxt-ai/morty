@@ -1,7 +1,14 @@
 import type { SessionConfigOption, WorkspaceEntriesEvent } from "@moxt-ai/mobius-protocol";
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ChatDraftConfiguration, ChatWorkspace } from "@/services/chat/bot-chat-api";
-import { readLastCwdPreference, saveLastCwdPreference } from "@/services/chat/last-cwd-preference";
+import {
+    forgetRecentCwdPreference,
+    type RecentCwdPreference,
+    readLastCwdPreference,
+    readRecentCwdPreferences,
+    saveLastCwdPreference,
+    saveRecentCwdPreference,
+} from "@/services/chat/last-cwd-preference";
 
 type DraftSettingsState =
     | { readonly kind: "loading" }
@@ -16,7 +23,7 @@ type DraftSettingsState =
 
 type CwdBrowserState =
     | { readonly kind: "closed" }
-    | { readonly kind: "loading"; readonly path: string }
+    | { readonly kind: "loading"; readonly directory: WorkspaceEntriesEvent; readonly path: string }
     | { readonly kind: "ready"; readonly directory: WorkspaceEntriesEvent; readonly path: string }
     | {
           readonly kind: "failed";
@@ -27,17 +34,22 @@ type CwdBrowserState =
 
 export interface DraftControlsStore {
     readonly cwdBrowser: CwdBrowserState;
+    readonly recentCwds: readonly RecentCwdPreference[];
     readonly settings: DraftSettingsState;
     readonly browseCwd: (directoryId: string, signal: AbortSignal) => Promise<void>;
     readonly closeCwd: () => void;
+    readonly forgetRecentCwd: (directoryId: string) => void;
     readonly load: (signal: AbortSignal) => Promise<void>;
     readonly openCwd: () => void;
     readonly saveCwd: (signal: AbortSignal) => Promise<void>;
+    readonly selectRecentCwd: (directoryId: string, signal: AbortSignal) => Promise<void>;
     readonly selectHarness: (value: string, disabled: boolean, signal: AbortSignal) => Promise<void>;
     readonly selectOption: (configId: string, value: string) => void;
     readonly toggleOption: (configId: string) => void;
-    readonly setCwdPath: (path: string) => void;
+    readonly setCwdPath: (path: string, signal: AbortSignal) => void;
 }
+
+const CWD_PREVIEW_DEBOUNCE_MILLISECONDS = 1_000;
 
 function pathDirectoryId(path: string): string {
     const bytes = new TextEncoder().encode(path);
@@ -61,6 +73,24 @@ function wait(signal: AbortSignal): Promise<void> {
             resolve();
         }
         signal.addEventListener("abort", finish, { once: true });
+    });
+}
+
+function waitForCwdPreview(signal: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+        signal.throwIfAborted();
+        const timeout = window.setTimeout(finish, CWD_PREVIEW_DEBOUNCE_MILLISECONDS);
+        function finish(): void {
+            window.clearTimeout(timeout);
+            signal.removeEventListener("abort", cancel);
+            resolve();
+        }
+        function cancel(): void {
+            window.clearTimeout(timeout);
+            signal.removeEventListener("abort", cancel);
+            reject(signal.reason);
+        }
+        signal.addEventListener("abort", cancel, { once: true });
     });
 }
 
@@ -89,6 +119,33 @@ export const createDraftControlsStore = (
                     })),
             });
         };
+        const rememberDirectory = (
+            settings: Extract<DraftSettingsState, { readonly kind: "ready" }>,
+            directory: WorkspaceEntriesEvent,
+        ): readonly RecentCwdPreference[] => {
+            const selected = settings.workspace.selected;
+            if (selected === null) {
+                return get().recentCwds;
+            }
+            saveLastCwdPreference(storage, botId, selected.runtimeId, selected.agentRef, directory.directoryId);
+            return saveRecentCwdPreference(
+                storage,
+                botId,
+                selected.runtimeId,
+                selected.agentRef,
+                { directoryId: directory.directoryId, directoryLabel: directory.directoryLabel },
+                get().recentCwds,
+            );
+        };
+        const applyDirectory = (
+            settings: Extract<DraftSettingsState, { readonly kind: "ready" }>,
+            directory: WorkspaceEntriesEvent,
+        ): void => {
+            const ready = { ...settings, cwd: directory };
+            const recentCwds = rememberDirectory(ready, directory);
+            set({ settings: ready, cwdBrowser: { kind: "closed" }, recentCwds });
+            publishSettings(ready);
+        };
         const browseCwd = async (directoryId: string, lifetimeSignal: AbortSignal): Promise<void> => {
             const settings = get().settings;
             if (settings.kind !== "ready") {
@@ -96,15 +153,12 @@ export const createDraftControlsStore = (
             }
             const currentBrowser = get().cwdBrowser;
             const previousPath = currentBrowser.kind === "closed" ? settings.cwd.directoryLabel : currentBrowser.path;
-            const previousDirectory =
-                currentBrowser.kind === "ready" || currentBrowser.kind === "failed"
-                    ? currentBrowser.directory
-                    : settings.cwd;
+            const previousDirectory = currentBrowser.kind === "closed" ? settings.cwd : currentBrowser.directory;
             cwdOperation?.abort();
             const operation = new AbortController();
             cwdOperation = operation;
             const signal = AbortSignal.any([lifetimeSignal, operation.signal, AbortSignal.timeout(120_000)]);
-            set({ cwdBrowser: { kind: "loading", path: previousPath } });
+            set({ cwdBrowser: { kind: "loading", directory: previousDirectory, path: previousPath } });
             try {
                 const directory = await requests.workspaceDirectory(botId, directoryId, signal);
                 signal.throwIfAborted();
@@ -120,6 +174,52 @@ export const createDraftControlsStore = (
                         directory: previousDirectory,
                         message: failureMessage(cause),
                         path: previousPath,
+                    },
+                });
+            } finally {
+                if (cwdOperation === operation) {
+                    cwdOperation = null;
+                }
+            }
+        };
+        const previewCwd = async (path: string, lifetimeSignal: AbortSignal): Promise<void> => {
+            const browser = get().cwdBrowser;
+            if (browser.kind === "closed") {
+                return;
+            }
+            cwdOperation?.abort();
+            const operation = new AbortController();
+            cwdOperation = operation;
+            const signal = AbortSignal.any([lifetimeSignal, operation.signal, AbortSignal.timeout(120_000)]);
+            try {
+                await waitForCwdPreview(signal);
+                const requestedPath = path.trim();
+                if (requestedPath.length === 0) {
+                    set({
+                        cwdBrowser: {
+                            kind: "failed",
+                            directory: browser.directory,
+                            message: "Enter a working directory path.",
+                            path,
+                        },
+                    });
+                    return;
+                }
+                set({ cwdBrowser: { kind: "loading", directory: browser.directory, path } });
+                const directory = await requests.workspaceDirectory(botId, pathDirectoryId(requestedPath), signal);
+                signal.throwIfAborted();
+                set({ cwdBrowser: { kind: "ready", directory, path: directory.directoryLabel } });
+            } catch (cause) {
+                if (operation.signal.aborted) {
+                    return;
+                }
+                lifetimeSignal.throwIfAborted();
+                set({
+                    cwdBrowser: {
+                        kind: "failed",
+                        directory: browser.directory,
+                        message: failureMessage(cause),
+                        path,
                     },
                 });
             } finally {
@@ -162,7 +262,25 @@ export const createDraftControlsStore = (
                         }
                         const ready = { kind: "ready" as const, workspace, cwd, ...result };
                         changedOptionIds.clear();
-                        set({ settings: ready });
+                        const existingRecentCwds = readRecentCwdPreferences(
+                            storage,
+                            botId,
+                            selected.runtimeId,
+                            selected.agentRef,
+                        );
+                        saveLastCwdPreference(storage, botId, selected.runtimeId, selected.agentRef, cwd.directoryId);
+                        const recentCwds =
+                            existingRecentCwds === null
+                                ? saveRecentCwdPreference(
+                                      storage,
+                                      botId,
+                                      selected.runtimeId,
+                                      selected.agentRef,
+                                      { directoryId: cwd.directoryId, directoryLabel: cwd.directoryLabel },
+                                      [],
+                                  )
+                                : existingRecentCwds;
+                        set({ settings: ready, recentCwds });
                         publishSettings(ready);
                         return;
                     }
@@ -181,12 +299,31 @@ export const createDraftControlsStore = (
         };
         return {
             cwdBrowser: { kind: "closed" },
+            recentCwds: [],
             settings: { kind: "loading" },
             browseCwd,
             closeCwd: () => {
                 cwdOperation?.abort();
                 cwdOperation = null;
                 set({ cwdBrowser: { kind: "closed" } });
+            },
+            forgetRecentCwd: (directoryId) => {
+                const settings = get().settings;
+                const selected = settings.kind === "ready" ? settings.workspace.selected : null;
+                const recentCwds = get().recentCwds;
+                if (selected === null || !recentCwds.some((directory) => directory.directoryId === directoryId)) {
+                    return;
+                }
+                set({
+                    recentCwds: forgetRecentCwdPreference(
+                        storage,
+                        botId,
+                        selected.runtimeId,
+                        selected.agentRef,
+                        directoryId,
+                        recentCwds,
+                    ),
+                });
             },
             load,
             openCwd: () => {
@@ -198,9 +335,11 @@ export const createDraftControlsStore = (
             saveCwd: async (signal) => {
                 const browser = get().cwdBrowser;
                 const settings = get().settings;
-                if ((browser.kind !== "ready" && browser.kind !== "failed") || settings.kind !== "ready") {
+                if (browser.kind === "closed" || settings.kind !== "ready") {
                     return;
                 }
+                cwdOperation?.abort();
+                cwdOperation = null;
                 const requestedPath = browser.path.trim();
                 if (requestedPath.length === 0) {
                     set({
@@ -215,11 +354,10 @@ export const createDraftControlsStore = (
                 }
                 let directory = browser.directory;
                 if (requestedPath !== browser.directory.directoryLabel) {
-                    cwdOperation?.abort();
                     const operation = new AbortController();
                     cwdOperation = operation;
                     const requestSignal = AbortSignal.any([signal, operation.signal, AbortSignal.timeout(120_000)]);
-                    set({ cwdBrowser: { kind: "loading", path: browser.path } });
+                    set({ cwdBrowser: { kind: "loading", directory: browser.directory, path: browser.path } });
                     try {
                         directory = await requests.workspaceDirectory(
                             botId,
@@ -247,13 +385,40 @@ export const createDraftControlsStore = (
                         }
                     }
                 }
-                const ready = { ...settings, cwd: directory };
-                set({ settings: ready, cwdBrowser: { kind: "closed" } });
-                const selected = ready.workspace.selected;
-                if (selected !== null) {
-                    saveLastCwdPreference(storage, botId, selected.runtimeId, selected.agentRef, directory.directoryId);
+                applyDirectory(settings, directory);
+            },
+            selectRecentCwd: async (directoryId, signal) => {
+                const settings = get().settings;
+                const recent = get().recentCwds.find((directory) => directory.directoryId === directoryId);
+                if (settings.kind !== "ready" || recent === undefined) {
+                    return;
                 }
-                publishSettings(ready);
+                cwdOperation?.abort();
+                const operation = new AbortController();
+                cwdOperation = operation;
+                const requestSignal = AbortSignal.any([signal, operation.signal, AbortSignal.timeout(120_000)]);
+                try {
+                    const directory = await requests.workspaceDirectory(botId, directoryId, requestSignal);
+                    requestSignal.throwIfAborted();
+                    applyDirectory(settings, directory);
+                } catch (cause) {
+                    if (operation.signal.aborted) {
+                        return;
+                    }
+                    signal.throwIfAborted();
+                    set({
+                        cwdBrowser: {
+                            kind: "failed",
+                            directory: settings.cwd,
+                            message: failureMessage(cause),
+                            path: recent.directoryLabel,
+                        },
+                    });
+                } finally {
+                    if (cwdOperation === operation) {
+                        cwdOperation = null;
+                    }
+                }
             },
             selectHarness: async (value, disabled, signal) => {
                 const settings = get().settings;
@@ -325,10 +490,13 @@ export const createDraftControlsStore = (
                 set({ settings: ready });
                 publishSettings(ready);
             },
-            setCwdPath: (path) => {
+            setCwdPath: (path, signal) => {
                 const browser = get().cwdBrowser;
-                if (browser.kind === "ready" || browser.kind === "failed") {
-                    set({ cwdBrowser: { ...browser, path } });
+                if (browser.kind !== "closed") {
+                    cwdOperation?.abort();
+                    cwdOperation = null;
+                    set({ cwdBrowser: { kind: "ready", directory: browser.directory, path } });
+                    void previewCwd(path, signal);
                 }
             },
         };

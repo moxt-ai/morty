@@ -1,8 +1,10 @@
-import { ChevronRight, Folder, FolderOpen, LoaderCircle } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Folder, FolderOpen, LoaderCircle, MapPinPlus, X } from "lucide-react";
+import { useState } from "react";
 import { dataTestId } from "@/data-testid";
 import type { DraftControlsStore } from "@/view-models/chat/draft-controls-store";
 import { Button } from "../ui/cloud-button.tsx";
 import { Dialog } from "../ui/dialog.tsx";
+import { Popover } from "../ui/popover.tsx";
 
 export function CwdSelector({
     disabled,
@@ -13,27 +15,92 @@ export function CwdSelector({
     readonly signal: AbortSignal;
     readonly viewModel: DraftControlsStore;
 }) {
+    const [menuOpen, setMenuOpen] = useState(false);
     const settings = viewModel.settings;
     if (settings.kind !== "ready") {
         return null;
     }
     const browser = viewModel.cwdBrowser;
     const workingDirectory = settings.cwd.directoryLabel;
-    const directory = browser.kind === "ready" || browser.kind === "failed" ? browser.directory : null;
+    const directory = browser.kind === "closed" ? null : browser.directory;
     return (
         <>
-            <button
-                aria-label={`Working directory: ${workingDirectory}`}
-                className="flex h-9 min-w-0 max-w-[200px] items-center gap-2 rounded-lg px-2 text-[13px] text-copy-secondary outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
-                data-testid={dataTestId.workingDirectory}
-                disabled={disabled}
-                onClick={viewModel.openCwd}
-                title={workingDirectory}
-                type="button"
-            >
-                <FolderOpen aria-hidden="true" className="size-4 shrink-0" />
-                <span className="truncate">{workingDirectory}</span>
-            </button>
+            <Popover.Root onOpenChange={setMenuOpen} open={menuOpen}>
+                <Popover.Trigger asChild>
+                    <button
+                        aria-label={`Working directory: ${workingDirectory}`}
+                        className="flex h-9 min-w-0 max-w-[200px] items-center gap-2 rounded-lg px-2 text-[13px] text-copy-secondary outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
+                        data-testid={dataTestId.workingDirectory}
+                        disabled={disabled}
+                        title={workingDirectory}
+                        type="button"
+                    >
+                        <FolderOpen aria-hidden="true" className="size-4 shrink-0" />
+                        <span className="truncate">{workingDirectory}</span>
+                        <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+                    </button>
+                </Popover.Trigger>
+                <Popover.Portal>
+                    <Popover.Content
+                        align="start"
+                        aria-label="Working directory menu"
+                        className="z-50 w-80 overflow-hidden rounded-2xl border border-[#d5d9dc] bg-white p-1.5 shadow-[0_16px_42px_rgba(0,0,0,0.14)]"
+                        role="menu"
+                        side="top"
+                        sideOffset={10}
+                    >
+                        <div className="max-h-80 overflow-y-auto">
+                            {viewModel.recentCwds.map((recent) => (
+                                <div className="flex items-center gap-0.5" key={recent.directoryId}>
+                                    <button
+                                        className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[13px] hover:bg-accent"
+                                        data-testid={dataTestId.recentWorkingDirectory}
+                                        onClick={() => {
+                                            setMenuOpen(false);
+                                            void viewModel.selectRecentCwd(recent.directoryId, signal);
+                                        }}
+                                        role="menuitem"
+                                        title={recent.directoryLabel}
+                                        type="button"
+                                    >
+                                        <Folder aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                                        <span className="min-w-0 flex-1 truncate">{recent.directoryLabel}</span>
+                                        {recent.directoryId === settings.cwd.directoryId && (
+                                            <Check aria-hidden="true" className="size-4 shrink-0" />
+                                        )}
+                                    </button>
+                                    <button
+                                        aria-label={`Forget recent working directory ${recent.directoryLabel}`}
+                                        className="flex size-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent hover:text-copy-primary"
+                                        data-testid={dataTestId.forgetRecentWorkingDirectory}
+                                        onClick={() => viewModel.forgetRecentCwd(recent.directoryId)}
+                                        role="menuitem"
+                                        title="Forget recent location"
+                                        type="button"
+                                    >
+                                        <X aria-hidden="true" className="size-4" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="mt-1 border-t border-border pt-1">
+                            <button
+                                className="flex h-10 w-full items-center gap-2 rounded-xl px-2.5 text-left text-[13px] font-medium hover:bg-accent"
+                                data-testid={dataTestId.changeWorkingDirectory}
+                                onClick={() => {
+                                    setMenuOpen(false);
+                                    viewModel.openCwd();
+                                }}
+                                role="menuitem"
+                                type="button"
+                            >
+                                <MapPinPlus aria-hidden="true" className="size-4 text-muted-foreground" />
+                                Change to a new location
+                            </button>
+                        </div>
+                    </Popover.Content>
+                </Popover.Portal>
+            </Popover.Root>
             {browser.kind !== "closed" && (
                 <Dialog
                     description="Browse folders on the paired machine or enter an absolute folder path."
@@ -47,12 +114,15 @@ export function CwdSelector({
                                 aria-label="Working directory path"
                                 className="h-10 rounded-lg border border-border bg-white px-3 text-[13px] outline-none focus:border-ring focus:ring-2 focus:ring-ring/15"
                                 data-testid={dataTestId.workingDirectoryPath}
-                                disabled={browser.kind === "loading"}
-                                onChange={(event) => viewModel.setCwdPath(event.currentTarget.value)}
+                                onChange={(event) => viewModel.setCwdPath(event.currentTarget.value, signal)}
                                 value={browser.path}
                             />
                         </label>
-                        <div className="min-h-56 overflow-hidden rounded-xl border border-border bg-surface-subtle/50">
+                        <section
+                            aria-label={directory === null ? undefined : `Folders in ${directory.directoryLabel}`}
+                            className="min-h-56 overflow-hidden rounded-xl border border-border bg-surface-subtle/50"
+                            data-testid={dataTestId.workingDirectoryPreview}
+                        >
                             {browser.kind === "loading" ? (
                                 <p
                                     className="flex min-h-56 items-center justify-center gap-2 text-muted-foreground"
@@ -114,7 +184,7 @@ export function CwdSelector({
                                     )}
                                 </>
                             )}
-                        </div>
+                        </section>
                     </div>
                     <footer className="mt-5 flex justify-end gap-2 border-t border-border pt-4">
                         <Button onClick={viewModel.closeCwd} variant="outline">

@@ -13,8 +13,10 @@ import {
     SessionInteractionCards,
 } from "../../components/chat/session-interactions.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
+import { registerMobiusChatDebugSession } from "../../debug-bridge.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
+import { sessionDebugBlocks } from "../../view-models/chat/session-debug-blocks.ts";
 import { createSessionPaneModel, sessionPanePresentation } from "../../view-models/chat/session-pane-store.ts";
 import { MobiusSessionMessage } from "./mobius-session-message.tsx";
 
@@ -76,6 +78,14 @@ export function MobiusSessionPane({
             }
         };
     }, [pane]);
+    useEffect(
+        () =>
+            registerMobiusChatDebugSession({
+                sessionId,
+                blocks: () => sessionDebugBlocks(pane.store.getState()),
+            }),
+        [pane, sessionId],
+    );
     // biome-ignore lint/correctness/useExhaustiveDependencies: Scroll after rendered message content changes, unless the user is reading older history.
     useEffect(() => {
         if (followLatest.current && messageList.current !== null) {
