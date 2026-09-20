@@ -1,7 +1,6 @@
-import { SignOutButton, UserButton } from "@clerk/react";
 import { type AnyRouter, RouterProvider } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { Button, Spinner } from "../../index.ts";
+import { Spinner } from "../../index.ts";
 
 export type AppState =
     | { readonly kind: "loading" }
@@ -51,19 +50,6 @@ export function Page({
         <div className="min-h-dvh bg-background font-sans text-foreground">
             <AppHeader account={account} navigation={navigation} />
             <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">{children}</main>
-        </div>
-    );
-}
-
-export function AccountActions() {
-    return (
-        <div className="flex items-center gap-5">
-            <SignOutButton redirectUrl="/">
-                <Button variant="ghost" size="sm">
-                    Sign out
-                </Button>
-            </SignOutButton>
-            <UserButton />
         </div>
     );
 }

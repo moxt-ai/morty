@@ -20,6 +20,8 @@ export const dataTestId = Object.freeze({
     pairingInstruction: "chat-pairing-instruction",
     botConnectionStatus: "chat-bot-connection-status",
     newConversation: "chat-new-conversation",
+    shareMachine: "chat-share-machine",
+    machineSharing: "chat-machine-sharing",
     localSessionEntry: "chat-local-session-entry",
     importLocalSession: "chat-import-local-session",
     forkLocalSession: "chat-fork-local-session",
