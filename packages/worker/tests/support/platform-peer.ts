@@ -444,29 +444,31 @@ export async function platformPeer({
                 (project) => v.parse(v.object({ projectId: v.string() }), project).projectId === runtimePath[1],
             )
         ) {
+            const pairedRuntimes = [...pairings.values()].filter((pairing) => pairing.projectId === runtimePath[1]);
             response.writeHead(200).end(
                 JSON.stringify({
                     runtimes: agentsOnline
-                        ? [...pairings.values()]
-                              .filter((pairing) => pairing.projectId === runtimePath[1])
-                              .map((pairing) => ({
-                                  runtimeId: pairing.runtimeId,
-                                  projectId: pairing.projectId,
-                                  channelId: pairing.channelId,
-                                  machineName: "Local machine",
-                                  workspaceName: "Workspace",
-                                  online: true,
-                                  agents: [
-                                      {
-                                          id: "agent-one",
-                                          label: "Agent One",
-                                          agentPath: "/agents/agent-one",
-                                          agentVersion: "1",
-                                          capabilities: readySession("descriptor").capabilities,
-                                      },
-                                  ],
-                                  installableAgents: [],
-                              }))
+                        ? (pairedRuntimes.length === 0
+                              ? [{ runtimeId: "runtime-1", projectId: runtimePath[1], channelId: "channel-1" }]
+                              : pairedRuntimes
+                          ).map((pairing) => ({
+                              runtimeId: pairing.runtimeId,
+                              projectId: pairing.projectId,
+                              channelId: pairing.channelId,
+                              machineName: "Local machine",
+                              workspaceName: "Workspace",
+                              online: true,
+                              agents: [
+                                  {
+                                      id: "agent-one",
+                                      label: "Agent One",
+                                      agentPath: "/agents/agent-one",
+                                      agentVersion: "1",
+                                      capabilities: readySession("descriptor").capabilities,
+                                  },
+                              ],
+                              installableAgents: [],
+                          }))
                         : [],
                 }),
             );
