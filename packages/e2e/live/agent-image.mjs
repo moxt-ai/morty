@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
-import { buildLocalStack } from "../../packages/e2e/infra/build.ts";
-import { ChatApi } from "../../packages/e2e/infra/chat-api.ts";
-import { runE2E } from "../../packages/e2e/infra/harness.ts";
-import { LocalStack, repository } from "../../packages/e2e/infra/local-stack.ts";
-import { followSetupInstructions } from "../../packages/e2e/infra/setup-instructions.ts";
-import { dataTestId } from "../../packages/web/src/data-testid.ts";
-import { FakeOpenAiProvider } from "../../third-party/mobius/tests/agent-daemon/providers/openai.ts";
+import { FakeOpenAiProvider } from "../../../third-party/mobius/tests/agent-daemon/providers/openai.ts";
+import { dataTestId } from "../../web/src/data-testid.ts";
+import { buildLocalStack } from "../infra/build.ts";
+import { ChatApi } from "../infra/chat-api.ts";
+import { runE2E } from "../infra/harness.ts";
+import { LocalStack, repository } from "../infra/local-stack.ts";
+import { followSetupInstructions } from "../infra/setup-instructions.ts";
 
 export async function runAgentImageE2E({ answer, expectedTool, model, name, prepareAgent, prompt, providerOptions }) {
     await runE2E(name, async (harness) => {

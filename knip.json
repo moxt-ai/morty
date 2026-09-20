@@ -4,7 +4,7 @@
     "ignoreDependencies": ["cloudflare", "drizzle-kit"],
     "workspaces": {
         "packages/e2e": {
-            "entry": ["*.e2e.test.ts", "fixtures/local-platform-worker.ts", "infra/acp-proxy.ts"]
+            "entry": ["*.e2e.test.ts", "fixtures/local-platform-worker.ts", "infra/acp-proxy.ts", "live/*.mjs"]
         },
         "packages/web": {
             "entry": [

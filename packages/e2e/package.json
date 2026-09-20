@@ -5,6 +5,8 @@
     "type": "module",
     "scripts": {
         "test": "playwright test",
+        "test:codex": "node live/codex.mjs",
+        "test:opencode": "node live/opencode.mjs",
         "typecheck": "tsc --project tsconfig.json"
     },
     "devDependencies": {

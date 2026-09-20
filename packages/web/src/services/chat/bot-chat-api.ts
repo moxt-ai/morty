@@ -229,6 +229,7 @@ export class BotChatApi {
                     bindingId: settings.bindingId,
                     configuration: settings.configuration,
                     conversationKey,
+                    permissionMode: settings.permissionMode,
                     title,
                     workspaceRef: settings.workspaceRef,
                 },

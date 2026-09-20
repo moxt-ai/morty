@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { runAgentImageE2E } from "./agent-image-live.mjs";
-import { prepareCodex } from "./codex.mjs";
+import { runAgentImageE2E } from "./agent-image.mjs";
+import { prepareCodexAgent } from "./codex-agent.mjs";
 
 const generatedImage = (harness) =>
     join(harness.workDirectory, "codex-home", "generated_images", "mobius-e2e", "geometric.png");
@@ -11,7 +11,7 @@ await runAgentImageE2E({
     expectedTool: { kind: "custom", name: "exec" },
     model: "gpt-5.6-sol",
     name: "codex-e2e",
-    prepareAgent: prepareCodex,
+    prepareAgent: prepareCodexAgent,
     prompt: "Generate one PNG with the available image tool.",
     providerOptions: (harness) => {
         const path = generatedImage(harness);

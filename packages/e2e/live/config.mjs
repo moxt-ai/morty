@@ -3,7 +3,7 @@ import { access, readFile } from "node:fs/promises";
 import { delimiter, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const imageMcp = fileURLToPath(new URL("../../packages/e2e/fixtures/image-mcp.mjs", import.meta.url));
+export const imageMcp = fileURLToPath(new URL("../fixtures/image-mcp.mjs", import.meta.url));
 
 export async function executable(name, environmentVariables) {
     for (const variable of environmentVariables) {

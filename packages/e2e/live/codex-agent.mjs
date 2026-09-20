@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { executable, imageMcp, publishableKey } from "./config.mjs";
 
-export async function prepareCodex(harness, repository, provider) {
+export async function prepareCodexAgent(harness, repository, provider) {
     const [binary, acpBinary, clerkPublishableKey] = await Promise.all([
         executable("codex", ["CODEX_BIN", "MOBIUS_CODEX_PATH"]),
         executable("codex-acp", ["CODEX_ACP_BIN", "MOBIUS_CODEX_ACP_PATH"]),

@@ -69,10 +69,20 @@ Do not test repository tooling or scaffolding. This includes CI workflows, lint 
 
 ## Required Test Levels
 
-Only write end-to-end tests for representative happy paths. Business logic must be covered by integration tests, while protocols and external boundaries use integration or contract tests. End-to-end tests exercise supported public entrypoints; integration and contract tests exercise the production boundary contract. Use production components together with real temporary filesystems, subprocesses, sockets, and local protocol servers where the product path requires them.
+End-to-end tests are a deliberately small set of representative journeys. They
+start at a supported public entrypoint, use the same production composition as a
+user, and prove a long path through its observable result. Browser journeys use
+mouse and keyboard interactions; API-oriented products may use their supported
+public client instead. Extend an existing journey before adding another one.
 
-Integration tests exercise behavior through user-visible mouse and keyboard interactions. They must not read from, write to, or invoke application stores directly.
-They bootstrap the entire application and must not render individual React components or views.
+Integration tests exercise one production boundary with its real collaborators:
+for example Worker HTTP, a Durable Object, a Runtime process, a protocol client,
+or a browser application boundary. They may use APIs, temporary filesystems,
+subprocesses, sockets, and local protocol servers. They must not invoke private
+helpers or mutate application stores to arrange the behavior under assertion.
+
+Contract tests own serialization, schema, authentication, and external-boundary
+compatibility where composing the larger product would reduce diagnostic signal.
 
 A lower-level test is not acceptance if the supported user path could break while the test still passes. Boundary tests may support a slice, but they cannot replace its user-visible acceptance scenario.
 
@@ -113,8 +123,11 @@ bots, Chat, Slack integration, and sign out when manually validating an auth cha
 
 ## Browser verification
 
-Chat browser E2E tests and their shared fixtures live in `packages/e2e`. Run
-`pnpm test:e2e` to execute all of them with Playwright Test and real Chrome.
+All Chat end-to-end journeys and their shared infrastructure live in
+`packages/e2e`. Run `pnpm test:e2e` to execute the deterministic journeys with
+Playwright Test and real Chrome. Run `pnpm test:e2e:opencode` or
+`pnpm test:e2e:codex` for the same local product stack with a real third-party
+Agent and a local fake LLM provider.
 The TypeScript scenarios receive a `runtime` fixture from `infra/test.ts`.
 `createTestRuntime` owns agent setup, the local stack, browser startup, instruction
 execution and deterministic setup timers; the fixture owns diagnostics and cleanup.
@@ -159,12 +172,14 @@ shows **Delivery unknown** after reload, and only retries after the user chooses
 Given a browser that redeemed a setup entry, ending remote access revokes that entry and
 every credential redeemed from it while the owner's local identity and Runtime remain active.
 
-Run `pnpm test:e2e:opencode` for the OpenCode product journey. It is excluded from
-`pnpm ci:check` and PR/merge-queue CI and runs nightly in GitHub Actions. It uses
-the latest OpenCode release with a local fake LLM provider. The journey starts at the
-unpaired browser, follows the displayed `pair.md` instruction through the downloaded
-production setup bundle, and continues through the paired Chat, image tool, artifact,
-and browser rendering path. This is the primary pairing acceptance scenario.
+The real OpenCode journey is excluded from `pnpm ci:check` and PR/merge-queue CI
+and runs nightly in GitHub Actions with the latest OpenCode release. It starts at
+the unpaired browser, follows the displayed `pair.md` instruction through the
+downloaded production setup bundle, and continues through paired Chat, a real
+Agent tool call, daemon-backed local-image retrieval, reload, and browser
+rendering. The deterministic setup journey owns the setup and remote-handoff
+contract; the live journey proves third-party Agent compatibility over the same
+product path.
 Verify other visual details
 manually with the `agent-browser` CLI against the running application. A first-time
 visitor should

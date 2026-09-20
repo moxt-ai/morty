@@ -6,6 +6,7 @@ import {
     MobiusTimeoutError,
 } from "@moxt-ai/mobius-sdk/platform";
 import {
+    AGENT_DEFAULT_EXECUTION_SETTING,
     MobiusAgentMessageEvent,
     MobiusCancelledTurnState,
     MobiusClient,
@@ -202,31 +203,33 @@ export class PlatformProjectGateway {
                 const ready = await client.sessions.prepare(sessionId, signal);
                 let configOptions = ready.configOptions;
                 if ("conversationKey" in input) {
-                    const permission = configOptions.find((option) => option.id === "permission_mode");
-                    if (
-                        permission === undefined ||
-                        permission.type !== "select" ||
-                        !permission.values.some((value) => value.value === input.permissionMode)
-                    ) {
-                        throw new PlatformProjectError(
-                            "AGENT_CONFIGURATION_REJECTED",
-                            "The harness did not offer the selected permission mode.",
-                            409,
-                        );
-                    }
-                    if (permission.currentValue !== input.permissionMode) {
-                        configOptions = (
-                            await client.sessions.updateConfiguration(
-                                sessionId,
-                                {
-                                    configId: permission.id,
-                                    value: input.permissionMode,
-                                    booleanValue: false,
-                                    valueType: "select",
-                                },
-                                signal,
-                            )
-                        ).configOptions;
+                    if (input.permissionMode !== AGENT_DEFAULT_EXECUTION_SETTING) {
+                        const permission = configOptions.find((option) => option.id === "permission_mode");
+                        if (
+                            permission === undefined ||
+                            permission.type !== "select" ||
+                            !permission.values.some((value) => value.value === input.permissionMode)
+                        ) {
+                            throw new PlatformProjectError(
+                                "AGENT_CONFIGURATION_REJECTED",
+                                "The harness did not offer the selected permission mode.",
+                                409,
+                            );
+                        }
+                        if (permission.currentValue !== input.permissionMode) {
+                            configOptions = (
+                                await client.sessions.updateConfiguration(
+                                    sessionId,
+                                    {
+                                        configId: permission.id,
+                                        value: input.permissionMode,
+                                        booleanValue: false,
+                                        valueType: "select",
+                                    },
+                                    signal,
+                                )
+                            ).configOptions;
+                        }
                     }
                     const model = configOptions.find((option) => option.id === input.configuration.configId);
                     if (

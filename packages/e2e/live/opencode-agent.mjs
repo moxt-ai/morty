@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { executable, imageMcp, publishableKey } from "./config.mjs";
 
-export async function prepareOpenCode(harness, repository, provider) {
+export async function prepareOpenCodeAgent(harness, repository, provider) {
     const binary = await executable("opencode", ["OPENCODE_BIN", "MOBIUS_OPENCODE_PATH"]);
     const clerkPublishableKey = await publishableKey(repository);
     const version = (await harness.run(binary, ["--version"])).stdout.trim();
