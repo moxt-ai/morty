@@ -4,9 +4,10 @@ import { dataTestId } from "@/data-testid";
 import { Select } from "../ui/option-select.tsx";
 import { Popover } from "../ui/popover.tsx";
 
-export interface ChatConfigurationControl {
+interface ChatConfigurationSelectControl {
     readonly disabled: boolean;
     readonly id: string;
+    readonly kind: "select";
     readonly label: string;
     readonly onValueChange: (value: string) => void;
     readonly options: readonly { readonly label: string; readonly value: string }[];
@@ -14,10 +15,24 @@ export interface ChatConfigurationControl {
     readonly value: string;
 }
 
+interface ChatConfigurationBooleanControl {
+    readonly checked: boolean;
+    readonly disabled: boolean;
+    readonly id: string;
+    readonly kind: "boolean";
+    readonly label: string;
+    readonly onCheckedChange: () => void;
+    readonly testId?: string | undefined;
+}
+
+export type ChatConfigurationControl = ChatConfigurationSelectControl | ChatConfigurationBooleanControl;
+
 export function ChatConfigurationMenu({ controls }: { readonly controls: readonly ChatConfigurationControl[] }) {
     const [open, setOpen] = useState(false);
-    const selections = controls.map(
-        (control) => control.options.find((option) => option.value === control.value)?.label ?? control.value,
+    const selections = controls.map((control) =>
+        control.kind === "boolean"
+            ? `${control.label}: ${control.checked ? "On" : "Off"}`
+            : (control.options.find((option) => option.value === control.value)?.label ?? control.value),
     );
     return (
         <Popover.Root onOpenChange={setOpen} open={open}>
@@ -48,14 +63,36 @@ export function ChatConfigurationMenu({ controls }: { readonly controls: readonl
                     {controls.map((control) => (
                         <div className="grid gap-1.5" key={control.id}>
                             <span className="px-1 text-xs font-medium text-copy-tertiary">{control.label}</span>
-                            <Select
-                                disabled={control.disabled}
-                                label={control.label}
-                                onValueChange={control.onValueChange}
-                                options={control.options}
-                                testId={control.testId}
-                                value={control.value}
-                            />
+                            {control.kind === "select" ? (
+                                <Select
+                                    disabled={control.disabled}
+                                    label={control.label}
+                                    onValueChange={control.onValueChange}
+                                    options={control.options}
+                                    testId={control.testId}
+                                    value={control.value}
+                                />
+                            ) : (
+                                <button
+                                    aria-checked={control.checked}
+                                    className="flex h-11 items-center justify-between rounded-xl border border-border bg-surface-subtle px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                                    data-testid={control.testId}
+                                    disabled={control.disabled}
+                                    onClick={control.onCheckedChange}
+                                    role="switch"
+                                    type="button"
+                                >
+                                    <span>{control.checked ? "On" : "Off"}</span>
+                                    <span
+                                        aria-hidden="true"
+                                        className={`flex h-6 w-10 items-center rounded-full p-0.5 transition-colors ${control.checked ? "bg-primary" : "bg-muted"}`}
+                                    >
+                                        <span
+                                            className={`size-5 rounded-full bg-white shadow-sm transition-transform ${control.checked ? "translate-x-4" : "translate-x-0"}`}
+                                        />
+                                    </span>
+                                </button>
+                            )}
                         </div>
                     ))}
                 </Popover.Content>

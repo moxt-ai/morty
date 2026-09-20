@@ -152,7 +152,12 @@ export interface SessionPaneStore {
     readonly steerQueued: (commandId: string, signal: AbortSignal) => Promise<void>;
     readonly deleteQueued: (commandId: string, signal: AbortSignal) => Promise<void>;
     readonly compact: (signal: AbortSignal) => Promise<void>;
-    readonly configure: (option: SessionConfigOption, value: string, signal: AbortSignal) => Promise<void>;
+    readonly configure: (
+        option: SessionConfigOption,
+        value: string,
+        booleanValue: boolean,
+        signal: AbortSignal,
+    ) => Promise<void>;
     readonly respondToPermission: (response: PermissionInteractionResponse, signal: AbortSignal) => Promise<void>;
     readonly respondToElicitation: (response: ElicitationInteractionResponse, signal: AbortSignal) => Promise<void>;
     readonly stop: (signal: AbortSignal) => Promise<void>;
@@ -853,7 +858,7 @@ export function createSessionPaneModel(options: {
                     signal,
                 );
             },
-            configure: async (option, value, signal) => {
+            configure: async (option, value, booleanValue, signal) => {
                 if (client === null || get().connection.kind !== "ready") {
                     return;
                 }
@@ -861,7 +866,7 @@ export function createSessionPaneModel(options: {
                 try {
                     const result = await client.sessions.updateConfiguration(
                         sessionId,
-                        { configId: option.id, value, valueType: option.type, booleanValue: false },
+                        { configId: option.id, value, valueType: option.type, booleanValue },
                         AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
                     );
                     signal.throwIfAborted();

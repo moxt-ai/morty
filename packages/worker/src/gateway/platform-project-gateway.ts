@@ -33,6 +33,17 @@ export type ChatConversationInput =
     | {
           readonly conversationKey: string;
           readonly bindingId: string;
+          readonly configurations: readonly {
+              readonly booleanValue: boolean;
+              readonly configId: string;
+              readonly value: string;
+              readonly valueType: "select" | "boolean";
+          }[];
+          readonly workspaceRef: string;
+      }
+    | {
+          readonly conversationKey: string;
+          readonly bindingId: string;
           readonly workspaceRef: string;
           readonly permissionMode: string;
           readonly configuration: {
@@ -203,7 +214,28 @@ export class PlatformProjectGateway {
                 }
                 const ready = await client.sessions.prepare(sessionId, signal);
                 let configOptions = ready.configOptions;
-                if ("conversationKey" in input) {
+                if ("configurations" in input) {
+                    for (const selection of input.configurations) {
+                        const option = configOptions.find((candidate) => candidate.id === selection.configId);
+                        if (
+                            option === undefined ||
+                            option.type !== selection.valueType ||
+                            (option.type === "select" &&
+                                !option.values.some((value) => value.value === selection.value))
+                        ) {
+                            throw new PlatformProjectError(
+                                "AGENT_CONFIGURATION_REJECTED",
+                                `The harness did not offer the selected ${selection.configId} setting.`,
+                                409,
+                            );
+                        }
+                        if (option.type === "boolean" && option.booleanValue === selection.booleanValue) {
+                            continue;
+                        }
+                        configOptions = (await client.sessions.updateConfiguration(sessionId, selection, signal))
+                            .configOptions;
+                    }
+                } else if ("configuration" in input) {
                     if (input.permissionMode !== AGENT_DEFAULT_EXECUTION_SETTING) {
                         const permission = configOptions.find((option) => option.id === "permission_mode");
                         if (
@@ -232,12 +264,12 @@ export class PlatformProjectGateway {
                             ).configOptions;
                         }
                     }
-                    const model = configOptions.find((option) => option.id === input.configuration.configId);
+                    const option = configOptions.find((candidate) => candidate.id === input.configuration.configId);
                     if (
-                        model === undefined ||
-                        model.type !== input.configuration.valueType ||
-                        (model.type === "select" &&
-                            !model.values.some((value) => value.value === input.configuration.value))
+                        option === undefined ||
+                        option.type !== input.configuration.valueType ||
+                        (option.type === "select" &&
+                            !option.values.some((value) => value.value === input.configuration.value))
                     ) {
                         throw new PlatformProjectError(
                             "AGENT_CONFIGURATION_REJECTED",

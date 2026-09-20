@@ -291,6 +291,7 @@ export class IdentityStorage {
     readonly createPairing = async (
         userId: string,
         botId: string,
+        expectedRuntimeId: string | null,
         now: number,
         signal: AbortSignal,
     ): Promise<IdentityTransfer> => {
@@ -299,7 +300,7 @@ export class IdentityStorage {
         const expiresAt = now + agentPairingLifetime;
         await this.#requireDatabase()
             .insert(agentPairingTicket)
-            .values({ codeHash: await digest(code), userId, botId, expiresAt })
+            .values({ codeHash: await digest(code), userId, botId, expectedRuntimeId, expiresAt })
             .run();
         signal.throwIfAborted();
         return { code, expiresAt };
@@ -309,7 +310,13 @@ export class IdentityStorage {
         code: string,
         now: number,
         signal: AbortSignal,
-    ): Promise<(AnonymousIdentity & { readonly botId: string }) | null> => {
+    ): Promise<
+        | (AnonymousIdentity & {
+              readonly botId: string;
+              readonly expectedRuntimeId: string | null;
+          })
+        | null
+    > => {
         const parsed = readProjectCredential(code);
         if (parsed?.kind !== "mobius_pair_v2" || parsed.projectId !== this.#projectId) {
             return null;
@@ -362,9 +369,13 @@ export class IdentityStorage {
             return null;
         }
         const row = v.parse(
-            v.object({ userId: v.string(), botId: v.string() }),
+            v.object({ userId: v.string(), botId: v.string(), expectedRuntimeId: v.nullable(v.string()) }),
             await database
-                .select({ userId: agentPairingTicket.userId, botId: agentPairingTicket.botId })
+                .select({
+                    userId: agentPairingTicket.userId,
+                    botId: agentPairingTicket.botId,
+                    expectedRuntimeId: agentPairingTicket.expectedRuntimeId,
+                })
                 .from(agentPairingTicket)
                 .where(and(eq(agentPairingTicket.codeHash, hash), eq(agentPairingTicket.claimNonce, nonce)))
                 .get(),

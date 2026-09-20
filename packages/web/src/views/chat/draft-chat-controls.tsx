@@ -48,9 +48,6 @@ export function DraftChatControls({
     }
     const selected = settings.workspace.selected;
     const model = settings.options.find((option) => option.category === "model" && option.type !== "boolean");
-    const permission = settings.options.find(
-        (option) => option.category === "_mobius_permission" && option.type !== "boolean",
-    );
     return (
         <div className="flex min-w-0 items-center gap-1">
             <ChatConfigurationMenu
@@ -58,6 +55,7 @@ export function DraftChatControls({
                     {
                         disabled,
                         id: "harness",
+                        kind: "select" as const,
                         label: "Harness",
                         onValueChange: (value) => {
                             const controller = operation.current;
@@ -73,37 +71,28 @@ export function DraftChatControls({
                             })),
                         value: selected === null ? "" : `${selected.runtimeId}:${selected.agentRef}`,
                     },
-                    {
-                        disabled: disabled || model === undefined,
-                        id: "model",
-                        label: "Model",
-                        onValueChange: (value) => {
-                            if (model !== undefined) {
-                                viewModel.selectOption(model.id, value);
-                            }
-                        },
-                        options:
-                            model?.type !== "boolean"
-                                ? (model?.values.map((value) => ({ value: value.value, label: value.name })) ?? [])
-                                : [],
-                        value: model?.currentValue ?? "",
-                    },
-                    {
-                        disabled: disabled || permission === undefined,
-                        id: "permissions",
-                        label: "Permissions",
-                        onValueChange: (value) => {
-                            if (permission !== undefined) {
-                                viewModel.selectOption(permission.id, value);
-                            }
-                        },
-                        options:
-                            permission?.type !== "boolean"
-                                ? (permission?.values.map((value) => ({ value: value.value, label: value.name })) ?? [])
-                                : [],
-                        testId: dataTestId.permissionMode,
-                        value: permission?.currentValue ?? "",
-                    },
+                    ...settings.options.map((option) =>
+                        option.type === "boolean"
+                            ? {
+                                  checked: option.booleanValue,
+                                  disabled,
+                                  id: option.id,
+                                  kind: "boolean" as const,
+                                  label: option.name,
+                                  onCheckedChange: () => viewModel.toggleOption(option.id),
+                                  testId: dataTestId.agentSetting(option.id),
+                              }
+                            : {
+                                  disabled,
+                                  id: option.id,
+                                  kind: "select" as const,
+                                  label: option.name,
+                                  onValueChange: (value: string) => viewModel.selectOption(option.id, value),
+                                  options: option.values.map((value) => ({ value: value.value, label: value.name })),
+                                  testId: dataTestId.agentSetting(option.id),
+                                  value: option.currentValue,
+                              },
+                    ),
                 ]}
             />
             <CwdSelector
@@ -112,9 +101,6 @@ export function DraftChatControls({
                 viewModel={viewModel}
             />
             {model === undefined && <span className="sr-only">This harness has not reported any model choices.</span>}
-            {permission === undefined && (
-                <span className="sr-only">This harness has not reported any permission choices.</span>
-            )}
         </div>
     );
 }

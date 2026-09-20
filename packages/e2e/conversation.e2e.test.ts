@@ -10,6 +10,12 @@ test("Given a paired workspace, When a user works across conversations, Then att
     const workingDirectory = await page.getByTestId(dataTestId.workingDirectory).textContent();
     assert.ok(workingDirectory);
 
+    await page.getByTestId(dataTestId.agentConfiguration).click();
+    await expect(page.getByTestId(dataTestId.agentSetting("model"))).toBeVisible();
+    await expect(page.getByTestId(dataTestId.agentSetting("reasoning_effort"))).toBeVisible();
+    await expect(page.getByTestId(dataTestId.agentSetting("fast_mode"))).toBeVisible();
+    await page.getByTestId(dataTestId.agentConfiguration).click();
+
     let firstConversationId = "";
     await test.step("create the first conversation with an image", async () => {
         const composer = page.getByTestId(dataTestId.messageComposer);
@@ -63,11 +69,12 @@ test("Given a paired workspace, When a user works across conversations, Then att
             true,
         );
         await page.getByTestId(dataTestId.agentConfiguration).click();
-        const permissions = page.getByTestId(dataTestId.permissionMode);
-        await permissions.click();
-        await permissions.press("ArrowDown");
-        await permissions.press("Enter");
-        await expect(permissions).toHaveText("Plan");
+        const mode = page.getByTestId(dataTestId.agentSetting("mode"));
+        await expect(mode).toBeEnabled();
+        await mode.click();
+        await mode.press("ArrowDown");
+        await mode.press("Enter");
+        await expect(mode).toHaveText("Plan");
         firstConversationId = new URL(page.url()).searchParams.get("conversationId") ?? "";
         assert.notEqual(firstConversationId, "");
     });

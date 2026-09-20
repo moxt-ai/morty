@@ -21,20 +21,21 @@ function createDatabase(): InMemoryD1Database {
     return database;
 }
 const baseConfiguration = { CLERK_PUBLISHABLE_KEY: issuer.publishableKey, CLERK_JWT_KEY: issuer.publicKey, APP_ORIGIN };
-function slackConfiguration(database = createDatabase()) {
+function slackConfiguration(database = createDatabase(), platformBindings = platform.bindings, appOrigin = APP_ORIGIN) {
     const attachments = { get: () => Promise.resolve(null), put: () => Promise.resolve() };
     const base = {
         ...baseConfiguration,
+        APP_ORIGIN: appOrigin,
         BOT_TRIGGER_RATE_LIMITER: { get: () => undefined, idFromName: () => undefined },
         ASSETS: { fetch: () => Promise.resolve(new Response()) },
         CHAT_ATTACHMENTS_APAC: attachments,
         CHAT_ATTACHMENTS_WNAM: attachments,
         AUTHENTICATION_BASE_URL: "https://identity.test",
         EVENTS: { send: () => Promise.resolve() },
-        ...platform.bindings,
+        ...platformBindings,
         SLACK_MOBIUS_AUTH_TOKEN: "service-token",
         SLACK_OAUTH_STATE_SIGNING_KEY: "state-signing-key",
-        SLACK_SERVER_BASE_URL: APP_ORIGIN,
+        SLACK_SERVER_BASE_URL: appOrigin,
         SLACK_TOKEN_ENCRYPTION_KEY: btoa("a".repeat(32)),
     };
     const projects = {
@@ -478,10 +479,11 @@ test.each(["anonymous", "clerk"])(
                 userId: v.string(),
                 botId: v.string(),
                 projectId: v.pipe(v.string(), v.minLength(1)),
+                expectedRuntimeId: v.null(),
             }),
             await response.json(),
         );
-        expect(identity).toMatchObject({ userId, botId });
+        expect(identity).toMatchObject({ userId, botId, expectedRuntimeId: null });
         const local = await worker.fetch(accountRequest(identity.token, identity.projectId), environment);
         expect(await local.json()).toMatchObject({ userId });
         expect((await redeem()).status).toBe(410);
@@ -720,6 +722,205 @@ test.each([
             await rm(directory, { recursive: true, force: true });
             server.closeAllConnections();
             await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+        }
+    },
+);
+
+test.each([
+    { flow: "pair", savedRuntime: "selected", reusesRuntime: true },
+    { flow: "pair", savedRuntime: "different", reusesRuntime: false },
+    { flow: "setup", savedRuntime: "selected", reusesRuntime: true },
+])(
+    "Given a $savedRuntime saved Runtime, When the user runs $flow instructions, Then setup reuses only the authorized Runtime",
+    async ({ flow, savedRuntime, reusesRuntime }) => {
+        const pairedPlatform = await platformPeer({ agentsOnline: true, pairingsPaired: true });
+        const database = createDatabase();
+        const environment = slackConfiguration(database, pairedPlatform.bindings);
+        const identity = v.parse(
+            v.object({ token: v.string(), userId: v.string(), projectId: v.string() }),
+            await (
+                await worker.fetch(
+                    new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/anonymous-users`, { method: "POST" }),
+                    environment,
+                )
+            ).json(),
+        );
+        const { bots } = v.parse(
+            v.object({ bots: v.array(v.object({ botId: v.string() })) }),
+            await (
+                await worker.fetch(
+                    new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/bots`, {
+                        headers: { authorization: `Bearer ${identity.token}` },
+                    }),
+                    environment,
+                )
+            ).json(),
+        );
+        const botId = v.parse(v.string(), bots[0]?.botId);
+        const createPairing = async (idempotencyKey: string) =>
+            v.parse(
+                v.object({
+                    pairingId: v.string(),
+                    projectId: v.string(),
+                    runtimeId: v.string(),
+                    channelId: v.string(),
+                    pairingCode: v.string(),
+                    relayUrl: v.string(),
+                }),
+                await (
+                    await worker.fetch(
+                        new Request(
+                            `${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/runtime-pairings`,
+                            {
+                                method: "POST",
+                                headers: {
+                                    authorization: `Bearer ${identity.token}`,
+                                    "content-type": "application/json",
+                                },
+                                body: JSON.stringify({ idempotencyKey }),
+                            },
+                        ),
+                        environment,
+                    )
+                ).json(),
+            );
+        const selectedPairing = await createPairing("selected-runtime");
+        const configured = await worker.fetch(
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/chat/projects/${identity.projectId}/bots/${botId}/setup`, {
+                method: "POST",
+                headers: {
+                    authorization: `Bearer ${identity.token}`,
+                    "content-type": "application/json",
+                },
+                body: JSON.stringify({
+                    runtimeId: selectedPairing.runtimeId,
+                    agentRef: "agent-one",
+                    workspaceRef: "default",
+                    agentConfigRevision: 1,
+                }),
+            }),
+            environment,
+        );
+        expect(configured.status).toBe(202);
+        const issued = await worker.fetch(
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/identity/pairings`, {
+                method: "POST",
+                headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+                body: JSON.stringify({ botId }),
+            }),
+            environment,
+        );
+        const ticket = new URL(v.parse(v.object({ url: v.string() }), await issued.json()).url).searchParams.get(
+            "token",
+        );
+        const savedPairing =
+            savedRuntime === "selected" ? selectedPairing : await createPairing("different-saved-runtime");
+        let runtimeEnvironment = environment;
+        const server = createServer(async (incoming, outgoing) => {
+            let body = "";
+            for await (const chunk of incoming) {
+                body += chunk;
+            }
+            const headers = new Headers();
+            for (const [key, value] of Object.entries(incoming.headers)) {
+                if (typeof value === "string") {
+                    headers.set(key, value);
+                }
+            }
+            const response = await worker.fetch(
+                new Request(new URL(incoming.url ?? "/", APP_ORIGIN), {
+                    method: incoming.method ?? "GET",
+                    headers,
+                    ...(body === "" ? {} : { body }),
+                }),
+                runtimeEnvironment,
+            );
+            outgoing.writeHead(response.status, Object.fromEntries(response.headers));
+            outgoing.end(await response.text());
+        });
+        await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+        const address = server.address();
+        if (address === null || typeof address === "string" || ticket === null) {
+            throw new Error("Setup fixture unavailable");
+        }
+        const base = `http://127.0.0.1:${address.port}`;
+        runtimeEnvironment = slackConfiguration(database, pairedPlatform.bindings, base);
+        const directory = await mkdtemp(join(tmpdir(), "mobius-setup-reconnect-"));
+        const executableDirectory = join(directory, "bin");
+        await mkdir(executableDirectory, { mode: 0o700 });
+        await writeFile(join(executableDirectory, "npx"), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+        await mkdir(join(directory, "mobius-chat"), { mode: 0o700 });
+        await writeFile(
+            join(directory, "mobius-chat", "config.json"),
+            JSON.stringify({
+                base_url: base,
+                user_token: identity.token,
+                user_id: identity.userId,
+                bot_id: botId,
+                project_id: identity.projectId,
+                pairing_key: `${savedRuntime}-runtime`,
+                pairing: savedPairing,
+                agent_ref: "agent-one",
+                agent_config_revision: 1,
+            }),
+            { mode: 0o600 },
+        );
+        try {
+            const result = await new Promise<{ readonly code: number | null; readonly output: string }>(
+                (resolve, reject) => {
+                    const child = spawn(
+                        process.execPath,
+                        [
+                            fileURLToPath(new URL("../../setup/src/cli.ts", import.meta.url)),
+                            flow,
+                            "--base-url",
+                            base,
+                            "--harness",
+                            "agent-one",
+                            ...(flow === "pair" ? [`--token=${ticket}`] : ["--session-id", "native-session"]),
+                        ],
+                        {
+                            env: {
+                                ...process.env,
+                                DOCUMENT_DIR: directory,
+                                PATH: `${executableDirectory}:${process.env["PATH"] ?? ""}`,
+                            },
+                            signal: AbortSignal.timeout(15000),
+                            stdio: ["pipe", "pipe", "pipe"],
+                        },
+                    );
+                    let output = "";
+                    child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+                        output += chunk;
+                    });
+                    child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
+                        output += chunk;
+                    });
+                    child.once("error", reject);
+                    child.once("close", (code) => resolve({ code, output }));
+                    child.stdin.end();
+                },
+            );
+            expect(result.code, result.output).toBe(0);
+            const config = JSON.parse(await readFile(join(directory, "mobius-chat", "config.json"), "utf8"));
+            if (reusesRuntime) {
+                expect(result.output).toContain(`"status":"runtime_reused"`);
+                expect(result.output).toContain(`"runtimeId":"${selectedPairing.runtimeId}"`);
+                expect(pairedPlatform.createdPairings()).toBe(1);
+                expect(config).toMatchObject({
+                    pairing_key: "selected-runtime",
+                    pairing: { runtimeId: selectedPairing.runtimeId, channelId: selectedPairing.channelId },
+                });
+            } else {
+                expect(result.output).not.toContain(`"status":"runtime_reused"`);
+                expect(pairedPlatform.createdPairings()).toBe(3);
+                expect(config).toMatchObject({ pairing: { runtimeId: "runtime-3", channelId: "channel-3" } });
+            }
+        } finally {
+            await rm(directory, { recursive: true, force: true });
+            server.closeAllConnections();
+            await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+            await pairedPlatform.close();
         }
     },
 );

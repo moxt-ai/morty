@@ -158,11 +158,16 @@ export class ManagementService {
         if (session.kind === "unauthenticated") {
             throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
         }
-        const bots = await this.#managedBots.listBots(session.session.userId, signal);
-        if (!bots.some((bot) => bot.botId === botId)) {
+        const bot = await this.#managedBots.readBot(session.session.userId, botId, signal);
+        if (bot === null) {
             throw new ManagementError("BOT_NOT_FOUND", "Bot is unavailable.", 404);
         }
-        return await this.#authentication.createPairing(session.session.userId, botId, signal);
+        return await this.#authentication.createPairing(
+            session.session.userId,
+            botId,
+            bot.configuration?.runtimeId ?? null,
+            signal,
+        );
     };
 
     readonly redeemAgentPairing = async (token: string, signal: AbortSignal) => {

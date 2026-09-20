@@ -84,9 +84,14 @@ export class AuthenticationService {
         return identity;
     };
 
-    readonly createPairing = async (userId: string, botId: string, signal: AbortSignal) => {
-        const ticket = await this.identities.createPairing(userId, botId, Date.now(), signal);
-        this.logger.info({ event: "agent-pairing-issued", userId, botId }, "Identity audit event");
+    readonly createPairing = async (
+        userId: string,
+        botId: string,
+        expectedRuntimeId: string | null,
+        signal: AbortSignal,
+    ) => {
+        const ticket = await this.identities.createPairing(userId, botId, expectedRuntimeId, Date.now(), signal);
+        this.logger.info({ event: "agent-pairing-issued", userId, botId, expectedRuntimeId }, "Identity audit event");
         return ticket;
     };
 

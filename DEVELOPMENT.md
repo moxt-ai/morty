@@ -16,10 +16,15 @@ their recorded placement when the user changes location.
 First-time visitors to `/` receive a browser-held anonymous identity and personal
 Bot; returning visitors restore their saved identity automatically. Every web
 workspace copies `/pair.md?token=...`, a one-time ticket that connects the local
-Runtime to its current user and Bot and directs the user back to Chat.
+Runtime to its current user and Bot and directs the user back to Chat. Pairing
+reconnects saved Runtime state only after the ticket proves the same Chat origin,
+user, Project, and Bot, names that Runtime as its expected target, and Platform
+confirms the Runtime pairing is still active;
+otherwise it creates a fresh Runtime identity.
 `/setup.md` is reserved for standalone testing and external sharing, including
 social posts. That flow requires the current harness session ID, creates or reuses a
-local identity, and returns a browser handoff carrying the validated harness and native
+local identity, reconnects its matching active Runtime or creates a fresh one, and
+returns a browser handoff carrying the validated harness and native
 session ID. The ready result includes the exact URL, its expiry, an owner-only PNG QR
 code, and the path to a private temporary text file containing a terminal-safe QR
 rendering. The bundled setup CLI decodes the PNG before returning it so the QR payload

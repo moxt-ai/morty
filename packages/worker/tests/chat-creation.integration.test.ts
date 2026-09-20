@@ -197,14 +197,20 @@ test.each([
                           await (await request(`chat/bots/${bot.botId}/agent-settings`, {})).json(),
                       ).bindingId
                     : "unconfigured",
-                permissionMode: "read-only",
-                configuration: {
-                    additionalDirectoryIds: [],
-                    booleanValue: false,
-                    configId: "model",
-                    value: "model-one",
-                    valueType: "select",
-                },
+                configurations: [
+                    {
+                        booleanValue: false,
+                        configId: "model",
+                        value: "model-two",
+                        valueType: "select",
+                    },
+                    {
+                        booleanValue: true,
+                        configId: "fast_mode",
+                        value: "",
+                        valueType: "boolean",
+                    },
+                ],
             };
             const firstResponse = await request(`chat/bots/${bot.botId}/access`, input);
             if (!settingsAvailable) {
@@ -213,20 +219,7 @@ test.each([
                 return;
             }
             expect(firstResponse.status).toBe(200);
-            expect(platform.configuredSettings()).toEqual([
-                {
-                    booleanValue: false,
-                    configId: "permission_mode",
-                    value: "read-only",
-                    valueType: "select",
-                },
-                {
-                    booleanValue: false,
-                    configId: "model",
-                    value: "model-one",
-                    valueType: "select",
-                },
-            ]);
+            expect(platform.configuredSettings()).toEqual(input.configurations);
             const schema = v.object({ conversationId: v.string() });
             const first = v.parse(schema, await firstResponse.json());
             expect(
@@ -263,10 +256,37 @@ test.each([
             const second = v.parse(
                 schema,
                 await (
-                    await request(`chat/bots/${bot.botId}/access`, { ...input, conversationKey: "second-draft" })
+                    await request(`chat/bots/${bot.botId}/access`, {
+                        bindingId: input.bindingId,
+                        conversationKey: "second-draft",
+                        permissionMode: "read-only",
+                        configuration: {
+                            additionalDirectoryIds: [],
+                            booleanValue: false,
+                            configId: "model",
+                            value: "model-one",
+                            valueType: "select",
+                        },
+                        workspaceRef: input.workspaceRef,
+                    })
                 ).json(),
             );
             expect(second.conversationId).not.toBe(first.conversationId);
+            expect(platform.configuredSettings()).toEqual([
+                ...input.configurations,
+                {
+                    booleanValue: false,
+                    configId: "permission_mode",
+                    value: "read-only",
+                    valueType: "select",
+                },
+                {
+                    booleanValue: false,
+                    configId: "model",
+                    value: "model-one",
+                    valueType: "select",
+                },
+            ]);
             expect(await (await request(`chat/bots/${bot.botId}/access`, input)).json()).toMatchObject(first);
             expect(
                 await (await request(`chat/bots/${bot.botId}/access`, { conversationId: first.conversationId })).json(),

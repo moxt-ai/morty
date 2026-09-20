@@ -1,13 +1,10 @@
 import {
-    AGENT_DEFAULT_EXECUTION_SETTING,
-    AGENT_PERMISSION_MODE_CONFIG_ID,
-    AGENT_PERMISSION_MODES,
     decodeAgentSettingsDiscoveredEvent,
     decodeNativeSessionHistory,
     decodeNativeSessionResult,
     decodeSessionReadyEvent,
     decodeWorkspaceEntriesEvent,
-    type SessionConfigOption,
+    type SessionConfigurationSelection,
 } from "@moxt-ai/mobius-protocol";
 import { HttpTransport, MobiusClient, type MobiusHttpTransport, WsTransport } from "@moxt-ai/mobius-sdk";
 import * as v from "valibot";
@@ -64,15 +61,8 @@ export type ChatAgentSelection = v.InferOutput<typeof agentSelectionSchema>;
 export interface ChatDraftConfiguration {
     readonly bindingId: string;
     readonly workspaceRef: string;
-    readonly permissionMode: string;
     readonly workspaceLabel: string;
-    readonly configuration: {
-        readonly additionalDirectoryIds: readonly string[];
-        readonly booleanValue: boolean;
-        readonly configId: string;
-        readonly value: string;
-        readonly valueType: "select" | "boolean";
-    };
+    readonly configurations: readonly SessionConfigurationSelection[];
 }
 export type ConversationActiveTurn =
     | { readonly kind: "idle" }
@@ -97,29 +87,6 @@ const localSessionSchema = v.object({
     }),
 });
 
-const permissionModeNames = new Map<string, string>([
-    [AGENT_DEFAULT_EXECUTION_SETTING, "Agent default"],
-    ["read-only", "Read only"],
-    ["workspace-write", "Workspace write"],
-    ["danger-full-access", "Full access"],
-]);
-
-const permissionModeOption: SessionConfigOption = {
-    booleanValue: false,
-    category: "_mobius_permission",
-    currentValue: AGENT_DEFAULT_EXECUTION_SETTING,
-    description: "Choose how much access the Agent receives.",
-    id: AGENT_PERMISSION_MODE_CONFIG_ID,
-    name: "Permissions",
-    type: "select",
-    values: AGENT_PERMISSION_MODES.map((value) => ({
-        description: "",
-        groupId: "",
-        groupName: "",
-        name: permissionModeNames.get(value) ?? value,
-        value,
-    })),
-};
 function sessionEndpoint(value: string): string {
     const endpoint = new URL(value);
     if (
@@ -228,9 +195,8 @@ export class BotChatApi {
                 "access",
                 {
                     bindingId: settings.bindingId,
-                    configuration: settings.configuration,
+                    configurations: settings.configurations,
                     conversationKey,
-                    permissionMode: settings.permissionMode,
                     title,
                     workspaceRef: settings.workspaceRef,
                 },
@@ -323,13 +289,13 @@ export class BotChatApi {
         const discovered = decodeAgentSettingsDiscoveredEvent(JSON.stringify(result.settings));
         return {
             bindingId: result.bindingId,
-            options: [
-                ...discovered.settings.map(({ defaultValue, ...setting }) => ({
-                    ...setting,
-                    currentValue: defaultValue,
-                })),
-                permissionModeOption,
-            ],
+            options: discovered.settings.map(({ defaultValue, ...setting }) => ({
+                ...setting,
+                currentValue:
+                    setting.type === "select" && !setting.values.some((value) => value.value === defaultValue)
+                        ? (setting.values[0]?.value ?? "")
+                        : defaultValue,
+            })),
         };
     };
     readonly createPairingInstruction = async (botId: string, signal: AbortSignal) => {

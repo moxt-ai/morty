@@ -68,6 +68,16 @@ test("Given Mobius Chat pairing instructions, When a user reads what will be pai
     expect(response.status).toBe(200);
     const document = await response.text();
     expect(document).toContain("existing user, Bot, and workspace");
+    expect(document).toContain("reconnect saved Runtime state");
+});
+
+test("Given standalone setup instructions, When a user runs setup again, Then the document says an active saved Runtime is reconnected", async () => {
+    const response = await worker.fetch(new Request("https://chat.example/setup.md"), {
+        APP_ORIGIN: "https://chat.example",
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("first reconnects a matching saved Runtime");
 });
 
 test("Given rendered pairing instructions at the edge, When users fetch different tickets, Then the CDN shares a token-free document cache", async () => {
