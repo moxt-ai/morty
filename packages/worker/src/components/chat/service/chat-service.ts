@@ -80,7 +80,7 @@ export class ChatService {
             ]),
         );
         if (!ownsProject) {
-            throw new PlatformProjectError("NOT_FOUND", "Your Project was not found.", 404);
+            throw new PlatformProjectError("NOT_FOUND", "Your workspace was not found.", 404);
         }
         if (!ownsBot) {
             throw new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);

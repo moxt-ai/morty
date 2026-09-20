@@ -65,7 +65,7 @@ export function BotBinding({
                     }}
                 >
                     <p className="my-2 text-sm text-muted-foreground">
-                        Select a bot from a project authorized in this browser.
+                        Select a bot from a workspace authorized in this browser.
                     </p>
                     {options.kind === "loading" ? (
                         <p role="status">Loading available bots…</p>
@@ -73,7 +73,7 @@ export function BotBinding({
                         <p role="alert">{options.message}</p>
                     ) : options.bots.length === 0 ? (
                         <p className="text-sm text-muted-foreground">
-                            Pair or connect a project in Mobius bots above, then add a bot.
+                            Pair or connect a workspace in Mobius bots above, then add a bot.
                         </p>
                     ) : (
                         <form

@@ -453,10 +453,10 @@ function NativeSessionList({
                     <h3 className="text-sm font-semibold">{agent.label} sessions</h3>
                     <span
                         className="ml-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground"
-                        title="Sessions across this machine’s projects"
+                        title="Sessions across this machine’s workspaces"
                     >
                         <Folder aria-hidden="true" className="size-3.5 shrink-0" />
-                        <span className="max-w-40 truncate">All projects</span>
+                        <span className="max-w-40 truncate">All workspaces</span>
                     </span>
                 </div>
                 <label className="mt-4 flex min-h-11 items-center gap-2 rounded-lg border-[0.5px] border-black/9 bg-background px-3 focus-within:ring-2 focus-within:ring-ring/50">
@@ -465,7 +465,7 @@ function NativeSessionList({
                     <input
                         className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
                         onChange={(event) => setQuery(event.currentTarget.value)}
-                        placeholder="Filter by title or project…"
+                        placeholder="Filter by title or workspace…"
                         type="search"
                         value={query}
                     />
@@ -769,7 +769,7 @@ function NativeSessionDialog({ browserId, onClose }: { readonly browserId: strin
                             <h3 className="text-lg font-semibold tracking-[-0.025em]">Choose a local Agent</h3>
                             <p className="mt-2 max-w-64 text-xs leading-5 text-muted-foreground">
                                 Each Agent has its own saved sessions. Select one to browse conversations across this
-                                machine’s projects.
+                                machine’s workspaces.
                             </p>
                         </div>
                     ) : (

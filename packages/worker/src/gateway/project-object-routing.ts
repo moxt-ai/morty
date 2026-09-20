@@ -19,7 +19,7 @@ function projectObjects(value: unknown): ProjectObjectNamespace {
         !("idFromName" in value) ||
         typeof value.idFromName !== "function"
     ) {
-        throw new PlatformProjectError("PROJECT_OBJECT_UNAVAILABLE", "Project storage is unavailable.", 503);
+        throw new PlatformProjectError("PROJECT_OBJECT_UNAVAILABLE", "Workspace storage is unavailable.", 503);
     }
     const get = value.get;
     const idFromName = value.idFromName;
@@ -28,7 +28,7 @@ function projectObjects(value: unknown): ProjectObjectNamespace {
         get: (id, options) => {
             const stub: unknown = Reflect.apply(get, value, [id, options]);
             if (typeof stub !== "object" || stub === null || !("fetch" in stub) || typeof stub.fetch !== "function") {
-                throw new PlatformProjectError("PROJECT_OBJECT_UNAVAILABLE", "Project storage is unavailable.", 503);
+                throw new PlatformProjectError("PROJECT_OBJECT_UNAVAILABLE", "Workspace storage is unavailable.", 503);
             }
             const fetchObject = stub.fetch;
             return {
@@ -37,7 +37,7 @@ function projectObjects(value: unknown): ProjectObjectNamespace {
                     if (!(response instanceof Response)) {
                         throw new PlatformProjectError(
                             "PROJECT_OBJECT_UNAVAILABLE",
-                            "Project storage is unavailable.",
+                            "Workspace storage is unavailable.",
                             503,
                         );
                     }
@@ -58,7 +58,7 @@ export async function routeProjectObject(
     }
     if (bindings.CHAT_PROJECT_ID !== undefined) {
         if (bindings.CHAT_PROJECT_ID !== projectId) {
-            throw new PlatformProjectError("PROJECT_CONTEXT_MISMATCH", "The Project context is invalid.", 400);
+            throw new PlatformProjectError("PROJECT_CONTEXT_MISMATCH", "The workspace context is invalid.", 400);
         }
         return null;
     }
@@ -73,7 +73,7 @@ export async function routeProjectObject(
         request.signal.throwIfAborted();
         throw new PlatformProjectError(
             deadline.signal.aborted ? "PROJECT_OBJECT_TIMEOUT" : "PROJECT_OBJECT_UNAVAILABLE",
-            "Project storage is unavailable.",
+            "Workspace storage is unavailable.",
             deadline.signal.aborted ? 504 : 503,
             { cause },
         );

@@ -32,7 +32,7 @@ export class ProjectDurableObject extends DurableObject<CloudBindings> {
             (await cloudProjectId(request)) ??
             (url.pathname.startsWith("/mobius-slack/api/") ? (url.searchParams.get("projectId") ?? null) : null);
         if (projectId === null) {
-            return json({ error: { code: "PROJECT_REQUIRED", message: "Project context is required." } }, 400);
+            return json({ error: { code: "PROJECT_REQUIRED", message: "Workspace context is required." } }, 400);
         }
         const validatedProjectId = v.parse(platformIdentifier, projectId);
         await this.#bindProject(validatedProjectId);
@@ -69,7 +69,7 @@ export class ProjectDurableObject extends DurableObject<CloudBindings> {
             return;
         }
         if (stored !== projectId) {
-            throw new Error("Durable Object Project identity does not match the request.");
+            throw new Error("Durable Object workspace identity does not match the request.");
         }
     };
 

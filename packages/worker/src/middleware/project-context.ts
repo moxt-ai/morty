@@ -31,7 +31,7 @@ export const slackProjectContext = createMiddleware<{
 }>(async (context, next) => {
     const projectId = context.req.query("projectId");
     if (projectId === undefined) {
-        throw new ManagementError("PROJECT_REQUIRED", "Project context is required.", 400);
+        throw new ManagementError("PROJECT_REQUIRED", "Workspace context is required.", 400);
     }
     const routed = await routeProjectObject(context.req.raw, context.env, projectId);
     if (routed !== null) {
@@ -47,14 +47,14 @@ export async function cloudProjectId(request: Request): Promise<string | null> {
     if (path.startsWith("/mobius-cloud/api/projects/")) {
         const projectId = path.split("/")[4];
         if (projectId === undefined || projectId === "") {
-            throw new ManagementError("PROJECT_REQUIRED", "Project context is required.", 400);
+            throw new ManagementError("PROJECT_REQUIRED", "Workspace context is required.", 400);
         }
         return v.parse(platformIdentifier, projectId);
     }
     if (path.startsWith("/mobius-cloud/api/chat/projects/")) {
         const projectId = path.split("/")[5];
         if (projectId === undefined || projectId === "") {
-            throw new ManagementError("PROJECT_REQUIRED", "Project context is required.", 400);
+            throw new ManagementError("PROJECT_REQUIRED", "Workspace context is required.", 400);
         }
         return v.parse(platformIdentifier, projectId);
     }

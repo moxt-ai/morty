@@ -802,7 +802,7 @@ function decodeChannelConnection(
         throw new PairingApiError("invalid_relay_response", "The relay returned an invalid channel.");
     }
     if (value["tenantId"] !== credential.tenantId || value["projectId"] !== credential.projectId) {
-        throw new PairingApiError("invalid_relay_response", "The relay returned a channel from another project.");
+        throw new PairingApiError("invalid_relay_response", "The relay returned a channel from another workspace.");
     }
     const agents = decodeAgents(value["agents"]);
     const installableAgents = decodeInstallableAgents(value["installableAgents"]);
@@ -1194,7 +1194,7 @@ function projectCredential(channelId: string, projectId: string): BrowserChannel
     if (credential.projectId !== projectId) {
         throw new PairingApiError(
             "project_access_mismatch",
-            "The saved channel credential belongs to another Project.",
+            "The saved channel credential belongs to another workspace.",
         );
     }
     return credential;

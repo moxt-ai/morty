@@ -20,7 +20,7 @@ import { selectActiveConversation, useChatStore } from "@/view-models/chat-store
 
 const SCROLL_TAIL_THRESHOLD = 96;
 const suggestions = [
-    "Explain the current project structure",
+    "Explain the current workspace structure",
     "Find the entry point for this workspace",
     "Summarize how the relay path works",
 ];

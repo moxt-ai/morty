@@ -103,7 +103,7 @@ export const createRuntimeManagementStore = (channelId: string, projectId: strin
                             directory,
                             pairing: {
                                 kind: "check-failed",
-                                message: "The paired Runtime is missing from the Project directory.",
+                                message: "The paired Runtime is missing from the workspace directory.",
                                 pairing,
                             },
                         });

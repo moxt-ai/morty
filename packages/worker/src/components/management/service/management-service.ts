@@ -176,7 +176,7 @@ export class ManagementService {
         }
         const project = await this.readProject(identity.userId, signal);
         if (project === null) {
-            throw new ManagementError("PROJECT_REQUIRED", "The Bot's Project is unavailable.", 409);
+            throw new ManagementError("PROJECT_REQUIRED", "The Bot's workspace is unavailable.", 409);
         }
         return { ...identity, projectId: project.projectId };
     };
@@ -184,7 +184,7 @@ export class ManagementService {
     readonly #requireProject = async (userId: string, signal: AbortSignal) => {
         const project = await this.readProject(userId, signal);
         if (project === null) {
-            throw new PlatformProjectError("PROJECT_REQUIRED", "Create your Project before pairing a Runtime.", 409);
+            throw new PlatformProjectError("PROJECT_REQUIRED", "Create your workspace before pairing a Runtime.", 409);
         }
         return project;
     };

@@ -23,6 +23,10 @@ anonymous credentials are never stored server-side. Device transfer URLs carry a
 separate 15-minute, one-use code in the URL fragment; redeeming it issues another
 credential for the same internal user.
 
+Mobius Chat calls the user-owned environment a **Workspace**. At the Mobius Platform
+boundary, the same resource remains a **Project**; Platform SDK types, `projectId`
+fields, Project-scoped routes, and Project error contracts retain Mobius terminology.
+
 One Cloud D1 and one Cloud R2 bucket serve the Slack component. Mobius remains an
 external service and owns its authorization and persistence. Cloud forwards only
 allowlisted headers and preserves cancellation, deadlines, streams, and upgrades.

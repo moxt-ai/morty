@@ -65,8 +65,8 @@ function PairingDetails({
                         Run this on the other machine
                     </h2>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                        The one-time code expires {formatRuntimeDate(pairing.expiresAt)}. It never contains your Project
-                        owner credential.
+                        The one-time code expires {formatRuntimeDate(pairing.expiresAt)}. It never contains your
+                        workspace owner credential.
                     </p>
                 </div>
             </div>
@@ -154,11 +154,11 @@ function RuntimeList({
     const canManage = directory.canManage;
 
     return (
-        <section aria-labelledby="project-runtimes-heading" className="mt-8">
+        <section aria-labelledby="workspace-runtimes-heading" className="mt-8">
             <div className="flex items-end justify-between gap-4">
                 <div>
-                    <h2 className="text-base font-semibold tracking-[-0.015em]" id="project-runtimes-heading">
-                        Project Runtimes
+                    <h2 className="text-base font-semibold tracking-[-0.015em]" id="workspace-runtimes-heading">
+                        Workspace Runtimes
                     </h2>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
                         Each machine keeps an independent credential, connection, Agent catalog, and local grants.
@@ -169,7 +169,7 @@ function RuntimeList({
                 </span>
             </div>
 
-            <ul aria-label="Project runtimes" className="mt-4 grid gap-3">
+            <ul aria-label="Workspace runtimes" className="mt-4 grid gap-3">
                 {directory.runtimes.map((runtime) => {
                     const name = runtimeDisplayName(runtime);
                     const confirming = revocation.kind === "confirming" && revocation.runtimeId === runtime.runtimeId;
@@ -324,7 +324,7 @@ function RuntimeManagementPanel({ channelId, projectId }: { readonly channelId: 
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="max-w-2xl">
                     <p className="text-[11px] font-semibold tracking-[0.08em] text-[#218854] uppercase">
-                        Project execution
+                        Workspace execution
                     </p>
                     <h2
                         className="mt-2 text-[28px] leading-9 font-semibold tracking-[-0.035em]"
@@ -333,7 +333,7 @@ function RuntimeManagementPanel({ channelId, projectId }: { readonly channelId: 
                         Manage local machines
                     </h2>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                        Pair another computer into this Project without sharing your owner credential. Each computer
+                        Pair another computer into this workspace without sharing your owner credential. Each computer
                         becomes a separate Runtime with its own local permissions and workspace.
                     </p>
                 </div>
@@ -358,7 +358,7 @@ function RuntimeManagementPanel({ channelId, projectId }: { readonly channelId: 
                     className="mt-5 flex min-h-20 items-center gap-3 rounded-xl border-[0.5px] border-black/10 bg-white px-5 py-4 text-sm text-muted-foreground"
                 >
                     <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
-                    Loading Project Runtimes…
+                    Loading Workspace Runtimes…
                 </div>
             )}
 
@@ -377,7 +377,7 @@ function RuntimeManagementPanel({ channelId, projectId }: { readonly channelId: 
 
             {directory.kind === "ready" && !directory.canManage && (
                 <div className="mt-5 rounded-xl border-[0.5px] border-black/10 bg-white px-5 py-4 text-sm leading-6 text-muted-foreground shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
-                    This browser has linked-device access. It can see Project Runtimes, but only the original owner
+                    This browser has linked-device access. It can see Workspace Runtimes, but only the original owner
                     browser can pair or revoke local machines.
                 </div>
             )}

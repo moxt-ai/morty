@@ -8,7 +8,7 @@ export async function projectBindings(
 ): Promise<CloudBindings> {
     signal.throwIfAborted();
     if (bindings.CHAT_PROJECT_ID !== projectId) {
-        throw new PlatformProjectError("PROJECT_CONTEXT_MISMATCH", "The Project context is invalid.", 400);
+        throw new PlatformProjectError("PROJECT_CONTEXT_MISMATCH", "The workspace context is invalid.", 400);
     }
     const database = bindings.DATABASE;
     const bucket = bindings.ATTACHMENTS;
@@ -22,7 +22,7 @@ export async function projectBindings(
         !("get" in bucket) ||
         typeof bucket.get !== "function"
     ) {
-        throw new PlatformProjectError("PROJECT_STORAGE_UNAVAILABLE", "Project storage is unavailable.", 503);
+        throw new PlatformProjectError("PROJECT_STORAGE_UNAVAILABLE", "Workspace storage is unavailable.", 503);
     }
     return { ...bindings, DATABASE: database, ATTACHMENTS: bucket, CHAT_PROJECT_ID: projectId };
 }

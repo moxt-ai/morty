@@ -28,7 +28,7 @@ export const createChannelRouteStore = (channelId: string) =>
             set({ state: { kind: "loading" } });
             try {
                 await redeemChannelAccessGrantFromLocation(channelId, signal);
-                // Validate channel-scoped access before the broader project history read.
+                // Validate channel-scoped access before the broader workspace history read.
                 const connection = await readChannelConnection(channelId, signal);
                 const history = await readChannelHistory(channelId);
                 signal.throwIfAborted();

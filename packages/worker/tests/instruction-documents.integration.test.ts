@@ -60,6 +60,16 @@ test.each(["setup", "pair"])(
     },
 );
 
+test("Given Mobius Chat pairing instructions, When a user reads what will be paired, Then Chat calls it a Workspace rather than a Project", async () => {
+    const response = await worker.fetch(new Request("https://chat.example/pair.md"), {
+        APP_ORIGIN: "https://chat.example",
+    });
+
+    expect(response.status).toBe(200);
+    const document = await response.text();
+    expect(document).toContain("existing user, Bot, and workspace");
+});
+
 test("Given rendered pairing instructions at the edge, When users fetch different tickets, Then the CDN shares a token-free document cache", async () => {
     const bundle = await build({
         entryPoints: [fileURLToPath(new URL("../src/index.ts", import.meta.url))],

@@ -273,7 +273,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function preparePairIdentity(context: Context, ticket: string) {
-        progress("identity", "Exchanging the one-time ticket for the existing user, Bot, and Project.");
+        progress("identity", "Exchanging the one-time ticket for the existing user, Bot, and workspace.");
         const identity = await request(context, "/identity/pairings/redeem", { token: ticket }, false);
         const updates = {
             user_token: credential(identity.token),
