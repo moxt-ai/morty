@@ -5,7 +5,7 @@ import {
     decodeSessionReadyEvent,
     decodeWorkspaceEntriesEvent,
 } from "@moxt-ai/mobius-protocol";
-import { HttpTransport, MobiusClient, type MobiusHttpTransport, WsTransport } from "@moxt-ai/mobius-sdk/browser";
+import { HttpTransport, MobiusClient, type MobiusHttpTransport, WsTransport } from "@moxt-ai/mobius-sdk";
 import * as v from "valibot";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 
@@ -290,9 +290,13 @@ export class BotChatApi {
             v.object({ bindingId: identifier, settings: v.unknown() }),
             await this.#request(botId, "agent-settings", {}, signal),
         );
+        const discovered = decodeAgentSettingsDiscoveredEvent(JSON.stringify(result.settings));
         return {
             bindingId: result.bindingId,
-            options: decodeAgentSettingsDiscoveredEvent(JSON.stringify(result.settings)).configOptions,
+            options: discovered.settings.map(({ defaultValue, ...setting }) => ({
+                ...setting,
+                currentValue: defaultValue,
+            })),
         };
     };
     readonly createPairingInstruction = async (botId: string, signal: AbortSignal) => {

@@ -6,8 +6,10 @@ import {
     decodeSessionPermissionResolvedEvent,
     MobiusAgentActivityEvent,
     MobiusAgentMessageEvent,
+    type MobiusClient,
     MobiusControlEvent,
     MobiusElicitationResponseRequest,
+    MobiusPageRequest,
     MobiusPermissionResponseRequest,
     MobiusRunningAttemptSummary,
     MobiusTurnCompletedEvent,
@@ -15,7 +17,6 @@ import {
     MobiusTurnStartedEvent,
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
-import { type MobiusClient, MobiusPageRequest } from "@moxt-ai/mobius-sdk/browser";
 import { createStore } from "zustand/vanilla";
 import {
     agentActivityKey,

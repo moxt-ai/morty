@@ -47,7 +47,6 @@ export async function createMobiusPlatformFixture() {
             durableObjects: {
                 RUNTIME_RELAY: { className: "RuntimeRelay", useSQLite: true },
                 SESSION_RELAY: { className: "PlatformSessionRelay", useSQLite: true },
-                BOT_CONNECTIONS: { className: "BotConnectionActor", useSQLite: true },
                 PROJECT_RELAY: { className: "ProjectRelay", useSQLite: true },
             },
         }),

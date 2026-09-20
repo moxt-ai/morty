@@ -130,14 +130,11 @@ export class PlatformProjectGateway {
             async (client) => {
                 const settings = await client.runtimes.discoverAgentSettings(
                     selection.runtimeId,
-                    {
-                        additionalDirectoryIds: [],
-                        agentId: selection.agentRef,
-                        directoryId: selection.workspaceRef,
-                    },
+                    selection.agentRef,
+                    {},
                     signal,
                 );
-                if (settings.agentId !== selection.agentRef || settings.directoryId !== selection.workspaceRef) {
+                if (settings.agentId !== selection.agentRef) {
                     throw new PlatformProjectError(
                         "PLATFORM_INVALID_RESPONSE",
                         "Platform returned settings for an unexpected Agent.",

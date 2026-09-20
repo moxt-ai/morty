@@ -111,8 +111,8 @@ test.each([true, false])(
                 expect(await prepared.json()).toMatchObject({
                     bindingId: expect.stringMatching(/^binding[-_]/u),
                     settings: {
-                        configOptions: expect.arrayContaining([
-                            expect.objectContaining({ id: "model", currentValue: "model-one" }),
+                        settings: expect.arrayContaining([
+                            expect.objectContaining({ id: "model", defaultValue: "model-one" }),
                         ]),
                     },
                 });

@@ -7,7 +7,6 @@
         "bindings": [
             { "name": "RUNTIME_RELAY", "class_name": "RuntimeRelay" },
             { "name": "SESSION_RELAY", "class_name": "PlatformSessionRelay" },
-            { "name": "BOT_CONNECTIONS", "class_name": "BotConnectionActor" },
             { "name": "PROJECT_RELAY", "class_name": "ProjectRelay" }
         ]
     },

@@ -1,4 +1,4 @@
-import type { MobiusMessagePage } from "@moxt-ai/mobius-sdk/browser";
+import type { MobiusMessagePage } from "@moxt-ai/mobius-sdk";
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { Button } from "../ui/cloud-button.tsx";

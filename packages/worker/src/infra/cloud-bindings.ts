@@ -9,7 +9,6 @@ export interface CloudBindings {
     readonly APP_ORIGIN?: unknown;
     readonly ASSETS?: unknown;
     readonly AUTHENTICATION_BASE_URL?: unknown;
-    readonly BOT_CONNECTIONS?: unknown;
     readonly CLERK_JWT_KEY?: unknown;
     readonly CLERK_PUBLISHABLE_KEY?: unknown;
     readonly DATABASE?: unknown;

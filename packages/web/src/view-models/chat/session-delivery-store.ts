@@ -1,4 +1,4 @@
-import { MobiusApiError, MobiusCancellationError, type MobiusClient } from "@moxt-ai/mobius-sdk/browser";
+import { MobiusApiError, MobiusCancellationError, type MobiusClient } from "@moxt-ai/mobius-sdk";
 import * as v from "valibot";
 import { createStore } from "zustand/vanilla";
 import { CloudApiError } from "../../services/management/management-api.ts";

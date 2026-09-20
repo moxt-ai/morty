@@ -1,4 +1,4 @@
-import { MobiusClient } from "../../../third-party/mobius/packages/mobius-sdk/src/browser.ts";
+import { MobiusClient } from "../../../third-party/mobius/packages/mobius-sdk/src/index.ts";
 import type { E2EHarness } from "./harness.ts";
 
 interface RequestOptions {

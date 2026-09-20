@@ -1,5 +1,4 @@
 import type { AgentDisplayContent, MobiusClient } from "@moxt-ai/mobius-sdk";
-import type { MobiusBrowserClient } from "@moxt-ai/mobius-sdk/browser";
 import { ExternalLink, FileText, Image as ImageIcon, Terminal, Video } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AgentMarkdown } from "@/components/agents/agent-markdown";
@@ -40,13 +39,11 @@ function ContentHeader({ content }: { readonly content: AgentDisplayContent }) {
 }
 
 function ArtifactMedia({
-    browserClient,
     channelId,
     content,
     serviceClient,
     sessionId,
 }: {
-    readonly browserClient?: Pick<MobiusBrowserClient, "artifacts"> | undefined;
     readonly channelId: string;
     readonly content: AgentDisplayContent;
     readonly serviceClient?: Pick<MobiusClient, "artifacts" | "sessions"> | undefined;
@@ -77,10 +74,6 @@ function ArtifactMedia({
                         content.artifactId,
                         controller.signal,
                     );
-                    bytes = artifact.bytes;
-                    mimeType = artifact.artifact.mediaType;
-                } else if (browserClient) {
-                    const artifact = await browserClient.artifacts.download(content.artifactId, controller.signal);
                     bytes = artifact.bytes;
                     mimeType = artifact.artifact.mediaType;
                 } else {
@@ -114,7 +107,7 @@ function ArtifactMedia({
                 URL.revokeObjectURL(objectUrl);
             }
         };
-    }, [browserClient, channelId, content.artifactId, content.type, content.uri, serviceClient, sessionId]);
+    }, [channelId, content.artifactId, content.type, content.uri, serviceClient, sessionId]);
     if (source === null) {
         return (
             <div className="min-h-24 rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
@@ -159,13 +152,11 @@ function ArtifactMedia({
 }
 
 function AgentRichContentItem({
-    browserClient,
     channelId,
     content,
     serviceClient,
     sessionId,
 }: {
-    readonly browserClient?: Pick<MobiusBrowserClient, "artifacts"> | undefined;
     readonly channelId?: string | undefined;
     readonly content: AgentDisplayContent;
     readonly serviceClient?: Pick<MobiusClient, "artifacts" | "sessions"> | undefined;
@@ -174,13 +165,10 @@ function AgentRichContentItem({
     if (content.type === "image" || content.type === "video") {
         if (
             (content.artifactId.length > 0 || (content.type === "image" && content.uri.length > 0)) &&
-            (browserClient !== undefined ||
-                serviceClient !== undefined ||
-                (channelId !== undefined && sessionId !== undefined))
+            (serviceClient !== undefined || (channelId !== undefined && sessionId !== undefined))
         ) {
             return (
                 <ArtifactMedia
-                    browserClient={browserClient}
                     channelId={channelId ?? ""}
                     content={content}
                     serviceClient={serviceClient}
@@ -293,13 +281,11 @@ function AgentRichContentItem({
 }
 
 export function AgentRichContent({
-    browserClient,
     channelId,
     contents,
     serviceClient,
     sessionId,
 }: {
-    readonly browserClient?: Pick<MobiusBrowserClient, "artifacts"> | undefined;
     readonly channelId?: string | undefined;
     readonly contents: readonly AgentDisplayContent[];
     readonly serviceClient?: Pick<MobiusClient, "artifacts" | "sessions"> | undefined;
@@ -312,7 +298,6 @@ export function AgentRichContent({
         <div className="mt-2 grid gap-2">
             {contents.map((content, index) => (
                 <AgentRichContentItem
-                    browserClient={browserClient}
                     channelId={channelId}
                     content={content}
                     key={`${content.type}:${content.name}:${content.uri}:${content.artifactId}:${index.toString()}`}

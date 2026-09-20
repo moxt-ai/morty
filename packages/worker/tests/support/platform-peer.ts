@@ -347,28 +347,30 @@ export async function platformPeer({
             return;
         }
         const agentSettingsPath = request.url?.match(
-            /^\/mobius\/api\/v1\/projects\/([^/]+)\/runtimes\/([^/]+)\/agent-settings$/u,
+            /^\/mobius\/api\/v1\/projects\/([^/]+)\/runtimes\/([^/]+)\/agents\/([^/]+)\/settings$/u,
         );
         if (request.method === "POST" && agentSettingsPath !== undefined && agentSettingsPath !== null) {
-            const input = v.parse(
-                v.strictObject({
-                    additionalDirectoryIds: v.array(v.string()),
-                    agentId: v.string(),
-                    directoryId: v.string(),
-                }),
-                JSON.parse(body),
-            );
+            v.parse(v.strictObject({}), JSON.parse(body));
             response.writeHead(settingsAvailable ? 200 : 409).end(
                 JSON.stringify(
                     settingsAvailable
                         ? {
                               kind: "agent.settings.discovered",
                               requestId: "discover-settings",
-                              agentId: input.agentId,
+                              agentId: v.parse(v.string(), agentSettingsPath[3]),
                               agentName: "Agent One",
                               agentVersion: "1",
-                              directoryId: input.directoryId,
-                              configOptions: readySession("settings").configOptions,
+                              modelEffort: {
+                                  effortSettingId: "",
+                                  modelSettingId: "model",
+                                  resolution: "unavailable",
+                                  valuesByModel: {},
+                              },
+                              settings: readySession("settings").configOptions.map(({ currentValue, ...option }) => ({
+                                  ...option,
+                                  defaultValue: currentValue,
+                              })),
+                              settingsRevision: "a".repeat(64),
                           }
                         : { error: { code: "agent_unavailable", message: "The settings agent is unavailable" } },
                 ),

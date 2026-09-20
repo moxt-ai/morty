@@ -35,7 +35,6 @@ export default createPlatformWorker(
 );
 
 export {
-    BotConnectionActor,
     PlatformSessionRelay,
     ProjectRelay,
     RuntimeRelay,
