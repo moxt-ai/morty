@@ -45,6 +45,7 @@ export class InMemoryD1Database {
             "0010_chat_owned_bot.sql",
             "0011_slack_chat_bot_binding.sql",
             "0012_remove_legacy_bot_migration.sql",
+            "0013_colossal_rictor.sql",
         ]) {
             this.#database.exec(readFileSync(new URL(`../../migrations/d1/${migration}`, import.meta.url), "utf8"));
         }

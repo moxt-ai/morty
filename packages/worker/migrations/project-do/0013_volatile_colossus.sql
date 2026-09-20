@@ -1,0 +1,1 @@
+ALTER TABLE `agent_pairing_ticket` ADD `expected_runtime_id` text;

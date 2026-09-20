@@ -10,6 +10,7 @@ import managedSessionImport from "../../migrations/project-do/0009_chat_managed_
 import chatOwnedBot from "../../migrations/project-do/0010_chat_owned_bot.sql?raw";
 import slackChatBotBinding from "../../migrations/project-do/0011_slack_chat_bot_binding.sql?raw";
 import removeLegacyBotMigration from "../../migrations/project-do/0012_remove_legacy_bot_migration.sql?raw";
+import pairingExpectedRuntime from "../../migrations/project-do/0013_volatile_colossus.sql?raw";
 
 const migrations = [
     management,
@@ -24,6 +25,7 @@ const migrations = [
     chatOwnedBot,
     slackChatBotBinding,
     removeLegacyBotMigration,
+    pairingExpectedRuntime,
 ];
 
 type BoundValue = ArrayBuffer | string | number | null;

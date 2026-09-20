@@ -8,6 +8,13 @@
             "when": 1789882795771,
             "tag": "0012_remove_legacy_bot_migration",
             "breakpoints": true
+        },
+        {
+            "idx": 13,
+            "version": "6",
+            "when": 1789896149623,
+            "tag": "0013_colossal_rictor",
+            "breakpoints": true
         }
     ]
 }
