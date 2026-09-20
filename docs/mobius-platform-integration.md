@@ -194,7 +194,7 @@ migration, then exercise the provisioned staging service with a real paired Runt
 an anonymous user and Bot, pair a Runtime, and return a browser handoff that supports up to five uses.
 `/pair.md?token=...` is copied from every web workspace. First-time visitors
 receive a browser-held identity and Bot before the instruction is shown. Its opaque,
-24-hour ticket is issued for the authenticated anonymous or Clerk user and target
+10-minute ticket is issued for the authenticated anonymous or Clerk user and target
 Bot. Explicit POST redemption atomically consumes it and issues a separate local
 credential for that user. It never creates another Bot. Reading the document does
 not consume the ticket. Pairing tickets and browser transfers have separate stores

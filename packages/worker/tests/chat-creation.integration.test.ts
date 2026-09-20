@@ -16,7 +16,7 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 test.each([true, false])(
-    "Given a paired workspace with settings available=%s, When Chat configures a draft and sends a supported Turn, Then available settings deliver it and unavailable settings fail closed",
+    "Given a paired workspace with settings available=%s, When Chat configures a draft and sends a supported Turn, Then available settings deliver it and unavailable settings retain Platform's error details",
     async (settingsAvailable) => {
         const platform = await platformPeer({ agentsOnline: true, settingsAvailable });
         const database = new InMemoryD1Database();
@@ -102,6 +102,14 @@ test.each([true, false])(
                 agentConfigRevision: 1,
             });
             expect(configured.status).toBe(settingsAvailable ? 202 : 409);
+            if (!settingsAvailable) {
+                expect(await configured.json()).toEqual({
+                    error: {
+                        code: "agent_unavailable",
+                        message: "Platform could not complete Runtime setup. Cause: The settings agent is unavailable",
+                    },
+                });
+            }
             expect(await (await request(`chat/bots/${bot.botId}/managed-sessions`, {})).json()).toEqual({
                 sessions: [],
             });
