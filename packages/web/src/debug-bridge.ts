@@ -3,7 +3,7 @@ export interface MobiusChatDebugSession {
     readonly blocks: () => readonly unknown[];
 }
 
-export interface MobiusChatDebugBridge {
+interface MobiusChatDebugBridge {
     readonly currentSession: () => MobiusChatDebugSession | null;
 }
 
