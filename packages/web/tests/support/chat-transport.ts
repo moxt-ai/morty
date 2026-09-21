@@ -110,6 +110,22 @@ export class ChatTransport implements ApiTransport {
                 requestId: "workspace-request",
             });
         }
+        if (
+            request.method === "POST" &&
+            path === `/mobius-cloud/api/chat/projects/${projectId}/bots/${botId}/managed-session`
+        ) {
+            return Response.json(
+                {
+                    error: {
+                        code: this.#agentOnline ? "INVALID_SESSION" : "runtime_offline",
+                        message: this.#agentOnline
+                            ? "The saved Session is unavailable."
+                            : "The local Runtime is offline.",
+                    },
+                },
+                { status: 409 },
+            );
+        }
         if (request.method === "POST" && path === `/mobius-cloud/api/projects/${projectId}/identity/pairings`) {
             return Response.json({
                 url: `${window.location.origin}/pair.md?token=mobius_pair_v2.runtime.${"a".repeat(43)}`,
