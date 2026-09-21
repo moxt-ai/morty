@@ -111,3 +111,31 @@ test("Given an offline paired Agent, When the Web application opens, Then Chat r
     expect((composer as HTMLTextAreaElement).disabled).toBe(false);
     expect(document.querySelector(`[data-testid="${dataTestId.pairingInstruction}"]`)).toBeNull();
 });
+
+test("Given an open Session loses its Runtime, When the same Runtime reconnects, Then the page reports Connected again", async () => {
+    window.history.replaceState(null, "", "/chat?sessionId=session-one");
+    const transport = new ChatTransport();
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+        root?.render(
+            <ApiTransportProvider transport={transport}>
+                <ToastProvider>
+                    <WorkspaceApplication
+                        activeIdentity={applicationIdentity}
+                        authorize={async (signal) => signal.throwIfAborted()}
+                        userId="user-one"
+                    />
+                </ToastProvider>
+            </ApiTransportProvider>,
+        );
+    });
+    await act(async () => await waitForText(`[data-testid="${dataTestId.botConnectionStatus}"]`, "Disconnected"));
+
+    await act(async () => {
+        transport.connectAgent();
+        await waitForText(`[data-testid="${dataTestId.botConnectionStatus}"]`, "Connected");
+    });
+});
