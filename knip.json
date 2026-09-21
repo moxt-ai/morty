@@ -12,6 +12,7 @@
         "packages/web": {
             "entry": [
                 "src/main.tsx",
+                "tests/**/*.integration.test.tsx",
                 "src/views/chat/app.tsx",
                 "src/views/applications/slack-management.tsx",
                 "src/components/ui/*.tsx"

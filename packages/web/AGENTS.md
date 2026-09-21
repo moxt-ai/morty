@@ -22,6 +22,7 @@ These rules apply to `packages/web`. Repository-wide rules in the root `AGENTS.m
 ## Testing
 
 - Do not run `pnpm ci:check` on a local machine. Run `pnpm lint` and `pnpm typecheck`, plus only related test cases when needed.
-- Integration tests must exercise only user behavior through mouse or keyboard operations. Direct access to stores in tests is forbidden.
+- Integration tests enter through navigation or exercise user behavior through mouse and keyboard operations. Direct access to stores in tests is forbidden.
 - Integration tests must bootstrap and render the entire application. Rendering individual React components or views in an integration test is forbidden.
-- Tests must select elements with shared `data-testid.ts` constants and `getByTestId`. `getByRole`, `querySelector`, and ad hoc test IDs are forbidden.
+- Tests prefer accessible roles, names, labels, and visible text. Use constants from `data-testid.ts` when an element has no stable semantic selector or the ID represents a supported product state. Ad hoc test IDs and selectors coupled to styling or DOM structure are forbidden.
+- Keep one stateful fake at the external API transport boundary. Do not replace modules, inject stores, or define request mocks inside individual scenarios.

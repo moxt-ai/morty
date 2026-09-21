@@ -25,6 +25,7 @@
         "test:coverage": "node scripts/coverage.mjs",
         "test:coverage:merge": "node scripts/coverage.mjs --merge-only",
         "test:worker": "pnpm --dir packages/worker exec vitest run --coverage",
+        "test:web": "pnpm --dir packages/web exec vitest run",
         "test:e2e": "pnpm --filter @moxt-ai/mobius-chat-e2e test",
         "knip": "knip",
         "check:static": "pnpm typecheck && pnpm build && pnpm lint && pnpm knip",

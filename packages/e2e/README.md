@@ -28,3 +28,8 @@ Real third-party Agent, provider, tool-call, ACP, and daemon compatibility belon
 to `third-party/mobius/tests/agent-daemon`. The browser journeys keep a
 deterministic ACP Agent and prove the Chat-owned side of that boundary, including
 media rendering and on-demand local-file transfer.
+
+Browser-side error branches and state transitions belong to the lightweight full-
+application suite in `packages/web/tests`. Keep only the critical successful proof
+of those behaviors here; do not add an E2E scenario solely because a Web regression
+needs automated coverage.
