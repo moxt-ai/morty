@@ -7,7 +7,7 @@ export function MessageCopyButton({ text }: { readonly text: string }) {
     return (
         <button
             aria-label={label}
-            className="invisible absolute -bottom-7 right-1 flex size-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-black/[0.045] hover:text-foreground focus:visible focus:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/60 group-hover/message:visible group-hover/message:opacity-100 group-focus-within/message:visible group-focus-within/message:opacity-100 motion-reduce:transition-none"
+            className="invisible absolute -bottom-7 right-1 z-10 flex size-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-black/[0.045] hover:text-foreground focus:visible focus:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/60 group-hover/message:visible group-hover/message:opacity-100 group-focus-within/message:visible group-focus-within/message:opacity-100 motion-reduce:transition-none"
             onClick={() => {
                 if (navigator.clipboard === undefined) {
                     setCopy("failed");
