@@ -28,7 +28,8 @@ Do not ask for an additional replacement confirmation.
    and install or repair missing dependencies using the host's normal tools.
 3. Download `{{BASE_URL}}/setup.mjs` into a private local directory, with
    finite timeouts and no redirects. Inspect it before running.
-4. Set `HARNESS` to your own harness ID: `codex`, `claude`, or `opencode`. Set
+4. Set `HARNESS` to your own harness ID: `codex`, `claude`, `opencode`, or
+   `oh-my-pi`. Set
    `SESSION_ID` to this current harness session's exact ID. Both values are required.
    Honor an explicit user choice instead. Complete that harness's installation and
    authentication if needed; do not ask the user to choose when your own harness is available.

@@ -101,7 +101,7 @@ otherwise stop this new process and report the configuration mismatch.
 
 ## Pair the current session
 
-Use the current harness ID (`codex`, `claude`, or `opencode`) from trusted local
+Use the current harness ID (`codex`, `claude`, `opencode`, or `oh-my-pi`) from trusted local
 harness metadata. Never invent it.
 
 Open `$CHAT_ORIGIN/` in the browser to create or restore the local Chat workspace.
