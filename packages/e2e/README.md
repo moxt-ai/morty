@@ -6,8 +6,13 @@ This package has one local product stack and one browser product suite.
 
 `conversation.e2e.test.ts` and `setup.e2e.test.ts` are the executable control
 surface for Mobius Chat. They run with Playwright and a deterministic stateful ACP
-Agent. Each file is one long journey through the real Chat, Platform, Mobius,
+Agent. Together their few long journeys cross the real Chat, Platform, Mobius,
 Runtime, protocol, and browser path.
+
+The setup journey is the sole owner of CLI preparation, pairing, browser handoff,
+configuration persistence, and reconnect behavior. Worker tests cover only the
+pairing-ticket HTTP contract; they do not spawn the setup CLI or repeat its local
+filesystem matrix.
 
 Run them with:
 
