@@ -7,6 +7,7 @@ import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import { ChatComposerMoreMenu } from "../../components/chat/chat-composer-more-menu.tsx";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
 import { ChatMessageQueue } from "../../components/chat/chat-message-queue.tsx";
+import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { FilePreview } from "../../components/chat/file-preview.tsx";
 import {
     type ElicitationInteractionResponse,
@@ -20,6 +21,7 @@ import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { SessionConnectionKind } from "../../view-models/chat/bot-chat-home-store.ts";
 import { createBrowserFilePreviewStore } from "../../view-models/chat/file-preview-store.ts";
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
+import type { QueuedDraftMessage } from "../../view-models/chat/conversation-creation-machine.ts";
 import { type SessionActivityState, workingCommandId } from "../../view-models/chat/session-activity-machine.ts";
 import { sessionDebugBlocks } from "../../view-models/chat/session-debug-blocks.ts";
 import { createSessionPaneModel, sessionPanePresentation } from "../../view-models/chat/session-pane-store.ts";
@@ -27,6 +29,7 @@ import { MobiusSessionMessage } from "./mobius-session-message.tsx";
 
 export function MobiusSessionPane({
     session,
+    initialMessage,
     botId,
     requests,
     endRemoteAccess,
@@ -34,6 +37,7 @@ export function MobiusSessionPane({
     onStatusChange,
 }: {
     readonly session: OpenMobiusSession;
+    readonly initialMessage?: QueuedDraftMessage | undefined;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession" | "steerTurn" | "submitTurn">;
     readonly endRemoteAccess?: (signal: AbortSignal) => Promise<void>;
@@ -132,6 +136,9 @@ export function MobiusSessionPane({
         await pane.store.getState().respondToElicitation(response, controller.signal);
     };
     const presentation = sessionPanePresentation(model, delivery, taskControls, messageQueue);
+    const initialMessageVisible =
+        initialMessage !== undefined &&
+        !model.messages.some((message) => message.role === "user" && message.text === initialMessage.content);
     useEffect(() => {
         onStatusChange(sessionId, model.activity);
     }, [model.activity, onStatusChange, sessionId]);
@@ -200,6 +207,19 @@ export function MobiusSessionPane({
                     aria-label="Messages"
                     className="min-h-0 flex-1 space-y-8 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10 lg:px-12"
                 >
+                    {initialMessageVisible && (
+                        <div className="mx-auto w-full min-w-0 max-w-[920px]">
+                            <UserPromptMessage
+                                images={initialMessage.attachments.flatMap((attachment) =>
+                                    attachment.kind === "image" ? [attachment.image] : [],
+                                )}
+                                resources={initialMessage.attachments.flatMap((attachment) =>
+                                    attachment.kind === "resource" ? [attachment.resource] : [],
+                                )}
+                                text={initialMessage.content}
+                            />
+                        </div>
+                    )}
                     {model.messages.map((message) => {
                         const workingOnly =
                             message.role === "assistant" &&

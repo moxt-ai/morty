@@ -295,6 +295,7 @@ export function BotChatHome({
                     requests={requests}
                     key={model.sessionView.session.result.ready.sessionId}
                     session={model.sessionView.session}
+                    initialMessage={model.creation.kind === "draft-message-sent" ? model.creation.message : undefined}
                     onConnectionStatusChange={onConnectionStatusChange}
                     onStatusChange={onStatusChange}
                     {...(remoteAccess ? { endRemoteAccess } : {})}
@@ -343,7 +344,7 @@ export function BotChatHome({
                                     )}
                                 </div>
                             ) : queuedInitialMessage !== null && creationStatus !== null ? (
-                                <div className="mx-auto mt-auto w-full min-w-0 max-w-[920px]">
+                                <div className="mx-auto flex w-full min-w-0 max-w-[920px] flex-col gap-2">
                                     <div data-testid={dataTestId.queuedMessage}>
                                         <UserPromptMessage
                                             images={queuedInitialMessage.attachments.flatMap((attachment) =>
@@ -357,12 +358,21 @@ export function BotChatHome({
                                     </div>
                                     <p
                                         aria-live="polite"
-                                        className="text-right text-xs text-muted-foreground"
+                                        className={`text-right text-xs ${creationError.length > 0 ? "text-destructive" : "text-muted-foreground"}`}
                                         data-testid={dataTestId.initialMessageStatus}
                                         role="status"
                                     >
                                         {creationStatus}
                                     </p>
+                                    {creationError.length > 0 && (
+                                        <p
+                                            aria-live="assertive"
+                                            className="ml-auto max-w-[85%] rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-right text-xs text-destructive"
+                                            role="alert"
+                                        >
+                                            {creationError}
+                                        </p>
+                                    )}
                                 </div>
                             ) : active === null ? null : (
                                 <div className="m-auto max-w-lg px-6 text-center" data-testid={dataTestId.chatLanding}>

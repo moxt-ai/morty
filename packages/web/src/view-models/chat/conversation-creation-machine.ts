@@ -31,6 +31,7 @@ export type ConversationCreationState =
     | {
           readonly kind: "draft-message-sent";
           readonly conversationId: string;
+          readonly message: QueuedDraftMessage;
           readonly session: OpenMobiusSession;
       };
 
@@ -94,7 +95,12 @@ export function transitionConversationCreation(
                 : state;
         case "draft-message-sent":
             return state.kind === "draft-message-sending" && isCurrentMessage(state, event.commandId)
-                ? { conversationId: event.conversationId, kind: "draft-message-sent", session: event.session }
+                ? {
+                      conversationId: event.conversationId,
+                      kind: "draft-message-sent",
+                      message: state.message,
+                      session: event.session,
+                  }
                 : state;
         case "draft-message-send-failed":
             return state.kind === "draft-message-sending" && isCurrentMessage(state, event.commandId)
@@ -111,8 +117,9 @@ export function transitionConversationCreation(
 export function queuedDraftMessage(state: ConversationCreationState): QueuedDraftMessage | null {
     switch (state.kind) {
         case "draft":
-        case "draft-message-sent":
             return null;
+        case "draft-message-sent":
+            return state.message;
         case "session-creating":
         case "session-create-failed":
         case "draft-message-sending":
@@ -127,7 +134,7 @@ export function conversationCreationStatus(state: ConversationCreationState): st
         case "draft-message-sent":
             return null;
         case "session-creating":
-            return "Creating session";
+            return "Session creating";
         case "session-create-failed":
             return "Session creation failed";
         case "draft-message-sending":

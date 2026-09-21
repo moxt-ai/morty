@@ -74,7 +74,7 @@ test("Given a paired workspace, When a user works across conversations, Then sen
         await composer.fill("First conversation");
         await page.getByRole("button", { name: "Send message", exact: true }).click();
         await expect(page.getByTestId(dataTestId.queuedMessage)).toHaveText("First conversation");
-        await expect(page.getByTestId(dataTestId.initialMessageStatus)).toHaveText("Creating session");
+        await expect(page.getByTestId(dataTestId.initialMessageStatus)).toHaveText("Session creating");
         await expect(page).toHaveURL(/\?conversationId=/u);
         await expect(page.getByRole("list", { name: "Attachments", exact: true })).toHaveCount(0);
         await expect(page.getByTestId(dataTestId.agentResponse).first()).toContainText("First conversation");
