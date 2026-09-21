@@ -18,7 +18,7 @@ function isR2Bucket(value: unknown): value is R2Bucket {
     return v.safeParse(r2BindingSchema, value).success;
 }
 
-export function configuredDatabase(bindings: CloudSlackStorageBindings): D1Database | null {
+function configuredDatabase(bindings: CloudSlackStorageBindings): D1Database | null {
     return isD1Database(bindings.DATABASE) ? bindings.DATABASE : null;
 }
 
