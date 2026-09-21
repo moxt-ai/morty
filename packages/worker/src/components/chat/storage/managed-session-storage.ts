@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import * as v from "valibot";
-import { createDatabase, type Database } from "../../../schema/d1/database.ts";
+import { createDatabase, type Database } from "../../../schema/project-do/database.ts";
 import { chatManagedSession } from "../../../schema/project-do/index.ts";
 import { PlatformProjectError, platformIdentifier } from "../../management/entity/platform-project.ts";
 

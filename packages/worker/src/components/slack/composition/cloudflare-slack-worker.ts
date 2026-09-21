@@ -23,13 +23,8 @@ import { slackLogger } from "../infra/util/logger.ts";
 import { SecretCipher } from "../infra/util/secret-cipher.ts";
 import { SlackQueueHandler } from "../queue/slack-queue-handler.ts";
 import { ClockService } from "../service/identity/clock-service.ts";
-import { D1SqlDatabase } from "../storage/d1-database.ts";
 import { DatabaseSlackAppDirectory } from "../storage/database-slack-app-directory.ts";
-import {
-    CloudAttachmentStorageResolver,
-    CloudDatabaseResolver,
-    configuredDatabase,
-} from "../storage/slack-storage-resolvers.ts";
+import { CloudAttachmentStorageResolver, configuredOrm } from "../storage/slack-storage-resolvers.ts";
 import { createSlackDependencies } from "./create-dependencies.ts";
 import { createSlackWorker } from "./slack-worker.ts";
 
@@ -81,10 +76,9 @@ const slack = createSlackWorker<
     ExecutionContext | undefined,
     MessageBatch<SlackQueueMessage>
 >((bindings) => {
-    const nowMilliseconds = () => performance.now();
-    const host = { config: { bindings }, metrics: slackLogger, nowMilliseconds };
-    const database = configuredDatabase(bindings);
-    if (database === null) {
+    const host = { config: { bindings } };
+    const orm = configuredOrm(bindings);
+    if (orm === null) {
         throw new Error("Slack database is unavailable.");
     }
     const cipher = new SecretCipher(bindings.SLACK_TOKEN_ENCRYPTION_KEY);
@@ -116,10 +110,9 @@ const slack = createSlackWorker<
         secretEncryption: cipher,
     };
     const storages = {
-        databaseResolver: new CloudDatabaseResolver(host),
+        database: orm,
         attachmentStorageResolver: new CloudAttachmentStorageResolver(host),
     };
-    const slackAppDatabase = new D1SqlDatabase({ database, metrics: slackLogger, nowMilliseconds });
     const infrastructure = { config, gateways, logger: slackLogger, storages, utilities };
     const cx = createSlackDependencies({
         ...infrastructure,
@@ -134,7 +127,7 @@ const slack = createSlackWorker<
                 resolve: (clerkUserId: string, signal: AbortSignal) =>
                     identities.resolveOrCreateClerk(clerkUserId, Date.now(), signal),
             },
-            slackAppDirectory: new DatabaseSlackAppDirectory(slackAppDatabase, cipher),
+            slackAppDirectory: new DatabaseSlackAppDirectory(orm, cipher),
         },
     });
     return {

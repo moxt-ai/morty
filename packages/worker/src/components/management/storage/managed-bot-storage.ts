@@ -1,4 +1,4 @@
-import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, or } from "drizzle-orm";
 import * as v from "valibot";
 import type { HttpError } from "../../../infra/http-error.ts";
 import { createDatabase, type Database } from "../../../schema/d1/database.ts";
@@ -142,12 +142,16 @@ export class ManagedBotStorage {
         const parsedBotId = v.parse(identifier, botId);
         signal.throwIfAborted();
         const database = this.#requireDatabase();
-        const result = await database.run(sql`
-            delete from ${managedBot}
-            where ${managedBot.userId} = ${userId}
-              and ${managedBot.botId} = ${parsedBotId}
-              and (select count(*) from ${managedBot} as user_bots where user_bots.user_id = ${userId}) > 1
-        `);
+        const result = await database
+            .delete(managedBot)
+            .where(
+                and(
+                    eq(managedBot.userId, userId),
+                    eq(managedBot.botId, parsedBotId),
+                    gt(database.$count(managedBot, eq(managedBot.userId, userId)), 1),
+                ),
+            )
+            .run();
         signal.throwIfAborted();
         if (result.meta.changes === 1) {
             return "deleted";

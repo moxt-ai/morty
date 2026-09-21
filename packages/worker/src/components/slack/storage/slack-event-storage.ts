@@ -22,7 +22,6 @@ import type {
     SlackInstallationRecord,
 } from "../entity/installation";
 import type { TenantContext } from "../entity/tenant-context";
-import type { DatabaseResolver } from "../infra/database-resolver";
 import { queueMessageSchema, type SecretCipher } from "../infra/index";
 import type { SlackQueue } from "../infra/slack-queue";
 import type { StoredSlackConversation, StoredSlackEventTarget } from "./slack-event-records";
@@ -272,21 +271,21 @@ export class SlackEventStorage {
             JSON.parse(v.parse(v.object({ payload: v.string() }), row).payload),
         );
     };
-    readonly #database: DatabaseResolver;
+    readonly #database: Database;
     readonly #cipher: SecretCipher;
     readonly #events: SlackQueue;
 
     constructor(cx: {
         readonly gateways: { readonly queue: SlackQueue };
         readonly storages: {
-            readonly databaseResolver: DatabaseResolver;
+            readonly database: Database;
         };
         readonly utilities: { readonly secretEncryption: SecretCipher };
     }) {
         const { queue: events } = cx.gateways;
-        const { databaseResolver: databases } = cx.storages;
+        const { database } = cx.storages;
         const { secretEncryption: cipher } = cx.utilities;
-        this.#database = databases;
+        this.#database = database;
         this.#cipher = cipher;
         this.#events = events;
     }
@@ -1249,7 +1248,7 @@ export class SlackEventStorage {
         query: (database: Database) => Promise<unknown>,
     ): Promise<unknown> => {
         signal.throwIfAborted();
-        const result = await this.#database.resolve().execute("first", 1, signal, query);
+        const result = await query(this.#database);
         signal.throwIfAborted();
         return result;
     };
@@ -1260,19 +1259,19 @@ export class SlackEventStorage {
         query: (database: Database) => Promise<D1Result>,
     ): Promise<{ readonly meta: { readonly changes: number } }> => {
         signal.throwIfAborted();
-        const result = await this.#database.resolve().execute("run", 1, signal, query);
+        const result = await query(this.#database);
         signal.throwIfAborted();
         return result;
     };
 
     readonly #batch = async (
         _tenant: TenantContext,
-        queryCount: number,
+        _queryCount: number,
         signal: AbortSignal,
         query: (database: Database) => Promise<void>,
     ): Promise<void> => {
         signal.throwIfAborted();
-        await this.#database.resolve().execute("batch", queryCount, signal, query);
+        await query(this.#database);
         signal.throwIfAborted();
     };
 }
