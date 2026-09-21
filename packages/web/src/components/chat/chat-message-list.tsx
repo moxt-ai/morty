@@ -184,7 +184,7 @@ export function NativeSessionHistoryView({
     if (history.status === "unavailable") {
         return (
             <p className="mb-5 text-center text-xs text-muted-foreground" role="status">
-                This Agent restores context but does not provide message history.
+                {history.cause.message}
             </p>
         );
     }

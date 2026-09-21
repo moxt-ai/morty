@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { ToolThinkingEntry } from "../../services/chat/agent-reply.ts";
 import { EditTool, matchesEditTool } from "./edit-tool.tsx";
 import { matchesReadTool, ReadTool } from "./read-tool.tsx";
+import { matchesSearchToolCall, SearchToolCall } from "./search-tool-call.tsx";
 import { matchesShellCommandToolCall, ShellCommandToolCall } from "./shell-command-tool-call.tsx";
 
 interface ToolRenderer {
@@ -30,9 +31,21 @@ const TOOL_RENDERERS: readonly ToolRenderer[] = [
         ),
     },
     {
-        matches: (entry) => matchesReadTool(entry.output),
+        matches: (entry) => matchesReadTool(entry.input, entry.output),
         render: (entry, autoOpen) => (
             <ReadTool
+                autoOpen={autoOpen}
+                input={entry.input}
+                output={entry.output}
+                state={entry.state}
+                title={entry.title}
+            />
+        ),
+    },
+    {
+        matches: (entry) => matchesSearchToolCall(entry.input),
+        render: (entry, autoOpen) => (
+            <SearchToolCall
                 autoOpen={autoOpen}
                 input={entry.input}
                 output={entry.output}

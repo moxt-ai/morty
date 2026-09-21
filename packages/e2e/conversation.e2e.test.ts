@@ -30,7 +30,7 @@ test("Given a paired workspace, When a user works across conversations, Then sen
     });
 
     let firstConversationId = "";
-    await test.step("create the first conversation with an image", async () => {
+    await test.step("Given a new conversation, When the first turn completes, Then Chat returns to idle without a reload", async () => {
         const composer = page.getByTestId(dataTestId.messageComposer);
         await composer.evaluate((element) => {
             const bytes = Uint8Array.from(
@@ -50,6 +50,11 @@ test("Given a paired workspace, When a user works across conversations, Then sen
         await expect(page.getByRole("list", { name: "Attachments", exact: true })).toHaveCount(0);
         await expect(page.getByTestId(dataTestId.agentResponse).first()).toContainText("First conversation");
         await expect(page.getByTestId(dataTestId.agentReplyStatus)).toHaveCount(0);
+        await expect(page.getByTestId(dataTestId.workingIndicator)).toHaveCount(0);
+        await expect(page.getByTestId(dataTestId.sendMessage)).toHaveAttribute("aria-label", "Send message");
+        await expect(page.getByTestId(dataTestId.recognizedReadToolCall).first()).toContainText(
+            "Read package metadata",
+        );
         firstConversationId = new URL(page.url()).searchParams.get("conversationId") ?? "";
         assert.notEqual(firstConversationId, "");
     });
@@ -70,11 +75,18 @@ test("Given a paired workspace, When a user works across conversations, Then sen
         const followUp = "Continue the second conversation";
         await runtime.sendMessage(followUp);
         await expect(page.getByTestId(dataTestId.agentResponse).nth(1)).toContainText(followUp);
+        const finalFollowUp = "Complete the second conversation";
+        await runtime.sendMessage(finalFollowUp);
+        await expect(page.getByTestId(dataTestId.agentResponse).nth(2)).toContainText(finalFollowUp);
         const savedUrl = page.url();
         await page.reload();
-        await expect(page.getByTestId(dataTestId.agentResponse).nth(1)).toContainText(followUp);
+        await expect(page.getByTestId(dataTestId.agentResponse).nth(2)).toContainText(finalFollowUp);
         expect(page.url()).toBe(savedUrl);
-        await expect(page.getByTestId(dataTestId.userMessage)).toHaveText(["Second conversation", followUp]);
+        await expect(page.getByTestId(dataTestId.userMessage)).toHaveText([
+            "Second conversation",
+            followUp,
+            finalFollowUp,
+        ]);
 
         await page.goto(`${new URL(page.url()).origin}/?conversationId=${firstConversationId}`);
         await expect(page.getByTestId(dataTestId.userMessage)).toHaveText(["First conversation"]);
@@ -97,6 +109,18 @@ test("Given a paired workspace, When a user works across conversations, Then sen
         await expect(page.getByTestId(dataTestId.agentResponse).last()).toContainText(
             "OpenCode turn 2: recover completed native history",
         );
+        await runtime.sendMessage("confirm completed native history");
+        await expect(page.getByTestId(dataTestId.agentResponse).last()).toContainText(
+            "OpenCode turn 3: confirm completed native history",
+        );
+        await page.reload();
+        await expect(page.getByTestId(dataTestId.agentReasoning).last()).toContainText("Inspecting the workspace");
+        await expect(
+            page.getByTestId(dataTestId.agentToolCall).filter({ hasText: "Read package metadata" }).last(),
+        ).toBeVisible();
+        await expect(
+            page.getByTestId(dataTestId.agentToolCall).filter({ hasText: "Agent error" }).last(),
+        ).toContainText("Agent could not inspect the optional workspace file");
     });
 
     await test.step("show a cancelled response after the user stops the agent", async () => {
