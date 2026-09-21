@@ -80,6 +80,10 @@ export async function createChatWorker() {
                 }
                 return { failure: runtime.failure };
             },
+            connectRuntime: async () => {
+                const runtime = await platform.connectAgent(identity.projectId);
+                return { failure: runtime.failure, runtimeId: runtime.runtimeId };
+            },
             identity: {
                 getToken: async (signal: AbortSignal): Promise<string> => {
                     signal.throwIfAborted();

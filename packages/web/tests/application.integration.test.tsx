@@ -140,3 +140,59 @@ test("Given an unpaired workspace, When its Agent responds with local media, The
         await fixture.close();
     }
 });
+
+test("Given a Bot bound to one Runtime while an older pairing of the same machine is still listed, When the user opens Native Sessions, Then the agent selector offers only the bound Runtime's agents", {
+    timeout: 30_000,
+}, async () => {
+    const fixture = await createChatWorker();
+    window.location.href = `${fixture.origin}/chat`;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    try {
+        await act(async () => {
+            root?.render(
+                <ApiTransportProvider transport={fixture.transport}>
+                    <ToastProvider>
+                        <WorkspaceApplication
+                            activeIdentity={fixture.identity}
+                            authorize={async (signal) => signal.throwIfAborted()}
+                            userId={fixture.userId}
+                        />
+                    </ToastProvider>
+                </ApiTransportProvider>,
+            );
+        });
+        await act(async () => await waitForElement(`[data-testid="${dataTestId.chatLanding}"]`));
+        await act(async () => await fixture.connectAgent());
+        await act(async () => await fixture.connectRuntime());
+        await act(async () => {
+            await waitForText(`[data-testid="${dataTestId.botConnectionStatus}"]`, "Connected");
+        });
+
+        const nativeSessions = await act(async () => {
+            const button = await waitForElement('button[aria-label="Native Sessions"]');
+            button.click();
+            return await waitForElement('button[aria-label="Session agent"]');
+        });
+        await act(async () => {
+            nativeSessions.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+            await vi.waitFor(
+                () => {
+                    if (document.querySelectorAll('[role="option"]').length === 0) {
+                        throw new Error(`No agent options appeared; page: ${document.body.textContent}`);
+                    }
+                },
+                { timeout: 12_000 },
+            );
+        });
+        const options = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+        expect(options.map((option) => option.textContent)).toEqual(["Codex · Fake Runtime"]);
+    } finally {
+        if (root !== null) {
+            await act(async () => root?.unmount());
+            root = null;
+        }
+        await fixture.close();
+    }
+});
