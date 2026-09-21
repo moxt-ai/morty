@@ -18,18 +18,18 @@
         "test:watch": "vitest --config vitest.config.ts"
     },
     "devDependencies": {
-        "@cloudflare/vitest-plugin": "^1.1.4",
+        "@cloudflare/vitest-plugin": "catalog:",
         "@moxt-ai/mobius-test": "link:../../third-party/mobius/tests",
-        "drizzle-kit": "0.31.8",
-        "esbuild": "0.25.12",
-        "miniflare": "5.20260903.0-alpha"
+        "drizzle-kit": "catalog:",
+        "esbuild": "catalog:",
+        "miniflare": "catalog:"
     },
     "dependencies": {
-        "@clerk/backend": "3.17.1",
+        "@clerk/backend": "catalog:",
         "@moxt-ai/mobius-sdk": "catalog:",
-        "drizzle-orm": "^0.45.2",
-        "hono": "^4.13.5",
-        "pino": "^10.3.1",
-        "valibot": "1.4.2"
+        "drizzle-orm": "catalog:",
+        "hono": "catalog:",
+        "pino": "catalog:",
+        "valibot": "catalog:"
     }
 }

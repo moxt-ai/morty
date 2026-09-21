@@ -22,6 +22,7 @@
         "enabled": true,
         "domains": {
             "project": "recommended",
+            "react": "recommended",
             "types": "recommended",
             "test": "recommended"
         },
