@@ -2,7 +2,6 @@ import { CircleAlert, X } from "lucide-react";
 import { AgentMarkdown, type MarkdownImageReader } from "../../components/agents/agent-markdown.tsx";
 import { AgentRichContent } from "../../components/agents/agent-rich-content.tsx";
 import { AgentReply } from "../../components/chat/agent-reply.tsx";
-import { AgentWorkingIndicator } from "../../components/chat/agent-thinking.tsx";
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { activitiesForIds, type RecordedAgentActivity } from "../../services/chat/agent-activities.ts";
@@ -13,7 +12,6 @@ export function MobiusSessionMessage({
     activities,
     activeCommandId,
     activeMessageId,
-    activeUserMessageId,
     deliveryUnknownUserMessageId,
     onRemoveUnknownDelivery,
     onRetryUnknownDelivery,
@@ -26,7 +24,6 @@ export function MobiusSessionMessage({
     readonly activities: ReadonlyMap<string, RecordedAgentActivity>;
     readonly activeCommandId: string | null;
     readonly activeMessageId: string | null;
-    readonly activeUserMessageId: string | null;
     readonly deliveryUnknownUserMessageId: string | null;
     readonly onRemoveUnknownDelivery: () => void;
     readonly onRetryUnknownDelivery: () => void;
@@ -54,8 +51,6 @@ export function MobiusSessionMessage({
                                 >
                                     <CircleAlert aria-hidden="true" className="size-4.5" />
                                 </button>
-                            ) : message.id === activeUserMessageId ? (
-                                <AgentWorkingIndicator />
                             ) : undefined
                         }
                         data-testid={dataTestId.userMessage}

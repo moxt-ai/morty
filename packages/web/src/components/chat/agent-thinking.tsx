@@ -1,4 +1,4 @@
-import { Brain, ChevronDown, LoaderCircle, Wrench } from "lucide-react";
+import { Brain, ChevronDown, Wrench } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { ThinkingEntry, ThinkingPresentation, ToolThinkingEntry } from "../../services/chat/agent-reply.ts";
 import { AgentMarkdown } from "../agents/agent-markdown.tsx";
@@ -10,18 +10,6 @@ type ToolEntry = ToolThinkingEntry;
 type TimelineEntry =
     | { readonly kind: "reasoning"; readonly id: string; readonly entries: readonly ReasoningEntry[] }
     | { readonly kind: "tool"; readonly entry: ToolEntry };
-
-export function AgentWorkingIndicator() {
-    return (
-        <span role="status" aria-label="Agent working" className="inline-flex items-center gap-2">
-            <LoaderCircle
-                aria-hidden="true"
-                className="size-3.5 animate-spin text-primary motion-reduce:animate-none"
-            />
-            <span className="sr-only">Agent is working</span>
-        </span>
-    );
-}
 
 function ReasoningDisclosure({
     autoOpen,

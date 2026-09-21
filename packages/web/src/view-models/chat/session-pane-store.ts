@@ -210,8 +210,6 @@ export function sessionPanePresentation(
             : (model.messages.findLast(
                   (message) => message.role === "assistant" && message.commandId === activeCommandId,
               )?.id ?? null);
-    const activeUserMessageId =
-        activeCommandId === null ? null : (model.messages.findLast((message) => message.role === "user")?.id ?? null);
     const deliveryUnknownCommandId =
         delivery.state.kind === "delivery-unknown" ? delivery.state.journal.commandId : null;
     const deliveryUnknownUserMessageId =
@@ -221,7 +219,6 @@ export function sessionPanePresentation(
                   ?.id ?? null);
     return {
         activeMessageId,
-        activeUserMessageId,
         busy,
         composerDisabled,
         compactAvailable,
