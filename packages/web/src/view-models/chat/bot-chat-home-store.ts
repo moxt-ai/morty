@@ -33,7 +33,7 @@ type Target =
       };
 
 type ActiveView = { readonly kind: "draft"; readonly bot: ManagedBot };
-export type SessionLoading = { readonly kind: "session-loading"; readonly bot: ManagedBot };
+type SessionLoading = { readonly kind: "session-loading"; readonly bot: ManagedBot };
 export type BotChatHomeView =
     | { readonly kind: "loading" }
     | { readonly kind: "connecting"; readonly bot: ManagedBot }
