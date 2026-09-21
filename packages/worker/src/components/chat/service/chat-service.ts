@@ -531,6 +531,10 @@ export class ChatService {
     };
 
     readonly configureBot = async (scope: ChatScope, input: ConfigureBotInput) => {
+        const current = await this.#bot(scope);
+        if (current.configuration !== null && current.configuration.runtimeId !== input.runtimeId) {
+            throw new PlatformProjectError("BOT_RUNTIME_FIXED", "Create a new Bot to pair a different Runtime.", 409);
+        }
         const agents = await this.#platform.chatAgents(scope.projectId, scope.signal);
         if (
             !agents.some(
@@ -544,17 +548,18 @@ export class ChatService {
             );
         }
         await this.#platform.discoverChatAgentSettings(scope.projectId, input, scope.signal);
-        const current = await this.#bot(scope);
         const bindingId = current.configuration?.bindingId ?? `binding_${crypto.randomUUID()}`;
-        const saved = await this.#managedBots.configureBot(
+        const result = await this.#managedBots.configureBot(
             scope.userId,
             scope.botId,
             { ...input, bindingId },
             Date.now(),
             scope.signal,
         );
-        if (!saved) {
-            throw new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);
+        if (result !== "configured") {
+            throw result === "runtime-mismatch"
+                ? new PlatformProjectError("BOT_RUNTIME_FIXED", "Create a new Bot to pair a different Runtime.", 409)
+                : new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);
         }
         this.#logger.info(
             { event: "bot-setup-requested", userId: scope.userId, projectId: scope.projectId, botId: scope.botId },

@@ -236,6 +236,44 @@ test("Given a first-time visitor, When their workspace and Bot are managed, Then
     ).toBe(401);
 });
 
+test("Given a user with multiple Bots, When they remove one Bot, Then the other remains and the last Bot cannot be removed", async () => {
+    const identity = await fixture.createAnonymousUser();
+    const environment = fixture.environment();
+    const botsUrl = `${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/bots`;
+    const headers = { authorization: `Bearer ${identity.token}` };
+    const initialResponse = await worker.fetch(new Request(botsUrl, { headers }), environment);
+    const initial = v.parse(
+        v.object({ bots: v.array(v.object({ botId: v.string(), displayName: v.string() })) }),
+        await initialResponse.json(),
+    ).bots;
+    const original = v.parse(v.object({ botId: v.string() }), initial[0]);
+
+    const blocked = await worker.fetch(
+        new Request(`${botsUrl}/${original.botId}`, { method: "DELETE", headers }),
+        environment,
+    );
+    expect(blocked.status).toBe(409);
+    expect(await blocked.json()).toMatchObject({ error: { code: "LAST_BOT_REQUIRED" } });
+
+    const createdResponse = await worker.fetch(
+        new Request(botsUrl, {
+            method: "POST",
+            headers: { ...headers, "content-type": "application/json" },
+            body: JSON.stringify({ displayName: "Laptop Bot" }),
+        }),
+        environment,
+    );
+    const created = v.parse(v.object({ botId: v.string() }), await createdResponse.json());
+    const removed = await worker.fetch(
+        new Request(`${botsUrl}/${created.botId}`, { method: "DELETE", headers }),
+        environment,
+    );
+    expect(removed.status).toBe(204);
+
+    const remainingResponse = await worker.fetch(new Request(botsUrl, { headers }), environment);
+    expect(await remainingResponse.json()).toEqual({ bots: initial });
+});
+
 test("Given a user with a Bot on a Project-scoped Platform, When setup checks the Bot workspace, Then the draft Bot and available agents are returned", async () => {
     const environment = fixture.environment();
     const identity = await fixture.createAnonymousUser();

@@ -29,6 +29,9 @@ export class ChatBotApi {
     readonly createBot = async (displayName: string, signal: AbortSignal): Promise<ChatBot> =>
         await this.#management.createBot(displayName, signal);
 
+    readonly deleteBot = async (botId: string, signal: AbortSignal): Promise<void> =>
+        await this.#management.deleteBot(botId, signal);
+
     readonly updateBot = async (
         botId: string,
         input: { readonly displayName: string; readonly instructions: string },

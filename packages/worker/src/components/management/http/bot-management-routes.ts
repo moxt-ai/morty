@@ -67,5 +67,14 @@ export function createBotManagementRoutes() {
                     ),
                 );
             },
-        );
+        )
+        .delete("/bots/:botId", authenticatedSession, async (context) => {
+            const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]);
+            await context.env.services.management.deleteBot(
+                context.get("session").userId,
+                context.req.param("botId"),
+                signal,
+            );
+            return context.body(null, 204);
+        });
 }

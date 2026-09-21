@@ -7,6 +7,7 @@ import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { dataTestId } from "../../data-testid.ts";
+import type { SelectedBotPreference } from "../../services/bots/selected-bot-preference.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer, WorkspaceLocation } from "../../services/identity/anonymous-identity-api.ts";
 import {
@@ -40,10 +41,13 @@ export function BotChatHome({
     endRemoteAccess,
     projectId,
     replaceWorkspace,
+    selectedBotPreference,
 }: {
     readonly requests: Pick<
         BotChatApi,
         | "listBots"
+        | "createBot"
+        | "deleteBot"
         | "access"
         | "archiveManagedSession"
         | "workspace"
@@ -66,6 +70,7 @@ export function BotChatHome({
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
     readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
     readonly projectId: string;
+    readonly selectedBotPreference: SelectedBotPreference;
     readonly replaceWorkspace?: (location: WorkspaceLocation, signal: AbortSignal) => Promise<void>;
 }) {
     const [store] = useState(() =>
@@ -102,6 +107,7 @@ export function BotChatHome({
                     window.history.replaceState(window.history.state, "", url);
                 },
             },
+            selectedBotPreference,
         }),
     );
     const model = useStore(store);
@@ -256,6 +262,7 @@ export function BotChatHome({
         >
             {active !== null && (
                 <ConversationSidebar
+                    activeBot={active.bot}
                     activeSession={activeSession}
                     activeId={
                         model.target.kind === "conversation-access"
@@ -264,9 +271,14 @@ export function BotChatHome({
                               ? model.target.sessionId
                               : ""
                     }
-                    botId={active.bot.botId}
+                    bots={model.bots}
+                    botOperation={model.botOperation}
                     connectionStatus={connectionStatus}
-                    onConnectionStatusClick={() => setPairingDialogOpen(true)}
+                    onCreateBot={store.getState().createBot}
+                    onPairAgain={() => setPairingDialogOpen(true)}
+                    onRemoveBot={store.getState().removeBot}
+                    onResetBotOperation={store.getState().resetBotOperation}
+                    onSelectBot={store.getState().selectBot}
                     requests={requests}
                     createTransfer={createTransfer}
                     onOpen={(session) => openManaged(session.kind, session.id)}
@@ -393,7 +405,7 @@ export function BotChatHome({
                     )}
                 </section>
             )}
-            {pairingDialogOpen && (
+            {pairingDialogOpen && active !== null && (
                 <Dialog
                     title={
                         disconnectedBot ? "Bot disconnected" : setupView === null ? "Pair agent again" : "Connect agent"
@@ -405,10 +417,12 @@ export function BotChatHome({
                     }
                     onClose={() => setPairingDialogOpen(false)}
                 >
-                    {setupView?.reason === "unconfigured" && replaceWorkspace !== undefined && (
-                        <WorkspaceRegionSelector projectId={projectId} replaceWorkspace={replaceWorkspace} />
-                    )}
-                    <PairingInstruction requests={requests} />
+                    {setupView?.reason === "unconfigured" &&
+                        model.bots.length === 1 &&
+                        replaceWorkspace !== undefined && (
+                            <WorkspaceRegionSelector projectId={projectId} replaceWorkspace={replaceWorkspace} />
+                        )}
+                    <PairingInstruction botId={active.bot.botId} requests={requests} />
                 </Dialog>
             )}
             {failureDialogOpen && model.view.kind === "connection-failed" && (

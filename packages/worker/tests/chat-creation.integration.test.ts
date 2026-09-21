@@ -68,6 +68,21 @@ const setupInput = {
     agentConfigRevision: 1,
 };
 
+test("Given a Bot bound to one Runtime, When setup requests another Runtime, Then the original Runtime binding remains fixed", async () => {
+    const fixture = await createChatFixture();
+    try {
+        expect((await fixture.request(`chat/bots/${fixture.botId}/setup`, setupInput)).status).toBe(202);
+        const rebound = await fixture.request(`chat/bots/${fixture.botId}/setup`, {
+            ...setupInput,
+            runtimeId: "runtime-2",
+        });
+        expect(rebound.status).toBe(409);
+        expect(await rebound.json()).toMatchObject({ error: { code: "BOT_RUNTIME_FIXED" } });
+    } finally {
+        await fixture.close();
+    }
+});
+
 test("Given an available Runtime, When a Bot is configured and used, Then settings, conversations, media, and instructions cross the Platform boundary", async () => {
     const fixture = await createChatFixture();
     try {

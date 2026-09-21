@@ -162,6 +162,8 @@ export class BotChatApi {
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly #waitForChange: (request: Request) => Promise<void>;
     readonly listBots: ManagementApi["listBots"];
+    readonly createBot: ManagementApi["createBot"];
+    readonly deleteBot: ManagementApi["deleteBot"];
     constructor(options: {
         readonly fetchRequest: (request: Request) => Promise<Response>;
         readonly origin: string;
@@ -174,7 +176,10 @@ export class BotChatApi {
         this.#fetchRequest = options.fetchRequest;
         this.#getToken = options.getToken;
         this.#waitForChange = options.waitForChange;
-        this.listBots = new ManagementApi(options).listBots;
+        const management = new ManagementApi(options);
+        this.listBots = management.listBots;
+        this.createBot = management.createBot;
+        this.deleteBot = management.deleteBot;
     }
     readonly access = async (botId: string, parent: AbortSignal, conversationId: string): Promise<ChatAccess> =>
         v.parse(

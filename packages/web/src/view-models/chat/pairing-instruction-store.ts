@@ -16,7 +16,7 @@ export interface PairingInstructionStore {
     readonly resetCopy: () => void;
 }
 
-export const createPairingInstructionStore = (requests: Pick<BotChatApi, "listBots" | "createPairingInstruction">) =>
+export const createPairingInstructionStore = (botId: string, requests: Pick<BotChatApi, "createPairingInstruction">) =>
     createStore<PairingInstructionStore>()((set, get) => ({
         copy: "idle",
         state: { kind: "loading" },
@@ -39,11 +39,7 @@ export const createPairingInstructionStore = (requests: Pick<BotChatApi, "listBo
         load: async (signal) => {
             set({ state: { kind: "loading" } });
             try {
-                const bot = (await requests.listBots(signal))[0];
-                if (bot === undefined) {
-                    throw new Error("Your Bot is unavailable.");
-                }
-                const ticket = await requests.createPairingInstruction(bot.botId, signal);
+                const ticket = await requests.createPairingInstruction(botId, signal);
                 signal.throwIfAborted();
                 set({ state: { kind: "ready", ...ticket } });
             } catch (cause) {

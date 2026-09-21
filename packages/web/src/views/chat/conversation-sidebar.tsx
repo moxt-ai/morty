@@ -7,8 +7,10 @@ import { Dialog } from "../../components/ui/dialog.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
-import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
+import type { ManagedBot } from "../../services/management/management-api.ts";
+import type { BotConnectionStatus, BotOperation } from "../../view-models/chat/bot-chat-home-store.ts";
 import { createConversationDirectoryStore } from "../../view-models/chat/conversation-directory-store.ts";
+import { BotSwitcherMenu } from "./bot-switcher-menu.tsx";
 import { MachineSharing } from "./machine-sharing.tsx";
 import { NativeSessionDialog, type OpenMobiusSession } from "./native-session-dialog.tsx";
 
@@ -31,9 +33,15 @@ function SidebarActionTooltip({ children, label }: { readonly children: ReactNod
 }
 
 export function ConversationSidebar({
-    botId,
+    activeBot,
+    bots,
+    botOperation,
     connectionStatus,
-    onConnectionStatusClick,
+    onCreateBot,
+    onPairAgain,
+    onRemoveBot,
+    onResetBotOperation,
+    onSelectBot,
     requests,
     activeId,
     onOpen,
@@ -42,9 +50,15 @@ export function ConversationSidebar({
     createTransfer,
     activeSession,
 }: {
-    readonly botId: string;
+    readonly activeBot: ManagedBot;
+    readonly bots: readonly ManagedBot[];
+    readonly botOperation: BotOperation;
     readonly connectionStatus: BotConnectionStatus;
-    readonly onConnectionStatusClick: () => void;
+    readonly onCreateBot: (displayName: string, signal: AbortSignal) => Promise<boolean>;
+    readonly onPairAgain: () => void;
+    readonly onRemoveBot: (signal: AbortSignal) => Promise<boolean>;
+    readonly onResetBotOperation: () => void;
+    readonly onSelectBot: (botId: string) => void;
     readonly requests: Pick<
         BotChatApi,
         "archiveManagedSession" | "workspace" | "nativeSessions" | "nativeSession" | "managedSessions"
@@ -63,6 +77,7 @@ export function ConversationSidebar({
               readonly status: "idle" | "working" | "failed";
           };
 }) {
+    const botId = activeBot.botId;
     const [store] = useState(() => createConversationDirectoryStore(botId, requests));
     const { archive, archiveSession, load, state: directory } = useStore(store);
     const [revision, refresh] = useState(0);
@@ -101,37 +116,17 @@ export function ConversationSidebar({
                     <span className="block text-[11px] leading-4 text-muted-foreground">Local workspace</span>
                 </span>
             </div>
-            {connectionStatus.kind === "connected" ? (
-                <div
-                    aria-live="polite"
-                    className="mb-4 flex items-center gap-1.5 px-1.5 text-[11px] leading-4 text-muted-foreground sm:mb-6"
-                    data-connection-status={connectionStatus.kind}
-                    data-testid={dataTestId.botConnectionStatus}
-                    role="status"
-                >
-                    <span aria-hidden="true" className="size-1.5 rounded-full bg-primary" />
-                    {connectionStatus.label}
-                </div>
-            ) : (
-                <button
-                    aria-label={`${connectionStatus.label}. Pair agent again`}
-                    className="mb-4 flex items-center gap-1.5 rounded px-1.5 text-[11px] leading-4 text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 sm:mb-6"
-                    data-connection-status={connectionStatus.kind}
-                    data-testid={dataTestId.botConnectionStatus}
-                    onClick={onConnectionStatusClick}
-                    type="button"
-                >
-                    <span
-                        aria-hidden="true"
-                        className={`size-1.5 rounded-full ${
-                            connectionStatus.kind === "connecting"
-                                ? "animate-pulse bg-amber-500 motion-reduce:animate-none"
-                                : "bg-muted-foreground/60"
-                        }`}
-                    />
-                    {connectionStatus.label}
-                </button>
-            )}
+            <BotSwitcherMenu
+                activeBot={activeBot}
+                bots={bots}
+                connectionStatus={connectionStatus}
+                operation={botOperation}
+                onCreate={onCreateBot}
+                onPairAgain={onPairAgain}
+                onRemove={onRemoveBot}
+                onResetOperation={onResetBotOperation}
+                onSelect={onSelectBot}
+            />
             <div className="mb-2 flex items-center justify-between px-1">
                 <h2 className="hidden text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground sm:block">
                     Conversations

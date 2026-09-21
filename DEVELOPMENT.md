@@ -14,13 +14,16 @@ Client headers and request bodies do not control this selection. Existing Projec
 their recorded placement when the user changes location.
 
 First-time visitors to `/` receive a browser-held anonymous identity and personal
-Bot; returning visitors restore their saved identity automatically. Every web
-workspace copies `/pair.md?token=...`, a one-time ticket that connects the local
-Runtime to its current user and Bot and directs the user back to Chat. Pairing
-reconnects saved Runtime state only after the ticket proves the same Chat origin,
-user, Project, and Bot, names that Runtime as its expected target, and Platform
-confirms the Runtime pairing is still active;
-otherwise it creates a fresh Runtime identity.
+Bot; returning visitors restore their saved identity and last selected Bot
+automatically. The Bot menu can create another Bot for another machine and can
+remove a Bot while at least one other Bot remains. Every web workspace copies
+`/pair.md?token=...`, a one-time ticket that connects the local Runtime to its
+current user and Bot and directs the user back to Chat. A Bot's Runtime ID is fixed
+after its first binding. Pairing reconnects saved Runtime state only after the
+ticket proves the same Chat origin, user, Project, and Bot, names that Runtime as
+its expected target, and Platform confirms the Runtime pairing is still active.
+An unbound Bot can create a fresh Runtime identity; pairing another machine
+requires another Bot.
 `/setup.md` is reserved for standalone testing and external sharing, including
 social posts. That flow requires the current harness session ID, creates or reuses a
 local identity, reconnects its matching active Runtime or creates a fresh one, and
