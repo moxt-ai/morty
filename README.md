@@ -29,9 +29,10 @@ packages/
     src/gateway/               # Request dispatch and all external gateways
 ```
 
-The pinned Mobius source under `third-party/mobius` supplies the protocol, SDK, and
-local end-to-end stack. Each deployment environment uses regional Chat databases and
-attachment buckets plus one Slack database and attachment bucket.
+Published Mobius protocol and SDK packages supply the application dependencies. The
+pinned source under `third-party/mobius` supplies unpublished test infrastructure for
+the local end-to-end stack. Each deployment environment uses regional Chat databases
+and attachment buckets plus one Slack database and attachment bucket.
 
 ## Development
 

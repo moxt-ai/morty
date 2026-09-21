@@ -26,7 +26,7 @@
     },
     "dependencies": {
         "@clerk/backend": "3.17.1",
-        "@moxt-ai/mobius-sdk": "link:../../third-party/mobius/packages/mobius-sdk",
+        "@moxt-ai/mobius-sdk": "catalog:",
         "drizzle-orm": "^0.45.2",
         "hono": "^4.13.5",
         "pino": "^10.3.1",

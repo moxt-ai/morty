@@ -1,5 +1,12 @@
 engineStrict: true
 minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - '@moxt-ai/mobius-protocol@0.0.11'
+  - '@moxt-ai/mobius-sdk@0.0.15'
+
+catalog:
+  '@moxt-ai/mobius-protocol': 0.0.11
+  '@moxt-ai/mobius-sdk': 0.0.15
 
 # dependency-cruiser's parser uses the TypeScript 6 JavaScript compiler API.
 # Application compilation continues to use TypeScript 7.

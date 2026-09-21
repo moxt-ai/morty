@@ -15,12 +15,7 @@
         "noImplicitReturns": true,
         "moduleResolution": "bundler",
         "paths": {
-            "@/*": ["./packages/web/src/*"],
-            "@moxt-ai/mobius-protocol": ["./third-party/mobius/packages/protocol/src/index.ts"],
-            "@moxt-ai/mobius-sdk": ["./third-party/mobius/packages/mobius-sdk/src/index.ts"],
-            "@moxt-ai/mobius-sdk/platform": ["./third-party/mobius/packages/mobius-sdk/src/platform.ts"],
-            "@moxt-ai/mobius-sdk/server": ["./third-party/mobius/packages/mobius-sdk/src/server.ts"],
-            "@moxt-ai/mobius-sdk/channel": ["./third-party/mobius/packages/mobius-sdk/src/channel.ts"]
+            "@/*": ["./packages/web/src/*"]
         },
         "lib": ["es2024"],
         "noEmit": true,

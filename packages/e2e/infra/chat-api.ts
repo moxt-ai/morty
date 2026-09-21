@@ -1,4 +1,4 @@
-import { MobiusClient } from "../../../third-party/mobius/packages/mobius-sdk/src/index.ts";
+import { MobiusClient } from "@moxt-ai/mobius-sdk";
 import type { E2EHarness } from "./harness.ts";
 
 interface RequestOptions {
