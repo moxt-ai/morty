@@ -1484,11 +1484,11 @@ packages:
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
   '@moxt-ai/mobius-protocol@0.0.12':
-    resolution: {integrity: sha512-S0fx8PeOl+Lffu6Y8bkj/OYqWqiu4DXoJ32L+vB8Bm+WuY0Z0yL07GCpRwx8qV2iOTe/yl5p6buM4jQyJKrbeQ==}
+    resolution: {integrity: sha512-fqsTvfE/RAnBXVuJYBrKRU51tTyHSovmwMZZw3iboXs4ODoz87pHHe0M7a/amuS2g9Y2JHJ37CCfr+dz/92cLw==}
     engines: {node: '>=20.19.0'}
 
   '@moxt-ai/mobius-sdk@0.0.16':
-    resolution: {integrity: sha512-QNdUDHXgYX7TOYa003GHOuEi7BMnPQ9lFKxXX+zuE+uS9rBOz3rCh0unUKPR+14744kaHSBQBYqWLDCIh3DCTQ==}
+    resolution: {integrity: sha512-Qa5seaiVT5/FBcN/TryO4Rgk61FI/q2zVeWB19g+14BWNvEcfHxMa5NUjOnLNb8aL5WQiZmEMWeuLQieA1JPPA==}
     engines: {node: '>=20.19.0'}
 
   '@napi-rs/wasm-runtime@1.2.3':
