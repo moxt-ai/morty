@@ -7,7 +7,7 @@
             "entry": ["drizzle/*.config.ts", ".agents/skills/*/scripts/*.{ts,cjs}"]
         },
         "packages/e2e": {
-            "entry": ["*.e2e.test.ts", "fixtures/local-platform-worker.ts", "infra/acp-proxy.ts", "live/*.mjs"]
+            "entry": ["*.e2e.test.ts", "fixtures/local-platform-worker.ts", "infra/acp-proxy.ts"]
         },
         "packages/web": {
             "entry": [

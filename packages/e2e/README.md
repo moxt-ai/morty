@@ -1,6 +1,6 @@
 # Browser journeys
 
-This package has one local product stack and two kinds of browser execution.
+This package has one local product stack and one browser product suite.
 
 ## Product E2E
 
@@ -19,17 +19,7 @@ Extend one of these journeys before adding another file. Keep business actions a
 visible outcomes in the scenario; `infra` owns only startup, credentials, waiting,
 diagnostics, and cleanup.
 
-## Agent compatibility
-
-`live` runs the same local product stack with a real third-party Agent connected
-to a local fake LLM provider. It proves compatibility with Agent releases; it is
-not a second product specification suite.
-
-```bash
-pnpm test:compatibility:opencode
-pnpm test:compatibility:codex
-```
-
-The OpenCode journey runs nightly with the latest release. Shared compatibility
-orchestration stays in `live/agent-image.mjs`; Agent files contain only their
-installation and configuration differences.
+Real third-party Agent, provider, tool-call, ACP, and daemon compatibility belongs
+to `third-party/mobius/tests/agent-daemon`. The browser journeys keep a
+deterministic ACP Agent and prove the Chat-owned side of that boundary, including
+media rendering and on-demand local-file transfer.

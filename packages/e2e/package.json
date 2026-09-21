@@ -8,8 +8,6 @@
         "pretest": "pnpm mobius:codegen",
         "pretypecheck": "pnpm mobius:codegen",
         "test": "playwright test",
-        "compatibility:codex": "node live/codex.mjs",
-        "compatibility:opencode": "node live/opencode.mjs",
         "typecheck": "tsc --project tsconfig.json"
     },
     "devDependencies": {

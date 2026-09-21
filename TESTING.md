@@ -33,21 +33,6 @@ filesystem, and database boundaries. A deterministic stateful ACP Agent replaces
 only the third-party Agent. Extend an existing journey before adding another file.
 See `packages/e2e/README.md` for scenario ownership.
 
-### Third-party Agent compatibility
-
-Compatibility journeys use the same local product stack, a real Codex or OpenCode
-executable, and a local fake LLM provider:
-
-```bash
-pnpm test:compatibility:opencode
-pnpm test:compatibility:codex
-```
-
-These are release canaries, not a second product specification suite. OpenCode
-runs nightly with the latest release. Agent-specific files own only installation
-and configuration; shared browser and image behavior stays in
-`packages/e2e/live/agent-image.mjs`.
-
 ### Worker integration
 
 `packages/worker/tests` enters through the production Worker HTTP, WebSocket,
@@ -67,8 +52,11 @@ component outside the test.
 
 `third-party/mobius` has its own product E2E, protocol contracts, boundary
 integration suites, and real Agent-daemon compatibility matrix. Its `TESTING.md`
-is authoritative for those tests. Do not reproduce Mobius behavior in Chat tests
-unless the Chat integration itself could break while Mobius remains correct.
+is authoritative for those tests. Real Agent discovery, provider access, tool
+execution, ACP translation, and daemon delivery belong there. Chat's browser E2E
+uses one deterministic ACP Agent and owns only the integration that can break in
+Chat: setup, messages, controls, media rendering, local-file pulling, persistence,
+and revocation.
 
 ## Scenario rules
 
@@ -110,8 +98,8 @@ Pull requests and merge-queue revisions run two parallel jobs:
 
 The required `check` job only combines those results. Main pushes do not repeat
 them; they validate deployment configuration and deploy the merge-queue-verified
-revision. Deterministic browser E2E is intentionally outside PR CI. The real
-OpenCode compatibility journey runs nightly.
+revision. Deterministic browser E2E is intentionally outside PR CI. Real Agent
+compatibility runs in Mobius instead of being repeated here.
 
 `pnpm test:coverage` covers production Worker TypeScript and writes LCOV, JSON,
 and HTML output. The 95% target is advisory; failed tests and missing or empty
