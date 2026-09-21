@@ -162,8 +162,10 @@ descriptive paths under `test-results/`, such as
 `test-results/<journey>-before.png` and
 `test-results/<journey>-after.png`. Do not place credentials, pairing
 instructions or tickets, configuration files, or other secrets in a screenshot
-or artifact. Report every repository-relative artifact path. Do not create or
-redeem an identity transfer for preview work.
+or artifact. Retain the PNG files after stopping local processes and removing
+the private runtime snapshot; cleanup must never remove verification artifacts
+from the checkout's `test-results/` directory. Report every repository-relative
+artifact path. Do not create or redeem an identity transfer for preview work.
 
 ## Return the local app
 

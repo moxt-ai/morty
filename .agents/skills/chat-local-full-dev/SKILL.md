@@ -66,11 +66,13 @@ specific tool.
    the behavior. Drive every captured state through normal mouse or keyboard
    interactions. Never capture credentials, pairing tickets, private configuration,
    or other secrets. Treat these screenshots as local verification artifacts and
-   report their repository-relative paths.
+   report their repository-relative paths. Retain the PNG files after stack
+   teardown; cleanup must never remove verification artifacts from
+   `<repo>/test-results/`.
 6. Read `references/debugging.md` before concluding a root cause. It covers where
    logs go, which structured events and headers to correlate, and how to inspect
    D1 and Durable Object SQLite.
-7. Remove the stack when finished:
+7. Remove the stack when finished without removing retained screenshots:
 
    ```sh
    node scripts/local-dev.cjs remove --state-dir <stateDir>
