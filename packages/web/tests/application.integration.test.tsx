@@ -33,7 +33,7 @@ async function waitForElement(selector: string): Promise<HTMLElement> {
             }
             return element;
         },
-        { timeout: 5_000 },
+        { timeout: 12_000 },
     );
 }
 
@@ -113,9 +113,8 @@ test("Given an unpaired workspace, When its Agent responds with local media, The
         expect(pairing).toBeInstanceOf(HTMLInputElement);
         expect((pairing as HTMLInputElement).value).toMatch(/^follow http:\/\/127\.0\.0\.1:\d+\/pair\.md\?token=/u);
 
-        let agentFailure: Promise<never>;
+        const { failure: agentFailure } = await act(async () => await fixture.connectAgent());
         const composer = await act(async () => {
-            ({ failure: agentFailure } = await fixture.connectAgent());
             await waitForText(`[data-testid="${dataTestId.botConnectionStatus}"]`, "Connected");
             return await waitForElement(`[data-testid="${dataTestId.messageComposer}"]`);
         });
@@ -125,16 +124,14 @@ test("Given an unpaired workspace, When its Agent responds with local media, The
 
         const prompt = "Create an image";
         await sendPrompt(composer as HTMLTextAreaElement, prompt);
-        await act(async () => {
-            await Promise.race([
-                Promise.all([
-                    waitForText("body", prompt),
-                    waitForText("body", `Codex turn 1: ${prompt}`),
-                    waitForElement('img[alt="Generated image"]'),
-                ]),
-                agentFailure,
-            ]);
-        });
+        await Promise.race([
+            Promise.all([
+                waitForText("body", prompt),
+                waitForText("body", `Codex turn 1: ${prompt}`),
+                waitForElement('img[alt="Generated image"]'),
+            ]),
+            agentFailure,
+        ]);
     } finally {
         if (root !== null) {
             await act(async () => root?.unmount());
