@@ -1,5 +1,5 @@
 import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
 import type { MarkdownImageReader } from "../../components/agents/agent-markdown.tsx";
@@ -14,6 +14,7 @@ import {
     SessionInteractionCards,
 } from "../../components/chat/session-interactions.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
+import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
 import { registerMobiusChatDebugSession } from "../../debug-bridge.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { SessionConnectionKind } from "../../view-models/chat/bot-chat-home-store.ts";
@@ -59,7 +60,6 @@ export function MobiusSessionPane({
     const lifetime = useRef<AbortController | null>(null);
     const messageList = useRef<HTMLDivElement | null>(null);
     const followLatest = useRef(true);
-    const prependAnchor = useRef<{ readonly height: number; readonly top: number } | null>(null);
     const readImage = useCallback<MarkdownImageReader>(
         async (path, signal) => {
             for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -102,14 +102,10 @@ export function MobiusSessionPane({
             messageList.current.scrollTop = messageList.current.scrollHeight;
         }
     }, [model.messages.length]);
-    useLayoutEffect(() => {
-        const element = messageList.current;
-        const anchor = prependAnchor.current;
-        if (element !== null && anchor !== null) {
-            element.scrollTop = anchor.top + (element.scrollHeight - anchor.height);
-            prependAnchor.current = null;
-        }
-    });
+    const loadOlderMessages = useCallback(
+        async (signal: AbortSignal) => await pane.store.getState().loadOlderMessages(signal),
+        [pane],
+    );
 
     const run = (action: (signal: AbortSignal) => Promise<void>) => {
         const controller = lifetime.current;
@@ -200,12 +196,6 @@ export function MobiusSessionPane({
                     onScroll={(event) => {
                         const element = event.currentTarget;
                         followLatest.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
-                        if (element.scrollTop <= 80 && model.hasOlderHistory && !model.historyLoading) {
-                            prependAnchor.current = { height: element.scrollHeight, top: element.scrollTop };
-                            void pane.store
-                                .getState()
-                                .loadOlderMessages(lifetime.current?.signal ?? new AbortController().signal);
-                        }
                     }}
                     aria-label="Messages"
                     className="min-h-0 flex-1 space-y-8 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10 lg:px-12"
@@ -251,6 +241,13 @@ export function MobiusSessionPane({
                         />
                     </div>
                 </div>
+                <LoadMoreTrigger
+                    container={messageList}
+                    hasMore={model.hasOlderHistory}
+                    loading={model.historyLoading}
+                    onLoadMore={loadOlderMessages}
+                    revision={model.messages.length}
+                />
                 <ChatMessageQueue
                     messages={messageQueue.messages}
                     steeringSupported={taskControls.steeringSupported}
