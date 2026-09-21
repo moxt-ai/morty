@@ -36,12 +36,23 @@ function safeExternalUrl(value: string): string {
     return "";
 }
 
-function FieldControl({ field }: { readonly field: SessionElicitationField }) {
+function FieldControl({
+    disabled,
+    field,
+    value,
+}: {
+    readonly disabled: boolean;
+    readonly field: SessionElicitationField;
+    readonly value: unknown;
+}) {
     if (field.type === "boolean") {
         return (
             <label className="flex min-h-11 items-center gap-2 rounded-md border-[0.5px] border-black/9 px-3 text-xs text-[#454959] md:min-h-10">
                 <input
-                    defaultChecked={field.hasDefaultValue && field.defaultBooleanValue}
+                    defaultChecked={
+                        typeof value === "boolean" ? value : field.hasDefaultValue && field.defaultBooleanValue
+                    }
+                    disabled={disabled}
                     name={field.name}
                     type="checkbox"
                 />
@@ -56,12 +67,17 @@ function FieldControl({ field }: { readonly field: SessionElicitationField }) {
                 <select
                     className="min-h-11 rounded-md border-[0.5px] border-black/12 bg-white px-2.5 text-base font-normal text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/70 md:min-h-10 md:text-xs"
                     defaultValue={
-                        field.type === "multiselect"
-                            ? readMultiselectDefaults(field)
-                            : field.hasDefaultValue
-                              ? field.defaultStringValue
-                              : undefined
+                        field.type === "multiselect" && Array.isArray(value)
+                            ? value.filter((entry): entry is string => typeof entry === "string")
+                            : typeof value === "string"
+                              ? value
+                              : field.type === "multiselect"
+                                ? readMultiselectDefaults(field)
+                                : field.hasDefaultValue
+                                  ? field.defaultStringValue
+                                  : undefined
                     }
+                    disabled={disabled}
                     multiple={field.type === "multiselect"}
                     name={field.name}
                     required={field.required}
@@ -86,8 +102,15 @@ function FieldControl({ field }: { readonly field: SessionElicitationField }) {
             <input
                 className="min-h-11 rounded-md border-[0.5px] border-black/12 bg-white px-3 text-base font-normal text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/70 md:min-h-10 md:text-xs"
                 defaultValue={
-                    field.hasDefaultValue ? (numeric ? field.defaultNumberValue : field.defaultStringValue) : undefined
+                    typeof value === "string" || typeof value === "number"
+                        ? value
+                        : field.hasDefaultValue
+                          ? numeric
+                              ? field.defaultNumberValue
+                              : field.defaultStringValue
+                          : undefined
                 }
+                disabled={disabled}
                 max={field.maximum.length > 0 ? field.maximum : undefined}
                 maxLength={!numeric && field.maximumLength.length > 0 ? Number(field.maximumLength) : undefined}
                 min={field.minimum.length > 0 ? field.minimum : undefined}
@@ -118,6 +141,21 @@ function FieldControl({ field }: { readonly field: SessionElicitationField }) {
     );
 }
 
+function elicitationAnswers(elicitation: ElicitationInteraction): Readonly<Record<string, unknown>> {
+    if (elicitation.state.kind === "pending" || elicitation.state.content.length === 0) {
+        return {};
+    }
+    try {
+        const decoded: unknown = JSON.parse(elicitation.state.content);
+        if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
+            return {};
+        }
+        return Object.fromEntries(Object.entries(decoded));
+    } catch {
+        return {};
+    }
+}
+
 function PermissionCard({
     busy,
     permission,
@@ -127,6 +165,7 @@ function PermissionCard({
     readonly permission: PermissionInteraction;
     readonly respond: (response: PermissionInteractionResponse) => void;
 }) {
+    const confirmed = permission.state.kind !== "pending";
     return (
         <section
             className="max-w-[444px] rounded-lg border-[0.5px] border-input bg-white px-4 pt-5 pb-4 text-sm"
@@ -138,7 +177,10 @@ function PermissionCard({
                     <ShieldCheck className="size-4" />
                 </span>
                 <div className="min-w-0 flex-1">
-                    <p className="text-base leading-6 font-semibold text-foreground">{permission.title}</p>
+                    <p className="text-base leading-6 font-semibold text-foreground">
+                        {confirmed ? "Confirmed" : "Agent needs permission"}
+                    </p>
+                    <p className="mt-1 text-sm leading-6 text-foreground">{permission.title}</p>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
                         {permission.toolKind.length > 0 ? permission.toolKind : "tool"} · {permission.toolCallId}
                     </p>
@@ -146,7 +188,7 @@ function PermissionCard({
                         {permission.options.map((option) => (
                             <Button
                                 className="min-h-11 md:min-h-10"
-                                disabled={busy}
+                                disabled={busy || confirmed}
                                 key={option.optionId}
                                 onClick={() => {
                                     respond({
@@ -164,7 +206,7 @@ function PermissionCard({
                         ))}
                         <Button
                             className="min-h-11 md:min-h-10"
-                            disabled={busy}
+                            disabled={busy || confirmed}
                             onClick={() => {
                                 respond({
                                     interactionId: permission.interactionId,
@@ -195,6 +237,8 @@ function ElicitationCard({
     readonly respond: (response: ElicitationInteractionResponse) => void;
 }) {
     const externalUrl = safeExternalUrl(elicitation.url);
+    const answered = elicitation.state.kind !== "pending";
+    const answers = elicitationAnswers(elicitation);
     const cancel = (action: ElicitationResponseRequest["action"]): void => {
         respond({
             action,
@@ -215,14 +259,16 @@ function ElicitationCard({
                     <HelpCircle className="size-4" />
                 </span>
                 <div className="min-w-0 flex-1">
-                    <p className="text-base leading-6 font-semibold text-foreground">Agent needs input</p>
+                    <p className="text-base leading-6 font-semibold text-foreground">
+                        {answered ? "Asked" : "Agent needs input"}
+                    </p>
                     <p className="mt-1 text-sm leading-6 text-foreground">{elicitation.message}</p>
                     {elicitation.mode === "url" ? (
                         <div className="mt-2.5">
                             <code className="block break-all rounded-lg border-[0.5px] border-[#2f6feb]/15 bg-white/70 px-2.5 py-2 text-[10px] leading-4 text-[#435f8c]">
                                 {externalUrl.length > 0 ? externalUrl : elicitation.url}
                             </code>
-                            {elicitation.accepted ? (
+                            {answered && elicitation.state.action === "accept" ? (
                                 <div className="mt-2.5 flex flex-wrap items-center gap-2">
                                     <span className="text-[11px] font-medium text-[#435f8c]">
                                         Waiting for the agent to confirm completion…
@@ -243,7 +289,7 @@ function ElicitationCard({
                                     {externalUrl.length > 0 && (
                                         <Button
                                             className="min-h-11 md:min-h-10"
-                                            disabled={busy}
+                                            disabled={busy || answered}
                                             onClick={() => {
                                                 window.open(externalUrl, "_blank", "noopener,noreferrer");
                                                 respond({
@@ -260,7 +306,7 @@ function ElicitationCard({
                                     )}
                                     <Button
                                         className="min-h-11 md:min-h-10"
-                                        disabled={busy}
+                                        disabled={busy || answered}
                                         onClick={() => cancel("decline")}
                                         size="sm"
                                         variant="outline"
@@ -269,7 +315,7 @@ function ElicitationCard({
                                     </Button>
                                     <Button
                                         className="min-h-11 md:min-h-10"
-                                        disabled={busy}
+                                        disabled={busy || answered}
                                         onClick={() => cancel("cancel")}
                                         size="sm"
                                         variant="ghost"
@@ -296,15 +342,25 @@ function ElicitationCard({
                             }}
                         >
                             {elicitation.fields.map((field) => (
-                                <FieldControl field={field} key={field.name} />
+                                <FieldControl
+                                    disabled={busy || answered}
+                                    field={field}
+                                    key={field.name}
+                                    value={Reflect.get(answers, field.name)}
+                                />
                             ))}
                             <div className="flex flex-wrap gap-2">
-                                <Button className="min-h-11 md:min-h-10" disabled={busy} size="sm" type="submit">
+                                <Button
+                                    className="min-h-11 md:min-h-10"
+                                    disabled={busy || answered}
+                                    size="sm"
+                                    type="submit"
+                                >
                                     Continue
                                 </Button>
                                 <Button
                                     className="min-h-11 md:min-h-10"
-                                    disabled={busy}
+                                    disabled={busy || answered}
                                     onClick={() => cancel("decline")}
                                     size="sm"
                                     variant="outline"
@@ -313,7 +369,7 @@ function ElicitationCard({
                                 </Button>
                                 <Button
                                     className="min-h-11 md:min-h-10"
-                                    disabled={busy}
+                                    disabled={busy || answered}
                                     onClick={() => cancel("cancel")}
                                     size="sm"
                                     variant="ghost"
@@ -395,8 +451,16 @@ export function SessionInteractions() {
     const conversation = useChatStore(selectActiveConversation);
     return (
         <SessionInteractionCards
-            elicitations={conversation.session.elicitations}
-            permissions={conversation.session.permissions}
+            elicitations={conversation.session.elicitations.map(({ accepted, ...elicitation }) => ({
+                ...elicitation,
+                state: accepted
+                    ? { action: "accept" as const, content: "", kind: "submitted" as const }
+                    : { kind: "pending" as const },
+            }))}
+            permissions={conversation.session.permissions.map((permission) => ({
+                ...permission,
+                state: { kind: "pending" as const },
+            }))}
             onElicitationResponse={respondToElicitation}
             onPermissionResponse={respondToPermission}
         />

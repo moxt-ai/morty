@@ -1,15 +1,49 @@
 import type { SessionElicitationRequestedEvent, SessionPermissionRequestedEvent } from "@moxt-ai/mobius-sdk";
 import type { ElicitationResponseRequest } from "@moxt-ai/mobius-sdk/channel";
 
-export type PermissionInteraction = Pick<
+type PermissionInteractionDetails = Pick<
     SessionPermissionRequestedEvent,
     "interactionId" | "options" | "sessionId" | "title" | "toolCallId" | "toolKind"
 >;
 
-export type ElicitationInteraction = Pick<
+type PermissionInteractionState =
+    | { readonly kind: "pending" }
+    | {
+          readonly kind: "submitted";
+          readonly optionId: string;
+          readonly outcome: PermissionInteractionResponse["outcome"];
+      }
+    | {
+          readonly kind: "resolved";
+          readonly optionId: string;
+          readonly outcome: PermissionInteractionResponse["outcome"];
+      };
+
+export type PermissionInteraction = PermissionInteractionDetails & {
+    readonly state: PermissionInteractionState;
+};
+
+type ElicitationInteractionDetails = Pick<
     SessionElicitationRequestedEvent,
-    "accepted" | "fields" | "interactionId" | "message" | "mode" | "sessionId" | "url"
+    "fields" | "interactionId" | "message" | "mode" | "sessionId" | "url"
 >;
+
+type ElicitationInteractionState =
+    | { readonly kind: "pending" }
+    | {
+          readonly action: ElicitationResponseRequest["action"];
+          readonly content: string;
+          readonly kind: "submitted";
+      }
+    | {
+          readonly action: ElicitationResponseRequest["action"] | "complete";
+          readonly content: string;
+          readonly kind: "resolved";
+      };
+
+export type ElicitationInteraction = ElicitationInteractionDetails & {
+    readonly state: ElicitationInteractionState;
+};
 
 export interface PermissionInteractionResponse {
     readonly interactionId: string;
