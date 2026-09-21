@@ -168,10 +168,13 @@ test("Given a paired workspace, When a user works across conversations, Then sen
         await composer.fill("wait for steering");
         await send.click();
         await expect(page.getByTestId(dataTestId.userMessageImage)).toHaveAttribute("alt", "sent-image.png");
+        await expect(page.getByTestId(dataTestId.userMessage).last()).toHaveText("wait for steering");
         await expect(send).toHaveAttribute("aria-label", "Stop agent output");
         await expect(page.getByTestId(dataTestId.workingIndicator)).toContainText("Working for");
         await expect(page.getByTestId(dataTestId.workingSpinner)).toBeVisible();
         await expect(page.getByTestId(dataTestId.agentResponse).last()).toContainText("Inspecting the workspace");
+        await page.reload();
+        await expect(page.getByTestId(dataTestId.userMessage).last()).toHaveText("wait for steering");
         await expect(composer).toBeEnabled();
         await composer.fill("focus on the public API");
         await composer.press("Enter");

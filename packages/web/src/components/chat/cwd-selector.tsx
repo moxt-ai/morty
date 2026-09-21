@@ -27,6 +27,24 @@ function middleTruncate(value: string, maximumLength: number): MiddleTruncation 
     };
 }
 
+function MiddleTruncatedLabel({ value }: { readonly value: string }) {
+    const displayedValue = middleTruncate(value, WORKING_DIRECTORY_LABEL_LENGTH);
+    if (displayedValue.kind === "complete") {
+        return displayedValue.value;
+    }
+    return (
+        <>
+            <span className="flex min-w-0 flex-1 overflow-hidden">
+                <span className="shrink-0">{displayedValue.prefix}</span>
+            </span>
+            <span className="shrink-0">...</span>
+            <span className="flex min-w-0 flex-1 justify-end overflow-hidden">
+                <span className="shrink-0">{displayedValue.suffix}</span>
+            </span>
+        </>
+    );
+}
+
 export function CwdSelector({
     disabled,
     signal,
@@ -43,7 +61,6 @@ export function CwdSelector({
     }
     const browser = viewModel.cwdBrowser;
     const workingDirectory = settings.cwd.directoryLabel;
-    const displayedWorkingDirectory = middleTruncate(workingDirectory, WORKING_DIRECTORY_LABEL_LENGTH);
     const directory = browser.kind === "closed" ? null : browser.directory;
     return (
         <>
@@ -58,21 +75,9 @@ export function CwdSelector({
                         type="button"
                     >
                         <FolderOpen aria-hidden="true" className="size-4 shrink-0" />
-                        {displayedWorkingDirectory.kind === "complete" ? (
-                            <span className="min-w-0 overflow-hidden whitespace-nowrap">
-                                {displayedWorkingDirectory.value}
-                            </span>
-                        ) : (
-                            <span className="flex min-w-0 items-center whitespace-nowrap">
-                                <span className="flex min-w-0 flex-1 overflow-hidden">
-                                    <span className="shrink-0">{displayedWorkingDirectory.prefix}</span>
-                                </span>
-                                <span className="shrink-0">...</span>
-                                <span className="flex min-w-0 flex-1 justify-end overflow-hidden">
-                                    <span className="shrink-0">{displayedWorkingDirectory.suffix}</span>
-                                </span>
-                            </span>
-                        )}
+                        <span className="flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap">
+                            <MiddleTruncatedLabel value={workingDirectory} />
+                        </span>
                         <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
                     </button>
                 </Popover.Trigger>
@@ -100,7 +105,9 @@ export function CwdSelector({
                                         type="button"
                                     >
                                         <Folder aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-                                        <span className="min-w-0 flex-1 truncate">{recent.directoryLabel}</span>
+                                        <span className="flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap">
+                                            <MiddleTruncatedLabel value={recent.directoryLabel} />
+                                        </span>
                                         {recent.directoryId === settings.cwd.directoryId && (
                                             <Check aria-hidden="true" className="size-4 shrink-0" />
                                         )}
