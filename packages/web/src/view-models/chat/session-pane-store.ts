@@ -304,10 +304,17 @@ export function createSessionPaneModel(options: {
             : recordedActiveTurn;
     let client: MobiusClient | null = null;
     let command = activeTurn?.commandId ?? "";
+    let sessionConfigurations = session.result.ready.configOptions.map((option) => ({
+        booleanValue: option.type === "boolean" ? option.booleanValue : false,
+        configId: option.id,
+        value: option.type === "select" ? option.currentValue : "",
+        valueType: option.type,
+    }));
     const delivery = createSessionDeliveryStore({
         sessionId,
         storage: options.storage,
-        submit: async (request, signal) => await requests.submitTurn(botId, sessionId, request, signal),
+        submit: async (request, signal) =>
+            await requests.submitTurn(botId, sessionId, { ...request, sessionConfigurations }, signal),
     });
     const initialDelivery = delivery.getState().state;
     const savedMessages = historySessionMessages(session.result.history, command === "" ? null : command);
@@ -988,6 +995,12 @@ export function createSessionPaneModel(options: {
                         AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
                     );
                     signal.throwIfAborted();
+                    sessionConfigurations = result.configOptions.map((candidate) => ({
+                        booleanValue: candidate.type === "boolean" ? candidate.booleanValue : false,
+                        configId: candidate.id,
+                        value: candidate.type === "select" ? candidate.currentValue : "",
+                        valueType: candidate.type,
+                    }));
                     set({ options: result.configOptions, operation: { kind: "idle" } });
                 } catch (cause) {
                     signal.throwIfAborted();

@@ -104,12 +104,18 @@ test("Given an available Runtime, When a Bot is configured and used, Then settin
             configurations: [
                 { booleanValue: false, configId: "model", value: "model-two", valueType: "select" },
                 { booleanValue: true, configId: "fast_mode", value: "", valueType: "boolean" },
+                {
+                    booleanValue: false,
+                    configId: "opencode_permission",
+                    value: "read-only",
+                    valueType: "select",
+                },
             ],
         };
         const opened = await fixture.request(`chat/bots/${fixture.botId}/access`, selection);
         expect(opened.status).toBe(200);
         const first = v.parse(v.object({ conversationId: v.string() }), await opened.json());
-        expect(fixture.platform.configuredSettings()).toEqual(selection.configurations);
+        expect(fixture.platform.configuredSettings()).toEqual(selection.configurations.slice(0, 2));
 
         const image = { data: "A".repeat(3_000_000), mimeType: "image/png", name: "large-screenshot.png" };
         const turn = await fixture.request(`chat/bots/${fixture.botId}/turns`, {
@@ -120,11 +126,13 @@ test("Given an available Runtime, When a Bot is configured and used, Then settin
             idempotencyKey: "command-1",
             images: [image],
             resources: [],
+            sessionConfigurations: selection.configurations,
         });
         expect(turn.status).toBe(200);
         expect(fixture.platform.submittedTurns()).toMatchObject([
             {
                 images: [image],
+                sessionConfigurations: selection.configurations,
                 resources: [
                     {
                         type: "embedded",
@@ -153,7 +161,7 @@ test("Given an available Runtime, When a Bot is configured and used, Then settin
         const secondConversation = v.parse(v.object({ conversationId: v.string() }), await second.json());
         expect(secondConversation.conversationId).not.toBe(first.conversationId);
         expect(fixture.platform.configuredSettings()).toEqual([
-            ...selection.configurations,
+            ...selection.configurations.slice(0, 2),
             {
                 booleanValue: false,
                 configId: "permission_mode",
