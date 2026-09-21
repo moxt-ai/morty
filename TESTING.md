@@ -35,8 +35,8 @@ See `packages/e2e/README.md` for scenario ownership.
 
 ### Worker integration
 
-`packages/worker/tests` enters through the production Worker HTTP, WebSocket,
-Durable Object, queue, or storage boundary. Run it with:
+`packages/worker/tests` enters through a production HTTP, WebSocket, Durable
+Object, Slack application, queue, or storage boundary. Run it with:
 
 ```bash
 pnpm test:worker
@@ -55,7 +55,10 @@ Slack journeys stay under `slack/app`. Related state transitions should advance
 through one journey instead of rebuilding the same user, database, and Platform
 peer in separate cases. The small shared `support/identity-fixture.ts` starts the
 real Platform Worker and Chat Durable Objects in memory and supplies only external
-configuration and cleanup.
+configuration and cleanup. Chat journeys always use real Project Durable Objects;
+the Chat creation fault cases replace only Platform with a stateful protocol peer.
+Slack journeys compose the production Slack application and queue consumer with
+stateful fakes at the external Clerk, Slack, Identity, and Platform ports.
 
 ### Mobius
 

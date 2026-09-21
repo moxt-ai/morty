@@ -167,7 +167,7 @@ test("Given Projects in separate regions, When users reopen and transfer their w
     }
 });
 
-test("Given a first-time visitor, When an anonymous identity is created, Then their Bot is already available without manual setup", async () => {
+test("Given a first-time visitor, When their workspace and Bot are managed, Then both persist behind the Project boundary", async () => {
     const identity = await fixture.createAnonymousUser();
     const response = await worker.fetch(accountRequest(identity.token, identity.projectId), fixture.environment());
 
@@ -183,8 +183,40 @@ test("Given a first-time visitor, When an anonymous identity is created, Then th
         fixture.environment(),
     );
     expect(bots.status).toBe(200);
-    expect(await bots.json()).toEqual({
-        bots: [expect.objectContaining({ botId: expect.any(String), displayName: "My Bot" })],
+    const { bots: availableBots } = v.parse(
+        v.object({ bots: v.array(v.object({ botId: v.string(), displayName: v.string() })) }),
+        await bots.json(),
+    );
+    expect(availableBots).toHaveLength(1);
+    const bot = v.parse(v.object({ botId: v.string(), displayName: v.literal("My Bot") }), availableBots[0]);
+    const updated = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/bots/${bot.botId}`, {
+            method: "PATCH",
+            headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+            body: JSON.stringify({
+                displayName: "Research Assistant",
+                instructions: "Cite the source for every factual claim.",
+            }),
+        }),
+        fixture.environment(),
+    );
+    expect(updated.status).toBe(200);
+    expect(await updated.json()).toMatchObject({
+        botId: bot.botId,
+        configured: false,
+        displayName: "Research Assistant",
+        instructions: "Cite the source for every factual claim.",
+    });
+    const persisted = await worker.fetch(
+        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/bots/${bot.botId}`, {
+            headers: { authorization: `Bearer ${identity.token}` },
+        }),
+        fixture.environment(),
+    );
+    expect(await persisted.json()).toMatchObject({
+        botId: bot.botId,
+        displayName: "Research Assistant",
+        instructions: "Cite the source for every factual claim.",
     });
     const projectResponse = await worker.fetch(
         new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/project`, {

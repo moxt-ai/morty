@@ -54,7 +54,7 @@ async function registerSourceApp(app: TestApplication) {
 }
 
 describe("Slack message journeys", () => {
-    it("propagates cancellation and accepts the next message without replaying the cancelled turn", async () => {
+    it("Given an active Slack turn, When it is cancelled and another message arrives, Then only the new message completes", async () => {
         const app = await createConnectedTestApplication();
         const controller = new AbortController();
         const signedRequest = createSignedRequest((url, init) =>
@@ -81,7 +81,7 @@ describe("Slack message journeys", () => {
         gate.complete();
     });
 
-    it("runs a complete channel, thread, retry, ordering, privacy, and direct-message journey", async () => {
+    it("Given a connected Slack app, When channel, thread, retry, and direct messages arrive, Then ordering and privacy are preserved", async () => {
         const app = await createConnectedTestApplication();
         const message = (ts: string, text: string) => ({
             botId: null,
@@ -152,7 +152,7 @@ describe("Slack message journeys", () => {
         expect(app.mobius.runs).toHaveLength(3);
     });
 
-    it("times out a stalled turn and resumes its waiting message", async () => {
+    it("Given a stalled Slack turn, When it times out, Then its waiting message resumes", async () => {
         const app = await createConnectedTestApplication();
         const gate = app.mobius.pauseNext();
         const pending = send(app);
@@ -173,14 +173,14 @@ describe("Slack message journeys", () => {
         gate.complete();
     });
 
-    it("discovers an app from Cloud D1 and completes its queued message", async () => {
+    it("Given an app stored in Cloud D1, When its queued message runs, Then the app is discovered and replies", async () => {
         const app = await createConnectedTestApplication();
         await send(app);
         expect(app.slack.messages[0]?.text).toBe("Investigation complete");
         expect(app.mobius.runs).toHaveLength(1);
     });
 
-    it("does not recover a disconnected result but processes the next message", async () => {
+    it("Given a disconnected result, When the next Slack message arrives, Then the lost result is not replayed and new work continues", async () => {
         const app = await createConnectedTestApplication();
         app.mobius.connectionState = "disconnect-after-result";
         await send(app);
@@ -198,7 +198,7 @@ describe("Slack message journeys", () => {
         expect(app.mobius.runs).toHaveLength(2);
     });
 
-    it("lets an independently configured app reply without a linked user identity", async () => {
+    it("Given an independently configured Slack app, When it receives a message, Then it replies without a linked user identity", async () => {
         const app = await createConnectedTestApplication();
         const response = await app.request("/mobius-slack/api/slack/apps/register", {
             method: "POST",
@@ -223,7 +223,7 @@ describe("Slack message journeys", () => {
         expect(app.mobius.runs).toHaveLength(1);
     });
 
-    it("applies every source-bot limiter outcome in one installation lifecycle", async () => {
+    it("Given one Slack installation, When every source-Bot limiter outcome occurs, Then each message follows its decision", async () => {
         const app = await createConnectedTestApplication();
         await registerSourceApp(app);
         for (const [index, mode] of ["admit", "refuse", "fail"].entries()) {
@@ -243,7 +243,7 @@ describe("Slack message journeys", () => {
         }
     });
 
-    it("handles Slack verification and rejects unauthenticated, stale, irrelevant, and unknown-bot events", async () => {
+    it("Given the Slack event boundary, When unauthenticated, stale, irrelevant, or unknown-Bot events arrive, Then each is rejected", async () => {
         const app = await createConnectedTestApplication();
         const challenge = await app.signedRequest(
             "/mobius-slack/api/slack/events",
@@ -285,7 +285,7 @@ describe("Slack message journeys", () => {
         expect(app.slack.messages).toEqual([]);
     });
 
-    it("stores a waiting event only until the active turn completes and then resumes it", async () => {
+    it("Given a waiting Slack event, When the active turn completes, Then the event resumes and its payload is cleared", async () => {
         const app = await createConnectedTestApplication();
         const gate = app.mobius.pauseNext();
         const first = send(app);
@@ -312,7 +312,7 @@ describe("Slack message journeys", () => {
         ).toEqual([{ payload: "" }, { payload: "" }]);
     });
 
-    it("suppresses NO_REPLY while still allowing authenticated tool delivery", async () => {
+    it("Given Slack reply and tool delivery, When the Agent returns NO_REPLY, Then chat is suppressed but authenticated tools still work", async () => {
         const app = await createConnectedTestApplication();
         app.mobius.responseText = " [NO_REPLY] ";
         await send(app);

@@ -31,8 +31,15 @@ export function accountRequest(token?: string, projectId?: string): Request {
     );
 }
 
-export async function createIdentityFixture() {
-    const platform = await createMobiusPlatformFixture();
+type PlatformFixture = {
+    readonly appId: string;
+    readonly appCredential: string;
+    readonly baseUrl: string;
+    readonly close: () => Promise<void>;
+};
+
+export async function createIdentityFixture(options: { readonly platform?: PlatformFixture } = {}) {
+    const platform = options.platform ?? (await createMobiusPlatformFixture());
     const baseConfiguration = {
         APP_ORIGIN,
         AUTHENTICATION_BASE_URL: "https://identity.test",

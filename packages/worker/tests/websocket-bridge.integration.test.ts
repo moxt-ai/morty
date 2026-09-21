@@ -55,7 +55,7 @@ function receive(socket: MiniflareWebSocket): Promise<unknown> {
     });
 }
 
-test("Given the Chat web application, When it requests public configuration, Then the server replies through one WebSocket bridge", async () => {
+test("Given the Chat web application, When it uses the WebSocket bridge, Then API requests pass and document requests are rejected", async () => {
     const response = await runtime.dispatchFetch("https://chat.test/mobius-cloud/ws", {
         headers: { Origin: "https://chat.test", Upgrade: "websocket" },
     });
@@ -82,19 +82,7 @@ test("Given the Chat web application, When it requests public configuration, The
         status: 200,
         body: JSON.stringify({ publishableKey: "pk_test_browser" }),
     });
-    socket.close(1000, "Test complete");
-});
-
-test("Given the WebSocket bridge, When a browser requests a document path, Then the bridge rejects it", async () => {
-    const response = await runtime.dispatchFetch("https://chat.test/mobius-cloud/ws", {
-        headers: { Origin: "https://chat.test", Upgrade: "websocket" },
-    });
-    const socket = response.webSocket;
-    if (socket === null) {
-        throw new Error("Expected the Chat WebSocket bridge.");
-    }
-    socket.accept();
-    const reply = receive(socket);
+    const rejected = receive(socket);
     socket.send(
         JSON.stringify({
             kind: "request",
@@ -105,7 +93,7 @@ test("Given the WebSocket bridge, When a browser requests a document path, Then 
             body: null,
         }),
     );
-    await expect(reply).resolves.toEqual({
+    await expect(rejected).resolves.toEqual({
         kind: "error",
         requestId: "request-2",
         code: "INVALID_BRIDGE_REQUEST",

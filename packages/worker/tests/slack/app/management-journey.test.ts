@@ -16,7 +16,7 @@ async function oauthUrl(app: Awaited<ReturnType<typeof createTestApplication>>) 
 }
 
 describe("Slack management journeys", () => {
-    it("takes an owner from project-aware setup through OAuth, app replacement, and disconnect", async () => {
+    it("Given a workspace owner, When Slack is installed, replaced, and removed, Then every management state is visible", async () => {
         const app = await createTestApplication();
         const headers = await authorization(app);
         const jsonHeaders = { ...headers, "Content-Type": "application/json" };
@@ -110,7 +110,7 @@ describe("Slack management journeys", () => {
         expect(await status.json()).toMatchObject({ kind: "not-configured" });
     });
 
-    it("rejects invalid management inputs at the shared HTTP boundary", async () => {
+    it("Given the Slack management boundary, When inputs, credentials, or OAuth state are invalid, Then each request is rejected", async () => {
         const app = await createTestApplication();
         const headers = await authorization(app);
 
@@ -136,28 +136,22 @@ describe("Slack management journeys", () => {
         expect(await missingBot.json()).toEqual({
             error: { code: "INVALID_REQUEST", message: "Request validation failed" },
         });
-    });
 
-    it("rejects a credential issued for another host", async () => {
-        const app = await createTestApplication();
         const other = new FakeClerk({ issuer: "https://identity.clerk.accounts.dev" });
-        const response = await app.request("/mobius-slack/api/slack/me", {
+        const wrongHost = await app.request("/mobius-slack/api/slack/me", {
             headers: {
                 authorization: `Bearer ${other.createSession("user_tenant-1", "https://slack.example.test")}`,
             },
         });
-        expect(response.status).toBe(401);
-    });
+        expect(wrongHost.status).toBe(401);
 
-    it("rejects tampered OAuth state without installing or welcoming", async () => {
-        const app = await createTestApplication();
         await app.registerSlackApp();
         const url = await oauthUrl(app);
-        const response = await app.request(
+        const tampered = await app.request(
             `/mobius-slack/api/slack/oauth/callback?code=oauth-code&state=${encodeURIComponent(`${url.searchParams.get("state")}tampered`)}`,
         );
-        expect(response.status).toBe(400);
-        expect(await response.json()).toMatchObject({ error: { code: "INVALID_SLACK_TOKEN" } });
+        expect(tampered.status).toBe(400);
+        expect(await tampered.json()).toMatchObject({ error: { code: "INVALID_SLACK_TOKEN" } });
         expect(app.slack.messages).toEqual([]);
     });
 });
