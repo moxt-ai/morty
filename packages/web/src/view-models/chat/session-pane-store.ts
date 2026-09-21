@@ -670,6 +670,24 @@ export function createSessionPaneModel(options: {
                                     payload instanceof MobiusTurnFailedEvent
                                 ) {
                                     const completedCommand = command;
+                                    const completedHistory =
+                                        payload instanceof MobiusTurnCompletedEvent
+                                            ? await connected.sessions.readNativeHistory(
+                                                  sessionId,
+                                                  AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
+                                              )
+                                            : null;
+                                    signal.throwIfAborted();
+                                    if (command !== completedCommand) {
+                                        return true;
+                                    }
+                                    const completedMessages =
+                                        completedHistory?.status === "available"
+                                            ? historySessionMessages(completedHistory)
+                                            : null;
+                                    if (completedHistory?.status === "available") {
+                                        delivery.getState().reconcile(completedHistory.coveredCommandIds);
+                                    }
                                     set((current) => ({
                                         activity:
                                             payload instanceof MobiusTurnFailedEvent
@@ -682,6 +700,7 @@ export function createSessionPaneModel(options: {
                                                       commandId: completedCommand,
                                                       kind: "work-completed",
                                                   }),
+                                        messages: completedMessages ?? current.messages,
                                         operation: { kind: "idle" },
                                     }));
                                     tasks.getState().finish(completedCommand);

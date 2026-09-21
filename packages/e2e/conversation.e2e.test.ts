@@ -67,6 +67,18 @@ test("Given a paired workspace, When a user works across conversations, Then ses
         await expect(page.getByTestId(dataTestId.userMessage)).toHaveText(["First conversation"]);
     });
 
+    await test.step("reconcile completed native history when live content is absent", async () => {
+        await page.getByTestId(dataTestId.newConversation).click();
+        await runtime.sendMessage("Establish live session");
+        await expect(page.getByTestId(dataTestId.agentResponse).last()).toContainText(
+            "OpenCode turn 1: Establish live session",
+        );
+        await runtime.sendMessage("recover completed native history");
+        await expect(page.getByTestId(dataTestId.agentResponse).last()).toContainText(
+            "OpenCode turn 2: recover completed native history",
+        );
+    });
+
     await test.step("queue a follow-up while the agent is working", async () => {
         await page.getByTestId(dataTestId.newConversation).click();
         const composer = page.getByTestId(dataTestId.messageComposer);
