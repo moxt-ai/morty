@@ -1,14 +1,15 @@
 ---
 name: chat-local-web-dev
-description: Start the current Mobius Chat checkout locally against the staging Platform, pair it with the current harness session, and return a localhost handoff URL that can be redeemed up to five times. Use when the user asks to run, preview, pair, or share the local Chat web app.
+description: Start the current Mobius Chat checkout locally against the staging Platform, open its browser workspace, and pair that workspace with the current harness through /pair.md. Use when the user asks to run, preview, pair, or share the local Chat web app.
 ---
 
 # Mobius Chat Web Development
 
-Start this checkout's local Chat app against the staging Mobius Platform, pair a
-Runtime with the current harness session, and return the generated localhost
-browser handoff. The handoff supports up to five successful redemptions. Chat
-stays local even when a tunnel is used to make its callback origin reachable.
+Start this checkout's local Chat app against the staging Mobius Platform, open
+its browser workspace, and use that workspace's `/pair.md` instruction to pair a
+Runtime with the current harness. Return the localhost Chat URL after pairing.
+Chat stays local even when a tunnel is used to make its callback origin
+reachable.
 
 ## Validate the checkout
 
@@ -100,9 +101,23 @@ otherwise stop this new process and report the configuration mismatch.
 
 ## Pair the current session
 
-Use the current harness ID (`codex`, `claude`, or `opencode`) and the current
-conversation's exact session ID from trusted local harness metadata. Never invent
-either value.
+Use the current harness ID (`codex`, `claude`, or `opencode`) from trusted local
+harness metadata. Never invent it.
+
+Open `$CHAT_ORIGIN/` in the browser to create or restore the local Chat workspace.
+Confirm that navigation remains on the exact `$CHAT_ORIGIN` origin. Obtain the
+one-time pairing instruction through the product UI: wait for the element with
+the shared `chat-pairing-instruction` test ID and read its `follow
+$CHAT_ORIGIN/pair.md?token=...` value. Do not call the pairing API directly and do
+not read browser storage. If the pairing dialog is not already visible, open it
+through the connection-status control. Require the URL origin to equal
+`$CHAT_ORIGIN`, the path to equal `/pair.md`, and the query to contain only a
+valid `mobius_pair_v2` token. Keep the URL and token private and never print them.
+
+Fetch that exact `/pair.md?token=...` URL with redirects disabled and a finite
+timeout. Require HTTP 200 and a Markdown content type. Fetching the document does
+not consume the ticket. Follow the checked-out document's pairing instructions;
+do not substitute the standalone `setup` identity flow.
 
 Fetch `$CHAT_ORIGIN/setup.mjs` into a new private temporary directory
 with redirects disabled and a finite timeout. Require HTTP 200 and a JavaScript
@@ -113,15 +128,16 @@ the file to mode `0600`.
 Use `DOCUMENT_DIR` when set; otherwise resolve the user's Documents directory
 locally. Always export the resolved absolute path for the setup process. Merely
 running the command with the Documents directory as its CWD is insufficient and
-causes the bundle to reject an empty `DOCUMENT_DIR`. Run the setup bundle with
-background execution support:
+causes the bundle to reject an empty `DOCUMENT_DIR`. Extract the token from the
+validated pairing URL into a process-local variable without writing it to output.
+Run the setup bundle with background execution support:
 
 ```sh
-DOCUMENT_DIR="$RESOLVED_DOCUMENTS_DIR" node "$SCRIPT_DIR/setup.mjs" setup \
+DOCUMENT_DIR="$RESOLVED_DOCUMENTS_DIR" node "$SCRIPT_DIR/setup.mjs" pair \
   --base-url "$CHAT_ORIGIN" \
   --cwd "$PWD" \
   --harness "$HARNESS" \
-  --session-id "$SESSION_ID"
+  --token="$TOKEN"
 ```
 
 The setup process owns the paired Runtime and must remain attached to the harness
@@ -129,35 +145,28 @@ lifecycle after readiness. Do not terminate another Runtime or create a remote
 production pairing to work around a local failure.
 
 Wait up to five minutes for structured output with `status: "ready"`. Success
-requires a URL whose origin is exactly `$CHAT_ORIGIN`, whose path is
-`/continue`, and whose fragment contains a transfer code, plus a valid ISO
-`expiresAt`. Do not open, preview, scan, or redeem the URL because that consumes
-one of its five uses.
+requires a URL equal to `$CHAT_ORIGIN` plus non-empty `botId` and `workspace`
+values. The browser workspace that issued the ticket is already the paired Chat
+session; do not create an identity transfer or `/continue` handoff.
 
 ## Capture requested previews
 
 Skip this section unless the user explicitly asks to open, preview, or capture
-the local app. In that case, redeem the ready handoff exactly once in the browser,
-confirm the resulting page remains on the `$CHAT_ORIGIN` origin, and capture only
-the requested states. Write screenshots or other requested artifacts to the
-user's requested repository-relative directory, creating it when needed; do not
-place credentials, the transfer URL, or configuration files there. Report the
-artifact paths and that the handoff has at most four successful redemptions
-remaining. Do not return or separately open the handoff again after redeeming it.
-If the continuation page asks whether to import or fork the native harness
-session, choose **Fork session** for preview work so the original session is not
-continued or mutated. Choose **Import session** only when the user explicitly
-requests that behavior.
+the local app. In that case, return to or reload the existing `$CHAT_ORIGIN`
+browser tab after pairing, confirm it remains on the exact local origin, and
+capture only the requested states. Write screenshots or other requested
+artifacts to the user's requested repository-relative directory, creating it
+when needed; do not place credentials, the pairing URL, or configuration files
+there. Report the artifact paths. Do not create or redeem an identity transfer
+for preview work.
 
-## Return the handoff
+## Return the local app
 
-When the handoff was not redeemed for a requested preview, return the exact
-clickable `url` and `expiresAt` from the ready record. Mention that it can be
-successfully opened up to five times and works only while the local app and
-paired Runtime remain online. Include QR paths when setup returns them. When the
-preview workflow already redeemed the handoff, return the captured artifact paths
-instead and do not expose the transfer URL. Never expose saved credentials or
-configuration files.
+When no preview was requested, return the exact clickable `$CHAT_ORIGIN` URL and
+the ready record's Bot ID and workspace. Mention that Chat works only while the
+local app and paired Runtime remain online. When a preview was requested, return
+the captured artifact paths and the local app URL. Never expose the pairing URL,
+ticket, saved credentials, or configuration files.
 
-If setup returns a typed error or does not become ready within five minutes,
+If pairing returns a typed error or does not become ready within five minutes,
 report the error instead of returning the unpaired homepage URL.
