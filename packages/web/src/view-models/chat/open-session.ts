@@ -1,4 +1,9 @@
-import type { NativeSessionEntry, NativeSessionResult, SessionReadyEvent } from "@moxt-ai/mobius-sdk/channel";
+import type {
+    NativeSessionEntry,
+    NativeSessionHistory,
+    NativeSessionResult,
+    SessionReadyEvent,
+} from "@moxt-ai/mobius-sdk/channel";
 import type { ConversationActiveTurn } from "../../services/chat/bot-chat-api.ts";
 
 export interface OpenMobiusSession {
@@ -9,7 +14,7 @@ export interface OpenMobiusSession {
               readonly action: "conversation";
               readonly ready: SessionReadyEvent;
               readonly targetSessionId: string;
-              readonly history: { readonly status: "unavailable" };
+              readonly history: Extract<NativeSessionHistory, { readonly status: "unavailable" }>;
               readonly activeTurn: ConversationActiveTurn;
           };
     readonly entry: NativeSessionEntry;

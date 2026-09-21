@@ -361,6 +361,27 @@ export const createBotChatHomeStore = (
                 }
                 const message = cause instanceof Error ? cause.message : "Chat is unavailable.";
                 const runtimeFailure = isRuntimeConnectionFailure(cause);
+                if (openedBot !== null && runtimeFailure) {
+                    set({
+                        connectionStatus: { kind: "disconnected", label: "Disconnected" },
+                        view: { kind: "runtime-disconnected", bot: openedBot, message },
+                    });
+                    try {
+                        await requests.waitForWorkspaceChange(openedBot.botId, signal);
+                        signal.throwIfAborted();
+                        set((current) => ({ revision: current.revision + 1 }));
+                    } catch (watchCause) {
+                        if (signal.aborted) {
+                            return;
+                        }
+                        if (watchCause instanceof DOMException && watchCause.name === "TimeoutError") {
+                            set((current) => ({ revision: current.revision + 1 }));
+                            return;
+                        }
+                        throw watchCause;
+                    }
+                    return;
+                }
                 set((current) => ({
                     connectionStatus:
                         current.connectionStatus.kind === "connecting" || runtimeFailure
@@ -369,9 +390,7 @@ export const createBotChatHomeStore = (
                     view:
                         openedBot === null
                             ? { kind: "failed", message }
-                            : runtimeFailure
-                              ? { kind: "runtime-disconnected", bot: openedBot, message }
-                              : { kind: "connection-failed", bot: openedBot, message },
+                            : { kind: "connection-failed", bot: openedBot, message },
                 }));
             }
         },

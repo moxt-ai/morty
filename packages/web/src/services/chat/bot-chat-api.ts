@@ -242,7 +242,13 @@ export class BotChatApi {
             activeTurn,
             targetSessionId: access.sessionId,
             ready: decodeSessionReadyEvent(JSON.stringify(access.ready)),
-            history: { status: "unavailable" as const },
+            history: {
+                status: "unavailable" as const,
+                cause: {
+                    code: "native_history_not_requested",
+                    message: "Native message history has not been requested yet.",
+                },
+            },
         },
         entry: {
             entryId: access.sessionId,

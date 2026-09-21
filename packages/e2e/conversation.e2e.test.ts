@@ -103,11 +103,18 @@ test("Given a paired workspace, When a user works across conversations, Then sen
         const followUp = "Continue the second conversation";
         await runtime.sendMessage(followUp);
         await expect(page.getByTestId(dataTestId.agentResponse).nth(1)).toContainText(followUp);
+        const finalFollowUp = "Complete the second conversation";
+        await runtime.sendMessage(finalFollowUp);
+        await expect(page.getByTestId(dataTestId.agentResponse).nth(2)).toContainText(finalFollowUp);
         const savedUrl = page.url();
         await page.reload();
-        await expect(page.getByTestId(dataTestId.agentResponse).nth(1)).toContainText(followUp);
+        await expect(page.getByTestId(dataTestId.agentResponse).nth(2)).toContainText(finalFollowUp);
         expect(page.url()).toBe(savedUrl);
-        await expect(page.getByTestId(dataTestId.userMessage)).toHaveText(["Second conversation", followUp]);
+        await expect(page.getByTestId(dataTestId.userMessage)).toHaveText([
+            "Second conversation",
+            followUp,
+            finalFollowUp,
+        ]);
 
         await page.goto(`${new URL(page.url()).origin}/?conversationId=${firstConversationId}`);
         await expect(page.getByTestId(dataTestId.userMessage)).toHaveText(["First conversation"]);
@@ -130,6 +137,18 @@ test("Given a paired workspace, When a user works across conversations, Then sen
         await expect(page.getByTestId(dataTestId.agentResponse).last()).toContainText(
             "OpenCode turn 2: recover completed native history",
         );
+        await runtime.sendMessage("confirm completed native history");
+        await expect(page.getByTestId(dataTestId.agentResponse).last()).toContainText(
+            "OpenCode turn 3: confirm completed native history",
+        );
+        await page.reload();
+        await expect(page.getByTestId(dataTestId.agentReasoning).last()).toContainText("Inspecting the workspace");
+        await expect(
+            page.getByTestId(dataTestId.agentToolCall).filter({ hasText: "Read package metadata" }).last(),
+        ).toBeVisible();
+        await expect(
+            page.getByTestId(dataTestId.agentToolCall).filter({ hasText: "Agent error" }).last(),
+        ).toContainText("Agent could not inspect the optional workspace file");
     });
 
     await test.step("queue a follow-up while the agent is working", async () => {

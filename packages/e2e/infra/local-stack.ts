@@ -22,6 +22,7 @@ const mobiusRepository = join(repository, "third-party", "mobius");
 const fixtureDirectory = fileURLToPath(new URL("../fixtures", import.meta.url));
 const platformConfiguration = join(fixtureDirectory, "wrangler.platform.jsonc");
 const chatConfiguration = join(fixtureDirectory, "wrangler.chat.jsonc");
+const wranglerExecutable = join(repository, "node_modules", ".bin", "wrangler");
 const acpProxy = fileURLToPath(new URL("./acp-proxy.ts", import.meta.url));
 
 async function freePort() {
@@ -48,20 +49,8 @@ async function migrate(
     cwd = repository,
 ) {
     await harness.run(
-        "pnpm",
-        [
-            "exec",
-            "wrangler",
-            "d1",
-            "migrations",
-            "apply",
-            binding,
-            "--local",
-            "--persist-to",
-            persistence,
-            "--config",
-            configuration,
-        ],
+        wranglerExecutable,
+        ["d1", "migrations", "apply", binding, "--local", "--persist-to", persistence, "--config", configuration],
         { cwd },
     );
 }
@@ -120,10 +109,8 @@ export class LocalStack {
         await this.harness.stage("start-platform", async () => {
             await this.harness.start(
                 "mobius-platform",
-                "pnpm",
+                wranglerExecutable,
                 [
-                    "exec",
-                    "wrangler",
                     "dev",
                     "--config",
                     platformConfiguration,
@@ -181,9 +168,7 @@ export class LocalStack {
             SLACK_SERVER_BASE_URL: this.chatOrigin,
             SLACK_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
         };
-        await this.harness.run("pnpm", [
-            "exec",
-            "wrangler",
+        await this.harness.run(wranglerExecutable, [
             "r2",
             "object",
             "put",
@@ -198,9 +183,7 @@ export class LocalStack {
         ]);
         await this.harness.stage("start-chat", async () => {
             const variableArguments = Object.entries(variables).flatMap(([key, value]) => ["--var", `${key}:${value}`]);
-            await this.harness.start("mobius-chat", "pnpm", [
-                "exec",
-                "wrangler",
+            await this.harness.start("mobius-chat", wranglerExecutable, [
                 "dev",
                 "--config",
                 chatConfiguration,

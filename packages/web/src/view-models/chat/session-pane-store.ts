@@ -44,7 +44,7 @@ import type {
 } from "./session-pane-types.ts";
 import {
     applyRecordedContents,
-    historySessionMessages,
+    historySessionPresentation,
     placeAgentActivity,
     promptImageContents,
     type SessionMessage,
@@ -289,7 +289,8 @@ export function createSessionPaneModel(options: {
             await requests.submitTurn(botId, sessionId, { ...request, sessionConfigurations }, signal),
     });
     const initialDelivery = delivery.getState().state;
-    const savedMessages = historySessionMessages(session.result.history, command === "" ? null : command);
+    const saved = historySessionPresentation(session.result.history, sessionId, command === "" ? null : command);
+    const savedMessages = saved.messages;
     const persistedMessages =
         initialDelivery.kind === "delivery-unknown"
             ? includePendingUserMessage(
@@ -383,7 +384,7 @@ export function createSessionPaneModel(options: {
             options: session.result.ready.configOptions,
             draft: "",
             attachments: [],
-            activities: new Map(),
+            activities: saved.activities,
             interactions: [],
             operation: { kind: "idle" },
             activity: initialWork.activity,
@@ -395,7 +396,7 @@ export function createSessionPaneModel(options: {
                     const reconcilingTurn = activeTurn.current();
                     signal.addEventListener("abort", () => connected.close(), { once: true });
                     const [nativeHistory, pendingInteractions, restoredTurn] = await Promise.all([
-                        connected.sessions.readNativeHistory(sessionId, signal),
+                        connected.sessions.queryNativeMessages(sessionId, signal),
                         connected.interactions.listPending(sessionId, signal),
                         reconcilingTurn.kind === "accepted"
                             ? connected.turns.read(sessionId, reconcilingTurn.turnId, signal)
@@ -417,7 +418,12 @@ export function createSessionPaneModel(options: {
                         activeTurn.turnCleared(command);
                         command = "";
                     }
-                    const nativeMessages = historySessionMessages(nativeHistory, command === "" ? null : command);
+                    const native = historySessionPresentation(
+                        nativeHistory,
+                        sessionId,
+                        command === "" ? null : command,
+                    );
+                    const nativeMessages = native.messages;
                     delivery
                         .getState()
                         .reconcile([
@@ -464,7 +470,7 @@ export function createSessionPaneModel(options: {
                                   { activity: { kind: "idle" }, messages: restoredMessages },
                                   { commandId: command, attempt: null },
                               );
-                    set({ activities: new Map(), ...restoredWork });
+                    set({ activities: native.activities, ...restoredWork });
                     const subscription = await connected.events.subscribe(
                         sessionId,
                         "",
@@ -631,7 +637,7 @@ export function createSessionPaneModel(options: {
                                     const completedCommand = command;
                                     const completedHistory =
                                         payload instanceof MobiusTurnCompletedEvent
-                                            ? await connected.sessions.readNativeHistory(
+                                            ? await connected.sessions.queryNativeMessages(
                                                   sessionId,
                                                   AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
                                               )
@@ -640,9 +646,9 @@ export function createSessionPaneModel(options: {
                                     if (command !== completedCommand) {
                                         return true;
                                     }
-                                    const completedMessages =
+                                    const completed =
                                         completedHistory?.status === "available"
-                                            ? historySessionMessages(completedHistory)
+                                            ? historySessionPresentation(completedHistory, sessionId)
                                             : null;
                                     if (completedHistory?.status === "available") {
                                         delivery.getState().reconcile(completedHistory.coveredCommandIds);
@@ -659,7 +665,8 @@ export function createSessionPaneModel(options: {
                                                       commandId: completedCommand,
                                                       kind: "work-completed",
                                                   }),
-                                        messages: completedMessages ?? current.messages,
+                                        activities: completed?.activities ?? current.activities,
+                                        messages: completed?.messages ?? current.messages,
                                         operation: { kind: "idle" },
                                     }));
                                     tasks.getState().finish(completedCommand);
@@ -675,7 +682,7 @@ export function createSessionPaneModel(options: {
                     if (reconcilingTurn.kind === "accepted" && command === reconcilingTurn.commandId) {
                         const latestTurn = await connected.turns.read(sessionId, reconcilingTurn.turnId, signal);
                         if (latestTurn.state.kind !== "queued" && latestTurn.state.kind !== "running") {
-                            const completedHistory = await connected.sessions.readNativeHistory(sessionId, signal);
+                            const completedHistory = await connected.sessions.queryNativeMessages(sessionId, signal);
                             signal.throwIfAborted();
                             if (command === reconcilingTurn.commandId) {
                                 delivery
@@ -688,9 +695,11 @@ export function createSessionPaneModel(options: {
                                 tasks.getState().finish(command);
                                 activeTurn.turnCleared(command);
                                 command = "";
+                                const restored = historySessionPresentation(completedHistory, sessionId);
                                 set({
                                     activity: { kind: "idle" },
-                                    messages: historySessionMessages(completedHistory),
+                                    activities: restored.activities,
+                                    messages: restored.messages,
                                     operation: { kind: "idle" },
                                 });
                             }
