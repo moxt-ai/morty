@@ -272,6 +272,7 @@ export function BotChatHome({
                               ? model.target.sessionId
                               : ""
                     }
+                    directoryRevision={model.directoryRevision}
                     bots={model.bots}
                     botOperation={model.botOperation}
                     connectionStatus={connectionStatus}
@@ -285,6 +286,7 @@ export function BotChatHome({
                     onOpen={(session) => openManaged(session.kind, session.id)}
                     onOpenSession={(session) => openManaged(session.result.action, session.result.ready.sessionId)}
                     onNewConversation={newConversation}
+                    key={active.bot.botId}
                 />
             )}
             {model.sessionView.kind === "session-access" && active !== null ? (
