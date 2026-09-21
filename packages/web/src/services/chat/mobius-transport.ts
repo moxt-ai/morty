@@ -26,7 +26,7 @@ import {
     MobiusTurnFailedEvent,
     MobiusTurnStartedEvent,
     mobiusApiUrl,
-    type NativeSessionCommand,
+    type NativeSessionRequest,
     type NativeSessionResult,
     type SessionConfigOption,
     type SessionConfigUpdatedEvent,
@@ -192,7 +192,7 @@ async function connectBrowserServiceClients(connection: ChannelConnection): Prom
 abstract class TransportConnection {
     abstract readonly readFile: (sessionId: string, path: string, signal: AbortSignal) => Promise<FileReadResult>;
     abstract readonly nativeSession: (
-        command: NativeSessionCommand,
+        command: NativeSessionRequest,
         signal: AbortSignal,
     ) => Promise<NativeSessionResult>;
     abstract readonly cancelAgentInstallation: (request: AgentInstallCancelRequest) => Promise<void>;
@@ -361,7 +361,7 @@ class ConnectedTransport extends TransportConnection {
     };
 
     readonly nativeSession = async (
-        command: NativeSessionCommand,
+        command: NativeSessionRequest,
         signal: AbortSignal,
     ): Promise<NativeSessionResult> => {
         signal.throwIfAborted();
@@ -826,7 +826,7 @@ export async function manageNativeSession(
         sessionId: scope.sessionId,
         requestId: crypto.randomUUID(),
         kind: "native.session.request",
-    } satisfies Omit<NativeSessionCommand, "action">;
+    } satisfies Omit<NativeSessionRequest, "action">;
     switch (action.action) {
         case "import":
         case "fork":

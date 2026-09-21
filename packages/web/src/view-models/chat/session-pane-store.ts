@@ -9,11 +9,13 @@ import {
     type MobiusClient,
     MobiusControlEvent,
     MobiusElicitationResponseRequest,
+    MobiusPageRequest,
     MobiusPermissionResponseRequest,
     MobiusRunningAttemptSummary,
     MobiusTurnCompletedEvent,
     MobiusTurnFailedEvent,
     MobiusTurnStartedEvent,
+    type NativeSessionHistory,
     type PromptImage,
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
@@ -230,6 +232,8 @@ function resolvePermission(
 export interface SessionPaneStore {
     readonly connection: Connection;
     readonly messages: readonly SessionMessage[];
+    readonly historyLoading: boolean;
+    readonly hasOlderHistory: boolean;
     readonly options: readonly SessionConfigOption[];
     readonly draft: string;
     readonly attachments: readonly ComposerAttachment[];
@@ -238,6 +242,7 @@ export interface SessionPaneStore {
     readonly operation: Operation;
     readonly activity: SessionActivityState;
     readonly connect: (signal: AbortSignal) => Promise<void>;
+    readonly loadOlderMessages: (signal: AbortSignal) => Promise<void>;
     readonly setDraft: (draft: string) => void;
     readonly setAttachments: (attachments: readonly ComposerAttachment[]) => void;
     readonly send: (signal: AbortSignal) => Promise<void>;
@@ -322,6 +327,8 @@ export function sessionPanePresentation(
                         : "",
         controlRunning,
         deliveryUnknownUserMessageId,
+        hasOlderHistory: model.hasOlderHistory,
+        historyLoading: model.historyLoading,
         outputState:
             queue.operation.kind === "submitting"
                 ? "sending"
@@ -371,6 +378,10 @@ export function createSessionPaneModel(options: {
     const activeTurn = createSessionActiveTurn({ initial: initialActiveTurn, sessionId, storage: options.storage });
     const openedActiveTurn = activeTurn.current();
     let client: MobiusClient | null = null;
+    let nativeHistory: NativeSessionHistory | null =
+        session.result.history.status === "available" ? session.result.history : null;
+    let historyCursor = nativeHistory === null ? null : "";
+    let loadingOlderHistory = false;
     let command = openedActiveTurn.kind === "idle" ? "" : openedActiveTurn.commandId;
     let sessionConfigurations = session.result.ready.configOptions.map((option) => ({
         booleanValue: option.type === "boolean" ? option.booleanValue : false,
@@ -477,6 +488,8 @@ export function createSessionPaneModel(options: {
         return {
             connection: { kind: "loading" },
             messages: initialWork.messages,
+            historyLoading: false,
+            hasOlderHistory: historyCursor !== null,
             options: session.result.ready.configOptions,
             draft: "",
             attachments: [],
@@ -484,6 +497,52 @@ export function createSessionPaneModel(options: {
             interactions: [],
             operation: { kind: "idle" },
             activity: initialWork.activity,
+            loadOlderMessages: async (signal) => {
+                if (loadingOlderHistory || historyCursor === null || client === null) {
+                    return;
+                }
+                loadingOlderHistory = true;
+                set({ historyLoading: true });
+                try {
+                    const page = await client.sessions.queryNativeMessages(
+                        sessionId,
+                        new MobiusPageRequest(50, historyCursor),
+                        signal,
+                    );
+                    signal.throwIfAborted();
+                    if (page.status !== "available" || nativeHistory?.status !== "available") {
+                        nativeHistory = page.status === "available" ? page : nativeHistory;
+                        historyCursor = page.nextCursor;
+                        set({ hasOlderHistory: historyCursor !== null });
+                        return;
+                    }
+                    const coveredCommandIds = [...page.coveredCommandIds, ...nativeHistory.coveredCommandIds].filter(
+                        (id, index, ids) => ids.indexOf(id) === index,
+                    );
+                    nativeHistory = {
+                        ...nativeHistory,
+                        messages: [...page.messages, ...nativeHistory.messages],
+                        coveredCommandIds,
+                        coveredMessageIds: [...page.coveredMessageIds, ...nativeHistory.coveredMessageIds].filter(
+                            (id, index, ids) => ids.indexOf(id) === index,
+                        ),
+                        truncated: page.truncated || nativeHistory.truncated,
+                    };
+                    historyCursor = page.nextCursor;
+                    const rendered = historySessionPresentation(nativeHistory, sessionId, command || null);
+                    signal.throwIfAborted();
+                    set({
+                        activities: rendered.activities,
+                        hasOlderHistory: historyCursor !== null,
+                        messages: rendered.messages,
+                    });
+                } finally {
+                    loadingOlderHistory = false;
+                    if (!signal.aborted) {
+                        set({ historyLoading: false });
+                    }
+                }
+            },
             connect: async (signal) => {
                 let lastSequence = 0n;
                 try {
@@ -496,7 +555,7 @@ export function createSessionPaneModel(options: {
                     const connected = client;
                     const reconcilingTurn = activeTurn.current();
                     signal.addEventListener("abort", () => connected.close(), { once: true });
-                    const [nativeHistory, pendingInteractions, restoredTurn] = await Promise.all([
+                    const [loadedHistory, pendingInteractions, restoredTurn] = await Promise.all([
                         connected.sessions.queryNativeMessages(sessionId, signal),
                         connected.interactions.listPending(sessionId, signal),
                         reconcilingTurn.kind === "accepted"
@@ -504,6 +563,8 @@ export function createSessionPaneModel(options: {
                             : Promise.resolve(null),
                     ]);
                     signal.throwIfAborted();
+                    nativeHistory = loadedHistory.status === "available" ? loadedHistory : null;
+                    historyCursor = loadedHistory.status === "available" ? loadedHistory.nextCursor : null;
                     set({
                         interactions: pendingInteractions.flatMap((interaction) => {
                             const presented = presentInteraction(interaction);
@@ -520,7 +581,7 @@ export function createSessionPaneModel(options: {
                         command = "";
                     }
                     const native = historySessionPresentation(
-                        nativeHistory,
+                        loadedHistory,
                         sessionId,
                         command === "" ? null : command,
                     );
@@ -528,7 +589,7 @@ export function createSessionPaneModel(options: {
                     delivery
                         .getState()
                         .reconcile([
-                            ...(nativeHistory.status === "available" ? nativeHistory.coveredCommandIds : []),
+                            ...(loadedHistory.status === "available" ? loadedHistory.coveredCommandIds : []),
                             ...(command !== "" &&
                             nativeMessages.some((message) => message.role === "user" && message.id === command)
                                 ? [command]
@@ -536,7 +597,7 @@ export function createSessionPaneModel(options: {
                         ]);
                     const liveCommandMessages =
                         command === "" ||
-                        (nativeHistory.status === "available" && nativeHistory.coveredCommandIds.includes(command))
+                        (loadedHistory.status === "available" && loadedHistory.coveredCommandIds.includes(command))
                             ? []
                             : get().messages.filter((message) =>
                                   message.role === "user"
@@ -571,7 +632,11 @@ export function createSessionPaneModel(options: {
                                   { activity: { kind: "idle" }, messages: restoredMessages },
                                   { commandId: command, attempt: null },
                               );
-                    set({ activities: native.activities, ...restoredWork });
+                    set({
+                        activities: native.activities,
+                        hasOlderHistory: historyCursor !== null,
+                        ...restoredWork,
+                    });
                     const subscription = await connected.events.subscribe(
                         sessionId,
                         "",
