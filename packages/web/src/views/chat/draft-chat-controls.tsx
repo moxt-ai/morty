@@ -79,14 +79,21 @@ export function DraftChatControls({
             </div>
         );
     }
+    const switching = settings.kind === "switching";
     const selected = settings.workspace.selected;
-    const model = settings.options.find((option) => option.category === "model" && option.type !== "boolean");
+    const selectedHarness = switching
+        ? settings.selectedHarness
+        : selected === null
+          ? ""
+          : `${selected.runtimeId}:${selected.agentRef}`;
+    const options = switching ? [] : settings.options;
+    const model = options.find((option) => option.category === "model" && option.type !== "boolean");
     return (
         <div className="flex min-w-0 items-center gap-1">
             <ChatConfigurationMenu
                 controls={[
                     {
-                        disabled,
+                        disabled: disabled || switching,
                         id: "harness",
                         kind: "select" as const,
                         label: "Harness",
@@ -101,10 +108,11 @@ export function DraftChatControls({
                             .map((agent) => ({
                                 value: `${agent.runtimeId}:${agent.agentRef}`,
                                 label: `${agent.label} · ${agent.machineName}`,
+                                tabLabel: agent.label,
                             })),
-                        value: selected === null ? "" : `${selected.runtimeId}:${selected.agentRef}`,
+                        value: selectedHarness,
                     },
-                    ...settings.options.map((option) =>
+                    ...options.map((option) =>
                         option.type === "boolean"
                             ? {
                                   checked: option.booleanValue,
@@ -127,13 +135,16 @@ export function DraftChatControls({
                               },
                     ),
                 ]}
+                settingsLoading={switching}
             />
             <CwdSelector
-                disabled={disabled}
+                disabled={disabled || switching}
                 signal={operation.current?.signal ?? AbortSignal.abort()}
                 viewModel={viewModel}
             />
-            {model === undefined && <span className="sr-only">This harness has not reported any model choices.</span>}
+            {!switching && model === undefined && (
+                <span className="sr-only">This harness has not reported any model choices.</span>
+            )}
         </div>
     );
 }

@@ -14,6 +14,11 @@ type DraftSettingsState =
     | { readonly kind: "loading" }
     | { readonly kind: "failed"; readonly message: string }
     | {
+          readonly kind: "switching";
+          readonly selectedHarness: string;
+          readonly workspace: ChatWorkspace;
+      }
+    | {
           readonly kind: "ready";
           readonly workspace: ChatWorkspace;
           readonly bindingId: string;
@@ -230,7 +235,9 @@ export const createDraftControlsStore = (
         };
         const load = async (lifetimeSignal: AbortSignal): Promise<void> => {
             const signal = AbortSignal.any([lifetimeSignal, AbortSignal.timeout(120_000)]);
-            set({ settings: { kind: "loading" } });
+            if (get().settings.kind !== "switching") {
+                set({ settings: { kind: "loading" } });
+            }
             onSettings(null);
             try {
                 while (!signal.aborted) {
@@ -431,7 +438,8 @@ export const createDraftControlsStore = (
                 if (agent === undefined) {
                     return;
                 }
-                set({ settings: { kind: "loading" } });
+                selectedHarness = value;
+                set({ settings: { kind: "switching", selectedHarness: value, workspace: settings.workspace } });
                 onSettings(null);
                 try {
                     await requests.selectAgent(
@@ -445,10 +453,10 @@ export const createDraftControlsStore = (
                         AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
                     );
                     signal.throwIfAborted();
-                    selectedHarness = value;
                     await load(signal);
                 } catch (cause) {
                     if (!signal.aborted) {
+                        selectedHarness = "";
                         set({
                             settings: {
                                 kind: "failed",
