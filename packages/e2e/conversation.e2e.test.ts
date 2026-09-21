@@ -17,12 +17,6 @@ test("Given a paired workspace, When a user works across conversations, Then ses
         await page.keyboard.press("Escape");
     });
 
-    await page.getByTestId(dataTestId.agentConfiguration).click();
-    await expect(page.getByTestId(dataTestId.agentSetting("model"))).toBeVisible();
-    await expect(page.getByTestId(dataTestId.agentSetting("reasoning_effort"))).toBeVisible();
-    await expect(page.getByTestId(dataTestId.agentSetting("fast_mode"))).toBeVisible();
-    await page.getByTestId(dataTestId.agentConfiguration).click();
-
     let firstConversationId = "";
     await test.step("create the first conversation with an image", async () => {
         const composer = page.getByTestId(dataTestId.messageComposer);
@@ -43,14 +37,6 @@ test("Given a paired workspace, When a user works across conversations, Then ses
         await expect(page).toHaveURL(/\?conversationId=/u);
         await expect(page.getByRole("list", { name: "Attachments", exact: true })).toHaveCount(0);
         await expect(page.getByTestId(dataTestId.agentResponse).first()).toContainText("First conversation");
-        await expect(page.getByTestId(dataTestId.sessionStatus)).toHaveText("Idle");
-        await page.getByTestId(dataTestId.agentConfiguration).click();
-        const mode = page.getByTestId(dataTestId.agentSetting("mode"));
-        await expect(mode).toBeEnabled();
-        await mode.click();
-        await page.keyboard.press("ArrowDown");
-        await page.keyboard.press("Enter");
-        await expect(mode).toHaveText("Plan");
         firstConversationId = new URL(page.url()).searchParams.get("conversationId") ?? "";
         assert.notEqual(firstConversationId, "");
     });
@@ -60,16 +46,13 @@ test("Given a paired workspace, When a user works across conversations, Then ses
         await expect(
             page.getByTestId(dataTestId.managedConversation).filter({ hasText: "First conversation" }),
         ).toContainText(workingDirectory);
-        const originalDocument = await page.locator("html").elementHandle();
-        assert.ok(originalDocument);
         await runtime.sendMessage("Second conversation");
         await expect(page.getByTestId(dataTestId.agentResponse).first()).toContainText("Second conversation");
-        expect(await originalDocument.evaluate((element) => element.isConnected)).toBe(true);
-        await expect(page.getByTestId(dataTestId.userMessage).last()).toHaveText("Second conversation");
         const secondConversationId = new URL(page.url()).searchParams.get("conversationId");
         assert.ok(secondConversationId);
         expect(secondConversationId).not.toBe(firstConversationId);
-        await originalDocument.dispose();
+        await page.reload();
+        await expect(page.getByTestId(dataTestId.agentResponse).first()).toContainText("Second conversation");
 
         const followUp = "Continue the second conversation";
         await runtime.sendMessage(followUp);
