@@ -19,7 +19,7 @@ import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { SessionConnectionKind } from "../../view-models/chat/bot-chat-home-store.ts";
 import { createBrowserFilePreviewStore } from "../../view-models/chat/file-preview-store.ts";
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
-import { type SessionActivityState, workingCommandId } from "../../view-models/chat/session-activity-machine.ts";
+import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
 import { sessionDebugBlocks } from "../../view-models/chat/session-debug-blocks.ts";
 import { createSessionPaneModel, sessionPanePresentation } from "../../view-models/chat/session-pane-store.ts";
 import { MobiusSessionMessage } from "./mobius-session-message.tsx";
@@ -133,7 +133,6 @@ export function MobiusSessionPane({
     useEffect(() => {
         onConnectionStatusChange(sessionId, model.connection.kind);
     }, [model.connection.kind, onConnectionStatusChange, sessionId]);
-    const activeCommandId = workingCommandId(model.activity);
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
         run(async (signal) => await pane.store.getState().configure(option, value, booleanValue, signal));
     const openLocalFile = useCallback(
@@ -210,7 +209,7 @@ export function MobiusSessionPane({
                                 <MobiusSessionMessage
                                     message={message}
                                     activities={model.activities}
-                                    activeCommandId={activeCommandId}
+                                    activeCommandId={presentation.activeCommandId}
                                     activeMessageId={presentation.activeMessageId}
                                     deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
                                     onRemoveUnknownDelivery={pane.store.getState().removeUnknownDelivery}

@@ -1,5 +1,6 @@
 import type { MobiusAgentActivityEvent, MobiusAttemptSummary } from "@moxt-ai/mobius-sdk";
 import type { ReactNode } from "react";
+import { dataTestId } from "../../data-testid.ts";
 import { describeAgentReply, type ReplyPhase } from "../../services/chat/agent-reply.ts";
 import type { MarkdownImageReader } from "../agents/agent-markdown.tsx";
 import { AgentMarkdown } from "../agents/agent-markdown.tsx";
@@ -30,7 +31,7 @@ function ReplyStatus({ phase, hasText }: { readonly phase: ReplyPhase; readonly 
             break;
     }
     return (
-        <p role="status" className="px-4 text-sm text-muted-foreground">
+        <p data-testid={dataTestId.agentReplyStatus} role="status" className="px-4 text-sm text-muted-foreground">
             {message}
         </p>
     );

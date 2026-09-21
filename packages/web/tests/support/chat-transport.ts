@@ -82,6 +82,13 @@ export class ChatTransport implements ApiTransport {
                                     name: "Model One",
                                     value: "model-one",
                                 },
+                                {
+                                    description: "",
+                                    groupId: "",
+                                    groupName: "",
+                                    name: "Model Two",
+                                    value: "model-two",
+                                },
                             ],
                         },
                     ],
@@ -99,7 +106,7 @@ export class ChatTransport implements ApiTransport {
                 directoryLabel: "/workspace",
                 entries: [],
                 kind: "workspace.entries",
-                parentDirectoryId: null,
+                parentDirectoryId: "",
                 requestId: "workspace-request",
             });
         }

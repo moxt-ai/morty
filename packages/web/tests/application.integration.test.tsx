@@ -68,6 +68,23 @@ async function waitForText(selector: string, text: string): Promise<HTMLElement>
     });
 }
 
+async function waitForTitle(selector: string, title: string): Promise<HTMLElement> {
+    const element = document.querySelector<HTMLElement>(selector);
+    if (element?.title === title) {
+        return element;
+    }
+    return await new Promise((resolve) => {
+        const observer = new MutationObserver(() => {
+            const current = document.querySelector<HTMLElement>(selector);
+            if (current?.title === title) {
+                observer.disconnect();
+                resolve(current);
+            }
+        });
+        observer.observe(document.body, { attributes: true, childList: true, subtree: true });
+    });
+}
+
 test("Given an offline paired Agent, When the Web application opens, Then Chat remains usable and offers a valid pairing instruction", async () => {
     window.history.replaceState(null, "", "/chat");
     const transport = new ChatTransport();
@@ -110,4 +127,62 @@ test("Given an offline paired Agent, When the Web application opens, Then Chat r
     expect(composer).toBeInstanceOf(HTMLTextAreaElement);
     expect((composer as HTMLTextAreaElement).disabled).toBe(false);
     expect(document.querySelector(`[data-testid="${dataTestId.pairingInstruction}"]`)).toBeNull();
+});
+
+test("Given a user selected agent settings, When they create a new draft conversation, Then their last settings are restored", async () => {
+    window.history.replaceState(null, "", "/chat");
+    const transport = new ChatTransport();
+    transport.connectAgent();
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+        root?.render(
+            <ApiTransportProvider transport={transport}>
+                <ToastProvider>
+                    <WorkspaceApplication
+                        activeIdentity={applicationIdentity}
+                        authorize={async (signal) => signal.throwIfAborted()}
+                        userId="user-one"
+                    />
+                </ToastProvider>
+            </ApiTransportProvider>,
+        );
+    });
+    const configuration = await act(
+        async () =>
+            await waitForTitle(
+                `[data-testid="${dataTestId.agentConfiguration}"]`,
+                "OpenCode · Development Mac · Model One",
+            ),
+    );
+    await act(async () => configuration.click());
+    const model = await act(async () => await waitForElement(`[data-testid="${dataTestId.agentSetting("model")}"]`));
+    await act(async () => model.click());
+    const modelTwo = await act(
+        async () => await waitForElement(`[data-testid="${dataTestId.sessionConfigValue("model-two")}"]`),
+    );
+    await act(async () => modelTwo.click());
+    await act(
+        async () =>
+            await waitForTitle(
+                `[data-testid="${dataTestId.agentConfiguration}"]`,
+                "OpenCode · Development Mac · Model Two",
+            ),
+    );
+
+    const newConversation = await act(
+        async () => await waitForElement(`[data-testid="${dataTestId.newConversation}"]`),
+    );
+    await act(async () => newConversation.click());
+
+    const restored = await act(
+        async () =>
+            await waitForTitle(
+                `[data-testid="${dataTestId.agentConfiguration}"]`,
+                "OpenCode · Development Mac · Model Two",
+            ),
+    );
+    expect(restored.title).toBe("OpenCode · Development Mac · Model Two");
 });

@@ -49,6 +49,7 @@ test("Given a paired workspace, When a user works across conversations, Then sen
         await expect(page).toHaveURL(/\?conversationId=/u);
         await expect(page.getByRole("list", { name: "Attachments", exact: true })).toHaveCount(0);
         await expect(page.getByTestId(dataTestId.agentResponse).first()).toContainText("First conversation");
+        await expect(page.getByTestId(dataTestId.agentReplyStatus)).toHaveCount(0);
         firstConversationId = new URL(page.url()).searchParams.get("conversationId") ?? "";
         assert.notEqual(firstConversationId, "");
     });
@@ -96,6 +97,15 @@ test("Given a paired workspace, When a user works across conversations, Then sen
         await expect(page.getByTestId(dataTestId.agentResponse).last()).toContainText(
             "OpenCode turn 2: recover completed native history",
         );
+    });
+
+    await test.step("show a cancelled response after the user stops the agent", async () => {
+        await page.getByTestId(dataTestId.newConversation).click();
+        await runtime.sendMessage("wait until cancelled");
+        const stop = page.getByTestId(dataTestId.sendMessage);
+        await expect(stop).toHaveAttribute("aria-label", "Stop agent output");
+        await stop.click();
+        await expect(page.getByTestId(dataTestId.agentReplyStatus)).toHaveText("Response cancelled.");
     });
 
     await test.step("queue a follow-up while the agent is working", async () => {
