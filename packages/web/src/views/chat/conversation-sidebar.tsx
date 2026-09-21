@@ -159,6 +159,7 @@ export function ConversationSidebar({
                             <Button
                                 aria-label="Native Sessions"
                                 className="size-8 rounded-lg"
+                                data-testid={dataTestId.nativeSessions}
                                 onClick={() => setDialog(true)}
                                 size="icon"
                                 variant="ghost"

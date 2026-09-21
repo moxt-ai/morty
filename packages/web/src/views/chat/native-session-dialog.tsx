@@ -194,6 +194,7 @@ export function NativeSessionDialog({
                 createPortal(
                     <div
                         className="fixed right-4 bottom-4 z-[70] max-w-sm rounded-xl border border-destructive/20 bg-white px-4 py-3 text-sm text-destructive shadow-lg"
+                        data-testid={dataTestId.nativeSessionFailure}
                         role="alert"
                     >
                         {model.error}

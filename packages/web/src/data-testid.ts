@@ -42,6 +42,8 @@ export const dataTestId = Object.freeze({
     sessionLoadFailure: "chat-session-load-failure",
     chatLanding: "chat-landing",
     newConversation: "chat-new-conversation",
+    nativeSessions: "chat-native-sessions",
+    nativeSessionFailure: "chat-native-session-failure",
     shareMachine: "chat-share-machine",
     machineSharing: "chat-machine-sharing",
     localSessionEntry: "chat-local-session-entry",

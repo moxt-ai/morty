@@ -89,6 +89,7 @@ export async function platformPeer({
     agentsOnline = false,
     settingsAvailable = true,
     settingsFailure = "api-error",
+    nativeSessionFailure = false,
 }: {
     readonly pairingLifetimeMilliseconds?: number;
     readonly pairingsPaired?: boolean;
@@ -96,6 +97,7 @@ export async function platformPeer({
     readonly agentsOnline?: boolean;
     readonly settingsAvailable?: boolean;
     readonly settingsFailure?: "api-error" | "invalid-json";
+    readonly nativeSessionFailure?: boolean;
 } = {}) {
     const projects = new Map<string, object>();
     const sessions = new Map<string, object>();
@@ -141,6 +143,26 @@ export async function platformPeer({
             body += chunk;
         }
         const timestamp = AUTH_TIME.toISOString();
+        const nativeSessionsPath = request.url?.match(
+            /^\/mobius\/api\/v1\/projects\/([^/]+)\/runtimes\/([^/]+)\/native-sessions$/u,
+        );
+        if (
+            nativeSessionFailure &&
+            request.method === "POST" &&
+            nativeSessionsPath !== undefined &&
+            nativeSessionsPath !== null
+        ) {
+            response.writeHead(502).end(
+                JSON.stringify({
+                    error: {
+                        code: "acp_agent_error",
+                        message:
+                            "Codex cannot fork this session while its source thread is active. Diagnostics: https://agent.invalid/failure?token=secret /Users/alice/.codex/session.json",
+                    },
+                }),
+            );
+            return;
+        }
         const turnPath = request.url?.match(/^\/mobius\/api\/v1\/projects\/([^/]+)\/sessions\/([^/]+)\/turns$/u);
         if (request.method === "POST" && turnPath !== undefined && turnPath !== null) {
             const projectId = v.parse(v.string(), turnPath[1]);

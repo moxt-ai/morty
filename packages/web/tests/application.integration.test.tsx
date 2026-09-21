@@ -164,3 +164,56 @@ test("Given a conversation cannot load its Session, When Chat opens it, Then the
     const failure = await act(async () => await waitForElement(`[data-testid="${dataTestId.sessionLoadFailure}"]`));
     expect(failure.textContent).toBe("Platform returned an unexpected Session.");
 });
+
+test("Given the local Agent rejects a native Session fork, When the user forks that Session, Then Chat shows the concrete Agent cause", async () => {
+    window.history.replaceState(null, "", "/chat");
+    const transport = new ChatTransport({ forkFailure: true });
+    transport.connectAgent();
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+        root?.render(
+            <ApiTransportProvider transport={transport}>
+                <ToastProvider>
+                    <WorkspaceApplication
+                        activeIdentity={applicationIdentity}
+                        authorize={async (signal) => signal.throwIfAborted()}
+                        userId="user-one"
+                    />
+                </ToastProvider>
+            </ApiTransportProvider>,
+        );
+    });
+
+    const nativeSessions = await act(async () => await waitForElement(`[data-testid="${dataTestId.nativeSessions}"]`));
+    await act(async () => nativeSessions.click());
+    const entry = await act(async () => await waitForElement(`[data-testid="${dataTestId.localSessionEntry}"]`));
+    await act(async () => entry.click());
+    const fork = await act(async () => await waitForElement(`[data-testid="${dataTestId.forkLocalSession}"]`));
+    await act(async () => {
+        await new Promise<void>((resolve, reject) => {
+            const button = fork instanceof HTMLButtonElement ? fork : null;
+            if (button === null) {
+                reject(new Error("Fork control is not a button"));
+                return;
+            }
+            if (!button.disabled) {
+                resolve();
+                return;
+            }
+            const observer = new MutationObserver(() => {
+                if (!button.disabled) {
+                    observer.disconnect();
+                    resolve();
+                }
+            });
+            observer.observe(button, { attributes: true, attributeFilter: ["disabled"] });
+        });
+        fork.click();
+    });
+    const failure = await act(async () => await waitForElement(`[data-testid="${dataTestId.nativeSessionFailure}"]`));
+
+    expect(failure.textContent).toBe("Codex cannot fork this session while its source thread is active.");
+});

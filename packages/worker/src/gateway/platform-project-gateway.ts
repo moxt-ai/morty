@@ -61,6 +61,26 @@ export type ChatConversationInput =
           };
       };
 
+function sanitizedRuntimeFailureMessage(value: string): string {
+    const printable = Array.from(value, (character) => {
+        const code = character.charCodeAt(0);
+        return code < 32 || code === 127 ? " " : character;
+    }).join("");
+    const sanitized = printable
+        .replace(/([?&](?:access_token|authorization|credential|key|secret|token)=)[^&\s]*/giu, "$1[redacted]")
+        .replace(/(?:https?|wss?):\/\/[^\s)]+/giu, (encodedUrl) => {
+            try {
+                return new URL(encodedUrl).origin;
+            } catch {
+                return "[redacted-url]";
+            }
+        })
+        .replace(/(^|\s)(?:\/(?:Users|home|private|tmp)\/[^\s]+)/giu, "$1[local-path]")
+        .replace(/(^|\s)[a-z]:\\Users\\[^\s]+/giu, "$1[local-path]")
+        .trim();
+    return (sanitized || "The local Agent operation failed.").slice(0, 500);
+}
+
 export class PlatformProjectGateway {
     readonly #bindings: CloudBindings;
     constructor(bindings: CloudBindings) {
@@ -521,6 +541,7 @@ export class PlatformProjectGateway {
                 return await client.runtimes.nativeSessions(runtimeId, request, signal);
             },
             120000,
+            "preserve-runtime-cause",
         );
 
     readonly findNativeSessionByNativeSessionId = async (
@@ -548,6 +569,7 @@ export class PlatformProjectGateway {
         signal: AbortSignal,
         operation: (client: MobiusClient) => Promise<T>,
         operationTimeoutMilliseconds = 15000,
+        runtimeFailurePresentation: "contextualize" | "preserve-runtime-cause" = "contextualize",
     ): Promise<T> => {
         signal.throwIfAborted();
         const client = new MobiusClient({
@@ -571,9 +593,12 @@ export class PlatformProjectGateway {
                 throw new PlatformProjectError("NOT_FOUND", "The Runtime pairing was not found.", 404, { cause });
             }
             if (cause instanceof MobiusError) {
+                const message = sanitizedRuntimeFailureMessage(cause.message);
                 throw new PlatformProjectError(
                     cause.code,
-                    `Platform could not complete Runtime setup. Cause: ${cause.message}`,
+                    runtimeFailurePresentation === "preserve-runtime-cause"
+                        ? message
+                        : `Platform could not complete Runtime setup. Cause: ${message}`,
                     cause instanceof MobiusApiError ? cause.status : 502,
                     { cause },
                 );

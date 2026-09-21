@@ -14,11 +14,18 @@ afterEach(() => vi.useRealTimers());
 async function createChatFixture({
     settingsAvailable = true,
     settingsFailure = "api-error",
+    nativeSessionFailure = false,
 }: {
     readonly settingsAvailable?: boolean;
     readonly settingsFailure?: "api-error" | "invalid-json";
+    readonly nativeSessionFailure?: boolean;
 } = {}) {
-    const platform = await platformPeer({ agentsOnline: true, settingsAvailable, settingsFailure });
+    const platform = await platformPeer({
+        agentsOnline: true,
+        settingsAvailable,
+        settingsFailure,
+        nativeSessionFailure,
+    });
     const cloud = await createIdentityFixture({
         platform: {
             appId: platform.bindings.MOBIUS_APP_ID,
@@ -76,6 +83,33 @@ test("Given a Bot bound to one Runtime, When setup requests another Runtime, The
         });
         expect(rebound.status).toBe(409);
         expect(await rebound.json()).toMatchObject({ error: { code: "BOT_RUNTIME_FIXED" } });
+    } finally {
+        await fixture.close();
+    }
+});
+
+test("Given a local Agent returns a concrete native Session failure, When Chat requests the operation, Then the typed sanitized cause crosses the Platform boundary", async () => {
+    const fixture = await createChatFixture({ nativeSessionFailure: true });
+    try {
+        expect((await fixture.request(`chat/bots/${fixture.botId}/setup`, setupInput)).status).toBe(202);
+        const response = await fixture.request(`chat/bots/${fixture.botId}/native-sessions`, {
+            action: "list",
+            additionalDirectoryIds: [],
+            agentId: "agent-one",
+            cursor: null,
+            directoryId: "default",
+            discoveryId: null,
+            runtimeId: "runtime-1",
+        });
+
+        expect(response.status).toBe(502);
+        expect(await response.json()).toEqual({
+            error: {
+                code: "acp_agent_error",
+                message:
+                    "Codex cannot fork this session while its source thread is active. Diagnostics: https://agent.invalid [local-path]",
+            },
+        });
     } finally {
         await fixture.close();
     }

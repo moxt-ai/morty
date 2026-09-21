@@ -5,7 +5,12 @@ const botId = "bot-one";
 
 export class ChatTransport implements ApiTransport {
     #agentOnline = false;
+    readonly #forkFailure: boolean;
     readonly #workspaceChanges = new Set<() => void>();
+
+    constructor(options: { readonly forkFailure?: boolean } = {}) {
+        this.#forkFailure = options.forkFailure ?? false;
+    }
 
     readonly open = (): void => {};
     readonly close = (): void => {};
@@ -117,6 +122,73 @@ export class ChatTransport implements ApiTransport {
                     },
                 },
                 { status: 409 },
+            );
+        }
+        if (
+            this.#forkFailure &&
+            request.method === "POST" &&
+            path === `/mobius-cloud/api/chat/projects/${projectId}/bots/${botId}/native-sessions`
+        ) {
+            return Response.json({
+                action: "list",
+                capabilities: {
+                    additionalDirectories: false,
+                    audioPrompt: false,
+                    closeSession: false,
+                    deleteSession: false,
+                    embeddedContextPrompt: false,
+                    imagePrompt: false,
+                    listSessions: true,
+                    loadSession: true,
+                    promptQueueing: false,
+                    resumeSession: true,
+                    steering: false,
+                    unstableForkSession: true,
+                },
+                entries: [
+                    {
+                        additionalDirectories: [],
+                        directoryId: "default",
+                        directoryLabel: "/workspace",
+                        entryId: "entry-one",
+                        title: "Locked Codex session",
+                        updatedAt: "2026-09-21T00:00:00.000Z",
+                    },
+                ],
+                kind: "native.session.result",
+                nextCursor: null,
+                requestId: "native-list-request",
+                sessionId: "discovery-one",
+            });
+        }
+        if (
+            this.#forkFailure &&
+            request.method === "POST" &&
+            path === `/mobius-cloud/api/chat/projects/${projectId}/bots/${botId}/native-session/entry-one`
+        ) {
+            return Response.json({
+                history: {
+                    coveredCommandIds: [],
+                    messages: [{ role: "user", text: "Original Codex request" }],
+                    status: "available",
+                    truncated: false,
+                },
+                title: "Locked Codex session",
+            });
+        }
+        if (
+            this.#forkFailure &&
+            request.method === "POST" &&
+            path === `/mobius-cloud/api/chat/projects/${projectId}/bots/${botId}/native-session/entry-one/fork`
+        ) {
+            return Response.json(
+                {
+                    error: {
+                        code: "acp_agent_error",
+                        message: "Codex cannot fork this session while its source thread is active.",
+                    },
+                },
+                { status: 502 },
             );
         }
         if (request.method === "POST" && path === `/mobius-cloud/api/projects/${projectId}/identity/pairings`) {
