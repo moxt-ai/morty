@@ -43,16 +43,20 @@ DOM and drives it through visible user-facing elements. Run it with:
 pnpm test:web
 ```
 
-The production router, API clients, view-models, Zustand stores, and React views all
-participate. One stateful transport fake replaces the external Worker/WebSocket
-boundary. Extend that fake through protocol-level requests and responses; do not
-inject stores, render an isolated component, or create a new fake for each test.
+The production router, API clients, view-models, Zustand stores, React views, Chat
+Worker, Project Durable Objects, Platform Worker, Platform Durable Objects, and
+WebSocket transports all participate. They run in local in-memory Cloudflare
+runtimes. A single stateful fake Agent-daemon replaces the external local process and
+answers the real Runtime protocol for settings, sessions, messages, events, and file
+reads. Do not inject stores, render an isolated component, or replace Chat or Platform
+with response tables.
 
-This is the default owner for browser-side branching such as loading, reconnecting,
-queued work, history reconciliation, errors, and rendering. Browser E2E retains only
-the corresponding critical happy-path proof that real processes and transports can
-connect. A Web bug should not require another full-stack E2E step when its failure can
-be reproduced at this boundary.
+This is the default owner for browser-side branching that needs the real Chat and
+Platform path, including loading, reconnecting, queued work, history reconciliation,
+errors, and rendering. Keep it as one advancing journey instead of rebuilding the
+stack for many cases. Browser E2E retains only the proof that deployed-style
+processes and a real browser connect. A Web bug should not require another full-stack
+E2E step when it can be reproduced through this in-memory stack.
 
 ### Worker integration
 
@@ -74,10 +78,11 @@ behavior belong in `identity.integration.test.ts`; the setup CLI and browser
 handoff belong to the existing product journey in `packages/e2e/setup.e2e.test.ts`.
 Slack journeys stay under `slack/app`. Related state transitions should advance
 through one journey instead of rebuilding the same user, database, and Platform
-peer in separate cases. The small shared `support/identity-fixture.ts` starts the
-real Platform Worker and Chat Durable Objects in memory and supplies only external
-configuration and cleanup. Chat journeys always use real Project Durable Objects;
-the Chat creation fault cases replace only Platform with a stateful protocol peer.
+peer in separate cases. The small shared `support/identity-fixture.ts` starts real
+Chat Durable Objects and, for identity flows, the real Platform Worker in memory.
+Chat creation journeys keep the Chat Worker and its Project Durable Objects real
+while replacing the external Platform service with one stateful protocol peer for
+both successful and failure behavior.
 Slack journeys compose the production Slack application and queue consumer with
 stateful fakes at the external Clerk, Slack, Identity, and Platform ports.
 
@@ -127,7 +132,17 @@ proves progress; a bounded scenario timeout is only failure containment.
 
 ## CI and coverage
 
-Pull requests and merge-queue revisions run two parallel jobs:
+The normal deterministic command runs the lightweight application and Worker
+boundaries only:
+
+```bash
+pnpm test
+```
+
+Run the heavier browser journeys explicitly with `pnpm test:e2e`.
+
+Pull requests and merge-queue revisions validate Worker configuration and run two
+parallel verification jobs:
 
 - `static`: typecheck, build, lint, architecture checks, migrations, and Knip;
 - `tests`: the Web application and Worker boundary suites and their Istanbul report.
@@ -142,8 +157,9 @@ JSON, and HTML output. The 95% target is advisory; failed tests and missing or e
 reports are blocking. Code executed in a separately bundled Worker or subprocess is
 not credited to the parent runner, so percentages cannot prove a product path.
 
-Run `pnpm typecheck`, `pnpm lint`, and only the affected suites locally. Reserve
-`pnpm ci:check` for CI.
+Run `pnpm typecheck`, `pnpm lint`, and only the affected suites locally.
+`pnpm ci:check` is the serial reproduction of CI's static and coverage jobs; keep
+it for diagnosing the combined check rather than routine local iteration.
 
 ## Authentication and visual checks
 

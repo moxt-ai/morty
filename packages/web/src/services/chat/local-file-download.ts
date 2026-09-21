@@ -16,7 +16,7 @@ export function downloadLocalFile(file: LocalFileDownload): void {
         link.download = safeDownloadName(file.name);
         link.href = url;
         link.hidden = true;
-        document.body.append(link);
+        document.body.appendChild(link);
         try {
             link.click();
         } finally {

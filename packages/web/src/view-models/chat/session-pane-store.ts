@@ -487,7 +487,12 @@ export function createSessionPaneModel(options: {
             connect: async (signal) => {
                 let lastSequence = 0n;
                 try {
-                    client = await requests.connectSession(botId, sessionId, signal);
+                    client = await requests.connectSession(
+                        botId,
+                        sessionId,
+                        signal,
+                        session.result.action === "conversation" ? session.result.access : undefined,
+                    );
                     const connected = client;
                     const reconcilingTurn = activeTurn.current();
                     signal.addEventListener("abort", () => connected.close(), { once: true });

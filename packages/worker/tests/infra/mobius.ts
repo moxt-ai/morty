@@ -1,4 +1,3 @@
-import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { readD1Migrations } from "@cloudflare/vitest-plugin";
 import {
@@ -7,17 +6,25 @@ import {
     type PlatformRelayBindings,
 } from "@moxt-ai/mobius-test/app";
 import { FakeClerk } from "@moxt-ai/mobius-test/clerk";
+import { convertV4MiniflareOptions, Miniflare, WebSocketPair, WorkerResponse } from "@moxt-ai/mobius-test/cloudflare";
+import { createFakeAgentDaemonRuntime } from "@moxt-ai/mobius-test/platform-agent-daemon";
+import { serveTestApp } from "@moxt-ai/mobius-test/server";
 import { build } from "esbuild";
-import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import * as v from "valibot";
 import { miniflareDurableObjects } from "../support/miniflare-durable-objects.ts";
 
-const platformDirectory = new URL(
-    "../../../../third-party/mobius/packages/relay-cloudflare-platform/",
-    import.meta.url,
-);
-
-export async function createMobiusPlatformFixture() {
+export async function createMobiusPlatformFixture(
+    options: { readonly allowedOrigins?: ReadonlySet<string>; readonly platformDirectory?: URL } = {},
+) {
+    const platformDirectory =
+        options.platformDirectory ??
+        new URL("../../../../third-party/mobius/packages/relay-cloudflare-platform/", import.meta.url);
+    const cancellation = new AbortController();
+    const runtimes: Awaited<ReturnType<typeof createFakeAgentDaemonRuntime>>[] = [];
+    const previousResponse = globalThis.Response;
+    const previousWebSocketPair = Reflect.get(globalThis, "WebSocketPair");
+    globalThis.Response = WorkerResponse as unknown as typeof Response;
+    Reflect.set(globalThis, "WebSocketPair", WebSocketPair);
     const clerk = new FakeClerk();
     const developerToken = clerk.session("developer-1", clerk.defaultOrganizationId);
     const bundle = await build({
@@ -63,7 +70,7 @@ export async function createMobiusPlatformFixture() {
                 bindings,
                 developerAuthenticator: clerk.authenticator,
                 operatorSubjects: new Set(["developer-1"]),
-                allowedOrigins: new Set(),
+                allowedOrigins: new Set(options.allowedOrigins),
             },
             createPlatformGateways,
         );
@@ -92,64 +99,50 @@ export async function createMobiusPlatformFixture() {
             v.object({ appId: v.string(), defaultCredential: v.object({ credential: v.string() }) }),
             await applicationResponse.json(),
         );
-        const server = createServer(async (request, response) => {
-            try {
-                const headers = new Headers();
-                for (const [name, value] of Object.entries(request.headers)) {
-                    if (Array.isArray(value)) {
-                        for (const item of value) {
-                            headers.append(name, item);
-                        }
-                    } else if (value !== undefined) {
-                        headers.set(name, value);
-                    }
-                }
-                const chunks: Buffer[] = [];
-                for await (const chunk of request) {
-                    chunks.push(Buffer.from(chunk));
-                }
-                const result = await app.request(
-                    new Request(new URL(request.url ?? "/", "http://platform.test"), {
-                        method: request.method ?? "GET",
-                        headers,
-                        signal: AbortSignal.timeout(15_000),
-                        ...(chunks.length === 0 ? {} : { body: Buffer.concat(chunks) }),
-                    }),
-                );
-                response.writeHead(result.status, Object.fromEntries(result.headers));
-                response.end(Buffer.from(await result.arrayBuffer()));
-            } catch {
-                response.writeHead(500);
-                response.end();
-            }
-        });
-        await new Promise<void>((resolve, reject) => {
-            server.once("error", reject);
-            server.listen(0, "127.0.0.1", resolve);
-        });
-        const address = server.address();
-        if (address === null || typeof address === "string") {
-            throw new Error("Expected the Platform HTTP address");
-        }
+        const server = await serveTestApp({ app, signal: cancellation.signal, onServerMessage: () => undefined });
         return {
             app,
             attachments: bindings.R2_BUCKET_APAC,
             appId: application.appId,
             appCredential: application.defaultCredential.credential,
             developerToken,
-            baseUrl: `http://127.0.0.1:${address.port}`,
+            baseUrl: server.origin,
+            connectAgent: async (projectId: string) => {
+                const runtime = await createFakeAgentDaemonRuntime({
+                    credential: application.defaultCredential.credential,
+                    projectId,
+                    server: app,
+                    signal: cancellation.signal,
+                });
+                runtimes.push(runtime);
+                return { failure: runtime.failure, runtimeId: runtime.runtimeId };
+            },
             close: async () => {
-                server.closeAllConnections();
                 try {
-                    await new Promise<void>((resolve, reject) =>
-                        server.close((error) => (error ? reject(error) : resolve())),
-                    );
+                    await Promise.all(runtimes.splice(0).map(async (runtime) => runtime[Symbol.asyncDispose]()));
                 } finally {
-                    await platform.dispose();
+                    cancellation.abort(new Error("Mobius Platform fixture stopped"));
+                    try {
+                        await server[Symbol.asyncDispose]();
+                    } finally {
+                        if (previousWebSocketPair === undefined) {
+                            Reflect.deleteProperty(globalThis, "WebSocketPair");
+                        } else {
+                            Reflect.set(globalThis, "WebSocketPair", previousWebSocketPair);
+                        }
+                        globalThis.Response = previousResponse;
+                        await platform.dispose();
+                    }
                 }
             },
         };
     } catch (cause) {
+        if (previousWebSocketPair === undefined) {
+            Reflect.deleteProperty(globalThis, "WebSocketPair");
+        } else {
+            Reflect.set(globalThis, "WebSocketPair", previousWebSocketPair);
+        }
+        globalThis.Response = previousResponse;
         await platform.dispose();
         throw cause;
     }

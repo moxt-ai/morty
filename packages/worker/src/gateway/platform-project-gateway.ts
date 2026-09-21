@@ -287,6 +287,7 @@ export class PlatformProjectGateway {
                 const access = await client.sessions.createAccess(sessionId, 900, signal);
                 return {
                     endpoint: this.configuration().origin,
+                    projectId,
                     conversationId: sessionId,
                     sessionId,
                     credential: access.credential,

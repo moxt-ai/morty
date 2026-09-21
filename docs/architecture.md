@@ -31,6 +31,7 @@ One Cloud D1 and one Cloud R2 bucket serve the Slack component. Mobius remains a
 external service and owns its authorization and persistence. Cloud forwards only
 allowlisted headers and preserves cancellation, deadlines, streams, and upgrades.
 
-CI runs `pnpm ci:check` to verify type safety, build output, linting, HTTP scenarios,
-browser journeys, coverage, and dependency boundaries. Locally, run lint, type checks,
-and only related tests.
+CI runs static verification and the Web and Worker boundary suites in parallel.
+Browser journeys remain an explicit local suite. `pnpm ci:check` reproduces the
+required jobs serially; normal local work should run lint, type checks, and only
+related tests.

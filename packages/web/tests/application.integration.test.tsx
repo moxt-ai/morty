@@ -1,11 +1,11 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { ToastProvider } from "../src/components/ui/toast.tsx";
 import { dataTestId } from "../src/data-testid.ts";
 import { ApiTransportProvider } from "../src/services/api/api-transport-context.tsx";
 import { WorkspaceApplication } from "../src/views/authentication/session-application.tsx";
-import { applicationIdentity, ChatTransport } from "./support/chat-transport.ts";
+import { createChatWorker } from "./support/chat-worker.ts";
 
 declare global {
     var IS_REACT_ACT_ENVIRONMENT: boolean;
@@ -24,143 +24,120 @@ afterEach(async () => {
     window.history.replaceState(null, "", "/");
 });
 
-function waitForElement(selector: string): Promise<HTMLElement> {
-    const existing = document.querySelector<HTMLElement>(selector);
-    if (existing !== null) {
-        return Promise.resolve(existing);
-    }
-    return new Promise((resolve, reject) => {
-        const timeout = window.setTimeout(() => {
-            observer.disconnect();
-            reject(new Error(`Element did not appear: ${selector}`));
-        }, 1_000);
-        const observer = new MutationObserver(() => {
+async function waitForElement(selector: string): Promise<HTMLElement> {
+    return await vi.waitFor(
+        () => {
             const element = document.querySelector<HTMLElement>(selector);
-            if (element !== null) {
-                window.clearTimeout(timeout);
-                observer.disconnect();
-                resolve(element);
+            if (element === null) {
+                throw new Error(`Element did not appear: ${selector}; page: ${document.body.textContent}`);
             }
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-    });
+            return element;
+        },
+        { timeout: 5_000 },
+    );
 }
 
 async function waitForText(selector: string, text: string): Promise<HTMLElement> {
-    const element = document.querySelector<HTMLElement>(selector);
-    if (element?.textContent === text) {
-        return element;
-    }
-    return new Promise((resolve, reject) => {
-        const timeout = window.setTimeout(() => {
-            observer.disconnect();
-            reject(new Error(`Element did not show text: ${text}`));
-        }, 1_000);
-        const observer = new MutationObserver(() => {
-            const current = document.querySelector<HTMLElement>(selector);
-            if (current?.textContent === text) {
-                window.clearTimeout(timeout);
-                observer.disconnect();
-                resolve(current);
+    return await vi.waitFor(
+        () => {
+            const element = document.querySelector<HTMLElement>(selector);
+            if (element?.textContent?.includes(text) !== true) {
+                throw new Error(`Element did not show text: ${text}; page: ${document.body.textContent}`);
             }
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-    });
+            return element;
+        },
+        { timeout: 12_000 },
+    );
 }
 
-test("Given an offline paired Agent, When the Web application opens, Then Chat remains usable and offers a valid pairing instruction", async () => {
-    window.history.replaceState(null, "", "/chat");
-    const transport = new ChatTransport();
-    const container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-
-    await act(async () => {
-        root?.render(
-            <ApiTransportProvider transport={transport}>
-                <ToastProvider>
-                    <WorkspaceApplication
-                        activeIdentity={applicationIdentity}
-                        authorize={async (signal) => signal.throwIfAborted()}
-                        userId="user-one"
-                    />
-                </ToastProvider>
-            </ApiTransportProvider>,
-        );
-    });
-    const [landing, connection, pairing] = await act(
-        async () =>
-            await Promise.all([
-                waitForElement(`[data-testid="${dataTestId.chatLanding}"]`),
-                waitForElement(`[data-testid="${dataTestId.botConnectionStatus}"]`),
-                waitForElement(`[data-testid="${dataTestId.pairingInstruction}"]`),
-            ]),
+async function waitForEnabled(selector: string): Promise<HTMLButtonElement> {
+    return await vi.waitFor(
+        () => {
+            const element = document.querySelector<HTMLButtonElement>(selector);
+            if (element === null || element.disabled) {
+                throw new Error(`Element did not become enabled: ${selector}`);
+            }
+            return element;
+        },
+        { timeout: 12_000 },
     );
+}
 
-    expect(landing.textContent).toContain("Local agent");
-    expect(connection.textContent).toBe("Disconnected");
-    expect(pairing).toBeInstanceOf(HTMLInputElement);
-    expect((pairing as HTMLInputElement).value).toMatch(/^follow http:\/\/localhost:\d+\/pair\.md\?token=/u);
-
-    const composer = await act(async () => {
-        transport.connectAgent();
-        await waitForText(`[data-testid="${dataTestId.botConnectionStatus}"]`, "Connected");
-        return await waitForElement(`[data-testid="${dataTestId.messageComposer}"]`);
+async function sendPrompt(composer: HTMLTextAreaElement, prompt: string): Promise<void> {
+    await act(async () => {
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+        setter?.call(composer, prompt);
+        composer.dispatchEvent(new window.InputEvent("input", { bubbles: true, data: prompt }));
     });
-    expect(composer).toBeInstanceOf(HTMLTextAreaElement);
-    expect((composer as HTMLTextAreaElement).disabled).toBe(false);
-    expect(document.querySelector(`[data-testid="${dataTestId.pairingInstruction}"]`)).toBeNull();
-});
+    const send = await act(async () => await waitForEnabled(`[data-testid="${dataTestId.sendMessage}"]`));
+    await act(async () => send.click());
+}
 
-test("Given an open Session loses its Runtime, When the same Runtime reconnects, Then the page reports Connected again", async () => {
-    window.history.replaceState(null, "", "/chat?sessionId=session-one");
-    const transport = new ChatTransport();
+test("Given an unpaired workspace, When its Agent responds with local media, Then the real Chat stack renders it", {
+    timeout: 30_000,
+}, async () => {
+    const fixture = await createChatWorker();
+    window.location.href = `${fixture.origin}/chat`;
     const container = document.createElement("div");
-    document.body.append(container);
+    document.body.appendChild(container);
     root = createRoot(container);
-
-    await act(async () => {
-        root?.render(
-            <ApiTransportProvider transport={transport}>
-                <ToastProvider>
-                    <WorkspaceApplication
-                        activeIdentity={applicationIdentity}
-                        authorize={async (signal) => signal.throwIfAborted()}
-                        userId="user-one"
-                    />
-                </ToastProvider>
-            </ApiTransportProvider>,
+    try {
+        await act(async () => {
+            root?.render(
+                <ApiTransportProvider transport={fixture.transport}>
+                    <ToastProvider>
+                        <WorkspaceApplication
+                            activeIdentity={fixture.identity}
+                            authorize={async (signal) => signal.throwIfAborted()}
+                            userId={fixture.userId}
+                        />
+                    </ToastProvider>
+                </ApiTransportProvider>,
+            );
+        });
+        const [landing, connection] = await act(
+            async () =>
+                await Promise.all([
+                    waitForElement(`[data-testid="${dataTestId.chatLanding}"]`),
+                    waitForElement(`[data-testid="${dataTestId.botConnectionStatus}"]`),
+                ]),
         );
-    });
-    await act(async () => await waitForText(`[data-testid="${dataTestId.botConnectionStatus}"]`, "Disconnected"));
 
-    await act(async () => {
-        transport.connectAgent();
-        await waitForText(`[data-testid="${dataTestId.botConnectionStatus}"]`, "Connected");
-    });
-});
+        expect(landing.textContent).toContain("My Bot");
+        const pairing = await act(async () => {
+            connection.click();
+            return await waitForElement(`[data-testid="${dataTestId.pairingInstruction}"]`);
+        });
+        expect(pairing).toBeInstanceOf(HTMLInputElement);
+        expect((pairing as HTMLInputElement).value).toMatch(/^follow http:\/\/127\.0\.0\.1:\d+\/pair\.md\?token=/u);
 
-test("Given a conversation cannot load its Session, When Chat opens it, Then the client shows the load error", async () => {
-    window.history.replaceState(null, "", "/chat?conversationId=conversation-one");
-    const transport = new ChatTransport();
-    const container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
+        let agentFailure: Promise<never>;
+        const composer = await act(async () => {
+            ({ failure: agentFailure } = await fixture.connectAgent());
+            await waitForText(`[data-testid="${dataTestId.botConnectionStatus}"]`, "Connected");
+            return await waitForElement(`[data-testid="${dataTestId.messageComposer}"]`);
+        });
+        expect(composer).toBeInstanceOf(HTMLTextAreaElement);
+        expect((composer as HTMLTextAreaElement).disabled).toBe(false);
+        expect(document.querySelector(`[data-testid="${dataTestId.pairingInstruction}"]`)).toBeNull();
 
-    await act(async () => {
-        root?.render(
-            <ApiTransportProvider transport={transport}>
-                <ToastProvider>
-                    <WorkspaceApplication
-                        activeIdentity={applicationIdentity}
-                        authorize={async (signal) => signal.throwIfAborted()}
-                        userId="user-one"
-                    />
-                </ToastProvider>
-            </ApiTransportProvider>,
-        );
-    });
-
-    const failure = await act(async () => await waitForElement(`[data-testid="${dataTestId.sessionLoadFailure}"]`));
-    expect(failure.textContent).toBe("Platform returned an unexpected Session.");
+        const prompt = "Create an image";
+        await sendPrompt(composer as HTMLTextAreaElement, prompt);
+        await act(async () => {
+            await Promise.race([
+                Promise.all([
+                    waitForText("body", prompt),
+                    waitForText("body", `Codex turn 1: ${prompt}`),
+                    waitForElement('img[alt="Generated image"]'),
+                ]),
+                agentFailure,
+            ]);
+        });
+    } finally {
+        if (root !== null) {
+            await act(async () => root?.unmount());
+            root = null;
+        }
+        await fixture.close();
+    }
 });

@@ -8,22 +8,6 @@ import { createMobiusPlatformFixture } from "../infra/mobius.ts";
 import { APP_ORIGIN, clerk as issuer } from "./clerk.ts";
 import { miniflareDurableObjects } from "./miniflare-durable-objects.ts";
 
-const bundle = await build({
-    entryPoints: [fileURLToPath(new URL("../../src/index.ts", import.meta.url))],
-    bundle: true,
-    external: ["cloudflare:*", "node:*"],
-    format: "esm",
-    loader: { ".md": "text", ".sql": "text" },
-    platform: "browser",
-    target: "es2022",
-    write: false,
-});
-const output = bundle.outputFiles[0];
-if (output === undefined) {
-    throw new Error("Missing Chat Worker bundle");
-}
-const workerScript = output.text;
-
 export function accountRequest(token?: string, projectId?: string): Request {
     return new Request(
         `${APP_ORIGIN}/mobius-cloud/api${projectId === undefined ? "" : `/projects/${projectId}`}/session`,
@@ -38,10 +22,33 @@ type PlatformFixture = {
     readonly close: () => Promise<void>;
 };
 
-export async function createIdentityFixture(options: { readonly platform?: PlatformFixture } = {}) {
+export async function createIdentityFixture(
+    options: {
+        readonly appOrigin?: string;
+        readonly platform?: PlatformFixture;
+        readonly workerEntryPoint?: string;
+        readonly wranglerConfiguration?: URL;
+    } = {},
+) {
     const platform = options.platform ?? (await createMobiusPlatformFixture());
+    const appOrigin = options.appOrigin ?? APP_ORIGIN;
+    const listener = new URL(appOrigin);
+    const bundle = await build({
+        entryPoints: [options.workerEntryPoint ?? fileURLToPath(new URL("../../src/index.ts", import.meta.url))],
+        bundle: true,
+        external: ["cloudflare:*", "node:*"],
+        format: "esm",
+        loader: { ".md": "text", ".sql": "text" },
+        platform: "browser",
+        target: "es2022",
+        write: false,
+    });
+    const output = bundle.outputFiles[0];
+    if (output === undefined) {
+        throw new Error("Missing Chat Worker bundle");
+    }
     const baseConfiguration = {
-        APP_ORIGIN,
+        APP_ORIGIN: appOrigin,
         AUTHENTICATION_BASE_URL: "https://identity.test",
         CLERK_JWT_KEY: issuer.publicKey,
         CLERK_PUBLISHABLE_KEY: issuer.publishableKey,
@@ -51,17 +58,25 @@ export async function createIdentityFixture(options: { readonly platform?: Platf
     };
     const cloudflare = new Miniflare(
         convertV4MiniflareOptions({
+            ...(options.appOrigin === undefined
+                ? {}
+                : { host: listener.hostname, port: Number.parseInt(listener.port, 10) }),
             bindings: baseConfiguration,
             compatibilityDate: "2026-09-07",
             compatibilityFlags: ["nodejs_compat"],
-            durableObjects: miniflareDurableObjects(new URL("../../../../wrangler.jsonc", import.meta.url)),
+            durableObjects: miniflareDurableObjects(
+                options.wranglerConfiguration ?? new URL("../../../../wrangler.jsonc", import.meta.url),
+            ),
             modules: true,
             r2Buckets: ["CHAT_ATTACHMENTS_APAC", "CHAT_ATTACHMENTS_WNAM"],
-            script: workerScript,
+            script: output.text,
         }),
     );
     try {
-        await cloudflare.ready;
+        const ready = await cloudflare.ready;
+        if (options.appOrigin !== undefined && ready.origin !== listener.origin) {
+            throw new Error(`Chat Worker started at ${ready.origin} instead of ${listener.origin}`);
+        }
         const cloudBindings = await cloudflare.getBindings();
         const projectObjects = cloudBindings["CHAT_PROJECTS"] as {
             readonly idFromName: (name: string) => unknown;
@@ -119,7 +134,9 @@ export async function createIdentityFixture(options: { readonly platform?: Platf
         return {
             baseConfiguration,
             createAnonymousUser,
+            dispatchFetch: cloudflare.dispatchFetch.bind(cloudflare),
             environment,
+            origin: ready.origin,
             close: async () => {
                 await cloudflare.dispose();
                 await platform.close();

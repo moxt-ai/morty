@@ -14,6 +14,7 @@ const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127
 const accessSchema = v.pipe(
     v.strictObject({
         endpoint: v.pipe(v.string(), v.url()),
+        projectId: identifier,
         conversationId: identifier,
         sessionId: identifier,
         credential: v.pipe(v.string(), v.regex(/^msession_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}$/u)),
@@ -232,6 +233,7 @@ export class BotChatApi {
         agentRef: access.agentRef,
         result: {
             action: "conversation" as const,
+            access,
             activeTurn,
             targetSessionId: access.sessionId,
             ready: decodeSessionReadyEvent(JSON.stringify(access.ready)),
@@ -400,7 +402,12 @@ export class BotChatApi {
         return { title: result.title, history: decodeNativeSessionHistory(result.history) };
     };
 
-    readonly connectSession = async (botId: string, sessionId: string, signal: AbortSignal): Promise<MobiusClient> => {
+    readonly connectSession = async (
+        botId: string,
+        sessionId: string,
+        signal: AbortSignal,
+        initialAccess?: ChatAccess,
+    ): Promise<MobiusClient> => {
         const readAccess = async (parent: AbortSignal) => {
             for (let attempt = 0; attempt < 2; attempt += 1) {
                 try {
@@ -422,7 +429,7 @@ export class BotChatApi {
             }
             throw new CloudApiError("CHAT_UNAVAILABLE", "Chat is unavailable.");
         };
-        let access = await readAccess(signal);
+        let access = initialAccess ?? (await readAccess(signal));
         const endpoint = sessionEndpoint(access.endpoint);
         const projectId = access.projectId;
         if (access.sessionId !== sessionId) {
