@@ -81,6 +81,7 @@ const turnInput = v.strictObject({
         ),
         v.maxLength(32),
     ),
+    sessionConfigurations: v.optional(sessionConfigurations),
     targetCommandId: v.optional(platformIdentifier),
 });
 const accessInput = v.union([
@@ -200,6 +201,9 @@ export function createBotChatRoutes() {
                         idempotencyKey: input.idempotencyKey,
                         images: input.images,
                         resources: input.resources,
+                        ...(input.sessionConfigurations === undefined
+                            ? {}
+                            : { sessionConfigurations: input.sessionConfigurations }),
                         ...(input.disposition === undefined ? {} : { disposition: input.disposition }),
                         ...(input.targetCommandId === undefined ? {} : { targetCommandId: input.targetCommandId }),
                     }),

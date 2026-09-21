@@ -412,10 +412,37 @@ export async function platformPeer({
                                   unsupportedModelIds: ["retired-model"],
                                   valuesByModel: {},
                               },
-                              settings: readySession("settings").configOptions.map(({ currentValue, ...option }) => ({
-                                  ...option,
-                                  defaultValue: currentValue,
-                              })),
+                              settings: [
+                                  ...readySession("settings").configOptions.map(({ currentValue, ...option }) => ({
+                                      ...option,
+                                      defaultValue: currentValue,
+                                  })),
+                                  {
+                                      id: "opencode_permission",
+                                      name: "Permissions",
+                                      description: "Controls OpenCode's local permission policy.",
+                                      booleanValue: false,
+                                      category: "execution",
+                                      type: "select",
+                                      defaultValue: "agent_default",
+                                      values: [
+                                          {
+                                              name: "Agent default",
+                                              value: "agent_default",
+                                              description: "",
+                                              groupId: "",
+                                              groupName: "",
+                                          },
+                                          {
+                                              name: "Read only",
+                                              value: "read-only",
+                                              description: "",
+                                              groupId: "",
+                                              groupName: "",
+                                          },
+                                      ],
+                                  },
+                              ],
                               settingsRevision: "a".repeat(64),
                           }
                         : { error: { code: "agent_unavailable", message: "The settings agent is unavailable" } },

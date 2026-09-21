@@ -476,6 +476,7 @@ export const createBotChatHomeStore = (
                         resources: sending.message.attachments.flatMap((attachment) =>
                             attachment.kind === "resource" ? [attachment.resource] : [],
                         ),
+                        sessionConfigurations: settings.configurations,
                     },
                     signal,
                 );
