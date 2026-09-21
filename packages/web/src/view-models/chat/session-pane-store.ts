@@ -17,7 +17,6 @@ import {
     type PromptImage,
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
-import * as v from "valibot";
 import { createStore } from "zustand/vanilla";
 import {
     agentActivityKey,
@@ -28,6 +27,7 @@ import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { createRemoteAccessStore } from "./remote-access-store.ts";
+import { createSessionActiveTurn, type SessionActiveTurn } from "./session-active-turn.ts";
 import {
     type SessionActivityState,
     startSessionWork,
@@ -65,21 +65,6 @@ type Connection =
     | { readonly kind: "ready"; readonly client: MobiusClient }
     | { readonly kind: "failed" };
 type ServiceInteraction = Awaited<ReturnType<MobiusClient["interactions"]["listPending"]>>[number];
-const activeTurnSchema = v.pipe(
-    v.variant("kind", [
-        v.object({
-            commandId: v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u)),
-            kind: v.literal("submitting"),
-        }),
-        v.object({
-            commandId: v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u)),
-            kind: v.literal("accepted"),
-            turnId: v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u)),
-        }),
-    ]),
-    v.readonly(),
-);
-type ActiveTurn = v.InferOutput<typeof activeTurnSchema>;
 export type LocalInteraction =
     | { readonly kind: "permission"; readonly permission: PermissionInteraction }
     | { readonly kind: "elicitation"; readonly elicitation: ElicitationInteraction };
@@ -270,19 +255,6 @@ function includePendingUserMessage(
     return [...messages, { contents: promptImageContents(images), id: commandId, role: "user", text: displayPrompt }];
 }
 
-function readActiveTurn(storage: Storage, key: string): ActiveTurn | null {
-    const encoded = storage.getItem(key);
-    if (encoded === null) {
-        return null;
-    }
-    try {
-        const parsed = v.safeParse(activeTurnSchema, JSON.parse(encoded));
-        return parsed.success ? parsed.output : null;
-    } catch {
-        return null;
-    }
-}
-
 export function createSessionPaneModel(options: {
     readonly session: OpenMobiusSession;
     readonly botId: string;
@@ -292,18 +264,18 @@ export function createSessionPaneModel(options: {
 }) {
     const { session, botId, requests } = options;
     const sessionId = session.result.ready.sessionId;
-    const activeTurnStorageKey = `mobius.session-active-turn.v1:${sessionId}`;
-    const recordedActiveTurn = readActiveTurn(options.storage, activeTurnStorageKey);
-    const activeTurn =
+    const initialActiveTurn: SessionActiveTurn =
         session.result.action === "conversation" && session.result.activeTurn.kind === "running"
             ? {
                   commandId: session.result.activeTurn.commandId,
                   kind: "accepted" as const,
                   turnId: session.result.activeTurn.turnId,
               }
-            : recordedActiveTurn;
+            : { kind: "idle" };
+    const activeTurn = createSessionActiveTurn({ initial: initialActiveTurn, sessionId, storage: options.storage });
+    const openedActiveTurn = activeTurn.current();
     let client: MobiusClient | null = null;
-    let command = activeTurn?.commandId ?? "";
+    let command = openedActiveTurn.kind === "idle" ? "" : openedActiveTurn.commandId;
     const delivery = createSessionDeliveryStore({
         sessionId,
         storage: options.storage,
@@ -345,8 +317,8 @@ export function createSessionPaneModel(options: {
             },
         },
     });
-    if (activeTurn?.kind === "accepted") {
-        tasks.getState().start(activeTurn.commandId, activeTurn.turnId);
+    if (openedActiveTurn.kind === "accepted") {
+        tasks.getState().start(openedActiveTurn.commandId, openedActiveTurn.turnId);
     }
     const remoteAccess = createRemoteAccessStore(options.endRemoteAccess);
     const messageQueue = createSessionMessageQueueStore({
@@ -413,13 +385,13 @@ export function createSessionPaneModel(options: {
                 try {
                     client = await requests.connectSession(botId, sessionId, signal);
                     const connected = client;
-                    const reconnectingTurn = readActiveTurn(options.storage, activeTurnStorageKey);
+                    const reconcilingTurn = activeTurn.current();
                     signal.addEventListener("abort", () => connected.close(), { once: true });
                     const [nativeHistory, pendingInteractions, restoredTurn] = await Promise.all([
                         connected.sessions.readNativeHistory(sessionId, signal),
                         connected.interactions.listPending(sessionId, signal),
-                        reconnectingTurn?.kind === "accepted"
-                            ? connected.turns.read(sessionId, reconnectingTurn.turnId, signal)
+                        reconcilingTurn.kind === "accepted"
+                            ? connected.turns.read(sessionId, reconcilingTurn.turnId, signal)
                             : Promise.resolve(null),
                     ]);
                     signal.throwIfAborted();
@@ -435,7 +407,7 @@ export function createSessionPaneModel(options: {
                         restoredTurn.state.kind !== "running"
                     ) {
                         tasks.getState().finish(command);
-                        options.storage.removeItem(activeTurnStorageKey);
+                        activeTurn.turnCleared(command);
                         command = "";
                     }
                     const nativeMessages = historySessionMessages(nativeHistory, command === "" ? null : command);
@@ -572,14 +544,7 @@ export function createSessionPaneModel(options: {
                                         }
                                         command = queued.commandId;
                                         tasks.getState().start(queued.commandId, queued.turnId);
-                                        options.storage.setItem(
-                                            activeTurnStorageKey,
-                                            JSON.stringify({
-                                                commandId: queued.commandId,
-                                                kind: "accepted",
-                                                turnId: queued.turnId,
-                                            }),
-                                        );
+                                        activeTurn.submissionAccepted(queued.commandId, queued.turnId);
                                         set((current) =>
                                             startSessionWork(
                                                 {
@@ -691,7 +656,7 @@ export function createSessionPaneModel(options: {
                                         operation: { kind: "idle" },
                                     }));
                                     tasks.getState().finish(completedCommand);
-                                    options.storage.removeItem(activeTurnStorageKey);
+                                    activeTurn.turnCleared(completedCommand);
                                     command = "";
                                 }
                                 return true;
@@ -700,12 +665,12 @@ export function createSessionPaneModel(options: {
                         signal,
                     );
                     signal.throwIfAborted();
-                    if (reconnectingTurn?.kind === "accepted" && command === reconnectingTurn.commandId) {
-                        const latestTurn = await connected.turns.read(sessionId, reconnectingTurn.turnId, signal);
+                    if (reconcilingTurn.kind === "accepted" && command === reconcilingTurn.commandId) {
+                        const latestTurn = await connected.turns.read(sessionId, reconcilingTurn.turnId, signal);
                         if (latestTurn.state.kind !== "queued" && latestTurn.state.kind !== "running") {
                             const completedHistory = await connected.sessions.readNativeHistory(sessionId, signal);
                             signal.throwIfAborted();
-                            if (command === reconnectingTurn.commandId) {
+                            if (command === reconcilingTurn.commandId) {
                                 delivery
                                     .getState()
                                     .reconcile(
@@ -714,7 +679,7 @@ export function createSessionPaneModel(options: {
                                             : [],
                                     );
                                 tasks.getState().finish(command);
-                                options.storage.removeItem(activeTurnStorageKey);
+                                activeTurn.turnCleared(command);
                                 command = "";
                                 set({
                                     activity: { kind: "idle" },
@@ -795,7 +760,7 @@ export function createSessionPaneModel(options: {
                     ],
                 }));
                 try {
-                    options.storage.setItem(activeTurnStorageKey, JSON.stringify({ commandId, kind: "submitting" }));
+                    activeTurn.submissionStarted(commandId);
                     const accepted = await delivery.getState().submit(
                         commandId,
                         displayPrompt,
@@ -813,16 +778,13 @@ export function createSessionPaneModel(options: {
                     signal.throwIfAborted();
                     if (accepted !== null && command === commandId) {
                         tasks.getState().start(commandId, accepted.turnId);
-                        options.storage.setItem(
-                            activeTurnStorageKey,
-                            JSON.stringify({ commandId, kind: "accepted", turnId: accepted.turnId }),
-                        );
+                        activeTurn.submissionAccepted(commandId, accepted.turnId);
                         set((current) => ({
                             ...startSessionWork(current, { commandId, attempt: null }),
                             operation: { kind: "idle" },
                         }));
                     } else {
-                        options.storage.removeItem(activeTurnStorageKey);
+                        activeTurn.turnCleared(commandId);
                         command = "";
                         set({ operation: { kind: "idle" } });
                     }
@@ -849,7 +811,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 if (command === commandId) {
-                    options.storage.removeItem(activeTurnStorageKey);
+                    activeTurn.turnCleared(commandId);
                     command = "";
                 }
                 set((current) => ({
@@ -888,12 +850,9 @@ export function createSessionPaneModel(options: {
                 signal.throwIfAborted();
                 if (accepted !== null) {
                     tasks.getState().start(pending.commandId, accepted.turnId);
-                    options.storage.setItem(
-                        activeTurnStorageKey,
-                        JSON.stringify({ commandId: pending.commandId, kind: "accepted", turnId: accepted.turnId }),
-                    );
+                    activeTurn.submissionAccepted(pending.commandId, accepted.turnId);
                 } else {
-                    options.storage.removeItem(activeTurnStorageKey);
+                    activeTurn.turnCleared(pending.commandId);
                     command = "";
                 }
             },
