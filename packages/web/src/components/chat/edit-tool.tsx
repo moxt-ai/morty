@@ -17,20 +17,33 @@ const diffSchema = v.pipe(
     ),
     v.readonly(),
 );
+const patchSchema = v.pipe(
+    v.strictObject({
+        patchText: v.pipe(v.string(), v.minLength(1)),
+    }),
+    v.readonly(),
+);
 
-function parseDiffs(value: string) {
-    let decoded: unknown;
+function parseJson(value: string): unknown {
     try {
-        decoded = JSON.parse(value);
+        return JSON.parse(value);
     } catch {
         return null;
     }
-    const result = v.safeParse(diffSchema, decoded);
+}
+
+function parseDiffs(value: string) {
+    const result = v.safeParse(diffSchema, parseJson(value));
     return result.success ? result.output : null;
 }
 
+function parsePatch(value: string): string | null {
+    const result = v.safeParse(patchSchema, parseJson(value));
+    return result.success ? result.output.patchText : null;
+}
+
 export function matchesEditTool(input: string, output: string): boolean {
-    return parseDiffs(input) !== null || parseDiffs(output) !== null;
+    return parseDiffs(input) !== null || parseDiffs(output) !== null || parsePatch(input) !== null;
 }
 
 export function EditTool({
@@ -49,6 +62,7 @@ export function EditTool({
     readonly title: string;
 }) {
     const diffs = parseDiffs(input) ?? parseDiffs(output);
+    const patch = parsePatch(input);
     const disclosure = useToolCallDisclosure(autoOpen);
     return (
         <details aria-label={`Edit: ${title}`} className="group/tool min-w-0" ref={disclosure}>
@@ -77,6 +91,10 @@ export function EditTool({
                             </div>
                         </section>
                     ))
+                ) : patch !== null ? (
+                    <div className="overflow-hidden rounded-lg border border-black/7 bg-black/[0.025]">
+                        <HighlightedCode code={patch} language="diff" />
+                    </div>
                 ) : content.length > 0 ? (
                     <AgentRichContent contents={content} />
                 ) : (
