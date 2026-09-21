@@ -1,4 +1,4 @@
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { BotChatComposer, type ComposerAttachment } from "../../components/chat/bot-chat-composer.tsx";
@@ -11,6 +11,7 @@ import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer, WorkspaceLocation } from "../../services/identity/anonymous-identity-api.ts";
 import {
     createBotChatHomeStore,
+    disconnectedBotNotice,
     type SessionConnectionKind,
     setupDescription,
 } from "../../view-models/chat/bot-chat-home-store.ts";
@@ -22,6 +23,7 @@ import {
     queuedDraftMessage,
 } from "../../view-models/chat/conversation-creation-machine.ts";
 import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
+import { reportApplicationError } from "../../view-models/report-error.ts";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
 import { MobiusSessionPane } from "./mobius-session-pane.tsx";
@@ -43,6 +45,7 @@ export function BotChatHome({
         BotChatApi,
         | "listBots"
         | "access"
+        | "archiveManagedSession"
         | "workspace"
         | "workspaceDirectory"
         | "waitForWorkspaceChange"
@@ -105,6 +108,7 @@ export function BotChatHome({
     const [draft, setDraft] = useState("");
     const [pairingDialogOpen, setPairingDialogOpen] = useState(false);
     const [failureDialogOpen, setFailureDialogOpen] = useState(false);
+    const [disconnectedNotificationDismissed, setDisconnectedNotificationDismissed] = useState(false);
     const [attachments, setAttachments] = useState<readonly ComposerAttachment[]>([]);
     const [activeSessionStatus, setActiveSessionStatus] = useState<ActiveSessionStatus>({ kind: "none" });
     const lifetime = useRef<AbortController | null>(null);
@@ -114,6 +118,7 @@ export function BotChatHome({
     const entryConnectionResolved = useRef(false);
     const [remoteAccess] = useState(() => new URL(window.location.href).searchParams.get("remoteAccess") === "1");
     const connectionStatus = model.connectionStatus;
+    const disconnectionNotice = disconnectedBotNotice(model.view, connectionStatus);
     const creationBusy = conversationCreationBusy(model.creation);
     const composerLocked = conversationComposerLocked(model.creation);
     const creationError = conversationCreationError(model.creation);
@@ -127,7 +132,14 @@ export function BotChatHome({
     useEffect(() => {
         const controller = new AbortController();
         lifetime.current = controller;
-        void store.getState().load(controller.signal);
+        void store
+            .getState()
+            .load(controller.signal)
+            .catch((cause: unknown) => {
+                if (!controller.signal.aborted) {
+                    reportApplicationError(cause, "chat-home-load");
+                }
+            });
         return () => {
             controller.abort();
             if (lifetime.current === controller) {
@@ -186,6 +198,7 @@ export function BotChatHome({
             : model.view.kind === "connecting" ||
                 model.view.kind === "draft" ||
                 model.view.kind === "setup" ||
+                model.view.kind === "runtime-disconnected" ||
                 model.view.kind === "connection-failed"
               ? model.view
               : null;
@@ -425,6 +438,28 @@ export function BotChatHome({
                         </Button>
                     </div>
                 </Dialog>
+            )}
+            {disconnectionNotice.kind === "visible" && !disconnectedNotificationDismissed && (
+                <div
+                    aria-live="polite"
+                    className="fixed top-4 right-4 z-[100] grid w-[calc(100%-2rem)] max-w-sm grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground shadow-lg sm:top-6 sm:right-6"
+                    role="status"
+                >
+                    <div className="min-w-0">
+                        <p className="font-medium">{disconnectionNotice.title}</p>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                            {disconnectionNotice.description}
+                        </p>
+                    </div>
+                    <button
+                        aria-label="Dismiss disconnected Bot notification"
+                        className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/70"
+                        onClick={() => setDisconnectedNotificationDismissed(true)}
+                        type="button"
+                    >
+                        <X aria-hidden="true" className="size-4" />
+                    </button>
+                </div>
             )}
         </main>
     );

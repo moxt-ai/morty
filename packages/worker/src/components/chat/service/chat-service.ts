@@ -263,6 +263,21 @@ export class ChatService {
     readonly managedSession = async (scope: ChatScope, sessionId: string) =>
         await this.#chatSessions.readLocalSession(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal);
 
+    readonly archiveManagedSession = async (scope: ChatScope, sessionId: string): Promise<Record<string, never>> => {
+        await this.#chatSessions.archive(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal);
+        this.#logger.info(
+            {
+                event: "chat-managed-session-archived",
+                userId: scope.userId,
+                projectId: scope.projectId,
+                botId: scope.botId,
+                sessionId,
+            },
+            "Chat audit event",
+        );
+        return {};
+    };
+
     readonly submitTurn = async (
         scope: ChatScope,
         input: Parameters<PlatformProjectGateway["submitChatTurn"]>[2] & { readonly sessionId: string },

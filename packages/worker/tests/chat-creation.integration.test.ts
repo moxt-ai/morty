@@ -174,6 +174,21 @@ test("Given an available Runtime, When a Bot is configured and used, Then settin
                 expect.objectContaining({ id: secondConversation.conversationId, title: "New chat" }),
             ]),
         });
+        const archived = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, {
+            sessionId: first.conversationId,
+        });
+        expect(archived.status).toBe(200);
+        expect(await archived.json()).toEqual({});
+        expect(await (await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {})).json()).toMatchObject({
+            sessions: [expect.objectContaining({ id: secondConversation.conversationId, title: "New chat" })],
+        });
+        expect(
+            (
+                await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, {
+                    sessionId: first.conversationId,
+                })
+            ).status,
+        ).toBe(404);
     } finally {
         await fixture.close();
     }

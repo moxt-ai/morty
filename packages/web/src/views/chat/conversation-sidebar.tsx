@@ -1,6 +1,6 @@
 import { ChevronDown, Laptop, LoaderCircle, MessageSquare, RefreshCw, Share2, SquarePen } from "lucide-react";
-import { Tooltip } from "radix-ui";
-import { type ReactNode, useEffect, useState } from "react";
+import { ContextMenu, Tooltip } from "radix-ui";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
@@ -45,7 +45,10 @@ export function ConversationSidebar({
     readonly botId: string;
     readonly connectionStatus: BotConnectionStatus;
     readonly onConnectionStatusClick: () => void;
-    readonly requests: Pick<BotChatApi, "workspace" | "nativeSessions" | "nativeSession" | "managedSessions">;
+    readonly requests: Pick<
+        BotChatApi,
+        "archiveManagedSession" | "workspace" | "nativeSessions" | "nativeSession" | "managedSessions"
+    >;
     readonly activeId: string;
     readonly onOpen: (session: ManagedChatSession) => void;
     readonly onOpenSession: (session: OpenMobiusSession) => void;
@@ -61,11 +64,12 @@ export function ConversationSidebar({
           };
 }) {
     const [store] = useState(() => createConversationDirectoryStore(botId, requests));
-    const { load, state: directory } = useStore(store);
+    const { archive, archiveSession, load, state: directory } = useStore(store);
     const [revision, refresh] = useState(0);
     const [expanded, setExpanded] = useState(false);
     const [dialog, setDialog] = useState(false);
     const [sharing, setSharing] = useState(false);
+    const lifetime = useRef<AbortController | null>(null);
     const sessions =
         directory.kind === "ready" || directory.kind === "refreshing" || directory.kind === "stale"
             ? directory.sessions
@@ -74,8 +78,14 @@ export function ConversationSidebar({
     // biome-ignore lint/correctness/useExhaustiveDependencies: Creation and explicit refresh reload the persisted directory.
     useEffect(() => {
         const controller = new AbortController();
+        lifetime.current = controller;
         void load(controller.signal);
-        return () => controller.abort();
+        return () => {
+            controller.abort();
+            if (lifetime.current === controller) {
+                lifetime.current = null;
+            }
+        };
     }, [activeId, load, revision]);
     return (
         <aside
@@ -189,61 +199,87 @@ export function ConversationSidebar({
                         {directory.message}
                     </p>
                 )}
+                {archive.kind === "failed" && (
+                    <p role="alert" className="px-2 text-sm text-destructive">
+                        {archive.message}
+                    </p>
+                )}
                 {sessions !== null && sessions.length === 0 && (
                     <p className="px-2 py-3 text-xs text-muted-foreground">Your Chat conversations will appear here.</p>
                 )}
                 {sessions?.map((session) => (
-                    <button
-                        data-testid={dataTestId.managedConversation}
-                        type="button"
-                        key={`${session.kind}:${session.id}`}
-                        aria-current={activeId === session.id ? "page" : undefined}
-                        onClick={() => {
-                            onOpen(session);
-                            setExpanded(false);
-                        }}
-                        className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-transparent px-3 py-2.5 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color,box-shadow] duration-150 hover:bg-white/70 focus-visible:ring-2 focus-visible:ring-ring/60 aria-[current=page]:bg-white aria-[current=page]:text-foreground aria-[current=page]:shadow-[0_1px_4px_rgba(17,24,20,0.08),inset_3px_0_0_var(--primary)] motion-reduce:transition-none"
-                    >
-                        <span className="min-w-0">
-                            <span className="block truncate">{session.title}</span>
-                            {session.directoryLabel.length > 0 && (
-                                <span
-                                    className="block truncate text-[11px] leading-4 font-normal text-copy-secondary"
-                                    title={session.directoryLabel}
-                                >
-                                    {session.directoryLabel}
+                    <ContextMenu.Root key={`${session.kind}:${session.id}`}>
+                        <ContextMenu.Trigger asChild>
+                            <button
+                                data-testid={dataTestId.managedConversation}
+                                type="button"
+                                aria-current={activeId === session.id ? "page" : undefined}
+                                disabled={connectionStatus.kind !== "connected"}
+                                onClick={() => {
+                                    onOpen(session);
+                                    setExpanded(false);
+                                }}
+                                className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-transparent px-3 py-2.5 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color,box-shadow] duration-150 hover:bg-white/70 focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent aria-[current=page]:bg-white aria-[current=page]:text-foreground aria-[current=page]:shadow-[0_1px_4px_rgba(17,24,20,0.08),inset_3px_0_0_var(--primary)] motion-reduce:transition-none"
+                            >
+                                <span className="min-w-0">
+                                    <span className="block truncate">{session.title}</span>
+                                    {session.directoryLabel.length > 0 && (
+                                        <span
+                                            className="block truncate text-[11px] leading-4 font-normal text-copy-secondary"
+                                            title={session.directoryLabel}
+                                        >
+                                            {session.directoryLabel}
+                                        </span>
+                                    )}
                                 </span>
-                            )}
-                        </span>
-                        {activeSession.kind === "active" &&
-                            activeSession.id === session.id &&
-                            (activeSession.status === "working" ? (
-                                <span
-                                    aria-label="Session working"
-                                    className="inline-flex text-primary"
-                                    data-testid={dataTestId.sessionStatus}
-                                    role="status"
+                                {activeSession.kind === "active" &&
+                                    activeSession.id === session.id &&
+                                    (activeSession.status === "working" ? (
+                                        <span
+                                            aria-label="Session working"
+                                            className="inline-flex text-primary"
+                                            data-testid={dataTestId.sessionStatus}
+                                            role="status"
+                                        >
+                                            <LoaderCircle
+                                                aria-hidden="true"
+                                                className="size-4 animate-spin motion-reduce:animate-none"
+                                            />
+                                        </span>
+                                    ) : (
+                                        <span
+                                            aria-label={`Session ${activeSession.status}`}
+                                            className={
+                                                activeSession.status === "failed"
+                                                    ? "text-xs text-destructive"
+                                                    : "text-xs text-copy-tertiary"
+                                            }
+                                            data-testid={dataTestId.sessionStatus}
+                                            role="status"
+                                        >
+                                            {activeSession.status === "failed" ? "Failed" : "Idle"}
+                                        </span>
+                                    ))}
+                            </button>
+                        </ContextMenu.Trigger>
+                        <ContextMenu.Portal>
+                            <ContextMenu.Content className="z-[110] min-w-40 rounded-lg border border-border bg-background p-1 text-sm text-foreground shadow-lg">
+                                <ContextMenu.Item
+                                    className="cursor-pointer rounded-md px-3 py-2 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-accent"
+                                    data-testid={dataTestId.archiveConversation}
+                                    disabled={archive.kind === "archiving"}
+                                    onSelect={() => {
+                                        const controller = lifetime.current;
+                                        if (controller !== null) {
+                                            void archiveSession(session.id, controller.signal);
+                                        }
+                                    }}
                                 >
-                                    <LoaderCircle
-                                        aria-hidden="true"
-                                        className="size-4 animate-spin motion-reduce:animate-none"
-                                    />
-                                </span>
-                            ) : (
-                                <span
-                                    aria-label={`Session ${activeSession.status}`}
-                                    className={
-                                        activeSession.status === "failed"
-                                            ? "text-xs text-destructive"
-                                            : "text-xs text-copy-tertiary"
-                                    }
-                                    data-testid={dataTestId.sessionStatus}
-                                    role="status"
-                                >
-                                    {activeSession.status === "failed" ? "Failed" : "Idle"}
-                                </span>
-                            ))}
-                    </button>
+                                    Archive conversation
+                                </ContextMenu.Item>
+                            </ContextMenu.Content>
+                        </ContextMenu.Portal>
+                    </ContextMenu.Root>
                 ))}
             </div>
             <div className="mt-3 border-t border-black/[0.06] pt-3">

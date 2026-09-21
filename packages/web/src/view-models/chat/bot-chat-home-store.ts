@@ -32,12 +32,13 @@ type Target =
       };
 
 type ActiveView = { readonly kind: "draft"; readonly bot: ManagedBot };
-type BotChatHomeView =
+export type BotChatHomeView =
     | { readonly kind: "loading" }
     | { readonly kind: "connecting"; readonly bot: ManagedBot }
     | { readonly kind: "switching"; readonly view: ActiveView }
     | ActiveView
     | { readonly kind: "setup"; readonly bot: ManagedBot; readonly reason: SetupReason }
+    | { readonly kind: "runtime-disconnected"; readonly bot: ManagedBot; readonly message: string }
     | { readonly kind: "connection-failed"; readonly bot: ManagedBot; readonly message: string }
     | { readonly kind: "failed"; readonly message: string };
 
@@ -47,7 +48,46 @@ export type BotConnectionStatus =
     | { readonly kind: "disconnected"; readonly label: "Disconnected" };
 export type SessionConnectionKind = "loading" | "ready" | "failed";
 
+export type DisconnectedBotNotice =
+    | { readonly kind: "hidden" }
+    | { readonly description: string; readonly kind: "visible"; readonly title: string };
+
+export function disconnectedBotNotice(
+    view: BotChatHomeView,
+    connectionStatus: BotConnectionStatus,
+): DisconnectedBotNotice {
+    if (connectionStatus.kind !== "disconnected") {
+        return { kind: "hidden" };
+    }
+    switch (view.kind) {
+        case "draft":
+        case "runtime-disconnected":
+        case "connection-failed":
+            return {
+                kind: "visible",
+                title: "Your Bot is disconnected",
+                description: "Start your local Runtime to reconnect this Bot and use its Sessions.",
+            };
+        case "setup":
+            return view.reason === "unconfigured"
+                ? { kind: "hidden" }
+                : {
+                      kind: "visible",
+                      title: "Your Bot is disconnected",
+                      description: "Start your local Runtime to reconnect this Bot and use its Sessions.",
+                  };
+        case "loading":
+        case "connecting":
+        case "switching":
+        case "failed":
+            return { kind: "hidden" };
+    }
+}
+
 function runtimeConnectionStatus(workspace: ChatWorkspace): BotConnectionStatus {
+    if (workspace.status !== "active") {
+        return { kind: "disconnected", label: "Disconnected" };
+    }
     const selected = workspace.selected;
     const agent =
         selected === null
@@ -272,8 +312,8 @@ export const createBotChatHomeStore = (
                 await conversations.getState().open(bot.botId, currentTarget.conversationId, signal);
                 const opened = conversations.getState().state;
                 if (opened.kind !== "ready") {
-                    if (opened.kind === "failed" && isRuntimeConnectionCode(opened.code)) {
-                        set({ connectionStatus: { kind: "disconnected", label: "Disconnected" } });
+                    if (opened.kind === "failed" && opened.code !== null) {
+                        throw new CloudApiError(opened.code, opened.message);
                     }
                     throw new Error(opened.kind === "failed" ? opened.message : "The Session could not be opened.");
                 }
@@ -297,15 +337,18 @@ export const createBotChatHomeStore = (
                     return;
                 }
                 const message = cause instanceof Error ? cause.message : "Chat is unavailable.";
+                const runtimeFailure = isRuntimeConnectionFailure(cause);
                 set((current) => ({
                     connectionStatus:
-                        current.connectionStatus.kind === "connecting" || isRuntimeConnectionFailure(cause)
+                        current.connectionStatus.kind === "connecting" || runtimeFailure
                             ? { kind: "disconnected", label: "Disconnected" }
                             : current.connectionStatus,
                     view:
                         openedBot === null
                             ? { kind: "failed", message }
-                            : { kind: "connection-failed", bot: openedBot, message },
+                            : runtimeFailure
+                              ? { kind: "runtime-disconnected", bot: openedBot, message }
+                              : { kind: "connection-failed", bot: openedBot, message },
                 }));
             }
         },

@@ -243,6 +243,18 @@ export function createBotChatRoutes() {
             },
         )
         .post(
+            "/bots/:botId/managed-session/archive",
+            authenticatedSession,
+            authorizedChat(),
+            bodyParser<AuthorizedChatEnvironment, typeof nativeSessionInput>(nativeSessionInput),
+            async (context) => {
+                const input = context.req.valid("json");
+                return privateJson(
+                    await context.env.services.chat.archiveManagedSession(context.get("chatScope"), input.sessionId),
+                );
+            },
+        )
+        .post(
             "/bots/:botId/native-sessions",
             authenticatedSession,
             authorizedChat(120000),

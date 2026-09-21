@@ -253,6 +253,17 @@ export class BotChatApi {
             v.object({ sessions: v.array(managedSessionSchema) }),
             await this.#request(botId, "managed-sessions", {}, signal),
         ).sessions;
+    readonly archiveManagedSession = async (botId: string, sessionId: string, signal: AbortSignal): Promise<void> => {
+        v.parse(
+            v.object({}),
+            await this.#request(
+                botId,
+                "managed-session/archive",
+                { sessionId: v.parse(identifier, sessionId) },
+                signal,
+            ),
+        );
+    };
     readonly managedSession = async (botId: string, sessionId: string, signal: AbortSignal) => {
         const stored = v.parse(
             localSessionSchema,

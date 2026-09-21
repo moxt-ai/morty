@@ -12,6 +12,7 @@ export const chatManagedSession = sqliteTable(
         title: text("title").notNull(),
         forkData: text("fork_data"),
         createdAt: integer("created_at").notNull(),
+        archivedAt: integer("archived_at"),
     },
     (table) => [
         check(

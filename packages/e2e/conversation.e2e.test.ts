@@ -65,6 +65,13 @@ test("Given a paired workspace, When a user works across conversations, Then ses
 
         await page.goto(`${new URL(page.url()).origin}/?conversationId=${firstConversationId}`);
         await expect(page.getByTestId(dataTestId.userMessage)).toHaveText(["First conversation"]);
+
+        const firstConversation = page
+            .getByTestId(dataTestId.managedConversation)
+            .filter({ hasText: "First conversation" });
+        await firstConversation.click({ button: "right" });
+        await page.getByTestId(dataTestId.archiveConversation).click();
+        await expect(firstConversation).toHaveCount(0);
     });
 
     await test.step("reconcile completed native history when live content is absent", async () => {
