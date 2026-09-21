@@ -43,6 +43,49 @@ function send(socket: BridgeSocket, value: Readonly<Record<string, unknown>>): v
     }
 }
 
+function encodeResponseChunk(requestIdValue: string, chunk: Uint8Array): Uint8Array {
+    const encodedRequestId = new TextEncoder().encode(requestIdValue);
+    const frame = new Uint8Array(1 + encodedRequestId.byteLength + chunk.byteLength);
+    frame[0] = encodedRequestId.byteLength;
+    frame.set(encodedRequestId, 1);
+    frame.set(chunk, 1 + encodedRequestId.byteLength);
+    return frame;
+}
+
+async function sendResponse(
+    socket: BridgeSocket,
+    requestIdValue: string,
+    response: Response,
+    signal: AbortSignal,
+): Promise<void> {
+    send(socket, {
+        kind: "response.begin",
+        requestId: requestIdValue,
+        status: response.status,
+        headers: [...response.headers],
+    });
+    const reader = response.body?.getReader();
+    if (reader !== undefined) {
+        try {
+            while (true) {
+                signal.throwIfAborted();
+                const chunk = await reader.read();
+                if (chunk.done) {
+                    break;
+                }
+                if (socket.readyState !== WebSocket.OPEN) {
+                    throw new Error("The WebSocket bridge closed while sending a response.");
+                }
+                socket.send(encodeResponseChunk(requestIdValue, chunk.value));
+            }
+        } finally {
+            reader.releaseLock();
+        }
+    }
+    signal.throwIfAborted();
+    send(socket, { kind: "response.end", requestId: requestIdValue });
+}
+
 function bridgedUrl(path: string): URL {
     const url = new URL(path, "https://bridge.internal");
     if (
@@ -227,15 +270,7 @@ export function createWebSocketApiBridge(request: Request, dispatch: Dispatch, l
             }),
         )
             .then(async (response) => {
-                const body = await response.text();
-                signal.throwIfAborted();
-                send(server, {
-                    kind: "response",
-                    requestId: frame.requestId,
-                    status: response.status,
-                    headers: [...response.headers],
-                    body,
-                });
+                await sendResponse(server, frame.requestId, response, signal);
             })
             .catch((cause: unknown) => {
                 if (controller.signal.aborted) {

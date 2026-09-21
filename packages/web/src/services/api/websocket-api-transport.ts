@@ -1,12 +1,12 @@
 import * as v from "valibot";
 
-const responseFrame = v.strictObject({
-    kind: v.literal("response"),
+const responseBeginFrame = v.strictObject({
+    kind: v.literal("response.begin"),
     requestId: v.string(),
     status: v.pipe(v.number(), v.integer(), v.minValue(100), v.maxValue(599)),
     headers: v.array(v.tuple([v.string(), v.string()])),
-    body: v.string(),
 });
+const responseEndFrame = v.strictObject({ kind: v.literal("response.end"), requestId: v.string() });
 const errorFrame = v.strictObject({
     kind: v.literal("error"),
     requestId: v.nullable(v.string()),
@@ -15,7 +15,7 @@ const errorFrame = v.strictObject({
 });
 const pongFrame = v.strictObject({ kind: v.literal("pong") });
 const notificationFrame = v.strictObject({ kind: v.literal("notification"), subscriptionId: v.string() });
-const serverFrame = v.variant("kind", [responseFrame, errorFrame, pongFrame, notificationFrame]);
+const serverFrame = v.variant("kind", [responseBeginFrame, responseEndFrame, errorFrame, pongFrame, notificationFrame]);
 const permittedHeaders = new Set(["authorization", "content-type"]);
 const KEEPALIVE_MILLISECONDS = 25_000;
 
@@ -29,12 +29,32 @@ interface PendingRequest {
     readonly reject: (cause: unknown) => void;
     readonly resolve: (response: Response) => void;
     readonly release: () => void;
+    response: { readonly chunks: Uint8Array[]; readonly headers: [string, string][]; readonly status: number } | null;
 }
 
 interface PendingWatch {
     readonly reject: (cause: unknown) => void;
     readonly resolve: () => void;
     readonly release: () => void;
+}
+
+function decodeResponseChunk(value: unknown): { readonly requestId: string; readonly bytes: Uint8Array } | null {
+    let bytes: Uint8Array;
+    if (value instanceof ArrayBuffer) {
+        bytes = new Uint8Array(value);
+    } else if (ArrayBuffer.isView(value)) {
+        bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    } else {
+        return null;
+    }
+    const requestIdLength = bytes[0] ?? 0;
+    if (requestIdLength === 0 || requestIdLength > 128 || bytes.byteLength < 1 + requestIdLength) {
+        return null;
+    }
+    return {
+        requestId: new TextDecoder().decode(bytes.subarray(1, 1 + requestIdLength)),
+        bytes: bytes.slice(1 + requestIdLength),
+    };
 }
 
 export class WebSocketApiTransport {
@@ -84,6 +104,7 @@ export class WebSocketApiTransport {
                 reject,
                 resolve,
                 release: () => request.signal.removeEventListener("abort", abort),
+                response: null,
             });
             try {
                 socket.send(
@@ -179,6 +200,7 @@ export class WebSocketApiTransport {
         const endpoint = new URL("/mobius-cloud/ws", this.#origin);
         endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
         const socket = new WebSocket(endpoint);
+        socket.binaryType = "arraybuffer";
         const connection = new Promise<WebSocket>((resolve, reject) => {
             const closedWhileConnecting = () => {
                 socket.removeEventListener("open", opened);
@@ -257,6 +279,14 @@ export class WebSocketApiTransport {
 
     readonly #receive = (event: MessageEvent): void => {
         if (typeof event.data !== "string") {
+            const chunk = decodeResponseChunk(event.data);
+            if (chunk === null) {
+                return;
+            }
+            const pending = this.#pending.get(chunk.requestId);
+            if (pending?.response !== null && pending?.response !== undefined) {
+                pending.response.chunks.push(chunk.bytes);
+            }
             return;
         }
         let value: unknown;
@@ -277,18 +307,38 @@ export class WebSocketApiTransport {
         if (frame.requestId === null) {
             return;
         }
-        const pending = this.#settle(frame.requestId);
+        const pending = this.#pending.get(frame.requestId);
         if (pending === undefined) {
             return;
         }
         if (frame.kind === "error") {
-            pending.reject(new Error(`${frame.code}: ${frame.message}`));
+            this.#settle(frame.requestId)?.reject(new Error(`${frame.code}: ${frame.message}`));
             return;
         }
-        pending.resolve(
-            new Response(frame.status === 204 || frame.status === 205 || frame.status === 304 ? null : frame.body, {
-                status: frame.status,
-                headers: frame.headers,
+        if (frame.kind === "response.begin") {
+            if (pending.response !== null) {
+                this.#settle(frame.requestId)?.reject(new Error("The Chat API response started more than once."));
+                return;
+            }
+            pending.response = { chunks: [], headers: frame.headers, status: frame.status };
+            return;
+        }
+        const response = pending.response;
+        if (response === null) {
+            this.#settle(frame.requestId)?.reject(new Error("The Chat API response ended before it started."));
+            return;
+        }
+        const length = response.chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
+        const body = new Uint8Array(length);
+        let offset = 0;
+        for (const chunk of response.chunks) {
+            body.set(chunk, offset);
+            offset += chunk.byteLength;
+        }
+        this.#settle(frame.requestId)?.resolve(
+            new Response(response.status === 204 || response.status === 205 || response.status === 304 ? null : body, {
+                status: response.status,
+                headers: response.headers,
             }),
         );
     };
