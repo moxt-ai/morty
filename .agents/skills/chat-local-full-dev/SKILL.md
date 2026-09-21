@@ -59,10 +59,18 @@ specific tool.
 4. Reproduce through a supported boundary: the browser app for user flows, or the
    Chat HTTP API for a narrower contract. Prefer the real app so the reproduction
    matches what a user sees.
-5. Read `references/debugging.md` before concluding a root cause. It covers where
+5. When verifying a browser behavior, capture representative user-journey states
+   as PNG screenshots under `<repo>/test-results/`. Use descriptive names such as
+   `test-results/<journey>-before.png` and
+   `test-results/<journey>-after.png`; capture the smallest set that demonstrates
+   the behavior. Drive every captured state through normal mouse or keyboard
+   interactions. Never capture credentials, pairing tickets, private configuration,
+   or other secrets. Treat these screenshots as local verification artifacts and
+   report their repository-relative paths.
+6. Read `references/debugging.md` before concluding a root cause. It covers where
    logs go, which structured events and headers to correlate, and how to inspect
    D1 and Durable Object SQLite.
-6. Remove the stack when finished:
+7. Remove the stack when finished:
 
    ```sh
    node scripts/local-dev.cjs remove --state-dir <stateDir>

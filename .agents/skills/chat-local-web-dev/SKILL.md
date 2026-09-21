@@ -154,11 +154,16 @@ session; do not create an identity transfer or `/continue` handoff.
 Skip this section unless the user explicitly asks to open, preview, or capture
 the local app. In that case, return to or reload the existing `$CHAT_ORIGIN`
 browser tab after pairing, confirm it remains on the exact local origin, and
-capture only the requested states. Write screenshots or other requested
-artifacts to the user's requested repository-relative directory, creating it
-when needed; do not place credentials, the pairing URL, or configuration files
-there. Report the artifact paths. Do not create or redeem an identity transfer
-for preview work.
+drive the requested journey through normal mouse or keyboard interactions.
+Capture a small set of representative states as PNG screenshots, including the
+state before the relevant action and the observable result when both are useful.
+Write them to the user's requested repository-relative directory, defaulting to
+descriptive paths under `test-results/`, such as
+`test-results/<journey>-before.png` and
+`test-results/<journey>-after.png`. Do not place credentials, pairing
+instructions or tickets, configuration files, or other secrets in a screenshot
+or artifact. Report every repository-relative artifact path. Do not create or
+redeem an identity transfer for preview work.
 
 ## Return the local app
 
