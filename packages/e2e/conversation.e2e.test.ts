@@ -51,6 +51,9 @@ test("Given a paired workspace, When a user works across conversations, Then sen
         await expect(page.getByTestId(dataTestId.agentResponse).first()).toContainText("First conversation");
         await expect(page.getByTestId(dataTestId.workingIndicator)).toHaveCount(0);
         await expect(page.getByTestId(dataTestId.sendMessage)).toHaveAttribute("aria-label", "Send message");
+        await expect(page.getByTestId(dataTestId.recognizedReadToolCall).first()).toContainText(
+            "Read package metadata",
+        );
         firstConversationId = new URL(page.url()).searchParams.get("conversationId") ?? "";
         assert.notEqual(firstConversationId, "");
     });

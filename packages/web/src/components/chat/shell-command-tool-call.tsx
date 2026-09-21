@@ -13,10 +13,19 @@ interface ShellCommandResponse {
     readonly output: string;
 }
 
-const shellCommandRequestSchema = v.pipe(
+const commandSchema = v.pipe(v.string(), v.minLength(1));
+const shellCommandCwdRequestSchema = v.pipe(
     v.strictObject({
-        command: v.pipe(v.string(), v.minLength(1)),
+        command: commandSchema,
         cwd: v.optional(v.string()),
+    }),
+    v.readonly(),
+);
+const shellCommandWorkdirRequestSchema = v.pipe(
+    v.strictObject({
+        command: commandSchema,
+        timeout: v.optional(v.number()),
+        workdir: v.optional(v.string()),
     }),
     v.readonly(),
 );
@@ -37,11 +46,15 @@ function parseJson(value: string): unknown {
 }
 
 function shellRequest(value: string): ShellCommandRequest | null {
-    const result = v.safeParse(shellCommandRequestSchema, parseJson(value));
-    if (!result.success) {
-        return null;
+    const decoded = parseJson(value);
+    const cwdRequest = v.safeParse(shellCommandCwdRequestSchema, decoded);
+    if (cwdRequest.success) {
+        return { command: cwdRequest.output.command, cwd: cwdRequest.output.cwd ?? null };
     }
-    return { command: result.output.command, cwd: result.output.cwd ?? null };
+    const workdirRequest = v.safeParse(shellCommandWorkdirRequestSchema, decoded);
+    return workdirRequest.success
+        ? { command: workdirRequest.output.command, cwd: workdirRequest.output.workdir ?? null }
+        : null;
 }
 
 function shellResponse(value: string): ShellCommandResponse | null {
