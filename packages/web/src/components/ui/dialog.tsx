@@ -8,6 +8,7 @@ export function Dialog({
     onClose,
     busy = false,
     wide = false,
+    testId,
     children,
 }: {
     readonly title: string;
@@ -15,6 +16,7 @@ export function Dialog({
     readonly onClose: () => void;
     readonly busy?: boolean;
     readonly wide?: boolean;
+    readonly testId?: string;
     readonly children: ReactNode;
 }) {
     const [returnFocus] = useState(() =>
@@ -34,6 +36,7 @@ export function Dialog({
             <Primitive.Portal>
                 <Primitive.Overlay className="fixed inset-0 z-50 bg-black/30 motion-safe:animate-cloud-enter" />
                 <Primitive.Content
+                    data-testid={testId}
                     onCloseAutoFocus={(event) => {
                         event.preventDefault();
                         returnFocus?.focus();

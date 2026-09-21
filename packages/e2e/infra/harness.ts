@@ -178,6 +178,23 @@ export class E2EHarness {
         return child;
     }
 
+    async terminate(name: string, signal: NodeJS.Signals = "SIGTERM") {
+        const processRecord = this.children.find((candidate) => candidate.name === name);
+        if (
+            processRecord === undefined ||
+            processRecord.child.pid === undefined ||
+            processRecord.child.exitCode !== null ||
+            processRecord.child.signalCode !== null
+        ) {
+            throw new Error(`${name} is not running`);
+        }
+        process.kill(-processRecord.child.pid, signal);
+        await Promise.race([
+            new Promise((resolveExit) => processRecord.child.once("exit", resolveExit)),
+            new Promise((_, reject) => setTimeout(() => reject(new Error(`${name} did not stop in time`)), 2_000)),
+        ]);
+    }
+
     async waitFor<T>(
         description: string,
         probe: () => Promise<T>,

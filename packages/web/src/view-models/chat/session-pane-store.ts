@@ -9,9 +9,6 @@ import {
     type MobiusClient,
     MobiusControlEvent,
     MobiusElicitationResponseRequest,
-    MobiusFailedAttemptSummary,
-    MobiusFailedBeforeStartAttemptSummary,
-    MobiusPageRequest,
     MobiusPermissionResponseRequest,
     MobiusRunningAttemptSummary,
     MobiusTurnCompletedEvent,
@@ -19,6 +16,7 @@ import {
     MobiusTurnStartedEvent,
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
+import * as v from "valibot";
 import { createStore } from "zustand/vanilla";
 import {
     agentActivityKey,
@@ -42,7 +40,6 @@ import {
     applyRecordedContents,
     historySessionMessages,
     placeAgentActivity,
-    restoreSessionPresentation,
     type SessionMessage,
 } from "./session-presentation.ts";
 import {
@@ -61,6 +58,21 @@ type Connection =
     | { readonly kind: "ready"; readonly client: MobiusClient }
     | { readonly kind: "failed" };
 type ServiceInteraction = Awaited<ReturnType<MobiusClient["interactions"]["listPending"]>>[number];
+const activeTurnSchema = v.pipe(
+    v.variant("kind", [
+        v.object({
+            commandId: v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u)),
+            kind: v.literal("submitting"),
+        }),
+        v.object({
+            commandId: v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u)),
+            kind: v.literal("accepted"),
+            turnId: v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u)),
+        }),
+    ]),
+    v.readonly(),
+);
+type ActiveTurn = v.InferOutput<typeof activeTurnSchema>;
 export type LocalInteraction =
     | { readonly kind: "permission"; readonly permission: PermissionInteraction }
     | { readonly kind: "elicitation"; readonly elicitation: ElicitationInteraction };
@@ -258,20 +270,17 @@ function includePendingUserMessage(
     return [...messages, { contents: [], id: commandId, role: "user", text: displayPrompt }];
 }
 
-function restoredSessionActivity(messages: readonly SessionMessage[]): SessionActivityState {
-    const lastAssistant = messages.findLast((message) => message.role === "assistant");
-    const attempt = lastAssistant?.role === "assistant" ? lastAssistant.attempt : null;
-    if (
-        lastAssistant?.role === "assistant" &&
-        (attempt instanceof MobiusFailedAttemptSummary || attempt instanceof MobiusFailedBeforeStartAttemptSummary)
-    ) {
-        return {
-            commandId: lastAssistant.commandId,
-            kind: "failed",
-            message: attempt.message,
-        };
+function readActiveTurn(storage: Storage, key: string): ActiveTurn | null {
+    const encoded = storage.getItem(key);
+    if (encoded === null) {
+        return null;
     }
-    return { kind: "idle" };
+    try {
+        const parsed = v.safeParse(activeTurnSchema, JSON.parse(encoded));
+        return parsed.success ? parsed.output : null;
+    } catch {
+        return null;
+    }
 }
 
 export function createSessionPaneModel(options: {
@@ -283,18 +292,25 @@ export function createSessionPaneModel(options: {
 }) {
     const { session, botId, requests } = options;
     const sessionId = session.result.ready.sessionId;
-    let client: MobiusClient | null = null;
-    let command =
+    const activeTurnStorageKey = `mobius.session-active-turn.v1:${sessionId}`;
+    const recordedActiveTurn = readActiveTurn(options.storage, activeTurnStorageKey);
+    const activeTurn =
         session.result.action === "conversation" && session.result.activeTurn.kind === "running"
-            ? session.result.activeTurn.commandId
-            : "";
+            ? {
+                  commandId: session.result.activeTurn.commandId,
+                  kind: "accepted" as const,
+                  turnId: session.result.activeTurn.turnId,
+              }
+            : recordedActiveTurn;
+    let client: MobiusClient | null = null;
+    let command = activeTurn?.commandId ?? "";
     const delivery = createSessionDeliveryStore({
         sessionId,
         storage: options.storage,
         submit: async (request, signal) => await requests.submitTurn(botId, sessionId, request, signal),
     });
     const initialDelivery = delivery.getState().state;
-    const savedMessages = historySessionMessages(session.result.history);
+    const savedMessages = historySessionMessages(session.result.history, command === "" ? null : command);
     const initialMessages =
         initialDelivery.kind === "delivery-unknown"
             ? includePendingUserMessage(
@@ -321,8 +337,8 @@ export function createSessionPaneModel(options: {
             },
         },
     });
-    if (session.result.action === "conversation" && session.result.activeTurn.kind === "running") {
-        tasks.getState().start(session.result.activeTurn.commandId, session.result.activeTurn.turnId);
+    if (activeTurn?.kind === "accepted") {
+        tasks.getState().start(activeTurn.commandId, activeTurn.turnId);
     }
     const remoteAccess = createRemoteAccessStore(options.endRemoteAccess);
     const messageQueue = createSessionMessageQueueStore({
@@ -386,69 +402,17 @@ export function createSessionPaneModel(options: {
             activity: command === "" ? { kind: "idle" } : { commandId: command, kind: "working" },
             connect: async (signal) => {
                 let lastSequence = 0n;
-                const refresh = async () => {
-                    if (client === null || command === "") {
-                        return;
-                    }
-                    const currentCommand = command;
-                    const page = await client.sessions.readMessages(sessionId, new MobiusPageRequest(100, ""), signal);
-                    signal.throwIfAborted();
-                    lastSequence = BigInt(page.lastCommittedSequence);
-                    const message = page.messages.find((item) => item.commandId === currentCommand);
-                    if (message === undefined || command !== currentCommand) {
-                        return;
-                    }
-                    set((current) => {
-                        const replies = current.messages.filter(
-                            (item) => item.role === "assistant" && item.commandId === currentCommand,
-                        );
-                        const onlyReplyId = replies.length === 1 ? replies[0]?.id : undefined;
-                        return {
-                            messages: current.messages.map((item) =>
-                                item.role === "assistant" && item.commandId === currentCommand
-                                    ? {
-                                          ...item,
-                                          attempt: message.attempt,
-                                          text: item.id === onlyReplyId ? message.response : item.text,
-                                      }
-                                    : item,
-                            ),
-                        };
-                    });
-                    if (["succeeded", "failed", "cancelled", "indeterminate"].includes(message.attempt.kind)) {
-                        const completedAttempt = message.attempt;
-                        set((current) => ({
-                            activity:
-                                completedAttempt instanceof MobiusFailedAttemptSummary ||
-                                completedAttempt instanceof MobiusFailedBeforeStartAttemptSummary
-                                    ? transitionSessionActivity(current.activity, {
-                                          commandId: currentCommand,
-                                          kind: "work-failed",
-                                          message: completedAttempt.message,
-                                      })
-                                    : completedAttempt.kind === "indeterminate"
-                                      ? transitionSessionActivity(current.activity, {
-                                            commandId: currentCommand,
-                                            kind: "work-failed",
-                                            message: "The Session result could not be determined.",
-                                        })
-                                      : transitionSessionActivity(current.activity, {
-                                            commandId: currentCommand,
-                                            kind: "work-completed",
-                                        }),
-                            operation: { kind: "idle" },
-                        }));
-                        tasks.getState().finish(currentCommand);
-                        command = "";
-                    }
-                };
                 try {
                     client = await requests.connectSession(botId, sessionId, signal);
                     const connected = client;
+                    const reconnectingTurn = readActiveTurn(options.storage, activeTurnStorageKey);
                     signal.addEventListener("abort", () => connected.close(), { once: true });
-                    const [saved, pendingInteractions] = await Promise.all([
-                        connected.sessions.readMessages(sessionId, new MobiusPageRequest(100, ""), signal),
+                    const [nativeHistory, pendingInteractions, restoredTurn] = await Promise.all([
+                        connected.sessions.readNativeHistory(sessionId, signal),
                         connected.interactions.listPending(sessionId, signal),
+                        reconnectingTurn?.kind === "accepted"
+                            ? connected.turns.read(sessionId, reconnectingTurn.turnId, signal)
+                            : Promise.resolve(null),
                     ]);
                     signal.throwIfAborted();
                     set({
@@ -457,38 +421,62 @@ export function createSessionPaneModel(options: {
                             return presented === null ? [] : [presented];
                         }),
                     });
-                    delivery.getState().reconcile(saved.messages.map((message) => message.commandId));
-                    const restored = restoreSessionPresentation(saved, session.result.history);
+                    if (
+                        restoredTurn !== null &&
+                        restoredTurn.state.kind !== "queued" &&
+                        restoredTurn.state.kind !== "running"
+                    ) {
+                        tasks.getState().finish(command);
+                        options.storage.removeItem(activeTurnStorageKey);
+                        command = "";
+                    }
+                    const nativeMessages = historySessionMessages(nativeHistory, command === "" ? null : command);
+                    delivery
+                        .getState()
+                        .reconcile([
+                            ...(nativeHistory.status === "available" ? nativeHistory.coveredCommandIds : []),
+                            ...(command !== "" &&
+                            nativeMessages.some((message) => message.role === "user" && message.id === command)
+                                ? [command]
+                                : []),
+                        ]);
+                    const liveCommandMessages =
+                        command === "" ||
+                        (nativeHistory.status === "available" && nativeHistory.coveredCommandIds.includes(command))
+                            ? []
+                            : get().messages.filter((message) =>
+                                  message.role === "user"
+                                      ? message.id === command &&
+                                        !nativeMessages.some(
+                                            (nativeMessage) =>
+                                                nativeMessage.role === "user" && nativeMessage.id === command,
+                                        )
+                                      : message.commandId === command &&
+                                        !nativeMessages.some(
+                                            (nativeMessage) =>
+                                                nativeMessage.role === "assistant" &&
+                                                nativeMessage.commandId === command,
+                                        ),
+                              );
+                    const restoredFromDaemon = [...nativeMessages, ...liveCommandMessages];
                     const reconciledDelivery = delivery.getState().state;
                     const restoredMessages =
                         reconciledDelivery.kind === "delivery-unknown"
                             ? includePendingUserMessage(
-                                  restored.messages,
+                                  restoredFromDaemon,
                                   reconciledDelivery.journal.commandId,
                                   reconciledDelivery.journal.displayPrompt,
                               )
-                            : restored.messages;
-                    lastSequence = restored.lastSequence;
-                    if (restored.activeCommandId === null) {
-                        if (command !== "") {
-                            tasks.getState().finish(command);
-                        }
-                        command = "";
-                    } else {
-                        command = restored.activeCommandId;
-                    }
+                            : restoredFromDaemon;
                     signal.throwIfAborted();
                     set({
-                        activities: restored.activities,
+                        activities: new Map(),
                         messages: restoredMessages,
-                        activity:
-                            command === ""
-                                ? restoredSessionActivity(restoredMessages)
-                                : { commandId: command, kind: "working" },
+                        activity: command === "" ? { kind: "idle" } : { commandId: command, kind: "working" },
                     });
                     const subscription = await connected.events.subscribe(
                         sessionId,
-                        restored.eventCursor,
+                        "",
                         {
                             receive: async (event) => {
                                 const payload = event.payload;
@@ -560,20 +548,6 @@ export function createSessionPaneModel(options: {
                                     }
                                 }
                                 if (
-                                    command !== "" &&
-                                    payload instanceof MobiusControlEvent &&
-                                    [
-                                        "session.permission.requested",
-                                        "session.permission.resolved",
-                                        "session.elicitation.requested",
-                                        "session.elicitation.resolved",
-                                    ].includes(payload.kind) &&
-                                    BigInt(event.sequence) > lastSequence
-                                ) {
-                                    await refresh();
-                                    return true;
-                                }
-                                if (
                                     payload instanceof MobiusTurnStartedEvent &&
                                     messageQueue
                                         .getState()
@@ -586,6 +560,14 @@ export function createSessionPaneModel(options: {
                                         }
                                         command = queued.commandId;
                                         tasks.getState().start(queued.commandId, queued.turnId);
+                                        options.storage.setItem(
+                                            activeTurnStorageKey,
+                                            JSON.stringify({
+                                                commandId: queued.commandId,
+                                                kind: "accepted",
+                                                turnId: queued.turnId,
+                                            }),
+                                        );
                                         set((current) => ({
                                             activity: transitionSessionActivity(current.activity, {
                                                 commandId: queued.commandId,
@@ -615,6 +597,37 @@ export function createSessionPaneModel(options: {
                                         }));
                                         return true;
                                     }
+                                }
+                                if (command === "" && payload instanceof MobiusTurnStartedEvent) {
+                                    command = payload.commandId;
+                                    lastSequence = BigInt(event.sequence);
+                                    set((current) => ({
+                                        activity: transitionSessionActivity(current.activity, {
+                                            commandId: payload.commandId,
+                                            kind: "work-started",
+                                        }),
+                                        messages: current.messages.some(
+                                            (message) =>
+                                                message.role === "assistant" && message.commandId === payload.commandId,
+                                        )
+                                            ? current.messages
+                                            : [
+                                                  ...current.messages,
+                                                  {
+                                                      activityIds: [],
+                                                      id: `${payload.commandId}-reply`,
+                                                      role: "assistant",
+                                                      text: "",
+                                                      attempt: new MobiusRunningAttemptSummary(
+                                                          payload.attemptId,
+                                                          event.recordedAt,
+                                                      ),
+                                                      commandId: payload.commandId,
+                                                      contents: [],
+                                                  },
+                                              ],
+                                    }));
+                                    return true;
                                 }
                                 if (
                                     command === "" ||
@@ -656,7 +669,24 @@ export function createSessionPaneModel(options: {
                                     payload instanceof MobiusTurnCompletedEvent ||
                                     payload instanceof MobiusTurnFailedEvent
                                 ) {
-                                    await refresh();
+                                    const completedCommand = command;
+                                    set((current) => ({
+                                        activity:
+                                            payload instanceof MobiusTurnFailedEvent
+                                                ? transitionSessionActivity(current.activity, {
+                                                      commandId: completedCommand,
+                                                      kind: "work-failed",
+                                                      message: payload.message,
+                                                  })
+                                                : transitionSessionActivity(current.activity, {
+                                                      commandId: completedCommand,
+                                                      kind: "work-completed",
+                                                  }),
+                                        operation: { kind: "idle" },
+                                    }));
+                                    tasks.getState().finish(completedCommand);
+                                    options.storage.removeItem(activeTurnStorageKey);
+                                    command = "";
                                 }
                                 return true;
                             },
@@ -664,6 +694,30 @@ export function createSessionPaneModel(options: {
                         signal,
                     );
                     signal.throwIfAborted();
+                    if (reconnectingTurn?.kind === "accepted" && command === reconnectingTurn.commandId) {
+                        const latestTurn = await connected.turns.read(sessionId, reconnectingTurn.turnId, signal);
+                        if (latestTurn.state.kind !== "queued" && latestTurn.state.kind !== "running") {
+                            const completedHistory = await connected.sessions.readNativeHistory(sessionId, signal);
+                            signal.throwIfAborted();
+                            if (command === reconnectingTurn.commandId) {
+                                delivery
+                                    .getState()
+                                    .reconcile(
+                                        completedHistory.status === "available"
+                                            ? completedHistory.coveredCommandIds
+                                            : [],
+                                    );
+                                tasks.getState().finish(command);
+                                options.storage.removeItem(activeTurnStorageKey);
+                                command = "";
+                                set({
+                                    activity: { kind: "idle" },
+                                    messages: historySessionMessages(completedHistory),
+                                    operation: { kind: "idle" },
+                                });
+                            }
+                        }
+                    }
                     set({ connection: { kind: "ready", client: connected } });
                     await subscription.completed;
                     signal.throwIfAborted();
@@ -716,7 +770,6 @@ export function createSessionPaneModel(options: {
                 set((state) => ({
                     draft: "",
                     attachments: [],
-                    activity: transitionSessionActivity(state.activity, { commandId, kind: "work-started" }),
                     operation: { kind: "sending", commandId },
                     messages: [
                         ...state.messages,
@@ -733,6 +786,7 @@ export function createSessionPaneModel(options: {
                     ],
                 }));
                 try {
+                    options.storage.setItem(activeTurnStorageKey, JSON.stringify({ commandId, kind: "submitting" }));
                     const accepted = await delivery.getState().submit(
                         commandId,
                         displayPrompt,
@@ -752,8 +806,22 @@ export function createSessionPaneModel(options: {
                     signal.throwIfAborted();
                     if (accepted !== null && command === commandId) {
                         tasks.getState().start(commandId, accepted.turnId);
+                        options.storage.setItem(
+                            activeTurnStorageKey,
+                            JSON.stringify({ commandId, kind: "accepted", turnId: accepted.turnId }),
+                        );
+                        set((current) => ({
+                            activity: transitionSessionActivity(current.activity, {
+                                commandId,
+                                kind: "work-started",
+                            }),
+                            operation: { kind: "idle" },
+                        }));
+                    } else {
+                        options.storage.removeItem(activeTurnStorageKey);
+                        command = "";
+                        set({ operation: { kind: "idle" } });
                     }
-                    set({ operation: { kind: "idle" } });
                 } catch (cause) {
                     signal.throwIfAborted();
                     set((current) => ({
@@ -777,6 +845,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 if (command === commandId) {
+                    options.storage.removeItem(activeTurnStorageKey);
                     command = "";
                 }
                 set((current) => ({
@@ -836,6 +905,13 @@ export function createSessionPaneModel(options: {
                 signal.throwIfAborted();
                 if (accepted !== null) {
                     tasks.getState().start(pending.commandId, accepted.turnId);
+                    options.storage.setItem(
+                        activeTurnStorageKey,
+                        JSON.stringify({ commandId: pending.commandId, kind: "accepted", turnId: accepted.turnId }),
+                    );
+                } else {
+                    options.storage.removeItem(activeTurnStorageKey);
+                    command = "";
                 }
             },
             queueDraft: async (signal) => {

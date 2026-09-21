@@ -1,12 +1,10 @@
 import {
     type AgentDisplayContent,
     decodeAgentContentEvent,
-    MobiusAgentActivityEvent,
     MobiusControlEvent,
     type MobiusMessagePage,
     type MobiusSessionEvent,
 } from "@moxt-ai/mobius-sdk";
-import { agentActivityKey, type RecordedAgentActivity } from "../../services/chat/agent-activities.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 
 export type SessionMessage =
@@ -31,16 +29,6 @@ interface SessionMessageContent {
     readonly content: AgentDisplayContent;
 }
 
-interface RestoredSessionPresentation {
-    readonly activeCommandId: string | null;
-    readonly activities: ReadonlyMap<string, RecordedAgentActivity>;
-    readonly eventCursor: string;
-    readonly lastSequence: bigint;
-    readonly messages: readonly SessionMessage[];
-}
-
-const ACTIVE_ATTEMPT_KINDS: ReadonlySet<string> = new Set(["none", "dispatching", "running", "waiting_input"]);
-
 function historyContents(
     images: readonly { readonly data: string; readonly mimeType: string; readonly name: string }[] | undefined,
 ): readonly SessionMessageContent[] {
@@ -62,105 +50,52 @@ function historyContents(
     }));
 }
 
-export function historySessionMessages(history: OpenMobiusSession["result"]["history"]): readonly SessionMessage[] {
-    return history.status === "available"
-        ? history.messages.map((message, index): SessionMessage => {
-              const id = `history-${index.toString()}`;
-              return message.role === "user"
-                  ? { id, role: "user", text: message.text, contents: historyContents(message.images) }
-                  : {
-                        activityIds: [],
-                        id,
-                        role: "assistant",
-                        text: message.text,
-                        attempt: null,
-                        commandId: null,
-                        contents: historyContents(message.images),
-                    };
-          })
-        : [];
-}
-
-function restoredActivity(message: MobiusMessagePage["messages"][number], index: number) {
-    const summary = message.activities[index];
-    if (summary === undefined) {
-        return null;
-    }
-    const activity = new MobiusAgentActivityEvent({
-        activityId: summary.activityId,
-        activityType: summary.activityType,
-        commandId: message.commandId,
-        content: [],
-        detail: { kind: "unrecorded" },
-        input: summary.input,
-        kind: "agent.activity",
-        locations: summary.locations,
-        name: summary.name,
-        output: summary.output,
-        sequence: summary.sequence,
-        sessionId: message.sessionId,
-        status: summary.status,
-        title: summary.title,
-        toolKind: summary.toolKind,
-    });
-    return { activity, key: agentActivityKey(activity), sequence: BigInt(summary.sequence) };
-}
-
-export function restoreSessionPresentation(
-    saved: MobiusMessagePage,
+export function historySessionMessages(
     history: OpenMobiusSession["result"]["history"],
-): RestoredSessionPresentation {
-    const activeCommandId =
-        saved.messages.find((message) => ACTIVE_ATTEMPT_KINDS.has(message.attempt.kind))?.commandId ?? null;
-    const activities = new Map<string, RecordedAgentActivity>();
-    for (const message of saved.messages) {
-        if (message.commandId === activeCommandId) {
-            continue;
-        }
-        for (let index = 0; index < message.activities.length; index += 1) {
-            const restored = restoredActivity(message, index);
-            if (restored !== null) {
-                activities.set(restored.key, { activity: restored.activity, sequence: restored.sequence });
-            }
-        }
+    activeCommandId: string | null = null,
+): readonly SessionMessage[] {
+    if (history.status !== "available") {
+        return [];
     }
-    const initial = historySessionMessages(history);
-    const messages: readonly SessionMessage[] = [
-        ...initial,
-        ...[...saved.messages]
-            .reverse()
-            .filter(
-                (message) => history.status !== "available" || !history.coveredCommandIds.includes(message.commandId),
-            )
-            .flatMap((message): readonly SessionMessage[] => {
-                const activityIds = message.activities.flatMap((_, index) => {
-                    const restored = restoredActivity(message, index);
-                    return restored === null ? [] : [restored.key];
-                });
-                return [
-                    { id: `${message.commandId}-user`, role: "user", text: message.prompt, contents: [] },
-                    {
-                        activityIds: message.commandId === activeCommandId ? [] : activityIds,
-                        id: `${message.commandId}-reply`,
-                        role: "assistant",
-                        text: message.commandId === activeCommandId ? "" : message.response,
-                        attempt: message.attempt,
-                        commandId: message.commandId,
-                        contents: message.contents.map((content, index) => ({
-                            contentId: `saved-content-${index.toString()}`,
-                            content,
-                        })),
-                    },
-                ];
-            }),
-    ];
-    return {
-        activeCommandId,
-        activities,
-        eventCursor: activeCommandId === null ? saved.tailEventCursor : "",
-        lastSequence: activeCommandId === null ? BigInt(saved.lastCommittedSequence) : 0n,
-        messages,
-    };
+    const commandIdsByMessageIndex = new Map<number, string>();
+    let historyIndex = history.messages.length;
+    if (activeCommandId !== null && history.messages[historyIndex - 1]?.role === "user") {
+        commandIdsByMessageIndex.set(historyIndex - 1, activeCommandId);
+        historyIndex -= 1;
+    }
+    for (const commandId of history.coveredCommandIds) {
+        let assistantStartIndex = historyIndex;
+        while (assistantStartIndex > 0 && history.messages[assistantStartIndex - 1]?.role === "assistant") {
+            assistantStartIndex -= 1;
+        }
+        const userIndex = assistantStartIndex - 1;
+        if (assistantStartIndex === historyIndex || history.messages[userIndex]?.role !== "user") {
+            break;
+        }
+        commandIdsByMessageIndex.set(userIndex, commandId);
+        for (let index = assistantStartIndex; index < historyIndex; index += 1) {
+            commandIdsByMessageIndex.set(index, commandId);
+        }
+        historyIndex = userIndex;
+    }
+    return history.messages.map((message, index): SessionMessage => {
+        const coveredCommandId = commandIdsByMessageIndex.get(index);
+        const id =
+            coveredCommandId === undefined
+                ? `history-${index.toString()}`
+                : `${coveredCommandId}-${message.role === "user" ? "user" : "reply"}`;
+        return message.role === "user"
+            ? { id, role: "user", text: message.text, contents: historyContents(message.images) }
+            : {
+                  activityIds: [],
+                  id,
+                  role: "assistant",
+                  text: message.text,
+                  attempt: null,
+                  commandId: coveredCommandId ?? null,
+                  contents: historyContents(message.images),
+              };
+    });
 }
 
 export function placeAgentActivity(

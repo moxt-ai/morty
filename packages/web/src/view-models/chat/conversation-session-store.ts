@@ -1,5 +1,6 @@
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import { CloudApiError } from "../../services/management/management-api.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 
 type ConversationSessionState =
@@ -10,7 +11,7 @@ type ConversationSessionState =
           readonly conversationId: string;
           readonly session: OpenMobiusSession;
       }
-    | { readonly kind: "failed"; readonly message: string };
+    | { readonly kind: "failed"; readonly code: string | null; readonly message: string };
 
 export interface ConversationSessionStore {
     readonly state: ConversationSessionState;
@@ -40,7 +41,11 @@ export function createConversationSessionStore(
             } catch (cause) {
                 signal.throwIfAborted();
                 set({
-                    state: { kind: "failed", message: cause instanceof Error ? cause.message : "Session unavailable." },
+                    state: {
+                        kind: "failed",
+                        code: cause instanceof CloudApiError ? cause.code : null,
+                        message: cause instanceof Error ? cause.message : "Session unavailable.",
+                    },
                 });
             }
         },
