@@ -63,7 +63,7 @@ Make illegal states unrepresentable.
 
 ### Server layers
 
-Server behavior flows inward through `http/do -> service -> storage -> database`. HTTP routes and Durable Objects translate and orchestrate requests, services own domain validation and transformations, and storage owns persistence through the authoritative Drizzle schema and ORM query builder. Do not skip layers or move domain/protocol decisions into storage.
+Server behavior flows inward through `http/do -> service -> storage -> database`. HTTP routes and Durable Objects translate and orchestrate requests, services own domain validation and transformations, storage owns persistence through the authoritative Drizzle schema and ORM query builder, and gateways communicate our services with external services. Do not skip layers or move domain/protocol decisions into storage. Do not issue raw SQL strings where the ORM can express the query.
 
 - Prefer direct, local, linear code.
 - Add an abstraction only for a real external boundary, a second real use case, or proven duplication.
