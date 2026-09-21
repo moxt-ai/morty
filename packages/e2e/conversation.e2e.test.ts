@@ -8,7 +8,7 @@ test("Given a paired workspace, When a user works across conversations, Then sen
     await runtime.openPairedChat();
     const { page } = runtime;
     await expect(page.getByTestId(dataTestId.botConnectionStatus)).toHaveText("Connected");
-    const workingDirectory = await page.getByTestId(dataTestId.workingDirectory).textContent();
+    const workingDirectory = await page.getByTestId(dataTestId.workingDirectory).getAttribute("title");
     assert.ok(workingDirectory);
 
     await test.step("share the machine from the unobstructed sidebar action", async () => {
@@ -106,6 +106,7 @@ test("Given a paired workspace, When a user works across conversations, Then sen
         await expect(send).toHaveAttribute("aria-label", "Stop agent output");
         await expect(page.getByTestId(dataTestId.workingIndicator)).toContainText("Working for");
         await expect(page.getByTestId(dataTestId.workingSpinner)).toBeVisible();
+        await expect(page.getByTestId(dataTestId.agentResponse).last()).toContainText("Inspecting the workspace");
         await expect(composer).toBeEnabled();
         await composer.fill("focus on the public API");
         await composer.press("Enter");

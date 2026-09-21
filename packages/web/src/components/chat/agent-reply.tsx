@@ -62,10 +62,10 @@ export function AgentReply({
     const hasText = text.length > 0;
     const { phase, thinking } = describeAgentReply(attempt, activities, active, latest && !hasText);
     return (
-        <div className="min-w-0 space-y-3">
+        <div className="min-w-0 space-y-3" data-testid={testId}>
             <AgentThinking {...thinking} />
             {hasText && (
-                <MessageBubble speaker="assistant" data-testid={testId}>
+                <MessageBubble speaker="assistant">
                     <AgentMarkdown
                         markdown={text}
                         openLocalFile={openLocalFile}
