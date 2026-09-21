@@ -30,7 +30,7 @@ test("Given a paired workspace, When a user works across conversations, Then sen
     });
 
     let firstConversationId = "";
-    await test.step("create the first conversation with an image", async () => {
+    await test.step("Given a new conversation, When the first turn completes, Then Chat returns to idle without a reload", async () => {
         const composer = page.getByTestId(dataTestId.messageComposer);
         await composer.evaluate((element) => {
             const bytes = Uint8Array.from(
@@ -49,6 +49,8 @@ test("Given a paired workspace, When a user works across conversations, Then sen
         await expect(page).toHaveURL(/\?conversationId=/u);
         await expect(page.getByRole("list", { name: "Attachments", exact: true })).toHaveCount(0);
         await expect(page.getByTestId(dataTestId.agentResponse).first()).toContainText("First conversation");
+        await expect(page.getByTestId(dataTestId.workingIndicator)).toHaveCount(0);
+        await expect(page.getByTestId(dataTestId.sendMessage)).toHaveAttribute("aria-label", "Send message");
         await expect(page.getByTestId(dataTestId.recognizedReadToolCall).first()).toContainText(
             "Read package metadata",
         );

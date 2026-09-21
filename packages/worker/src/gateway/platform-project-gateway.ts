@@ -223,13 +223,12 @@ export class PlatformProjectGateway {
                             (option.type === "select" &&
                                 !option.values.some((value) => value.value === selection.value))
                         ) {
-                            throw new PlatformProjectError(
-                                "AGENT_CONFIGURATION_REJECTED",
-                                `The harness did not offer the selected ${selection.configId} setting.`,
-                                409,
-                            );
+                            continue;
                         }
                         if (option.type === "boolean" && option.booleanValue === selection.booleanValue) {
+                            continue;
+                        }
+                        if (option.type === "select" && option.currentValue === selection.value) {
                             continue;
                         }
                         configOptions = (await client.sessions.updateConfiguration(sessionId, selection, signal))
