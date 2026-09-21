@@ -1,10 +1,12 @@
 import {
     type AgentDisplayContent,
     decodeAgentContentEvent,
+    MobiusAgentActivityEvent,
     MobiusControlEvent,
     type MobiusMessagePage,
     type MobiusSessionEvent,
 } from "@moxt-ai/mobius-sdk";
+import type { RecordedAgentActivity } from "../../services/chat/agent-activities.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 
 export type SessionMessage =
@@ -50,12 +52,16 @@ function historyContents(
     }));
 }
 
-export function historySessionMessages(
+export function historySessionPresentation(
     history: OpenMobiusSession["result"]["history"],
+    sessionId: string,
     activeCommandId: string | null = null,
-): readonly SessionMessage[] {
+): {
+    readonly activities: ReadonlyMap<string, RecordedAgentActivity>;
+    readonly messages: readonly SessionMessage[];
+} {
     if (history.status !== "available") {
-        return [];
+        return { activities: new Map(), messages: [] };
     }
     const commandIdsByMessageIndex = new Map<number, string>();
     let historyIndex = history.messages.length;
@@ -78,24 +84,48 @@ export function historySessionMessages(
         }
         historyIndex = userIndex;
     }
-    return history.messages.map((message, index): SessionMessage => {
+    const activities = new Map<string, RecordedAgentActivity>();
+    const messages = history.messages.map((message, index): SessionMessage => {
         const coveredCommandId = commandIdsByMessageIndex.get(index);
         const id =
             coveredCommandId === undefined
                 ? `history-${index.toString()}`
                 : `${coveredCommandId}-${message.role === "user" ? "user" : "reply"}`;
-        return message.role === "user"
-            ? { id, role: "user", text: message.text, contents: historyContents(message.images) }
-            : {
-                  activityIds: [],
-                  id,
-                  role: "assistant",
-                  text: message.text,
-                  attempt: null,
-                  commandId: coveredCommandId ?? null,
-                  contents: historyContents(message.images),
-              };
+        if (message.role === "user") {
+            return { id, role: "user", text: message.text, contents: historyContents(message.images) };
+        }
+        const commandId = coveredCommandId ?? `native-message-${index.toString()}`;
+        const activityIds = message.activities.map((activity) => {
+            const key = `native-message-${index.toString()}-activity-${activity.activityId}`;
+            activities.set(key, {
+                sequence: BigInt(activity.sequence),
+                activity: new MobiusAgentActivityEvent({
+                    ...activity,
+                    commandId,
+                    detail: { kind: "unrecorded" },
+                    kind: "agent.activity",
+                    sessionId,
+                }),
+            });
+            return key;
+        });
+        return {
+            activityIds,
+            id,
+            role: "assistant",
+            text: message.text,
+            attempt: null,
+            commandId: coveredCommandId ?? null,
+            contents: [
+                ...historyContents(message.images),
+                ...message.content.map((content, contentIndex) => ({
+                    contentId: `native-message-${index.toString()}-content-${contentIndex.toString()}`,
+                    content,
+                })),
+            ],
+        };
     });
+    return { activities, messages };
 }
 
 export function placeAgentActivity(

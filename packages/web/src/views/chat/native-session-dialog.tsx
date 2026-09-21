@@ -133,7 +133,7 @@ export function NativeSessionDialog({
                                 {model.preview.content.title || model.preview.entry.title || "Untitled session"}
                             </h2>
                             {model.preview.content.history.status === "unavailable" ? (
-                                <p>This agent does not expose saved message history.</p>
+                                <p>{model.preview.content.history.cause.message}</p>
                             ) : (
                                 <>
                                     {model.preview.content.history.messages.length === 0 && (

@@ -22,6 +22,8 @@ export const dataTestId = Object.freeze({
     workingSpinner: "chat-working-spinner",
     userMessage: "chat-user-message",
     agentResponse: "chat-agent-response",
+    agentReasoning: "chat-agent-reasoning",
+    agentToolCall: "chat-agent-tool-call",
     pairingInstruction: "chat-pairing-instruction",
     botConnectionStatus: "chat-bot-connection-status",
     runtimeSetupFailure: "chat-runtime-setup-failure",

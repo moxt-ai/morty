@@ -937,7 +937,7 @@ async function readChannelHistoryWithSignal(channelId: string, signal: AbortSign
         await Promise.all(
             summaries.map(async (session) => {
                 try {
-                    const nativeHistory = await client.sessions.readNativeHistory(session.sessionId, signal);
+                    const nativeHistory = await client.sessions.queryNativeMessages(session.sessionId, signal);
                     const turns: RecordedTurn[] = [];
                     restoredBySessionId.set(session.sessionId, {
                         turns,

@@ -21,6 +21,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 const REPO_ROOT = path.resolve(__dirname, "../../../..");
+const WRANGLER = path.join(REPO_ROOT, "node_modules", ".bin", "wrangler");
 const PLATFORM_CONFIG = "packages/e2e/fixtures/wrangler.platform.jsonc";
 const CHAT_CONFIG = "packages/e2e/fixtures/wrangler.chat.jsonc";
 const SETUP_BUNDLE = "packages/setup/dist/setup.mjs";
@@ -122,13 +123,13 @@ function run(command, args, options = {}) {
 }
 
 function wrangler(args) {
-    return run("pnpm", ["exec", "wrangler", ...args]);
+    return run(WRANGLER, args);
 }
 
 function startProcess(name, args, logPath) {
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
     const output = fs.openSync(logPath, "a", 0o600);
-    const child = spawn("pnpm", args, {
+    const child = spawn(WRANGLER, args, {
         cwd: REPO_ROOT,
         detached: true,
         stdio: ["ignore", output, output],
@@ -293,8 +294,6 @@ async function prepare(options) {
     const platformPid = startProcess(
         "platform",
         [
-            "exec",
-            "wrangler",
             "dev",
             "--config",
             PLATFORM_CONFIG,
@@ -326,7 +325,7 @@ async function prepare(options) {
     }
     const application = await httpJson(`${platformOrigin}/mobius/api/dashboard/v1/apps`, {
         headers: PLATFORM_AUTH_HEADERS,
-        body: { displayName: `Mobius Chat local full dev ${path.basename(stateDir)}`, tenantId },
+        body: { cloudRetention: false, displayName: `Mobius Chat local full dev ${path.basename(stateDir)}`, tenantId },
     });
     const appId = application.appId;
     const appSecret = application.defaultCredential?.credential;
@@ -377,8 +376,6 @@ async function prepare(options) {
     const chatPid = startProcess(
         "chat",
         [
-            "exec",
-            "wrangler",
             "dev",
             "--config",
             CHAT_CONFIG,

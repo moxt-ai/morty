@@ -22,11 +22,11 @@ catalogs:
       specifier: ^1.1.4
       version: 1.1.8
     '@moxt-ai/mobius-protocol':
-      specifier: 0.0.11
-      version: 0.0.11
+      specifier: 0.0.12
+      version: 0.0.12
     '@moxt-ai/mobius-sdk':
-      specifier: 0.0.15
-      version: 0.0.15
+      specifier: 0.0.16
+      version: 0.0.16
     '@playwright/test':
       specifier: 1.63.0
       version: 1.63.0
@@ -1477,12 +1477,12 @@ packages:
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
-  '@moxt-ai/mobius-protocol@0.0.11':
-    resolution: {integrity: sha512-Lq9DoZIoONpYBPl3Tp0dtLUapGgL9LtFBNpNZdSOM7skc3/4g7K0tVOrpbEjo7WecM7WnNDzgumTFX3XUFC8pA==}
+  '@moxt-ai/mobius-protocol@0.0.12':
+    resolution: {integrity: sha512-S0fx8PeOl+Lffu6Y8bkj/OYqWqiu4DXoJ32L+vB8Bm+WuY0Z0yL07GCpRwx8qV2iOTe/yl5p6buM4jQyJKrbeQ==}
     engines: {node: '>=20.19.0'}
 
-  '@moxt-ai/mobius-sdk@0.0.15':
-    resolution: {integrity: sha512-jlh6Lovf6yk2p8OcBLV/mKGrShKnOUTHQIAKfAkoEtPWBpVIzeFxhtVbqrOSSSKUKROiuYZIFX+nwzVXsTEqYA==}
+  '@moxt-ai/mobius-sdk@0.0.16':
+    resolution: {integrity: sha512-QNdUDHXgYX7TOYa003GHOuEi7BMnPQ9lFKxXX+zuE+uS9rBOz3rCh0unUKPR+14744kaHSBQBYqWLDCIh3DCTQ==}
     engines: {node: '>=20.19.0'}
 
   '@napi-rs/wasm-runtime@1.2.3':
@@ -5561,13 +5561,13 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@moxt-ai/mobius-protocol@0.0.11':
+  '@moxt-ai/mobius-protocol@0.0.12':
     dependencies:
       zod: 4.6.5
 
-  '@moxt-ai/mobius-sdk@0.0.15(react@19.2.8)':
+  '@moxt-ai/mobius-sdk@0.0.16(react@19.2.8)':
     dependencies:
-      '@moxt-ai/mobius-protocol': 0.0.11
+      '@moxt-ai/mobius-protocol': 0.0.12
       base64-js: 1.5.1
       partysocket: 1.3.0(react@19.2.8)
     transitivePeerDependencies:

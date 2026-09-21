@@ -1,5 +1,6 @@
 import { Brain, ChevronDown, LoaderCircle, Wrench } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { dataTestId } from "../../data-testid.ts";
 import type { ThinkingEntry, ThinkingPresentation, ToolThinkingEntry } from "../../services/chat/agent-reply.ts";
 import { AgentMarkdown } from "../agents/agent-markdown.tsx";
 import { ToolCallStatus } from "./tool-call-status.tsx";
@@ -37,7 +38,12 @@ function ReasoningDisclosure({
         }
     }, [autoOpen]);
     return (
-        <details aria-label="Agent thinking" className="group/thinking min-w-0" ref={disclosure}>
+        <details
+            aria-label="Agent thinking"
+            className="group/thinking min-w-0"
+            data-testid={dataTestId.agentReasoning}
+            ref={disclosure}
+        >
             <summary className="flex min-h-10 w-fit cursor-pointer list-none items-center gap-2 rounded-lg px-1 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
                 <ChevronDown
                     aria-hidden="true"
@@ -66,7 +72,11 @@ function ToolCall({ autoOpen, entry }: { readonly autoOpen: boolean; readonly en
         return registered;
     }
     return (
-        <details aria-label={`Tool: ${entry.title}`} className="group/tool min-w-0">
+        <details
+            aria-label={`Tool: ${entry.title}`}
+            className="group/tool min-w-0"
+            data-testid={dataTestId.agentToolCall}
+        >
             <summary
                 className="flex min-h-8 w-full min-w-0 cursor-pointer list-none items-center gap-2 rounded-lg px-1 text-sm text-copy-secondary outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                 title={entry.title}
