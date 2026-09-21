@@ -101,11 +101,10 @@ Runtime, Session, and turn operations call Mobius with the AppCredential.
 
 ### 2. Worker SDK and authentication
 
-The Worker now depends on the local `third-party/mobius/packages/mobius-sdk` package
-and uses `@moxt-ai/mobius-sdk/platform` for Project provisioning. The Platform
-subpath is configured in TypeScript and Vite. Use `@moxt-ai/mobius-sdk/server` for
-generic Project, Runtime, Session, and turn operations. Mobius Chat does not use
-Mobius Bot resources during normal operation.
+The Worker depends on the published `@moxt-ai/mobius-sdk` package and uses its
+`@moxt-ai/mobius-sdk/platform` export for Project provisioning. Use
+`@moxt-ai/mobius-sdk/server` for generic Project, Runtime, Session, and turn
+operations. Mobius Chat does not use Mobius Bot resources during normal operation.
 
 Replace `x-mobius-app-id` / `x-mobius-app-secret` authentication with
 `Authorization: Bearer mapp_...`. Keep the AppCredential server-side. Retain

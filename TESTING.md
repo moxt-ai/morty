@@ -19,10 +19,10 @@ duplicate scenario.
 
 ### Browser product journeys
 
-`packages/e2e/conversation.e2e.test.ts` covers an already-paired workspace.
-`packages/e2e/setup.e2e.test.ts` covers setup handoff, native-session import,
-remote work, media, reload, and revocation. These two Playwright scenarios are the
-product E2E suite:
+`packages/e2e/conversation.e2e.test.ts` covers paired and newly created
+workspaces. `packages/e2e/setup.e2e.test.ts` covers setup handoff,
+native-session import, remote work, media, reload, and revocation. These two
+files contain the product E2E journeys:
 
 ```bash
 pnpm test:e2e
@@ -47,6 +47,15 @@ fakes, and cleanup. Slack tests start empty and create app registration, binding
 OAuth, and connection state through production HTTP operations. Direct persistence
 setup is reserved for storage and migration behavior or state owned by an upstream
 component outside the test.
+
+Keep one file per business boundary. Identity lifecycle and pairing-ticket HTTP
+behavior belong in `identity.integration.test.ts`; the setup CLI and browser
+handoff belong to the existing product journey in `packages/e2e/setup.e2e.test.ts`.
+Slack journeys stay under `slack/app`. Related state transitions should advance
+through one journey instead of rebuilding the same user, database, and Platform
+peer in separate cases. The small shared `support/identity-fixture.ts` starts the
+real Platform Worker and Chat Durable Objects in memory and supplies only external
+configuration and cleanup.
 
 ### Mobius
 
@@ -84,10 +93,11 @@ Mocks, spies, module replacement, monkey patching, and canned request intercepto
 are prohibited. A dependency outside the product may use one stateful fake through
 its production port when the real service cannot run safely or deterministically.
 
-Time-sensitive tests use a fixed fake clock and explicit advancement. Do not use
-real sleeps, polling loops, or timing tolerances. Async tests wait for the event or
-visible state that proves progress; a bounded scenario timeout is only failure
-containment.
+Do not make a real Cloudflare isolate pretend to share the test runner's fake
+clock. Assert generated deadlines structurally at this boundary; test elapsed-time
+rules at the owning storage or protocol boundary. Do not use real sleeps, polling
+loops, or timing tolerances. Async tests wait for the event or visible state that
+proves progress; a bounded scenario timeout is only failure containment.
 
 ## CI and coverage
 
@@ -112,8 +122,9 @@ Run `pnpm typecheck`, `pnpm lint`, and only the affected suites locally. Reserve
 ## Authentication and visual checks
 
 Worker authentication scenarios use the shared fake Clerk, which issues real
-RSA-signed tokens at a fixed clock. Hosted Clerk sign-in and sign-up remain manual
-because the external hosted UI is outside the product boundary.
+RSA-signed tokens through Clerk's production authentication port. Hosted Clerk
+sign-in and sign-up remain manual because the external hosted UI is outside the
+product boundary.
 
 Browser-specific layout and appearance remain manual unless they become a critical
 supported behavior. Functional browser journeys use accessible roles, labels, and

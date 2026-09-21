@@ -8,8 +8,8 @@
     },
     "dependencies": {
         "@clerk/react": "6.15.1",
-        "@moxt-ai/mobius-protocol": "link:../../third-party/mobius/packages/protocol",
-        "@moxt-ai/mobius-sdk": "link:../../third-party/mobius/packages/mobius-sdk",
+        "@moxt-ai/mobius-protocol": "catalog:",
+        "@moxt-ai/mobius-sdk": "catalog:",
         "@radix-ui/react-select": "2.3.7",
         "@sentry/react": "^10.73.0",
         "@streamdown/code": "1.1.1",

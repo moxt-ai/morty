@@ -75,7 +75,8 @@ class DurableObjectStatement {
     readonly runSynchronously = () => {
         const cursor = this.#sql.exec(this.#query, ...this.#values);
         cursor.toArray();
-        return { meta: { changes: cursor.rowsWritten }, success: true };
+        const { changes } = this.#sql.exec<{ changes: number }>("SELECT changes() AS changes").one();
+        return { meta: { changes }, success: true };
     };
 }
 
