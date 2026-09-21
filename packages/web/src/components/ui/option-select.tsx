@@ -1,4 +1,6 @@
 import { Select as Primitive } from "radix-ui";
+import { useState } from "react";
+import { dataTestId } from "@/data-testid";
 
 export function Select({
     compact = false,
@@ -6,6 +8,7 @@ export function Select({
     value,
     onValueChange,
     options,
+    searchable = false,
     disabled = false,
     testId,
 }: {
@@ -13,12 +16,32 @@ export function Select({
     readonly value: string;
     readonly onValueChange: (value: string) => void;
     readonly options: readonly { readonly value: string; readonly label: string }[];
+    readonly searchable?: boolean | undefined;
     readonly disabled?: boolean;
     readonly compact?: boolean;
     readonly testId?: string | undefined;
 }) {
+    const [search, setSearch] = useState("");
+    const normalizedSearch = search.trim().toLocaleLowerCase();
+    const visibleOptions =
+        searchable && normalizedSearch.length > 0
+            ? options.filter((option) =>
+                  [option.label, option.value].some((candidate) =>
+                      candidate.toLocaleLowerCase().includes(normalizedSearch),
+                  ),
+              )
+            : options;
     return (
-        <Primitive.Root value={value} onValueChange={onValueChange} disabled={disabled}>
+        <Primitive.Root
+            disabled={disabled}
+            onOpenChange={(open) => {
+                if (!open) {
+                    setSearch("");
+                }
+            }}
+            onValueChange={onValueChange}
+            value={value}
+        >
             <Primitive.Trigger
                 aria-label={label}
                 className={`flex h-9 min-w-0 items-center justify-between gap-1.5 rounded-lg text-left text-[13px] outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50 motion-reduce:transition-none ${compact ? "w-auto max-w-48 border-transparent bg-transparent px-2" : "w-full gap-2 border border-border bg-background px-3"}`}
@@ -41,8 +64,9 @@ export function Select({
                         <ChevronUp aria-hidden="true" className="size-4" />
                     </Primitive.ScrollUpButton>
                     <Primitive.Viewport className="p-1">
-                        {options.map((option) => (
+                        {visibleOptions.map((option) => (
                             <Primitive.Item
+                                data-testid={dataTestId.sessionConfigValue(option.value)}
                                 key={option.value}
                                 value={option.value}
                                 className="relative cursor-default select-none rounded-md py-2 pl-7 pr-3 text-[13px] outline-none data-[highlighted]:bg-accent"
@@ -53,7 +77,31 @@ export function Select({
                                 <Primitive.ItemText>{option.label}</Primitive.ItemText>
                             </Primitive.Item>
                         ))}
+                        {visibleOptions.length === 0 && (
+                            <p className="px-3 py-2 text-center text-xs text-muted-foreground">No matching models</p>
+                        )}
                     </Primitive.Viewport>
+                    {searchable && (
+                        <div className="border-t border-border bg-card p-1.5">
+                            <div className="relative">
+                                <Search
+                                    aria-hidden="true"
+                                    className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+                                />
+                                <input
+                                    aria-label="Search models"
+                                    autoComplete="off"
+                                    className="h-8 w-full rounded-md border border-border bg-background pr-2 pl-8 text-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20"
+                                    data-testid={dataTestId.modelSearch}
+                                    onChange={(event) => setSearch(event.currentTarget.value)}
+                                    onKeyDown={(event) => event.stopPropagation()}
+                                    placeholder="Search models…"
+                                    type="search"
+                                    value={search}
+                                />
+                            </div>
+                        </div>
+                    )}
                     <Primitive.ScrollDownButton className="flex justify-center">
                         <ChevronDown aria-hidden="true" className="size-4" />
                     </Primitive.ScrollDownButton>
@@ -63,4 +111,4 @@ export function Select({
     );
 }
 
-import { Check, ChevronDown, ChevronUp } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Search } from "lucide-react";

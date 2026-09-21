@@ -11,6 +11,7 @@ interface ChatConfigurationSelectControl {
     readonly label: string;
     readonly onValueChange: (value: string) => void;
     readonly options: readonly { readonly label: string; readonly tabLabel?: string; readonly value: string }[];
+    readonly searchable?: boolean;
     readonly testId?: string | undefined;
     readonly value: string;
 }
@@ -122,6 +123,7 @@ export function ChatConfigurationMenu({
                                             label={control.label}
                                             onValueChange={control.onValueChange}
                                             options={control.options}
+                                            searchable={control.searchable}
                                             testId={control.testId}
                                             value={control.value}
                                         />
