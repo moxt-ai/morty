@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
-test("Given a paired workspace, When a user works across conversations, Then session creation, queued work, replies, and revisits remain visible", async ({
+test("Given a paired workspace, When a user works across conversations, Then sent images, session creation, queued work, replies, and revisits remain visible", async ({
     runtime,
 }) => {
     await runtime.openPairedChat();
@@ -88,10 +88,21 @@ test("Given a paired workspace, When a user works across conversations, Then ses
 
     await test.step("queue a follow-up while the agent is working", async () => {
         await page.getByTestId(dataTestId.newConversation).click();
+        await runtime.sendMessage("Prepare for an image prompt");
         const composer = page.getByTestId(dataTestId.messageComposer);
         const send = page.getByTestId(dataTestId.sendMessage);
+        await composer.evaluate((element) => {
+            const bytes = Uint8Array.from(
+                atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="),
+                (character) => character.charCodeAt(0),
+            );
+            const clipboard = new DataTransfer();
+            clipboard.items.add(new File([bytes], "sent-image.png", { type: "image/png" }));
+            element.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, clipboardData: clipboard }));
+        });
         await composer.fill("wait for steering");
         await send.click();
+        await expect(page.getByTestId(dataTestId.userMessageImage)).toHaveAttribute("alt", "sent-image.png");
         await expect(send).toHaveAttribute("aria-label", "Stop agent output");
         await expect(page.getByTestId(dataTestId.workingIndicator)).toContainText("Working for");
         await expect(page.getByTestId(dataTestId.workingSpinner)).toBeVisible();

@@ -14,6 +14,7 @@ import {
     MobiusTurnCompletedEvent,
     MobiusTurnFailedEvent,
     MobiusTurnStartedEvent,
+    type PromptImage,
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
 import * as v from "valibot";
@@ -40,6 +41,7 @@ import {
     applyRecordedContents,
     historySessionMessages,
     placeAgentActivity,
+    promptImageContents,
     type SessionMessage,
 } from "./session-presentation.ts";
 import {
@@ -263,11 +265,12 @@ function includePendingUserMessage(
     messages: readonly SessionMessage[],
     commandId: string,
     displayPrompt: string,
+    images: readonly PromptImage[],
 ): readonly SessionMessage[] {
     if (messages.some((message) => message.role === "user" && message.id === commandId)) {
         return messages;
     }
-    return [...messages, { contents: [], id: commandId, role: "user", text: displayPrompt }];
+    return [...messages, { contents: promptImageContents(images), id: commandId, role: "user", text: displayPrompt }];
 }
 
 function readActiveTurn(storage: Storage, key: string): ActiveTurn | null {
@@ -317,6 +320,7 @@ export function createSessionPaneModel(options: {
                   savedMessages,
                   initialDelivery.journal.commandId,
                   initialDelivery.journal.displayPrompt,
+                  initialDelivery.journal.request.images,
               )
             : savedMessages;
     const tasks = createSessionTaskControlsStore({
@@ -466,6 +470,7 @@ export function createSessionPaneModel(options: {
                                   restoredFromDaemon,
                                   reconciledDelivery.journal.commandId,
                                   reconciledDelivery.journal.displayPrompt,
+                                  reconciledDelivery.journal.request.images,
                               )
                             : restoredFromDaemon;
                     signal.throwIfAborted();
@@ -579,7 +584,7 @@ export function createSessionPaneModel(options: {
                                                     id: `${queued.commandId}-user`,
                                                     role: "user",
                                                     text: queued.summary,
-                                                    contents: [],
+                                                    contents: promptImageContents(queued.images),
                                                 },
                                                 {
                                                     activityIds: [],
@@ -786,13 +791,16 @@ export function createSessionPaneModel(options: {
                             attachment.kind === "image" ? attachment.image.name : attachment.resource.name,
                         )
                         .join(", ");
+                const images = current.attachments.flatMap((attachment) =>
+                    attachment.kind === "image" ? [attachment.image] : [],
+                );
                 set((state) => ({
                     draft: "",
                     attachments: [],
                     operation: { kind: "sending", commandId },
                     messages: [
                         ...state.messages,
-                        { id: commandId, role: "user", text: displayPrompt, contents: [] },
+                        { id: commandId, role: "user", text: displayPrompt, contents: promptImageContents(images) },
                         {
                             activityIds: [],
                             id: `${commandId}-reply`,
@@ -812,9 +820,7 @@ export function createSessionPaneModel(options: {
                         {
                             ...request,
                             content: prompt,
-                            images: current.attachments.flatMap((attachment) =>
-                                attachment.kind === "image" ? [attachment.image] : [],
-                            ),
+                            images,
                             resources: current.attachments.flatMap((attachment) =>
                                 attachment.kind === "resource" ? [attachment.resource] : [],
                             ),
@@ -890,7 +896,7 @@ export function createSessionPaneModel(options: {
                                 id: pending.commandId,
                                 role: "user",
                                 text: pending.displayPrompt,
-                                contents: [],
+                                contents: promptImageContents(pending.request.images),
                             },
                         ];
                     }
@@ -979,7 +985,7 @@ export function createSessionPaneModel(options: {
                                 id: `${steered.commandId}-user`,
                                 role: "user",
                                 text: steered.summary,
-                                contents: [],
+                                contents: promptImageContents(steered.images),
                             },
                         ],
                     }));

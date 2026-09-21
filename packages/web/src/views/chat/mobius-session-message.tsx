@@ -69,12 +69,15 @@ export function MobiusSessionMessage({
                         />
                     </MessageBubble>
                 )}
-                <AgentRichContent
-                    contents={message.contents.map((entry) => entry.content)}
-                    readImage={readImage}
-                    openLocalFile={openLocalFile}
-                    sessionId={sessionId}
-                />
+                <div className="ml-auto max-w-[82%]">
+                    <AgentRichContent
+                        contents={message.contents.map((entry) => entry.content)}
+                        mediaTestId={dataTestId.userMessageImage}
+                        readImage={readImage}
+                        openLocalFile={openLocalFile}
+                        sessionId={sessionId}
+                    />
+                </div>
                 {deliveryUnknown && (
                     <div
                         className="ml-auto flex max-w-[82%] items-center gap-3 rounded-lg border border-destructive/15 bg-destructive/5 py-2 pr-2 pl-3 text-xs leading-5 text-destructive"

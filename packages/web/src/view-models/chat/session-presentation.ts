@@ -4,6 +4,7 @@ import {
     MobiusControlEvent,
     type MobiusMessagePage,
     type MobiusSessionEvent,
+    type PromptImage,
 } from "@moxt-ai/mobius-sdk";
 import type { OpenMobiusSession } from "./open-session.ts";
 
@@ -24,14 +25,12 @@ export type SessionMessage =
           readonly contents: readonly SessionMessageContent[];
       };
 
-interface SessionMessageContent {
+export interface SessionMessageContent {
     readonly contentId: string;
     readonly content: AgentDisplayContent;
 }
 
-function historyContents(
-    images: readonly { readonly data: string; readonly mimeType: string; readonly name: string }[] | undefined,
-): readonly SessionMessageContent[] {
+export function promptImageContents(images: readonly PromptImage[] | undefined): readonly SessionMessageContent[] {
     return (images ?? []).map((image, index) => ({
         contentId: `history-image-${index.toString()}`,
         content: {
@@ -85,7 +84,7 @@ export function historySessionMessages(
                 ? `history-${index.toString()}`
                 : `${coveredCommandId}-${message.role === "user" ? "user" : "reply"}`;
         return message.role === "user"
-            ? { id, role: "user", text: message.text, contents: historyContents(message.images) }
+            ? { id, role: "user", text: message.text, contents: promptImageContents(message.images) }
             : {
                   activityIds: [],
                   id,
@@ -93,7 +92,7 @@ export function historySessionMessages(
                   text: message.text,
                   attempt: null,
                   commandId: coveredCommandId ?? null,
-                  contents: historyContents(message.images),
+                  contents: promptImageContents(message.images),
               };
     });
 }

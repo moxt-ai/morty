@@ -40,9 +40,11 @@ function ContentHeader({ content }: { readonly content: AgentDisplayContent }) {
 
 function LocalImage({
     content,
+    mediaTestId,
     readImage,
 }: {
     readonly content: AgentDisplayContent;
+    readonly mediaTestId?: string | undefined;
     readonly readImage: MarkdownImageReader;
 }) {
     const [source, setSource] = useState<string | null>(null);
@@ -93,6 +95,7 @@ function LocalImage({
             <img
                 alt={content.name.length > 0 ? content.name : "Agent-provided image"}
                 className="max-h-[480px] w-auto max-w-full rounded-lg object-contain"
+                data-testid={mediaTestId}
                 loading="lazy"
                 src={source}
             />
@@ -103,12 +106,14 @@ function LocalImage({
 function AgentRichContentItem({
     channelId,
     content,
+    mediaTestId,
     openLocalFile,
     readImage,
     sessionId,
 }: {
     readonly channelId?: string | undefined;
     readonly content: AgentDisplayContent;
+    readonly mediaTestId?: string | undefined;
     readonly readImage?: MarkdownImageReader | undefined;
     readonly openLocalFile?: ((path: string) => void) | undefined;
     readonly sessionId?: string | undefined;
@@ -116,7 +121,7 @@ function AgentRichContentItem({
     if (content.type === "image" && content.uri.length > 0) {
         if (sessionId !== undefined && (readImage !== undefined || channelId !== undefined)) {
             const reader = readImage ?? (async (path, signal) => await readFile(sessionId, path, signal));
-            return <LocalImage content={content} readImage={reader} />;
+            return <LocalImage content={content} mediaTestId={mediaTestId} readImage={reader} />;
         }
         return (
             <div className="rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
@@ -141,6 +146,7 @@ function AgentRichContentItem({
                         aria-label={content.name.length > 0 ? content.name : "Agent-provided video"}
                         className="max-h-[480px] w-auto max-w-full rounded-lg bg-black object-contain"
                         controls
+                        data-testid={mediaTestId}
                         muted
                         playsInline
                         preload="metadata"
@@ -155,6 +161,7 @@ function AgentRichContentItem({
                 <img
                     alt={content.name.length > 0 ? content.name : "Agent-provided image"}
                     className="max-h-[480px] w-auto max-w-full rounded-lg object-contain"
+                    data-testid={mediaTestId}
                     loading="lazy"
                     src={`data:${content.mimeType};base64,${content.data}`}
                 />
@@ -232,12 +239,14 @@ function AgentRichContentItem({
 export function AgentRichContent({
     channelId,
     contents,
+    mediaTestId,
     readImage,
     openLocalFile,
     sessionId,
 }: {
     readonly channelId?: string | undefined;
     readonly contents: readonly AgentDisplayContent[];
+    readonly mediaTestId?: string | undefined;
     readonly readImage?: MarkdownImageReader | undefined;
     readonly openLocalFile?: ((path: string) => void) | undefined;
     readonly sessionId?: string | undefined;
@@ -252,6 +261,7 @@ export function AgentRichContent({
                     channelId={channelId}
                     content={content}
                     key={`${content.type}:${content.name}:${content.uri}:${index.toString()}`}
+                    mediaTestId={mediaTestId}
                     readImage={readImage}
                     openLocalFile={openLocalFile}
                     sessionId={sessionId}
