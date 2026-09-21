@@ -103,6 +103,12 @@ export class ChatTransport implements ApiTransport {
                 requestId: "workspace-request",
             });
         }
+        if (request.method === "POST" && path === `/mobius-cloud/api/chat/projects/${projectId}/bots/${botId}/access`) {
+            return Response.json(
+                { error: { code: "PLATFORM_INVALID_RESPONSE", message: "Platform returned an unexpected Session." } },
+                { status: 502 },
+            );
+        }
         if (
             request.method === "POST" &&
             path === `/mobius-cloud/api/chat/projects/${projectId}/bots/${botId}/managed-session`

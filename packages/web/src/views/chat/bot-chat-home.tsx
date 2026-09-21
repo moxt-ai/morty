@@ -202,10 +202,12 @@ export function BotChatHome({
         model.view.kind === "switching"
             ? model.view.view
             : model.view.kind === "connecting" ||
+                model.view.kind === "session-loading" ||
                 model.view.kind === "draft" ||
                 model.view.kind === "setup" ||
                 model.view.kind === "runtime-disconnected" ||
-                model.view.kind === "connection-failed"
+                model.view.kind === "connection-failed" ||
+                model.view.kind === "session-failed"
               ? model.view
               : null;
     const switching = model.view.kind === "switching";
@@ -309,19 +311,25 @@ export function BotChatHome({
                         aria-label="Messages"
                     >
                         <div ref={messageContent} className="flex min-h-full flex-col gap-8">
-                            {model.view.kind === "loading" || model.view.kind === "switching" ? (
+                            {model.view.kind === "loading" ||
+                            model.view.kind === "session-loading" ||
+                            model.view.kind === "switching" ? (
                                 <div className="m-auto">
                                     <Spinner
                                         label={
                                             model.view.kind === "switching"
                                                 ? "Switching session"
-                                                : "Connecting to your agent"
+                                                : model.view.kind === "session-loading"
+                                                  ? "Loading session"
+                                                  : "Connecting to your agent"
                                         }
                                     />
                                 </div>
-                            ) : model.view.kind === "failed" ? (
+                            ) : model.view.kind === "failed" || model.view.kind === "session-failed" ? (
                                 <div className="m-auto grid justify-items-center gap-4 text-center">
-                                    <p role="alert">{model.view.message}</p>
+                                    <p data-testid={dataTestId.sessionLoadFailure} role="alert">
+                                        {model.view.message}
+                                    </p>
                                     {model.target.kind === "continue" && model.target.action === "import" ? (
                                         <Button onClick={store.getState().forkInstead}>Fork session instead</Button>
                                     ) : (

@@ -5,7 +5,7 @@ import type { OpenMobiusSession } from "./open-session.ts";
 
 type ConversationSessionState =
     | { readonly kind: "idle" }
-    | { readonly kind: "opening" }
+    | { readonly kind: "loading" }
     | {
           readonly kind: "ready";
           readonly conversationId: string;
@@ -26,7 +26,7 @@ export function createConversationSessionStore(
         state: { kind: "idle" },
         clear: () => set({ state: { kind: "idle" } }),
         open: async (botId, conversationId, signal) => {
-            set({ state: { kind: "opening" } });
+            set({ state: { kind: "loading" } });
             try {
                 const access = await requests.access(botId, signal, conversationId);
                 const directory = await requests.workspaceDirectory(botId, access.workspaceRef, signal);

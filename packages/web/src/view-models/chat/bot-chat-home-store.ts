@@ -33,14 +33,17 @@ type Target =
       };
 
 type ActiveView = { readonly kind: "draft"; readonly bot: ManagedBot };
+export type SessionLoading = { readonly kind: "session-loading"; readonly bot: ManagedBot };
 export type BotChatHomeView =
     | { readonly kind: "loading" }
     | { readonly kind: "connecting"; readonly bot: ManagedBot }
+    | SessionLoading
     | { readonly kind: "switching"; readonly view: ActiveView }
     | ActiveView
     | { readonly kind: "setup"; readonly bot: ManagedBot; readonly reason: SetupReason }
     | { readonly kind: "runtime-disconnected"; readonly bot: ManagedBot; readonly message: string }
     | { readonly kind: "connection-failed"; readonly bot: ManagedBot; readonly message: string }
+    | { readonly kind: "session-failed"; readonly bot: ManagedBot; readonly message: string }
     | { readonly kind: "failed"; readonly message: string };
 
 export type BotConnectionStatus =
@@ -69,6 +72,7 @@ export function disconnectedBotNotice(
         case "draft":
         case "runtime-disconnected":
         case "connection-failed":
+        case "session-failed":
             return {
                 kind: "visible",
                 title: "Your Bot is disconnected",
@@ -84,6 +88,7 @@ export function disconnectedBotNotice(
                   };
         case "loading":
         case "connecting":
+        case "session-loading":
         case "switching":
         case "failed":
             return { kind: "hidden" };
@@ -330,6 +335,7 @@ export const createBotChatHomeStore = (
                     await reloadAfterWorkspaceChange();
                     return;
                 }
+                set({ view: { kind: "session-loading", bot } });
                 await conversations.getState().open(bot.botId, currentTarget.conversationId, signal);
                 const opened = conversations.getState().state;
                 if (opened.kind !== "ready") {
@@ -361,6 +367,10 @@ export const createBotChatHomeStore = (
                 }
                 const message = cause instanceof Error ? cause.message : "Chat is unavailable.";
                 const runtimeFailure = isRuntimeConnectionFailure(cause);
+                if (openedBot !== null && get().target.kind === "conversation-access" && !runtimeFailure) {
+                    set({ view: { kind: "session-failed", bot: openedBot, message } });
+                    return;
+                }
                 if (openedBot !== null && runtimeFailure) {
                     set({
                         connectionStatus: { kind: "disconnected", label: "Disconnected" },

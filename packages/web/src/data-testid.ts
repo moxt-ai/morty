@@ -39,6 +39,7 @@ export const dataTestId = Object.freeze({
     removeBot: "chat-remove-bot",
     confirmRemoveBot: "chat-confirm-remove-bot",
     runtimeSetupFailure: "chat-runtime-setup-failure",
+    sessionLoadFailure: "chat-session-load-failure",
     chatLanding: "chat-landing",
     newConversation: "chat-new-conversation",
     shareMachine: "chat-share-machine",
