@@ -1,10 +1,6 @@
 import {
-    decodeAgentDisplayContentValue,
     decodeMobiusAgentCapabilities,
-    decodePromptImagesValue,
-    decodePromptResourcesValue,
     decodeRecordedAgentContentValue,
-    type Interaction,
     MobiusApiError,
     MobiusClient,
     MobiusError,
@@ -15,8 +11,6 @@ import {
     type MobiusRuntimePairingStatus,
     type MobiusSession,
     mobiusApiUrl,
-    type SessionElicitationRequestedEvent,
-    type SessionPermissionRequestedEvent,
     StaticMobiusCredentialProvider,
 } from "@moxt-ai/mobius-sdk";
 import {
@@ -25,12 +19,10 @@ import {
     type BrowserPairingStatus,
     ChannelConnection,
     ChannelHistory,
-    CompletedRecordedTurn,
     ConnectedBrowserPairingStatus,
     CreatedChannelAccessGrant,
     CreatedPairing,
     ExpiredBrowserPairingStatus,
-    FailedRecordedTurn,
     type InstallableAgentOption,
     isIdentifier,
     isPairingCode,
@@ -38,33 +30,13 @@ import {
     LinkedChannelDevice,
     MissingAgentOption,
     PairingApiError,
-    PendingRecordedTurn,
-    RecordedActivity,
-    RecordedContent,
     RecordedSession,
     type RecordedTurn,
-    RunningRecordedTurn,
     WaitingBrowserPairingStatus,
 } from "@/view-models/chat/channel";
 
 const REQUEST_TIMEOUT_MILLISECONDS = 20_000;
 const CHANNEL_CREDENTIAL_PREFIX = "mobius:channel-credential:";
-const DIRECTORY_IDENTIFIER_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,2047}$/;
-const ACTIVITY_TYPES = new Set(["plan", "progress", "reasoning", "tool"]);
-const ACTIVITY_STATUSES = new Set(["pending", "running", "completed", "failed"]);
-const TOOL_KINDS = new Set([
-    "",
-    "delete",
-    "edit",
-    "execute",
-    "fetch",
-    "move",
-    "other",
-    "read",
-    "search",
-    "switch_mode",
-    "think",
-]);
 
 export type ActivityDetailResult =
     | {
@@ -194,175 +166,6 @@ function readIdentifier(value: unknown, field: string): string {
         throw new PairingApiError("invalid_relay_response", `The relay returned an invalid ${field}.`);
     }
     return value;
-}
-
-function readAdditionalDirectoryIds(value: unknown): readonly string[] {
-    if (!Array.isArray(value) || value.length > 16) {
-        throw new PairingApiError(
-            "invalid_relay_response",
-            "The relay returned invalid additional Session workspaces.",
-        );
-    }
-    const directoryIds: string[] = [];
-    for (const directoryId of value) {
-        if (typeof directoryId !== "string" || !DIRECTORY_IDENTIFIER_PATTERN.test(directoryId)) {
-            throw new PairingApiError(
-                "invalid_relay_response",
-                "The relay returned an invalid additional Session workspace.",
-            );
-        }
-        directoryIds.push(directoryId);
-    }
-    if (new Set(directoryIds).size !== directoryIds.length) {
-        throw new PairingApiError(
-            "invalid_relay_response",
-            "The relay returned duplicate additional Session workspaces.",
-        );
-    }
-    return directoryIds;
-}
-
-function readSessionAdditionalDirectoryIds(messages: readonly unknown[]): readonly string[] {
-    const first = messages[0];
-    if (first === undefined) {
-        return [];
-    }
-    if (!isRecord(first)) {
-        throw new PairingApiError("invalid_relay_response", "The relay returned an invalid session message.");
-    }
-    const recorded = readAdditionalDirectoryIds(first["additionalDirectoryIds"]);
-    for (const message of messages.slice(1)) {
-        if (!isRecord(message)) {
-            throw new PairingApiError("invalid_relay_response", "The relay returned an invalid session message.");
-        }
-        const directoryIds = readAdditionalDirectoryIds(message["additionalDirectoryIds"]);
-        if (
-            recorded.length !== directoryIds.length ||
-            recorded.some((directoryId, index) => directoryId !== directoryIds[index])
-        ) {
-            throw new PairingApiError(
-                "invalid_relay_response",
-                "The relay returned inconsistent additional Session workspaces.",
-            );
-        }
-    }
-    return recorded;
-}
-
-function readAllowedString(value: unknown, field: string, allowedValues: ReadonlySet<string>): string {
-    const text = readText(value, field, 64);
-    if (!allowedValues.has(text)) {
-        throw new PairingApiError("invalid_relay_response", `The relay returned an invalid ${field}.`);
-    }
-    return text;
-}
-
-function decodeRecordedActivity(value: unknown): RecordedActivity {
-    if (!isRecord(value)) {
-        throw new PairingApiError("invalid_relay_response", "The relay returned an invalid agent activity.");
-    }
-    const sequence = value["sequence"];
-    const locationsValue = value["locations"];
-    const contentValue = value["content"] ?? [];
-    if (
-        typeof sequence !== "number" ||
-        !Number.isSafeInteger(sequence) ||
-        sequence < 0 ||
-        !Array.isArray(locationsValue) ||
-        locationsValue.length > 12 ||
-        !Array.isArray(contentValue) ||
-        contentValue.length > 500
-    ) {
-        throw new PairingApiError("invalid_relay_response", "The relay returned invalid agent activity details.");
-    }
-    const content = contentValue.map((entry) => decodeAgentDisplayContentValue(entry));
-    const detailAvailability = value["detailAvailability"];
-    if (
-        detailAvailability !== "available" &&
-        detailAvailability !== "truncated" &&
-        detailAvailability !== "unrecorded"
-    ) {
-        throw new PairingApiError("invalid_relay_response", "The relay returned invalid activity detail availability.");
-    }
-    const locations: string[] = [];
-    const uniqueLocations = new Set<string>();
-    for (const location of locationsValue) {
-        const normalized = readString(location, "agent activity location", 1_024);
-        if (uniqueLocations.has(normalized)) {
-            throw new PairingApiError(
-                "invalid_relay_response",
-                "The relay returned a duplicate agent activity location.",
-            );
-        }
-        uniqueLocations.add(normalized);
-        locations.push(normalized);
-    }
-    return new RecordedActivity(
-        readIdentifier(value["activityId"], "agent activity"),
-        readIdentifier(value["attemptId"], "agent activity Attempt"),
-        readAllowedString(value["activityType"], "agent activity type", ACTIVITY_TYPES),
-        readText(value["input"], "agent activity input", 24_000),
-        locations,
-        readText(value["name"], "agent activity name", 128),
-        readText(value["output"], "agent activity output", 24_000),
-        sequence,
-        readAllowedString(value["status"], "agent activity status", ACTIVITY_STATUSES),
-        readString(value["title"], "agent activity title", 500),
-        readAllowedString(value["toolKind"], "agent tool kind", TOOL_KINDS),
-        content,
-        detailAvailability,
-    );
-}
-
-function decodeRecordedContents(value: unknown): readonly RecordedContent[] {
-    if (value === undefined) {
-        return [];
-    }
-    if (!Array.isArray(value) || value.length > 2_000) {
-        throw new PairingApiError("invalid_relay_response", "The relay returned invalid agent content.");
-    }
-    const contents: RecordedContent[] = [];
-    const identifiers = new Set<string>();
-    for (const candidate of value) {
-        if (!isRecord(candidate)) {
-            throw new PairingApiError("invalid_relay_response", "The relay returned invalid agent content.");
-        }
-        const contentId = readIdentifier(candidate["contentId"], "agent content identifier");
-        if (identifiers.has(contentId)) {
-            throw new PairingApiError("invalid_relay_response", "The relay returned duplicate agent content.");
-        }
-        identifiers.add(contentId);
-        contents.push(
-            new RecordedContent(
-                readIdentifier(candidate["commandId"], "agent content command"),
-                contentId,
-                readText(candidate["messageId"], "agent content message", 255),
-                decodeAgentDisplayContentValue(candidate["content"]),
-            ),
-        );
-    }
-    return contents;
-}
-
-function decodeRecordedActivities(value: unknown): readonly RecordedActivity[] {
-    if (value === undefined) {
-        return [];
-    }
-    if (!Array.isArray(value) || value.length > 2_000) {
-        throw new PairingApiError("invalid_relay_response", "The relay returned invalid agent activities.");
-    }
-    const activities: RecordedActivity[] = [];
-    const identifiers = new Set<string>();
-    for (const candidate of value) {
-        const activity = decodeRecordedActivity(candidate);
-        if (identifiers.has(activity.activityId)) {
-            throw new PairingApiError("invalid_relay_response", "The relay returned a duplicate agent activity.");
-        }
-        identifiers.add(activity.activityId);
-        activities.push(activity);
-    }
-    activities.sort((left, right) => left.sequence - right.sequence);
-    return activities;
 }
 
 function decodeAgents(value: unknown): readonly AgentOption[] {
@@ -828,85 +631,6 @@ function decodeChannelConnection(
     );
 }
 
-function decodeRecordedTurn(value: unknown): RecordedTurn {
-    if (!isRecord(value)) {
-        throw new PairingApiError("invalid_relay_response", "The relay returned an invalid conversation history.");
-    }
-    const agentId = readIdentifier(value["agentId"], "history agent");
-    const commandId = readIdentifier(value["commandId"], "history command");
-    const createdAt = readDate(value["createdAt"], "history timestamp");
-    const prompt = readText(value["prompt"], "history prompt", 10_000);
-    const response = readText(value["response"], "history response", 100_000);
-    const sessionId = readIdentifier(value["sessionId"], "history session");
-    const activities = decodeRecordedActivities(value["activities"]);
-    const images = decodePromptImagesValue(value["images"] ?? []);
-    const resources = decodePromptResourcesValue(value["resources"] ?? []);
-    const contents = decodeRecordedContents(value["contents"]);
-    const status = value["status"];
-    if (status === "pending") {
-        return new PendingRecordedTurn(
-            agentId,
-            commandId,
-            createdAt,
-            prompt,
-            response,
-            sessionId,
-            activities,
-            images,
-            resources,
-            contents,
-        );
-    }
-    if (status === "running") {
-        return new RunningRecordedTurn(
-            agentId,
-            commandId,
-            createdAt,
-            prompt,
-            response,
-            sessionId,
-            readIdentifier(value["attemptId"], "history attempt"),
-            activities,
-            images,
-            resources,
-            contents,
-        );
-    }
-    if (status === "completed") {
-        return new CompletedRecordedTurn(
-            agentId,
-            commandId,
-            createdAt,
-            prompt,
-            response,
-            sessionId,
-            readIdentifier(value["attemptId"], "history attempt"),
-            readString(value["stopReason"], "history stop reason", 64),
-            activities,
-            images,
-            resources,
-            contents,
-        );
-    }
-    if (status === "failed") {
-        return new FailedRecordedTurn(
-            agentId,
-            commandId,
-            createdAt,
-            prompt,
-            response,
-            sessionId,
-            readIdentifier(value["code"], "history error code"),
-            readString(value["message"], "history error message", 500),
-            activities,
-            images,
-            resources,
-            contents,
-        );
-    }
-    throw new PairingApiError("invalid_relay_response", "The relay returned an invalid conversation history state.");
-}
-
 export async function createBrowserPairing(signal: AbortSignal, token: string | null): Promise<CreatedPairing> {
     const pairing = decodeCreatedPairing(
         await requestJson(
@@ -1068,90 +792,6 @@ export async function readChannelHistory(channelId: string): Promise<ChannelHist
     return await readChannelHistoryWithSignal(channelId, AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS));
 }
 
-interface PendingSessionInteractions {
-    readonly elicitations: readonly SessionElicitationRequestedEvent[];
-    readonly permissions: readonly SessionPermissionRequestedEvent[];
-}
-
-function isAcceptedUrlResponse(interaction: Interaction): boolean {
-    if (
-        interaction.request.kind !== "elicitation" ||
-        interaction.request.mode !== "url" ||
-        interaction.state.kind !== "responded" ||
-        interaction.state.response.kind !== "elicitation"
-    ) {
-        return false;
-    }
-    try {
-        const response: unknown = JSON.parse(interaction.state.response.content);
-        return (
-            isRecord(response) &&
-            Object.keys(response).length === 2 &&
-            response["action"] === "accept" &&
-            typeof response["content"] === "string"
-        );
-    } catch {
-        return false;
-    }
-}
-
-function pendingSessionInteractions(
-    interactions: readonly Interaction[],
-    sessionId: string,
-    turns: readonly RecordedTurn[],
-): PendingSessionInteractions {
-    const commandIdsByAttempt = new Map(
-        turns.filter((turn) => turn instanceof RunningRecordedTurn).map((turn) => [turn.attemptId, turn.commandId]),
-    );
-    const elicitations: SessionElicitationRequestedEvent[] = [];
-    const permissions: SessionPermissionRequestedEvent[] = [];
-    for (const interaction of interactions) {
-        if (
-            interaction.sessionId !== sessionId ||
-            (interaction.state.kind !== "pending" && interaction.state.kind !== "responded")
-        ) {
-            throw new PairingApiError(
-                "invalid_relay_response",
-                "The relay returned an inconsistent pending Interaction.",
-            );
-        }
-        const commandId = commandIdsByAttempt.get(interaction.attemptId);
-        if (commandId === undefined) {
-            continue;
-        }
-        if (interaction.request.kind === "permission") {
-            if (interaction.state.kind === "pending") {
-                permissions.push({
-                    commandId,
-                    interactionId: interaction.interactionId,
-                    kind: "session.permission.requested",
-                    options: interaction.request.options,
-                    sessionId,
-                    title: interaction.request.title,
-                    toolCallId: interaction.request.toolCallId,
-                    toolKind: interaction.request.toolKind,
-                });
-            }
-            continue;
-        }
-        if (interaction.state.kind === "pending" || isAcceptedUrlResponse(interaction)) {
-            elicitations.push({
-                accepted: interaction.state.kind === "responded",
-                commandId,
-                elicitationId: interaction.request.elicitationId,
-                fields: interaction.request.fields,
-                interactionId: interaction.interactionId,
-                kind: "session.elicitation.requested",
-                message: interaction.request.message,
-                mode: interaction.request.mode,
-                sessionId,
-                url: interaction.request.url,
-            });
-        }
-    }
-    return { elicitations, permissions };
-}
-
 interface RestoredChannelSession {
     readonly session: RecordedSession;
     readonly turns: RecordedTurn[];
@@ -1295,18 +935,10 @@ async function readChannelHistoryWithSignal(channelId: string, signal: AbortSign
         const summaries = directory.sessions.map((session) => decodeRecordedSession(session, credential));
         const restoredBySessionId = new Map<string, RestoredChannelSession>();
         await Promise.all(
-            summaries.map(async ({ hasNativeHistory, session }) => {
+            summaries.map(async (session) => {
                 try {
-                    const [page, nativeHistory, interactions] = await Promise.all([
-                        client.sessions.readMessages(session.sessionId, new MobiusPageRequest(100, ""), signal),
-                        hasNativeHistory
-                            ? client.sessions.readNativeHistory(session.sessionId, signal)
-                            : Promise.resolve(null),
-                        client.interactions.listPending(session.sessionId, signal),
-                    ]);
-                    const additionalDirectoryIds = readSessionAdditionalDirectoryIds(page.messages);
-                    const turns = page.messages.map(decodeSessionMessage);
-                    const pending = pendingSessionInteractions(interactions, session.sessionId, turns);
+                    const nativeHistory = await client.sessions.readNativeHistory(session.sessionId, signal);
+                    const turns: RecordedTurn[] = [];
                     restoredBySessionId.set(session.sessionId, {
                         turns,
                         session: new RecordedSession(
@@ -1319,10 +951,10 @@ async function readChannelHistoryWithSignal(channelId: string, signal: AbortSign
                             session.title,
                             session.updatedAt,
                             nativeHistory,
-                            pending.elicitations,
-                            pending.permissions,
-                            additionalDirectoryIds,
-                            page.lastCommittedSequence,
+                            [],
+                            [],
+                            session.additionalDirectoryIds,
+                            session.lastCommittedSeq,
                         ),
                     });
                 } catch (error) {
@@ -1333,7 +965,7 @@ async function readChannelHistoryWithSignal(channelId: string, signal: AbortSign
             }),
         );
         const restored: RestoredChannelSession[] = [];
-        for (const { session } of summaries) {
+        for (const session of summaries) {
             const value = restoredBySessionId.get(session.sessionId);
             if (value !== undefined) {
                 restored.push(value);
@@ -1353,10 +985,7 @@ async function readChannelHistoryWithSignal(channelId: string, signal: AbortSign
     }
 }
 
-function decodeRecordedSession(
-    value: MobiusSession,
-    credential: BrowserChannelCredential,
-): { readonly hasNativeHistory: boolean; readonly session: RecordedSession } {
+function decodeRecordedSession(value: MobiusSession, credential: BrowserChannelCredential): RecordedSession {
     const binding = value.defaultBinding;
     if (
         value.projectId !== credential.projectId ||
@@ -1367,89 +996,21 @@ function decodeRecordedSession(
     ) {
         throw new PairingApiError("invalid_relay_response", "The relay returned an inconsistent session summary.");
     }
-    return {
-        hasNativeHistory: value.hasNativeHistory,
-        session: new RecordedSession(
-            value.agentId,
-            binding.bindingId,
-            binding.configRevision,
-            binding.workspaceRef,
-            value.runtimeId,
-            value.sessionId,
-            value.title,
-            value.updatedAt,
-            null,
-            [],
-            [],
-            [],
-            value.lastCommittedSequence,
-        ),
-    };
-}
-
-function decodeSessionMessage(value: unknown): RecordedTurn {
-    if (!isRecord(value) || !Array.isArray(value["activities"])) {
-        throw new PairingApiError("invalid_relay_response", "The relay returned an invalid session message.");
-    }
-    const base = {
-        activities: value["activities"],
-        agentId: value["agentId"],
-        commandId: value["commandId"],
-        contents: [],
-        createdAt: value["createdAt"],
-        images: value["images"],
-        prompt: value["prompt"],
-        resources: value["resources"],
-        response: value["response"],
-        sessionId: value["sessionId"],
-    };
-    const attempt = value["attempt"];
-    if (attempt === null || (isRecord(attempt) && attempt["kind"] === "none")) {
-        return decodeRecordedTurn({ ...base, status: "pending" });
-    }
-    if (!isRecord(attempt) || typeof attempt["kind"] !== "string") {
-        throw new PairingApiError("invalid_relay_response", "The relay returned an invalid execution attempt.");
-    }
-    if (attempt["kind"] === "dispatching" || attempt["kind"] === "running" || attempt["kind"] === "waiting_input") {
-        return decodeRecordedTurn({
-            ...base,
-            attemptId: attempt["attemptId"],
-            status: "running",
-        });
-    }
-    if (attempt["kind"] === "succeeded") {
-        return decodeRecordedTurn({
-            ...base,
-            attemptId: attempt["attemptId"],
-            status: "completed",
-            stopReason: attempt["stopReason"],
-        });
-    }
-    if (attempt["kind"] === "cancelled") {
-        return decodeRecordedTurn({
-            ...base,
-            attemptId: attempt["attemptId"],
-            status: "completed",
-            stopReason: "cancelled",
-        });
-    }
-    if (attempt["kind"] === "failed") {
-        return decodeRecordedTurn({
-            ...base,
-            code: attempt["code"],
-            message: attempt["message"],
-            status: "failed",
-        });
-    }
-    if (attempt["kind"] === "indeterminate") {
-        return decodeRecordedTurn({
-            ...base,
-            code: "indeterminate",
-            message: "The runtime disconnected before the execution outcome was reconciled.",
-            status: "failed",
-        });
-    }
-    throw new PairingApiError("invalid_relay_response", "The relay returned an unknown execution attempt state.");
+    return new RecordedSession(
+        value.agentId,
+        binding.bindingId,
+        binding.configRevision,
+        binding.workspaceRef,
+        value.runtimeId,
+        value.sessionId,
+        value.title,
+        value.updatedAt,
+        null,
+        [],
+        [],
+        [],
+        value.lastCommittedSequence,
+    );
 }
 
 function decodeActivityDetail(value: unknown): ActivityDetailResult {

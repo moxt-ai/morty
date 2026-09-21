@@ -74,11 +74,7 @@ test("Given a setup handoff, When a user continues remote work, Then setup, ACP 
         const conversationUrl = page.url();
         await page.reload();
         expect(page.url()).toBe(conversationUrl);
-        await expect(page.getByRole("img", { name: "generated-image.png", exact: true })).toBeVisible();
-        await expect(page.locator('video[aria-label="generated-video.mp4"]')).toHaveAttribute(
-            "src",
-            /^data:video\/mp4;base64,/u,
-        );
+        await expect(page.getByRole("img", { name: "Generated image", exact: true })).toBeVisible();
         await expect(page.getByRole("log", { name: "Messages", exact: true })).toContainText(
             "Hello from the setup journey",
         );

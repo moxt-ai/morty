@@ -153,7 +153,11 @@ export class LocalStack {
             const tenant = object(Array.isArray(inventory.tenants) ? inventory.tenants[0] : undefined, "tenant");
             const application = await jsonRequest(this.platformOrigin, "/mobius/api/dashboard/v1/apps", {
                 ...authentication,
-                body: { displayName: "Mobius Chat live E2E", tenantId: text(tenant.tenantId, "tenantId") },
+                body: {
+                    cloudRetention: false,
+                    displayName: "Mobius Chat live E2E",
+                    tenantId: text(tenant.tenantId, "tenantId"),
+                },
             });
             return {
                 appId: text(application.appId, "appId"),

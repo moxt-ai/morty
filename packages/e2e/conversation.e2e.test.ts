@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
-test("Given a paired workspace, When a user works across conversations, Then session creation, queued work, replies, render inspection, and revisits remain visible", async ({
+test("Given a paired workspace, When a user works across conversations, Then session creation, queued work, replies, and revisits remain visible", async ({
     runtime,
 }) => {
     await runtime.openPairedChat();
@@ -44,52 +44,18 @@ test("Given a paired workspace, When a user works across conversations, Then ses
         await expect(page.getByRole("list", { name: "Attachments", exact: true })).toHaveCount(0);
         await expect(page.getByTestId(dataTestId.agentResponse).first()).toContainText("First conversation");
         await expect(page.getByTestId(dataTestId.sessionStatus)).toHaveText("Idle");
-        const renderBlocks: unknown = await page.evaluate(() => {
-            const bridge: unknown = Reflect.get(globalThis, "_mobiusChat");
-            if (typeof bridge !== "object" || bridge === null) {
-                return null;
-            }
-            const currentSession = Reflect.get(bridge, "currentSession");
-            if (typeof currentSession !== "function") {
-                return null;
-            }
-            const session: unknown = Reflect.apply(currentSession, bridge, []);
-            if (typeof session !== "object" || session === null) {
-                return null;
-            }
-            const blocks = Reflect.get(session, "blocks");
-            return typeof blocks === "function" ? Reflect.apply(blocks, session, []) : null;
-        });
-        assert.ok(Array.isArray(renderBlocks));
-        assert.equal(
-            renderBlocks.some(
-                (block: unknown) =>
-                    typeof block === "object" &&
-                    block !== null &&
-                    Reflect.get(block, "role") === "user" &&
-                    Reflect.get(block, "text") === "First conversation",
-            ),
-            true,
-        );
-        assert.equal(
-            renderBlocks.some(
-                (block: unknown) =>
-                    typeof block === "object" && block !== null && Reflect.get(block, "role") === "assistant",
-            ),
-            true,
-        );
         await page.getByTestId(dataTestId.agentConfiguration).click();
         const mode = page.getByTestId(dataTestId.agentSetting("mode"));
         await expect(mode).toBeEnabled();
         await mode.click();
-        await mode.press("ArrowDown");
-        await mode.press("Enter");
+        await page.keyboard.press("ArrowDown");
+        await page.keyboard.press("Enter");
         await expect(mode).toHaveText("Plan");
         firstConversationId = new URL(page.url()).searchParams.get("conversationId") ?? "";
         assert.notEqual(firstConversationId, "");
     });
 
-    await test.step("create, continue, reload, and revisit conversations", async () => {
+    await test.step("create, continue, reload from daemon history, and revisit conversations", async () => {
         await page.getByTestId(dataTestId.newConversation).click();
         await expect(
             page.getByTestId(dataTestId.managedConversation).filter({ hasText: "First conversation" }),
