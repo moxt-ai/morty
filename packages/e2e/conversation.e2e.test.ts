@@ -17,6 +17,18 @@ test("Given a paired workspace, When a user works across conversations, Then sen
         await page.keyboard.press("Escape");
     });
 
+    await test.step("Given model choices, When the user searches, Then only matching models remain visible", async () => {
+        await page.getByTestId(dataTestId.agentConfiguration).click();
+        const model = page.getByTestId(dataTestId.agentSetting("model"));
+        await expect(model).toBeEnabled();
+        await model.click();
+        await page.getByTestId(dataTestId.modelSearch).fill("large");
+        await expect(page.getByTestId(dataTestId.sessionConfigValue("test-small"))).toHaveCount(0);
+        await expect(page.getByTestId(dataTestId.sessionConfigValue("test-large"))).toHaveText("Test Large");
+        await page.keyboard.press("Escape");
+        await page.keyboard.press("Escape");
+    });
+
     let firstConversationId = "";
     await test.step("create the first conversation with an image", async () => {
         const composer = page.getByTestId(dataTestId.messageComposer);

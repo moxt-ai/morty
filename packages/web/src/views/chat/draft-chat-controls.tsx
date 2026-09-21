@@ -130,6 +130,7 @@ export function DraftChatControls({
                                   label: option.name,
                                   onValueChange: (value: string) => viewModel.selectOption(option.id, value),
                                   options: option.values.map((value) => ({ value: value.value, label: value.name })),
+                                  searchable: option.category === "model",
                                   testId: dataTestId.agentSetting(option.id),
                                   value: option.currentValue,
                               },

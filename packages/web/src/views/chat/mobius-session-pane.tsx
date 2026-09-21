@@ -303,6 +303,7 @@ export function MobiusSessionPane({
                                               value: value.value,
                                               label: value.name,
                                           })),
+                                          searchable: option.category === "model",
                                           testId: dataTestId.agentSetting(option.id),
                                           value: option.currentValue,
                                       },
