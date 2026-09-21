@@ -37,6 +37,9 @@ test("Given a paired workspace, When a user works across conversations, Then sen
         await expect(page).toHaveURL(/\?conversationId=/u);
         await expect(page.getByRole("list", { name: "Attachments", exact: true })).toHaveCount(0);
         await expect(page.getByTestId(dataTestId.agentResponse).first()).toContainText("First conversation");
+        await expect(page.getByTestId(dataTestId.recognizedReadToolCall).first()).toContainText(
+            "Read package metadata",
+        );
         firstConversationId = new URL(page.url()).searchParams.get("conversationId") ?? "";
         assert.notEqual(firstConversationId, "");
     });
