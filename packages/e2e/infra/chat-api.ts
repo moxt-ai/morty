@@ -145,7 +145,7 @@ export class ChatApi {
         await this.#request(
             `/mobius-cloud/api/chat/projects/${encodeURIComponent(identity.projectId)}/bots/${encodeURIComponent(identity.botId)}/setup`,
             {
-                body: { runtimeId, agentRef: agentId, workspaceRef: "default", agentConfigRevision: 1 },
+                body: { runtimeId, agentRef: agentId },
             },
         );
     }
@@ -163,8 +163,8 @@ export class ChatApi {
                 ),
             (workspace) =>
                 workspace.status === "active" &&
-                workspace.selected !== null &&
-                object(workspace.selected, "selected").agentRef === agentId,
+                Array.isArray(workspace.agents) &&
+                workspace.agents.some((agent) => object(agent, "agent").agentRef === agentId),
         );
     }
 

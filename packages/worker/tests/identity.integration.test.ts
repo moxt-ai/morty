@@ -299,7 +299,7 @@ test("Given a user with a Bot on a Project-scoped Platform, When setup checks th
         environment,
     );
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ status: "draft", selected: null, agents: [] });
+    expect(await response.json()).toEqual({ status: "draft", runtimeId: null, agents: [] });
 });
 
 test("Given an anonymous user, When access is transferred, revoked, and exhausted, Then every credential follows the lifecycle", async () => {

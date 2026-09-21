@@ -1,6 +1,16 @@
-import type { BotConfiguration } from "../../management/entity/bot-configuration.ts";
+import type { ChatBotBinding } from "./chat-bot-binding.ts";
 
 export interface SlackPlatformGateway {
+    readonly chatAgents: (
+        projectId: string,
+        signal: AbortSignal,
+    ) => Promise<
+        readonly {
+            readonly runtimeId: string;
+            readonly agentRef: string;
+            readonly online: boolean;
+        }[]
+    >;
     readonly createPairing: (
         projectId: string,
         idempotencyKey: string,
@@ -13,7 +23,7 @@ export interface SlackPlatformGateway {
     ) => Promise<{ readonly status: string }>;
     readonly openAutomatedChatSession: (
         projectId: string,
-        selection: BotConfiguration,
+        selection: Pick<ChatBotBinding, "bindingId" | "runtimeId" | "agentRef" | "workspaceRef">,
         sessionId: string,
         title: string,
         signal: AbortSignal,

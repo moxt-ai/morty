@@ -67,11 +67,7 @@ export class ManagedBotStorage {
             .select({
                 botId: managedBot.botId,
                 displayName: managedBot.displayName,
-                bindingId: managedBot.bindingId,
                 runtimeId: managedBot.runtimeId,
-                agentRef: managedBot.agentRef,
-                workspaceRef: managedBot.workspaceRef,
-                agentConfigRevision: managedBot.agentConfigRevision,
                 instructions: managedBot.instructions,
             })
             .from(managedBot)
@@ -101,7 +97,7 @@ export class ManagedBotStorage {
         signal.throwIfAborted();
         const result = await this.#requireDatabase()
             .update(managedBot)
-            .set({ ...value, updatedAt: now })
+            .set({ runtimeId: value.runtimeId, updatedAt: now })
             .where(
                 and(
                     eq(managedBot.userId, userId),

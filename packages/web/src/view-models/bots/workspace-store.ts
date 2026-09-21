@@ -20,7 +20,7 @@ export const createBotWorkspaceStore = (api: ChatBotApi, botId: string) =>
             try {
                 const [bot, workspace] = await Promise.all([api.readBot(botId, signal), api.workspace(botId, signal)]);
                 signal.throwIfAborted();
-                set({ state: { kind: "ready", bot, configured: workspace.selected !== null }, refreshing: false });
+                set({ state: { kind: "ready", bot, configured: workspace.runtimeId !== null }, refreshing: false });
                 return bot;
             } catch (error) {
                 signal.throwIfAborted();

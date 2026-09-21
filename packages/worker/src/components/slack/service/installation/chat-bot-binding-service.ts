@@ -51,15 +51,35 @@ export class ChatBotBindingService {
         slackBotId: string,
         connectionId: string,
         bot: LocalSlackBot & { readonly configuration: BotConfiguration },
+        selection: Pick<ChatBotBinding, "bindingId" | "agentRef" | "workspaceRef" | "agentConfigRevision">,
     ): ChatBotBinding => ({
         tenantId,
         slackBotId,
         botId: bot.botId,
         connectionId,
         projectId: this.#projectId,
-        ...bot.configuration,
+        runtimeId: bot.configuration.runtimeId,
+        ...selection,
         instructions: bot.instructions,
     });
+
+    readonly #newSelection = async (
+        bot: LocalSlackBot & { readonly configuration: BotConfiguration },
+        signal: AbortSignal,
+    ): Promise<Pick<ChatBotBinding, "bindingId" | "agentRef" | "workspaceRef" | "agentConfigRevision">> => {
+        const agent = (await this.#platform.chatAgents(this.#projectId, signal)).find(
+            (candidate) => candidate.runtimeId === bot.configuration.runtimeId && candidate.online,
+        );
+        if (agent === undefined) {
+            throw new SlackServiceError("CHAT_BOT_BINDING_NOT_CONFIGURED", "Connect an Agent before using Slack");
+        }
+        return {
+            bindingId: `binding_${crypto.randomUUID()}`,
+            agentRef: agent.agentRef,
+            workspaceRef: "default",
+            agentConfigRevision: 1,
+        };
+    };
 
     readonly bind = async (
         tenant: TenantContext,
@@ -73,7 +93,13 @@ export class ChatBotBindingService {
             throw new SlackServiceError("CHAT_BOT_BINDING_NOT_CONFIGURED", "Create this Slack bot before binding Chat");
         }
         const bot = await this.#ownedBot(tenant, input.botId, signal);
-        const binding = this.#binding(principal.tenantId, slackBotId, crypto.randomUUID(), bot);
+        const binding = this.#binding(
+            principal.tenantId,
+            slackBotId,
+            crypto.randomUUID(),
+            bot,
+            await this.#newSelection(bot, signal),
+        );
         await this.#storage.saveBinding(tenant, binding, signal);
         return { kind: "bound" as const, botId: binding.botId };
     };
@@ -100,12 +126,12 @@ export class ChatBotBindingService {
         slackBotId: string,
         signal: AbortSignal,
     ): Promise<ChatBotBinding> => {
-        const mapping = await this.#storage.findMapping(tenant, tenantId, slackBotId, signal);
-        if (mapping === null) {
+        const existing = await this.#storage.findBinding(tenant, tenantId, slackBotId, signal);
+        if (existing === null) {
             throw new SlackServiceError("CHAT_BOT_BINDING_NOT_CONFIGURED", "Bind a Chat Bot in Slack settings first");
         }
-        const bot = await this.#ownedBot(tenant, mapping.botId, signal);
-        const binding = this.#binding(tenantId, slackBotId, mapping.connectionId, bot);
+        const bot = await this.#ownedBot(tenant, existing.botId, signal);
+        const binding = this.#binding(tenantId, slackBotId, existing.connectionId, bot, existing);
         await this.#storage.saveBinding(tenant, binding, signal);
         return binding;
     };

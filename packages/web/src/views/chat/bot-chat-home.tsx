@@ -53,7 +53,6 @@ export function BotChatHome({
         | "workspace"
         | "workspaceDirectory"
         | "waitForWorkspaceChange"
-        | "selectAgent"
         | "nativeSessions"
         | "nativeSession"
         | "managedSessions"
