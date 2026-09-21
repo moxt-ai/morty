@@ -106,6 +106,8 @@ test("Given an unpaired workspace, When its Agent responds with local media, The
         expect(landing.textContent).toContain("My Bot");
         const pairing = await act(async () => {
             connection.click();
+            const pairAgain = await waitForElement(`[data-testid="${dataTestId.pairBotAgain}"]`);
+            pairAgain.click();
             return await waitForElement(`[data-testid="${dataTestId.pairingInstruction}"]`);
         });
         expect(pairing).toBeInstanceOf(HTMLInputElement);

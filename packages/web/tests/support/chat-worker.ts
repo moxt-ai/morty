@@ -74,8 +74,6 @@ export async function createChatWorker() {
                 const setup = await request(`chat/projects/${identity.projectId}/bots/${botId}/setup`, {
                     runtimeId: runtime.runtimeId,
                     agentRef: "codex",
-                    workspaceRef: "root",
-                    agentConfigRevision: 1,
                 });
                 if (setup.status !== 202) {
                     throw new Error(`Could not prepare the test Bot: ${setup.status} ${await setup.text()}`);
