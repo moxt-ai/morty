@@ -2,7 +2,6 @@ import { CircleAlert, X } from "lucide-react";
 import { AgentMarkdown, type MarkdownImageReader } from "../../components/agents/agent-markdown.tsx";
 import { AgentRichContent } from "../../components/agents/agent-rich-content.tsx";
 import { AgentReply } from "../../components/chat/agent-reply.tsx";
-import { AgentWorkingIndicator } from "../../components/chat/agent-thinking.tsx";
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { activitiesForIds, type RecordedAgentActivity } from "../../services/chat/agent-activities.ts";
@@ -13,7 +12,6 @@ export function MobiusSessionMessage({
     activities,
     activeCommandId,
     activeMessageId,
-    activeUserMessageId,
     deliveryUnknownUserMessageId,
     onRemoveUnknownDelivery,
     onRetryUnknownDelivery,
@@ -26,7 +24,6 @@ export function MobiusSessionMessage({
     readonly activities: ReadonlyMap<string, RecordedAgentActivity>;
     readonly activeCommandId: string | null;
     readonly activeMessageId: string | null;
-    readonly activeUserMessageId: string | null;
     readonly deliveryUnknownUserMessageId: string | null;
     readonly onRemoveUnknownDelivery: () => void;
     readonly onRetryUnknownDelivery: () => void;
@@ -54,8 +51,6 @@ export function MobiusSessionMessage({
                                 >
                                     <CircleAlert aria-hidden="true" className="size-4.5" />
                                 </button>
-                            ) : message.id === activeUserMessageId ? (
-                                <AgentWorkingIndicator />
                             ) : undefined
                         }
                         data-testid={dataTestId.userMessage}
@@ -69,12 +64,15 @@ export function MobiusSessionMessage({
                         />
                     </MessageBubble>
                 )}
-                <AgentRichContent
-                    contents={message.contents.map((entry) => entry.content)}
-                    readImage={readImage}
-                    openLocalFile={openLocalFile}
-                    sessionId={sessionId}
-                />
+                <div className="ml-auto max-w-[82%]">
+                    <AgentRichContent
+                        contents={message.contents.map((entry) => entry.content)}
+                        mediaTestId={dataTestId.userMessageImage}
+                        readImage={readImage}
+                        openLocalFile={openLocalFile}
+                        sessionId={sessionId}
+                    />
+                </div>
                 {deliveryUnknown && (
                     <div
                         className="ml-auto flex max-w-[82%] items-center gap-3 rounded-lg border border-destructive/15 bg-destructive/5 py-2 pr-2 pl-3 text-xs leading-5 text-destructive"

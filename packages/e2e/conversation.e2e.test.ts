@@ -2,18 +2,30 @@ import assert from "node:assert/strict";
 import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
-test("Given a paired workspace, When a user works across conversations, Then session creation, queued work, replies, and revisits remain visible", async ({
+test("Given a paired workspace, When a user works across conversations, Then sent images, session creation, queued work, replies, and revisits remain visible", async ({
     runtime,
 }) => {
     await runtime.openPairedChat();
     const { page } = runtime;
     await expect(page.getByTestId(dataTestId.botConnectionStatus)).toHaveText("Connected");
-    const workingDirectory = await page.getByTestId(dataTestId.workingDirectory).textContent();
+    const workingDirectory = await page.getByTestId(dataTestId.workingDirectory).getAttribute("title");
     assert.ok(workingDirectory);
 
     await test.step("share the machine from the unobstructed sidebar action", async () => {
         await page.getByTestId(dataTestId.shareMachine).click();
         await expect(page.getByTestId(dataTestId.machineSharing)).toBeVisible();
+        await page.keyboard.press("Escape");
+    });
+
+    await test.step("Given model choices, When the user searches, Then only matching models remain visible", async () => {
+        await page.getByTestId(dataTestId.agentConfiguration).click();
+        const model = page.getByTestId(dataTestId.agentSetting("model"));
+        await expect(model).toBeEnabled();
+        await model.click();
+        await page.getByTestId(dataTestId.modelSearch).fill("large");
+        await expect(page.getByTestId(dataTestId.sessionConfigValue("test-small"))).toHaveCount(0);
+        await expect(page.getByTestId(dataTestId.sessionConfigValue("test-large"))).toHaveText("Test Large");
+        await page.keyboard.press("Escape");
         await page.keyboard.press("Escape");
     });
 
@@ -37,6 +49,9 @@ test("Given a paired workspace, When a user works across conversations, Then ses
         await expect(page).toHaveURL(/\?conversationId=/u);
         await expect(page.getByRole("list", { name: "Attachments", exact: true })).toHaveCount(0);
         await expect(page.getByTestId(dataTestId.agentResponse).first()).toContainText("First conversation");
+        await expect(page.getByTestId(dataTestId.recognizedReadToolCall).first()).toContainText(
+            "Read package metadata",
+        );
         firstConversationId = new URL(page.url()).searchParams.get("conversationId") ?? "";
         assert.notEqual(firstConversationId, "");
     });
@@ -107,13 +122,25 @@ test("Given a paired workspace, When a user works across conversations, Then ses
 
     await test.step("queue a follow-up while the agent is working", async () => {
         await page.getByTestId(dataTestId.newConversation).click();
+        await runtime.sendMessage("Prepare for an image prompt");
         const composer = page.getByTestId(dataTestId.messageComposer);
         const send = page.getByTestId(dataTestId.sendMessage);
+        await composer.evaluate((element) => {
+            const bytes = Uint8Array.from(
+                atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="),
+                (character) => character.charCodeAt(0),
+            );
+            const clipboard = new DataTransfer();
+            clipboard.items.add(new File([bytes], "sent-image.png", { type: "image/png" }));
+            element.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, clipboardData: clipboard }));
+        });
         await composer.fill("wait for steering");
         await send.click();
+        await expect(page.getByTestId(dataTestId.userMessageImage)).toHaveAttribute("alt", "sent-image.png");
         await expect(send).toHaveAttribute("aria-label", "Stop agent output");
         await expect(page.getByTestId(dataTestId.workingIndicator)).toContainText("Working for");
         await expect(page.getByTestId(dataTestId.workingSpinner)).toBeVisible();
+        await expect(page.getByTestId(dataTestId.agentResponse).last()).toContainText("Inspecting the workspace");
         await expect(composer).toBeEnabled();
         await composer.fill("focus on the public API");
         await composer.press("Enter");

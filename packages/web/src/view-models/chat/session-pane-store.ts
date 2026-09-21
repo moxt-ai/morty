@@ -14,6 +14,7 @@ import {
     MobiusTurnCompletedEvent,
     MobiusTurnFailedEvent,
     MobiusTurnStartedEvent,
+    type PromptImage,
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
 import * as v from "valibot";
@@ -27,7 +28,12 @@ import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { createRemoteAccessStore } from "./remote-access-store.ts";
-import { type SessionActivityState, transitionSessionActivity, workingCommandId } from "./session-activity-machine.ts";
+import {
+    type SessionActivityState,
+    startSessionWork,
+    transitionSessionActivity,
+    workingCommandId,
+} from "./session-activity-machine.ts";
 import { createSessionDeliveryStore, type SessionDeliveryStore } from "./session-delivery-store.ts";
 import { createSessionMessageQueueStore, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
 import type {
@@ -40,6 +46,7 @@ import {
     applyRecordedContents,
     historySessionPresentation,
     placeAgentActivity,
+    promptImageContents,
     type SessionMessage,
 } from "./session-presentation.ts";
 import {
@@ -202,14 +209,7 @@ export function sessionPanePresentation(
     const activeCommandId = workingCommandId(model.activity);
     const busy = activeCommandId !== null || composerDisabled;
     const compactAvailable = findCompactCommand(tasks.commands) !== null;
-    const activeMessageId =
-        activeCommandId === null
-            ? null
-            : (model.messages.findLast(
-                  (message) => message.role === "assistant" && message.commandId === activeCommandId,
-              )?.id ?? null);
-    const activeUserMessageId =
-        activeCommandId === null ? null : (model.messages.findLast((message) => message.role === "user")?.id ?? null);
+    const activeMessageId = model.activity.kind === "working" ? model.activity.messageId : null;
     const deliveryUnknownCommandId =
         delivery.state.kind === "delivery-unknown" ? delivery.state.journal.commandId : null;
     const deliveryUnknownUserMessageId =
@@ -219,7 +219,6 @@ export function sessionPanePresentation(
                   ?.id ?? null);
     return {
         activeMessageId,
-        activeUserMessageId,
         busy,
         composerDisabled,
         compactAvailable,
@@ -263,11 +262,12 @@ function includePendingUserMessage(
     messages: readonly SessionMessage[],
     commandId: string,
     displayPrompt: string,
+    images: readonly PromptImage[],
 ): readonly SessionMessage[] {
     if (messages.some((message) => message.role === "user" && message.id === commandId)) {
         return messages;
     }
-    return [...messages, { contents: [], id: commandId, role: "user", text: displayPrompt }];
+    return [...messages, { contents: promptImageContents(images), id: commandId, role: "user", text: displayPrompt }];
 }
 
 function readActiveTurn(storage: Storage, key: string): ActiveTurn | null {
@@ -312,14 +312,22 @@ export function createSessionPaneModel(options: {
     const initialDelivery = delivery.getState().state;
     const saved = historySessionPresentation(session.result.history, sessionId, command === "" ? null : command);
     const savedMessages = saved.messages;
-    const initialMessages =
+    const persistedMessages =
         initialDelivery.kind === "delivery-unknown"
             ? includePendingUserMessage(
                   savedMessages,
                   initialDelivery.journal.commandId,
                   initialDelivery.journal.displayPrompt,
+                  initialDelivery.journal.request.images,
               )
             : savedMessages;
+    const initialWork =
+        command === ""
+            ? { activity: { kind: "idle" } as const, messages: persistedMessages }
+            : startSessionWork(
+                  { activity: { kind: "idle" }, messages: persistedMessages },
+                  { commandId: command, attempt: null },
+              );
     const tasks = createSessionTaskControlsStore({
         commands: session.result.ready.commands,
         steeringSupported: session.result.ready.capabilities.steering,
@@ -393,14 +401,14 @@ export function createSessionPaneModel(options: {
         };
         return {
             connection: { kind: "loading" },
-            messages: initialMessages,
+            messages: initialWork.messages,
             options: session.result.ready.configOptions,
             draft: "",
             attachments: [],
             activities: saved.activities,
             interactions: [],
             operation: { kind: "idle" },
-            activity: command === "" ? { kind: "idle" } : { commandId: command, kind: "working" },
+            activity: initialWork.activity,
             connect: async (signal) => {
                 let lastSequence = 0n;
                 try {
@@ -472,14 +480,18 @@ export function createSessionPaneModel(options: {
                                   restoredFromDaemon,
                                   reconciledDelivery.journal.commandId,
                                   reconciledDelivery.journal.displayPrompt,
+                                  reconciledDelivery.journal.request.images,
                               )
                             : restoredFromDaemon;
                     signal.throwIfAborted();
-                    set({
-                        activities: native.activities,
-                        messages: restoredMessages,
-                        activity: command === "" ? { kind: "idle" } : { commandId: command, kind: "working" },
-                    });
+                    const restoredWork =
+                        command === ""
+                            ? { activity: { kind: "idle" } as const, messages: restoredMessages }
+                            : startSessionWork(
+                                  { activity: { kind: "idle" }, messages: restoredMessages },
+                                  { commandId: command, attempt: null },
+                              );
+                    set({ activities: native.activities, ...restoredWork });
                     const subscription = await connected.events.subscribe(
                         sessionId,
                         "",
@@ -574,65 +586,44 @@ export function createSessionPaneModel(options: {
                                                 turnId: queued.turnId,
                                             }),
                                         );
-                                        set((current) => ({
-                                            activity: transitionSessionActivity(current.activity, {
-                                                commandId: queued.commandId,
-                                                kind: "work-started",
-                                            }),
-                                            messages: [
-                                                ...current.messages,
+                                        set((current) =>
+                                            startSessionWork(
                                                 {
-                                                    id: `${queued.commandId}-user`,
-                                                    role: "user",
-                                                    text: queued.summary,
-                                                    contents: [],
+                                                    activity: current.activity,
+                                                    messages: [
+                                                        ...current.messages,
+                                                        {
+                                                            id: `${queued.commandId}-user`,
+                                                            role: "user",
+                                                            text: queued.summary,
+                                                            contents: promptImageContents(queued.images),
+                                                        },
+                                                    ],
                                                 },
                                                 {
-                                                    activityIds: [],
-                                                    id: `${queued.commandId}-reply`,
-                                                    role: "assistant",
-                                                    text: "",
+                                                    commandId: queued.commandId,
                                                     attempt: new MobiusRunningAttemptSummary(
                                                         payload.attemptId,
                                                         event.recordedAt,
                                                     ),
-                                                    commandId: queued.commandId,
-                                                    contents: [],
                                                 },
-                                            ],
-                                        }));
+                                            ),
+                                        );
                                         return true;
                                     }
                                 }
                                 if (command === "" && payload instanceof MobiusTurnStartedEvent) {
                                     command = payload.commandId;
                                     lastSequence = BigInt(event.sequence);
-                                    set((current) => ({
-                                        activity: transitionSessionActivity(current.activity, {
+                                    set((current) =>
+                                        startSessionWork(current, {
                                             commandId: payload.commandId,
-                                            kind: "work-started",
+                                            attempt: new MobiusRunningAttemptSummary(
+                                                payload.attemptId,
+                                                event.recordedAt,
+                                            ),
                                         }),
-                                        messages: current.messages.some(
-                                            (message) =>
-                                                message.role === "assistant" && message.commandId === payload.commandId,
-                                        )
-                                            ? current.messages
-                                            : [
-                                                  ...current.messages,
-                                                  {
-                                                      activityIds: [],
-                                                      id: `${payload.commandId}-reply`,
-                                                      role: "assistant",
-                                                      text: "",
-                                                      attempt: new MobiusRunningAttemptSummary(
-                                                          payload.attemptId,
-                                                          event.recordedAt,
-                                                      ),
-                                                      commandId: payload.commandId,
-                                                      contents: [],
-                                                  },
-                                              ],
-                                    }));
+                                    );
                                     return true;
                                 }
                                 if (
@@ -658,19 +649,15 @@ export function createSessionPaneModel(options: {
                                         };
                                     });
                                 } else if (payload instanceof MobiusTurnStartedEvent) {
-                                    set((current) => ({
-                                        messages: current.messages.map((item) =>
-                                            item.role === "assistant" && item.commandId === command
-                                                ? {
-                                                      ...item,
-                                                      attempt: new MobiusRunningAttemptSummary(
-                                                          payload.attemptId,
-                                                          event.recordedAt,
-                                                      ),
-                                                  }
-                                                : item,
-                                        ),
-                                    }));
+                                    set((current) =>
+                                        startSessionWork(current, {
+                                            commandId: command,
+                                            attempt: new MobiusRunningAttemptSummary(
+                                                payload.attemptId,
+                                                event.recordedAt,
+                                            ),
+                                        }),
+                                    );
                                 } else if (
                                     payload instanceof MobiusTurnCompletedEvent ||
                                     payload instanceof MobiusTurnFailedEvent
@@ -795,13 +782,16 @@ export function createSessionPaneModel(options: {
                             attachment.kind === "image" ? attachment.image.name : attachment.resource.name,
                         )
                         .join(", ");
+                const images = current.attachments.flatMap((attachment) =>
+                    attachment.kind === "image" ? [attachment.image] : [],
+                );
                 set((state) => ({
                     draft: "",
                     attachments: [],
                     operation: { kind: "sending", commandId },
                     messages: [
                         ...state.messages,
-                        { id: commandId, role: "user", text: displayPrompt, contents: [] },
+                        { id: commandId, role: "user", text: displayPrompt, contents: promptImageContents(images) },
                         {
                             activityIds: [],
                             id: `${commandId}-reply`,
@@ -821,9 +811,7 @@ export function createSessionPaneModel(options: {
                         {
                             ...request,
                             content: prompt,
-                            images: current.attachments.flatMap((attachment) =>
-                                attachment.kind === "image" ? [attachment.image] : [],
-                            ),
+                            images,
                             resources: current.attachments.flatMap((attachment) =>
                                 attachment.kind === "resource" ? [attachment.resource] : [],
                             ),
@@ -839,10 +827,7 @@ export function createSessionPaneModel(options: {
                             JSON.stringify({ commandId, kind: "accepted", turnId: accepted.turnId }),
                         );
                         set((current) => ({
-                            activity: transitionSessionActivity(current.activity, {
-                                commandId,
-                                kind: "work-started",
-                            }),
+                            ...startSessionWork(current, { commandId, attempt: null }),
                             operation: { kind: "idle" },
                         }));
                     } else {
@@ -899,35 +884,14 @@ export function createSessionPaneModel(options: {
                                 id: pending.commandId,
                                 role: "user",
                                 text: pending.displayPrompt,
-                                contents: [],
+                                contents: promptImageContents(pending.request.images),
                             },
                         ];
                     }
-                    if (
-                        !messages.some(
-                            (message) => message.role === "assistant" && message.commandId === pending.commandId,
-                        )
-                    ) {
-                        messages = [
-                            ...messages,
-                            {
-                                activityIds: [],
-                                id: `${pending.commandId}-reply`,
-                                role: "assistant",
-                                text: "",
-                                attempt: null,
-                                commandId: pending.commandId,
-                                contents: [],
-                            },
-                        ];
-                    }
-                    return {
-                        activity: transitionSessionActivity(current.activity, {
-                            commandId: pending.commandId,
-                            kind: "work-started",
-                        }),
-                        messages,
-                    };
+                    return startSessionWork(
+                        { activity: current.activity, messages },
+                        { commandId: pending.commandId, attempt: null },
+                    );
                 });
                 const accepted = await delivery.getState().retry(signal);
                 signal.throwIfAborted();
@@ -988,7 +952,7 @@ export function createSessionPaneModel(options: {
                                 id: `${steered.commandId}-user`,
                                 role: "user",
                                 text: steered.summary,
-                                contents: [],
+                                contents: promptImageContents(steered.images),
                             },
                         ],
                     }));
@@ -1005,22 +969,18 @@ export function createSessionPaneModel(options: {
                     { ...request, artifactIds: [], images: [], resources: [] },
                     (commandId, prompt) => {
                         command = commandId;
-                        set((state) => ({
-                            activity: transitionSessionActivity(state.activity, { commandId, kind: "work-started" }),
-                            messages: [
-                                ...state.messages,
-                                { id: `${commandId}-user`, role: "user", text: prompt, contents: [] },
+                        set((state) =>
+                            startSessionWork(
                                 {
-                                    activityIds: [],
-                                    id: `${commandId}-reply`,
-                                    role: "assistant",
-                                    text: "",
-                                    attempt: null,
-                                    commandId,
-                                    contents: [],
+                                    activity: state.activity,
+                                    messages: [
+                                        ...state.messages,
+                                        { id: `${commandId}-user`, role: "user", text: prompt, contents: [] },
+                                    ],
                                 },
-                            ],
-                        }));
+                                { commandId, attempt: null },
+                            ),
+                        );
                     },
                     signal,
                 );

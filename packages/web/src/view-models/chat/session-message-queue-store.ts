@@ -1,9 +1,10 @@
-import type { MobiusTurn, SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
+import type { MobiusTurn, PromptImage, SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
 import { SessionPromptDisposition } from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
 
 interface QueuedMessageValue {
     readonly commandId: string;
+    readonly images: readonly PromptImage[];
     readonly summary: string;
     readonly turnId: string;
 }
@@ -103,7 +104,13 @@ export const createSessionMessageQueueStore = (port: SessionMessageQueuePort) =>
                     signal,
                 );
                 signal.throwIfAborted();
-                const message: ChatQueuedMessage = { commandId, kind: "queued", summary, turnId: accepted.turnId };
+                const message: ChatQueuedMessage = {
+                    commandId,
+                    images: request.images,
+                    kind: "queued",
+                    summary,
+                    turnId: accepted.turnId,
+                };
                 set((state) => ({ messages: [...state.messages, message], operation: { kind: "idle" } }));
                 return message;
             } catch (cause) {

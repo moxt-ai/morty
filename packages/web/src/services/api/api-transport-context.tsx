@@ -1,19 +1,24 @@
 import { createContext, type ReactNode, useContext } from "react";
-import type { WebSocketApiTransport } from "./websocket-api-transport.ts";
+export interface ApiTransport {
+    readonly open: () => void;
+    readonly fetch: (request: Request) => Promise<Response>;
+    readonly waitForChange: (request: Request) => Promise<void>;
+    readonly close: () => void;
+}
 
-const ApiTransportContext = createContext<WebSocketApiTransport | null>(null);
+const ApiTransportContext = createContext<ApiTransport | null>(null);
 
 export function ApiTransportProvider({
     children,
     transport,
 }: {
     readonly children: ReactNode;
-    readonly transport: WebSocketApiTransport;
+    readonly transport: ApiTransport;
 }) {
     return <ApiTransportContext.Provider value={transport}>{children}</ApiTransportContext.Provider>;
 }
 
-export function useApiTransport(): WebSocketApiTransport {
+export function useApiTransport(): ApiTransport {
     const transport = useContext(ApiTransportContext);
     if (transport === null) {
         throw new Error("The Chat API transport is unavailable.");

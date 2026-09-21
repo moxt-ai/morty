@@ -5,6 +5,7 @@ import {
     MobiusControlEvent,
     type MobiusMessagePage,
     type MobiusSessionEvent,
+    type PromptImage,
 } from "@moxt-ai/mobius-sdk";
 import type { RecordedAgentActivity } from "../../services/chat/agent-activities.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
@@ -26,14 +27,12 @@ export type SessionMessage =
           readonly contents: readonly SessionMessageContent[];
       };
 
-interface SessionMessageContent {
+export interface SessionMessageContent {
     readonly contentId: string;
     readonly content: AgentDisplayContent;
 }
 
-function historyContents(
-    images: readonly { readonly data: string; readonly mimeType: string; readonly name: string }[] | undefined,
-): readonly SessionMessageContent[] {
+export function promptImageContents(images: readonly PromptImage[] | undefined): readonly SessionMessageContent[] {
     return (images ?? []).map((image, index) => ({
         contentId: `history-image-${index.toString()}`,
         content: {
@@ -92,7 +91,7 @@ export function historySessionPresentation(
                 ? `history-${index.toString()}`
                 : `${coveredCommandId}-${message.role === "user" ? "user" : "reply"}`;
         if (message.role === "user") {
-            return { id, role: "user", text: message.text, contents: historyContents(message.images) };
+            return { id, role: "user", text: message.text, contents: promptImageContents(message.images) };
         }
         const commandId = coveredCommandId ?? `native-message-${index.toString()}`;
         const activityIds = message.activities.map((activity) => {
@@ -117,7 +116,7 @@ export function historySessionPresentation(
             attempt: null,
             commandId: coveredCommandId ?? null,
             contents: [
-                ...historyContents(message.images),
+                ...promptImageContents(message.images),
                 ...message.content.map((content, contentIndex) => ({
                     contentId: `native-message-${index.toString()}-content-${contentIndex.toString()}`,
                     content,

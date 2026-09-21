@@ -32,7 +32,7 @@ type WorkspaceApplicationProps = {
     readonly userId: string;
 };
 
-function WorkspaceApplication(props: WorkspaceApplicationProps) {
+export function WorkspaceApplication(props: WorkspaceApplicationProps) {
     const transport = useApiTransport();
     const { activeIdentity, authorize, userId } = props;
     const router = useMemo(() => {

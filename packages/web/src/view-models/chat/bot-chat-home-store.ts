@@ -320,7 +320,9 @@ export const createBotChatHomeStore = (
                 set({ view: { kind: "draft", bot }, sessionView: { kind: "session-access", session: opened.session } });
                 await reloadAfterWorkspaceChange();
             } catch (cause) {
-                signal.throwIfAborted();
+                if (signal.aborted) {
+                    return;
+                }
                 if (cause instanceof DOMException && cause.name === "TimeoutError") {
                     set((current) => ({ revision: current.revision + 1 }));
                     return;

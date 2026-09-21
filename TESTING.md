@@ -6,6 +6,7 @@ Tests are the executable control surface for Mobius Chat. Each supported behavio
 has one primary owner:
 
 - a browser E2E journey owns a critical successful user path;
+- a Web application integration test owns browser-side behavior and state transitions;
 - a Worker integration test owns one HTTP, Durable Object, Slack, or storage
   boundary;
 - Mobius owns its protocol, Runtime, daemon, Relay, and Agent boundaries.
@@ -32,6 +33,26 @@ They start real local Chat, Platform, Mobius, Runtime, browser, HTTP, WebSocket,
 filesystem, and database boundaries. A deterministic stateful ACP Agent replaces
 only the third-party Agent. Extend an existing journey before adding another file.
 See `packages/e2e/README.md` for scenario ownership.
+
+### Web application integration
+
+`packages/web/tests` renders the complete authenticated application in a lightweight
+DOM and drives it through visible user-facing elements. Run it with:
+
+```bash
+pnpm test:web
+```
+
+The production router, API clients, view-models, Zustand stores, and React views all
+participate. One stateful transport fake replaces the external Worker/WebSocket
+boundary. Extend that fake through protocol-level requests and responses; do not
+inject stores, render an isolated component, or create a new fake for each test.
+
+This is the default owner for browser-side branching such as loading, reconnecting,
+queued work, history reconciliation, errors, and rendering. Browser E2E retains only
+the corresponding critical happy-path proof that real processes and transports can
+connect. A Web bug should not require another full-stack E2E step when its failure can
+be reproduced at this boundary.
 
 ### Worker integration
 
@@ -88,9 +109,11 @@ tested boundary. Harnesses may hide startup, ports, credentials, waiting,
 diagnostics, and cleanup; they must not hide the business action or bypass a
 participating production layer.
 
-Unit tests are prohibited by default. Naming a direct helper or class test
-`integration` does not make it one. Move the assertion to its owning boundary or
-delete it when a stronger journey already owns the behavior.
+Isolated helper, class, store, and component tests are prohibited by default. Naming
+one `integration` does not make it one. Prefer the cheapest production boundary that
+still executes the behavior's real composition: the complete Web application, the
+Worker entrypoint, or a long browser journey. Delete a lower-level assertion when a
+stable boundary test already owns the same risk.
 
 Mocks, spies, module replacement, monkey patching, and canned request interceptors
 are prohibited. A dependency outside the product may use one stateful fake through
@@ -107,17 +130,17 @@ proves progress; a bounded scenario timeout is only failure containment.
 Pull requests and merge-queue revisions run two parallel jobs:
 
 - `static`: typecheck, build, lint, architecture checks, migrations, and Knip;
-- `tests`: the Worker boundary suite and its Istanbul report.
+- `tests`: the Web application and Worker boundary suites and their Istanbul report.
 
 The required `check` job only combines those results. Main pushes do not repeat
 them; they validate deployment configuration and deploy the merge-queue-verified
 revision. Deterministic browser E2E is intentionally outside PR CI. Real Agent
 compatibility runs in Mobius instead of being repeated here.
 
-`pnpm test:coverage` covers production Worker TypeScript and writes LCOV, JSON,
-and HTML output. The 95% target is advisory; failed tests and missing or empty
-reports are blocking. Code executed in a separately bundled Worker or subprocess
-is not credited to the parent runner, so percentages cannot prove a product path.
+`pnpm test:coverage` covers production Web and Worker TypeScript and writes LCOV,
+JSON, and HTML output. The 95% target is advisory; failed tests and missing or empty
+reports are blocking. Code executed in a separately bundled Worker or subprocess is
+not credited to the parent runner, so percentages cannot prove a product path.
 
 Run `pnpm typecheck`, `pnpm lint`, and only the affected suites locally. Reserve
 `pnpm ci:check` for CI.
@@ -130,8 +153,9 @@ sign-in and sign-up remain manual because the external hosted UI is outside the
 product boundary.
 
 Browser-specific layout and appearance remain manual unless they become a critical
-supported behavior. Functional browser journeys use accessible roles, labels, and
-visible results rather than screenshots or private application state.
+supported behavior. Web and browser tests prefer accessible roles and labels. Use a
+shared test ID when an element has no stable semantic selector or the ID expresses a
+supported product state; do not use private application state or ad hoc selectors.
 
 Architecture rules are executable in `dependency-cruiser.config.cjs`. Shared Slack
 records live with their owning entity boundary; storage and infrastructure cannot

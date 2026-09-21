@@ -6,6 +6,27 @@ import { Button } from "../ui/cloud-button.tsx";
 import { Dialog } from "../ui/dialog.tsx";
 import { Popover } from "../ui/popover.tsx";
 
+const WORKING_DIRECTORY_LABEL_LENGTH = 30;
+
+type MiddleTruncation =
+    | { readonly kind: "complete"; readonly value: string }
+    | { readonly kind: "truncated"; readonly prefix: string; readonly suffix: string };
+
+function middleTruncate(value: string, maximumLength: number): MiddleTruncation {
+    if (value.length <= maximumLength) {
+        return { kind: "complete", value };
+    }
+    const marker = "...";
+    const retainedLength = maximumLength - marker.length;
+    const prefixLength = Math.ceil(retainedLength / 2);
+    const suffixLength = Math.floor(retainedLength / 2);
+    return {
+        kind: "truncated",
+        prefix: value.slice(0, prefixLength),
+        suffix: value.slice(value.length - suffixLength),
+    };
+}
+
 export function CwdSelector({
     disabled,
     signal,
@@ -22,6 +43,7 @@ export function CwdSelector({
     }
     const browser = viewModel.cwdBrowser;
     const workingDirectory = settings.cwd.directoryLabel;
+    const displayedWorkingDirectory = middleTruncate(workingDirectory, WORKING_DIRECTORY_LABEL_LENGTH);
     const directory = browser.kind === "closed" ? null : browser.directory;
     return (
         <>
@@ -36,7 +58,21 @@ export function CwdSelector({
                         type="button"
                     >
                         <FolderOpen aria-hidden="true" className="size-4 shrink-0" />
-                        <span className="truncate">{workingDirectory}</span>
+                        {displayedWorkingDirectory.kind === "complete" ? (
+                            <span className="min-w-0 overflow-hidden whitespace-nowrap">
+                                {displayedWorkingDirectory.value}
+                            </span>
+                        ) : (
+                            <span className="flex min-w-0 items-center whitespace-nowrap">
+                                <span className="flex min-w-0 flex-1 overflow-hidden">
+                                    <span className="shrink-0">{displayedWorkingDirectory.prefix}</span>
+                                </span>
+                                <span className="shrink-0">...</span>
+                                <span className="flex min-w-0 flex-1 justify-end overflow-hidden">
+                                    <span className="shrink-0">{displayedWorkingDirectory.suffix}</span>
+                                </span>
+                            </span>
+                        )}
                         <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
                     </button>
                 </Popover.Trigger>

@@ -212,7 +212,6 @@ export function MobiusSessionPane({
                                     activities={model.activities}
                                     activeCommandId={activeCommandId}
                                     activeMessageId={presentation.activeMessageId}
-                                    activeUserMessageId={presentation.activeUserMessageId}
                                     deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
                                     onRemoveUnknownDelivery={pane.store.getState().removeUnknownDelivery}
                                     onRetryUnknownDelivery={() => run(pane.store.getState().retryUnknownDelivery)}
@@ -304,6 +303,7 @@ export function MobiusSessionPane({
                                               value: value.value,
                                               label: value.name,
                                           })),
+                                          searchable: option.category === "model",
                                           testId: dataTestId.agentSetting(option.id),
                                           value: option.currentValue,
                                       },

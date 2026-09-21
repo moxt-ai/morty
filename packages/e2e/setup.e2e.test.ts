@@ -149,9 +149,9 @@ test("Given a setup handoff, When a user continues remote work, Then setup, ACP 
     await test.step("preserve active work across reload and end remote access", async () => {
         await composer.fill("wait until cancelled");
         await page.getByRole("button", { name: "Send message", exact: true }).click();
-        await expect(page.getByRole("status", { name: "Agent working", exact: true })).toBeVisible();
+        await expect(page.getByTestId(dataTestId.sendMessage)).toHaveAttribute("aria-label", "Stop agent output");
         await page.reload();
-        await expect(page.getByRole("status", { name: "Agent working", exact: true })).toBeVisible();
+        await expect(page.getByTestId(dataTestId.sendMessage)).toHaveAttribute("aria-label", "Stop agent output");
         await expect(
             page.getByText("Agent updates stopped. Check your local agent or reconnect.", { exact: true }),
         ).toHaveCount(0);
