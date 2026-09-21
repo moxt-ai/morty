@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import * as v from "valibot";
 
@@ -32,22 +32,13 @@ class InMemoryD1Statement {
 export class InMemoryD1Database {
     readonly #database = new DatabaseSync(":memory:");
     constructor() {
-        for (const migration of [
-            "0001_initial.sql",
-            "0002_anonymous_identity.sql",
-            "0003_platform_project.sql",
-            "0004_platform_origin.sql",
-            "0005_agent_pairing.sql",
-            "0006_chat_managed_session.sql",
-            "0007_identity_transfer_redemptions.sql",
-            "0008_remote_access.sql",
-            "0009_chat_managed_import.sql",
-            "0010_chat_owned_bot.sql",
-            "0011_slack_chat_bot_binding.sql",
-            "0012_remove_legacy_bot_migration.sql",
-            "0013_colossal_rictor.sql",
-        ]) {
-            this.#database.exec(readFileSync(new URL(`../../migrations/d1/${migration}`, import.meta.url), "utf8"));
+        const migrationDirectory = new URL("../../migrations/d1/", import.meta.url);
+        const migrations = readdirSync(migrationDirectory, { withFileTypes: true })
+            .filter((entry) => entry.isFile() && entry.name.endsWith(".sql"))
+            .map((entry) => entry.name)
+            .sort();
+        for (const migration of migrations) {
+            this.#database.exec(readFileSync(new URL(migration, migrationDirectory), "utf8"));
         }
     }
     readonly close = () => this.#database.close();
