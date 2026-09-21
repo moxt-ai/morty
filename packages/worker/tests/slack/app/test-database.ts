@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { drizzle } from "drizzle-orm/d1";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { afterEach, beforeEach, vi } from "vitest";
@@ -49,13 +49,13 @@ export async function createTestDatabase(): Promise<TestDatabase> {
         }),
     );
     const d1 = await runtime.getD1Database("DATABASE");
+    const migrationDirectory = new URL("../../../migrations/d1/", import.meta.url);
+    const migrationNames = (await readdir(migrationDirectory, { withFileTypes: true }))
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".sql"))
+        .map((entry) => entry.name)
+        .sort();
     const migrations = await Promise.all(
-        [
-            "0001_initial.sql",
-            "0010_chat_owned_bot.sql",
-            "0011_slack_chat_bot_binding.sql",
-            "0012_remove_legacy_bot_migration.sql",
-        ].map(async (name) => await readFile(new URL(`../../../migrations/d1/${name}`, import.meta.url), "utf8")),
+        migrationNames.map(async (name) => await readFile(new URL(name, migrationDirectory), "utf8")),
     );
     const statements = migrations.flatMap((migration) =>
         migration
