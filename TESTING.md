@@ -37,7 +37,7 @@ See `packages/e2e/README.md` for scenario ownership.
 
 ### Web application integration
 
-`packages/web/tests` renders the complete authenticated application in a lightweight
+`packages/web/tests` renders the authenticated workspace application in a lightweight
 DOM and drives it through visible user-facing elements. Run it with:
 
 ```bash
@@ -54,8 +54,9 @@ component, or replace Chat or Platform with response tables.
 
 This is the default owner for browser-side branching that needs the real Chat and
 Platform path, including loading, reconnecting, queued work, history reconciliation,
-errors, and rendering. Keep it as one advancing journey instead of rebuilding the
-stack for many cases. Browser E2E retains only the proof that deployed-style
+errors, and rendering. A few business-owned cases share one production local stack
+and create an isolated Project for each scenario; do not rebuild Chat and Platform
+for every branch. Browser E2E retains only the proof that deployed-style
 processes and a real browser connect. A Web bug should not require another full-stack
 E2E step when it can be reproduced through this in-memory stack. Bot management,
 Agent configuration filtering, media rendering, local-file pulling, and Runtime
@@ -71,7 +72,9 @@ pnpm test:worker
 ```
 
 The shared fixtures own application composition, migrations, credentials, external
-fakes, and cleanup. `startTestPlatform` starts the production Platform Worker,
+fakes, and cleanup. A suite shares its production local runtime when each case can
+create isolated users and Projects through public operations; do not rebuild the
+same Worker bundle and Platform for every case. `startTestPlatform` starts the production Platform Worker,
 Durable Objects, migrations, and HTTP/WebSocket boundary with isolated local
 Cloudflare storage; it does not simulate Platform responses. Slack tests start empty and create app registration, binding,
 OAuth, and connection state through production HTTP operations. Direct persistence

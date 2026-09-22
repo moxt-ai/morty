@@ -21,7 +21,7 @@ async function availableOrigin(): Promise<string> {
     return `http://127.0.0.1:${address.port}`;
 }
 
-export async function createChatWorker() {
+export async function createChatWorkerEnvironment() {
     const origin = await availableOrigin();
     const cloud = await createIdentityFixture({
         appOrigin: origin,
@@ -29,7 +29,7 @@ export async function createChatWorker() {
         workerEntryPoint: resolve(process.cwd(), "../worker/src/index.ts"),
         wranglerConfiguration: pathToFileURL(resolve(process.cwd(), "../../wrangler.jsonc")),
     });
-    try {
+    const createApplication = async () => {
         const identityResponse = await cloud.dispatchFetch(`${origin}/mobius-cloud/api/identity/anonymous-users`, {
             method: "POST",
         });
@@ -83,13 +83,11 @@ export async function createChatWorker() {
             origin,
             transport,
             userId: identity.userId,
-            close: async () => {
-                transport.close();
-                await cloud.close();
-            },
+            close: () => transport.close(),
         };
-    } catch (cause) {
-        await cloud.close();
-        throw cause;
-    }
+    };
+    return {
+        createApplication,
+        close: cloud.close,
+    };
 }
