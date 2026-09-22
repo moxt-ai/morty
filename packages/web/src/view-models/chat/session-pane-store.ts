@@ -26,6 +26,7 @@ import {
     recordAgentActivity,
 } from "../../services/chat/agent-activities.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { createRemoteAccessStore } from "./remote-access-store.ts";
@@ -65,7 +66,7 @@ type Operation =
 type Connection =
     | { readonly kind: "loading" }
     | { readonly kind: "ready"; readonly client: MobiusClient }
-    | { readonly kind: "failed" };
+    | { readonly kind: "failed"; readonly message: string };
 type ServiceInteraction = Awaited<ReturnType<MobiusClient["interactions"]["listPending"]>>[number];
 export type LocalInteraction =
     | { readonly kind: "permission"; readonly permission: PermissionInteraction }
@@ -292,10 +293,19 @@ export function sessionPanePresentation(
         queue.operation.kind === "submitting" ||
         tasks.operation.kind === "steering" ||
         tasks.operation.kind === "stopping";
-    const activeCommandId = workingCommandId(model.activity);
+    const workingActivityCommandId = workingCommandId(model.activity);
+    const submittingCommandId = model.operation.kind === "sending" ? model.operation.commandId : null;
+    const activeCommandId = workingActivityCommandId ?? submittingCommandId;
     const busy = activeCommandId !== null || composerDisabled;
     const compactAvailable = findCompactCommand(tasks.commands) !== null;
-    const activeMessageId = model.activity.kind === "working" ? model.activity.messageId : null;
+    const activeMessageId =
+        model.activity.kind === "working"
+            ? model.activity.messageId
+            : submittingCommandId !== null
+              ? (model.messages.findLast(
+                    (message) => message.role === "assistant" && message.commandId === submittingCommandId,
+                )?.id ?? null)
+              : null;
     const deliveryUnknownCommandId =
         delivery.state.kind === "delivery-unknown" ? delivery.state.journal.commandId : null;
     const deliveryUnknownUserMessageId =
@@ -305,6 +315,7 @@ export function sessionPanePresentation(
                   ?.id ?? null);
     return {
         activeMessageId,
+        activeCommandId,
         busy,
         composerDisabled,
         compactAvailable,
@@ -362,7 +373,6 @@ export function createSessionPaneModel(options: {
     readonly session: OpenMobiusSession;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession" | "steerTurn" | "submitTurn">;
-    readonly storage: Storage;
     readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
 }) {
     const { session, botId, requests } = options;
@@ -375,7 +385,7 @@ export function createSessionPaneModel(options: {
                   turnId: session.result.activeTurn.turnId,
               }
             : { kind: "idle" };
-    const activeTurn = createSessionActiveTurn({ initial: initialActiveTurn, sessionId, storage: options.storage });
+    const activeTurn = createSessionActiveTurn({ initial: initialActiveTurn, sessionId });
     const openedActiveTurn = activeTurn.current();
     let client: MobiusClient | null = null;
     let nativeHistory: NativeSessionHistory | null =
@@ -391,7 +401,6 @@ export function createSessionPaneModel(options: {
     }));
     const delivery = createSessionDeliveryStore({
         sessionId,
-        storage: options.storage,
         submit: async (request, signal) =>
             await requests.submitTurn(botId, sessionId, { ...request, sessionConfigurations }, signal),
     });
@@ -536,6 +545,15 @@ export function createSessionPaneModel(options: {
                         hasOlderHistory: historyCursor !== null,
                         messages: rendered.messages,
                     });
+                } catch (cause) {
+                    signal.throwIfAborted();
+                    set({
+                        operation: {
+                            kind: "failed",
+                            message: cause instanceof Error ? cause.message : "Older messages could not be loaded.",
+                        },
+                    });
+                    throw cause;
                 } finally {
                     loadingOlderHistory = false;
                     if (!signal.aborted) {
@@ -919,15 +937,16 @@ export function createSessionPaneModel(options: {
                     client?.close();
                     client = null;
                     if (!signal.aborted) {
+                        const message = cause instanceof Error ? cause.message : "The Session could not be opened.";
                         set({
-                            connection: { kind: "failed" },
+                            connection: { kind: "failed", message },
                             activity: transitionSessionActivity(get().activity, {
                                 kind: "session-failed",
-                                message: cause instanceof Error ? cause.message : "The Session could not be opened.",
+                                message,
                             }),
                             operation: {
                                 kind: "failed",
-                                message: cause instanceof Error ? cause.message : "The Session could not be opened.",
+                                message,
                             },
                         });
                     }
@@ -1175,6 +1194,7 @@ export function createSessionPaneModel(options: {
                         value: candidate.type === "select" ? candidate.currentValue : "",
                         valueType: candidate.type,
                     }));
+                    saveLastAgentSettings(botId, session.agentRef, result.configOptions);
                     set({ options: result.configOptions, operation: { kind: "idle" } });
                 } catch (cause) {
                     signal.throwIfAborted();

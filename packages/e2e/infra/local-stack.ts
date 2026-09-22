@@ -236,6 +236,7 @@ export class LocalStack {
                     MOBIUS_E2E_ACP_TRACE_DIRECTORY: join(this.harness.artifactDirectory, "acp"),
                     MOBIUS_E2E_ACP_REAL_BIN: this.agent.acpBinary,
                     MOBIUS_DEFAULT_WORKSPACE: workspace,
+                    PATH: dirname(process.execPath),
                     [this.agent.adapterOverrideVariable]: acpProxy,
                     MOBIUS_STATE_DIRECTORY: this.directories.runtime,
                     XDG_CACHE_HOME: this.directories["xdg-cache"],

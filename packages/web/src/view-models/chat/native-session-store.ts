@@ -62,11 +62,19 @@ export const createNativeSessionStore = (
             try {
                 const workspace = await requests.workspace(botId, signal);
                 signal.throwIfAborted();
-                set({ agents: workspace.agents });
+                // A Bot's native sessions import through the Runtime its harness is bound to.
+                // Older pairings of the same machine remain listed as separate Runtimes, so
+                // unscoped agents would repeat every agent once per pairing. Scope to the
+                // bound Runtime exactly like the harness selection does.
+                const agents =
+                    workspace.runtimeId === null
+                        ? workspace.agents
+                        : workspace.agents.filter((agent) => agent.runtimeId === workspace.runtimeId);
+                set({ agents });
                 const selected = get().selected;
                 const agent =
-                    workspace.agents.find((item) => `${item.runtimeId}:${item.agentRef}` === selected) ??
-                    workspace.agents.find((item) => item.online);
+                    agents.find((item) => `${item.runtimeId}:${item.agentRef}` === selected) ??
+                    agents.find((item) => item.online);
                 if (agent === undefined) {
                     set({ directory: { kind: "empty" } });
                     return;

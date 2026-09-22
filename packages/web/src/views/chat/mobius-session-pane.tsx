@@ -13,20 +13,23 @@ import {
     type PermissionInteractionResponse,
     SessionInteractionCards,
 } from "../../components/chat/session-interactions.tsx";
+import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
 import { registerMobiusChatDebugSession } from "../../debug-bridge.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { SessionConnectionKind } from "../../view-models/chat/bot-chat-home-store.ts";
+import type { QueuedDraftMessage } from "../../view-models/chat/conversation-creation-machine.ts";
 import { createBrowserFilePreviewStore } from "../../view-models/chat/file-preview-store.ts";
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
-import { type SessionActivityState, workingCommandId } from "../../view-models/chat/session-activity-machine.ts";
+import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
 import { sessionDebugBlocks } from "../../view-models/chat/session-debug-blocks.ts";
 import { createSessionPaneModel, sessionPanePresentation } from "../../view-models/chat/session-pane-store.ts";
 import { MobiusSessionMessage } from "./mobius-session-message.tsx";
 
 export function MobiusSessionPane({
     session,
+    initialMessage,
     botId,
     requests,
     endRemoteAccess,
@@ -34,9 +37,10 @@ export function MobiusSessionPane({
     onStatusChange,
 }: {
     readonly session: OpenMobiusSession;
+    readonly initialMessage?: QueuedDraftMessage | undefined;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession" | "steerTurn" | "submitTurn">;
-    readonly endRemoteAccess?: (signal: AbortSignal) => Promise<void>;
+    readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
     readonly onConnectionStatusChange: (sessionId: string, connection: SessionConnectionKind) => void;
     readonly onStatusChange: (sessionId: string, status: SessionActivityState) => void;
 }) {
@@ -46,8 +50,7 @@ export function MobiusSessionPane({
             session,
             botId,
             requests,
-            storage: window.localStorage,
-            endRemoteAccess: endRemoteAccess ?? (async () => Promise.resolve()),
+            endRemoteAccess,
         }),
     );
     const model = useStore(pane.store);
@@ -56,7 +59,6 @@ export function MobiusSessionPane({
     const delivery = useStore(pane.delivery);
     const messageQueue = useStore(pane.messageQueue);
     const taskControls = useStore(pane.tasks);
-    const remoteAccess = useStore(pane.remoteAccess);
     const lifetime = useRef<AbortController | null>(null);
     const messageList = useRef<HTMLDivElement | null>(null);
     const followLatest = useRef(true);
@@ -132,13 +134,15 @@ export function MobiusSessionPane({
         await pane.store.getState().respondToElicitation(response, controller.signal);
     };
     const presentation = sessionPanePresentation(model, delivery, taskControls, messageQueue);
+    const initialMessageVisible =
+        initialMessage !== undefined &&
+        !model.messages.some((message) => message.role === "user" && message.text === initialMessage.content);
     useEffect(() => {
         onStatusChange(sessionId, model.activity);
     }, [model.activity, onStatusChange, sessionId]);
     useEffect(() => {
         onConnectionStatusChange(sessionId, model.connection.kind);
     }, [model.connection.kind, onConnectionStatusChange, sessionId]);
-    const activeCommandId = workingCommandId(model.activity);
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
         run(async (signal) => await pane.store.getState().configure(option, value, booleanValue, signal));
     const openLocalFile = useCallback(
@@ -151,45 +155,9 @@ export function MobiusSessionPane({
         [filePreview],
     );
 
-    if (endRemoteAccess !== undefined && remoteAccess.state.kind === "ended") {
-        return (
-            <section className="m-auto grid max-w-lg gap-3 p-8 text-center">
-                <h1 className="text-2xl font-semibold">Remote access ended</h1>
-                <p>Your local task is still running on your computer. This browser can no longer open it.</p>
-            </section>
-        );
-    }
     return (
         <>
             <section className="flex min-h-0 min-w-0 flex-1 animate-cloud-enter flex-col motion-reduce:animate-none">
-                {endRemoteAccess !== undefined && (
-                    <div className="flex items-center justify-end gap-2 border-b border-border px-4 py-2">
-                        {remoteAccess.state.kind === "confirming" ? (
-                            <>
-                                <span className="text-sm">End access for every remote browser?</span>
-                                <Button
-                                    variant="destructive"
-                                    disabled={false}
-                                    onClick={() => run(pane.store.getState().endRemoteAccess)}
-                                >
-                                    Confirm end access
-                                </Button>
-                                <Button variant="ghost" onClick={pane.remoteAccess.getState().cancelEnd}>
-                                    Cancel
-                                </Button>
-                            </>
-                        ) : (
-                            <Button
-                                variant="outline"
-                                disabled={remoteAccess.state.kind === "ending"}
-                                onClick={pane.remoteAccess.getState().requestEnd}
-                            >
-                                {remoteAccess.state.kind === "ending" ? "Ending remote access…" : "End remote access"}
-                            </Button>
-                        )}
-                        {remoteAccess.state.kind === "failed" && <p role="alert">{remoteAccess.state.message}</p>}
-                    </div>
-                )}
                 <div
                     role="log"
                     ref={messageList}
@@ -200,6 +168,49 @@ export function MobiusSessionPane({
                     aria-label="Messages"
                     className="min-h-0 flex-1 space-y-8 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10 lg:px-12"
                 >
+                    {initialMessageVisible && (
+                        <div className="mx-auto w-full min-w-0 max-w-[920px]">
+                            <UserPromptMessage
+                                images={initialMessage.attachments.flatMap((attachment) =>
+                                    attachment.kind === "image" ? [attachment.image] : [],
+                                )}
+                                resources={initialMessage.attachments.flatMap((attachment) =>
+                                    attachment.kind === "resource" ? [attachment.resource] : [],
+                                )}
+                                text={initialMessage.content}
+                            />
+                        </div>
+                    )}
+                    {model.messages.length === 0 && model.connection.kind === "loading" && (
+                        <p role="status" className="text-center text-sm text-muted-foreground">
+                            Loading...
+                        </p>
+                    )}
+                    {model.messages.length === 0 && model.connection.kind === "failed" && (
+                        <div className="flex min-h-full items-center justify-center">
+                            <div className="grid max-w-lg justify-items-center gap-4 px-6 text-center">
+                                <p data-testid={dataTestId.sessionLoadFailure} role="alert">
+                                    {model.connection.message}
+                                </p>
+                                <Button
+                                    onClick={() => run(async (signal) => await pane.store.getState().connect(signal))}
+                                    variant="outline"
+                                >
+                                    Reconnect
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                    {model.messages.length === 0 && model.connection.kind === "ready" && !model.historyLoading && (
+                        <p className="text-center text-sm text-muted-foreground" role="status">
+                            No message history is available for this conversation.
+                        </p>
+                    )}
+                    {model.historyLoading && (
+                        <p role="status" className="text-center text-sm text-muted-foreground">
+                            Loading...
+                        </p>
+                    )}
                     {model.messages.map((message) => {
                         const workingOnly =
                             message.role === "assistant" &&
@@ -215,7 +226,7 @@ export function MobiusSessionPane({
                                 <MobiusSessionMessage
                                     message={message}
                                     activities={model.activities}
-                                    activeCommandId={activeCommandId}
+                                    activeCommandId={presentation.activeCommandId}
                                     activeMessageId={presentation.activeMessageId}
                                     deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
                                     onRemoveUnknownDelivery={pane.store.getState().removeUnknownDelivery}

@@ -1,6 +1,7 @@
 import type { SessionConfigOption, WorkspaceEntriesEvent } from "@moxt-ai/mobius-protocol";
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ChatDraftConfiguration, ChatWorkspace } from "@/services/chat/bot-chat-api";
+import { restoreLastAgentSettings, saveLastAgentSettings } from "@/services/chat/last-agent-settings";
 import {
     forgetRecentCwdPreference,
     type RecentCwdPreference,
@@ -103,12 +104,14 @@ export const createDraftControlsStore = (
     botId: string,
     requests: Pick<BotChatApi, "workspace" | "workspaceDirectory" | "agentSettings">,
     onSettings: (settings: ChatDraftConfiguration | null) => void,
-    storage: Storage,
 ) =>
     createStore<DraftControlsStore>()((set, get) => {
         let cwdOperation: AbortController | null = null;
         let selectedHarness = "";
         const changedOptionIds = new Set<string>();
+        const rememberAgentSettings = (settings: Extract<DraftSettingsState, { readonly kind: "ready" }>): void => {
+            saveLastAgentSettings(botId, settings.selectedAgent.agentRef, settings.options);
+        };
         const publishSettings = (settings: Extract<DraftSettingsState, { readonly kind: "ready" }>): void => {
             onSettings({
                 agentRef: settings.selectedAgent.agentRef,
@@ -129,12 +132,9 @@ export const createDraftControlsStore = (
             directory: WorkspaceEntriesEvent,
         ): readonly RecentCwdPreference[] => {
             const selected = settings.selectedAgent;
-            saveLastCwdPreference(storage, botId, selected.runtimeId, selected.agentRef, directory.directoryId);
+            saveLastCwdPreference(botId, selected.runtimeId, selected.agentRef, directory.directoryId);
             return saveRecentCwdPreference(
-                storage,
                 botId,
-                selected.runtimeId,
-                selected.agentRef,
                 { directoryId: directory.directoryId, directoryLabel: directory.directoryLabel },
                 get().recentCwds,
             );
@@ -251,12 +251,7 @@ export const createDraftControlsStore = (
                             requests.workspaceDirectory(botId, "default", signal),
                         ]);
                         signal.throwIfAborted();
-                        const savedDirectoryId = readLastCwdPreference(
-                            storage,
-                            botId,
-                            selected.runtimeId,
-                            selected.agentRef,
-                        );
+                        const savedDirectoryId = readLastCwdPreference(botId, selected.runtimeId, selected.agentRef);
                         let cwd = defaultCwd;
                         if (savedDirectoryId !== null && savedDirectoryId !== defaultCwd.directoryId) {
                             try {
@@ -266,22 +261,24 @@ export const createDraftControlsStore = (
                                 signal.throwIfAborted();
                             }
                         }
-                        const ready = { kind: "ready" as const, workspace, selectedAgent: selected, cwd, ...result };
+                        const restoredSettings = restoreLastAgentSettings(botId, selected.agentRef, result.options);
+                        const ready = {
+                            kind: "ready" as const,
+                            workspace,
+                            selectedAgent: selected,
+                            cwd,
+                            options: restoredSettings.options,
+                        };
                         changedOptionIds.clear();
-                        const existingRecentCwds = readRecentCwdPreferences(
-                            storage,
-                            botId,
-                            selected.runtimeId,
-                            selected.agentRef,
-                        );
-                        saveLastCwdPreference(storage, botId, selected.runtimeId, selected.agentRef, cwd.directoryId);
+                        for (const configId of restoredSettings.restoredIds) {
+                            changedOptionIds.add(configId);
+                        }
+                        const existingRecentCwds = readRecentCwdPreferences(botId);
+                        saveLastCwdPreference(botId, selected.runtimeId, selected.agentRef, cwd.directoryId);
                         const recentCwds =
                             existingRecentCwds === null
                                 ? saveRecentCwdPreference(
-                                      storage,
                                       botId,
-                                      selected.runtimeId,
-                                      selected.agentRef,
                                       { directoryId: cwd.directoryId, directoryLabel: cwd.directoryLabel },
                                       [],
                                   )
@@ -321,14 +318,7 @@ export const createDraftControlsStore = (
                     return;
                 }
                 set({
-                    recentCwds: forgetRecentCwdPreference(
-                        storage,
-                        botId,
-                        selected.runtimeId,
-                        selected.agentRef,
-                        directoryId,
-                        recentCwds,
-                    ),
+                    recentCwds: forgetRecentCwdPreference(botId, directoryId, recentCwds),
                 });
             },
             load,
@@ -466,6 +456,7 @@ export const createDraftControlsStore = (
                     ),
                 };
                 changedOptionIds.add(configId);
+                rememberAgentSettings(ready);
                 set({ settings: ready });
                 publishSettings(ready);
             },
@@ -483,6 +474,7 @@ export const createDraftControlsStore = (
                     ),
                 };
                 changedOptionIds.add(configId);
+                rememberAgentSettings(ready);
                 set({ settings: ready });
                 publishSettings(ready);
             },

@@ -13,6 +13,7 @@ import {
     mobiusApiUrl,
     StaticMobiusCredentialProvider,
 } from "@moxt-ai/mobius-sdk";
+import { centralLocalStorage, channelCredentialEntry } from "@/services/local-storage/central-local-storage";
 import {
     AgentIntegrationOption,
     AgentOption,
@@ -36,7 +37,6 @@ import {
 } from "@/view-models/chat/channel";
 
 const REQUEST_TIMEOUT_MILLISECONDS = 20_000;
-const CHANNEL_CREDENTIAL_PREFIX = "mobius:channel-credential:";
 
 export type ActivityDetailResult =
     | {
@@ -393,15 +393,14 @@ export class OwnerRuntimeManagementAccess extends RuntimeManagementAccess {}
 class ReadOnlyRuntimeManagementAccess extends RuntimeManagementAccess {}
 
 function saveBrowserChannelCredential(channelId: string, credential: BrowserChannelCredential): void {
-    window.localStorage.setItem(
-        `${CHANNEL_CREDENTIAL_PREFIX}${channelId}`,
-        JSON.stringify({
-            authority: credential.authority,
-            hostToken: credential.hostToken,
-            projectId: credential.projectId,
-            tenantId: credential.tenantId,
-        }),
-    );
+    centralLocalStorage.write(channelCredentialEntry(channelId), {
+        ...(credential.authority === "owner" || credential.authority === "linked"
+            ? { authority: credential.authority }
+            : {}),
+        hostToken: credential.hostToken,
+        projectId: credential.projectId,
+        tenantId: credential.tenantId,
+    });
 }
 
 function saveChannelCredential(pairing: CreatedPairing): void {
@@ -412,20 +411,14 @@ function saveChannelCredential(pairing: CreatedPairing): void {
 }
 
 function readChannelCredential(channelId: string): BrowserChannelCredential {
-    let value: unknown;
-    try {
-        const encoded = window.localStorage.getItem(`${CHANNEL_CREDENTIAL_PREFIX}${channelId}`);
-        value = encoded === null ? null : JSON.parse(encoded);
-    } catch (cause) {
-        throw new PairingApiError("channel_credential_invalid", "The saved channel credential is invalid.", { cause });
-    }
-    if (!isRecord(value)) {
+    const value = centralLocalStorage.read(channelCredentialEntry(channelId));
+    if (value === null) {
         throw new PairingApiError("channel_credential_missing", "This browser does not have access to the channel.");
     }
-    const hostToken = value["hostToken"];
-    const tenantId = value["tenantId"];
-    const projectId = value["projectId"];
-    const authority = value["authority"];
+    const hostToken = value.hostToken;
+    const tenantId = value.tenantId;
+    const projectId = value.projectId;
+    const authority = value.authority;
     if (
         typeof hostToken !== "string" ||
         !isToken(hostToken) ||

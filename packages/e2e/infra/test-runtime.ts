@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { mock } from "node:test";
 import { chromium } from "playwright-core";
 import { dataTestId } from "../../web/src/data-testid.ts";
-import { ANONYMOUS_CREDENTIAL_KEY } from "../../web/src/services/identity/anonymous-identity-api.ts";
+import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../web/src/services/identity/anonymous-identity-api.ts";
 import { ChatApi, text } from "./chat-api.ts";
 import type { E2EHarness } from "./harness.ts";
 import { LocalStack, repository } from "./local-stack.ts";
@@ -14,7 +14,7 @@ export async function createTestRuntime(harness: E2EHarness) {
     // model-provider credentials. Chat, Platform and Runtime are real processes.
     const binary = join(harness.workDirectory, "agent.sh");
     await mkdir(join(harness.workDirectory, "agent-state"), { recursive: true });
-    const agent = join(repository, "third-party/mobius/e2e/fixtures/fake-acp-agent/src/cli.ts");
+    const agent = join(repository, "third-party/mobius/tests/agent-daemon/fixtures/fake-acp-agent/src/cli.ts");
     await writeFile(
         binary,
         `#!/bin/sh\nif [ "$1" = "--version" ]; then echo '1.2.0'; exit 0; fi\nexport MOBIUS_FAKE_ACP_STATE_DIRECTORY=${JSON.stringify(join(harness.workDirectory, "agent-state"))}\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(agent)} --agent-name OpenCode "$@"\n`,
@@ -39,7 +39,10 @@ export async function createTestRuntime(harness: E2EHarness) {
 
         const openChat = async () => {
             await page.goto(stack.chatOrigin);
-            const stored = await page.waitForFunction((key) => localStorage.getItem(key), ANONYMOUS_CREDENTIAL_KEY);
+            const stored = await page.waitForFunction(
+                (key) => localStorage.getItem(key),
+                ANONYMOUS_CREDENTIAL_KEY_NAME,
+            );
             const user = await chat.useBrowserIdentity(
                 JSON.parse(text(await stored.jsonValue(), "stored browser identity")),
             );

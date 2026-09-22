@@ -1,15 +1,10 @@
-import * as v from "valibot";
+import {
+    centralLocalStorage,
+    type StoredSessionActiveTurn,
+    sessionActiveTurnEntry,
+} from "@/services/local-storage/central-local-storage";
 
-const commandIdSchema = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
-const activeTurnSchema = v.pipe(
-    v.variant("kind", [
-        v.object({ commandId: commandIdSchema, kind: v.literal("submitting") }),
-        v.object({ commandId: commandIdSchema, kind: v.literal("accepted"), turnId: commandIdSchema }),
-    ]),
-    v.readonly(),
-);
-
-export type SessionActiveTurn = { readonly kind: "idle" } | v.InferOutput<typeof activeTurnSchema>;
+export type SessionActiveTurn = { readonly kind: "idle" } | StoredSessionActiveTurn;
 
 type SessionActiveTurnEvent =
     | { readonly kind: "submission-started"; readonly commandId: string }
@@ -27,32 +22,16 @@ function transitionSessionActiveTurn(state: SessionActiveTurn, event: SessionAct
     }
 }
 
-function readPersistedTurn(storage: Storage, key: string): SessionActiveTurn {
-    const encoded = storage.getItem(key);
-    if (encoded === null) {
-        return { kind: "idle" };
-    }
-    try {
-        const parsed = v.safeParse(activeTurnSchema, JSON.parse(encoded));
-        return parsed.success ? parsed.output : { kind: "idle" };
-    } catch {
-        return { kind: "idle" };
-    }
-}
-
-export function createSessionActiveTurn(options: {
-    readonly sessionId: string;
-    readonly initial: SessionActiveTurn;
-    readonly storage: Storage;
-}) {
-    const storageKey = `mobius.session-active-turn.v1:${options.sessionId}`;
-    let state = options.initial.kind === "idle" ? readPersistedTurn(options.storage, storageKey) : options.initial;
+export function createSessionActiveTurn(options: { readonly sessionId: string; readonly initial: SessionActiveTurn }) {
+    const entry = sessionActiveTurnEntry(options.sessionId);
+    let state =
+        options.initial.kind === "idle" ? (centralLocalStorage.read(entry) ?? { kind: "idle" }) : options.initial;
 
     const persist = (): void => {
         if (state.kind === "idle") {
-            options.storage.removeItem(storageKey);
+            centralLocalStorage.remove(entry);
         } else {
-            options.storage.setItem(storageKey, JSON.stringify(state));
+            centralLocalStorage.write(entry, state);
         }
     };
     persist();

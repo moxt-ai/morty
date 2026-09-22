@@ -19,7 +19,7 @@ export function DraftChatControls({
     readonly disabled: boolean;
     readonly onSettings: (settings: ChatDraftConfiguration | null) => void;
 }) {
-    const [store] = useState(() => createDraftControlsStore(botId, requests, onSettings, window.localStorage));
+    const [store] = useState(() => createDraftControlsStore(botId, requests, onSettings));
     const viewModel = useStore(store);
     const { settings } = viewModel;
     const [revision, retry] = useState(0);

@@ -58,6 +58,48 @@ function errorCode(cause: unknown): unknown {
     return cause !== null && typeof cause === "object" && "code" in cause ? cause.code : undefined;
 }
 
+interface ErrorCause {
+    readonly name: string;
+    readonly message: string;
+    readonly code?: string;
+    readonly stack?: string;
+    readonly cause?: ErrorCause;
+    readonly errors?: readonly ErrorCause[];
+}
+
+function sanitizeErrorText(value: string) {
+    return value
+        .replace(/mobius_(?:anon|pair|transfer)_v2\.[A-Za-z0-9._-]+/gu, "[REDACTED]")
+        .replace(/([?&](?:token|code)=)[^&\s#]+/giu, "$1[REDACTED]");
+}
+
+function serializeErrorCause(cause: unknown, seen = new WeakSet<object>()): ErrorCause {
+    if (!(cause instanceof Error)) {
+        return {
+            name: "UnknownError",
+            message: typeof cause === "string" ? sanitizeErrorText(cause) : "Unknown failure",
+        };
+    }
+    if (seen.has(cause)) {
+        return { name: cause.name, message: sanitizeErrorText(cause.message) };
+    }
+    seen.add(cause);
+    const code = errorCode(cause);
+    const nested = cause.cause === undefined ? undefined : serializeErrorCause(cause.cause, seen);
+    const errors =
+        cause instanceof AggregateError
+            ? [...cause.errors].map((error) => serializeErrorCause(error, seen))
+            : undefined;
+    return {
+        name: cause.name,
+        message: sanitizeErrorText(cause.message),
+        ...(typeof code === "string" ? { code } : {}),
+        ...(cause.stack === undefined ? {} : { stack: sanitizeErrorText(cause.stack) }),
+        ...(nested === undefined ? {} : { cause: nested }),
+        ...(errors === undefined ? {} : { errors }),
+    };
+}
+
 export async function runSetup(args: readonly string[], host: SetupHost): Promise<number> {
     const signal = AbortSignal.any([host.signal, AbortSignal.timeout(300000)]);
     const clock = host.clock ?? {
@@ -72,8 +114,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         emit({ status: "progress", stage, message });
     }
 
-    function fail(code: string): never {
-        throw Object.assign(new Error(code), { code });
+    function fail(code: string, cause?: Error): never {
+        throw Object.assign(new Error(code, cause === undefined ? undefined : { cause }), { code });
     }
 
     function object(value: unknown): Record<string, unknown> {
@@ -269,7 +311,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         });
         const value = object(await response.json());
         if (!response.ok) {
-            fail(text(object(value.error).code, /^[A-Za-z0-9_-]+$/u));
+            const failure = object(value.error);
+            const code = text(failure.code, /^[A-Za-z0-9_-]+$/u);
+            const message =
+                typeof failure.message === "string" ? failure.message : `Request failed with HTTP ${response.status}`;
+            fail(code, Object.assign(new Error(message), { name: "RemoteError" }));
         }
         return value;
     }
@@ -761,6 +807,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                         : cause instanceof Error && cause.name === "TimeoutError"
                           ? "TIMEOUT"
                           : "SETUP_FAILED",
+                cause: serializeErrorCause(cause),
             },
         });
         return 1;

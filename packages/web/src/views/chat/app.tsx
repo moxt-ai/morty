@@ -38,16 +38,18 @@ import {
 import {
     type DesktopSidebarLayoutState,
     decodeSidebarLayoutPreference,
-    encodeSidebarLayoutPreference,
     toggleSidebar,
 } from "@/services/chat/workspace-layout";
+import {
+    centralLocalStorage,
+    type StoredSidebarLayout,
+    sidebarLayoutEntry,
+} from "@/services/local-storage/central-local-storage";
 import type { ChannelConnection, ChannelHistory } from "@/view-models/chat/channel";
 import { isIdentifier } from "@/view-models/chat/channel";
 import { createChannelRouteStore } from "@/view-models/chat/channel-route-store";
 import { createChannelWorkspaceStore } from "@/view-models/chat/channel-workspace-store";
 import { useChatStore } from "@/view-models/chat-store";
-
-const SIDEBAR_LAYOUT_STORAGE_KEY = "mobius:conversation-sidebar-layout";
 
 export interface ChatProps {
     readonly channelId: string;
@@ -58,12 +60,17 @@ export interface ChatProps {
     readonly projectId: string;
 }
 
-function initialSidebarLayout(): DesktopSidebarLayoutState {
-    try {
-        return decodeSidebarLayoutPreference(window.localStorage.getItem(SIDEBAR_LAYOUT_STORAGE_KEY));
-    } catch {
+function toLayoutState(stored: StoredSidebarLayout | null): DesktopSidebarLayoutState {
+    if (stored === null) {
         return decodeSidebarLayoutPreference(null);
     }
+    return stored.kind === "expanded"
+        ? { kind: "expanded", width: stored.width }
+        : { kind: "collapsed", rememberedWidth: stored.rememberedWidth };
+}
+
+function initialSidebarLayout(): DesktopSidebarLayoutState {
+    return toLayoutState(centralLocalStorage.read(sidebarLayoutEntry));
 }
 
 function ChannelErrorPage({ message, title }: { readonly message: string; readonly title: string }) {
@@ -154,9 +161,11 @@ function ChannelWorkspace({
     const [sidebarLayout, setSidebarLayout] = useState<DesktopSidebarLayoutState>(initialSidebarLayout);
 
     useEffect(() => {
-        try {
-            window.localStorage.setItem(SIDEBAR_LAYOUT_STORAGE_KEY, encodeSidebarLayoutPreference(sidebarLayout));
-        } catch {}
+        const stored: StoredSidebarLayout =
+            sidebarLayout.kind === "expanded"
+                ? { kind: "expanded", width: sidebarLayout.width }
+                : { kind: "collapsed", rememberedWidth: sidebarLayout.rememberedWidth };
+        centralLocalStorage.write(sidebarLayoutEntry, stored);
     }, [sidebarLayout]);
 
     useEffect(() => {

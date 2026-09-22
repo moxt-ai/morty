@@ -10,6 +10,7 @@
     },
     "scripts": {
         "dev": "vite",
+        "local-dev": "node scripts/local-dev.cjs",
         "build": "pnpm build:setup && vite build",
         "build:setup": "pnpm --filter @moxt-ai/mobius-chat-setup build",
         "publish:web-assets": "bash scripts/publish-web-assets.sh",

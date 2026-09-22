@@ -1,4 +1,5 @@
-const SELECTED_BOT_KEY_PREFIX = "mobius.chat.selectedBot.v1:";
+import { centralLocalStorage, selectedBotEntry } from "@/services/local-storage/central-local-storage";
+
 const identifierPattern = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u;
 
 export interface SelectedBotPreference {
@@ -6,26 +7,14 @@ export interface SelectedBotPreference {
     readonly write: (botId: string) => void;
 }
 
-export function createSelectedBotPreference(storage: Storage, projectId: string): SelectedBotPreference {
-    const key = `${SELECTED_BOT_KEY_PREFIX}${encodeURIComponent(projectId)}`;
+export function createSelectedBotPreference(projectId: string): SelectedBotPreference {
     return {
-        read: () => {
-            try {
-                const botId = storage.getItem(key);
-                return botId !== null && identifierPattern.test(botId) ? botId : null;
-            } catch {
-                return null;
-            }
-        },
+        read: () => centralLocalStorage.read(selectedBotEntry(projectId)),
         write: (botId) => {
             if (!identifierPattern.test(botId)) {
                 return;
             }
-            try {
-                storage.setItem(key, botId);
-            } catch {
-                // Selection remains usable for this page when browser storage is unavailable.
-            }
+            centralLocalStorage.write(selectedBotEntry(projectId), botId);
         },
     };
 }

@@ -1,19 +1,11 @@
 import { type DrizzleD1Database, drizzle } from "drizzle-orm/d1";
+import * as v from "valibot";
+import { d1DatabaseBindingSchema } from "../../infra/cloud-bindings.ts";
 import * as schema from "./index.ts";
 
 export type Database = DrizzleD1Database<typeof schema>;
 
-function isD1Database(value: unknown): value is D1Database {
-    return (
-        typeof value === "object" &&
-        value !== null &&
-        "prepare" in value &&
-        typeof value.prepare === "function" &&
-        "batch" in value &&
-        typeof value.batch === "function"
-    );
-}
-
 export function createDatabase(value: unknown): Database | null {
-    return isD1Database(value) ? drizzle(value, { schema }) : null;
+    const parsed = v.safeParse(d1DatabaseBindingSchema, value);
+    return parsed.success ? drizzle(parsed.output, { schema }) : null;
 }

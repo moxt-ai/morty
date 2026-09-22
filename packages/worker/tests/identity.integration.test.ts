@@ -1,16 +1,16 @@
 import * as v from "valibot";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterAll, beforeAll, expect, test } from "vitest";
 import worker from "../src/application.ts";
 import { APP_ORIGIN, clerk as issuer } from "./support/clerk.ts";
 import { accountRequest, createIdentityFixture } from "./support/identity-fixture.ts";
 
 let fixture: Awaited<ReturnType<typeof createIdentityFixture>>;
 
-beforeEach(async () => {
+beforeAll(async () => {
     fixture = await createIdentityFixture();
 });
 
-afterEach(async () => {
+afterAll(async () => {
     await fixture.close();
 });
 

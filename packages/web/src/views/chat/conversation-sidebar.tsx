@@ -47,6 +47,7 @@ export function ConversationSidebar({
     onOpen,
     onOpenSession,
     onNewConversation,
+    endRemoteAccess,
     createTransfer,
     activeSession,
     directoryRevision,
@@ -69,6 +70,7 @@ export function ConversationSidebar({
     readonly onOpen: (session: ManagedChatSession) => void;
     readonly onOpenSession: (session: OpenMobiusSession) => void;
     readonly onNewConversation: () => void;
+    readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
     readonly activeSession:
         | { readonly kind: "none" }
@@ -193,7 +195,24 @@ export function ConversationSidebar({
                 id="chat-conversations"
                 className={`${expanded ? "block" : "hidden"} max-h-48 min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5 sm:block sm:max-h-none`}
             >
-                {directory.kind === "loading" && <p role="status">Loading conversations…</p>}
+                {directory.kind === "loading" && (
+                    <div
+                        aria-label="Loading conversations"
+                        className="space-y-1 animate-pulse motion-reduce:animate-none"
+                        role="status"
+                    >
+                        <span className="sr-only">Loading conversations…</span>
+                        <div aria-hidden="true" className="px-3 py-2.5">
+                            <div className="h-3.5 w-3/4 rounded-full bg-border" />
+                        </div>
+                        <div aria-hidden="true" className="px-3 py-2.5">
+                            <div className="h-3.5 w-1/2 rounded-full bg-border" />
+                        </div>
+                        <div aria-hidden="true" className="px-3 py-2.5">
+                            <div className="h-3.5 w-2/3 rounded-full bg-border" />
+                        </div>
+                    </div>
+                )}
                 {(directory.kind === "failed" || directory.kind === "stale") && (
                     <p role="alert" className="text-sm text-destructive">
                         {directory.message}
@@ -246,20 +265,16 @@ export function ConversationSidebar({
                                                 className="size-4 animate-spin motion-reduce:animate-none"
                                             />
                                         </span>
-                                    ) : (
+                                    ) : activeSession.status === "failed" ? (
                                         <span
-                                            aria-label={`Session ${activeSession.status}`}
-                                            className={
-                                                activeSession.status === "failed"
-                                                    ? "text-xs text-destructive"
-                                                    : "text-xs text-copy-tertiary"
-                                            }
+                                            aria-label="Session failed"
+                                            className="text-xs text-destructive"
                                             data-testid={dataTestId.sessionStatus}
                                             role="status"
                                         >
-                                            {activeSession.status === "failed" ? "Failed" : "Idle"}
+                                            Failed
                                         </span>
-                                    ))}
+                                    ) : null)}
                             </button>
                         </ContextMenu.Trigger>
                         <ContextMenu.Portal>
@@ -277,6 +292,19 @@ export function ConversationSidebar({
                                 >
                                     Archive conversation
                                 </ContextMenu.Item>
+                                {activeId === session.id && (
+                                    <ContextMenu.Item
+                                        className="cursor-pointer rounded-md px-3 py-2 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-accent"
+                                        onSelect={() => {
+                                            const controller = lifetime.current;
+                                            if (controller !== null) {
+                                                void endRemoteAccess(controller.signal);
+                                            }
+                                        }}
+                                    >
+                                        End remote access
+                                    </ContextMenu.Item>
+                                )}
                             </ContextMenu.Content>
                         </ContextMenu.Portal>
                     </ContextMenu.Root>

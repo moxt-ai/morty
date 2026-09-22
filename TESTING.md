@@ -20,9 +20,10 @@ duplicate scenario.
 
 ### Browser product journeys
 
-`packages/e2e/conversation.e2e.test.ts` covers paired and newly created
-workspaces. `packages/e2e/setup.e2e.test.ts` covers setup handoff,
-native-session import, remote work, media, reload, and revocation. These two
+`packages/e2e/conversation.e2e.test.ts` covers one paired conversation from an
+image prompt through an Agent tool response and persisted reload.
+`packages/e2e/setup.e2e.test.ts` covers setup handoff, native-session import,
+reload, and revocation. These two
 files contain the product E2E journeys:
 
 ```bash
@@ -36,7 +37,7 @@ See `packages/e2e/README.md` for scenario ownership.
 
 ### Web application integration
 
-`packages/web/tests` renders the complete authenticated application in a lightweight
+`packages/web/tests` renders the authenticated workspace application in a lightweight
 DOM and drives it through visible user-facing elements. Run it with:
 
 ```bash
@@ -47,16 +48,19 @@ The production router, API clients, view-models, Zustand stores, React views, Ch
 Worker, Project Durable Objects, Platform Worker, Platform Durable Objects, and
 WebSocket transports all participate. They run in local in-memory Cloudflare
 runtimes. A single stateful fake Agent-daemon replaces the external local process and
-answers the real Runtime protocol for settings, sessions, messages, events, and file
-reads. Do not inject stores, render an isolated component, or replace Chat or Platform
-with response tables.
+answers the real Runtime protocol with a representative Agent and model directory,
+sessions, messages, events, and file reads. Do not inject stores, render an isolated
+component, or replace Chat or Platform with response tables.
 
 This is the default owner for browser-side branching that needs the real Chat and
 Platform path, including loading, reconnecting, queued work, history reconciliation,
-errors, and rendering. Keep it as one advancing journey instead of rebuilding the
-stack for many cases. Browser E2E retains only the proof that deployed-style
+errors, and rendering. A few business-owned cases share one production local stack
+and create an isolated Project for each scenario; do not rebuild Chat and Platform
+for every branch. Browser E2E retains only the proof that deployed-style
 processes and a real browser connect. A Web bug should not require another full-stack
-E2E step when it can be reproduced through this in-memory stack.
+E2E step when it can be reproduced through this in-memory stack. Bot management,
+Agent configuration filtering, media rendering, local-file pulling, and Runtime
+scoping therefore live in this journey; the browser suite does not repeat them.
 
 ### Worker integration
 
@@ -68,7 +72,11 @@ pnpm test:worker
 ```
 
 The shared fixtures own application composition, migrations, credentials, external
-fakes, and cleanup. Slack tests start empty and create app registration, binding,
+fakes, and cleanup. A suite shares its production local runtime when each case can
+create isolated users and Projects through public operations; do not rebuild the
+same Worker bundle and Platform for every case. `startTestPlatform` starts the production Platform Worker,
+Durable Objects, migrations, and HTTP/WebSocket boundary with isolated local
+Cloudflare storage; it does not simulate Platform responses. Slack tests start empty and create app registration, binding,
 OAuth, and connection state through production HTTP operations. Direct persistence
 setup is reserved for storage and migration behavior or state owned by an upstream
 component outside the test.
@@ -78,11 +86,12 @@ behavior belong in `identity.integration.test.ts`; the setup CLI and browser
 handoff belong to the existing product journey in `packages/e2e/setup.e2e.test.ts`.
 Slack journeys stay under `slack/app`. Related state transitions should advance
 through one journey instead of rebuilding the same user, database, and Platform
-peer in separate cases. The small shared `support/identity-fixture.ts` starts real
-Chat Durable Objects and, for identity flows, the real Platform Worker in memory.
-Chat creation journeys keep the Chat Worker and its Project Durable Objects real
-while replacing the external Platform service with one stateful protocol peer for
-both successful and failure behavior.
+stack in separate cases. The small shared `support/identity-fixture.ts` starts real
+Chat Durable Objects and composes them with the real local Platform. Chat creation
+uses production Chat and Platform business operations end to end; only the external
+Agent-daemon process is replaced by the shared protocol fake. Narrow peers are
+reserved for a boundary behavior that a healthy Platform cannot produce, such as
+rejecting an HTTP redirect.
 Slack journeys compose the production Slack application and queue consumer with
 stateful fakes at the external Clerk, Slack, Identity, and Platform ports.
 

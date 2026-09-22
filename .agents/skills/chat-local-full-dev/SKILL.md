@@ -16,8 +16,44 @@ For deployed logs and incidents use `worker-debug`.
 ## Quick start
 
 ```sh
-node scripts/local-dev.cjs prepare
+scripts/local-dev web-server-mobius
 ```
+
+The repository provides one local-development entrypoint, `scripts/local-dev`.
+It reads the owner-provided `MOBIUS_CHAT_LOCAL_APP_ID` and
+`MOBIUS_CHAT_LOCAL_APP_SECRET` values and passes them as explicit arguments to
+the dependency-free worker supervisor; `scripts/local-dev.cjs` never reads
+those environment variables directly.
+
+Modes:
+
+| Mode | Services | Platform |
+| --- | --- | --- |
+| `web` | local Chat web/Worker | staging Platform |
+| `web-server` | local Chat web/Worker + local Platform | supplied app credential |
+| `web-server-mobius` | local Chat + local Platform + local Mobius relay | local |
+| `web-server-mobius-cli` | mode above + local Mobius CLI | local |
+
+Examples:
+
+```sh
+scripts/local-dev web
+scripts/local-dev web-server
+scripts/local-dev web-server-mobius
+scripts/local-dev web-server-mobius-cli
+```
+
+Use `node scripts/local-dev.cjs ...` for status, logs, and removal. The
+`prepare` command remains available for automation and accepts explicit
+`--app-id` and `--app-secret` arguments. Full-stack modes also force the local
+Platform App to `cloudRetention: false`, including reused and owner-supplied
+Apps, so history restoration always exercises the non-cloud-retention path.
+
+`prepare` stays attached in the foreground after it prints its ready record.
+For agent-driven development, start the wrapper in the background and poll
+`node scripts/local-dev.cjs status --state-dir <stateDir>`; the record contains
+the Chat URL and, for server modes, the local Platform and Mobius URLs. Stop it
+with Ctrl-C or use `remove` when finished.
 
 `prepare` prints one JSON object on stdout. Progress goes to stderr, so stdout
 stays parseable. Read these fields instead of assuming defaults:
@@ -42,6 +78,13 @@ Check health before debugging:
 node scripts/local-dev.cjs status --state-dir <stateDir>
 ```
 
+Before pairing an agent Runtime, verify the `third-party/mobius` submodule
+matches the commit recorded by the branch
+(`git submodule status third-party/mobius`); a stale checkout speaks an older
+relay protocol than the published CLI daemon and fails with WebSocket close
+code 1008 `Invalid protocol message`. Repair with
+`git submodule update --init third-party/mobius` and re-run `prepare --force`.
+
 Then drive the app with whatever browser tool this environment provides - a
 dedicated CLI, the harness browser, Playwright, or manual checks. Do not assume a
 specific tool.
@@ -53,8 +96,14 @@ specific tool.
    `vite.config.ts`, and `wrangler.jsonc`. Inspect `git status --short` and keep
    user changes intact.
 2. Require the pinned Node.js and pnpm from `package.json` `engines` (Node 24).
-   Install locked dependencies only when missing or stale; never upgrade them.
-3. Run `node scripts/local-dev.cjs prepare`. It builds the Worker and setup
+   Install locked root dependencies only when missing or stale; never upgrade them.
+   The local-development entrypoint checks the Mobius submodule's independent
+   `pnpm-lock.yaml`, installs its dependencies when they are missing or stale,
+   and builds relay web assets for Mobius modes.
+   If diagnosing startup manually, use
+   `pnpm --dir third-party/mobius install --frozen-lockfile`; a root `pnpm install`
+   does not install the submodule workspace.
+3. Run `scripts/local-dev web-server`. It builds the Worker and setup
    bundle by default; pass `--no-build` only when those artifacts are fresh.
 4. Reproduce through a supported boundary: the browser app for user flows, or the
    Chat HTTP API for a narrower contract. Prefer the real app so the reproduction
@@ -74,9 +123,9 @@ specific tool.
    D1 and Durable Object SQLite.
 7. Remove the stack when finished without removing retained screenshots:
 
-   ```sh
-   node scripts/local-dev.cjs remove --state-dir <stateDir>
-   ```
+```sh
+node scripts/local-dev.cjs remove --state-dir <stateDir>
+```
 
 ## Process model
 
@@ -87,10 +136,54 @@ specific tool.
 - **Platform fixture** - pinned Wrangler runs
   `packages/e2e/fixtures/wrangler.platform.jsonc` with an explicit
   `--persist-to`. It authenticates local developer calls with provider `e2e` and
-  token `mobius-chat-local-e2e`.
+  token `mobius-chat-local-e2e`. `prepare` creates or updates its App with
+  cloud retention disabled.
 - **Configuration** - `prepare` passes variables through Wrangler `--var`
   arguments instead of writing `.dev.vars`, so the checkout is never modified and
   no credentials land on disk. Treat the generated values as local-only secrets.
+
+## Pairing a local agent Runtime
+
+`prepare` only starts the web and relay services. To exercise a real agent
+(for example Codex or Claude Code) through the local stack, run:
+
+```sh
+node scripts/local-dev.cjs pair --state-dir <stateDir> [--harness codex] [--workspace DIR]
+```
+
+`pair` mints a fresh browser identity and one-time pairing ticket against the
+local Chat Worker, downloads the served `setup.mjs`, and runs its `pair` flow
+with Mobius configuration and state isolated under the state directory:
+
+- `DOCUMENT_DIR` is set to `<stateDir>/documents`, so the setup script writes
+  its private configuration there instead of the user's documents directory.
+- `MOBIUS_STATE_DIRECTORY` is set to `<stateDir>/cli-state`, so the Runtime CLI
+  saves connections and audit data there instead of `~/.mobius`.
+- `--workspace` defaults to `<stateDir>/workspace`, the paired default
+  workspace.
+
+The command waits until the Runtime reports ready (up to five minutes), then
+prints one JSON record on stdout with `browserIdentity`
+(`token`, `userId`, `projectId`), `botId`, `workspace`, `pairLog`, and
+`runtimePid`. Inject the identity into the browser before opening the app:
+
+```js
+localStorage.setItem(
+    "mobius.anonymous-credential.v2",
+    JSON.stringify({ token, userId, projectId }),
+);
+localStorage.setItem(
+    "mobius.workspace.v2",
+    JSON.stringify({ userId, projectId }),
+);
+```
+
+Paired runtimes are recorded in the stack record; `remove` stops them with the
+rest of the stack. The pairing ticket binds to the freshly minted identity, so
+a browser that already holds another identity must clear or overwrite the two
+localStorage keys above. Runtime setup output is written to `pairLog`; bounded
+daemon diagnostics are under `<cliState>/logs/daemon.log`. Read both with
+`logs --worker runtime`.
 
 ## Debugging
 
@@ -98,6 +191,7 @@ Read or follow logs:
 
 ```sh
 node scripts/local-dev.cjs logs --state-dir <stateDir> --worker chat --lines 300
+node scripts/local-dev.cjs logs --state-dir <stateDir> --worker runtime --lines 300
 node scripts/local-dev.cjs logs --state-dir <stateDir> --worker all --follow
 node scripts/local-dev.cjs logs --state-dir <stateDir> --filter 'PLATFORM_UNAVAILABLE|ERROR'
 ```
@@ -133,8 +227,13 @@ Details, inspection commands, and a failure-mode table are in
 - `prepare [--state-dir DIR] [--platform-port N] [--chat-port N] [--force] [--no-build]`
   - provision Platform, seed R2, start both Workers, verify readiness, print the
     JSON descriptor. Idempotent: a live stack is reused, a dead one is replaced.
+    Full-stack modes force the local App to non-cloud retention.
+- `pair --state-dir DIR [--harness ID] [--workspace DIR]`
+  - pair a local agent Runtime through the served setup bundle with
+    `DOCUMENT_DIR` and `MOBIUS_STATE_DIRECTORY` isolated under the state
+    directory; prints the browser identity to adopt.
 - `status --state-dir DIR` - report process and HTTP health for a stack.
-- `logs --state-dir DIR [--worker chat|platform|all] [--lines N] [--filter REGEX] [--follow]`
-  - read or follow captured Worker logs.
+- `logs --state-dir DIR [--worker chat|platform|runtime|all] [--lines N] [--filter REGEX] [--follow]`
+  - read or follow captured Worker and paired Runtime logs.
 - `remove --state-dir DIR [--keep-state]` - stop both process groups and delete the
   state directory.

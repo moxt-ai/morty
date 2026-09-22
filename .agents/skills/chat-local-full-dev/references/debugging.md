@@ -9,6 +9,7 @@ Durable Objects, so most deployed failure modes reproduce locally.
 | --- | --- |
 | Chat Worker output | `chatLog` from `prepare` |
 | Platform fixture output | `platformLog` from `prepare` |
+| Paired Runtime output | `pairLog` and `<cliState>/logs/daemon.log` from each stack `runtimes` record (`logs --worker runtime`) |
 | Chat D1 / Durable Objects / R2 / KV | `chatPersist` |
 | Platform D1 / Durable Objects / R2 / KV | `platformPersist` |
 | Stack record (pids, origins, paths) | `<stateDir>/stack.json` |
@@ -67,12 +68,16 @@ part of the live state.
 
 | Symptom | Likely cause | Check |
 | --- | --- | --- |
+| Agent Runtime reconnect loop, close code 1008 `Invalid protocol message` | `third-party/mobius` checkout is older than the published CLI daemon the setup bundle starts | `git submodule status third-party/mobius`; run `git submodule update --init third-party/mobius`, then `prepare --force` |
+| Platform Worker process exits after `Can't call WebSocket send() after close()` | Relay sent to a replaced/closing daemon socket without a readyState guard | `platformLog`; the uncaught TypeError is a relay bug - fix it in `third-party/mobius` rather than retrying |
 | `PLATFORM_UNAVAILABLE` (502) on first request | Platform D1 schema is older than the code | `platformLog`; re-run `prepare --force` to recreate the state directory |
 | `SETUP_ARTIFACT_UNAVAILABLE` (503) on `/setup.mjs` | R2 seed missing in this state directory | Re-run `prepare --force`; confirm the seed step logged success |
 | App shows only a spinner, browser console logs `failed_to_load_clerk_js` | Placeholder Clerk publishable key cannot load Clerk JS | Set `CHAT_LOCAL_CLERK_PUBLISHABLE_KEY` to a valid `pk_test_...` before `prepare` |
 | `INVALID_REQUEST` (400) with a generic message | Schema validation rejected the body | Find the logged typed error and its validation issue path in `chatLog` |
 | `NOT_FOUND` on a Session or Conversation | Wrong Project, or the record lives in another state directory | Inspect `chat_managed_session` and the stack's `appId` |
 | Process exited but the port stays bound | A previous stack was not removed | `status` then `remove --state-dir` the old stack |
+| Platform health times out with unresolved Mobius packages in `platformLog` | The submodule's independent dependencies were not installed | Re-run the current `scripts/local-dev` entrypoint; for an older checkout run `pnpm --dir third-party/mobius install --frozen-lockfile` first |
+| Mobius relay exits because `packages/web/dist` does not exist | Relay web assets were not built after checking out the submodule | Re-run the current `scripts/local-dev` entrypoint without `--no-build` |
 
 ## Boundary checklist
 

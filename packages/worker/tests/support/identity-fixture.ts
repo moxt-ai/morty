@@ -1,12 +1,12 @@
 import { fileURLToPath } from "node:url";
+import { miniflareDurableObjects } from "@moxt-ai/mobius-test/cloudflare";
+import { startTestPlatform } from "@moxt-ai/mobius-test/platform";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import * as v from "valibot";
 import { expect } from "vitest";
 import worker from "../../src/application.ts";
-import { createMobiusPlatformFixture } from "../infra/mobius.ts";
 import { APP_ORIGIN, clerk as issuer } from "./clerk.ts";
-import { miniflareDurableObjects } from "./miniflare-durable-objects.ts";
 
 export function accountRequest(token?: string, projectId?: string): Request {
     return new Request(
@@ -15,22 +15,17 @@ export function accountRequest(token?: string, projectId?: string): Request {
     );
 }
 
-type PlatformFixture = {
-    readonly appId: string;
-    readonly appCredential: string;
-    readonly baseUrl: string;
-    readonly close: () => Promise<void>;
-};
-
 export async function createIdentityFixture(
     options: {
         readonly appOrigin?: string;
-        readonly platform?: PlatformFixture;
+        readonly platformAllowedOrigins?: ReadonlySet<string>;
         readonly workerEntryPoint?: string;
         readonly wranglerConfiguration?: URL;
     } = {},
 ) {
-    const platform = options.platform ?? (await createMobiusPlatformFixture());
+    const platform = await startTestPlatform(
+        options.platformAllowedOrigins === undefined ? {} : { allowedOrigins: options.platformAllowedOrigins },
+    );
     const appOrigin = options.appOrigin ?? APP_ORIGIN;
     const listener = new URL(appOrigin);
     const bundle = await build({
@@ -133,6 +128,7 @@ export async function createIdentityFixture(
         };
         return {
             baseConfiguration,
+            connectAgent: platform.connectAgent,
             createAnonymousUser,
             dispatchFetch: cloudflare.dispatchFetch.bind(cloudflare),
             environment,
