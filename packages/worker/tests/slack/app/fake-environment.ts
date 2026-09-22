@@ -94,6 +94,11 @@ export class FakeMobius implements SlackPlatformGateway {
         return { status: "pending" };
     };
 
+    readonly chatAgents = async (_projectId: string, signal: AbortSignal) => {
+        signal.throwIfAborted();
+        return [{ runtimeId: "runtime-1", agentRef: "agent-1", online: true }];
+    };
+
     readonly openAutomatedChatSession = async (
         _projectId: string,
         selection: { readonly bindingId: string },

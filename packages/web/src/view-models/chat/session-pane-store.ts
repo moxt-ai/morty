@@ -70,56 +70,92 @@ export type LocalInteraction =
     | { readonly kind: "permission"; readonly permission: PermissionInteraction }
     | { readonly kind: "elicitation"; readonly elicitation: ElicitationInteraction };
 
-function acceptedUrlInteraction(interaction: ServiceInteraction): boolean {
-    if (
-        interaction.request.kind !== "elicitation" ||
-        interaction.request.mode !== "url" ||
-        interaction.state.kind !== "responded" ||
-        interaction.state.response.kind !== "elicitation"
-    ) {
-        return false;
+function interactionResponse(interaction: ServiceInteraction) {
+    return interaction.state.kind === "responded"
+        ? interaction.state.response
+        : interaction.state.kind === "resolved" && interaction.state.resolution.kind === "response_applied"
+          ? interaction.state.resolution.response
+          : null;
+}
+
+function permissionResponse(interaction: ServiceInteraction): PermissionInteraction["state"] | null {
+    const response = interactionResponse(interaction);
+    if (response?.kind !== "permission") {
+        return null;
     }
     try {
-        const response: unknown = JSON.parse(interaction.state.response.content);
-        return (
-            typeof response === "object" &&
-            response !== null &&
-            !Array.isArray(response) &&
-            Reflect.get(response, "action") === "accept"
-        );
+        const decoded: unknown = JSON.parse(response.content);
+        if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
+            return null;
+        }
+        const optionId = Reflect.get(decoded, "optionId");
+        const outcome = Reflect.get(decoded, "outcome");
+        if (typeof optionId !== "string" || (outcome !== "cancelled" && outcome !== "selected")) {
+            return null;
+        }
+        return interaction.state.kind === "responded"
+            ? { kind: "submitted", optionId, outcome }
+            : { kind: "resolved", optionId, outcome };
     } catch {
-        return false;
+        return null;
+    }
+}
+
+function elicitationResponse(interaction: ServiceInteraction): ElicitationInteraction["state"] | null {
+    const response = interactionResponse(interaction);
+    if (response?.kind !== "elicitation") {
+        return null;
+    }
+    try {
+        const decoded: unknown = JSON.parse(response.content);
+        if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
+            return null;
+        }
+        const action = Reflect.get(decoded, "action");
+        const content = Reflect.get(decoded, "content");
+        if ((action !== "accept" && action !== "cancel" && action !== "decline") || typeof content !== "string") {
+            return null;
+        }
+        return interaction.state.kind === "responded"
+            ? { action, content, kind: "submitted" }
+            : { action, content, kind: "resolved" };
+    } catch {
+        return null;
     }
 }
 
 function presentInteraction(interaction: ServiceInteraction): LocalInteraction | null {
     if (interaction.request.kind === "permission") {
-        return interaction.state.kind === "pending"
-            ? {
-                  kind: "permission",
-                  permission: {
-                      interactionId: interaction.interactionId,
-                      options: interaction.request.options,
-                      sessionId: interaction.sessionId,
-                      title: interaction.request.title,
-                      toolCallId: interaction.request.toolCallId,
-                      toolKind: interaction.request.toolKind,
-                  },
-              }
-            : null;
+        const response = permissionResponse(interaction);
+        if (interaction.state.kind !== "pending" && response === null) {
+            return null;
+        }
+        return {
+            kind: "permission",
+            permission: {
+                interactionId: interaction.interactionId,
+                options: interaction.request.options,
+                sessionId: interaction.sessionId,
+                state: response ?? { kind: "pending" },
+                title: interaction.request.title,
+                toolCallId: interaction.request.toolCallId,
+                toolKind: interaction.request.toolKind,
+            },
+        };
     }
-    if (interaction.state.kind !== "pending" && !acceptedUrlInteraction(interaction)) {
+    const response = elicitationResponse(interaction);
+    if (interaction.state.kind !== "pending" && response === null) {
         return null;
     }
     return {
         kind: "elicitation",
         elicitation: {
-            accepted: interaction.state.kind === "responded",
             fields: interaction.request.fields,
             interactionId: interaction.interactionId,
             message: interaction.request.message,
             mode: interaction.request.mode,
             sessionId: interaction.sessionId,
+            state: response ?? { kind: "pending" },
             url: interaction.request.url,
         },
     };
@@ -138,6 +174,58 @@ function replaceInteraction(
 ): readonly LocalInteraction[] {
     const remaining = current.filter((interaction) => interactionId(interaction) !== id);
     return replacement === null ? remaining : [...remaining, replacement];
+}
+
+function resolveElicitation(
+    current: readonly LocalInteraction[],
+    id: string,
+    action: "accept" | "cancel" | "complete" | "decline",
+): readonly LocalInteraction[] {
+    return current.map((interaction): LocalInteraction => {
+        if (
+            interaction.kind !== "elicitation" ||
+            interaction.elicitation.interactionId !== id ||
+            interaction.elicitation.state.kind === "resolved"
+        ) {
+            return interaction;
+        }
+        return {
+            kind: "elicitation",
+            elicitation: {
+                ...interaction.elicitation,
+                state: {
+                    action,
+                    content:
+                        interaction.elicitation.state.kind === "submitted" ? interaction.elicitation.state.content : "",
+                    kind: "resolved",
+                },
+            },
+        };
+    });
+}
+
+function resolvePermission(
+    current: readonly LocalInteraction[],
+    id: string,
+    outcome: PermissionInteractionResponse["outcome"],
+    optionId: string,
+): readonly LocalInteraction[] {
+    return current.map((interaction): LocalInteraction => {
+        if (
+            interaction.kind !== "permission" ||
+            interaction.permission.interactionId !== id ||
+            interaction.permission.state.kind === "resolved"
+        ) {
+            return interaction;
+        }
+        return {
+            kind: "permission",
+            permission: {
+                ...interaction.permission,
+                state: { kind: "resolved", optionId, outcome },
+            },
+        };
+    });
 }
 
 export interface SessionPaneStore {
@@ -178,6 +266,13 @@ export function sessionPanePresentation(
     tasks: SessionTaskControlsStore,
     queue: SessionMessageQueueStore,
 ) {
+    const waitingForInput = model.interactions.some(
+        (interaction) =>
+            (interaction.kind === "permission" && interaction.permission.state.kind !== "resolved") ||
+            (interaction.kind === "elicitation" &&
+                (interaction.elicitation.state.kind === "pending" ||
+                    interaction.elicitation.state.kind === "submitted")),
+    );
     const controlRunning =
         tasks.operation.kind === "running" ||
         tasks.operation.kind === "steering" ||
@@ -189,6 +284,7 @@ export function sessionPanePresentation(
         model.operation.kind === "sending" ||
         model.operation.kind === "configuring" ||
         tasks.operation.kind === "compacting" ||
+        waitingForInput ||
         queue.operation.kind === "submitting" ||
         tasks.operation.kind === "steering" ||
         tasks.operation.kind === "stopping";
@@ -521,38 +617,78 @@ export function createSessionPaneModel(options: {
                                             interactions: replaceInteraction(
                                                 current.interactions,
                                                 permission.interactionId,
-                                                { kind: "permission", permission },
+                                                {
+                                                    kind: "permission",
+                                                    permission: { ...permission, state: { kind: "pending" } },
+                                                },
                                             ),
                                         }));
                                     } else if (payload.kind === "session.permission.resolved") {
                                         const resolved = decodeSessionPermissionResolvedEvent(payload.encodedPayload);
                                         set((current) => ({
-                                            interactions: replaceInteraction(
+                                            interactions: resolvePermission(
                                                 current.interactions,
                                                 resolved.interactionId,
-                                                null,
+                                                resolved.outcome,
+                                                resolved.optionId,
                                             ),
                                         }));
+                                        try {
+                                            applyAuthoritativeInteraction(
+                                                await connected.interactions.read(
+                                                    sessionId,
+                                                    resolved.interactionId,
+                                                    AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
+                                                ),
+                                            );
+                                        } catch (cause) {
+                                            signal.throwIfAborted();
+                                            console.error("The resolved permission could not be refreshed", cause);
+                                        }
                                     } else if (payload.kind === "session.elicitation.requested") {
-                                        const elicitation = decodeSessionElicitationRequestedEvent(
+                                        const { accepted, ...elicitation } = decodeSessionElicitationRequestedEvent(
                                             payload.encodedPayload,
                                         );
                                         set((current) => ({
                                             interactions: replaceInteraction(
                                                 current.interactions,
                                                 elicitation.interactionId,
-                                                { kind: "elicitation", elicitation },
+                                                {
+                                                    kind: "elicitation",
+                                                    elicitation: {
+                                                        ...elicitation,
+                                                        state: accepted
+                                                            ? {
+                                                                  action: "accept",
+                                                                  content: "",
+                                                                  kind: "submitted",
+                                                              }
+                                                            : { kind: "pending" },
+                                                    },
+                                                },
                                             ),
                                         }));
                                     } else if (payload.kind === "session.elicitation.resolved") {
                                         const resolved = decodeSessionElicitationResolvedEvent(payload.encodedPayload);
                                         set((current) => ({
-                                            interactions: replaceInteraction(
+                                            interactions: resolveElicitation(
                                                 current.interactions,
                                                 resolved.interactionId,
-                                                null,
+                                                resolved.action,
                                             ),
                                         }));
+                                        try {
+                                            applyAuthoritativeInteraction(
+                                                await connected.interactions.read(
+                                                    sessionId,
+                                                    resolved.interactionId,
+                                                    AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
+                                                ),
+                                            );
+                                        } catch (cause) {
+                                            signal.throwIfAborted();
+                                            console.error("The resolved elicitation could not be refreshed", cause);
+                                        }
                                     }
                                 }
                                 if (

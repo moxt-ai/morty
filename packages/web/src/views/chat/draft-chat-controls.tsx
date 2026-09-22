@@ -15,7 +15,7 @@ export function DraftChatControls({
     onSettings,
 }: {
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "workspace" | "workspaceDirectory" | "selectAgent" | "agentSettings">;
+    readonly requests: Pick<BotChatApi, "workspace" | "workspaceDirectory" | "agentSettings">;
     readonly disabled: boolean;
     readonly onSettings: (settings: ChatDraftConfiguration | null) => void;
 }) {
@@ -80,12 +80,9 @@ export function DraftChatControls({
         );
     }
     const switching = settings.kind === "switching";
-    const selected = settings.workspace.selected;
     const selectedHarness = switching
         ? settings.selectedHarness
-        : selected === null
-          ? ""
-          : `${selected.runtimeId}:${selected.agentRef}`;
+        : `${settings.selectedAgent.runtimeId}:${settings.selectedAgent.agentRef}`;
     const options = switching ? [] : settings.options;
     const model = options.find((option) => option.category === "model" && option.type !== "boolean");
     return (

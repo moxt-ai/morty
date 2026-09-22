@@ -214,3 +214,28 @@ test("Given an open Session loses its Runtime, When the same Runtime reconnects,
         await waitForText(`[data-testid="${dataTestId.botConnectionStatus}"]`, "Connected");
     });
 });
+
+test("Given a conversation cannot load its Session, When Chat opens it, Then the client shows the load error", async () => {
+    window.history.replaceState(null, "", "/chat?conversationId=conversation-one");
+    const transport = new ChatTransport();
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+        root?.render(
+            <ApiTransportProvider transport={transport}>
+                <ToastProvider>
+                    <WorkspaceApplication
+                        activeIdentity={applicationIdentity}
+                        authorize={async (signal) => signal.throwIfAborted()}
+                        userId="user-one"
+                    />
+                </ToastProvider>
+            </ApiTransportProvider>,
+        );
+    });
+
+    const failure = await act(async () => await waitForElement(`[data-testid="${dataTestId.sessionLoadFailure}"]`));
+    expect(failure.textContent).toBe("Platform returned an unexpected Session.");
+});

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.tsx";
+import { dataTestId } from "../../data-testid.ts";
 import type { WorkspaceLocation } from "../../services/identity/anonymous-identity-api.ts";
 import { createWorkspaceRegionStore } from "../../view-models/chat/workspace-region-store.ts";
 
@@ -49,7 +50,7 @@ export function WorkspaceRegionSelector({
                     void select(selected.value, controller.signal);
                 }}
             >
-                <SelectTrigger id="workspace-region" className="w-full">
+                <SelectTrigger id="workspace-region" className="w-full" data-testid={dataTestId.workspaceRegion}>
                     <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

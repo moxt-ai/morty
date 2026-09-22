@@ -58,6 +58,10 @@ export class ManagementApi {
     readonly createBot = async (displayName: string, signal: AbortSignal): Promise<ManagedBot> =>
         v.parse(botSchema, await this.#request("/bots", "POST", { displayName }, signal));
 
+    readonly deleteBot = async (botId: string, signal: AbortSignal): Promise<void> => {
+        await this.#request(`/bots/${encodeURIComponent(v.parse(identifier, botId))}`, "DELETE", undefined, signal);
+    };
+
     readonly readBot = async (botId: string, signal: AbortSignal): Promise<ManagedBotDetail> =>
         v.parse(
             managedBotDetailSchema,
@@ -76,7 +80,7 @@ export class ManagementApi {
 
     readonly #request = async (
         path: string,
-        method: "GET" | "PATCH" | "POST",
+        method: "DELETE" | "GET" | "PATCH" | "POST",
         body: object | undefined,
         requestSignal: AbortSignal,
     ): Promise<unknown> => {
@@ -102,7 +106,7 @@ export class ManagementApi {
                 },
             ),
         );
-        const value: unknown = await response.json();
+        const value: unknown = response.status === 204 ? null : await response.json();
         signal.throwIfAborted();
         if (!response.ok) {
             const parsed = v.safeParse(v.object({ error: v.object({ code: v.string(), message: v.string() }) }), value);

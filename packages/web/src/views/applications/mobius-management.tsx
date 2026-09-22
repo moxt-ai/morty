@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
+import { createSelectedBotPreference } from "../../services/bots/selected-bot-preference.ts";
 import { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { WorkspaceLocation } from "../../services/identity/anonymous-identity-api.ts";
 import { AnonymousIdentityApi } from "../../services/identity/anonymous-identity-api.ts";
@@ -27,6 +28,10 @@ export function userBotConnection(
 export function MobiusManagement() {
     const transport = useApiTransport();
     const identity = useActiveIdentity();
+    const selectedBotPreference = useMemo(
+        () => createSelectedBotPreference(window.localStorage, identity.projectId),
+        [identity.projectId],
+    );
     const requests = useMemo(
         () =>
             new BotChatApi({
@@ -90,6 +95,7 @@ export function MobiusManagement() {
             createTransfer={createTransfer}
             endRemoteAccess={endRemoteAccess}
             projectId={identity.projectId}
+            selectedBotPreference={selectedBotPreference}
             {...(identity.kind === "anonymous" ? { replaceWorkspace } : {})}
         />
     );

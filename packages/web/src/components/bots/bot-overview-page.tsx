@@ -58,32 +58,23 @@ export function BotOverviewPage() {
                 )}
             </section>
             <section className="mt-5 rounded-2xl border border-black/10 bg-white p-6">
-                <h2 className="text-base font-semibold">Agent configuration</h2>
+                <h2 className="text-base font-semibold">Runtime connection</h2>
                 {viewModel.state.kind === "loading" && (
                     <p className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
                         <LoaderCircle className="size-4 animate-spin" /> Loading configuration…
                     </p>
                 )}
                 {viewModel.state.kind === "failed" && <BotInlineError>{viewModel.state.message}</BotInlineError>}
-                {viewModel.state.kind === "ready" && viewModel.state.workspace.selected === null && (
+                {viewModel.state.kind === "ready" && viewModel.state.workspace.runtimeId === null && (
                     <p className="mt-3 text-sm text-muted-foreground">
-                        This Bot is not configured yet. Open the main Chat workspace to choose its Runtime, Agent,
-                        workspace, and instructions.
+                        This Bot is not configured yet. Open the main Chat workspace to connect its Runtime.
                     </p>
                 )}
-                {viewModel.state.kind === "ready" && viewModel.state.workspace.selected !== null && (
+                {viewModel.state.kind === "ready" && viewModel.state.workspace.runtimeId !== null && (
                     <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                         <div>
                             <dt className="text-muted-foreground">Runtime</dt>
-                            <dd className="font-mono text-xs">{viewModel.state.workspace.selected.runtimeId}</dd>
-                        </div>
-                        <div>
-                            <dt className="text-muted-foreground">Agent</dt>
-                            <dd>{viewModel.state.workspace.selected.agentRef}</dd>
-                        </div>
-                        <div className="sm:col-span-2">
-                            <dt className="text-muted-foreground">Workspace</dt>
-                            <dd className="break-all">{viewModel.state.workspace.selected.workspaceRef}</dd>
+                            <dd className="font-mono text-xs">{viewModel.state.workspace.runtimeId}</dd>
                         </div>
                     </dl>
                 )}

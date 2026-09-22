@@ -7,6 +7,7 @@ import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { dataTestId } from "../../data-testid.ts";
+import type { SelectedBotPreference } from "../../services/bots/selected-bot-preference.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer, WorkspaceLocation } from "../../services/identity/anonymous-identity-api.ts";
 import {
@@ -40,16 +41,18 @@ export function BotChatHome({
     endRemoteAccess,
     projectId,
     replaceWorkspace,
+    selectedBotPreference,
 }: {
     readonly requests: Pick<
         BotChatApi,
         | "listBots"
+        | "createBot"
+        | "deleteBot"
         | "access"
         | "archiveManagedSession"
         | "workspace"
         | "workspaceDirectory"
         | "waitForWorkspaceChange"
-        | "selectAgent"
         | "nativeSessions"
         | "nativeSession"
         | "managedSessions"
@@ -66,6 +69,7 @@ export function BotChatHome({
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
     readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
     readonly projectId: string;
+    readonly selectedBotPreference: SelectedBotPreference;
     readonly replaceWorkspace?: (location: WorkspaceLocation, signal: AbortSignal) => Promise<void>;
 }) {
     const [store] = useState(() =>
@@ -102,6 +106,7 @@ export function BotChatHome({
                     window.history.replaceState(window.history.state, "", url);
                 },
             },
+            selectedBotPreference,
         }),
     );
     const model = useStore(store);
@@ -196,10 +201,12 @@ export function BotChatHome({
         model.view.kind === "switching"
             ? model.view.view
             : model.view.kind === "connecting" ||
+                model.view.kind === "session-loading" ||
                 model.view.kind === "draft" ||
                 model.view.kind === "setup" ||
                 model.view.kind === "runtime-disconnected" ||
-                model.view.kind === "connection-failed"
+                model.view.kind === "connection-failed" ||
+                model.view.kind === "session-failed"
               ? model.view
               : null;
     const switching = model.view.kind === "switching";
@@ -256,6 +263,7 @@ export function BotChatHome({
         >
             {active !== null && (
                 <ConversationSidebar
+                    activeBot={active.bot}
                     activeSession={activeSession}
                     activeId={
                         model.target.kind === "conversation-access"
@@ -264,9 +272,14 @@ export function BotChatHome({
                               ? model.target.sessionId
                               : ""
                     }
-                    botId={active.bot.botId}
+                    bots={model.bots}
+                    botOperation={model.botOperation}
                     connectionStatus={connectionStatus}
-                    onConnectionStatusClick={() => setPairingDialogOpen(true)}
+                    onCreateBot={store.getState().createBot}
+                    onPairAgain={() => setPairingDialogOpen(true)}
+                    onRemoveBot={store.getState().removeBot}
+                    onResetBotOperation={store.getState().resetBotOperation}
+                    onSelectBot={store.getState().selectBot}
                     requests={requests}
                     createTransfer={createTransfer}
                     onOpen={(session) => openManaged(session.kind, session.id)}
@@ -297,19 +310,25 @@ export function BotChatHome({
                         aria-label="Messages"
                     >
                         <div ref={messageContent} className="flex min-h-full flex-col gap-8">
-                            {model.view.kind === "loading" || model.view.kind === "switching" ? (
+                            {model.view.kind === "loading" ||
+                            model.view.kind === "session-loading" ||
+                            model.view.kind === "switching" ? (
                                 <div className="m-auto">
                                     <Spinner
                                         label={
                                             model.view.kind === "switching"
                                                 ? "Switching session"
-                                                : "Connecting to your agent"
+                                                : model.view.kind === "session-loading"
+                                                  ? "Loading session"
+                                                  : "Connecting to your agent"
                                         }
                                     />
                                 </div>
-                            ) : model.view.kind === "failed" ? (
+                            ) : model.view.kind === "failed" || model.view.kind === "session-failed" ? (
                                 <div className="m-auto grid justify-items-center gap-4 text-center">
-                                    <p role="alert">{model.view.message}</p>
+                                    <p data-testid={dataTestId.sessionLoadFailure} role="alert">
+                                        {model.view.message}
+                                    </p>
                                     {model.target.kind === "continue" && model.target.action === "import" ? (
                                         <Button onClick={store.getState().forkInstead}>Fork session instead</Button>
                                     ) : (
@@ -393,7 +412,7 @@ export function BotChatHome({
                     )}
                 </section>
             )}
-            {pairingDialogOpen && (
+            {pairingDialogOpen && active !== null && (
                 <Dialog
                     title={
                         disconnectedBot ? "Bot disconnected" : setupView === null ? "Pair agent again" : "Connect agent"
@@ -405,10 +424,12 @@ export function BotChatHome({
                     }
                     onClose={() => setPairingDialogOpen(false)}
                 >
-                    {setupView?.reason === "unconfigured" && replaceWorkspace !== undefined && (
-                        <WorkspaceRegionSelector projectId={projectId} replaceWorkspace={replaceWorkspace} />
-                    )}
-                    <PairingInstruction requests={requests} />
+                    {setupView?.reason === "unconfigured" &&
+                        model.bots.length === 1 &&
+                        replaceWorkspace !== undefined && (
+                            <WorkspaceRegionSelector projectId={projectId} replaceWorkspace={replaceWorkspace} />
+                        )}
+                    <PairingInstruction botId={active.bot.botId} requests={requests} />
                 </Dialog>
             )}
             {failureDialogOpen && model.view.kind === "connection-failed" && (

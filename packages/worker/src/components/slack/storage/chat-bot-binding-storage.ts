@@ -36,11 +36,7 @@ export class ChatBotBindingStorage {
                 await database
                     .select({
                         botId: managedBot.botId,
-                        bindingId: managedBot.bindingId,
                         runtimeId: managedBot.runtimeId,
-                        agentRef: managedBot.agentRef,
-                        workspaceRef: managedBot.workspaceRef,
-                        agentConfigRevision: managedBot.agentConfigRevision,
                         instructions: managedBot.instructions,
                     })
                     .from(managedBot)
@@ -113,29 +109,6 @@ export class ChatBotBindingStorage {
                     .get(),
         );
         const parsed = v.safeParse(chatBotBindingSchema, row);
-        return parsed.success ? parsed.output : null;
-    };
-
-    readonly findMapping = async (
-        _tenant: TenantContext,
-        tenantId: string,
-        slackBotId: string,
-        signal: AbortSignal,
-    ): Promise<{ readonly botId: string; readonly connectionId: string } | null> => {
-        const row = await this.#database.resolve().execute(
-            "first",
-            1,
-            signal,
-            async (database) =>
-                await database
-                    .select({ botId: slackChatBotBinding.botId, connectionId: slackChatBotBinding.connectionId })
-                    .from(slackChatBotBinding)
-                    .where(
-                        and(eq(slackChatBotBinding.tenantId, tenantId), eq(slackChatBotBinding.slackBotId, slackBotId)),
-                    )
-                    .get(),
-        );
-        const parsed = v.safeParse(v.object({ botId: identifier, connectionId: identifier }), row);
         return parsed.success ? parsed.output : null;
     };
 

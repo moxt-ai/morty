@@ -596,8 +596,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         await request(context, `/chat/projects/${context.config.project_id}/bots/${context.config.bot_id}/setup`, {
             runtimeId,
             agentRef,
-            workspaceRef: "default",
-            agentConfigRevision: revision,
         });
         const saved = await saveConfiguration(context, { agent_ref: agentRef, agent_config_revision: revision });
         emit({ status: "binding_activated", botId: context.config.bot_id, harness });
@@ -606,21 +604,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
 
     function hasReadyBinding(context: Context, workspace: Record<string, unknown>) {
         const runtimeId = identifier(object(context.config.pairing).runtimeId);
-        if (workspace.selected === null) {
-            return false;
-        }
-        const selected = object(workspace.selected);
         if (
             workspace.status !== "active" ||
-            selected.runtimeId !== runtimeId ||
-            selected.agentRef !== context.config.agent_ref ||
-            selected.workspaceRef !== "default" ||
-            selected.agentConfigRevision !== context.config.agent_config_revision ||
+            workspace.runtimeId !== runtimeId ||
             !Array.isArray(workspace.agents) ||
             !workspace.agents.some(
                 (item) =>
                     object(item).runtimeId === runtimeId &&
-                    object(item).agentRef === selected.agentRef &&
+                    object(item).agentRef === context.config.agent_ref &&
                     object(item).online === true,
             )
         ) {

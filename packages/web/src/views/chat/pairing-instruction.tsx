@@ -8,11 +8,13 @@ import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { createPairingInstructionStore } from "../../view-models/chat/pairing-instruction-store.ts";
 
 export function PairingInstruction({
+    botId,
     requests,
 }: {
-    readonly requests: Pick<BotChatApi, "listBots" | "createPairingInstruction">;
+    readonly botId: string;
+    readonly requests: Pick<BotChatApi, "createPairingInstruction">;
 }) {
-    const [store] = useState(() => createPairingInstructionStore(requests));
+    const [store] = useState(() => createPairingInstructionStore(botId, requests));
     const { copy, copyInstruction, load, resetCopy, state } = useStore(store);
     const [revision, refresh] = useState(0);
     const showToast = useToast();

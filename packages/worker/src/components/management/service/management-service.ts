@@ -109,6 +109,19 @@ export class ManagementService {
         return await this.readBot(userId, botId, signal);
     };
 
+    readonly deleteBot = async (userId: string, botId: string, signal: AbortSignal): Promise<void> => {
+        const result = await this.#managedBots.deleteBot(userId, botId, signal);
+        switch (result) {
+            case "deleted":
+                this.#logger.info({ event: "user-bot-deleted", userId, botId }, "Bot audit event");
+                return;
+            case "last-bot":
+                throw new ManagementError("LAST_BOT_REQUIRED", "Keep at least one Bot in your workspace.", 409);
+            case "not-found":
+                throw new ManagementError("BOT_NOT_FOUND", "Bot is unavailable.", 404);
+        }
+    };
+
     readonly readProject = async (userId: string, signal: AbortSignal) => {
         const { origin, appId } = this.#platform.configuration();
         return await this.#platformProjects.read(userId, origin, appId, signal);

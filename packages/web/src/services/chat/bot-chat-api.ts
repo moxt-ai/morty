@@ -37,15 +37,9 @@ const managedSessionSchema = v.pipe(
     v.readonly(),
 );
 export type ManagedChatSession = v.InferOutput<typeof managedSessionSchema>;
-const agentSelectionSchema = v.object({
-    runtimeId: identifier,
-    agentRef: identifier,
-    workspaceRef: v.pipe(v.string(), v.minLength(1), v.maxLength(2048)),
-    agentConfigRevision: v.pipe(v.number(), v.integer(), v.minValue(1)),
-});
 const workspaceSchema = v.object({
     status: v.string(),
-    selected: v.nullable(agentSelectionSchema),
+    runtimeId: v.nullable(identifier),
     agents: v.array(
         v.object({
             runtimeId: identifier,
@@ -57,9 +51,8 @@ const workspaceSchema = v.object({
     ),
 });
 export type ChatWorkspace = v.InferOutput<typeof workspaceSchema>;
-export type ChatAgentSelection = v.InferOutput<typeof agentSelectionSchema>;
 export interface ChatDraftConfiguration {
-    readonly bindingId: string;
+    readonly agentRef: string;
     readonly workspaceRef: string;
     readonly workspaceLabel: string;
     readonly configurations: readonly SessionConfigurationSelection[];
@@ -162,6 +155,8 @@ export class BotChatApi {
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly #waitForChange: (request: Request) => Promise<void>;
     readonly listBots: ManagementApi["listBots"];
+    readonly createBot: ManagementApi["createBot"];
+    readonly deleteBot: ManagementApi["deleteBot"];
     constructor(options: {
         readonly fetchRequest: (request: Request) => Promise<Response>;
         readonly origin: string;
@@ -174,7 +169,10 @@ export class BotChatApi {
         this.#fetchRequest = options.fetchRequest;
         this.#getToken = options.getToken;
         this.#waitForChange = options.waitForChange;
-        this.listBots = new ManagementApi(options).listBots;
+        const management = new ManagementApi(options);
+        this.listBots = management.listBots;
+        this.createBot = management.createBot;
+        this.deleteBot = management.deleteBot;
     }
     readonly access = async (botId: string, parent: AbortSignal, conversationId: string): Promise<ChatAccess> =>
         v.parse(
@@ -194,7 +192,7 @@ export class BotChatApi {
                 botId,
                 "access",
                 {
-                    bindingId: settings.bindingId,
+                    agentRef: settings.agentRef,
                     configurations: settings.configurations,
                     conversationKey,
                     title,
@@ -298,14 +296,13 @@ export class BotChatApi {
         }
         return { ...stored, result };
     };
-    readonly agentSettings = async (botId: string, signal: AbortSignal) => {
+    readonly agentSettings = async (botId: string, agentRef: string, signal: AbortSignal) => {
         const result = v.parse(
-            v.object({ bindingId: identifier, settings: v.unknown() }),
-            await this.#request(botId, "agent-settings", {}, signal),
+            v.object({ settings: v.unknown() }),
+            await this.#request(botId, "agent-settings", { agentRef: v.parse(identifier, agentRef) }, signal),
         );
         const discovered = decodeAgentSettingsDiscoveredEvent(JSON.stringify(result.settings));
         return {
-            bindingId: result.bindingId,
             options: discovered.settings.map(({ defaultValue, ...setting }) => ({
                 ...setting,
                 currentValue:
@@ -351,9 +348,6 @@ export class BotChatApi {
                 { method: "POST", headers: { authorization: `Bearer ${token}` }, signal },
             ),
         );
-    };
-    readonly selectAgent = async (botId: string, selection: ChatAgentSelection, parent: AbortSignal): Promise<void> => {
-        await this.#request(botId, "setup", v.parse(agentSelectionSchema, selection), parent);
     };
     readonly nativeSessions = async (
         botId: string,

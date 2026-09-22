@@ -13,8 +13,6 @@ import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
 const setupInput = v.strictObject({
     runtimeId: platformIdentifier,
     agentRef: platformIdentifier,
-    workspaceRef: v.pipe(v.string(), v.minLength(1), v.maxLength(2048)),
-    agentConfigRevision: v.pipe(v.number(), v.integer(), v.minValue(1)),
 });
 const nativeDirectoryId = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,2047}$/u));
 const nativeIdentity = {
@@ -52,6 +50,7 @@ const sessionConfigurations = v.pipe(
         "Session configuration identifiers must be unique.",
     ),
 );
+const agentSettingsInput = v.strictObject({ agentRef: platformIdentifier });
 const turnInput = v.strictObject({
     sessionId: platformIdentifier,
     additionalDirectoryIds: v.pipe(v.array(nativeDirectoryId), v.maxLength(16)),
@@ -87,15 +86,15 @@ const turnInput = v.strictObject({
 const accessInput = v.union([
     v.strictObject({ conversationId: platformIdentifier }),
     v.strictObject({
+        agentRef: platformIdentifier,
         conversationKey: platformIdentifier,
-        bindingId: platformIdentifier,
         configurations: sessionConfigurations,
         title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)), "New chat"),
         workspaceRef: nativeDirectoryId,
     }),
     v.strictObject({
+        agentRef: platformIdentifier,
         conversationKey: platformIdentifier,
-        bindingId: platformIdentifier,
         permissionMode: v.pipe(v.string(), v.minLength(1), v.maxLength(500)),
         title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)), "New chat"),
         configuration: v.strictObject({
@@ -167,9 +166,19 @@ export function createBotChatRoutes() {
         .post("/bots/:botId/managed-sessions", authenticatedSession, authorizedChat(), async (context) => {
             return privateJson(await context.env.services.chat.managedSessions(context.get("chatScope")));
         })
-        .post("/bots/:botId/agent-settings", authenticatedSession, authorizedChat(120000), async (context) => {
-            return privateJson(await context.env.services.chat.agentSettings(context.get("chatScope")));
-        })
+        .post(
+            "/bots/:botId/agent-settings",
+            authenticatedSession,
+            authorizedChat(120000),
+            bodyParser<AuthorizedChatEnvironment, typeof agentSettingsInput>(agentSettingsInput),
+            async (context) =>
+                privateJson(
+                    await context.env.services.chat.agentSettings(
+                        context.get("chatScope"),
+                        context.req.valid("json").agentRef,
+                    ),
+                ),
+        )
         .post(
             "/bots/:botId/access",
             authenticatedSession,

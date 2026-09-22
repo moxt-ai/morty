@@ -22,7 +22,7 @@ type DraftSettingsState =
     | {
           readonly kind: "ready";
           readonly workspace: ChatWorkspace;
-          readonly bindingId: string;
+          readonly selectedAgent: ChatWorkspace["agents"][number];
           readonly cwd: WorkspaceEntriesEvent;
           readonly options: readonly SessionConfigOption[];
       };
@@ -102,7 +102,7 @@ function waitForCwdPreview(signal: AbortSignal): Promise<void> {
 
 export const createDraftControlsStore = (
     botId: string,
-    requests: Pick<BotChatApi, "workspace" | "workspaceDirectory" | "selectAgent" | "agentSettings">,
+    requests: Pick<BotChatApi, "workspace" | "workspaceDirectory" | "agentSettings">,
     onSettings: (settings: ChatDraftConfiguration | null) => void,
     storage: Storage,
 ) =>
@@ -111,14 +111,11 @@ export const createDraftControlsStore = (
         let selectedHarness = "";
         const changedOptionIds = new Set<string>();
         const rememberAgentSettings = (settings: Extract<DraftSettingsState, { readonly kind: "ready" }>): void => {
-            const selected = settings.workspace.selected;
-            if (selected !== null) {
-                saveLastAgentSettings(storage, botId, selected.agentRef, settings.options);
-            }
+            saveLastAgentSettings(storage, botId, settings.selectedAgent.agentRef, settings.options);
         };
         const publishSettings = (settings: Extract<DraftSettingsState, { readonly kind: "ready" }>): void => {
             onSettings({
-                bindingId: settings.bindingId,
+                agentRef: settings.selectedAgent.agentRef,
                 workspaceRef: settings.cwd.directoryId,
                 workspaceLabel: settings.cwd.directoryLabel,
                 configurations: settings.options
@@ -135,10 +132,7 @@ export const createDraftControlsStore = (
             settings: Extract<DraftSettingsState, { readonly kind: "ready" }>,
             directory: WorkspaceEntriesEvent,
         ): readonly RecentCwdPreference[] => {
-            const selected = settings.workspace.selected;
-            if (selected === null) {
-                return get().recentCwds;
-            }
+            const selected = settings.selectedAgent;
             saveLastCwdPreference(storage, botId, selected.runtimeId, selected.agentRef, directory.directoryId);
             return saveRecentCwdPreference(
                 storage,
@@ -249,14 +243,16 @@ export const createDraftControlsStore = (
             try {
                 while (!signal.aborted) {
                     const workspace = await requests.workspace(botId, signal);
-                    const selected = workspace.selected;
-                    if (
-                        selected !== null &&
-                        (selectedHarness === "" || `${selected.runtimeId}:${selected.agentRef}` === selectedHarness)
-                    ) {
+                    const selected = workspace.agents.find(
+                        (agent) =>
+                            agent.online &&
+                            agent.runtimeId === workspace.runtimeId &&
+                            (selectedHarness === "" || `${agent.runtimeId}:${agent.agentRef}` === selectedHarness),
+                    );
+                    if (selected !== undefined) {
                         const [result, defaultCwd] = await Promise.all([
-                            requests.agentSettings(botId, signal),
-                            requests.workspaceDirectory(botId, selected.workspaceRef, signal),
+                            requests.agentSettings(botId, selected.agentRef, signal),
+                            requests.workspaceDirectory(botId, "default", signal),
                         ]);
                         signal.throwIfAborted();
                         const savedDirectoryId = readLastCwdPreference(
@@ -283,8 +279,8 @@ export const createDraftControlsStore = (
                         const ready = {
                             kind: "ready" as const,
                             workspace,
+                            selectedAgent: selected,
                             cwd,
-                            bindingId: result.bindingId,
                             options: restoredSettings.options,
                         };
                         changedOptionIds.clear();
@@ -338,7 +334,7 @@ export const createDraftControlsStore = (
             },
             forgetRecentCwd: (directoryId) => {
                 const settings = get().settings;
-                const selected = settings.kind === "ready" ? settings.workspace.selected : null;
+                const selected = settings.kind === "ready" ? settings.selectedAgent : null;
                 const recentCwds = get().recentCwds;
                 if (selected === null || !recentCwds.some((directory) => directory.directoryId === directoryId)) {
                     return;
@@ -464,17 +460,6 @@ export const createDraftControlsStore = (
                 set({ settings: { kind: "switching", selectedHarness: value, workspace: settings.workspace } });
                 onSettings(null);
                 try {
-                    await requests.selectAgent(
-                        botId,
-                        {
-                            agentConfigRevision: 1,
-                            agentRef: agent.agentRef,
-                            runtimeId: agent.runtimeId,
-                            workspaceRef: "default",
-                        },
-                        AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
-                    );
-                    signal.throwIfAborted();
                     await load(signal);
                 } catch (cause) {
                     if (!signal.aborted) {

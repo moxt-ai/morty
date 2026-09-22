@@ -17,6 +17,35 @@ test("Given a paired workspace, When a user works across conversations, Then sen
         await page.keyboard.press("Escape");
     });
 
+    await test.step("Given one paired Bot, When the user creates, revisits, and removes another Bot, Then the selected Bot is restored and the original remains available", async () => {
+        const switcher = page.getByTestId(dataTestId.botMenuTrigger);
+        await expect(switcher).toContainText("My Bot");
+        await expect(switcher).toContainText("Connected");
+        await switcher.click();
+        await expect(page.getByTestId(dataTestId.removeBot)).toHaveCount(0);
+        await page.getByTestId(dataTestId.createBot).click();
+        await page.getByTestId(dataTestId.botNameInput).fill("Laptop Bot");
+        await page.getByTestId(dataTestId.confirmCreateBot).click();
+
+        await expect(switcher).toContainText("Laptop Bot");
+        await expect(switcher).toContainText("Disconnected");
+        await switcher.click();
+        await expect(page.getByTestId(dataTestId.pairBotAgain)).toBeVisible();
+        await page.getByTestId(dataTestId.pairBotAgain).click();
+        await expect(page.getByTestId(dataTestId.workspaceRegion)).toHaveCount(0);
+        await page.keyboard.press("Escape");
+
+        await page.reload();
+        await expect(switcher).toContainText("Laptop Bot");
+        await expect(switcher).toContainText("Disconnected");
+        await page.keyboard.press("Escape");
+        await switcher.click();
+        await page.getByTestId(dataTestId.removeBot).click();
+        await page.getByTestId(dataTestId.confirmRemoveBot).click();
+        await expect(switcher).toContainText("My Bot");
+        await expect(switcher).toContainText("Connected");
+    });
+
     await test.step("Given model choices, When the user searches, Then only matching models remain visible", async () => {
         await page.getByTestId(dataTestId.agentConfiguration).click();
         const model = page.getByTestId(dataTestId.agentSetting("model"));

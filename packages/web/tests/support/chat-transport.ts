@@ -29,12 +29,7 @@ export class ChatTransport implements ApiTransport {
         ) {
             return Response.json({
                 status: "active",
-                selected: {
-                    runtimeId: "runtime-one",
-                    agentRef: "opencode",
-                    workspaceRef: "default",
-                    agentConfigRevision: 1,
-                },
+                runtimeId: "runtime-one",
                 agents: [
                     {
                         runtimeId: "runtime-one",
@@ -51,7 +46,6 @@ export class ChatTransport implements ApiTransport {
             path === `/mobius-cloud/api/chat/projects/${projectId}/bots/${botId}/agent-settings`
         ) {
             return Response.json({
-                bindingId: "binding-one",
                 settings: {
                     agentId: "opencode",
                     agentName: "OpenCode",
@@ -109,6 +103,12 @@ export class ChatTransport implements ApiTransport {
                 parentDirectoryId: "",
                 requestId: "workspace-request",
             });
+        }
+        if (request.method === "POST" && path === `/mobius-cloud/api/chat/projects/${projectId}/bots/${botId}/access`) {
+            return Response.json(
+                { error: { code: "PLATFORM_INVALID_RESPONSE", message: "Platform returned an unexpected Session." } },
+                { status: 502 },
+            );
         }
         if (
             request.method === "POST" &&

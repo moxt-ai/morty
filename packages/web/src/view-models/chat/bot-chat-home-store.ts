@@ -1,4 +1,5 @@
 import { createStore } from "zustand/vanilla";
+import type { SelectedBotPreference } from "../../services/bots/selected-bot-preference.ts";
 import type {
     BotChatApi,
     ChatAccess,
@@ -32,14 +33,17 @@ type Target =
       };
 
 type ActiveView = { readonly kind: "draft"; readonly bot: ManagedBot };
+type SessionLoading = { readonly kind: "session-loading"; readonly bot: ManagedBot };
 export type BotChatHomeView =
     | { readonly kind: "loading" }
     | { readonly kind: "connecting"; readonly bot: ManagedBot }
+    | SessionLoading
     | { readonly kind: "switching"; readonly view: ActiveView }
     | ActiveView
     | { readonly kind: "setup"; readonly bot: ManagedBot; readonly reason: SetupReason }
     | { readonly kind: "runtime-disconnected"; readonly bot: ManagedBot; readonly message: string }
     | { readonly kind: "connection-failed"; readonly bot: ManagedBot; readonly message: string }
+    | { readonly kind: "session-failed"; readonly bot: ManagedBot; readonly message: string }
     | { readonly kind: "failed"; readonly message: string };
 
 export type BotConnectionStatus =
@@ -47,6 +51,11 @@ export type BotConnectionStatus =
     | { readonly kind: "connected"; readonly label: "Connected" }
     | { readonly kind: "disconnected"; readonly label: "Disconnected" };
 export type SessionConnectionKind = "loading" | "ready" | "failed";
+export type BotOperation =
+    | { readonly kind: "idle" }
+    | { readonly kind: "creating" }
+    | { readonly kind: "removing" }
+    | { readonly kind: "failed"; readonly message: string };
 
 export type DisconnectedBotNotice =
     | { readonly kind: "hidden" }
@@ -63,6 +72,7 @@ export function disconnectedBotNotice(
         case "draft":
         case "runtime-disconnected":
         case "connection-failed":
+        case "session-failed":
             return {
                 kind: "visible",
                 title: "Your Bot is disconnected",
@@ -78,6 +88,7 @@ export function disconnectedBotNotice(
                   };
         case "loading":
         case "connecting":
+        case "session-loading":
         case "switching":
         case "failed":
             return { kind: "hidden" };
@@ -88,14 +99,7 @@ function runtimeConnectionStatus(workspace: ChatWorkspace): BotConnectionStatus 
     if (workspace.status !== "active") {
         return { kind: "disconnected", label: "Disconnected" };
     }
-    const selected = workspace.selected;
-    const agent =
-        selected === null
-            ? undefined
-            : workspace.agents.find(
-                  (candidate) => candidate.runtimeId === selected.runtimeId && candidate.agentRef === selected.agentRef,
-              );
-    return agent?.online === true
+    return workspace.agents.some((agent) => agent.runtimeId === workspace.runtimeId && agent.online)
         ? { kind: "connected", label: "Connected" }
         : { kind: "disconnected", label: "Disconnected" };
 }
@@ -131,6 +135,8 @@ export interface BotChatNavigation {
 }
 
 export interface BotChatHomeStore {
+    readonly bots: readonly ManagedBot[];
+    readonly botOperation: BotOperation;
     readonly view: BotChatHomeView;
     readonly connectionStatus: BotConnectionStatus;
     readonly target: Target;
@@ -139,6 +145,10 @@ export interface BotChatHomeStore {
     readonly revision: number;
     readonly draftSettings: ChatDraftConfiguration | null;
     readonly load: (signal: AbortSignal) => Promise<void>;
+    readonly selectBot: (botId: string) => void;
+    readonly createBot: (displayName: string, signal: AbortSignal) => Promise<boolean>;
+    readonly removeBot: (signal: AbortSignal) => Promise<boolean>;
+    readonly resetBotOperation: () => void;
     readonly newConversation: () => void;
     readonly openManaged: (kind: "conversation" | "fork" | "import", id: string) => void;
     readonly retry: () => void;
@@ -177,17 +187,14 @@ function setupReason(workspace: ChatWorkspace): SetupReason | null {
     if (workspace.status !== "active") {
         return workspace.status === "draft" ? "unconfigured" : "inactive";
     }
-    if (workspace.selected === null) {
+    if (workspace.runtimeId === null) {
         return "no-selection";
     }
-    const selected = workspace.selected;
-    const agent = workspace.agents.find(
-        (candidate) => candidate.runtimeId === selected.runtimeId && candidate.agentRef === selected.agentRef,
-    );
-    if (agent === undefined) {
+    const agents = workspace.agents.filter((candidate) => candidate.runtimeId === workspace.runtimeId);
+    if (agents.length === 0) {
         return "agent-missing";
     }
-    return agent.online ? null : "agent-offline";
+    return agents.some((agent) => agent.online) ? null : "agent-offline";
 }
 
 export function setupDescription(reason: SetupReason): string {
@@ -197,11 +204,11 @@ export function setupDescription(reason: SetupReason): string {
         case "inactive":
             return "Your workspace is loaded, but this Bot is not active, so Chat cannot reconnect. Use the instruction below to connect your local agent and activate Chat.";
         case "no-selection":
-            return "Your workspace is loaded, but no agent is selected for this Bot. Use the instruction below to connect an agent to this workspace.";
+            return "Your workspace is loaded, but this Bot is not connected to a Runtime. Use the instruction below to connect one.";
         case "agent-missing":
-            return "Your workspace is loaded, but the previously selected agent is no longer available in its agent list. Start the previously paired local agent, or use the instruction below to pair an agent again.";
+            return "Your workspace is loaded, but its connected Runtime no longer reports any agents. Start the paired Runtime, or use the instruction below to pair it again.";
         case "agent-offline":
-            return "Your workspace is loaded, but your selected local agent is offline. Start the previously paired agent and check its internet connection. If you need to pair it again, use the instruction below.";
+            return "Your workspace is loaded, but every agent on its connected Runtime is offline. Start the paired Runtime and check its internet connection, or use the instruction below to pair it again.";
         case "agent-required":
             return "Your workspace is loaded, but the server could not connect Chat to an available agent. Check that your local agent is running, or use the instruction below to pair it again.";
     }
@@ -214,6 +221,8 @@ export const createBotChatHomeStore = (
         | "conversationSession"
         | "continueNativeSession"
         | "createConversation"
+        | "createBot"
+        | "deleteBot"
         | "listBots"
         | "managedSession"
         | "submitTurn"
@@ -225,11 +234,14 @@ export const createBotChatHomeStore = (
         readonly url: string;
         readonly createId: () => string;
         readonly navigation: BotChatNavigation;
+        readonly selectedBotPreference: SelectedBotPreference;
     },
 ) => {
     const conversations = createConversationSessionStore(requests);
     const target = initialTarget(options.url, options.createId);
     return createStore<BotChatHomeStore>()((set, get) => ({
+        bots: [],
+        botOperation: { kind: "idle" },
         view: { kind: "loading" },
         connectionStatus: { kind: "connecting", label: "Connecting" },
         target,
@@ -251,11 +263,15 @@ export const createBotChatHomeStore = (
             }));
             let openedBot: ManagedBot | null = null;
             try {
-                const bot = (await requests.listBots(signal))[0];
+                const bots = await requests.listBots(signal);
+                const preferredBotId = options.selectedBotPreference.read();
+                const bot = bots.find((candidate) => candidate.botId === preferredBotId) ?? bots[0];
                 if (bot === undefined) {
                     throw new Error("Your Bot is unavailable.");
                 }
+                options.selectedBotPreference.write(bot.botId);
                 openedBot = bot;
+                set({ bots });
                 if (get().view.kind === "loading") {
                     set({ view: { kind: "connecting", bot } });
                 }
@@ -309,6 +325,7 @@ export const createBotChatHomeStore = (
                     await reloadAfterWorkspaceChange();
                     return;
                 }
+                set({ view: { kind: "session-loading", bot } });
                 await conversations.getState().open(bot.botId, currentTarget.conversationId, signal);
                 const opened = conversations.getState().state;
                 if (opened.kind !== "ready") {
@@ -340,6 +357,10 @@ export const createBotChatHomeStore = (
                 }
                 const message = cause instanceof Error ? cause.message : "Chat is unavailable.";
                 const runtimeFailure = isRuntimeConnectionFailure(cause);
+                if (openedBot !== null && get().target.kind === "conversation-access" && !runtimeFailure) {
+                    set({ view: { kind: "session-failed", bot: openedBot, message } });
+                    return;
+                }
                 if (openedBot !== null && runtimeFailure) {
                     set({
                         connectionStatus: { kind: "disconnected", label: "Disconnected" },
@@ -373,6 +394,114 @@ export const createBotChatHomeStore = (
                 }));
             }
         },
+        selectBot: (botId) => {
+            const current = get();
+            const selected = current.bots.find((bot) => bot.botId === botId);
+            const activeBot =
+                current.view.kind === "switching"
+                    ? current.view.view.bot
+                    : "bot" in current.view
+                      ? current.view.bot
+                      : null;
+            if (selected === undefined || selected.botId === activeBot?.botId) {
+                return;
+            }
+            options.selectedBotPreference.write(selected.botId);
+            options.navigation.showDraft();
+            set((state) => ({
+                botOperation: { kind: "idle" },
+                connectionStatus: { kind: "connecting", label: "Connecting" },
+                creation: transitionConversationCreation(state.creation, { kind: "reset" }),
+                draftSettings: null,
+                revision: state.revision + 1,
+                sessionView: { kind: "conversation-access" },
+                target: { kind: "draft", key: options.createId() },
+                view: { kind: "connecting", bot: selected },
+            }));
+        },
+        createBot: async (displayName, signal) => {
+            const name = displayName.trim();
+            if (name.length === 0 || name.length > 80) {
+                set({ botOperation: { kind: "failed", message: "Enter a Bot name between 1 and 80 characters." } });
+                return false;
+            }
+            set({ botOperation: { kind: "creating" } });
+            try {
+                const bot = await requests.createBot(name, signal);
+                signal.throwIfAborted();
+                options.selectedBotPreference.write(bot.botId);
+                options.navigation.showDraft();
+                set((state) => ({
+                    bots: [...state.bots, bot],
+                    botOperation: { kind: "idle" },
+                    connectionStatus: { kind: "disconnected", label: "Disconnected" },
+                    creation: transitionConversationCreation(state.creation, { kind: "reset" }),
+                    draftSettings: null,
+                    revision: state.revision + 1,
+                    sessionView: { kind: "conversation-access" },
+                    target: { kind: "draft", key: options.createId() },
+                    view: { kind: "setup", bot, reason: "unconfigured" },
+                }));
+                return true;
+            } catch (cause) {
+                if (!signal.aborted) {
+                    set({
+                        botOperation: {
+                            kind: "failed",
+                            message: cause instanceof Error ? cause.message : "The Bot could not be created.",
+                        },
+                    });
+                }
+                return false;
+            }
+        },
+        removeBot: async (signal) => {
+            const current = get();
+            const activeBot =
+                current.view.kind === "switching"
+                    ? current.view.view.bot
+                    : "bot" in current.view
+                      ? current.view.bot
+                      : null;
+            if (activeBot === null || current.bots.length < 2) {
+                return false;
+            }
+            set({ botOperation: { kind: "removing" } });
+            try {
+                await requests.deleteBot(activeBot.botId, signal);
+                signal.throwIfAborted();
+                const bots = get().bots.filter((bot) => bot.botId !== activeBot.botId);
+                const selected = bots[0];
+                if (selected === undefined) {
+                    throw new Error("Keep at least one Bot in your workspace.");
+                }
+                options.selectedBotPreference.write(selected.botId);
+                options.navigation.showDraft();
+                set((state) => ({
+                    bots,
+                    botOperation: { kind: "idle" },
+                    connectionStatus: { kind: "connecting", label: "Connecting" },
+                    creation: transitionConversationCreation(state.creation, { kind: "reset" }),
+                    draftSettings: null,
+                    revision: state.revision + 1,
+                    sessionView: { kind: "conversation-access" },
+                    target: { kind: "draft", key: options.createId() },
+                    view: { kind: "connecting", bot: selected },
+                }));
+                return true;
+            } catch (cause) {
+                if (!signal.aborted) {
+                    set({
+                        botOperation: {
+                            kind: "failed",
+                            message: cause instanceof Error ? cause.message : "The Bot could not be removed.",
+                        },
+                    });
+                }
+                return false;
+            }
+        },
+        resetBotOperation: () => set({ botOperation: { kind: "idle" } }),
         newConversation: () => {
             options.navigation.showDraft();
             set((current) => ({

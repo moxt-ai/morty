@@ -64,9 +64,55 @@ async function createChatFixture({
 const setupInput = {
     runtimeId: "runtime-1",
     agentRef: "agent-one",
-    workspaceRef: "default",
-    agentConfigRevision: 1,
 };
+
+test("Given a Bot bound to one Runtime, When setup requests another Runtime, Then the original Runtime binding remains fixed", async () => {
+    const fixture = await createChatFixture();
+    try {
+        expect((await fixture.request(`chat/bots/${fixture.botId}/setup`, setupInput)).status).toBe(202);
+        const rebound = await fixture.request(`chat/bots/${fixture.botId}/setup`, {
+            ...setupInput,
+            runtimeId: "runtime-2",
+        });
+        expect(rebound.status).toBe(409);
+        expect(await rebound.json()).toMatchObject({ error: { code: "BOT_RUNTIME_FIXED" } });
+    } finally {
+        await fixture.close();
+    }
+});
+
+test("Given a conversation bound to one Agent, When another Agent is selected, Then the existing conversation reopens with its original Agent", async () => {
+    const fixture = await createChatFixture();
+    try {
+        expect((await fixture.request(`chat/bots/${fixture.botId}/setup`, setupInput)).status).toBe(202);
+        const settings = await fixture.request(`chat/bots/${fixture.botId}/agent-settings`, {
+            agentRef: "agent-one",
+        });
+        expect(settings.status).toBe(200);
+        const created = await fixture.request(`chat/bots/${fixture.botId}/access`, {
+            agentRef: "agent-one",
+            configurations: [],
+            conversationKey: "original-agent",
+            workspaceRef: "default",
+        });
+        const { conversationId } = v.parse(v.object({ conversationId: v.string() }), await created.json());
+
+        const changed = await fixture.request(`chat/bots/${fixture.botId}/access`, {
+            agentRef: "agent-two",
+            configurations: [],
+            conversationKey: "changed-agent",
+            workspaceRef: "default",
+        });
+        expect(changed.status).toBe(200);
+        expect(await changed.json()).toMatchObject({ agentRef: "agent-two" });
+        const reopened = await fixture.request(`chat/bots/${fixture.botId}/access`, { conversationId });
+
+        expect(reopened.status).toBe(200);
+        expect(await reopened.json()).toMatchObject({ agentRef: "agent-one", conversationId });
+    } finally {
+        await fixture.close();
+    }
+});
 
 test("Given an available Runtime, When a Bot is configured and used, Then settings, conversations, media, and instructions cross the Platform boundary", async () => {
     const fixture = await createChatFixture();
@@ -80,9 +126,10 @@ test("Given an available Runtime, When a Bot is configured and used, Then settin
         expect((await fixture.request(`chat/bots/${fixture.botId}/workspace`, {})).status).toBe(200);
         expect((await fixture.request(`chat/bots/${fixture.botId}/setup`, setupInput)).status).toBe(202);
 
-        const prepared = await fixture.request(`chat/bots/${fixture.botId}/agent-settings`, {});
+        const prepared = await fixture.request(`chat/bots/${fixture.botId}/agent-settings`, {
+            agentRef: setupInput.agentRef,
+        });
         expect(prepared.status).toBe(200);
-        const { bindingId } = v.parse(v.object({ bindingId: v.string() }), await prepared.json());
         expect(
             await (
                 await fixture.request(`chat/bots/${fixture.botId}/workspace/directory`, { directoryId: "default" })
@@ -98,9 +145,9 @@ test("Given an available Runtime, When a Bot is configured and used, Then settin
         });
 
         const selection = {
+            agentRef: setupInput.agentRef,
             conversationKey: "first-draft",
             workspaceRef: "path-L2hvbWUvYS9tb2JpdXMudDMvc2VsZWN0ZWQtcHJvamVjdA",
-            bindingId,
             configurations: [
                 { booleanValue: false, configId: "model", value: "model-two", valueType: "select" },
                 { booleanValue: true, configId: "fast_mode", value: "", valueType: "boolean" },
@@ -145,7 +192,7 @@ test("Given an available Runtime, When a Bot is configured and used, Then settin
         ]);
 
         const second = await fixture.request(`chat/bots/${fixture.botId}/access`, {
-            bindingId,
+            agentRef: setupInput.agentRef,
             conversationKey: "second-draft",
             permissionMode: "read-only",
             configuration: {

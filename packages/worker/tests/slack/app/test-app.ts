@@ -125,11 +125,7 @@ export async function createTestApplication() {
             "tenant-1",
             "chat-bot-1",
             {
-                bindingId: "binding-1",
                 runtimeId: "runtime-1",
-                agentRef: "agent-1",
-                workspaceRef: "workspace-1",
-                agentConfigRevision: 1,
             },
             now,
             signal,

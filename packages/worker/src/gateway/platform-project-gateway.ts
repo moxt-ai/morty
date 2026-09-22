@@ -29,10 +29,13 @@ import type { ProjectLocationHint } from "../components/management/util/project-
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 
 export type ChatConversationInput =
-    | { readonly conversationId: string }
+    | { readonly kind: "existing"; readonly conversationId: string }
     | {
+          readonly kind: "new";
           readonly conversationKey: string;
           readonly bindingId: string;
+          readonly runtimeId: string;
+          readonly agentRef: string;
           readonly configurations: readonly {
               readonly booleanValue: boolean;
               readonly configId: string;
@@ -42,8 +45,11 @@ export type ChatConversationInput =
           readonly workspaceRef: string;
       }
     | {
+          readonly kind: "new";
           readonly conversationKey: string;
           readonly bindingId: string;
+          readonly runtimeId: string;
+          readonly agentRef: string;
           readonly workspaceRef: string;
           readonly permissionMode: string;
           readonly configuration: {
@@ -161,12 +167,6 @@ export class PlatformProjectGateway {
 
     readonly openChatSession = async (
         projectId: string,
-        selection: {
-            readonly bindingId: string;
-            readonly runtimeId: string;
-            readonly agentRef: string;
-            readonly workspaceRef: string;
-        },
         input: ChatConversationInput,
         title: string,
         signal: AbortSignal,
@@ -175,7 +175,7 @@ export class PlatformProjectGateway {
             projectId,
             signal,
             async (client) => {
-                const sessionId = "conversationId" in input ? input.conversationId : input.conversationKey;
+                const sessionId = input.kind === "existing" ? input.conversationId : input.conversationKey;
                 let session: Awaited<ReturnType<MobiusClient["sessions"]["read"]>>;
                 try {
                     session = await client.sessions.read(sessionId, signal);
@@ -183,29 +183,24 @@ export class PlatformProjectGateway {
                     if (
                         !(cause instanceof MobiusApiError) ||
                         cause.code !== "session_not_found" ||
-                        "conversationId" in input
+                        input.kind === "existing"
                     ) {
                         throw cause;
                     }
                     session = await client.sessions.create(
                         {
-                            agentId: selection.agentRef,
-                            bindingId: selection.bindingId,
-                            directoryId: selection.workspaceRef,
+                            agentId: input.agentRef,
+                            bindingId: input.bindingId,
+                            directoryId: input.workspaceRef,
                             policy: new MobiusRecordingPolicy("full", 30 * 24 * 60 * 60 * 1000, 1000, 6_000_000),
-                            runtimeId: selection.runtimeId,
+                            runtimeId: input.runtimeId,
                             sessionId,
                             title,
                         },
                         signal,
                     );
                 }
-                if (
-                    session.projectId !== projectId ||
-                    session.sessionId !== sessionId ||
-                    session.runtimeId !== selection.runtimeId ||
-                    session.agentId !== selection.agentRef
-                ) {
+                if (session.projectId !== projectId || session.sessionId !== sessionId) {
                     throw new PlatformProjectError(
                         "PLATFORM_INVALID_RESPONSE",
                         "Platform returned an unexpected Session.",
@@ -214,7 +209,7 @@ export class PlatformProjectGateway {
                 }
                 const ready = await client.sessions.prepare(sessionId, signal);
                 let configOptions = ready.configOptions;
-                if ("configurations" in input) {
+                if (input.kind === "new" && "configurations" in input) {
                     for (const selection of input.configurations) {
                         const option = configOptions.find((candidate) => candidate.id === selection.configId);
                         if (
@@ -234,7 +229,7 @@ export class PlatformProjectGateway {
                         configOptions = (await client.sessions.updateConfiguration(sessionId, selection, signal))
                             .configOptions;
                     }
-                } else if ("configuration" in input) {
+                } else if (input.kind === "new" && "configuration" in input) {
                     if (input.permissionMode !== AGENT_DEFAULT_EXECUTION_SETTING) {
                         const permission = configOptions.find((option) => option.id === "permission_mode");
                         if (
@@ -297,7 +292,7 @@ export class PlatformProjectGateway {
                     credential: access.credential,
                     expiresAt: access.expiresAt,
                     ready: { ...ready, configOptions },
-                    agentRef: selection.agentRef,
+                    agentRef: session.agentId,
                     workspaceRef: session.defaultBinding.workspaceRef,
                 };
             },

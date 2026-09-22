@@ -29,7 +29,8 @@ Do not ask for an additional replacement confirmation.
 3. Download `{{BASE_URL}}/setup.mjs` to a private local directory, with a
    finite timeout and no redirects. Inspect it before running.
 4. Set `TOKEN` from the supplied URL. Set `HARNESS` to **your own harness ID**:
-   `codex` when running in Codex, `claude` in Claude Code, or `opencode` in OpenCode.
+   `codex` when running in Codex, `claude` in Claude Code, `opencode` in OpenCode,
+   or `oh-my-pi` in Oh My Pi.
    Honor an explicit user choice instead. Do not ask the user to choose when your
    own harness is available. Complete its installation/authentication if needed.
 5. Run the command from the user's current working directory. The script resolves and

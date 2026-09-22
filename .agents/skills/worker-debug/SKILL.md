@@ -144,6 +144,22 @@ Do not assume the current checkout was deployed at the failure time. Distinguish
 an already-fixed deployment mismatch from a defect still present on current
 `main`.
 
+### Read deployed D1 or Durable Object data
+
+When retained telemetry cannot reveal the persisted value needed to diagnose a
+staging or production failure, follow the temporary helper pattern documented by
+the `worker-data-migration` skill. Deploy a separate, short-lived, token-gated
+Worker in the same account and bind the target deployment's D1 database or
+Durable Object class with `script_name`. Query only the records required for the
+diagnosis through an existing internal read boundary, then delete the helper on
+success or failure.
+
+Do not upload diagnostic code as a version of the application Worker, alter its
+active deployment, copy an encrypted application secret, weaken an authorization
+gate, or run the migration endpoint merely to read data. State the exact staging
+or production target before deploying the helper, keep its token in a mode `0600`
+file, never print it, and independently verify that the helper was deleted.
+
 ## Implement and verify a fix
 
 Before production changes, state the user-visible slice and add the repository's
