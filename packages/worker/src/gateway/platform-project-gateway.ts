@@ -26,7 +26,12 @@ import {
     platformProjectSchema,
 } from "../components/management/entity/platform-project.ts";
 import type { ProjectLocationHint } from "../components/management/util/project-location.ts";
-import type { CloudBindings } from "../infra/cloud-bindings.ts";
+import {
+    appOriginBindingSchema,
+    type CloudBindings,
+    platformCredentialBindingsSchema,
+    platformEndpointBindingsSchema,
+} from "../infra/cloud-bindings.ts";
 
 export type ChatConversationInput =
     | { readonly kind: "existing"; readonly conversationId: string }
@@ -73,7 +78,9 @@ export class PlatformProjectGateway {
 
     readonly configuration = () => {
         try {
-            const endpoint = new URL(v.parse(v.string(), this.#bindings.MOBIUS_BASE_URL));
+            const bindings = v.parse(platformEndpointBindingsSchema, this.#bindings);
+            const appOrigin = v.safeParse(appOriginBindingSchema, this.#bindings);
+            const endpoint = new URL(bindings.MOBIUS_BASE_URL);
             if (
                 (endpoint.protocol !== "https:" &&
                     !(
@@ -84,12 +91,11 @@ export class PlatformProjectGateway {
                 endpoint.pathname !== "/" ||
                 endpoint.search !== "" ||
                 endpoint.hash !== "" ||
-                (typeof this.#bindings.APP_ORIGIN === "string" &&
-                    endpoint.origin === new URL(this.#bindings.APP_ORIGIN).origin)
+                (appOrigin.success && endpoint.origin === new URL(appOrigin.output.APP_ORIGIN).origin)
             ) {
                 throw new Error("Invalid Platform endpoint");
             }
-            return { origin: endpoint.origin, appId: v.parse(platformIdentifier, this.#bindings.MOBIUS_APP_ID) };
+            return { origin: endpoint.origin, appId: v.parse(platformIdentifier, bindings.MOBIUS_APP_ID) };
         } catch (cause) {
             throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Platform is not configured.", 503, { cause });
         }
@@ -554,7 +560,9 @@ export class PlatformProjectGateway {
         const client = new MobiusClient({
             endpoint: this.configuration().origin,
             projectId: v.parse(platformIdentifier, projectId),
-            credentialProvider: new MobiusAppCredentialProvider(v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET)),
+            credentialProvider: new MobiusAppCredentialProvider(
+                v.parse(platformCredentialBindingsSchema, this.#bindings).MOBIUS_APP_SECRET,
+            ),
             observeResponse: this.#observeMobiusResponse,
             operationTimeoutMilliseconds,
         });
@@ -654,7 +662,9 @@ export class PlatformProjectGateway {
         const locationHint = requestedLocationHint ?? "apac";
         const client = new MobiusPlatformAppClient({
             endpoint: configuration.origin,
-            credentialProvider: new MobiusAppCredentialProvider(v.parse(v.string(), this.#bindings.MOBIUS_APP_SECRET)),
+            credentialProvider: new MobiusAppCredentialProvider(
+                v.parse(platformCredentialBindingsSchema, this.#bindings).MOBIUS_APP_SECRET,
+            ),
             observeResponse: this.#observeMobiusResponse,
             operationTimeoutMilliseconds: 15000,
         });

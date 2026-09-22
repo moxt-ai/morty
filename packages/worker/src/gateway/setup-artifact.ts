@@ -1,11 +1,7 @@
 import { Hono } from "hono";
 import * as v from "valibot";
-import type { CloudBindings } from "../infra/cloud-bindings.ts";
+import { type CloudBindings, readableR2BucketBindingSchema } from "../infra/cloud-bindings.ts";
 import { json } from "../infra/http.ts";
-
-function isBucket(value: unknown): value is R2Bucket {
-    return v.safeParse(v.object({ get: v.function() }), value).success;
-}
 
 export const setupArtifact = new Hono<{ readonly Bindings: CloudBindings }>().get("/setup.mjs", async (context) => {
     const unavailable = () =>
@@ -18,10 +14,11 @@ export const setupArtifact = new Hono<{ readonly Bindings: CloudBindings }>().ge
             },
             503,
         );
-    const bucket = context.env.CHAT_ATTACHMENTS_APAC;
-    if (!isBucket(bucket)) {
+    const parsed = v.safeParse(readableR2BucketBindingSchema, context.env.CHAT_ATTACHMENTS_APAC);
+    if (!parsed.success) {
         return unavailable();
     }
+    const bucket = parsed.output;
     const deadline = new AbortController();
     const timer = setTimeout(() => deadline.abort(), 15000);
     const signal = AbortSignal.any([context.req.raw.signal, deadline.signal]);
