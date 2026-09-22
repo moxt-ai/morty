@@ -15,6 +15,7 @@ import {
 } from "../../components/chat/session-interactions.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
+import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
 import { registerMobiusChatDebugSession } from "../../debug-bridge.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
@@ -61,7 +62,6 @@ export function MobiusSessionPane({
     const taskControls = useStore(pane.tasks);
     const lifetime = useRef<AbortController | null>(null);
     const messageList = useRef<HTMLDivElement | null>(null);
-    const followLatest = useRef(true);
     const readImage = useCallback<MarkdownImageReader>(
         async (path, signal) => {
             for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -98,12 +98,6 @@ export function MobiusSessionPane({
             }),
         [pane, sessionId],
     );
-    // biome-ignore lint/correctness/useExhaustiveDependencies: Scroll after rendered message content changes, unless the user is reading older history.
-    useEffect(() => {
-        if (followLatest.current && messageList.current !== null) {
-            messageList.current.scrollTop = messageList.current.scrollHeight;
-        }
-    }, [model.messages.length]);
     const loadOlderMessages = useCallback(
         async (signal: AbortSignal) => await pane.store.getState().loadOlderMessages(signal),
         [pane],
@@ -116,7 +110,9 @@ export function MobiusSessionPane({
         }
     };
     const runAndFollow = (action: (signal: AbortSignal) => Promise<void>) => {
-        followLatest.current = true;
+        if (messageList.current !== null) {
+            messageList.current.scrollTop = messageList.current.scrollHeight;
+        }
         run(action);
     };
     const respondToPermission = async (response: PermissionInteractionResponse): Promise<void> => {
@@ -158,13 +154,10 @@ export function MobiusSessionPane({
     return (
         <>
             <section className="flex min-h-0 min-w-0 flex-1 animate-cloud-enter flex-col motion-reduce:animate-none">
-                <div
+                <FollowLatestScrollArea
                     role="log"
-                    ref={messageList}
-                    onScroll={(event) => {
-                        const element = event.currentTarget;
-                        followLatest.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
-                    }}
+                    container={messageList}
+                    followThreshold={80}
                     aria-label="Messages"
                     className="min-h-0 flex-1 space-y-8 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10 lg:px-12"
                 >
@@ -251,7 +244,7 @@ export function MobiusSessionPane({
                             onPermissionResponse={respondToPermission}
                         />
                     </div>
-                </div>
+                </FollowLatestScrollArea>
                 <LoadMoreTrigger
                     container={messageList}
                     hasMore={model.hasOlderHistory}

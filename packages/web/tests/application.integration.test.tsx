@@ -228,6 +228,56 @@ test("Given a paired Bot, When a user filters its models and requests an image, 
     ]);
 });
 
+test("Given a user follows the latest message, When a response streams, Then the latest content remains visible", {
+    timeout: 30_000,
+}, async () => {
+    const created = await renderWorkspace();
+    const { failure } = await act(async () => await created.connectAgent());
+    const composer = await act(async () => {
+        await waitForText(`[data-testid="${dataTestId.botConnectionStatus}"]`, "Connected");
+        return await waitForElement(`[data-testid="${dataTestId.messageComposer}"]`);
+    });
+    const draftMessages = await waitForElement('[role="log"][aria-label="Messages"]');
+    await sendPrompt(composer as HTMLTextAreaElement, "Create an image");
+    const messages = await vi.waitFor(() => {
+        const current = document.querySelector<HTMLElement>('[role="log"][aria-label="Messages"]');
+        if (current === null || current === draftMessages) {
+            throw new Error("The active Session message list did not appear");
+        }
+        return current;
+    });
+    let scrollHeight = 800;
+    let scrollTop = 100;
+    Object.defineProperties(messages, {
+        clientHeight: { configurable: true, get: () => 100 },
+        scrollHeight: {
+            configurable: true,
+            get: () =>
+                document.body.textContent?.includes("Codex turn 1: Create an image") === true ? scrollHeight : 200,
+        },
+        scrollTop: {
+            configurable: true,
+            get: () => scrollTop,
+            set: (value: number) => {
+                scrollTop = value;
+            },
+        },
+    });
+    messages.dispatchEvent(new Event("scroll"));
+
+    await Promise.race([waitForText("body", "Codex turn 1: Create an image"), failure]);
+
+    await vi.waitFor(() => expect(scrollTop).toBe(800));
+
+    scrollTop = 700;
+    messages.dispatchEvent(new Event("scroll"));
+    scrollHeight = 1_200;
+    const response = await waitForElement('article[aria-label="Agent response"]');
+    response.textContent = `${response.textContent} More streamed content`;
+
+    await vi.waitFor(() => expect(scrollTop).toBe(1_200));
+});
+
 test("Given a Bot is bound to one Runtime, When another Runtime connects, Then native sessions stay scoped to the Bot", {
     timeout: 30_000,
 }, async () => {

@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import type { ThinkingEntry, ThinkingPresentation, ToolThinkingEntry } from "../../services/chat/agent-reply.ts";
 import { AgentMarkdown } from "../agents/agent-markdown.tsx";
+import { FollowLatestScrollArea } from "../utils/follow-latest-scroll-area.tsx";
 import { ToolCallStatus } from "./tool-call-status.tsx";
 import { renderRegisteredTool } from "./tool-renderer-registry.tsx";
 
@@ -11,6 +12,20 @@ type ToolEntry = ToolThinkingEntry;
 type TimelineEntry =
     | { readonly kind: "reasoning"; readonly id: string; readonly entries: readonly ReasoningEntry[] }
     | { readonly kind: "tool"; readonly entry: ToolEntry };
+
+function ReasoningContent({ entry }: { readonly entry: ReasoningEntry }) {
+    const content = useRef<HTMLDivElement>(null);
+    return (
+        <FollowLatestScrollArea
+            className="overscroll-contain [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin]"
+            container={content}
+            followThreshold={24}
+            style={{ maxHeight: "10.5rem", overflowY: "auto" }}
+        >
+            <AgentMarkdown markdown={entry.text} streaming={entry.status === "streaming"} />
+        </FollowLatestScrollArea>
+    );
+}
 
 function ReasoningDisclosure({
     autoOpen,
@@ -46,7 +61,7 @@ function ReasoningDisclosure({
                             <Brain aria-hidden="true" className="size-4" />
                             <span>Thinking</span>
                         </div>
-                        <AgentMarkdown markdown={entry.text} streaming={entry.status === "streaming"} />
+                        <ReasoningContent entry={entry} />
                     </section>
                 ))}
             </div>
