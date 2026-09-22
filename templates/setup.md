@@ -74,7 +74,8 @@ preview, scan, or redeem it yourself because doing so consumes one use. Tell the
 **Open this link or scan the QR code to chat. It can be used up to five times before it
 expires. Keep the Runtime online. You can bind an account later if you want.**
 
-On failure, use `error.code` and the private Runtime log, fix the problem, and rerun
+On failure, use `error.code`, its sanitized `error.cause` chain, and the private
+Runtime log. Fix the problem and rerun
 the same command. It reuses the saved user identity and reconnects its active Runtime when possible. Preserve `$DOCUMENT_DIR/mobius-chat`
 credentials on network errors, cancellation, and timeouts. An unavailable identity
 requires user resolution; creating another user does not recover conversations.

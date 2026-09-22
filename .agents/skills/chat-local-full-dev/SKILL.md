@@ -94,7 +94,13 @@ specific tool.
    `vite.config.ts`, and `wrangler.jsonc`. Inspect `git status --short` and keep
    user changes intact.
 2. Require the pinned Node.js and pnpm from `package.json` `engines` (Node 24).
-   Install locked dependencies only when missing or stale; never upgrade them.
+   Install locked root dependencies only when missing or stale; never upgrade them.
+   The local-development entrypoint checks the Mobius submodule's independent
+   `pnpm-lock.yaml`, installs its dependencies when they are missing or stale,
+   and builds relay web assets for Mobius modes.
+   If diagnosing startup manually, use
+   `pnpm --dir third-party/mobius install --frozen-lockfile`; a root `pnpm install`
+   does not install the submodule workspace.
 3. Run `scripts/local-dev web-server`. It builds the Worker and setup
    bundle by default; pass `--no-build` only when those artifacts are fresh.
 4. Reproduce through a supported boundary: the browser app for user flows, or the

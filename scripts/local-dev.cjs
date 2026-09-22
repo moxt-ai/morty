@@ -37,6 +37,17 @@ const MOBIUS_WRANGLER = path.join(
     "wrangler.js",
 );
 const MOBIUS_CONFIG = "packages/relay-cloudflare-standalone/wrangler.jsonc";
+const MOBIUS_LOCKFILE = path.join(MOBIUS_ROOT, "pnpm-lock.yaml");
+const MOBIUS_INSTALLED_LOCKFILE = path.join(MOBIUS_ROOT, "node_modules", ".pnpm", "lock.yaml");
+const MOBIUS_GENERATED_MIGRATIONS = path.join(
+    MOBIUS_ROOT,
+    "packages",
+    "relay-cloudflare-platform",
+    "src",
+    "generated",
+    "non-cloud-retention-session-relay-do-migrations.ts",
+);
+const MOBIUS_WEB_ASSETS = path.join(MOBIUS_ROOT, "packages", "web", "dist");
 const SETUP_BUNDLE = "packages/setup/dist/setup.mjs";
 const CHAT_ATTACHMENTS_BUCKET = "mobius-chat-local-e2e-attachments";
 const PLATFORM_AUTH_HEADERS = {
@@ -254,10 +265,13 @@ async function stopProcess(pid) {
     }
 }
 
-async function waitForHttp(url, accept, timeoutMilliseconds, description) {
+async function waitForHttp(url, accept, timeoutMilliseconds, description, process) {
     const deadline = Date.now() + timeoutMilliseconds;
     let last = "no attempt";
     while (Date.now() < deadline) {
+        if (process !== undefined && !isAlive(process.pid)) {
+            throw new Error(`${description} process exited before becoming healthy; see ${process.logPath}`);
+        }
         try {
             const response = await fetch(url, { signal: AbortSignal.timeout(3_000) });
             if (await accept(response)) {
@@ -270,6 +284,19 @@ async function waitForHttp(url, accept, timeoutMilliseconds, description) {
         await new Promise((resolve) => setTimeout(resolve, 400));
     }
     throw new Error(`Timed out waiting for ${description}: ${last}`);
+}
+
+async function ensureMobiusDependencies() {
+    const installed =
+        fs.existsSync(MOBIUS_WRANGLER) &&
+        fs.existsSync(MOBIUS_GENERATED_MIGRATIONS) &&
+        fs.existsSync(MOBIUS_INSTALLED_LOCKFILE) &&
+        fs.readFileSync(MOBIUS_LOCKFILE).equals(fs.readFileSync(MOBIUS_INSTALLED_LOCKFILE));
+    if (installed) {
+        return;
+    }
+    log("installing Mobius submodule dependencies from the lockfile");
+    await run("pnpm", ["install", "--frozen-lockfile"], { cwd: MOBIUS_ROOT });
 }
 
 async function httpJson(url, options = {}) {
@@ -408,199 +435,260 @@ async function prepare(options) {
     const mobiusOrigin = `http://127.0.0.1:${mobiusPort}`;
     const mobiusPersist = path.join(stateDir, "mobius");
     const mobiusLog = path.join(stateDir, "mobius.log");
-
-    log("applying Platform migrations");
-    await wrangler([
-        "d1",
-        "migrations",
-        "apply",
-        "PLATFORM_DIRECTORY_DATABASE",
-        "--local",
-        "--persist-to",
-        platformPersist,
-        "--config",
-        PLATFORM_CONFIG,
-    ]);
-
-    log("starting Platform fixture");
-    const platformPid = startProcess(
-        "platform",
-        [
-            "dev",
-            "--config",
-            PLATFORM_CONFIG,
-            "--ip",
-            "127.0.0.1",
-            "--port",
-            String(platformPort),
-            "--inspector-port",
-            "0",
-            "--persist-to",
-            platformPersist,
-        ],
-        platformLog,
-    );
-    await waitForHttp(
-        `${platformOrigin}/mobius/api/dashboard/health`,
-        (response) => response.ok,
-        90_000,
-        "Platform health",
-    );
-
-    let appId = options.appId;
-    let appSecret = options.appSecret;
-    if (appId === undefined || appId.length === 0 || appSecret === undefined || appSecret.length === 0) {
-        log("provisioning local Platform application");
-        const inventory = await httpJson(`${platformOrigin}/mobius/api/dashboard/v1/platform/tenants`, {
-            headers: PLATFORM_AUTH_HEADERS,
-        });
-        const tenantId = inventory.tenants?.[0]?.tenantId;
-        if (typeof tenantId !== "string") {
-            throw new Error("The local Platform did not return a tenant");
-        }
-        const application = await httpJson(`${platformOrigin}/mobius/api/dashboard/v1/apps`, {
-            headers: PLATFORM_AUTH_HEADERS,
-            body: { cloudRetention: false, displayName: `Mobius Chat local dev ${path.basename(stateDir)}`, tenantId },
-        });
-        appId = application.appId;
-        appSecret = application.defaultCredential?.credential;
-    }
-    if (typeof appId !== "string" || appId.length === 0 || typeof appSecret !== "string" || appSecret.length === 0) {
-        throw new Error("Set --app-id and --app-secret, or allow local app provisioning");
-    }
-
-    if (options.build !== false) {
-        log("building Chat Worker and setup bundle");
-        await run("pnpm", ["build"]);
-    }
-    if (!fs.existsSync(path.join(REPO_ROOT, SETUP_BUNDLE))) {
-        throw new Error(`Missing setup bundle at ${SETUP_BUNDLE}; run without --no-build`);
-    }
-
-    log("seeding setup bundle into local R2");
-    await wrangler([
-        "r2",
-        "object",
-        "put",
-        `${CHAT_ATTACHMENTS_BUCKET}/artifacts/setup.mjs`,
-        "--file",
-        SETUP_BUNDLE,
-        "--local",
-        "--persist-to",
-        chatPersist,
-        "--config",
-        CHAT_CONFIG,
-    ]);
-
-    const { publicKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2_048 });
-    const variables = {
-        APP_ORIGIN: chatOrigin,
-        AUTHENTICATION_BASE_URL: chatOrigin,
-        CLERK_JWT_KEY: publicKey.export({ format: "pem", type: "spki" }).toString(),
-        CLERK_PUBLISHABLE_KEY: clerkPublishableKey(),
-        MOBIUS_APP_ID: appId,
-        MOBIUS_APP_SECRET: appSecret,
-        MOBIUS_BASE_URL: platformOrigin,
-        SLACK_MOBIUS_AUTH_TOKEN: randomToken(16),
-        SLACK_OAUTH_STATE_SIGNING_KEY: randomToken(16),
-        SLACK_SERVER_BASE_URL: chatOrigin,
-        SLACK_TOKEN_ENCRYPTION_KEY: crypto.randomBytes(32).toString("base64"),
-    };
-    const variableArguments = Object.entries(variables).flatMap(([key, value]) => ["--var", `${key}:${value}`]);
-
-    log("starting Chat Worker");
-    const chatPid = startProcess(
-        "chat",
-        [
-            "dev",
-            "--config",
-            CHAT_CONFIG,
-            "--ip",
-            "127.0.0.1",
-            "--port",
-            String(chatPort),
-            "--inspector-port",
-            "0",
-            "--persist-to",
-            chatPersist,
-            ...variableArguments,
-        ],
-        chatLog,
-    );
-    await waitForHttp(chatOrigin, (response) => response.ok, 90_000, "Chat Worker");
-
-    let mobiusPid;
-    let cliLog;
-    if (options.mode === "web-server-mobius" || options.mode === "web-server-mobius-cli") {
-        log("applying Mobius relay migrations");
-        await mobiusWrangler([
-            "d1",
-            "migrations",
-            "apply",
-            "DIRECTORY_DATABASE",
-            "--local",
-            "--persist-to",
-            mobiusPersist,
-            "--config",
-            MOBIUS_CONFIG,
-        ]);
-        log("starting Mobius relay");
-        mobiusPid = startMobiusProcess(
-            "mobius",
-            [
-                "dev",
-                "--config",
-                MOBIUS_CONFIG,
-                "--ip",
-                "127.0.0.1",
-                "--port",
-                String(mobiusPort),
-                "--inspector-port",
-                "0",
-                "--persist-to",
-                mobiusPersist,
-            ],
-            mobiusLog,
-        );
-        await waitForHttp(
-            `${mobiusOrigin}/mobius/api/health`,
-            (response) => response.ok,
-            90_000,
-            "Mobius relay health",
-        );
-        if (options.mode === "web-server-mobius-cli") {
-            cliLog = path.join(stateDir, "cli.log");
-            log("checking local Mobius CLI");
-            await run("pnpm", ["--dir", "third-party/mobius", "mobius", "agents"], {
-                cwd: REPO_ROOT,
-            }).then(({ stdout, stderr }) => fs.writeFileSync(cliLog, `${stdout}${stderr}`, { mode: 0o600 }));
-        }
-    }
-
-    const stack = {
-        appId,
+    let stack = {
         mode: options.mode,
-        cliCommand:
-            options.mode === "web-server-mobius-cli" ? "pnpm --dir third-party/mobius mobius agents" : undefined,
-        ...(mobiusPid === undefined ? {} : { mobiusLog, mobiusOrigin, mobiusPersist, mobiusPid }),
-        ...(cliLog === undefined ? {} : { cliLog }),
-        chatConfig: CHAT_CONFIG,
         chatLog,
         chatOrigin,
         chatPersist,
-        chatPid,
         platformConfig: PLATFORM_CONFIG,
         platformLog,
         platformOrigin,
         platformPersist,
-        platformPid,
-        ready: true,
+        ...(options.mode === "web-server-mobius" || options.mode === "web-server-mobius-cli"
+            ? { mobiusLog, mobiusOrigin, mobiusPersist }
+            : {}),
+        ready: false,
         stateDir,
     };
     writeStack(stack);
-    log(`ready at ${chatOrigin}`);
-    process.stdout.write(`${JSON.stringify(stack)}\n`);
-    await keepAlive(stack, options);
+
+    try {
+        await ensureMobiusDependencies();
+        if (
+            (options.mode === "web-server-mobius" || options.mode === "web-server-mobius-cli") &&
+            options.build !== false
+        ) {
+            log("building Mobius relay web assets");
+            await run("pnpm", ["--filter", "@moxt-ai/mobius-web", "build"], {
+                cwd: MOBIUS_ROOT,
+                env: { VITE_CLERK_PUBLISHABLE_KEY: "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k" },
+            });
+        }
+        if (
+            (options.mode === "web-server-mobius" || options.mode === "web-server-mobius-cli") &&
+            !fs.existsSync(MOBIUS_WEB_ASSETS)
+        ) {
+            throw new Error("Missing Mobius relay web assets; run without --no-build");
+        }
+
+        log("applying Platform migrations");
+        await wrangler([
+            "d1",
+            "migrations",
+            "apply",
+            "PLATFORM_DIRECTORY_DATABASE",
+            "--local",
+            "--persist-to",
+            platformPersist,
+            "--config",
+            PLATFORM_CONFIG,
+        ]);
+
+        log("starting Platform fixture");
+        const platformPid = startProcess(
+            "platform",
+            [
+                "dev",
+                "--config",
+                PLATFORM_CONFIG,
+                "--ip",
+                "127.0.0.1",
+                "--port",
+                String(platformPort),
+                "--inspector-port",
+                "0",
+                "--persist-to",
+                platformPersist,
+            ],
+            platformLog,
+        );
+        stack = { ...stack, platformPid };
+        writeStack(stack);
+        await waitForHttp(
+            `${platformOrigin}/mobius/api/dashboard/health`,
+            (response) => response.ok,
+            90_000,
+            "Platform health",
+            { pid: platformPid, logPath: platformLog },
+        );
+
+        let appId = options.appId;
+        let appSecret = options.appSecret;
+        if (appId === undefined || appId.length === 0 || appSecret === undefined || appSecret.length === 0) {
+            log("provisioning local Platform application");
+            const inventory = await httpJson(`${platformOrigin}/mobius/api/dashboard/v1/platform/tenants`, {
+                headers: PLATFORM_AUTH_HEADERS,
+            });
+            const tenantId = inventory.tenants?.[0]?.tenantId;
+            if (typeof tenantId !== "string") {
+                throw new Error("The local Platform did not return a tenant");
+            }
+            const application = await httpJson(`${platformOrigin}/mobius/api/dashboard/v1/apps`, {
+                headers: PLATFORM_AUTH_HEADERS,
+                body: {
+                    cloudRetention: false,
+                    displayName: `Mobius Chat local dev ${path.basename(stateDir)}`,
+                    tenantId,
+                },
+            });
+            appId = application.appId;
+            appSecret = application.defaultCredential?.credential;
+        }
+        if (
+            typeof appId !== "string" ||
+            appId.length === 0 ||
+            typeof appSecret !== "string" ||
+            appSecret.length === 0
+        ) {
+            throw new Error("Set --app-id and --app-secret, or allow local app provisioning");
+        }
+
+        if (options.build !== false) {
+            log("building Chat Worker and setup bundle");
+            await run("pnpm", ["build"]);
+        }
+        if (!fs.existsSync(path.join(REPO_ROOT, SETUP_BUNDLE))) {
+            throw new Error(`Missing setup bundle at ${SETUP_BUNDLE}; run without --no-build`);
+        }
+
+        log("seeding setup bundle into local R2");
+        await wrangler([
+            "r2",
+            "object",
+            "put",
+            `${CHAT_ATTACHMENTS_BUCKET}/artifacts/setup.mjs`,
+            "--file",
+            SETUP_BUNDLE,
+            "--local",
+            "--persist-to",
+            chatPersist,
+            "--config",
+            CHAT_CONFIG,
+        ]);
+
+        const { publicKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2_048 });
+        const variables = {
+            APP_ORIGIN: chatOrigin,
+            AUTHENTICATION_BASE_URL: chatOrigin,
+            CLERK_JWT_KEY: publicKey.export({ format: "pem", type: "spki" }).toString(),
+            CLERK_PUBLISHABLE_KEY: clerkPublishableKey(),
+            MOBIUS_APP_ID: appId,
+            MOBIUS_APP_SECRET: appSecret,
+            MOBIUS_BASE_URL: platformOrigin,
+            SLACK_MOBIUS_AUTH_TOKEN: randomToken(16),
+            SLACK_OAUTH_STATE_SIGNING_KEY: randomToken(16),
+            SLACK_SERVER_BASE_URL: chatOrigin,
+            SLACK_TOKEN_ENCRYPTION_KEY: crypto.randomBytes(32).toString("base64"),
+        };
+        const variableArguments = Object.entries(variables).flatMap(([key, value]) => ["--var", `${key}:${value}`]);
+
+        log("starting Chat Worker");
+        const chatPid = startProcess(
+            "chat",
+            [
+                "dev",
+                "--config",
+                CHAT_CONFIG,
+                "--ip",
+                "127.0.0.1",
+                "--port",
+                String(chatPort),
+                "--inspector-port",
+                "0",
+                "--persist-to",
+                chatPersist,
+                ...variableArguments,
+            ],
+            chatLog,
+        );
+        stack = { ...stack, appId, chatPid };
+        writeStack(stack);
+        await waitForHttp(chatOrigin, (response) => response.ok, 90_000, "Chat Worker", {
+            pid: chatPid,
+            logPath: chatLog,
+        });
+
+        let mobiusPid;
+        let cliLog;
+        if (options.mode === "web-server-mobius" || options.mode === "web-server-mobius-cli") {
+            log("applying Mobius relay migrations");
+            await mobiusWrangler([
+                "d1",
+                "migrations",
+                "apply",
+                "DIRECTORY_DATABASE",
+                "--local",
+                "--persist-to",
+                mobiusPersist,
+                "--config",
+                MOBIUS_CONFIG,
+            ]);
+            log("starting Mobius relay");
+            mobiusPid = startMobiusProcess(
+                "mobius",
+                [
+                    "dev",
+                    "--config",
+                    MOBIUS_CONFIG,
+                    "--ip",
+                    "127.0.0.1",
+                    "--port",
+                    String(mobiusPort),
+                    "--inspector-port",
+                    "0",
+                    "--persist-to",
+                    mobiusPersist,
+                ],
+                mobiusLog,
+            );
+            stack = { ...stack, mobiusPid };
+            writeStack(stack);
+            await waitForHttp(
+                `${mobiusOrigin}/mobius/api/health`,
+                (response) => response.ok,
+                90_000,
+                "Mobius relay health",
+                { pid: mobiusPid, logPath: mobiusLog },
+            );
+            if (options.mode === "web-server-mobius-cli") {
+                cliLog = path.join(stateDir, "cli.log");
+                log("checking local Mobius CLI");
+                await run("pnpm", ["--dir", "third-party/mobius", "mobius", "agents"], {
+                    cwd: REPO_ROOT,
+                }).then(({ stdout, stderr }) => fs.writeFileSync(cliLog, `${stdout}${stderr}`, { mode: 0o600 }));
+            }
+        }
+
+        stack = {
+            ...stack,
+            appId,
+            mode: options.mode,
+            cliCommand:
+                options.mode === "web-server-mobius-cli" ? "pnpm --dir third-party/mobius mobius agents" : undefined,
+            ...(mobiusPid === undefined ? {} : { mobiusLog, mobiusOrigin, mobiusPersist, mobiusPid }),
+            ...(cliLog === undefined ? {} : { cliLog }),
+            chatConfig: CHAT_CONFIG,
+            chatLog,
+            chatOrigin,
+            chatPersist,
+            chatPid,
+            platformConfig: PLATFORM_CONFIG,
+            platformLog,
+            platformOrigin,
+            platformPersist,
+            platformPid,
+            ready: true,
+            stateDir,
+        };
+        writeStack(stack);
+        log(`ready at ${chatOrigin}`);
+        process.stdout.write(`${JSON.stringify(stack)}\n`);
+        await keepAlive(stack, options);
+    } catch (error) {
+        await stopRecorded(stack);
+        writeStack({ ...stack, ready: false });
+        throw error;
+    }
 }
 
 const PAIR_READY_TIMEOUT_MILLISECONDS = 300_000;
@@ -841,8 +929,10 @@ async function stopRecorded(stack) {
         log(`stopping paired runtime (pid ${runtime.runtimePid})`);
         await stopProcess(runtime.runtimePid);
     }
-    log(`stopping Chat Worker (pid ${stack.chatPid})`);
-    await stopProcess(stack.chatPid);
+    if (stack.chatPid !== undefined) {
+        log(`stopping Chat Worker (pid ${stack.chatPid})`);
+        await stopProcess(stack.chatPid);
+    }
     if (stack.webPid !== undefined) {
         await stopProcess(stack.webPid);
     }
