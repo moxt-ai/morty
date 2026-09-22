@@ -165,7 +165,7 @@ export const lastAgentSettingsEntry = (botId: string, agentRef: string) =>
     });
 
 // ---------------------------------------------------------------------------
-// Working-directory preferences per Bot, Runtime, and agent
+// Working-directory preferences
 // ---------------------------------------------------------------------------
 
 const directoryIdSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(1_000));
@@ -183,9 +183,9 @@ const recentCwdPreferenceSchema = v.pipe(
 );
 export type RecentCwdPreference = v.InferOutput<typeof recentCwdPreferenceSchema>;
 
-export const recentCwdEntry = (botId: string, runtimeId: string, agentRef: string) =>
+export const recentCwdEntry = (botId: string) =>
     jsonLocalStorageEntry({
-        key: scopedKey("mobius:recent-cwd:", botId, runtimeId, agentRef),
+        key: scopedKey("mobius:recent-cwd:", botId),
         schema: v.pipe(
             v.array(recentCwdPreferenceSchema),
             v.maxLength(10),
