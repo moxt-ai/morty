@@ -14,7 +14,6 @@ import {
     SessionInteractionCards,
 } from "../../components/chat/session-interactions.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
-import { Button } from "../../components/ui/cloud-button.tsx";
 import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
 import { registerMobiusChatDebugSession } from "../../debug-bridge.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
@@ -40,7 +39,7 @@ export function MobiusSessionPane({
     readonly initialMessage?: QueuedDraftMessage | undefined;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession" | "steerTurn" | "submitTurn">;
-    readonly endRemoteAccess?: (signal: AbortSignal) => Promise<void>;
+    readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
     readonly onConnectionStatusChange: (sessionId: string, connection: SessionConnectionKind) => void;
     readonly onStatusChange: (sessionId: string, status: SessionActivityState) => void;
 }) {
@@ -51,7 +50,7 @@ export function MobiusSessionPane({
             botId,
             requests,
             storage: window.localStorage,
-            endRemoteAccess: endRemoteAccess ?? (async () => Promise.resolve()),
+            endRemoteAccess,
         }),
     );
     const model = useStore(pane.store);
@@ -60,7 +59,6 @@ export function MobiusSessionPane({
     const delivery = useStore(pane.delivery);
     const messageQueue = useStore(pane.messageQueue);
     const taskControls = useStore(pane.tasks);
-    const remoteAccess = useStore(pane.remoteAccess);
     const lifetime = useRef<AbortController | null>(null);
     const messageList = useRef<HTMLDivElement | null>(null);
     const followLatest = useRef(true);
@@ -157,45 +155,9 @@ export function MobiusSessionPane({
         [filePreview],
     );
 
-    if (endRemoteAccess !== undefined && remoteAccess.state.kind === "ended") {
-        return (
-            <section className="m-auto grid max-w-lg gap-3 p-8 text-center">
-                <h1 className="text-2xl font-semibold">Remote access ended</h1>
-                <p>Your local task is still running on your computer. This browser can no longer open it.</p>
-            </section>
-        );
-    }
     return (
         <>
             <section className="flex min-h-0 min-w-0 flex-1 animate-cloud-enter flex-col motion-reduce:animate-none">
-                {endRemoteAccess !== undefined && (
-                    <div className="flex items-center justify-end gap-2 border-b border-border px-4 py-2">
-                        {remoteAccess.state.kind === "confirming" ? (
-                            <>
-                                <span className="text-sm">End access for every remote browser?</span>
-                                <Button
-                                    variant="destructive"
-                                    disabled={false}
-                                    onClick={() => run(pane.store.getState().endRemoteAccess)}
-                                >
-                                    Confirm end access
-                                </Button>
-                                <Button variant="ghost" onClick={pane.remoteAccess.getState().cancelEnd}>
-                                    Cancel
-                                </Button>
-                            </>
-                        ) : (
-                            <Button
-                                variant="outline"
-                                disabled={remoteAccess.state.kind === "ending"}
-                                onClick={pane.remoteAccess.getState().requestEnd}
-                            >
-                                {remoteAccess.state.kind === "ending" ? "Ending remote access…" : "End remote access"}
-                            </Button>
-                        )}
-                        {remoteAccess.state.kind === "failed" && <p role="alert">{remoteAccess.state.message}</p>}
-                    </div>
-                )}
                 <div
                     role="log"
                     ref={messageList}

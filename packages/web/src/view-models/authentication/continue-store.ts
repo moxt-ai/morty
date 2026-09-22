@@ -90,7 +90,6 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     destination.searchParams.set("sessionId", state.handoff.sessionId);
                     destination.searchParams.set("nativeSessionAction", state.choice);
                 }
-                destination.searchParams.set("remoteAccess", "1");
                 window.location.replace(destination);
             } catch (cause) {
                 if (!signal.aborted) {

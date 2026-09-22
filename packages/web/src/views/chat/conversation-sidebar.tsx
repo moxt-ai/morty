@@ -47,6 +47,7 @@ export function ConversationSidebar({
     onOpen,
     onOpenSession,
     onNewConversation,
+    endRemoteAccess,
     createTransfer,
     activeSession,
     directoryRevision,
@@ -69,6 +70,7 @@ export function ConversationSidebar({
     readonly onOpen: (session: ManagedChatSession) => void;
     readonly onOpenSession: (session: OpenMobiusSession) => void;
     readonly onNewConversation: () => void;
+    readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
     readonly activeSession:
         | { readonly kind: "none" }
@@ -273,6 +275,19 @@ export function ConversationSidebar({
                                 >
                                     Archive conversation
                                 </ContextMenu.Item>
+                                {activeId === session.id && (
+                                    <ContextMenu.Item
+                                        className="cursor-pointer rounded-md px-3 py-2 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-accent"
+                                        onSelect={() => {
+                                            const controller = lifetime.current;
+                                            if (controller !== null) {
+                                                void endRemoteAccess(controller.signal);
+                                            }
+                                        }}
+                                    >
+                                        End remote access
+                                    </ContextMenu.Item>
+                                )}
                             </ContextMenu.Content>
                         </ContextMenu.Portal>
                     </ContextMenu.Root>
