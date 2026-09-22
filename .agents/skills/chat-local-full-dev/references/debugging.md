@@ -9,6 +9,7 @@ Durable Objects, so most deployed failure modes reproduce locally.
 | --- | --- |
 | Chat Worker output | `chatLog` from `prepare` |
 | Platform fixture output | `platformLog` from `prepare` |
+| Paired Runtime output | `pairLog` and `<cliState>/logs/daemon.log` from each stack `runtimes` record (`logs --worker runtime`) |
 | Chat D1 / Durable Objects / R2 / KV | `chatPersist` |
 | Platform D1 / Durable Objects / R2 / KV | `platformPersist` |
 | Stack record (pids, origins, paths) | `<stateDir>/stack.json` |
