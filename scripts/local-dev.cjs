@@ -19,11 +19,23 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const net = require("node:net");
 
-const REPO_ROOT = path.resolve(__dirname, "../../../..");
+const REPO_ROOT = path.resolve(__dirname, "..");
 const WRANGLER = path.join(REPO_ROOT, "node_modules", ".bin", "wrangler");
 const PLATFORM_CONFIG = "packages/e2e/fixtures/wrangler.platform.jsonc";
 const CHAT_CONFIG = "packages/e2e/fixtures/wrangler.chat.jsonc";
+const MOBIUS_ROOT = path.join(REPO_ROOT, "third-party", "mobius");
+const MOBIUS_WRANGLER = path.join(
+    MOBIUS_ROOT,
+    "node_modules",
+    ".pnpm",
+    "node_modules",
+    "wrangler",
+    "bin",
+    "wrangler.js",
+);
+const MOBIUS_CONFIG = "packages/relay-cloudflare-standalone/wrangler.jsonc";
 const SETUP_BUNDLE = "packages/setup/dist/setup.mjs";
 const CHAT_ATTACHMENTS_BUCKET = "mobius-chat-local-e2e-attachments";
 const PLATFORM_AUTH_HEADERS = {
@@ -31,8 +43,23 @@ const PLATFORM_AUTH_HEADERS = {
     authorization: "Bearer mobius-chat-local-e2e",
     "x-mobius-oidc-provider": "e2e",
 };
-const DEFAULT_PLATFORM_PORT = 8788;
-const DEFAULT_CHAT_PORT = 5173;
+
+async function availablePort() {
+    return await new Promise((resolve, reject) => {
+        const server = net.createServer();
+        server.once("error", reject);
+        server.listen(0, "127.0.0.1", () => {
+            const address = server.address();
+            if (address === null || typeof address === "string") {
+                server.close(() => reject(new Error("Could not allocate a local port")));
+                return;
+            }
+            const port = address.port;
+            server.close((error) => (error === undefined ? resolve(port) : reject(error)));
+        });
+    });
+}
+const DEFAULT_STAGING_PLATFORM = "https://mobius.moxt.ws";
 
 function log(message) {
     process.stderr.write(`[local-dev] ${message}\n`);
@@ -44,7 +71,7 @@ function fail(message) {
 }
 
 function parseArguments(argv) {
-    const options = { command: argv[0] ?? "help" };
+    const options = { command: argv[0] ?? "help", mode: argv[1] ?? "web-server" };
     const requireValue = (index, token) => {
         const value = argv[index + 1];
         if (value === undefined || value.length === 0) {
@@ -54,9 +81,31 @@ function parseArguments(argv) {
     };
     for (let index = 1; index < argv.length; index += 1) {
         const token = argv[index];
+        if (index === 1 && !token.startsWith("--")) {
+            options.mode = token;
+            continue;
+        }
+        const equals = token.indexOf("=");
+        if (equals > 0 && (token.startsWith("--app-id") || token.startsWith("--app-secret"))) {
+            const name = token.slice(0, equals);
+            const value = token.slice(equals + 1);
+            if (value.length === 0) {
+                fail(`${name} requires a value`);
+            }
+            options[name === "--app-id" ? "appId" : "appSecret"] = value;
+            continue;
+        }
         switch (token) {
             case "--state-dir":
                 options.stateDir = path.resolve(requireValue(index, token));
+                index += 1;
+                break;
+            case "--app-id":
+                options.appId = requireValue(index, token);
+                index += 1;
+                break;
+            case "--app-secret":
+                options.appSecret = requireValue(index, token);
                 index += 1;
                 break;
             case "--platform-port":
@@ -65,6 +114,10 @@ function parseArguments(argv) {
                 break;
             case "--chat-port":
                 options.chatPort = Number.parseInt(requireValue(index, token), 10);
+                index += 1;
+                break;
+            case "--mobius-port":
+                options.mobiusPort = Number.parseInt(requireValue(index, token), 10);
                 index += 1;
                 break;
             case "--worker":
@@ -90,6 +143,9 @@ function parseArguments(argv) {
                 break;
             case "--keep-state":
                 options.keepState = true;
+                break;
+            case "--background":
+                options.background = true;
                 break;
             default:
                 break;
@@ -126,11 +182,16 @@ function wrangler(args) {
     return run(WRANGLER, args);
 }
 
-function startProcess(name, args, logPath) {
+function mobiusWrangler(args) {
+    return run(process.execPath, [MOBIUS_WRANGLER, ...args], { cwd: MOBIUS_ROOT });
+}
+
+function startProcess(name, args, logPath, command = WRANGLER, env = {}, cwd = REPO_ROOT) {
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
     const output = fs.openSync(logPath, "a", 0o600);
-    const child = spawn(WRANGLER, args, {
-        cwd: REPO_ROOT,
+    const child = spawn(command, args, {
+        cwd,
+        env: { ...process.env, ...env },
         detached: true,
         stdio: ["ignore", output, output],
     });
@@ -141,6 +202,10 @@ function startProcess(name, args, logPath) {
     }
     log(`started ${name} pid=${child.pid}`);
     return child.pid;
+}
+
+function startMobiusProcess(name, args, logPath) {
+    return startProcess(name, [MOBIUS_WRANGLER, ...args], logPath, process.execPath, {}, MOBIUS_ROOT);
 }
 
 function isAlive(pid) {
@@ -253,9 +318,63 @@ function randomToken(bytes) {
     return crypto.randomBytes(bytes).toString("hex");
 }
 
+async function prepareWeb(options) {
+    const chatPort = options.chatPort ?? (await availablePort());
+    const stateDir = options.stateDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "chat-local-web-dev-"));
+    fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+    const chatOrigin = `http://localhost:${chatPort}`;
+    const logPath = path.join(stateDir, "web.log");
+    const appId = options.appId;
+    const appSecret = options.appSecret;
+    if (appId === undefined || appId.length === 0 || appSecret === undefined || appSecret.length === 0) {
+        throw new Error("web mode requires --app-id and --app-secret");
+    }
+    const pid = startProcess(
+        "web",
+        ["exec", "vite", "--host", "localhost", "--port", String(chatPort)],
+        logPath,
+        "pnpm",
+        {
+            VITE_MOBIUS_BASE_URL: process.env.MOBIUS_CHAT_LOCAL_PLATFORM_URL ?? DEFAULT_STAGING_PLATFORM,
+            VITE_MOBIUS_APP_ID: appId,
+        },
+    );
+    await waitForHttp(chatOrigin, (response) => response.ok, 90_000, "local web app");
+    const stack = { mode: options.mode, appId, chatOrigin, chatLog: logPath, chatPid: pid, stateDir, ready: true };
+    writeStack(stack);
+    process.stdout.write(`${JSON.stringify(stack)}\n`);
+    await keepAlive(stack, options);
+}
+
+async function keepAlive(stack, options) {
+    if (options.background === true) {
+        return;
+    }
+    await new Promise((resolve) => {
+        const shutdown = async () => {
+            await stopRecorded(stack);
+            resolve();
+        };
+        process.once("SIGINT", shutdown);
+        process.once("SIGTERM", shutdown);
+    });
+}
+
 async function prepare(options) {
-    const platformPort = options.platformPort ?? DEFAULT_PLATFORM_PORT;
-    const chatPort = options.chatPort ?? DEFAULT_CHAT_PORT;
+    const validModes = new Set(["web", "web-server", "web-server-mobius", "web-server-mobius-cli"]);
+    if (!validModes.has(options.mode)) {
+        throw new Error(
+            `Unknown mode ${options.mode}; use web, web-server, web-server-mobius, or web-server-mobius-cli`,
+        );
+    }
+    if (options.mode === "web") {
+        return prepareWeb(options);
+    }
+    if (options.mode === "web-server" && (options.appId === undefined || options.appSecret === undefined)) {
+        throw new Error("web-server requires --app-id and --app-secret");
+    }
+    const platformPort = options.platformPort ?? (await availablePort());
+    const chatPort = options.chatPort ?? (await availablePort());
     const stateDir = options.stateDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "chat-local-full-dev-"));
     fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
 
@@ -276,6 +395,10 @@ async function prepare(options) {
     const platformLog = path.join(stateDir, "platform.log");
     const chatOrigin = `http://localhost:${chatPort}`;
     const platformOrigin = `http://127.0.0.1:${platformPort}`;
+    const mobiusPort = options.mobiusPort ?? (await availablePort());
+    const mobiusOrigin = `http://127.0.0.1:${mobiusPort}`;
+    const mobiusPersist = path.join(stateDir, "mobius");
+    const mobiusLog = path.join(stateDir, "mobius.log");
 
     log("applying Platform migrations");
     await wrangler([
@@ -315,22 +438,26 @@ async function prepare(options) {
         "Platform health",
     );
 
-    log("provisioning local Platform application");
-    const inventory = await httpJson(`${platformOrigin}/mobius/api/dashboard/v1/platform/tenants`, {
-        headers: PLATFORM_AUTH_HEADERS,
-    });
-    const tenantId = inventory.tenants?.[0]?.tenantId;
-    if (typeof tenantId !== "string") {
-        throw new Error("The local Platform did not return a tenant");
+    let appId = options.appId;
+    let appSecret = options.appSecret;
+    if (appId === undefined || appId.length === 0 || appSecret === undefined || appSecret.length === 0) {
+        log("provisioning local Platform application");
+        const inventory = await httpJson(`${platformOrigin}/mobius/api/dashboard/v1/platform/tenants`, {
+            headers: PLATFORM_AUTH_HEADERS,
+        });
+        const tenantId = inventory.tenants?.[0]?.tenantId;
+        if (typeof tenantId !== "string") {
+            throw new Error("The local Platform did not return a tenant");
+        }
+        const application = await httpJson(`${platformOrigin}/mobius/api/dashboard/v1/apps`, {
+            headers: PLATFORM_AUTH_HEADERS,
+            body: { cloudRetention: false, displayName: `Mobius Chat local dev ${path.basename(stateDir)}`, tenantId },
+        });
+        appId = application.appId;
+        appSecret = application.defaultCredential?.credential;
     }
-    const application = await httpJson(`${platformOrigin}/mobius/api/dashboard/v1/apps`, {
-        headers: PLATFORM_AUTH_HEADERS,
-        body: { cloudRetention: false, displayName: `Mobius Chat local full dev ${path.basename(stateDir)}`, tenantId },
-    });
-    const appId = application.appId;
-    const appSecret = application.defaultCredential?.credential;
-    if (typeof appId !== "string" || typeof appSecret !== "string") {
-        throw new Error("The local Platform did not return an application credential");
+    if (typeof appId !== "string" || appId.length === 0 || typeof appSecret !== "string" || appSecret.length === 0) {
+        throw new Error("Set --app-id and --app-secret, or allow local app provisioning");
     }
 
     if (options.build !== false) {
@@ -393,8 +520,61 @@ async function prepare(options) {
     );
     await waitForHttp(chatOrigin, (response) => response.ok, 90_000, "Chat Worker");
 
+    let mobiusPid;
+    let cliLog;
+    if (options.mode === "web-server-mobius" || options.mode === "web-server-mobius-cli") {
+        log("applying Mobius relay migrations");
+        await mobiusWrangler([
+            "d1",
+            "migrations",
+            "apply",
+            "DIRECTORY_DATABASE",
+            "--local",
+            "--persist-to",
+            mobiusPersist,
+            "--config",
+            MOBIUS_CONFIG,
+        ]);
+        log("starting Mobius relay");
+        mobiusPid = startMobiusProcess(
+            "mobius",
+            [
+                "dev",
+                "--config",
+                MOBIUS_CONFIG,
+                "--ip",
+                "127.0.0.1",
+                "--port",
+                String(mobiusPort),
+                "--inspector-port",
+                "0",
+                "--persist-to",
+                mobiusPersist,
+            ],
+            mobiusLog,
+        );
+        await waitForHttp(
+            `${mobiusOrigin}/mobius/api/health`,
+            (response) => response.ok,
+            90_000,
+            "Mobius relay health",
+        );
+        if (options.mode === "web-server-mobius-cli") {
+            cliLog = path.join(stateDir, "cli.log");
+            log("checking local Mobius CLI");
+            await run("pnpm", ["--dir", "third-party/mobius", "mobius", "agents"], {
+                cwd: REPO_ROOT,
+            }).then(({ stdout, stderr }) => fs.writeFileSync(cliLog, `${stdout}${stderr}`, { mode: 0o600 }));
+        }
+    }
+
     const stack = {
         appId,
+        mode: options.mode,
+        cliCommand:
+            options.mode === "web-server-mobius-cli" ? "pnpm --dir third-party/mobius mobius agents" : undefined,
+        ...(mobiusPid === undefined ? {} : { mobiusLog, mobiusOrigin, mobiusPersist, mobiusPid }),
+        ...(cliLog === undefined ? {} : { cliLog }),
         chatConfig: CHAT_CONFIG,
         chatLog,
         chatOrigin,
@@ -411,6 +591,7 @@ async function prepare(options) {
     writeStack(stack);
     log(`ready at ${chatOrigin}`);
     process.stdout.write(`${JSON.stringify(stack)}\n`);
+    await keepAlive(stack, options);
 }
 
 async function status(options) {
@@ -419,7 +600,7 @@ async function status(options) {
         fail("pass --state-dir for a stack created by prepare");
     }
     const chatAlive = isAlive(stack.chatPid);
-    const platformAlive = isAlive(stack.platformPid);
+    const platformAlive = stack.platformPid === undefined ? false : isAlive(stack.platformPid);
     let chatHttp = false;
     let platformHttp = false;
     try {
@@ -427,12 +608,16 @@ async function status(options) {
     } catch {
         chatHttp = false;
     }
-    try {
-        platformHttp = (
-            await fetch(`${stack.platformOrigin}/mobius/api/dashboard/health`, { signal: AbortSignal.timeout(3_000) })
-        ).ok;
-    } catch {
-        platformHttp = false;
+    if (stack.platformOrigin !== undefined) {
+        try {
+            platformHttp = (
+                await fetch(`${stack.platformOrigin}/mobius/api/dashboard/health`, {
+                    signal: AbortSignal.timeout(3_000),
+                })
+            ).ok;
+        } catch {
+            platformHttp = false;
+        }
     }
     process.stdout.write(
         `${JSON.stringify({ ...stack, chatAlive, chatHttp, platformAlive, platformHttp }, null, 2)}\n`,
@@ -454,9 +639,11 @@ async function logs(options) {
     const worker = options.worker ?? "chat";
     const files =
         worker === "all"
-            ? [stack.chatLog, stack.platformLog]
+            ? [stack.chatLog, stack.platformLog].filter((file) => file !== undefined)
             : worker === "platform"
-              ? [stack.platformLog]
+              ? stack.platformLog === undefined
+                  ? []
+                  : [stack.platformLog]
               : [stack.chatLog];
     const filter = options.filter === undefined ? null : new RegExp(options.filter, "u");
     const count = Number.isInteger(options.lines) ? options.lines : 200;
@@ -507,8 +694,17 @@ async function logs(options) {
 async function stopRecorded(stack) {
     log(`stopping Chat Worker (pid ${stack.chatPid})`);
     await stopProcess(stack.chatPid);
-    log(`stopping Platform (pid ${stack.platformPid})`);
-    await stopProcess(stack.platformPid);
+    if (stack.webPid !== undefined) {
+        await stopProcess(stack.webPid);
+    }
+    if (stack.platformPid !== undefined) {
+        log(`stopping Platform (pid ${stack.platformPid})`);
+        await stopProcess(stack.platformPid);
+    }
+    if (stack.mobiusPid !== undefined) {
+        log(`stopping Mobius relay (pid ${stack.mobiusPid})`);
+        await stopProcess(stack.mobiusPid);
+    }
 }
 
 async function remove(options) {
@@ -534,7 +730,7 @@ function usage() {
     process.stdout.write(
         [
             "Usage:",
-            "  node scripts/local-dev.cjs prepare [--state-dir DIR] [--platform-port N] [--chat-port N] [--force] [--no-build]",
+            "  node scripts/local-dev.cjs prepare <web|web-server|web-server-mobius|web-server-mobius-cli> [--state-dir DIR] [--platform-port N] [--chat-port N] [--mobius-port N] [--app-id ID --app-secret SECRET] [--force] [--no-build] [--background]",
             "  node scripts/local-dev.cjs status --state-dir DIR",
             "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|platform|all] [--lines N] [--filter REGEX] [--follow]",
             "  node scripts/local-dev.cjs remove --state-dir DIR [--keep-state]",
