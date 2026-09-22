@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+APP_ID=${MOBIUS_CHAT_LOCAL_APP_ID:-}
+APP_SECRET=${MOBIUS_CHAT_LOCAL_APP_SECRET:-}
+
+case "${1:-}" in
+    web|web-server)
+        [ -n "$APP_ID" ] && [ -n "$APP_SECRET" ] || {
+            echo "MOBIUS_CHAT_LOCAL_APP_ID and MOBIUS_CHAT_LOCAL_APP_SECRET are required" >&2
+            exit 2
+        }
+        MODE=$1
+        shift
+        exec node "$ROOT/scripts/local-dev.cjs" prepare "$MODE" --app-id "$APP_ID" --app-secret "$APP_SECRET" "$@"
+        ;;
+    web-server-mobius|web-server-mobius-cli)
+        MODE=$1
+        shift
+        exec node "$ROOT/scripts/local-dev.cjs" prepare "$MODE" "$@"
+        ;;
+    *)
+        exec node "$ROOT/scripts/local-dev.cjs" "$@"
+        ;;
+esac

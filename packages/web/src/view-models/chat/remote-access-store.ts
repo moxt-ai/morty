@@ -20,7 +20,7 @@ export const createRemoteAccessStore = (endRemoteAccess: (signal: AbortSignal) =
         requestEnd: () => set({ state: { kind: "confirming" } }),
         cancelEnd: () => set({ state: { kind: "available" } }),
         end: async (signal) => {
-            if (get().state.kind !== "confirming") {
+            if (get().state.kind === "ending" || get().state.kind === "ended") {
                 return;
             }
             set({ state: { kind: "ending" } });

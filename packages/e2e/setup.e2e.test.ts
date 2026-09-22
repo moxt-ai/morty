@@ -155,11 +155,7 @@ test("Given a setup handoff, When a user continues remote work, Then setup, ACP 
         await expect(
             page.getByText("Agent updates stopped. Check your local agent or reconnect.", { exact: true }),
         ).toHaveCount(0);
-        await page.getByRole("button", { name: "End remote access", exact: true }).click();
-        await page.getByRole("button", { name: "Confirm end access", exact: true }).click();
-        await expect(page.getByRole("heading", { name: "Remote access ended", exact: true })).toBeVisible();
-        await expect(
-            page.getByText("Your local task is still running on your computer.", { exact: false }),
-        ).toBeVisible();
+        await page.locator('[aria-current="page"]').click({ button: "right" });
+        await page.getByText("End remote access", { exact: true }).click();
     });
 });

@@ -16,8 +16,42 @@ For deployed logs and incidents use `worker-debug`.
 ## Quick start
 
 ```sh
-node scripts/local-dev.cjs prepare
+scripts/local-dev web-server-mobius
 ```
+
+The repository provides one local-development entrypoint, `scripts/local-dev`.
+It reads the owner-provided `MOBIUS_CHAT_LOCAL_APP_ID` and
+`MOBIUS_CHAT_LOCAL_APP_SECRET` values and passes them as explicit arguments to
+the dependency-free worker supervisor; `scripts/local-dev.cjs` never reads
+those environment variables directly.
+
+Modes:
+
+| Mode | Services | Platform |
+| --- | --- | --- |
+| `web` | local Chat web/Worker | staging Platform |
+| `web-server` | local Chat web/Worker + local Platform | supplied app credential |
+| `web-server-mobius` | local Chat + local Platform + local Mobius relay | local |
+| `web-server-mobius-cli` | mode above + local Mobius CLI | local |
+
+Examples:
+
+```sh
+scripts/local-dev web
+scripts/local-dev web-server
+scripts/local-dev web-server-mobius
+scripts/local-dev web-server-mobius-cli
+```
+
+Use `node scripts/local-dev.cjs ...` for status, logs, and removal. The
+`prepare` command remains available for automation and accepts explicit
+`--app-id` and `--app-secret` arguments.
+
+`prepare` stays attached in the foreground after it prints its ready record.
+For agent-driven development, start the wrapper in the background and poll
+`node scripts/local-dev.cjs status --state-dir <stateDir>`; the record contains
+the Chat URL and, for server modes, the local Platform and Mobius URLs. Stop it
+with Ctrl-C or use `remove` when finished.
 
 `prepare` prints one JSON object on stdout. Progress goes to stderr, so stdout
 stays parseable. Read these fields instead of assuming defaults:
@@ -54,7 +88,7 @@ specific tool.
    user changes intact.
 2. Require the pinned Node.js and pnpm from `package.json` `engines` (Node 24).
    Install locked dependencies only when missing or stale; never upgrade them.
-3. Run `node scripts/local-dev.cjs prepare`. It builds the Worker and setup
+3. Run `scripts/local-dev web-server`. It builds the Worker and setup
    bundle by default; pass `--no-build` only when those artifacts are fresh.
 4. Reproduce through a supported boundary: the browser app for user flows, or the
    Chat HTTP API for a narrower contract. Prefer the real app so the reproduction
@@ -74,9 +108,9 @@ specific tool.
    D1 and Durable Object SQLite.
 7. Remove the stack when finished without removing retained screenshots:
 
-   ```sh
-   node scripts/local-dev.cjs remove --state-dir <stateDir>
-   ```
+```sh
+node scripts/local-dev.cjs remove --state-dir <stateDir>
+```
 
 ## Process model
 
