@@ -20,9 +20,10 @@ duplicate scenario.
 
 ### Browser product journeys
 
-`packages/e2e/conversation.e2e.test.ts` covers paired and newly created
-workspaces. `packages/e2e/setup.e2e.test.ts` covers setup handoff,
-native-session import, remote work, media, reload, and revocation. These two
+`packages/e2e/conversation.e2e.test.ts` covers one paired conversation from an
+image prompt through an Agent tool response and persisted reload.
+`packages/e2e/setup.e2e.test.ts` covers setup handoff, native-session import,
+reload, and revocation. These two
 files contain the product E2E journeys:
 
 ```bash
@@ -47,16 +48,18 @@ The production router, API clients, view-models, Zustand stores, React views, Ch
 Worker, Project Durable Objects, Platform Worker, Platform Durable Objects, and
 WebSocket transports all participate. They run in local in-memory Cloudflare
 runtimes. A single stateful fake Agent-daemon replaces the external local process and
-answers the real Runtime protocol for settings, sessions, messages, events, and file
-reads. Do not inject stores, render an isolated component, or replace Chat or Platform
-with response tables.
+answers the real Runtime protocol with a representative Agent and model directory,
+sessions, messages, events, and file reads. Do not inject stores, render an isolated
+component, or replace Chat or Platform with response tables.
 
 This is the default owner for browser-side branching that needs the real Chat and
 Platform path, including loading, reconnecting, queued work, history reconciliation,
 errors, and rendering. Keep it as one advancing journey instead of rebuilding the
 stack for many cases. Browser E2E retains only the proof that deployed-style
 processes and a real browser connect. A Web bug should not require another full-stack
-E2E step when it can be reproduced through this in-memory stack.
+E2E step when it can be reproduced through this in-memory stack. Bot management,
+Agent configuration filtering, media rendering, local-file pulling, and Runtime
+scoping therefore live in this journey; the browser suite does not repeat them.
 
 ### Worker integration
 

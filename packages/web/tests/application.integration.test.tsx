@@ -73,7 +73,7 @@ async function sendPrompt(composer: HTMLTextAreaElement, prompt: string): Promis
     await act(async () => send.click());
 }
 
-test("Given an unpaired workspace, When its Agent responds with local media, Then the real Chat stack renders it", {
+test("Given a workspace, When a user manages its Bot and chats through the real local stack, Then configuration, media, and Runtime scoping remain visible", {
     timeout: 30_000,
 }, async () => {
     const fixture = await createChatWorker();
@@ -113,6 +113,26 @@ test("Given an unpaired workspace, When its Agent responds with local media, The
         expect(pairing).toBeInstanceOf(HTMLInputElement);
         expect((pairing as HTMLInputElement).value).toMatch(/^follow http:\/\/127\.0\.0\.1:\d+\/pair\.md\?token=/u);
 
+        await act(async () => {
+            const element = await waitForElement(`[data-testid="${dataTestId.botMenuTrigger}"]`);
+            element.click();
+        });
+        await act(async () => {
+            (await waitForElement(`[data-testid="${dataTestId.createBot}"]`)).click();
+            const name = await waitForElement(`[data-testid="${dataTestId.botNameInput}"]`);
+            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+            setter?.call(name, "Laptop Bot");
+            name.dispatchEvent(new window.InputEvent("input", { bubbles: true, data: "Laptop Bot" }));
+            (await waitForEnabled(`[data-testid="${dataTestId.confirmCreateBot}"]`)).click();
+        });
+        await act(async () => await waitForText(`[data-testid="${dataTestId.botMenuTrigger}"]`, "Laptop Bot"));
+        await act(async () => {
+            (await waitForElement(`[data-testid="${dataTestId.botMenuTrigger}"]`)).click();
+            (await waitForElement(`[data-testid="${dataTestId.removeBot}"]`)).click();
+            (await waitForElement(`[data-testid="${dataTestId.confirmRemoveBot}"]`)).click();
+        });
+        await act(async () => await waitForText(`[data-testid="${dataTestId.botMenuTrigger}"]`, "My Bot"));
+
         const { failure: agentFailure } = await act(async () => await fixture.connectAgent());
         const composer = await act(async () => {
             await waitForText(`[data-testid="${dataTestId.botConnectionStatus}"]`, "Connected");
@@ -121,6 +141,24 @@ test("Given an unpaired workspace, When its Agent responds with local media, The
         expect(composer).toBeInstanceOf(HTMLTextAreaElement);
         expect((composer as HTMLTextAreaElement).disabled).toBe(false);
         expect(document.querySelector(`[data-testid="${dataTestId.pairingInstruction}"]`)).toBeNull();
+
+        await act(async () => {
+            (await waitForElement(`[data-testid="${dataTestId.agentConfiguration}"]`)).click();
+            (await waitForEnabled(`[data-testid="${dataTestId.agentSetting("model")}"]`)).click();
+            const search = await waitForElement(`[data-testid="${dataTestId.modelSearch}"]`);
+            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+            setter?.call(search, "large");
+            search.dispatchEvent(new window.InputEvent("input", { bubbles: true, data: "large" }));
+        });
+        await act(
+            async () =>
+                await waitForText(`[data-testid="${dataTestId.sessionConfigValue("test-large")}"]`, "Test Large"),
+        );
+        expect(document.querySelector(`[data-testid="${dataTestId.sessionConfigValue("test-small")}"]`)).toBeNull();
+        await act(async () => {
+            document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+            document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        });
 
         const prompt = "Create an image";
         await sendPrompt(composer as HTMLTextAreaElement, prompt);
@@ -132,43 +170,7 @@ test("Given an unpaired workspace, When its Agent responds with local media, The
             ]),
             agentFailure,
         ]);
-    } finally {
-        if (root !== null) {
-            await act(async () => root?.unmount());
-            root = null;
-        }
-        await fixture.close();
-    }
-});
-
-test("Given a Bot bound to one Runtime while an older pairing of the same machine is still listed, When the user opens Native Sessions, Then the agent selector offers only the bound Runtime's agents", {
-    timeout: 30_000,
-}, async () => {
-    const fixture = await createChatWorker();
-    window.location.href = `${fixture.origin}/chat`;
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-    try {
-        await act(async () => {
-            root?.render(
-                <ApiTransportProvider transport={fixture.transport}>
-                    <ToastProvider>
-                        <WorkspaceApplication
-                            activeIdentity={fixture.identity}
-                            authorize={async (signal) => signal.throwIfAborted()}
-                            userId={fixture.userId}
-                        />
-                    </ToastProvider>
-                </ApiTransportProvider>,
-            );
-        });
-        await act(async () => await waitForElement(`[data-testid="${dataTestId.chatLanding}"]`));
-        await act(async () => await fixture.connectAgent());
         await act(async () => await fixture.connectRuntime());
-        await act(async () => {
-            await waitForText(`[data-testid="${dataTestId.botConnectionStatus}"]`, "Connected");
-        });
 
         const nativeSessions = await act(async () => {
             const button = await waitForElement('button[aria-label="Native Sessions"]');

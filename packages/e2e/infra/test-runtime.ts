@@ -14,7 +14,7 @@ export async function createTestRuntime(harness: E2EHarness) {
     // model-provider credentials. Chat, Platform and Runtime are real processes.
     const binary = join(harness.workDirectory, "agent.sh");
     await mkdir(join(harness.workDirectory, "agent-state"), { recursive: true });
-    const agent = join(repository, "third-party/mobius/e2e/fixtures/fake-acp-agent/src/cli.ts");
+    const agent = join(repository, "third-party/mobius/tests/agent-daemon/fixtures/fake-acp-agent/src/cli.ts");
     await writeFile(
         binary,
         `#!/bin/sh\nif [ "$1" = "--version" ]; then echo '1.2.0'; exit 0; fi\nexport MOBIUS_FAKE_ACP_STATE_DIRECTORY=${JSON.stringify(join(harness.workDirectory, "agent-state"))}\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(agent)} --agent-name OpenCode "$@"\n`,
