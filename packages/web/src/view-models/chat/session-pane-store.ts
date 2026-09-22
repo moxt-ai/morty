@@ -9,6 +9,7 @@ import {
     type MobiusClient,
     MobiusControlEvent,
     MobiusElicitationResponseRequest,
+    type MobiusLiveSessionEventObserver,
     MobiusPageRequest,
     MobiusPermissionResponseRequest,
     MobiusRunningAttemptSummary,
@@ -572,371 +573,360 @@ export function createSessionPaneModel(options: {
                     );
                     const connected = client;
                     signal.addEventListener("abort", () => connected.close(), { once: true });
-                    const subscription = await connected.events.subscribeLive(
-                        sessionId,
-                        {
-                            reconcile: async (connection) => {
-                                const reconcilingTurn = activeTurn.current();
-                                const reconciliation =
-                                    connection.kind === "initial"
-                                        ? { kind: "initial-subscription" as const, turn: reconcilingTurn }
-                                        : { kind: "reconnecting" as const, turn: reconcilingTurn };
-                                switch (reconciliation.kind) {
-                                    case "initial-subscription":
-                                        break;
-                                    case "reconnecting":
-                                        set({ connection: { kind: "loading" } });
-                                        break;
-                                }
-                                const [loadedHistory, pendingInteractions, restoredTurn] = await Promise.all([
-                                    connected.sessions.queryNativeMessages(sessionId, signal),
-                                    connected.interactions.listPending(sessionId, signal),
-                                    reconciliation.turn.kind === "accepted"
-                                        ? connected.turns.read(sessionId, reconciliation.turn.turnId, signal)
-                                        : Promise.resolve(null),
+                    const observer: MobiusLiveSessionEventObserver = {
+                        reconcile: async (connection) => {
+                            const reconcilingTurn = activeTurn.current();
+                            const reconciliation =
+                                connection.kind === "initial"
+                                    ? { kind: "initial-subscription" as const, turn: reconcilingTurn }
+                                    : { kind: "reconnecting" as const, turn: reconcilingTurn };
+                            switch (reconciliation.kind) {
+                                case "initial-subscription":
+                                    break;
+                                case "reconnecting":
+                                    set({ connection: { kind: "loading" } });
+                                    break;
+                            }
+                            const [loadedHistory, pendingInteractions, restoredTurn] = await Promise.all([
+                                connected.sessions.queryNativeMessages(sessionId, signal),
+                                connected.interactions.listPending(sessionId, signal),
+                                reconciliation.turn.kind === "accepted"
+                                    ? connected.turns.read(sessionId, reconciliation.turn.turnId, signal)
+                                    : Promise.resolve(null),
+                            ]);
+                            signal.throwIfAborted();
+                            const authoritative = {
+                                history: loadedHistory,
+                                interactions: pendingInteractions,
+                                kind: "authoritative-state-loaded" as const,
+                                turn: restoredTurn,
+                            };
+                            nativeHistory = authoritative.history.status === "available" ? authoritative.history : null;
+                            historyCursor =
+                                authoritative.history.status === "available" ? authoritative.history.nextCursor : null;
+                            set({
+                                interactions: authoritative.interactions.flatMap((interaction) => {
+                                    const presented = presentInteraction(interaction);
+                                    return presented === null ? [] : [presented];
+                                }),
+                            });
+                            if (
+                                authoritative.turn !== null &&
+                                authoritative.turn.state.kind !== "queued" &&
+                                authoritative.turn.state.kind !== "running"
+                            ) {
+                                tasks.getState().finish(command);
+                                activeTurn.turnCleared(command);
+                                command = "";
+                            }
+                            const native = historySessionPresentation(
+                                authoritative.history,
+                                sessionId,
+                                command === "" ? null : command,
+                            );
+                            const nativeMessages = native.messages;
+                            delivery
+                                .getState()
+                                .reconcile([
+                                    ...(authoritative.history.status === "available"
+                                        ? authoritative.history.coveredCommandIds
+                                        : []),
+                                    ...(command !== "" &&
+                                    nativeMessages.some((message) => message.role === "user" && message.id === command)
+                                        ? [command]
+                                        : []),
                                 ]);
-                                signal.throwIfAborted();
-                                const authoritative = {
-                                    history: loadedHistory,
-                                    interactions: pendingInteractions,
-                                    kind: "authoritative-state-loaded" as const,
-                                    turn: restoredTurn,
-                                };
-                                nativeHistory =
-                                    authoritative.history.status === "available" ? authoritative.history : null;
-                                historyCursor =
-                                    authoritative.history.status === "available"
-                                        ? authoritative.history.nextCursor
-                                        : null;
-                                set({
-                                    interactions: authoritative.interactions.flatMap((interaction) => {
-                                        const presented = presentInteraction(interaction);
-                                        return presented === null ? [] : [presented];
-                                    }),
-                                });
-                                if (
-                                    authoritative.turn !== null &&
-                                    authoritative.turn.state.kind !== "queued" &&
-                                    authoritative.turn.state.kind !== "running"
-                                ) {
-                                    tasks.getState().finish(command);
-                                    activeTurn.turnCleared(command);
-                                    command = "";
+                            const liveCommandMessages =
+                                command === "" ||
+                                (authoritative.history.status === "available" &&
+                                    authoritative.history.coveredCommandIds.includes(command))
+                                    ? []
+                                    : get().messages.filter((message) =>
+                                          message.role === "user"
+                                              ? message.id === command &&
+                                                !nativeMessages.some(
+                                                    (nativeMessage) =>
+                                                        nativeMessage.role === "user" && nativeMessage.id === command,
+                                                )
+                                              : message.commandId === command &&
+                                                !nativeMessages.some(
+                                                    (nativeMessage) =>
+                                                        nativeMessage.role === "assistant" &&
+                                                        nativeMessage.commandId === command,
+                                                ),
+                                      );
+                            const restoredFromDaemon = [...nativeMessages, ...liveCommandMessages];
+                            const reconciledDelivery = delivery.getState().state;
+                            const restoredMessages =
+                                reconciledDelivery.kind === "delivery-unknown"
+                                    ? includePendingUserMessage(
+                                          restoredFromDaemon,
+                                          reconciledDelivery.journal.commandId,
+                                          reconciledDelivery.journal.displayPrompt,
+                                          reconciledDelivery.journal.request.images,
+                                      )
+                                    : restoredFromDaemon;
+                            signal.throwIfAborted();
+                            const restoredWork =
+                                command === ""
+                                    ? { activity: { kind: "idle" } as const, messages: restoredMessages }
+                                    : startSessionWork(
+                                          { activity: { kind: "idle" }, messages: restoredMessages },
+                                          { commandId: command, attempt: null },
+                                      );
+                            set({
+                                activities: native.activities,
+                                hasOlderHistory: historyCursor !== null,
+                                ...restoredWork,
+                            });
+                            switch (reconciliation.kind) {
+                                case "initial-subscription":
+                                    break;
+                                case "reconnecting":
+                                    set({ connection: { client: connected, kind: "ready" } });
+                                    break;
+                            }
+                        },
+                        receive: async (event) => {
+                            const payload = event.payload;
+                            if (payload instanceof MobiusAgentActivityEvent) {
+                                if (command !== "" && payload.commandId !== command) {
+                                    return true;
                                 }
-                                const native = historySessionPresentation(
-                                    authoritative.history,
-                                    sessionId,
-                                    command === "" ? null : command,
-                                );
-                                const nativeMessages = native.messages;
-                                delivery
-                                    .getState()
-                                    .reconcile([
-                                        ...(authoritative.history.status === "available"
-                                            ? authoritative.history.coveredCommandIds
-                                            : []),
-                                        ...(command !== "" &&
-                                        nativeMessages.some(
-                                            (message) => message.role === "user" && message.id === command,
-                                        )
-                                            ? [command]
-                                            : []),
-                                    ]);
-                                const liveCommandMessages =
-                                    command === "" ||
-                                    (authoritative.history.status === "available" &&
-                                        authoritative.history.coveredCommandIds.includes(command))
-                                        ? []
-                                        : get().messages.filter((message) =>
-                                              message.role === "user"
-                                                  ? message.id === command &&
-                                                    !nativeMessages.some(
-                                                        (nativeMessage) =>
-                                                            nativeMessage.role === "user" &&
-                                                            nativeMessage.id === command,
-                                                    )
-                                                  : message.commandId === command &&
-                                                    !nativeMessages.some(
-                                                        (nativeMessage) =>
-                                                            nativeMessage.role === "assistant" &&
-                                                            nativeMessage.commandId === command,
-                                                    ),
-                                          );
-                                const restoredFromDaemon = [...nativeMessages, ...liveCommandMessages];
-                                const reconciledDelivery = delivery.getState().state;
-                                const restoredMessages =
-                                    reconciledDelivery.kind === "delivery-unknown"
-                                        ? includePendingUserMessage(
-                                              restoredFromDaemon,
-                                              reconciledDelivery.journal.commandId,
-                                              reconciledDelivery.journal.displayPrompt,
-                                              reconciledDelivery.journal.request.images,
-                                          )
-                                        : restoredFromDaemon;
-                                signal.throwIfAborted();
-                                const restoredWork =
-                                    command === ""
-                                        ? { activity: { kind: "idle" } as const, messages: restoredMessages }
-                                        : startSessionWork(
-                                              { activity: { kind: "idle" }, messages: restoredMessages },
-                                              { commandId: command, attempt: null },
-                                          );
-                                set({
-                                    activities: native.activities,
-                                    hasOlderHistory: historyCursor !== null,
-                                    ...restoredWork,
-                                });
-                                switch (reconciliation.kind) {
-                                    case "initial-subscription":
-                                        break;
-                                    case "reconnecting":
-                                        set({ connection: { client: connected, kind: "ready" } });
-                                        break;
-                                }
-                            },
-                            receive: async (event) => {
-                                const payload = event.payload;
-                                if (payload instanceof MobiusAgentActivityEvent) {
-                                    if (command !== "" && payload.commandId !== command) {
-                                        return true;
-                                    }
+                                set((current) => ({
+                                    activities: recordAgentActivity(current.activities, event),
+                                    messages: placeAgentActivity(
+                                        current.messages,
+                                        payload.commandId,
+                                        agentActivityKey(payload),
+                                    ),
+                                }));
+                                return true;
+                            }
+                            if (payload instanceof MobiusControlEvent) {
+                                if (payload.kind === "agent.content") {
                                     set((current) => ({
-                                        activities: recordAgentActivity(current.activities, event),
-                                        messages: placeAgentActivity(
-                                            current.messages,
-                                            payload.commandId,
-                                            agentActivityKey(payload),
+                                        messages: applyRecordedContents(current.messages, [event]),
+                                    }));
+                                } else if (payload.kind === "session.commands.updated") {
+                                    tasks
+                                        .getState()
+                                        .updateCommands(
+                                            decodeSessionCommandsUpdatedEvent(payload.encodedPayload).commands,
+                                        );
+                                } else if (payload.kind === "session.permission.requested") {
+                                    const permission = decodeSessionPermissionRequestedEvent(payload.encodedPayload);
+                                    set((current) => ({
+                                        interactions: replaceInteraction(
+                                            current.interactions,
+                                            permission.interactionId,
+                                            {
+                                                kind: "permission",
+                                                permission: { ...permission, state: { kind: "pending" } },
+                                            },
                                         ),
                                     }));
-                                    return true;
-                                }
-                                if (payload instanceof MobiusControlEvent) {
-                                    if (payload.kind === "agent.content") {
-                                        set((current) => ({
-                                            messages: applyRecordedContents(current.messages, [event]),
-                                        }));
-                                    } else if (payload.kind === "session.commands.updated") {
-                                        tasks
-                                            .getState()
-                                            .updateCommands(
-                                                decodeSessionCommandsUpdatedEvent(payload.encodedPayload).commands,
-                                            );
-                                    } else if (payload.kind === "session.permission.requested") {
-                                        const permission = decodeSessionPermissionRequestedEvent(
-                                            payload.encodedPayload,
-                                        );
-                                        set((current) => ({
-                                            interactions: replaceInteraction(
-                                                current.interactions,
-                                                permission.interactionId,
-                                                {
-                                                    kind: "permission",
-                                                    permission: { ...permission, state: { kind: "pending" } },
-                                                },
-                                            ),
-                                        }));
-                                    } else if (payload.kind === "session.permission.resolved") {
-                                        const resolved = decodeSessionPermissionResolvedEvent(payload.encodedPayload);
-                                        set((current) => ({
-                                            interactions: resolvePermission(
-                                                current.interactions,
-                                                resolved.interactionId,
-                                                resolved.outcome,
-                                                resolved.optionId,
-                                            ),
-                                        }));
-                                        try {
-                                            applyAuthoritativeInteraction(
-                                                await connected.interactions.read(
-                                                    sessionId,
-                                                    resolved.interactionId,
-                                                    AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
-                                                ),
-                                            );
-                                        } catch (cause) {
-                                            signal.throwIfAborted();
-                                            console.error("The resolved permission could not be refreshed", cause);
-                                        }
-                                    } else if (payload.kind === "session.elicitation.requested") {
-                                        const { accepted, ...elicitation } = decodeSessionElicitationRequestedEvent(
-                                            payload.encodedPayload,
-                                        );
-                                        set((current) => ({
-                                            interactions: replaceInteraction(
-                                                current.interactions,
-                                                elicitation.interactionId,
-                                                {
-                                                    kind: "elicitation",
-                                                    elicitation: {
-                                                        ...elicitation,
-                                                        state: accepted
-                                                            ? {
-                                                                  action: "accept",
-                                                                  content: "",
-                                                                  kind: "submitted",
-                                                              }
-                                                            : { kind: "pending" },
-                                                    },
-                                                },
-                                            ),
-                                        }));
-                                    } else if (payload.kind === "session.elicitation.resolved") {
-                                        const resolved = decodeSessionElicitationResolvedEvent(payload.encodedPayload);
-                                        set((current) => ({
-                                            interactions: resolveElicitation(
-                                                current.interactions,
-                                                resolved.interactionId,
-                                                resolved.action,
-                                            ),
-                                        }));
-                                        try {
-                                            applyAuthoritativeInteraction(
-                                                await connected.interactions.read(
-                                                    sessionId,
-                                                    resolved.interactionId,
-                                                    AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
-                                                ),
-                                            );
-                                        } catch (cause) {
-                                            signal.throwIfAborted();
-                                            console.error("The resolved elicitation could not be refreshed", cause);
-                                        }
-                                    }
-                                }
-                                if (
-                                    payload instanceof MobiusTurnStartedEvent &&
-                                    messageQueue
-                                        .getState()
-                                        .messages.some((message) => message.commandId === payload.commandId)
-                                ) {
-                                    const queued = messageQueue.getState().takeStarted(payload.commandId);
-                                    if (queued !== null) {
-                                        if (command !== "") {
-                                            tasks.getState().finish(command);
-                                        }
-                                        command = queued.commandId;
-                                        tasks.getState().start(queued.commandId, queued.turnId);
-                                        activeTurn.submissionAccepted(queued.commandId, queued.turnId);
-                                        set((current) =>
-                                            startSessionWork(
-                                                {
-                                                    activity: current.activity,
-                                                    messages: [
-                                                        ...current.messages,
-                                                        {
-                                                            id: `${queued.commandId}-user`,
-                                                            role: "user",
-                                                            text: queued.summary,
-                                                            contents: promptImageContents(queued.images),
-                                                        },
-                                                    ],
-                                                },
-                                                {
-                                                    commandId: queued.commandId,
-                                                    attempt: new MobiusRunningAttemptSummary(
-                                                        payload.attemptId,
-                                                        event.recordedAt,
-                                                    ),
-                                                },
-                                            ),
-                                        );
-                                        return true;
-                                    }
-                                }
-                                if (command === "" && payload instanceof MobiusTurnStartedEvent) {
-                                    command = payload.commandId;
-                                    lastSequence = BigInt(event.sequence);
-                                    set((current) =>
-                                        startSessionWork(current, {
-                                            commandId: payload.commandId,
-                                            attempt: new MobiusRunningAttemptSummary(
-                                                payload.attemptId,
-                                                event.recordedAt,
-                                            ),
-                                        }),
-                                    );
-                                    return true;
-                                }
-                                if (
-                                    command === "" ||
-                                    !("commandId" in payload) ||
-                                    payload.commandId !== command ||
-                                    BigInt(event.sequence) <= lastSequence
-                                ) {
-                                    return true;
-                                }
-                                lastSequence = BigInt(event.sequence);
-                                if (payload instanceof MobiusAgentMessageEvent) {
-                                    set((current) => {
-                                        const target = current.messages.findLastIndex(
-                                            (item) => item.role === "assistant" && item.commandId === command,
-                                        );
-                                        return {
-                                            messages: current.messages.map((item, index) =>
-                                                index === target && item.role === "assistant"
-                                                    ? { ...item, text: item.text + payload.text }
-                                                    : item,
-                                            ),
-                                        };
-                                    });
-                                } else if (payload instanceof MobiusTurnStartedEvent) {
-                                    set((current) =>
-                                        startSessionWork(current, {
-                                            commandId: command,
-                                            attempt: new MobiusRunningAttemptSummary(
-                                                payload.attemptId,
-                                                event.recordedAt,
-                                            ),
-                                        }),
-                                    );
-                                } else if (
-                                    payload instanceof MobiusTurnCompletedEvent ||
-                                    payload instanceof MobiusTurnFailedEvent
-                                ) {
-                                    const completedCommand = command;
-                                    const completedHistory =
-                                        payload instanceof MobiusTurnCompletedEvent
-                                            ? await connected.sessions.queryNativeMessages(
-                                                  sessionId,
-                                                  AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
-                                              )
-                                            : null;
-                                    signal.throwIfAborted();
-                                    if (command !== completedCommand) {
-                                        return true;
-                                    }
-                                    const completed =
-                                        completedHistory?.status === "available"
-                                            ? historySessionPresentation(completedHistory, sessionId)
-                                            : null;
-                                    if (completedHistory?.status === "available") {
-                                        delivery.getState().reconcile(completedHistory.coveredCommandIds);
-                                    }
+                                } else if (payload.kind === "session.permission.resolved") {
+                                    const resolved = decodeSessionPermissionResolvedEvent(payload.encodedPayload);
                                     set((current) => ({
-                                        activity:
-                                            payload instanceof MobiusTurnFailedEvent
-                                                ? transitionSessionActivity(current.activity, {
-                                                      commandId: completedCommand,
-                                                      kind: "work-failed",
-                                                      message: payload.message,
-                                                  })
-                                                : transitionSessionActivity(current.activity, {
-                                                      commandId: completedCommand,
-                                                      kind: "work-completed",
-                                                  }),
-                                        activities: completed?.activities ?? current.activities,
-                                        messages: completed?.messages ?? current.messages,
-                                        operation: { kind: "idle" },
+                                        interactions: resolvePermission(
+                                            current.interactions,
+                                            resolved.interactionId,
+                                            resolved.outcome,
+                                            resolved.optionId,
+                                        ),
                                     }));
-                                    tasks.getState().finish(completedCommand);
-                                    activeTurn.turnCleared(completedCommand);
-                                    command = "";
+                                    try {
+                                        applyAuthoritativeInteraction(
+                                            await connected.interactions.read(
+                                                sessionId,
+                                                resolved.interactionId,
+                                                AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
+                                            ),
+                                        );
+                                    } catch (cause) {
+                                        signal.throwIfAborted();
+                                        console.error("The resolved permission could not be refreshed", cause);
+                                    }
+                                } else if (payload.kind === "session.elicitation.requested") {
+                                    const { accepted, ...elicitation } = decodeSessionElicitationRequestedEvent(
+                                        payload.encodedPayload,
+                                    );
+                                    set((current) => ({
+                                        interactions: replaceInteraction(
+                                            current.interactions,
+                                            elicitation.interactionId,
+                                            {
+                                                kind: "elicitation",
+                                                elicitation: {
+                                                    ...elicitation,
+                                                    state: accepted
+                                                        ? {
+                                                              action: "accept",
+                                                              content: "",
+                                                              kind: "submitted",
+                                                          }
+                                                        : { kind: "pending" },
+                                                },
+                                            },
+                                        ),
+                                    }));
+                                } else if (payload.kind === "session.elicitation.resolved") {
+                                    const resolved = decodeSessionElicitationResolvedEvent(payload.encodedPayload);
+                                    set((current) => ({
+                                        interactions: resolveElicitation(
+                                            current.interactions,
+                                            resolved.interactionId,
+                                            resolved.action,
+                                        ),
+                                    }));
+                                    try {
+                                        applyAuthoritativeInteraction(
+                                            await connected.interactions.read(
+                                                sessionId,
+                                                resolved.interactionId,
+                                                AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
+                                            ),
+                                        );
+                                    } catch (cause) {
+                                        signal.throwIfAborted();
+                                        console.error("The resolved elicitation could not be refreshed", cause);
+                                    }
                                 }
+                            }
+                            if (
+                                payload instanceof MobiusTurnStartedEvent &&
+                                messageQueue
+                                    .getState()
+                                    .messages.some((message) => message.commandId === payload.commandId)
+                            ) {
+                                const queued = messageQueue.getState().takeStarted(payload.commandId);
+                                if (queued !== null) {
+                                    if (command !== "") {
+                                        tasks.getState().finish(command);
+                                    }
+                                    command = queued.commandId;
+                                    tasks.getState().start(queued.commandId, queued.turnId);
+                                    activeTurn.submissionAccepted(queued.commandId, queued.turnId);
+                                    set((current) =>
+                                        startSessionWork(
+                                            {
+                                                activity: current.activity,
+                                                messages: [
+                                                    ...current.messages,
+                                                    {
+                                                        id: `${queued.commandId}-user`,
+                                                        role: "user",
+                                                        text: queued.summary,
+                                                        contents: promptImageContents(queued.images),
+                                                    },
+                                                ],
+                                            },
+                                            {
+                                                commandId: queued.commandId,
+                                                attempt: new MobiusRunningAttemptSummary(
+                                                    payload.attemptId,
+                                                    event.recordedAt,
+                                                ),
+                                            },
+                                        ),
+                                    );
+                                    return true;
+                                }
+                            }
+                            if (command === "" && payload instanceof MobiusTurnStartedEvent) {
+                                command = payload.commandId;
+                                lastSequence = BigInt(event.sequence);
+                                set((current) =>
+                                    startSessionWork(current, {
+                                        commandId: payload.commandId,
+                                        attempt: new MobiusRunningAttemptSummary(payload.attemptId, event.recordedAt),
+                                    }),
+                                );
                                 return true;
-                            },
+                            }
+                            if (
+                                command === "" ||
+                                !("commandId" in payload) ||
+                                payload.commandId !== command ||
+                                BigInt(event.sequence) <= lastSequence
+                            ) {
+                                return true;
+                            }
+                            lastSequence = BigInt(event.sequence);
+                            if (payload instanceof MobiusAgentMessageEvent) {
+                                set((current) => {
+                                    const target = current.messages.findLastIndex(
+                                        (item) => item.role === "assistant" && item.commandId === command,
+                                    );
+                                    return {
+                                        messages: current.messages.map((item, index) =>
+                                            index === target && item.role === "assistant"
+                                                ? { ...item, text: item.text + payload.text }
+                                                : item,
+                                        ),
+                                    };
+                                });
+                            } else if (payload instanceof MobiusTurnStartedEvent) {
+                                set((current) =>
+                                    startSessionWork(current, {
+                                        commandId: command,
+                                        attempt: new MobiusRunningAttemptSummary(payload.attemptId, event.recordedAt),
+                                    }),
+                                );
+                            } else if (
+                                payload instanceof MobiusTurnCompletedEvent ||
+                                payload instanceof MobiusTurnFailedEvent
+                            ) {
+                                const completedCommand = command;
+                                const completedHistory =
+                                    payload instanceof MobiusTurnCompletedEvent
+                                        ? await connected.sessions.queryNativeMessages(
+                                              sessionId,
+                                              AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
+                                          )
+                                        : null;
+                                signal.throwIfAborted();
+                                if (command !== completedCommand) {
+                                    return true;
+                                }
+                                const completed =
+                                    completedHistory?.status === "available"
+                                        ? historySessionPresentation(completedHistory, sessionId)
+                                        : null;
+                                if (completedHistory?.status === "available") {
+                                    delivery.getState().reconcile(completedHistory.coveredCommandIds);
+                                }
+                                set((current) => ({
+                                    activity:
+                                        payload instanceof MobiusTurnFailedEvent
+                                            ? transitionSessionActivity(current.activity, {
+                                                  commandId: completedCommand,
+                                                  kind: "work-failed",
+                                                  message: payload.message,
+                                              })
+                                            : transitionSessionActivity(current.activity, {
+                                                  commandId: completedCommand,
+                                                  kind: "work-completed",
+                                              }),
+                                    activities: completed?.activities ?? current.activities,
+                                    messages: completed?.messages ?? current.messages,
+                                    operation: { kind: "idle" },
+                                }));
+                                tasks.getState().finish(completedCommand);
+                                activeTurn.turnCleared(completedCommand);
+                                command = "";
+                            }
+                            return true;
                         },
-                        signal,
-                    );
+                    };
+                    const summary = await connected.sessions.read(sessionId, signal);
+                    const subscription = summary.cloudRetention
+                        ? await (async () => {
+                              await observer.reconcile({ kind: "initial" });
+                              return await connected.events.subscribe(sessionId, "", observer, signal);
+                          })()
+                        : await connected.events.subscribeLive(sessionId, observer, signal);
                     signal.throwIfAborted();
                     set({ connection: { kind: "ready", client: connected } });
                     await subscription.completed;
