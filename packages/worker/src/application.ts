@@ -70,7 +70,7 @@ const application: Hono<{ readonly Bindings: CloudBindings }> = new Hono<{ reado
     .route("/mobius-slack/api", slackRoutes)
     .notFound(notFound);
 
-export const publicApplication = new Hono<{ readonly Bindings: CloudBindings }>()
+const publicApplication = new Hono<{ readonly Bindings: CloudBindings }>()
     .onError(rethrowHttpError)
     .use(
         "*",
