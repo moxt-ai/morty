@@ -54,10 +54,6 @@ export function decodeSidebarLayoutPreference(serialized: string | null): Deskto
     return { kind: "expanded", width: DEFAULT_SIDEBAR_WIDTH };
 }
 
-export function encodeSidebarLayoutPreference(state: DesktopSidebarLayoutState): string {
-    return JSON.stringify(state);
-}
-
 export function resizeSidebar(requestedWidth: number): DesktopSidebarLayoutState {
     return {
         kind: "expanded",

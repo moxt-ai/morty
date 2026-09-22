@@ -373,7 +373,6 @@ export function createSessionPaneModel(options: {
     readonly session: OpenMobiusSession;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession" | "steerTurn" | "submitTurn">;
-    readonly storage: Storage;
     readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
 }) {
     const { session, botId, requests } = options;
@@ -386,7 +385,7 @@ export function createSessionPaneModel(options: {
                   turnId: session.result.activeTurn.turnId,
               }
             : { kind: "idle" };
-    const activeTurn = createSessionActiveTurn({ initial: initialActiveTurn, sessionId, storage: options.storage });
+    const activeTurn = createSessionActiveTurn({ initial: initialActiveTurn, sessionId });
     const openedActiveTurn = activeTurn.current();
     let client: MobiusClient | null = null;
     let nativeHistory: NativeSessionHistory | null =
@@ -402,7 +401,6 @@ export function createSessionPaneModel(options: {
     }));
     const delivery = createSessionDeliveryStore({
         sessionId,
-        storage: options.storage,
         submit: async (request, signal) =>
             await requests.submitTurn(botId, sessionId, { ...request, sessionConfigurations }, signal),
     });
@@ -1195,7 +1193,7 @@ export function createSessionPaneModel(options: {
                         value: candidate.type === "select" ? candidate.currentValue : "",
                         valueType: candidate.type,
                     }));
-                    saveLastAgentSettings(options.storage, botId, session.agentRef, result.configOptions);
+                    saveLastAgentSettings(botId, session.agentRef, result.configOptions);
                     set({ options: result.configOptions, operation: { kind: "idle" } });
                 } catch (cause) {
                     signal.throwIfAborted();

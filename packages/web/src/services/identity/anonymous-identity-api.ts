@@ -1,6 +1,9 @@
 import * as v from "valibot";
-
-export const ANONYMOUS_CREDENTIAL_KEY = "mobius.anonymous-credential.v2";
+import {
+    anonymousCredentialEntry,
+    centralLocalStorage,
+    workspaceEntry,
+} from "../local-storage/central-local-storage.ts";
 
 const tokenSchema = v.pipe(v.string(), v.regex(/^mobius_anon_v2_[A-Za-z0-9_-]{43}$/u));
 const workspaceSchema = v.object({
@@ -8,23 +11,13 @@ const workspaceSchema = v.object({
     projectId: v.pipe(v.string(), v.regex(/^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u)),
 });
 const identitySchema = v.pipe(v.object({ token: tokenSchema, ...workspaceSchema.entries }), v.readonly());
-const WORKSPACE_KEY = "mobius.workspace.v2";
 
-function storedValue(storage: Storage, key: string): unknown {
-    const value = storage.getItem(key);
-    if (value === null) {
-        return null;
-    }
-    try {
-        return JSON.parse(value);
-    } catch {
-        return null;
-    }
-}
+/** Stored key name for the anonymous credential, shared with browser tests. */
+export const ANONYMOUS_CREDENTIAL_KEY_NAME = anonymousCredentialEntry.key;
 
-function readStoredWorkspace(storage: Storage) {
-    const parsed = v.safeParse(workspaceSchema, storedValue(storage, WORKSPACE_KEY));
-    return parsed.success ? parsed.output : null;
+function readStoredWorkspace() {
+    const workspace = centralLocalStorage.read(workspaceEntry);
+    return workspace !== null && !("kind" in workspace) ? workspace : null;
 }
 const anonymousSessionSchema = v.pipe(
     v.object({ authentication: v.object({ kind: v.literal("anonymous") }), userId: v.string() }),
@@ -42,6 +35,11 @@ const bindingSchema = v.variant("kind", [
 export type AnonymousIdentity = v.InferOutput<typeof identitySchema>;
 export type IdentityTransfer = v.InferOutput<typeof transferSchema>;
 export type ClerkBinding = v.InferOutput<typeof bindingSchema>;
+
+/** Whether this browser already holds an anonymous credential, without validating it. */
+export function hasStoredAnonymousCredential(): boolean {
+    return centralLocalStorage.has(anonymousCredentialEntry);
+}
 export type WorkspaceLocation =
     | "wnam"
     | "enam"
@@ -58,30 +56,27 @@ export type WorkspaceLocation =
 interface Options {
     readonly fetchRequest: (request: Request) => Promise<Response>;
     readonly origin: string;
-    readonly storage: Storage;
 }
 
 export class AnonymousIdentityApi {
     readonly #fetchRequest: (request: Request) => Promise<Response>;
     readonly #origin: string;
-    readonly #storage: Storage;
 
     constructor(options: Options) {
         this.#fetchRequest = options.fetchRequest;
         this.#origin = v.parse(v.pipe(v.string(), v.url()), options.origin);
-        this.#storage = options.storage;
     }
 
     readonly loadExisting = async (requestSignal: AbortSignal): Promise<AnonymousIdentity | null> => {
-        const stored = v.safeParse(identitySchema, storedValue(this.#storage, ANONYMOUS_CREDENTIAL_KEY));
-        if (stored.success) {
-            const session = await this.#anonymousSession(stored.output, requestSignal);
+        const stored = centralLocalStorage.read(anonymousCredentialEntry);
+        if (stored !== null) {
+            const session = await this.#anonymousSession(stored, requestSignal);
             if (session !== null) {
-                if (session.userId === stored.output.userId) {
-                    return stored.output;
+                if (session.userId === stored.userId) {
+                    return stored;
                 }
             }
-            this.#storage.removeItem(ANONYMOUS_CREDENTIAL_KEY);
+            centralLocalStorage.remove(anonymousCredentialEntry);
         }
         return null;
     };
@@ -95,12 +90,12 @@ export class AnonymousIdentityApi {
             identitySchema,
             await this.#request("/identity/anonymous-users", { method: "POST" }, requestSignal),
         );
-        const concurrent = v.safeParse(identitySchema, storedValue(this.#storage, ANONYMOUS_CREDENTIAL_KEY));
-        if (concurrent.success) {
-            const session = await this.#anonymousSession(concurrent.output, requestSignal);
+        const concurrent = centralLocalStorage.read(anonymousCredentialEntry);
+        if (concurrent !== null) {
+            const session = await this.#anonymousSession(concurrent, requestSignal);
             if (session !== null) {
-                if (session.userId === concurrent.output.userId) {
-                    return concurrent.output;
+                if (session.userId === concurrent.userId) {
+                    return concurrent;
                 }
             }
         }
@@ -161,8 +156,8 @@ export class AnonymousIdentityApi {
             { method: "DELETE", headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
             signal,
         );
-        this.#storage.removeItem(ANONYMOUS_CREDENTIAL_KEY);
-        this.#storage.removeItem(WORKSPACE_KEY);
+        centralLocalStorage.remove(anonymousCredentialEntry);
+        centralLocalStorage.remove(workspaceEntry);
     };
 
     readonly clerkBinding = async (clerkToken: string, signal: AbortSignal): Promise<ClerkBinding> =>
@@ -197,20 +192,19 @@ export class AnonymousIdentityApi {
     };
 
     readonly #saveIdentity = (identity: AnonymousIdentity) => {
-        this.#storage.setItem(ANONYMOUS_CREDENTIAL_KEY, JSON.stringify(identity));
-        this.#storage.setItem(
-            WORKSPACE_KEY,
-            JSON.stringify({ userId: identity.userId, projectId: identity.projectId }),
-        );
+        centralLocalStorage.write(anonymousCredentialEntry, identity);
+        centralLocalStorage.write(workspaceEntry, { userId: identity.userId, projectId: identity.projectId });
     };
 
     readonly clearLocal = () => {
-        this.#storage.removeItem(ANONYMOUS_CREDENTIAL_KEY);
-        this.#storage.setItem(WORKSPACE_KEY, JSON.stringify({ kind: "recovery" }));
+        centralLocalStorage.remove(anonymousCredentialEntry);
+        centralLocalStorage.write(workspaceEntry, { kind: "recovery" });
     };
 
-    readonly needsRecovery = () =>
-        v.safeParse(v.object({ kind: v.literal("recovery") }), storedValue(this.#storage, WORKSPACE_KEY)).success;
+    readonly needsRecovery = () => {
+        const workspace = centralLocalStorage.read(workspaceEntry);
+        return workspace !== null && "kind" in workspace && workspace.kind === "recovery";
+    };
 
     readonly #anonymousSession = async (
         identity: AnonymousIdentity,
@@ -241,7 +235,7 @@ export class AnonymousIdentityApi {
     readonly #request = async (path: string, init: RequestInit, requestSignal: AbortSignal): Promise<unknown> => {
         const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(15_000)]);
         const headers = new Headers(init.headers);
-        const workspace = readStoredWorkspace(this.#storage);
+        const workspace = readStoredWorkspace();
         const scopedPath =
             workspace !== null &&
             !path.startsWith("/projects/") &&

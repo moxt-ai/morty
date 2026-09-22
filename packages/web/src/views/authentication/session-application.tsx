@@ -75,7 +75,6 @@ function BindingConflict({
         const api = new AnonymousIdentityApi({
             fetchRequest: transport.fetch,
             origin: window.location.origin,
-            storage: window.localStorage,
         });
         void waitForClerk(() => session.getToken(), controller.signal)
             .then((token) => {
@@ -148,7 +147,6 @@ export function SessionApplication() {
         const api = new AnonymousIdentityApi({
             fetchRequest: transport.fetch,
             origin: window.location.origin,
-            storage: window.localStorage,
         });
         void api
             .loadExisting(controller.signal)
@@ -256,7 +254,6 @@ export function SessionApplication() {
         const api = new AnonymousIdentityApi({
             fetchRequest: transport.fetch,
             origin: window.location.origin,
-            storage: window.localStorage,
         });
         const activeIdentity: ActiveIdentity = {
             getToken: async (signal) => {

@@ -467,23 +467,27 @@ class ConnectedTransport extends TransportConnection {
                 if (option === undefined || option.type !== preference.valueType) {
                     continue;
                 }
-                if (option.type === "select") {
+                if (option.type === "select" && preference.valueType === "select") {
                     if (
                         option.currentValue === preference.value ||
                         !option.values.some((candidate) => candidate.value === preference.value)
                     ) {
                         continue;
                     }
-                } else if (option.booleanValue === preference.booleanValue) {
+                } else if (option.type === "boolean" && preference.valueType === "boolean") {
+                    if (option.booleanValue === preference.booleanValue) {
+                        continue;
+                    }
+                } else {
                     continue;
                 }
                 const configured = await client.configureSession(
                     {
                         ...request,
                         bindingId,
-                        booleanValue: preference.booleanValue,
+                        booleanValue: preference.valueType === "boolean" ? preference.booleanValue : false,
                         configId: option.id,
-                        value: preference.value,
+                        value: preference.valueType === "select" ? preference.value : "",
                         valueType: option.type,
                     },
                     signal,
