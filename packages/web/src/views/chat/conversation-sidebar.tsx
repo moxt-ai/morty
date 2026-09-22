@@ -195,7 +195,24 @@ export function ConversationSidebar({
                 id="chat-conversations"
                 className={`${expanded ? "block" : "hidden"} max-h-48 min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5 sm:block sm:max-h-none`}
             >
-                {directory.kind === "loading" && <p role="status">Loading conversations…</p>}
+                {directory.kind === "loading" && (
+                    <div
+                        aria-label="Loading conversations"
+                        className="space-y-1 animate-pulse motion-reduce:animate-none"
+                        role="status"
+                    >
+                        <span className="sr-only">Loading conversations…</span>
+                        <div aria-hidden="true" className="px-3 py-2.5">
+                            <div className="h-3.5 w-3/4 rounded-full bg-border" />
+                        </div>
+                        <div aria-hidden="true" className="px-3 py-2.5">
+                            <div className="h-3.5 w-1/2 rounded-full bg-border" />
+                        </div>
+                        <div aria-hidden="true" className="px-3 py-2.5">
+                            <div className="h-3.5 w-2/3 rounded-full bg-border" />
+                        </div>
+                    </div>
+                )}
                 {(directory.kind === "failed" || directory.kind === "stale") && (
                     <p role="alert" className="text-sm text-destructive">
                         {directory.message}

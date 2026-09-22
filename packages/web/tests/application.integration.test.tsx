@@ -101,6 +101,31 @@ async function renderWorkspace(created?: Application): Promise<Application> {
     return current;
 }
 
+function observeStatusText(expected: string): Promise<HTMLElement> {
+    return new Promise((resolve) => {
+        const observer = new MutationObserver((records) => {
+            for (const record of records) {
+                for (const addedNode of record.addedNodes) {
+                    if (!(addedNode instanceof HTMLElement)) {
+                        continue;
+                    }
+                    const statuses = [
+                        ...(addedNode.matches('[role="status"]') ? [addedNode] : []),
+                        ...addedNode.querySelectorAll<HTMLElement>('[role="status"]'),
+                    ];
+                    const status = statuses.find((candidate) => candidate.textContent?.includes(expected) === true);
+                    if (status !== undefined) {
+                        observer.disconnect();
+                        resolve(status);
+                        return;
+                    }
+                }
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+    });
+}
+
 function changeValue(element: HTMLInputElement | HTMLTextAreaElement, value: string): void {
     const prototype =
         element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
@@ -114,6 +139,14 @@ async function sendPrompt(composer: HTMLTextAreaElement, prompt: string): Promis
     const send = await act(async () => await waitForEnabled(`[data-testid="${dataTestId.sendMessage}"]`));
     await act(async () => send.click());
 }
+
+test("Given the conversation directory is loading, When the workspace appears, Then an accessible skeleton replaces the loading copy", async () => {
+    const loadingStatus = observeStatusText("Loading conversations");
+
+    await renderWorkspace();
+
+    expect((await loadingStatus).getAttribute("aria-label")).toBe("Loading conversations");
+});
 
 test("Given an unpaired workspace, When a user manages Bots, Then pairing and the surviving Bot remain visible", {
     timeout: 30_000,
