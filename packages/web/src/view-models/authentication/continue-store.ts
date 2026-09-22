@@ -1,5 +1,8 @@
 import { createStore } from "zustand/vanilla";
+import { createSelectedBotPreference } from "@/services/bots/selected-bot-preference";
+import { BotChatApi } from "@/services/chat/bot-chat-api";
 import { ANONYMOUS_CREDENTIAL_KEY, AnonymousIdentityApi } from "@/services/identity/anonymous-identity-api";
+import { ManagementApi } from "@/services/management/management-api";
 
 type Handoff =
     | { readonly kind: "workspace" }
@@ -78,18 +81,48 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 storage: window.localStorage,
             });
             try {
-                await api.redeemTransfer(state.code, signal);
+                const identity = await api.redeemTransfer(state.code, signal);
                 signal.throwIfAborted();
                 if (state.handoff.kind === "workspace") {
                     window.location.replace("/");
                     return;
                 }
-                const destination = new URL("/", window.location.origin);
-                if (state.choice !== "skip" && state.choice !== "workspace") {
-                    destination.searchParams.set("harness", state.handoff.harness);
-                    destination.searchParams.set("sessionId", state.handoff.sessionId);
-                    destination.searchParams.set("nativeSessionAction", state.choice);
+                const choice = state.choice;
+                if (choice === "skip" || choice === "workspace") {
+                    window.location.replace("/");
+                    return;
                 }
+                const management = new ManagementApi({
+                    fetchRequest,
+                    origin: window.location.origin,
+                    projectId: identity.projectId,
+                    getToken: async () => identity.token,
+                });
+                const bots = await management.listBots(signal);
+                const preferredBot = createSelectedBotPreference(window.localStorage, identity.projectId).read();
+                const bot = bots.find((candidate) => candidate.botId === preferredBot) ?? bots[0];
+                if (bot === undefined) {
+                    throw new Error("Your Bot is unavailable.");
+                }
+                const chat = new BotChatApi({
+                    fetchRequest,
+                    origin: window.location.origin,
+                    projectId: identity.projectId,
+                    getToken: async () => identity.token,
+                    waitForChange: async () => {
+                        throw new Error("Workspace updates are unavailable while continuing this session.");
+                    },
+                });
+                const session = await chat.continueNativeSession(
+                    bot.botId,
+                    state.handoff.harness,
+                    state.handoff.sessionId,
+                    choice,
+                    signal,
+                );
+                signal.throwIfAborted();
+                const destination = new URL("/", window.location.origin);
+                destination.searchParams.set("sessionId", session.result.ready.sessionId);
                 window.location.replace(destination);
             } catch (cause) {
                 if (!signal.aborted) {
