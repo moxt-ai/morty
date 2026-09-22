@@ -69,7 +69,7 @@ export async function createChatWorker() {
                 return { failure: runtime.failure };
             },
             connectRuntime: async () => {
-                const runtime = await platform.connectAgent(identity.projectId);
+                const runtime = await cloud.connectAgent(identity.projectId);
                 return { failure: runtime.failure, runtimeId: runtime.runtimeId };
             },
             identity: {
