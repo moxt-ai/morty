@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import { centralLocalStorage, userChannelEntry } from "@/services/local-storage/central-local-storage";
 
 export interface ChannelReference {
     readonly channelId: string;
@@ -26,24 +27,13 @@ const channelIdSchema = v.pipe(v.string(), v.regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{
 
 export class BrowserChannelConnection<TConnection extends ChannelReference> {
     readonly #userId: string;
-    readonly #storage: Storage;
     readonly #readChannel: (channelId: string, signal: AbortSignal) => Promise<TConnection>;
-    constructor(
-        userId: string,
-        storage: Storage,
-        readChannel: (channelId: string, signal: AbortSignal) => Promise<TConnection>,
-    ) {
+    constructor(userId: string, readChannel: (channelId: string, signal: AbortSignal) => Promise<TConnection>) {
         this.#userId = userId;
-        this.#storage = storage;
         this.#readChannel = readChannel;
     }
-    readonly #key = (): string => `mobius-cloud:user-channel:${encodeURIComponent(this.#userId)}`;
     readonly save = (connection: TConnection): void => {
-        try {
-            this.#storage.setItem(this.#key(), v.parse(channelIdSchema, connection.channelId));
-        } catch (cause) {
-            throw new ChannelConnectionError({ cause });
-        }
+        centralLocalStorage.write(userChannelEntry(this.#userId), v.parse(channelIdSchema, connection.channelId));
     };
     readonly load = async (
         requestedChannelId: unknown,
@@ -51,7 +41,7 @@ export class BrowserChannelConnection<TConnection extends ChannelReference> {
     ): Promise<SavedChannel<TConnection>> => {
         const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(15_000)]);
         try {
-            const candidate = requestedChannelId ?? this.#storage.getItem(this.#key());
+            const candidate = requestedChannelId ?? centralLocalStorage.read(userChannelEntry(this.#userId));
             if (candidate === null) {
                 return { kind: "unpaired" };
             }

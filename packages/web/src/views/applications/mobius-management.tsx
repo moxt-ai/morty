@@ -16,7 +16,7 @@ export function userBotConnection(
     fetchRequest: (request: Request) => Promise<Response>,
 ) {
     const requests = new ManagementApi({ fetchRequest, origin: window.location.origin, projectId, getToken });
-    return new BrowserChannelConnection(userId, window.localStorage, async (botId, signal) => {
+    return new BrowserChannelConnection(userId, async (botId, signal) => {
         const bots = await requests.listBots(signal);
         if (!bots.some((bot) => bot.botId === botId)) {
             throw new Error("Your Bot is unavailable.");
@@ -28,10 +28,7 @@ export function userBotConnection(
 export function MobiusManagement() {
     const transport = useApiTransport();
     const identity = useActiveIdentity();
-    const selectedBotPreference = useMemo(
-        () => createSelectedBotPreference(window.localStorage, identity.projectId),
-        [identity.projectId],
-    );
+    const selectedBotPreference = useMemo(() => createSelectedBotPreference(identity.projectId), [identity.projectId]);
     const requests = useMemo(
         () =>
             new BotChatApi({
@@ -48,7 +45,6 @@ export function MobiusManagement() {
             const api = new AnonymousIdentityApi({
                 fetchRequest: transport.fetch,
                 origin: window.location.origin,
-                storage: window.localStorage,
             });
             const localIdentity = await api.loadExisting(signal);
             if (localIdentity === null || localIdentity.projectId !== identity.projectId) {
@@ -63,7 +59,6 @@ export function MobiusManagement() {
             const api = new AnonymousIdentityApi({
                 fetchRequest: transport.fetch,
                 origin: window.location.origin,
-                storage: window.localStorage,
             });
             const localIdentity = await api.loadExisting(signal);
             if (localIdentity === null) {
@@ -81,7 +76,6 @@ export function MobiusManagement() {
             const api = new AnonymousIdentityApi({
                 fetchRequest: transport.fetch,
                 origin: window.location.origin,
-                storage: window.localStorage,
             });
             await api.replaceWorkspace(location, signal);
             signal.throwIfAborted();

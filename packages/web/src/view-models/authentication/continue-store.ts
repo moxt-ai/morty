@@ -1,5 +1,5 @@
 import { createStore } from "zustand/vanilla";
-import { ANONYMOUS_CREDENTIAL_KEY, AnonymousIdentityApi } from "@/services/identity/anonymous-identity-api";
+import { AnonymousIdentityApi, hasStoredAnonymousCredential } from "@/services/identity/anonymous-identity-api";
 
 type Handoff =
     | { readonly kind: "workspace" }
@@ -45,7 +45,7 @@ function initialState(): ContinueState {
     }
     const handoff: Handoff =
         harness === null || sessionId === null ? { kind: "workspace" } : { kind: "session", harness, sessionId };
-    const replacesWorkspace = window.localStorage.getItem(ANONYMOUS_CREDENTIAL_KEY) !== null;
+    const replacesWorkspace = hasStoredAnonymousCredential();
     if (handoff.kind === "session" || replacesWorkspace) {
         return { code, handoff, kind: "confirm", replacesWorkspace };
     }
@@ -75,7 +75,6 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
             const api = new AnonymousIdentityApi({
                 fetchRequest,
                 origin: window.location.origin,
-                storage: window.localStorage,
             });
             try {
                 await api.redeemTransfer(state.code, signal);

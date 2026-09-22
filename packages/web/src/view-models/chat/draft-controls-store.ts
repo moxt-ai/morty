@@ -104,14 +104,13 @@ export const createDraftControlsStore = (
     botId: string,
     requests: Pick<BotChatApi, "workspace" | "workspaceDirectory" | "agentSettings">,
     onSettings: (settings: ChatDraftConfiguration | null) => void,
-    storage: Storage,
 ) =>
     createStore<DraftControlsStore>()((set, get) => {
         let cwdOperation: AbortController | null = null;
         let selectedHarness = "";
         const changedOptionIds = new Set<string>();
         const rememberAgentSettings = (settings: Extract<DraftSettingsState, { readonly kind: "ready" }>): void => {
-            saveLastAgentSettings(storage, botId, settings.selectedAgent.agentRef, settings.options);
+            saveLastAgentSettings(botId, settings.selectedAgent.agentRef, settings.options);
         };
         const publishSettings = (settings: Extract<DraftSettingsState, { readonly kind: "ready" }>): void => {
             onSettings({
@@ -133,9 +132,8 @@ export const createDraftControlsStore = (
             directory: WorkspaceEntriesEvent,
         ): readonly RecentCwdPreference[] => {
             const selected = settings.selectedAgent;
-            saveLastCwdPreference(storage, botId, selected.runtimeId, selected.agentRef, directory.directoryId);
+            saveLastCwdPreference(botId, selected.runtimeId, selected.agentRef, directory.directoryId);
             return saveRecentCwdPreference(
-                storage,
                 botId,
                 selected.runtimeId,
                 selected.agentRef,
@@ -255,12 +253,7 @@ export const createDraftControlsStore = (
                             requests.workspaceDirectory(botId, "default", signal),
                         ]);
                         signal.throwIfAborted();
-                        const savedDirectoryId = readLastCwdPreference(
-                            storage,
-                            botId,
-                            selected.runtimeId,
-                            selected.agentRef,
-                        );
+                        const savedDirectoryId = readLastCwdPreference(botId, selected.runtimeId, selected.agentRef);
                         let cwd = defaultCwd;
                         if (savedDirectoryId !== null && savedDirectoryId !== defaultCwd.directoryId) {
                             try {
@@ -270,12 +263,7 @@ export const createDraftControlsStore = (
                                 signal.throwIfAborted();
                             }
                         }
-                        const restoredSettings = restoreLastAgentSettings(
-                            storage,
-                            botId,
-                            selected.agentRef,
-                            result.options,
-                        );
+                        const restoredSettings = restoreLastAgentSettings(botId, selected.agentRef, result.options);
                         const ready = {
                             kind: "ready" as const,
                             workspace,
@@ -288,16 +276,14 @@ export const createDraftControlsStore = (
                             changedOptionIds.add(configId);
                         }
                         const existingRecentCwds = readRecentCwdPreferences(
-                            storage,
                             botId,
                             selected.runtimeId,
                             selected.agentRef,
                         );
-                        saveLastCwdPreference(storage, botId, selected.runtimeId, selected.agentRef, cwd.directoryId);
+                        saveLastCwdPreference(botId, selected.runtimeId, selected.agentRef, cwd.directoryId);
                         const recentCwds =
                             existingRecentCwds === null
                                 ? saveRecentCwdPreference(
-                                      storage,
                                       botId,
                                       selected.runtimeId,
                                       selected.agentRef,
@@ -341,7 +327,6 @@ export const createDraftControlsStore = (
                 }
                 set({
                     recentCwds: forgetRecentCwdPreference(
-                        storage,
                         botId,
                         selected.runtimeId,
                         selected.agentRef,

@@ -50,7 +50,6 @@ export function MobiusSessionPane({
             session,
             botId,
             requests,
-            storage: window.localStorage,
             endRemoteAccess: endRemoteAccess ?? (async () => Promise.resolve()),
         }),
     );
