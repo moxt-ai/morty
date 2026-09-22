@@ -228,6 +228,29 @@ test("Given a paired Bot, When a user filters its models and requests an image, 
     ]);
 });
 
+test("Given a Bot has a recent directory from another harness, When its workspace loads, Then the directory remains available", {
+    timeout: 30_000,
+}, async () => {
+    const created = await environment.createApplication();
+    window.localStorage.setItem(
+        `mobius:recent-cwd:${encodeURIComponent(created.botId)}`,
+        JSON.stringify([{ directoryId: "saved-directory", directoryLabel: "/saved-by-another-harness" }]),
+    );
+    await renderWorkspace(created);
+    const { failure } = await act(async () => await created.connectAgent());
+
+    const menu = await Promise.race([
+        act(async () => {
+            const workingDirectory = await waitForElement(`[data-testid="${dataTestId.workingDirectory}"]`);
+            workingDirectory.click();
+            return await waitForText('[aria-label="Working directory menu"]', "/saved-by-another-harness");
+        }),
+        failure,
+    ]);
+
+    expect(menu.textContent).toContain("/saved-by-another-harness");
+});
+
 test("Given a Bot is bound to one Runtime, When another Runtime connects, Then native sessions stay scoped to the Bot", {
     timeout: 30_000,
 }, async () => {

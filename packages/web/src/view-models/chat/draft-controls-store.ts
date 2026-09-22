@@ -135,8 +135,6 @@ export const createDraftControlsStore = (
             saveLastCwdPreference(botId, selected.runtimeId, selected.agentRef, directory.directoryId);
             return saveRecentCwdPreference(
                 botId,
-                selected.runtimeId,
-                selected.agentRef,
                 { directoryId: directory.directoryId, directoryLabel: directory.directoryLabel },
                 get().recentCwds,
             );
@@ -275,18 +273,12 @@ export const createDraftControlsStore = (
                         for (const configId of restoredSettings.restoredIds) {
                             changedOptionIds.add(configId);
                         }
-                        const existingRecentCwds = readRecentCwdPreferences(
-                            botId,
-                            selected.runtimeId,
-                            selected.agentRef,
-                        );
+                        const existingRecentCwds = readRecentCwdPreferences(botId);
                         saveLastCwdPreference(botId, selected.runtimeId, selected.agentRef, cwd.directoryId);
                         const recentCwds =
                             existingRecentCwds === null
                                 ? saveRecentCwdPreference(
                                       botId,
-                                      selected.runtimeId,
-                                      selected.agentRef,
                                       { directoryId: cwd.directoryId, directoryLabel: cwd.directoryLabel },
                                       [],
                                   )
@@ -326,13 +318,7 @@ export const createDraftControlsStore = (
                     return;
                 }
                 set({
-                    recentCwds: forgetRecentCwdPreference(
-                        botId,
-                        selected.runtimeId,
-                        selected.agentRef,
-                        directoryId,
-                        recentCwds,
-                    ),
+                    recentCwds: forgetRecentCwdPreference(botId, directoryId, recentCwds),
                 });
             },
             load,
