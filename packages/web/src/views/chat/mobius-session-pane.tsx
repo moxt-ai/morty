@@ -7,21 +7,21 @@ import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import { ChatComposerMoreMenu } from "../../components/chat/chat-composer-more-menu.tsx";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
 import { ChatMessageQueue } from "../../components/chat/chat-message-queue.tsx";
-import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { FilePreview } from "../../components/chat/file-preview.tsx";
 import {
     type ElicitationInteractionResponse,
     type PermissionInteractionResponse,
     SessionInteractionCards,
 } from "../../components/chat/session-interactions.tsx";
+import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
 import { registerMobiusChatDebugSession } from "../../debug-bridge.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { SessionConnectionKind } from "../../view-models/chat/bot-chat-home-store.ts";
+import type { QueuedDraftMessage } from "../../view-models/chat/conversation-creation-machine.ts";
 import { createBrowserFilePreviewStore } from "../../view-models/chat/file-preview-store.ts";
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
-import type { QueuedDraftMessage } from "../../view-models/chat/conversation-creation-machine.ts";
 import { type SessionActivityState, workingCommandId } from "../../view-models/chat/session-activity-machine.ts";
 import { sessionDebugBlocks } from "../../view-models/chat/session-debug-blocks.ts";
 import { createSessionPaneModel, sessionPanePresentation } from "../../view-models/chat/session-pane-store.ts";
