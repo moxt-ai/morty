@@ -67,6 +67,8 @@ part of the live state.
 
 | Symptom | Likely cause | Check |
 | --- | --- | --- |
+| Agent Runtime reconnect loop, close code 1008 `Invalid protocol message` | `third-party/mobius` checkout is older than the published CLI daemon the setup bundle starts | `git submodule status third-party/mobius`; run `git submodule update --init third-party/mobius`, then `prepare --force` |
+| Platform Worker process exits after `Can't call WebSocket send() after close()` | Relay sent to a replaced/closing daemon socket without a readyState guard | `platformLog`; the uncaught TypeError is a relay bug - fix it in `third-party/mobius` rather than retrying |
 | `PLATFORM_UNAVAILABLE` (502) on first request | Platform D1 schema is older than the code | `platformLog`; re-run `prepare --force` to recreate the state directory |
 | `SETUP_ARTIFACT_UNAVAILABLE` (503) on `/setup.mjs` | R2 seed missing in this state directory | Re-run `prepare --force`; confirm the seed step logged success |
 | App shows only a spinner, browser console logs `failed_to_load_clerk_js` | Placeholder Clerk publishable key cannot load Clerk JS | Set `CHAT_LOCAL_CLERK_PUBLISHABLE_KEY` to a valid `pk_test_...` before `prepare` |

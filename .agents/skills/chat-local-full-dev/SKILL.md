@@ -76,6 +76,13 @@ Check health before debugging:
 node scripts/local-dev.cjs status --state-dir <stateDir>
 ```
 
+Before pairing an agent Runtime, verify the `third-party/mobius` submodule
+matches the commit recorded by the branch
+(`git submodule status third-party/mobius`); a stale checkout speaks an older
+relay protocol than the published CLI daemon and fails with WebSocket close
+code 1008 `Invalid protocol message`. Repair with
+`git submodule update --init third-party/mobius` and re-run `prepare --force`.
+
 Then drive the app with whatever browser tool this environment provides - a
 dedicated CLI, the harness browser, Playwright, or manual checks. Do not assume a
 specific tool.
@@ -126,6 +133,47 @@ node scripts/local-dev.cjs remove --state-dir <stateDir>
   arguments instead of writing `.dev.vars`, so the checkout is never modified and
   no credentials land on disk. Treat the generated values as local-only secrets.
 
+## Pairing a local agent Runtime
+
+`prepare` only starts the web and relay services. To exercise a real agent
+(for example Codex or Claude Code) through the local stack, run:
+
+```sh
+node scripts/local-dev.cjs pair --state-dir <stateDir> [--harness codex] [--workspace DIR]
+```
+
+`pair` mints a fresh browser identity and one-time pairing ticket against the
+local Chat Worker, downloads the served `setup.mjs`, and runs its `pair` flow
+with Mobius configuration and state isolated under the state directory:
+
+- `DOCUMENT_DIR` is set to `<stateDir>/documents`, so the setup script writes
+  its private configuration there instead of the user's documents directory.
+- `MOBIUS_STATE_DIRECTORY` is set to `<stateDir>/cli-state`, so the Runtime CLI
+  saves connections and audit data there instead of `~/.mobius`.
+- `--workspace` defaults to `<stateDir>/workspace`, the paired default
+  workspace.
+
+The command waits until the Runtime reports ready (up to five minutes), then
+prints one JSON record on stdout with `browserIdentity`
+(`token`, `userId`, `projectId`), `botId`, `workspace`, `pairLog`, and
+`runtimePid`. Inject the identity into the browser before opening the app:
+
+```js
+localStorage.setItem(
+    "mobius.anonymous-credential.v2",
+    JSON.stringify({ token, userId, projectId }),
+);
+localStorage.setItem(
+    "mobius.workspace.v2",
+    JSON.stringify({ userId, projectId }),
+);
+```
+
+Paired runtimes are recorded in the stack record; `remove` stops them with the
+rest of the stack. The pairing ticket binds to the freshly minted identity, so
+a browser that already holds another identity must clear or overwrite the two
+localStorage keys above.
+
 ## Debugging
 
 Read or follow logs:
@@ -167,6 +215,10 @@ Details, inspection commands, and a failure-mode table are in
 - `prepare [--state-dir DIR] [--platform-port N] [--chat-port N] [--force] [--no-build]`
   - provision Platform, seed R2, start both Workers, verify readiness, print the
     JSON descriptor. Idempotent: a live stack is reused, a dead one is replaced.
+- `pair --state-dir DIR [--harness ID] [--workspace DIR]`
+  - pair a local agent Runtime through the served setup bundle with
+    `DOCUMENT_DIR` and `MOBIUS_STATE_DIRECTORY` isolated under the state
+    directory; prints the browser identity to adopt.
 - `status --state-dir DIR` - report process and HTTP health for a stack.
 - `logs --state-dir DIR [--worker chat|platform|all] [--lines N] [--filter REGEX] [--follow]`
   - read or follow captured Worker logs.
