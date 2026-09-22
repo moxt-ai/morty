@@ -45,7 +45,9 @@ scripts/local-dev web-server-mobius-cli
 
 Use `node scripts/local-dev.cjs ...` for status, logs, and removal. The
 `prepare` command remains available for automation and accepts explicit
-`--app-id` and `--app-secret` arguments.
+`--app-id` and `--app-secret` arguments. Full-stack modes also force the local
+Platform App to `cloudRetention: false`, including reused and owner-supplied
+Apps, so history restoration always exercises the non-cloud-retention path.
 
 `prepare` stays attached in the foreground after it prints its ready record.
 For agent-driven development, start the wrapper in the background and poll
@@ -134,7 +136,8 @@ node scripts/local-dev.cjs remove --state-dir <stateDir>
 - **Platform fixture** - pinned Wrangler runs
   `packages/e2e/fixtures/wrangler.platform.jsonc` with an explicit
   `--persist-to`. It authenticates local developer calls with provider `e2e` and
-  token `mobius-chat-local-e2e`.
+  token `mobius-chat-local-e2e`. `prepare` creates or updates its App with
+  cloud retention disabled.
 - **Configuration** - `prepare` passes variables through Wrangler `--var`
   arguments instead of writing `.dev.vars`, so the checkout is never modified and
   no credentials land on disk. Treat the generated values as local-only secrets.
@@ -178,7 +181,9 @@ localStorage.setItem(
 Paired runtimes are recorded in the stack record; `remove` stops them with the
 rest of the stack. The pairing ticket binds to the freshly minted identity, so
 a browser that already holds another identity must clear or overwrite the two
-localStorage keys above.
+localStorage keys above. Runtime setup output is written to `pairLog`; bounded
+daemon diagnostics are under `<cliState>/logs/daemon.log`. Read both with
+`logs --worker runtime`.
 
 ## Debugging
 
@@ -186,6 +191,7 @@ Read or follow logs:
 
 ```sh
 node scripts/local-dev.cjs logs --state-dir <stateDir> --worker chat --lines 300
+node scripts/local-dev.cjs logs --state-dir <stateDir> --worker runtime --lines 300
 node scripts/local-dev.cjs logs --state-dir <stateDir> --worker all --follow
 node scripts/local-dev.cjs logs --state-dir <stateDir> --filter 'PLATFORM_UNAVAILABLE|ERROR'
 ```
@@ -221,12 +227,13 @@ Details, inspection commands, and a failure-mode table are in
 - `prepare [--state-dir DIR] [--platform-port N] [--chat-port N] [--force] [--no-build]`
   - provision Platform, seed R2, start both Workers, verify readiness, print the
     JSON descriptor. Idempotent: a live stack is reused, a dead one is replaced.
+    Full-stack modes force the local App to non-cloud retention.
 - `pair --state-dir DIR [--harness ID] [--workspace DIR]`
   - pair a local agent Runtime through the served setup bundle with
     `DOCUMENT_DIR` and `MOBIUS_STATE_DIRECTORY` isolated under the state
     directory; prints the browser identity to adopt.
 - `status --state-dir DIR` - report process and HTTP health for a stack.
-- `logs --state-dir DIR [--worker chat|platform|all] [--lines N] [--filter REGEX] [--follow]`
-  - read or follow captured Worker logs.
+- `logs --state-dir DIR [--worker chat|platform|runtime|all] [--lines N] [--filter REGEX] [--follow]`
+  - read or follow captured Worker and paired Runtime logs.
 - `remove --state-dir DIR [--keep-state]` - stop both process groups and delete the
   state directory.

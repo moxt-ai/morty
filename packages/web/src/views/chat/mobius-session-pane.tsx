@@ -14,6 +14,7 @@ import {
     SessionInteractionCards,
 } from "../../components/chat/session-interactions.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
+import { Button } from "../../components/ui/cloud-button.tsx";
 import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
 import { registerMobiusChatDebugSession } from "../../debug-bridge.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
@@ -183,6 +184,26 @@ export function MobiusSessionPane({
                     {model.messages.length === 0 && model.connection.kind === "loading" && (
                         <p role="status" className="text-center text-sm text-muted-foreground">
                             Loading...
+                        </p>
+                    )}
+                    {model.messages.length === 0 && model.connection.kind === "failed" && (
+                        <div className="flex min-h-full items-center justify-center">
+                            <div className="grid max-w-lg justify-items-center gap-4 px-6 text-center">
+                                <p data-testid={dataTestId.sessionLoadFailure} role="alert">
+                                    {model.connection.message}
+                                </p>
+                                <Button
+                                    onClick={() => run(async (signal) => await pane.store.getState().connect(signal))}
+                                    variant="outline"
+                                >
+                                    Reconnect
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                    {model.messages.length === 0 && model.connection.kind === "ready" && !model.historyLoading && (
+                        <p className="text-center text-sm text-muted-foreground" role="status">
+                            No message history is available for this conversation.
                         </p>
                     )}
                     {model.historyLoading && (

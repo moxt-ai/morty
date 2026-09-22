@@ -333,6 +333,34 @@ function writeStack(stack) {
     });
 }
 
+/** Local full-stack Sessions always exercise the non-cloud-retention path. */
+async function ensureNonCloudRetention(platformOrigin, appId) {
+    if (typeof platformOrigin !== "string" || typeof appId !== "string" || appId.length === 0) {
+        throw new Error("The local stack has invalid Platform application metadata");
+    }
+    const origin = new URL(platformOrigin);
+    if (origin.protocol !== "http:" && origin.protocol !== "https:") {
+        throw new Error("The local stack has an invalid Platform origin");
+    }
+    const url = new URL(`/mobius/api/dashboard/v1/apps/${encodeURIComponent(appId)}`, origin);
+    const app = await httpJson(url, { headers: PLATFORM_AUTH_HEADERS });
+    if (app.cloudRetention === false) {
+        return;
+    }
+    log("forcing the local Platform application to non-cloud retention");
+    await httpJson(url, {
+        headers: PLATFORM_AUTH_HEADERS,
+        method: "PUT",
+        body: {
+            cloudRetention: false,
+            displayName:
+                typeof app.displayName === "string" && app.displayName.length <= 500
+                    ? app.displayName
+                    : "Mobius Chat local dev",
+        },
+    });
+}
+
 function clerkPublishableKey() {
     const configured = process.env.CHAT_LOCAL_CLERK_PUBLISHABLE_KEY;
     if (configured !== undefined && /^pk_(test|live)_[A-Za-z0-9_-]+$/u.test(configured)) {
@@ -418,6 +446,7 @@ async function prepare(options) {
     if (existing !== null) {
         if (options.force !== true && isAlive(existing.chatPid) && isAlive(existing.platformPid)) {
             log(`reusing live stack at ${stateDir}`);
+            await ensureNonCloudRetention(existing.platformOrigin, existing.appId);
             process.stdout.write(`${JSON.stringify(existing)}\n`);
             return;
         }
@@ -542,6 +571,7 @@ async function prepare(options) {
         ) {
             throw new Error("Set --app-id and --app-secret, or allow local app provisioning");
         }
+        await ensureNonCloudRetention(platformOrigin, appId);
 
         if (options.build !== false) {
             log("building Chat Worker and setup bundle");
@@ -870,14 +900,21 @@ async function logs(options) {
         fail("pass --state-dir for a stack created by prepare");
     }
     const worker = options.worker ?? "chat";
+    const runtimeLogs = (Array.isArray(stack.runtimes) ? stack.runtimes : []).flatMap((runtime) => [
+        runtime.pairLog,
+        typeof runtime.cliState === "string" ? path.join(runtime.cliState, "logs", "daemon.log") : undefined,
+    ]);
+    const uniqueRuntimeLogs = [...new Set(runtimeLogs.filter((file) => typeof file === "string"))];
     const files =
         worker === "all"
-            ? [stack.chatLog, stack.platformLog].filter((file) => file !== undefined)
+            ? [stack.chatLog, stack.platformLog, ...uniqueRuntimeLogs].filter((file) => file !== undefined)
             : worker === "platform"
               ? stack.platformLog === undefined
                   ? []
                   : [stack.platformLog]
-              : [stack.chatLog];
+              : worker === "runtime"
+                ? uniqueRuntimeLogs
+                : [stack.chatLog];
     const filter = options.filter === undefined ? null : new RegExp(options.filter, "u");
     const count = Number.isInteger(options.lines) ? options.lines : 200;
     const print = (file) => {
@@ -972,7 +1009,7 @@ function usage() {
             "  node scripts/local-dev.cjs prepare <web|web-server|web-server-mobius|web-server-mobius-cli> [--state-dir DIR] [--platform-port N] [--chat-port N] [--mobius-port N] [--app-id ID --app-secret SECRET] [--force] [--no-build] [--background]",
             "  node scripts/local-dev.cjs pair    --state-dir DIR [--harness ID] [--workspace DIR]",
             "  node scripts/local-dev.cjs status --state-dir DIR",
-            "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|platform|all] [--lines N] [--filter REGEX] [--follow]",
+            "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|platform|runtime|all] [--lines N] [--filter REGEX] [--follow]",
             "  node scripts/local-dev.cjs remove --state-dir DIR [--keep-state]",
             "",
         ].join("\n"),
