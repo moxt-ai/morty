@@ -33,8 +33,15 @@ export const publicCloudRoutes = new Hono<{ readonly Bindings: CloudBindings }>(
     .post("/identity/pairings/redeem", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .get("/projects/:projectId/session", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .get("/projects/:projectId/management/bots", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .post("/projects/:projectId/management/runtime-pairings", (context) =>
+        cloudRoutes.fetch(context.req.raw, context.env),
+    )
     .get("/projects/:projectId/management/runtime-pairings/:pairingId", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     )
+    .post("/projects/:projectId/identity/pairings", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .post("/projects/:projectId/identity/transfers", (context) => cloudRoutes.fetch(context.req.raw, context.env))
-    .post("/chat/projects/:projectId/bots/:botId/setup", (context) => cloudRoutes.fetch(context.req.raw, context.env));
+    .post("/chat/projects/:projectId/bots/:botId/setup", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .post("/chat/projects/:projectId/bots/:botId/workspace", (context) =>
+        cloudRoutes.fetch(context.req.raw, context.env),
+    );

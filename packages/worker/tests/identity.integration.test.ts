@@ -1,6 +1,6 @@
 import * as v from "valibot";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import worker from "../src/application.ts";
+import worker, { fetchPublicApplication } from "../src/application.ts";
 import { APP_ORIGIN, clerk as issuer } from "./support/clerk.ts";
 import { accountRequest, createIdentityFixture } from "./support/identity-fixture.ts";
 
@@ -286,7 +286,7 @@ test("Given a user with a Bot on a Project-scoped Platform, When setup checks th
         environment,
     );
     const { bots } = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await listed.json());
-    const response = await worker.fetch(
+    const response = await fetchPublicApplication(
         new Request(
             `${APP_ORIGIN}/mobius-cloud/api/chat/projects/${identity.projectId}/bots/${bots[0]?.botId}/workspace`,
             {
@@ -414,7 +414,7 @@ test("Given anonymous and signed-in users with Bots, When pairing tickets are is
             expect(foreignIssue.status).toBe(404);
         }
 
-        const issued = await worker.fetch(
+        const issued = await fetchPublicApplication(
             new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/identity/pairings`, {
                 method: "POST",
                 headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
@@ -452,6 +452,24 @@ test("Given anonymous and signed-in users with Bots, When pairing tickets are is
         );
         expect(local).toMatchObject({ userId, botId, expectedRuntimeId: null });
         expect((await worker.fetch(accountRequest(local.token, local.projectId), environment)).status).toBe(200);
+        const runtimePairing = await fetchPublicApplication(
+            new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${local.projectId}/management/runtime-pairings`, {
+                method: "POST",
+                headers: { authorization: `Bearer ${local.token}`, "content-type": "application/json" },
+                body: JSON.stringify({ idempotencyKey: `pairing-${kind}` }),
+            }),
+            environment,
+        );
+        expect(runtimePairing.status).toBe(201);
+        const { pairingId } = v.parse(v.object({ pairingId: v.string() }), await runtimePairing.json());
+        const pairingStatus = await fetchPublicApplication(
+            new Request(
+                `${APP_ORIGIN}/mobius-cloud/api/projects/${local.projectId}/management/runtime-pairings/${pairingId}`,
+                { headers: { authorization: `Bearer ${local.token}` } },
+            ),
+            environment,
+        );
+        expect(pairingStatus.status).toBe(200);
         expect((await redeem()).status).toBe(410);
     }
 });
