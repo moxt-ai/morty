@@ -57,6 +57,7 @@ export async function createChatWorkerEnvironment() {
         const transport = new WebSocketApiTransport(origin);
         transport.open();
         return {
+            botId,
             connectAgent: async () => {
                 const runtime = await cloud.connectAgent(identity.projectId);
                 const setup = await request(`chat/projects/${identity.projectId}/bots/${botId}/setup`, {

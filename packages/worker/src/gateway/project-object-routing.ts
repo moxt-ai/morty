@@ -1,6 +1,7 @@
+import * as v from "valibot";
 import { PlatformProjectError } from "../components/management/entity/platform-project.ts";
 import { projectRegion } from "../components/management/entity/project-region.ts";
-import type { CloudBindings } from "../infra/cloud-bindings.ts";
+import { type CloudBindings, durableObjectNamespaceBindingSchema } from "../infra/cloud-bindings.ts";
 
 interface ProjectObjectNamespace {
     readonly get: (
@@ -11,22 +12,17 @@ interface ProjectObjectNamespace {
 }
 
 function projectObjects(value: unknown): ProjectObjectNamespace {
-    if (
-        typeof value !== "object" ||
-        value === null ||
-        !("get" in value) ||
-        typeof value.get !== "function" ||
-        !("idFromName" in value) ||
-        typeof value.idFromName !== "function"
-    ) {
+    const parsed = v.safeParse(durableObjectNamespaceBindingSchema(), value);
+    if (!parsed.success) {
         throw new PlatformProjectError("PROJECT_OBJECT_UNAVAILABLE", "Workspace storage is unavailable.", 503);
     }
-    const get = value.get;
-    const idFromName = value.idFromName;
+    const namespace = parsed.output;
+    const get = namespace.get;
+    const idFromName = namespace.idFromName;
     return {
-        idFromName: (name) => Reflect.apply(idFromName, value, [name]),
+        idFromName: (name) => Reflect.apply(idFromName, namespace, [name]),
         get: (id, options) => {
-            const stub: unknown = Reflect.apply(get, value, [id, options]);
+            const stub: unknown = Reflect.apply(get, namespace, [id, options]);
             if (typeof stub !== "object" || stub === null || !("fetch" in stub) || typeof stub.fetch !== "function") {
                 throw new PlatformProjectError("PROJECT_OBJECT_UNAVAILABLE", "Workspace storage is unavailable.", 503);
             }
