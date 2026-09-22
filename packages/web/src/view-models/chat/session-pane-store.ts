@@ -571,94 +571,129 @@ export function createSessionPaneModel(options: {
                         session.result.action === "conversation" ? session.result.access : undefined,
                     );
                     const connected = client;
-                    const reconcilingTurn = activeTurn.current();
                     signal.addEventListener("abort", () => connected.close(), { once: true });
-                    const [loadedHistory, pendingInteractions, restoredTurn] = await Promise.all([
-                        connected.sessions.queryNativeMessages(sessionId, signal),
-                        connected.interactions.listPending(sessionId, signal),
-                        reconcilingTurn.kind === "accepted"
-                            ? connected.turns.read(sessionId, reconcilingTurn.turnId, signal)
-                            : Promise.resolve(null),
-                    ]);
-                    signal.throwIfAborted();
-                    nativeHistory = loadedHistory.status === "available" ? loadedHistory : null;
-                    historyCursor = loadedHistory.status === "available" ? loadedHistory.nextCursor : null;
-                    set({
-                        interactions: pendingInteractions.flatMap((interaction) => {
-                            const presented = presentInteraction(interaction);
-                            return presented === null ? [] : [presented];
-                        }),
-                    });
-                    if (
-                        restoredTurn !== null &&
-                        restoredTurn.state.kind !== "queued" &&
-                        restoredTurn.state.kind !== "running"
-                    ) {
-                        tasks.getState().finish(command);
-                        activeTurn.turnCleared(command);
-                        command = "";
-                    }
-                    const native = historySessionPresentation(
-                        loadedHistory,
+                    const subscription = await connected.events.subscribeLive(
                         sessionId,
-                        command === "" ? null : command,
-                    );
-                    const nativeMessages = native.messages;
-                    delivery
-                        .getState()
-                        .reconcile([
-                            ...(loadedHistory.status === "available" ? loadedHistory.coveredCommandIds : []),
-                            ...(command !== "" &&
-                            nativeMessages.some((message) => message.role === "user" && message.id === command)
-                                ? [command]
-                                : []),
-                        ]);
-                    const liveCommandMessages =
-                        command === "" ||
-                        (loadedHistory.status === "available" && loadedHistory.coveredCommandIds.includes(command))
-                            ? []
-                            : get().messages.filter((message) =>
-                                  message.role === "user"
-                                      ? message.id === command &&
-                                        !nativeMessages.some(
-                                            (nativeMessage) =>
-                                                nativeMessage.role === "user" && nativeMessage.id === command,
-                                        )
-                                      : message.commandId === command &&
-                                        !nativeMessages.some(
-                                            (nativeMessage) =>
-                                                nativeMessage.role === "assistant" &&
-                                                nativeMessage.commandId === command,
-                                        ),
-                              );
-                    const restoredFromDaemon = [...nativeMessages, ...liveCommandMessages];
-                    const reconciledDelivery = delivery.getState().state;
-                    const restoredMessages =
-                        reconciledDelivery.kind === "delivery-unknown"
-                            ? includePendingUserMessage(
-                                  restoredFromDaemon,
-                                  reconciledDelivery.journal.commandId,
-                                  reconciledDelivery.journal.displayPrompt,
-                                  reconciledDelivery.journal.request.images,
-                              )
-                            : restoredFromDaemon;
-                    signal.throwIfAborted();
-                    const restoredWork =
-                        command === ""
-                            ? { activity: { kind: "idle" } as const, messages: restoredMessages }
-                            : startSessionWork(
-                                  { activity: { kind: "idle" }, messages: restoredMessages },
-                                  { commandId: command, attempt: null },
-                              );
-                    set({
-                        activities: native.activities,
-                        hasOlderHistory: historyCursor !== null,
-                        ...restoredWork,
-                    });
-                    const subscription = await connected.events.subscribe(
-                        sessionId,
-                        "",
                         {
+                            reconcile: async (connection) => {
+                                const reconcilingTurn = activeTurn.current();
+                                const reconciliation =
+                                    connection.kind === "initial"
+                                        ? { kind: "initial-subscription" as const, turn: reconcilingTurn }
+                                        : { kind: "reconnecting" as const, turn: reconcilingTurn };
+                                switch (reconciliation.kind) {
+                                    case "initial-subscription":
+                                        break;
+                                    case "reconnecting":
+                                        set({ connection: { kind: "loading" } });
+                                        break;
+                                }
+                                const [loadedHistory, pendingInteractions, restoredTurn] = await Promise.all([
+                                    connected.sessions.queryNativeMessages(sessionId, signal),
+                                    connected.interactions.listPending(sessionId, signal),
+                                    reconciliation.turn.kind === "accepted"
+                                        ? connected.turns.read(sessionId, reconciliation.turn.turnId, signal)
+                                        : Promise.resolve(null),
+                                ]);
+                                signal.throwIfAborted();
+                                const authoritative = {
+                                    history: loadedHistory,
+                                    interactions: pendingInteractions,
+                                    kind: "authoritative-state-loaded" as const,
+                                    turn: restoredTurn,
+                                };
+                                nativeHistory =
+                                    authoritative.history.status === "available" ? authoritative.history : null;
+                                historyCursor =
+                                    authoritative.history.status === "available"
+                                        ? authoritative.history.nextCursor
+                                        : null;
+                                set({
+                                    interactions: authoritative.interactions.flatMap((interaction) => {
+                                        const presented = presentInteraction(interaction);
+                                        return presented === null ? [] : [presented];
+                                    }),
+                                });
+                                if (
+                                    authoritative.turn !== null &&
+                                    authoritative.turn.state.kind !== "queued" &&
+                                    authoritative.turn.state.kind !== "running"
+                                ) {
+                                    tasks.getState().finish(command);
+                                    activeTurn.turnCleared(command);
+                                    command = "";
+                                }
+                                const native = historySessionPresentation(
+                                    authoritative.history,
+                                    sessionId,
+                                    command === "" ? null : command,
+                                );
+                                const nativeMessages = native.messages;
+                                delivery
+                                    .getState()
+                                    .reconcile([
+                                        ...(authoritative.history.status === "available"
+                                            ? authoritative.history.coveredCommandIds
+                                            : []),
+                                        ...(command !== "" &&
+                                        nativeMessages.some(
+                                            (message) => message.role === "user" && message.id === command,
+                                        )
+                                            ? [command]
+                                            : []),
+                                    ]);
+                                const liveCommandMessages =
+                                    command === "" ||
+                                    (authoritative.history.status === "available" &&
+                                        authoritative.history.coveredCommandIds.includes(command))
+                                        ? []
+                                        : get().messages.filter((message) =>
+                                              message.role === "user"
+                                                  ? message.id === command &&
+                                                    !nativeMessages.some(
+                                                        (nativeMessage) =>
+                                                            nativeMessage.role === "user" &&
+                                                            nativeMessage.id === command,
+                                                    )
+                                                  : message.commandId === command &&
+                                                    !nativeMessages.some(
+                                                        (nativeMessage) =>
+                                                            nativeMessage.role === "assistant" &&
+                                                            nativeMessage.commandId === command,
+                                                    ),
+                                          );
+                                const restoredFromDaemon = [...nativeMessages, ...liveCommandMessages];
+                                const reconciledDelivery = delivery.getState().state;
+                                const restoredMessages =
+                                    reconciledDelivery.kind === "delivery-unknown"
+                                        ? includePendingUserMessage(
+                                              restoredFromDaemon,
+                                              reconciledDelivery.journal.commandId,
+                                              reconciledDelivery.journal.displayPrompt,
+                                              reconciledDelivery.journal.request.images,
+                                          )
+                                        : restoredFromDaemon;
+                                signal.throwIfAborted();
+                                const restoredWork =
+                                    command === ""
+                                        ? { activity: { kind: "idle" } as const, messages: restoredMessages }
+                                        : startSessionWork(
+                                              { activity: { kind: "idle" }, messages: restoredMessages },
+                                              { commandId: command, attempt: null },
+                                          );
+                                set({
+                                    activities: native.activities,
+                                    hasOlderHistory: historyCursor !== null,
+                                    ...restoredWork,
+                                });
+                                switch (reconciliation.kind) {
+                                    case "initial-subscription":
+                                        break;
+                                    case "reconnecting":
+                                        set({ connection: { client: connected, kind: "ready" } });
+                                        break;
+                                }
+                            },
                             receive: async (event) => {
                                 const payload = event.payload;
                                 if (payload instanceof MobiusAgentActivityEvent) {
@@ -903,32 +938,6 @@ export function createSessionPaneModel(options: {
                         signal,
                     );
                     signal.throwIfAborted();
-                    if (reconcilingTurn.kind === "accepted" && command === reconcilingTurn.commandId) {
-                        const latestTurn = await connected.turns.read(sessionId, reconcilingTurn.turnId, signal);
-                        if (latestTurn.state.kind !== "queued" && latestTurn.state.kind !== "running") {
-                            const completedHistory = await connected.sessions.queryNativeMessages(sessionId, signal);
-                            signal.throwIfAborted();
-                            if (command === reconcilingTurn.commandId) {
-                                delivery
-                                    .getState()
-                                    .reconcile(
-                                        completedHistory.status === "available"
-                                            ? completedHistory.coveredCommandIds
-                                            : [],
-                                    );
-                                tasks.getState().finish(command);
-                                activeTurn.turnCleared(command);
-                                command = "";
-                                const restored = historySessionPresentation(completedHistory, sessionId);
-                                set({
-                                    activity: { kind: "idle" },
-                                    activities: restored.activities,
-                                    messages: restored.messages,
-                                    operation: { kind: "idle" },
-                                });
-                            }
-                        }
-                    }
                     set({ connection: { kind: "ready", client: connected } });
                     await subscription.completed;
                     signal.throwIfAborted();

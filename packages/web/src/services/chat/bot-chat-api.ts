@@ -6,7 +6,14 @@ import {
     decodeWorkspaceEntriesEvent,
     type SessionConfigurationSelection,
 } from "@moxt-ai/mobius-protocol";
-import { HttpTransport, MobiusClient, type MobiusHttpTransport, WsTransport } from "@moxt-ai/mobius-sdk";
+import {
+    HttpTransport,
+    MobiusClient,
+    type MobiusHttpTransport,
+    type MobiusLiveEventTransport,
+    type MobiusTransportSessionEvent,
+    WsTransport,
+} from "@moxt-ai/mobius-sdk";
 import * as v from "valibot";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 
@@ -97,7 +104,7 @@ function sessionEndpoint(value: string): string {
     return endpoint.origin;
 }
 
-class BrowserSessionTransport implements MobiusHttpTransport {
+class BrowserSessionTransport implements MobiusHttpTransport, MobiusLiveEventTransport {
     readonly #http = new HttpTransport();
     readonly #webSocket = new WsTransport();
 
@@ -107,6 +114,9 @@ class BrowserSessionTransport implements MobiusHttpTransport {
             ? this.#http
             : this.#webSocket
         ).fetch(request);
+
+    readonly openLiveSessionEvents = async (request: Request): Promise<ReadableStream<MobiusTransportSessionEvent>> =>
+        await this.#webSocket.openLiveSessionEvents(request);
 
     readonly close = (): void => this.#webSocket.close();
 }
