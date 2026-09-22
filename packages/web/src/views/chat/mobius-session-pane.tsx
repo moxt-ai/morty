@@ -14,6 +14,7 @@ import {
     SessionInteractionCards,
 } from "../../components/chat/session-interactions.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
+import { Button } from "../../components/ui/cloud-button.tsx";
 import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
 import { registerMobiusChatDebugSession } from "../../debug-bridge.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
