@@ -220,6 +220,16 @@ export function MobiusSessionPane({
                             />
                         </div>
                     )}
+                    {model.messages.length === 0 && model.connection.kind === "loading" && (
+                        <p role="status" className="text-center text-sm text-muted-foreground">
+                            Loading...
+                        </p>
+                    )}
+                    {model.historyLoading && (
+                        <p role="status" className="text-center text-sm text-muted-foreground">
+                            Loading...
+                        </p>
+                    )}
                     {model.messages.map((message) => {
                         const workingOnly =
                             message.role === "assistant" &&

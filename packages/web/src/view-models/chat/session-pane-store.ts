@@ -536,6 +536,15 @@ export function createSessionPaneModel(options: {
                         hasOlderHistory: historyCursor !== null,
                         messages: rendered.messages,
                     });
+                } catch (cause) {
+                    signal.throwIfAborted();
+                    set({
+                        operation: {
+                            kind: "failed",
+                            message: cause instanceof Error ? cause.message : "Older messages could not be loaded.",
+                        },
+                    });
+                    throw cause;
                 } finally {
                     loadingOlderHistory = false;
                     if (!signal.aborted) {
