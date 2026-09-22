@@ -705,6 +705,29 @@ async function pair(options) {
 
     const pairLog = path.join(stack.stateDir, "pair.log");
     fs.writeFileSync(pairLog, "", { mode: 0o600 });
+    const pairEnvironment = {};
+    if (stack.mode === "web-server-mobius-cli") {
+        const shimDirectory = path.join(stack.stateDir, "local-cli-bin");
+        fs.mkdirSync(shimDirectory, { recursive: true, mode: 0o700 });
+        const shim = path.join(shimDirectory, "npx");
+        fs.writeFileSync(
+            shim,
+            `#!/usr/bin/env node
+const { spawnSync } = require("node:child_process");
+const args = process.argv.slice(2);
+if (args[0] !== "--yes" || args[1] !== "@moxt-ai/mobius@latest") {
+    process.stderr.write("The local Mobius CLI shim received an unsupported command.\\n");
+    process.exit(2);
+}
+const result = spawnSync("pnpm", ["--dir", ${JSON.stringify(MOBIUS_ROOT)}, "mobius", ...args.slice(2)], {
+    stdio: "inherit",
+});
+process.exit(result.status ?? 1);
+`,
+            { mode: 0o700 },
+        );
+        pairEnvironment.PATH = `${shimDirectory}${path.delimiter}${process.env.PATH ?? ""}`;
+    }
     log(`pairing harness "${harness}" against workspace ${workspace}`);
     const runtimePid = startProcess(
         "pair runtime",
@@ -714,6 +737,7 @@ async function pair(options) {
         {
             DOCUMENT_DIR: documents,
             MOBIUS_STATE_DIRECTORY: cliState,
+            ...pairEnvironment,
         },
         workspace,
     );
