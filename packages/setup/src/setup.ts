@@ -625,7 +625,33 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     fail("HARNESS_UNAVAILABLE");
                 }
                 emit({ status: "runtime_paired", runtimeId, harness });
+                break;
+            }
+            await clock.wait(1000, signal);
+        }
+
+        attempts = 0;
+        while (true) {
+            signal.throwIfAborted();
+            const workspace = await request(
+                context,
+                `/chat/projects/${context.config.project_id}/bots/${context.config.bot_id}/workspace`,
+                {},
+            );
+            if (
+                Array.isArray(workspace.agents) &&
+                workspace.agents.some(
+                    (agent) =>
+                        object(agent).runtimeId === runtimeId &&
+                        object(agent).agentRef === harness &&
+                        object(agent).online === true,
+                )
+            ) {
+                emit({ status: "runtime_online", runtimeId, harness });
                 return;
+            }
+            if (attempts++ % 10 === 0) {
+                progress("runtime", `Waiting for the Runtime and ${harness} to come online.`);
             }
             await clock.wait(1000, signal);
         }

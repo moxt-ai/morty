@@ -3,6 +3,22 @@ import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
 import { expect, test } from "./infra/test.ts";
 
+test("Given a saved setup handoff, When its Runtime reconnects, Then setup waits for the agent to come online", async ({
+    runtime,
+}) => {
+    await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    await runtime.disconnectRuntime();
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    const statuses = connected.events.map((event) => event.status);
+
+    expect(statuses).toEqual(
+        expect.arrayContaining(["runtime_reused", "runtime_paired", "runtime_online", "binding_activated"]),
+    );
+    expect(statuses.indexOf("runtime_reused")).toBeLessThan(statuses.indexOf("runtime_paired"));
+    expect(statuses.indexOf("runtime_paired")).toBeLessThan(statuses.indexOf("runtime_online"));
+    expect(statuses.indexOf("runtime_online")).toBeLessThan(statuses.indexOf("binding_activated"));
+});
+
 test("Given a setup handoff, When a user imports a native session, Then the handoff persists until access is revoked", async ({
     runtime,
 }) => {
