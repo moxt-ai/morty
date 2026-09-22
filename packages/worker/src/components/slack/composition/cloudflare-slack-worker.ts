@@ -5,7 +5,14 @@ import { IdentityGateway } from "../../../gateway/identity-gateway.ts";
 import { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
 import { projectObject } from "../../../gateway/project-object-routing.ts";
 import { SlackWebApi } from "../../../gateway/slack-web-gateway.ts";
-import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
+import {
+    type CloudBindings,
+    d1DatabaseBindingSchema,
+    durableObjectNamespaceBindingSchema,
+    fetcherBindingSchema,
+    queueBindingSchema,
+    r2BucketBindingSchema,
+} from "../../../infra/cloud-bindings.ts";
 import { json } from "../../../infra/http.ts";
 import { IdentityStorage } from "../../management/storage/identity-storage.ts";
 import type { BotTriggerRateLimiter } from "../do/bot-trigger-rate-limiter.ts";
@@ -28,44 +35,29 @@ import { CloudAttachmentStorageResolver, configuredOrm } from "../storage/slack-
 import { createSlackDependencies } from "./create-dependencies.ts";
 import { createSlackWorker } from "./slack-worker.ts";
 
-const slackBindingsSchema = v.object({
-    CHAT_PROJECT_ID: v.string(),
-    ATTACHMENTS: v.object({ get: v.function(), put: v.function() }),
-    DATABASE: v.object({ batch: v.function(), prepare: v.function() }),
-    BOT_TRIGGER_RATE_LIMITER: v.object({ get: v.function(), idFromName: v.function() }),
-    ASSETS: v.object({ fetch: v.function() }),
-    APP_ORIGIN: v.pipe(v.string(), v.url()),
-    AUTHENTICATION_BASE_URL: v.pipe(v.string(), v.url()),
-    CLERK_JWT_KEY: v.string(),
-    CLERK_PUBLISHABLE_KEY: v.string(),
-    EVENTS: v.object({ send: v.function() }),
-    MOBIUS_APP_ID: v.pipe(v.string(), v.minLength(1)),
-    MOBIUS_APP_SECRET: v.pipe(v.string(), v.minLength(1)),
-    MOBIUS_BASE_URL: v.pipe(v.string(), v.url()),
-    SLACK_MOBIUS_AUTH_TOKEN: v.pipe(v.string(), v.minLength(1)),
-    SLACK_OAUTH_STATE_SIGNING_KEY: v.pipe(v.string(), v.minLength(1)),
-    SLACK_SERVER_BASE_URL: v.pipe(v.string(), v.url()),
-    SLACK_TOKEN_ENCRYPTION_KEY: v.pipe(v.string(), v.minLength(1)),
-});
-interface SlackBindings {
-    readonly CHAT_PROJECT_ID: string;
-    readonly ATTACHMENTS: R2Bucket;
-    readonly DATABASE: D1Database;
-    readonly BOT_TRIGGER_RATE_LIMITER: DurableObjectNamespace<BotTriggerRateLimiter>;
-    readonly ASSETS: Fetcher;
-    readonly APP_ORIGIN: string;
-    readonly EVENTS: Queue<ProjectQueueMessage>;
-    readonly AUTHENTICATION_BASE_URL: string;
-    readonly CLERK_JWT_KEY: string;
-    readonly CLERK_PUBLISHABLE_KEY: string;
-    readonly MOBIUS_APP_ID: string;
-    readonly MOBIUS_APP_SECRET: string;
-    readonly MOBIUS_BASE_URL: string;
-    readonly SLACK_MOBIUS_AUTH_TOKEN: string;
-    readonly SLACK_OAUTH_STATE_SIGNING_KEY: string;
-    readonly SLACK_SERVER_BASE_URL: string;
-    readonly SLACK_TOKEN_ENCRYPTION_KEY: string;
-}
+const slackBindingsSchema = v.pipe(
+    v.object({
+        CHAT_PROJECT_ID: v.string(),
+        ATTACHMENTS: r2BucketBindingSchema,
+        DATABASE: d1DatabaseBindingSchema,
+        BOT_TRIGGER_RATE_LIMITER: durableObjectNamespaceBindingSchema<BotTriggerRateLimiter>(),
+        ASSETS: fetcherBindingSchema,
+        APP_ORIGIN: v.pipe(v.string(), v.url()),
+        AUTHENTICATION_BASE_URL: v.pipe(v.string(), v.url()),
+        CLERK_JWT_KEY: v.string(),
+        CLERK_PUBLISHABLE_KEY: v.string(),
+        EVENTS: queueBindingSchema<ProjectQueueMessage>(),
+        MOBIUS_APP_ID: v.pipe(v.string(), v.minLength(1)),
+        MOBIUS_APP_SECRET: v.pipe(v.string(), v.minLength(1)),
+        MOBIUS_BASE_URL: v.pipe(v.string(), v.url()),
+        SLACK_MOBIUS_AUTH_TOKEN: v.pipe(v.string(), v.minLength(1)),
+        SLACK_OAUTH_STATE_SIGNING_KEY: v.pipe(v.string(), v.minLength(1)),
+        SLACK_SERVER_BASE_URL: v.pipe(v.string(), v.url()),
+        SLACK_TOKEN_ENCRYPTION_KEY: v.pipe(v.string(), v.minLength(1)),
+    }),
+    v.readonly(),
+);
+type SlackBindings = v.InferOutput<typeof slackBindingsSchema>;
 function hasSlackBindings(bindings: CloudBindings): bindings is CloudBindings & SlackBindings {
     return v.safeParse(slackBindingsSchema, bindings).success;
 }
