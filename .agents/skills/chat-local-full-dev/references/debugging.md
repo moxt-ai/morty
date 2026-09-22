@@ -76,6 +76,8 @@ part of the live state.
 | `INVALID_REQUEST` (400) with a generic message | Schema validation rejected the body | Find the logged typed error and its validation issue path in `chatLog` |
 | `NOT_FOUND` on a Session or Conversation | Wrong Project, or the record lives in another state directory | Inspect `chat_managed_session` and the stack's `appId` |
 | Process exited but the port stays bound | A previous stack was not removed | `status` then `remove --state-dir` the old stack |
+| Platform health times out with unresolved Mobius packages in `platformLog` | The submodule's independent dependencies were not installed | Re-run the current `scripts/local-dev` entrypoint; for an older checkout run `pnpm --dir third-party/mobius install --frozen-lockfile` first |
+| Mobius relay exits because `packages/web/dist` does not exist | Relay web assets were not built after checking out the submodule | Re-run the current `scripts/local-dev` entrypoint without `--no-build` |
 
 ## Boundary checklist
 

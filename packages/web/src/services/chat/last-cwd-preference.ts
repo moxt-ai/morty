@@ -10,18 +10,12 @@ const MAXIMUM_DIRECTORY_LABEL_LENGTH = 4_000;
 
 export type { RecentCwdPreference };
 
-export function readRecentCwdPreferences(
-    botId: string,
-    runtimeId: string,
-    agentRef: string,
-): readonly RecentCwdPreference[] | null {
-    return centralLocalStorage.read(recentCwdEntry(botId, runtimeId, agentRef));
+export function readRecentCwdPreferences(botId: string): readonly RecentCwdPreference[] | null {
+    return centralLocalStorage.read(recentCwdEntry(botId));
 }
 
 export function saveRecentCwdPreference(
     botId: string,
-    runtimeId: string,
-    agentRef: string,
     directory: RecentCwdPreference,
     existing: readonly RecentCwdPreference[],
 ): readonly RecentCwdPreference[] {
@@ -37,19 +31,17 @@ export function saveRecentCwdPreference(
         directory,
         ...existing.filter((preference) => preference.directoryId !== directory.directoryId),
     ].slice(0, 10);
-    centralLocalStorage.write(recentCwdEntry(botId, runtimeId, agentRef), recent);
+    centralLocalStorage.write(recentCwdEntry(botId), recent);
     return recent;
 }
 
 export function forgetRecentCwdPreference(
     botId: string,
-    runtimeId: string,
-    agentRef: string,
     directoryId: string,
     existing: readonly RecentCwdPreference[],
 ): readonly RecentCwdPreference[] {
     const recent = existing.filter((preference) => preference.directoryId !== directoryId);
-    centralLocalStorage.write(recentCwdEntry(botId, runtimeId, agentRef), recent);
+    centralLocalStorage.write(recentCwdEntry(botId), recent);
     return recent;
 }
 

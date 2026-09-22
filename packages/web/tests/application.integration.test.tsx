@@ -101,6 +101,31 @@ async function renderWorkspace(created?: Application): Promise<Application> {
     return current;
 }
 
+function observeStatusText(expected: string): Promise<HTMLElement> {
+    return new Promise((resolve) => {
+        const observer = new MutationObserver((records) => {
+            for (const record of records) {
+                for (const addedNode of record.addedNodes) {
+                    if (!(addedNode instanceof HTMLElement)) {
+                        continue;
+                    }
+                    const statuses = [
+                        ...(addedNode.matches('[role="status"]') ? [addedNode] : []),
+                        ...addedNode.querySelectorAll<HTMLElement>('[role="status"]'),
+                    ];
+                    const status = statuses.find((candidate) => candidate.textContent?.includes(expected) === true);
+                    if (status !== undefined) {
+                        observer.disconnect();
+                        resolve(status);
+                        return;
+                    }
+                }
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+    });
+}
+
 function changeValue(element: HTMLInputElement | HTMLTextAreaElement, value: string): void {
     const prototype =
         element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
@@ -114,6 +139,14 @@ async function sendPrompt(composer: HTMLTextAreaElement, prompt: string): Promis
     const send = await act(async () => await waitForEnabled(`[data-testid="${dataTestId.sendMessage}"]`));
     await act(async () => send.click());
 }
+
+test("Given the conversation directory is loading, When the workspace appears, Then an accessible skeleton replaces the loading copy", async () => {
+    const loadingStatus = observeStatusText("Loading conversations");
+
+    await renderWorkspace();
+
+    expect((await loadingStatus).getAttribute("aria-label")).toBe("Loading conversations");
+});
 
 test("Given an unpaired workspace, When a user manages Bots, Then pairing and the surviving Bot remain visible", {
     timeout: 30_000,
@@ -193,6 +226,29 @@ test("Given a paired Bot, When a user filters its models and requests an image, 
         ]),
         failure,
     ]);
+});
+
+test("Given a Bot has a recent directory from another harness, When its workspace loads, Then the directory remains available", {
+    timeout: 30_000,
+}, async () => {
+    const created = await environment.createApplication();
+    window.localStorage.setItem(
+        `mobius:recent-cwd:${encodeURIComponent(created.botId)}`,
+        JSON.stringify([{ directoryId: "saved-directory", directoryLabel: "/saved-by-another-harness" }]),
+    );
+    await renderWorkspace(created);
+    const { failure } = await act(async () => await created.connectAgent());
+
+    const menu = await Promise.race([
+        act(async () => {
+            const workingDirectory = await waitForElement(`[data-testid="${dataTestId.workingDirectory}"]`);
+            workingDirectory.click();
+            return await waitForText('[aria-label="Working directory menu"]', "/saved-by-another-harness");
+        }),
+        failure,
+    ]);
+
+    expect(menu.textContent).toContain("/saved-by-another-harness");
 });
 
 test("Given a Bot is bound to one Runtime, When another Runtime connects, Then native sessions stay scoped to the Bot", {
