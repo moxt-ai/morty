@@ -246,20 +246,16 @@ export function ConversationSidebar({
                                                 className="size-4 animate-spin motion-reduce:animate-none"
                                             />
                                         </span>
-                                    ) : (
+                                    ) : activeSession.status === "failed" ? (
                                         <span
-                                            aria-label={`Session ${activeSession.status}`}
-                                            className={
-                                                activeSession.status === "failed"
-                                                    ? "text-xs text-destructive"
-                                                    : "text-xs text-copy-tertiary"
-                                            }
+                                            aria-label="Session failed"
+                                            className="text-xs text-destructive"
                                             data-testid={dataTestId.sessionStatus}
                                             role="status"
                                         >
-                                            {activeSession.status === "failed" ? "Failed" : "Idle"}
+                                            Failed
                                         </span>
-                                    ))}
+                                    ) : null)}
                             </button>
                         </ContextMenu.Trigger>
                         <ContextMenu.Portal>
