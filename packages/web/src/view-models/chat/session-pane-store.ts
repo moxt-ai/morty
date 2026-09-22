@@ -66,7 +66,7 @@ type Operation =
 type Connection =
     | { readonly kind: "loading" }
     | { readonly kind: "ready"; readonly client: MobiusClient }
-    | { readonly kind: "failed" };
+    | { readonly kind: "failed"; readonly message: string };
 type ServiceInteraction = Awaited<ReturnType<MobiusClient["interactions"]["listPending"]>>[number];
 export type LocalInteraction =
     | { readonly kind: "permission"; readonly permission: PermissionInteraction }
@@ -937,15 +937,16 @@ export function createSessionPaneModel(options: {
                     client?.close();
                     client = null;
                     if (!signal.aborted) {
+                        const message = cause instanceof Error ? cause.message : "The Session could not be opened.";
                         set({
-                            connection: { kind: "failed" },
+                            connection: { kind: "failed", message },
                             activity: transitionSessionActivity(get().activity, {
                                 kind: "session-failed",
-                                message: cause instanceof Error ? cause.message : "The Session could not be opened.",
+                                message,
                             }),
                             operation: {
                                 kind: "failed",
-                                message: cause instanceof Error ? cause.message : "The Session could not be opened.",
+                                message,
                             },
                         });
                     }
