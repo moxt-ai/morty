@@ -2,7 +2,6 @@ import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as v from "valibot";
-import { createMobiusPlatformFixture } from "../../../worker/tests/infra/mobius.ts";
 import { createIdentityFixture } from "../../../worker/tests/support/identity-fixture.ts";
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
 
@@ -24,22 +23,11 @@ async function availableOrigin(): Promise<string> {
 
 export async function createChatWorker() {
     const origin = await availableOrigin();
-    const platform = await createMobiusPlatformFixture({
-        allowedOrigins: new Set(["*"]),
-        platformDirectory: pathToFileURL(
-            `${resolve(process.cwd(), "../../third-party/mobius/packages/relay-cloudflare-platform")}/`,
-        ),
-    });
     const cloud = await createIdentityFixture({
         appOrigin: origin,
+        platformAllowedOrigins: new Set(["*"]),
         workerEntryPoint: resolve(process.cwd(), "../worker/src/index.ts"),
         wranglerConfiguration: pathToFileURL(resolve(process.cwd(), "../../wrangler.jsonc")),
-        platform: {
-            appId: platform.appId,
-            appCredential: platform.appCredential,
-            baseUrl: platform.baseUrl,
-            close: platform.close,
-        },
     });
     try {
         const identityResponse = await cloud.dispatchFetch(`${origin}/mobius-cloud/api/identity/anonymous-users`, {
@@ -70,7 +58,7 @@ export async function createChatWorker() {
         transport.open();
         return {
             connectAgent: async () => {
-                const runtime = await platform.connectAgent(identity.projectId);
+                const runtime = await cloud.connectAgent(identity.projectId);
                 const setup = await request(`chat/projects/${identity.projectId}/bots/${botId}/setup`, {
                     runtimeId: runtime.runtimeId,
                     agentRef: "codex",

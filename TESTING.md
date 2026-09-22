@@ -68,7 +68,9 @@ pnpm test:worker
 ```
 
 The shared fixtures own application composition, migrations, credentials, external
-fakes, and cleanup. Slack tests start empty and create app registration, binding,
+fakes, and cleanup. `startTestPlatform` starts the production Platform Worker,
+Durable Objects, migrations, and HTTP/WebSocket boundary with isolated local
+Cloudflare storage; it does not simulate Platform responses. Slack tests start empty and create app registration, binding,
 OAuth, and connection state through production HTTP operations. Direct persistence
 setup is reserved for storage and migration behavior or state owned by an upstream
 component outside the test.
@@ -78,11 +80,12 @@ behavior belong in `identity.integration.test.ts`; the setup CLI and browser
 handoff belong to the existing product journey in `packages/e2e/setup.e2e.test.ts`.
 Slack journeys stay under `slack/app`. Related state transitions should advance
 through one journey instead of rebuilding the same user, database, and Platform
-peer in separate cases. The small shared `support/identity-fixture.ts` starts real
-Chat Durable Objects and, for identity flows, the real Platform Worker in memory.
-Chat creation journeys keep the Chat Worker and its Project Durable Objects real
-while replacing the external Platform service with one stateful protocol peer for
-both successful and failure behavior.
+stack in separate cases. The small shared `support/identity-fixture.ts` starts real
+Chat Durable Objects and composes them with the real local Platform. Chat creation
+uses production Chat and Platform business operations end to end; only the external
+Agent-daemon process is replaced by the shared protocol fake. Narrow peers are
+reserved for a boundary behavior that a healthy Platform cannot produce, such as
+rejecting an HTTP redirect.
 Slack journeys compose the production Slack application and queue consumer with
 stateful fakes at the external Clerk, Slack, Identity, and Platform ports.
 
