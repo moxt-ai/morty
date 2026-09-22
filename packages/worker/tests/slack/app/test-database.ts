@@ -2,26 +2,18 @@ import { readdir, readFile } from "node:fs/promises";
 import { drizzle } from "drizzle-orm/d1";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { afterEach, beforeEach, vi } from "vitest";
-import type { SqlDatabase } from "../../../src/components/slack/infra/sql-database.ts";
-import { D1SqlDatabase } from "../../../src/components/slack/storage/d1-database.ts";
 import type { Database } from "../../../src/schema/d1/database.ts";
 import * as schema from "../../../src/schema/d1/index.ts";
 
-class TestDatabase implements SqlDatabase {
+class TestDatabase {
     readonly binding: D1Database;
     readonly orm: Database;
-    readonly execute: SqlDatabase["execute"];
     readonly #runtime: Miniflare;
 
     constructor(runtime: Miniflare, d1: D1Database) {
         this.#runtime = runtime;
         this.binding = d1;
         this.orm = drizzle(d1, { schema });
-        this.execute = new D1SqlDatabase({
-            database: d1,
-            metrics: { info: () => undefined },
-            nowMilliseconds: () => performance.now(),
-        }).execute;
     }
 
     readonly dispose = async (): Promise<void> => {

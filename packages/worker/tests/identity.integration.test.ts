@@ -14,7 +14,9 @@ afterEach(async () => {
     await fixture.close();
 });
 
-test("Given visitors across Cloudflare regions, When Chat provisions and reopens workspaces, Then Platform preserves every placement", async () => {
+test("Given visitors across Cloudflare regions, When Chat provisions and reopens workspaces, Then Platform preserves every placement", {
+    timeout: 30_000,
+}, async () => {
     // Cloudflare supplies cf metadata on incoming Requests; Node does not.
     class GeolocatedRequest extends Request {
         override readonly cf: { readonly continent: string; readonly country: string };

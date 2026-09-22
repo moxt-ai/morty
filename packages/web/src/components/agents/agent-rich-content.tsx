@@ -42,10 +42,12 @@ function LocalImage({
     content,
     mediaTestId,
     readImage,
+    sessionId,
 }: {
     readonly content: AgentDisplayContent;
     readonly mediaTestId?: string | undefined;
-    readonly readImage: MarkdownImageReader;
+    readonly readImage?: MarkdownImageReader | undefined;
+    readonly sessionId: string;
 }) {
     const [source, setSource] = useState<string | null>(null);
     useEffect(() => {
@@ -53,7 +55,10 @@ function LocalImage({
         let objectUrl = "";
         const load = async () => {
             try {
-                const file = await readImage(content.uri, controller.signal);
+                const file =
+                    readImage === undefined
+                        ? await readFile(sessionId, content.uri, controller.signal)
+                        : await readImage(content.uri, controller.signal);
 
                 if (controller.signal.aborted || !SAFE_IMAGE_MIME.test(file.mediaType)) {
                     return;
@@ -74,7 +79,7 @@ function LocalImage({
                 URL.revokeObjectURL(objectUrl);
             }
         };
-    }, [content.uri, readImage]);
+    }, [content.uri, readImage, sessionId]);
     if (source === null) {
         return (
             <div className="min-h-24 rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
@@ -120,8 +125,9 @@ function AgentRichContentItem({
 }) {
     if (content.type === "image" && content.uri.length > 0) {
         if (sessionId !== undefined && (readImage !== undefined || channelId !== undefined)) {
-            const reader = readImage ?? (async (path, signal) => await readFile(sessionId, path, signal));
-            return <LocalImage content={content} mediaTestId={mediaTestId} readImage={reader} />;
+            return (
+                <LocalImage content={content} mediaTestId={mediaTestId} readImage={readImage} sessionId={sessionId} />
+            );
         }
         return (
             <div className="rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">

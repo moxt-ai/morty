@@ -222,9 +222,13 @@ Session, and turn APIs. Bot instructions are injected as trusted Chat-owned cont
 
 ## Verification
 
-Run `pnpm lint` and `pnpm typecheck` locally, plus only the tests related to the change when needed. Product behavior is covered at HTTP and browser boundaries; tests use deterministic time and stateful fakes rather than request mocks. `pnpm ci:check` is reserved for CI.
+Run `pnpm lint` and `pnpm typecheck` locally, plus only the tests related to the
+change when needed. Product behavior is covered at HTTP and browser boundaries;
+tests use deterministic time and stateful fakes rather than request mocks.
+`pnpm ci:check` serially reproduces the combined CI validation when diagnosis
+requires it.
 
-The check includes combined production TS/TSX coverage and executable dependency
+That command includes combined production TS/TSX coverage and executable dependency
 boundaries. `pnpm check:architecture` follows type imports and re-exports. Slack
 storage consumes shared records from `components/slack/entity` and execution ports
 from `infra`, with no dependency on services, gateways, or composition. Biome's

@@ -143,6 +143,7 @@ export interface BotChatHomeStore {
     readonly sessionView: SessionView;
     readonly creation: ConversationCreationState;
     readonly revision: number;
+    readonly directoryRevision: number;
     readonly draftSettings: ChatDraftConfiguration | null;
     readonly load: (signal: AbortSignal) => Promise<void>;
     readonly selectBot: (botId: string) => void;
@@ -248,6 +249,7 @@ export const createBotChatHomeStore = (
         sessionView: { kind: "conversation-access" },
         creation: { kind: "draft" },
         revision: 0,
+        directoryRevision: 0,
         draftSettings: null,
         load: async (signal) => {
             set((current) => ({
@@ -650,6 +652,7 @@ export const createBotChatHomeStore = (
                 set({
                     target: { kind: "conversation-access", conversationId: sent.conversationId },
                     sessionView: { kind: "session-access", session: sent.session },
+                    directoryRevision: get().directoryRevision + 1,
                 });
                 return true;
             } catch (cause) {

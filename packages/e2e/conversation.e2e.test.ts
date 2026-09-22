@@ -74,7 +74,7 @@ test("Given a paired workspace, When a user works across conversations, Then sen
         await composer.fill("First conversation");
         await page.getByRole("button", { name: "Send message", exact: true }).click();
         await expect(page.getByTestId(dataTestId.queuedMessage)).toHaveText("First conversation");
-        await expect(page.getByTestId(dataTestId.initialMessageStatus)).toHaveText("Creating session");
+        await expect(page.getByTestId(dataTestId.initialMessageStatus)).toHaveText("Session creating");
         await expect(page).toHaveURL(/\?conversationId=/u);
         await expect(page.getByRole("list", { name: "Attachments", exact: true })).toHaveCount(0);
         await expect(page.getByTestId(dataTestId.agentResponse).first()).toContainText("First conversation");
@@ -178,10 +178,13 @@ test("Given a paired workspace, When a user works across conversations, Then sen
         await composer.fill("wait for steering");
         await send.click();
         await expect(page.getByTestId(dataTestId.userMessageImage)).toHaveAttribute("alt", "sent-image.png");
+        await expect(page.getByTestId(dataTestId.userMessage).last()).toHaveText("wait for steering");
         await expect(send).toHaveAttribute("aria-label", "Stop agent output");
         await expect(page.getByTestId(dataTestId.workingIndicator)).toContainText("Working for");
         await expect(page.getByTestId(dataTestId.workingSpinner)).toBeVisible();
         await expect(page.getByTestId(dataTestId.agentResponse).last()).toContainText("Inspecting the workspace");
+        await page.reload();
+        await expect(page.getByTestId(dataTestId.userMessage).last()).toHaveText("wait for steering");
         await expect(composer).toBeEnabled();
         await composer.fill("focus on the public API");
         await composer.press("Enter");

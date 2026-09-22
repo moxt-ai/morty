@@ -3,5 +3,5 @@
     "compilerOptions": {
         "types": ["vitest/globals"]
     },
-    "include": ["../src/**/*.ts", "../src/**/*.tsx", "./**/*.ts", "./**/*.tsx"]
+    "include": ["../src/**/*.ts", "../src/**/*.tsx", "../../worker/src/**/*.d.ts", "./**/*.ts", "./**/*.tsx"]
 }

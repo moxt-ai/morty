@@ -49,6 +49,7 @@ export function ConversationSidebar({
     onNewConversation,
     createTransfer,
     activeSession,
+    directoryRevision,
 }: {
     readonly activeBot: ManagedBot;
     readonly bots: readonly ManagedBot[];
@@ -64,6 +65,7 @@ export function ConversationSidebar({
         "archiveManagedSession" | "workspace" | "nativeSessions" | "nativeSession" | "managedSessions"
     >;
     readonly activeId: string;
+    readonly directoryRevision: number;
     readonly onOpen: (session: ManagedChatSession) => void;
     readonly onOpenSession: (session: OpenMobiusSession) => void;
     readonly onNewConversation: () => void;
@@ -90,6 +92,9 @@ export function ConversationSidebar({
             ? directory.sessions
             : null;
     const refreshing = directory.kind === "refreshing";
+    // The directory belongs to the active Bot, not to the selected Session.
+    // Session selection is managed by the home view-model and must not restart
+    // or cancel this independent directory workflow.
     // biome-ignore lint/correctness/useExhaustiveDependencies: Creation and explicit refresh reload the persisted directory.
     useEffect(() => {
         const controller = new AbortController();
@@ -101,7 +106,7 @@ export function ConversationSidebar({
                 lifetime.current = null;
             }
         };
-    }, [activeId, load, revision]);
+    }, [directoryRevision, load, revision]);
     return (
         <aside
             aria-label="Workspace navigation"
@@ -241,20 +246,16 @@ export function ConversationSidebar({
                                                 className="size-4 animate-spin motion-reduce:animate-none"
                                             />
                                         </span>
-                                    ) : (
+                                    ) : activeSession.status === "failed" ? (
                                         <span
-                                            aria-label={`Session ${activeSession.status}`}
-                                            className={
-                                                activeSession.status === "failed"
-                                                    ? "text-xs text-destructive"
-                                                    : "text-xs text-copy-tertiary"
-                                            }
+                                            aria-label="Session failed"
+                                            className="text-xs text-destructive"
                                             data-testid={dataTestId.sessionStatus}
                                             role="status"
                                         >
-                                            {activeSession.status === "failed" ? "Failed" : "Idle"}
+                                            Failed
                                         </span>
-                                    ))}
+                                    ) : null)}
                             </button>
                         </ContextMenu.Trigger>
                         <ContextMenu.Portal>

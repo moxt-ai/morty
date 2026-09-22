@@ -64,9 +64,14 @@ export function historySessionPresentation(
     }
     const commandIdsByMessageIndex = new Map<number, string>();
     let historyIndex = history.messages.length;
-    if (activeCommandId !== null && history.messages[historyIndex - 1]?.role === "user") {
-        commandIdsByMessageIndex.set(historyIndex - 1, activeCommandId);
-        historyIndex -= 1;
+    if (activeCommandId !== null) {
+        const activeUserIndex = history.messages.findLastIndex((message) => message.role === "user");
+        if (activeUserIndex >= 0) {
+            for (let index = activeUserIndex; index < historyIndex; index += 1) {
+                commandIdsByMessageIndex.set(index, activeCommandId);
+            }
+            historyIndex = activeUserIndex;
+        }
     }
     for (const commandId of history.coveredCommandIds) {
         let assistantStartIndex = historyIndex;

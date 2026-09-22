@@ -96,3 +96,43 @@ drives the migration in batches, verifies completion, and deletes it on exit.
 migration in batches of 10, verifies `total == migrated`, and deletes the helper.
 Set `MOBIUS_REPOSITORY` to override the Mobius checkout path, and
 `CLOUDFLARE_ACCOUNT_ID` to override the account.
+
+## Repair an already-corrupted non-cloud-retention Turn
+
+Use this separate procedure only for a confirmed incident where the persisted
+Turn command is no longer decodable (for example, the old scrubber replaced the
+prompt with an empty string and also removed attachments). The normal migration
+does not repair Turn content, and this procedure must not be used as a general
+scrub operation.
+
+The repair build adds a token-gated `repair-scrubbed-turn` operation to the
+non-cloud-retention Session Durable Object. Build and deploy that temporary
+Platform Worker revision first; do not leave the repair route in the normal
+application deployment. Then run:
+
+```sh
+scripts/repair-turn.sh production \
+  <projectId> <runtimeId> <sessionId> <commandId> <turnId>
+```
+
+Use `staging` only when the incident is in staging. Resolve every identifier
+from the authoritative session/project directory and verify that the resolved
+Project, Runtime, Session, Command, and Turn are the intended target before
+running the command. The script:
+
+1. deploys a short-lived helper bound to the named Platform Worker;
+2. creates random helper and repair tokens in mode `0600` files;
+3. installs the repair token as `NON_CLOUD_RETENTION_TURN_REPAIR_TOKEN`;
+4. confirms the Turn is unreadable before repair, applies the one-shot repair,
+   and confirms the production read path returns a readable Turn with
+   `content: "[Content unavailable]"`;
+5. deletes the helper and removes the repair secret on success or failure.
+
+The repair preserves the stored command's protocol identity and configuration,
+removes images/resources, and clears response/error text. It must never fabricate
+identity fields or rewrite a healthy Turn. For a session with multiple affected
+Turns, use the same temporary repair build's all-Turn operation through a
+reviewed operator command; apply it only after independently authorizing the
+single Project/Runtime/Session target and verify the session-level read path
+afterward. Do not broaden this into an account-wide sweep without explicit
+approval.

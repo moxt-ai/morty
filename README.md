@@ -3,9 +3,11 @@
 [![CI](https://github.com/moxt-ai/mobius-chat/actions/workflows/ci.yml/badge.svg)](https://github.com/moxt-ai/mobius-chat/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/moxt-ai/mobius-chat/branch/main/graph/badge.svg)](https://codecov.io/gh/moxt-ai/mobius-chat)
 
-CI runs `pnpm ci:check` for complete static verification and test coverage. Do not run it locally; use `pnpm lint`, `pnpm typecheck`, and related test cases instead.
-Coverage reports a 95% advisory target across lines, statements, functions, and
-branches; missing coverage is visible but does not fail the build. See
+CI runs static verification and test coverage as parallel jobs. `pnpm ci:check`
+reproduces them serially; routine local work should use `pnpm lint`, `pnpm
+typecheck`, and related test cases instead. Coverage reports a 95% advisory target
+across lines, statements, functions, and branches; falling short of the target is
+visible but does not fail the build. See
 [Testing](TESTING.md) for scope and commands.
 
 Mobius Cloud is one web application and one Cloudflare Worker. Clerk authenticates

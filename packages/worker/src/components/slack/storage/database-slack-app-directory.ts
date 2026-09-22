@@ -1,8 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
+import type { Database } from "../../../schema/d1/database.ts";
 import { slackApp } from "../../../schema/d1/index.ts";
 import { tenantContext } from "../entity/tenant-context.ts";
-import type { SqlDatabase } from "../infra/sql-database.ts";
 import type { SecretCipher } from "../infra/util/secret-cipher.ts";
 import type { SlackAppDirectory } from "./slack-app-directory.ts";
 import { TenantStorageError } from "./tenant-storage-error.ts";
@@ -10,24 +10,20 @@ import { TenantStorageError } from "./tenant-storage-error.ts";
 const rowSchema = v.object({ tenant_id: v.pipe(v.string(), v.minLength(1)), signing_secret_encrypted: v.string() });
 
 export class DatabaseSlackAppDirectory implements SlackAppDirectory {
-    readonly #database: SqlDatabase;
+    readonly #database: Database;
     readonly #cipher: SecretCipher;
-    constructor(database: SqlDatabase, cipher: SecretCipher) {
+    constructor(database: Database, cipher: SecretCipher) {
         this.#database = database;
         this.#cipher = cipher;
     }
     readonly find: SlackAppDirectory["find"] = async (slackAppId, signal) => {
-        const value = await this.#database.execute(
-            "first",
-            1,
-            signal,
-            async (database) =>
-                await database
-                    .select({ tenantId: slackApp.tenantId, signingSecretEncrypted: slackApp.signingSecretEncrypted })
-                    .from(slackApp)
-                    .where(and(eq(slackApp.slackAppId, slackAppId), eq(slackApp.status, "enabled")))
-                    .get(),
-        );
+        signal.throwIfAborted();
+        const value = await this.#database
+            .select({ tenantId: slackApp.tenantId, signingSecretEncrypted: slackApp.signingSecretEncrypted })
+            .from(slackApp)
+            .where(and(eq(slackApp.slackAppId, slackAppId), eq(slackApp.status, "enabled")))
+            .get();
+        signal.throwIfAborted();
         if (value === undefined) {
             return null;
         }

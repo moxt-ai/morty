@@ -64,9 +64,7 @@ export async function createTestApplication() {
         secretEncryption: cipher,
     };
     const storages = {
-        databaseResolver: {
-            resolve: () => database,
-        },
+        database: database.orm,
         attachmentStorageResolver: attachments,
         humanIdentity: {
             resolve: async (clerkUserId: string, signal: AbortSignal) => {
@@ -84,7 +82,7 @@ export async function createTestApplication() {
         },
         storages: {
             ...storages,
-            slackAppDirectory: new DatabaseSlackAppDirectory(database, cipher),
+            slackAppDirectory: new DatabaseSlackAppDirectory(database.orm, cipher),
         },
     });
     const signal = new AbortController().signal;
