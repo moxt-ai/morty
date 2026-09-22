@@ -1,6 +1,6 @@
 import * as v from "valibot";
-import { toHttpError } from "../infra/http-error.ts";
-import { RequestError } from "../infra/request-error.ts";
+import { toHttpError } from "./http-error.ts";
+import { RequestError } from "./request-error.ts";
 
 const requestId = v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{1,128}$/u));
 const requestFrame = v.strictObject({
@@ -23,18 +23,32 @@ const unwatchFrame = v.strictObject({ kind: v.literal("unwatch"), subscriptionId
 const cancelFrame = v.strictObject({ kind: v.literal("cancel"), requestId });
 const pingFrame = v.strictObject({ kind: v.literal("ping") });
 const clientFrame = v.variant("kind", [requestFrame, watchFrame, unwatchFrame, cancelFrame, pingFrame]);
-const permittedHeaders = new Set(["authorization", "content-type"]);
 const CONNECTION_IDLE_MILLISECONDS = 60_000;
 const REQUEST_TIMEOUT_MILLISECONDS = 120_000;
-const WATCH_INTERVAL_MILLISECONDS = 5_000;
 
 interface BridgeSocket extends WebSocket {
     accept(): void;
 }
 
-type Dispatch = (request: Request) => Promise<Response>;
 interface BridgeLogger {
     readonly error: (value: unknown, message: string) => void;
+}
+
+export interface WebSocketBridgeRequest {
+    readonly method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
+    readonly path: string;
+    readonly headers: readonly (readonly [string, string])[];
+    readonly body: string | null;
+}
+
+export interface WebSocketBridgeHandlers {
+    readonly resolve: (request: WebSocketBridgeRequest, operation: "request" | "watch", signal: AbortSignal) => Request;
+    readonly dispatch: (request: Request) => Promise<Response>;
+    readonly subscribe: (
+        request: Request,
+        observer: { readonly notify: () => void },
+        signal: AbortSignal,
+    ) => Promise<void>;
 }
 
 function send(socket: BridgeSocket, value: Readonly<Record<string, unknown>>): void {
@@ -86,29 +100,6 @@ async function sendResponse(
     send(socket, { kind: "response.end", requestId: requestIdValue });
 }
 
-function bridgedUrl(path: string): URL {
-    const url = new URL(path, "https://bridge.internal");
-    if (
-        url.origin !== "https://bridge.internal" ||
-        (!url.pathname.startsWith("/mobius-cloud/api/") && !url.pathname.startsWith("/mobius-slack/api/"))
-    ) {
-        throw new RequestError("INVALID_BRIDGE_REQUEST", "The bridged request is invalid.", 400);
-    }
-    return url;
-}
-
-function bridgedHeaders(values: readonly (readonly [string, string])[]): Headers {
-    const headers = new Headers();
-    for (const [untrustedName, value] of values) {
-        const name = untrustedName.toLowerCase();
-        if (!permittedHeaders.has(name) || headers.has(name) || value.includes("\r") || value.includes("\n")) {
-            throw new RequestError("INVALID_BRIDGE_REQUEST", "The bridged request is invalid.", 400);
-        }
-        headers.set(name, value);
-    }
-    return headers;
-}
-
 function protocolError(socket: BridgeSocket, requestIdValue: string | null): void {
     send(socket, {
         kind: "error",
@@ -118,7 +109,11 @@ function protocolError(socket: BridgeSocket, requestIdValue: string | null): voi
     });
 }
 
-export function createWebSocketApiBridge(request: Request, dispatch: Dispatch, logger: BridgeLogger): Response {
+export function createWebSocketApiBridge(
+    request: Request,
+    handlers: WebSocketBridgeHandlers,
+    logger: BridgeLogger,
+): Response {
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
         throw new RequestError("WEBSOCKET_UPGRADE_REQUIRED", "A WebSocket upgrade is required.", 426);
     }
@@ -129,7 +124,7 @@ export function createWebSocketApiBridge(request: Request, dispatch: Dispatch, l
     const client = pair[0];
     const server = pair[1] as BridgeSocket;
     const pending = new Map<string, AbortController>();
-    const watches = new Map<string, () => void>();
+    const watches = new Map<string, AbortController>();
     let idleTimer: ReturnType<typeof setTimeout>;
     const refreshIdleDeadline = () => {
         clearTimeout(idleTimer);
@@ -141,8 +136,8 @@ export function createWebSocketApiBridge(request: Request, dispatch: Dispatch, l
             controller.abort(new Error("The WebSocket bridge closed."));
         }
         pending.clear();
-        for (const stop of watches.values()) {
-            stop();
+        for (const controller of watches.values()) {
+            controller.abort(new Error("The WebSocket bridge closed."));
         }
         watches.clear();
     };
@@ -178,7 +173,7 @@ export function createWebSocketApiBridge(request: Request, dispatch: Dispatch, l
             return;
         }
         if (frame.kind === "unwatch") {
-            watches.get(frame.subscriptionId)?.();
+            watches.get(frame.subscriptionId)?.abort(new Error("The bridge watch stopped."));
             watches.delete(frame.subscriptionId);
             refreshIdleDeadline();
             return;
@@ -188,87 +183,57 @@ export function createWebSocketApiBridge(request: Request, dispatch: Dispatch, l
                 protocolError(server, frame.subscriptionId);
                 return;
             }
-            let url: URL;
-            let headers: Headers;
+            const lifetime = new AbortController();
+            let request: Request;
             try {
-                url = bridgedUrl(frame.path);
-                headers = bridgedHeaders(frame.headers);
-                if (frame.method !== "POST" || !url.pathname.endsWith("/workspace") || frame.body !== null) {
-                    throw new RequestError("INVALID_BRIDGE_REQUEST", "The bridged request is invalid.", 400);
-                }
+                request = handlers.resolve(frame, "watch", lifetime.signal);
             } catch {
                 protocolError(server, frame.subscriptionId);
                 return;
             }
-            const lifetime = new AbortController();
-            let timer: ReturnType<typeof setTimeout> | null = null;
-            let fingerprint: string | null = null;
-            const stop = () => {
-                lifetime.abort(new Error("The bridge watch stopped."));
-                if (timer !== null) {
-                    clearTimeout(timer);
-                }
-            };
-            watches.set(frame.subscriptionId, stop);
+            watches.set(frame.subscriptionId, lifetime);
             refreshIdleDeadline();
-            const check = async (): Promise<void> => {
-                const signal = AbortSignal.any([lifetime.signal, AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS)]);
-                try {
-                    const response = await dispatch(
-                        new Request(url, {
-                            method: frame.method,
-                            headers,
-                            signal,
-                            ...(frame.body === null ? {} : { body: frame.body }),
-                        }),
-                    );
-                    const body = await response.text();
-                    signal.throwIfAborted();
-                    const next = `${response.status}\u0000${body}`;
-                    if (fingerprint !== null && fingerprint !== next) {
-                        send(server, { kind: "notification", subscriptionId: frame.subscriptionId });
-                    }
-                    fingerprint = next;
-                } catch (cause) {
+            void handlers
+                .subscribe(
+                    request,
+                    {
+                        notify: () => send(server, { kind: "notification", subscriptionId: frame.subscriptionId }),
+                    },
+                    lifetime.signal,
+                )
+                .catch((cause: unknown) => {
                     if (!lifetime.signal.aborted) {
                         logger.error(
                             { err: cause, subscriptionId: frame.subscriptionId },
-                            "WebSocket bridge watch failed",
+                            "WebSocket bridge subscription failed",
                         );
                     }
-                }
-                if (!lifetime.signal.aborted) {
-                    timer = setTimeout(() => void check(), WATCH_INTERVAL_MILLISECONDS);
-                }
-            };
-            void check();
+                })
+                .finally(() => {
+                    if (watches.get(frame.subscriptionId) === lifetime) {
+                        watches.delete(frame.subscriptionId);
+                        refreshIdleDeadline();
+                    }
+                });
             return;
         }
         if (pending.has(frame.requestId)) {
             protocolError(server, frame.requestId);
             return;
         }
-        let url: URL;
-        let headers: Headers;
+        const controller = new AbortController();
+        const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS)]);
+        let dispatchedRequest: Request;
         try {
-            url = bridgedUrl(frame.path);
-            headers = bridgedHeaders(frame.headers);
+            dispatchedRequest = handlers.resolve(frame, "request", signal);
         } catch {
             protocolError(server, frame.requestId);
             return;
         }
-        const controller = new AbortController();
-        const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS)]);
         pending.set(frame.requestId, controller);
         refreshIdleDeadline();
-        void dispatch(
-            new Request(url, {
-                method: frame.method,
-                headers,
-                signal,
-                ...(frame.body === null ? {} : { body: frame.body }),
-            }),
-        )
+        void handlers
+            .dispatch(dispatchedRequest)
             .then(async (response) => {
                 await sendResponse(server, frame.requestId, response, signal);
             })
