@@ -1088,5 +1088,5 @@ export async function readChannelHistoryForSynchronization(
 }
 
 export function pairingCommand(pairing: CreatedPairing): string {
-    return `npm install --global @moxt-ai/mobius@latest && mobius pair --app-id ${JSON.stringify(pairing.appId)} --url ${JSON.stringify(window.location.origin)} --pairing ${JSON.stringify(pairing.pairingId)} --code ${JSON.stringify(pairing.pairingCode)}`;
+    return `npm install --global @moxt-ai/mobius@latest && mobius pair --url ${JSON.stringify(window.location.origin)} --pairing ${JSON.stringify(pairing.pairingId)} --code ${JSON.stringify(pairing.pairingCode)}`;
 }

@@ -535,8 +535,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
         return [
             "pair",
-            "--app-id",
-            runtime.appId,
             "--url",
             runtime.relayUrl,
             "--pairing",
