@@ -40,6 +40,7 @@ import { PlatformProjectError, platformIdentifier } from "../../management/entit
 import type { ChatScope } from "../service/chat-service.ts";
 
 const MAX_MESSAGE_BYTES = 8 * 1024 * 1024;
+const MAX_PENDING_RUNTIME_BYTES = 32 * 1024 * 1024;
 const IDLE_TIMEOUT_MILLISECONDS = 10 * 60 * 1000;
 const envelopeSchema = v.object({
     kind: v.string(),
@@ -251,9 +252,25 @@ export async function openBotRuntimeChannel(input: {
             }
         });
     });
+    let outbound = Promise.resolve();
+    let pendingRuntimeBytes = 0;
     upstream.addEventListener("message", (event) => {
-        void (async () => {
+        if (closed) {
+            return;
+        }
+        if (typeof event.data !== "string") {
+            close(1002, "Invalid Runtime message");
+            return;
+        }
+        const messageBytes = new TextEncoder().encode(event.data).byteLength;
+        if (messageBytes > MAX_MESSAGE_BYTES || pendingRuntimeBytes + messageBytes > MAX_PENDING_RUNTIME_BYTES) {
+            close(1009, "Runtime channel capacity exceeded");
+            return;
+        }
+        pendingRuntimeBytes += messageBytes;
+        outbound = outbound.then(async () => {
             if (closed) {
+                pendingRuntimeBytes -= messageBytes;
                 return;
             }
             liveness();
@@ -296,8 +313,10 @@ export async function openBotRuntimeChannel(input: {
                 }
             } catch {
                 close(1002, "Invalid Runtime message");
+            } finally {
+                pendingRuntimeBytes -= messageBytes;
             }
-        })();
+        });
     });
     server.addEventListener("close", () => close(1000, "Browser disconnected"));
     upstream.addEventListener("close", () => close(1001, "Runtime disconnected"));
