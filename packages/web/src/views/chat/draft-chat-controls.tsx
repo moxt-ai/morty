@@ -5,6 +5,7 @@ import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
 import { CwdSelector } from "../../components/chat/cwd-selector.tsx";
+import { Spinner } from "../../components/ui/spinner.tsx";
 import type { BotChatApi, ChatDraftConfiguration } from "../../services/chat/bot-chat-api.ts";
 import { createDraftControlsStore } from "../../view-models/chat/draft-controls-store.ts";
 
@@ -32,11 +33,7 @@ export function DraftChatControls({
         return () => controller.abort();
     }, [revision, viewModel.load]);
     if (settings.kind === "loading") {
-        return (
-            <p role="status" className="text-xs text-muted-foreground">
-                Loading harness and model settings…
-            </p>
-        );
+        return <Spinner label="Loading harness and model settings" />;
     }
     if (settings.kind === "failed") {
         return (

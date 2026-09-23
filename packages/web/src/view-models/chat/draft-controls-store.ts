@@ -33,6 +33,19 @@ type DraftSettingsState =
           readonly options: readonly SessionConfigOption[];
       };
 
+type ReadyDraftSettings = Extract<DraftSettingsState, { readonly kind: "ready" }>;
+
+const draftSettingsCache = new WeakMap<object, Map<string, ReadyDraftSettings>>();
+
+function cacheDraftSettings(requests: object, botId: string, settings: ReadyDraftSettings): void {
+    const existing = draftSettingsCache.get(requests);
+    if (existing === undefined) {
+        draftSettingsCache.set(requests, new Map([[botId, settings]]));
+        return;
+    }
+    existing.set(botId, settings);
+}
+
 type CwdBrowserState =
     | { readonly kind: "closed" }
     | { readonly kind: "loading"; readonly directory: WorkspaceEntriesEvent; readonly path: string }
@@ -113,13 +126,22 @@ export const createDraftControlsStore = (
     onSettings: (settings: ChatDraftConfiguration | null) => void,
 ) =>
     createStore<DraftControlsStore>()((set, get) => {
+        const cachedSettings = draftSettingsCache.get(requests)?.get(botId);
         let cwdOperation: AbortController | null = null;
-        let selectedHarness = "";
-        const changedOptionIds = new Set<string>();
-        const rememberAgentSettings = (settings: Extract<DraftSettingsState, { readonly kind: "ready" }>): void => {
+        let selectedHarness =
+            cachedSettings === undefined
+                ? ""
+                : `${cachedSettings.selectedAgent.runtimeId}:${cachedSettings.selectedAgent.agentRef}`;
+        const changedOptionIds = new Set(
+            cachedSettings === undefined
+                ? []
+                : restoreLastAgentSettings(botId, cachedSettings.selectedAgent.agentRef, cachedSettings.options)
+                      .restoredIds,
+        );
+        const rememberAgentSettings = (settings: ReadyDraftSettings): void => {
             saveLastAgentSettings(botId, settings.selectedAgent.agentRef, settings.options);
         };
-        const publishSettings = (settings: Extract<DraftSettingsState, { readonly kind: "ready" }>): void => {
+        const publishSettings = (settings: ReadyDraftSettings): void => {
             onSettings({
                 agentRef: settings.selectedAgent.agentRef,
                 workspaceRef: settings.cwd.directoryId,
@@ -135,7 +157,7 @@ export const createDraftControlsStore = (
             });
         };
         const rememberDirectory = (
-            settings: Extract<DraftSettingsState, { readonly kind: "ready" }>,
+            settings: ReadyDraftSettings,
             directory: WorkspaceEntriesEvent,
         ): readonly RecentCwdPreference[] => {
             const selected = settings.selectedAgent;
@@ -146,12 +168,10 @@ export const createDraftControlsStore = (
                 get().recentCwds,
             );
         };
-        const applyDirectory = (
-            settings: Extract<DraftSettingsState, { readonly kind: "ready" }>,
-            directory: WorkspaceEntriesEvent,
-        ): void => {
+        const applyDirectory = (settings: ReadyDraftSettings, directory: WorkspaceEntriesEvent): void => {
             const ready = { ...settings, cwd: directory };
             const recentCwds = rememberDirectory(ready, directory);
+            cacheDraftSettings(requests, botId, ready);
             set({ settings: ready, cwdBrowser: { kind: "closed" }, recentCwds });
             publishSettings(ready);
         };
@@ -183,6 +203,7 @@ export const createDraftControlsStore = (
                           [],
                       )
                     : existingRecentCwds;
+            cacheDraftSettings(requests, botId, ready);
             set({ settings: ready, recentCwds });
             publishSettings(ready);
         };
@@ -270,10 +291,15 @@ export const createDraftControlsStore = (
         };
         const load = async (lifetimeSignal: AbortSignal): Promise<void> => {
             const signal = AbortSignal.any([lifetimeSignal, AbortSignal.timeout(120_000)]);
-            if (get().settings.kind !== "switching") {
+            const currentSettings = get().settings;
+            if (currentSettings.kind === "ready") {
+                publishSettings(currentSettings);
+            } else {
+                onSettings(null);
+            }
+            if (currentSettings.kind !== "ready" && currentSettings.kind !== "switching") {
                 set({ settings: { kind: "loading" } });
             }
-            onSettings(null);
             try {
                 while (!signal.aborted) {
                     const workspace = await requests.workspace(botId, signal);
@@ -317,8 +343,8 @@ export const createDraftControlsStore = (
         };
         return {
             cwdBrowser: { kind: "closed" },
-            recentCwds: [],
-            settings: { kind: "loading" },
+            recentCwds: readRecentCwdPreferences(botId) ?? [],
+            settings: cachedSettings ?? { kind: "loading" },
             browseCwd,
             closeCwd: () => {
                 cwdOperation?.abort();
@@ -501,6 +527,7 @@ export const createDraftControlsStore = (
                 };
                 changedOptionIds.add(configId);
                 rememberAgentSettings(ready);
+                cacheDraftSettings(requests, botId, ready);
                 set({ settings: ready });
                 publishSettings(ready);
             },
@@ -519,6 +546,7 @@ export const createDraftControlsStore = (
                 };
                 changedOptionIds.add(configId);
                 rememberAgentSettings(ready);
+                cacheDraftSettings(requests, botId, ready);
                 set({ settings: ready });
                 publishSettings(ready);
             },

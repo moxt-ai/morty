@@ -141,6 +141,31 @@ function observeStatusText(expected: string): Promise<HTMLElement> {
     });
 }
 
+function observeStatusLabel(expected: string): Promise<HTMLElement> {
+    return new Promise((resolve) => {
+        const observer = new MutationObserver((records) => {
+            for (const record of records) {
+                for (const addedNode of record.addedNodes) {
+                    if (!(addedNode instanceof HTMLElement)) {
+                        continue;
+                    }
+                    const statuses = [
+                        ...(addedNode.matches('[role="status"]') ? [addedNode] : []),
+                        ...addedNode.querySelectorAll<HTMLElement>('[role="status"]'),
+                    ];
+                    const status = statuses.find((candidate) => candidate.getAttribute("aria-label") === expected);
+                    if (status !== undefined) {
+                        observer.disconnect();
+                        resolve(status);
+                        return;
+                    }
+                }
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+    });
+}
+
 function changeValue(element: HTMLInputElement | HTMLTextAreaElement, value: string): void {
     const prototype =
         element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
@@ -259,6 +284,47 @@ test.skip("Given a conversation is working, When a user starts a new conversatio
     });
     expect(backgroundConversation.getAttribute("aria-current")).toBeNull();
     releaseTurn.resolve();
+});
+
+test.skip("Given a paired Bot with loaded agent settings, When a user returns to a new conversation, Then the cached controls appear without loading again", {
+    timeout: 30_000,
+}, async () => {
+    const created = await renderWorkspace();
+    const initialLoading = observeStatusLabel("Loading harness and model settings");
+    const { failure } = await act(async () => await created.connectAgent());
+    expect((await initialLoading).textContent).toBe("");
+    const composer = await act(async () => {
+        await waitForText(`[data-testid="${dataTestId.botConnectionStatus}"]`, "Connected");
+        await vi.waitFor(() =>
+            expect(
+                document.querySelector(`[data-testid="${dataTestId.agentConfiguration}"]`)?.getAttribute("title"),
+            ).toContain("Test Small"),
+        );
+        return await waitForElement(`[data-testid="${dataTestId.messageComposer}"]`);
+    });
+
+    await sendPrompt(composer as HTMLTextAreaElement, "Cache these controls");
+    await Promise.race([
+        waitForText(`[data-testid="${dataTestId.managedConversation}"]`, "Cache these controls"),
+        failure,
+    ]);
+
+    let settingsLoadedAgain = false;
+    const observer = new MutationObserver(() => {
+        settingsLoadedAgain ||= document.querySelector('[aria-label="Loading harness and model settings"]') !== null;
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    await act(async () => (await waitForElement(`[data-testid="${dataTestId.newConversation}"]`)).click());
+    await act(async () => {
+        await vi.waitFor(() =>
+            expect(
+                document.querySelector(`[data-testid="${dataTestId.agentConfiguration}"]`)?.getAttribute("title"),
+            ).toContain("Test Small"),
+        );
+    });
+    observer.disconnect();
+
+    expect(settingsLoadedAgain).toBe(false);
 });
 
 test.skip("Given an unpaired workspace, When a user manages Bots, Then pairing and the surviving Bot remain visible", {
