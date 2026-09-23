@@ -6,18 +6,7 @@ import {
     MobiusPlatformAppClient,
     MobiusTimeoutError,
 } from "@moxt-ai/mobius-sdk/platform";
-import {
-    MobiusAgentMessageEvent,
-    MobiusCancelledTurnState,
-    MobiusClient,
-    MobiusFailedTurnState,
-    MobiusIndeterminateTurnState,
-    MobiusRecordingPolicy,
-    MobiusRuntimePairingRequest,
-    MobiusSucceededTurnState,
-    MobiusTurnCompletedEvent,
-    MobiusTurnFailedEvent,
-} from "@moxt-ai/mobius-sdk/server";
+import { MobiusClient, MobiusRuntimePairingRequest } from "@moxt-ai/mobius-sdk/server";
 import * as v from "valibot";
 import {
     PlatformProjectError,
@@ -31,6 +20,7 @@ import {
     platformCredentialBindingsSchema,
     platformEndpointBindingsSchema,
 } from "../infra/cloud-bindings.ts";
+import { runAutomatedRuntimeTurn } from "./automated-runtime-turn.ts";
 
 export class PlatformProjectGateway {
     readonly #bindings: CloudBindings;
@@ -126,7 +116,7 @@ export class PlatformProjectGateway {
 
     readonly discoverChatAgentSettings = async (
         projectId: string,
-        selection: { readonly runtimeId: string; readonly agentRef: string; readonly workspaceRef: string },
+        selection: { readonly runtimeId: string; readonly agentRef: string },
         signal: AbortSignal,
     ) =>
         await this.#withProject(
@@ -151,185 +141,50 @@ export class PlatformProjectGateway {
             120000,
         );
 
-    readonly openAutomatedChatSession = async (
+    readonly createAutomatedChatSession = async (
         projectId: string,
-        selection: {
-            readonly bindingId: string;
-            readonly runtimeId: string;
-            readonly agentRef: string;
-            readonly workspaceRef: string;
-        },
-        sessionId: string,
-        title: string,
+        selection: { readonly runtimeId: string; readonly agentRef: string },
+        existingSessionId: string | null,
         signal: AbortSignal,
-    ): Promise<string> =>
-        await this.#withProject(
+    ): Promise<string> => {
+        signal.throwIfAborted();
+        if (existingSessionId !== null) {
+            return existingSessionId;
+        }
+        const created = await this.nativeSessions(
             projectId,
-            signal,
-            async (client) => {
-                let session: Awaited<ReturnType<MobiusClient["sessions"]["read"]>>;
-                try {
-                    session = await client.sessions.read(sessionId, signal);
-                } catch (cause) {
-                    if (!(cause instanceof MobiusApiError) || cause.code !== "session_not_found") {
-                        throw cause;
-                    }
-                    session = await client.sessions.create(
-                        {
-                            agentId: selection.agentRef,
-                            bindingId: selection.bindingId,
-                            directoryId: selection.workspaceRef,
-                            policy: new MobiusRecordingPolicy("full", 30 * 24 * 60 * 60 * 1000, 1000, 6_000_000),
-                            runtimeId: selection.runtimeId,
-                            sessionId,
-                            title,
-                        },
-                        signal,
-                    );
-                }
-                if (
-                    session.projectId !== projectId ||
-                    session.sessionId !== sessionId ||
-                    session.runtimeId !== selection.runtimeId ||
-                    session.agentId !== selection.agentRef ||
-                    session.defaultBinding.bindingId !== selection.bindingId ||
-                    session.defaultBinding.workspaceRef !== selection.workspaceRef
-                ) {
-                    throw new PlatformProjectError(
-                        "PLATFORM_INVALID_RESPONSE",
-                        "Platform returned an unexpected Session.",
-                        502,
-                    );
-                }
-                await client.sessions.prepare(sessionId, signal);
-                return sessionId;
+            selection.runtimeId,
+            {
+                action: "create",
+                agentId: selection.agentRef,
+                directoryId: "default",
+                additionalDirectoryIds: [],
             },
-            120000,
+            signal,
         );
+        if (created.action !== "create") {
+            throw new PlatformProjectError("INVALID_SESSION", "The Runtime did not create a Session.", 502);
+        }
+        return created.nativeSessionId;
+    };
 
     readonly submitAutomatedChatTurn = async (
         projectId: string,
+        selection: { readonly runtimeId: string; readonly agentRef: string },
         sessionId: string,
-        input: {
-            readonly commandId: string;
-            readonly prompt: string;
-            readonly instructions: string;
-        },
+        input: { readonly commandId: string; readonly prompt: string; readonly instructions: string },
         signal: AbortSignal,
-    ): Promise<{ readonly text: string; readonly stopReason: string }> =>
-        await this.#withProject(
-            projectId,
-            signal,
-            async (client) => {
-                let text = "";
-                let streamInterrupted = false;
-                let turnSubmissionStarted = false;
-                let outcome:
-                    | { readonly kind: "pending" }
-                    | { readonly kind: "completed"; readonly stopReason: string }
-                    | { readonly kind: "failed"; readonly code: string; readonly message: string } = {
-                    kind: "pending",
-                };
-                const subscription = await client.events.subscribeLive(
-                    sessionId,
-                    {
-                        reconcile: async (connection) => {
-                            if (connection.kind === "reconnected" && turnSubmissionStarted) {
-                                streamInterrupted = true;
-                            }
-                        },
-                        receive: async (event) => {
-                            const payload = event.payload;
-                            if (payload instanceof MobiusAgentMessageEvent && payload.commandId === input.commandId) {
-                                text += payload.text;
-                            } else if (
-                                payload instanceof MobiusTurnCompletedEvent &&
-                                payload.commandId === input.commandId
-                            ) {
-                                outcome = { kind: "completed", stopReason: payload.stopReason };
-                                return false;
-                            } else if (
-                                payload instanceof MobiusTurnFailedEvent &&
-                                payload.commandId === input.commandId
-                            ) {
-                                outcome = { kind: "failed", code: payload.code, message: payload.message };
-                                return false;
-                            }
-                            return true;
-                        },
-                    },
-                    signal,
-                );
-                try {
-                    turnSubmissionStarted = true;
-                    const turn = await client.turns.submit(
-                        sessionId,
-                        {
-                            additionalDirectoryIds: [],
-                            content: input.prompt,
-                            idempotencyKey: input.commandId,
-                            images: [],
-                            resources:
-                                input.instructions.trim().length === 0
-                                    ? []
-                                    : [
-                                          {
-                                              type: "embedded",
-                                              uri: "morty://bot/instructions",
-                                              name: "Bot instructions",
-                                              mimeType: "text/plain",
-                                              text: input.instructions,
-                                          },
-                                      ],
-                        },
-                        signal,
-                    );
-                    try {
-                        await subscription.completed;
-                    } catch (streamCause) {
-                        streamInterrupted = true;
-                        const current = await client.turns.read(sessionId, turn.turnId, signal);
-                        if (current.state instanceof MobiusSucceededTurnState) {
-                            outcome = { kind: "completed", stopReason: current.state.stopReason };
-                        } else if (current.state instanceof MobiusCancelledTurnState) {
-                            outcome = { kind: "completed", stopReason: "cancelled" };
-                        } else if (current.state instanceof MobiusFailedTurnState) {
-                            outcome = { kind: "failed", code: current.state.code, message: current.state.message };
-                        } else if (current.state instanceof MobiusIndeterminateTurnState) {
-                            throw new PlatformProjectError(
-                                "TURN_INDETERMINATE",
-                                "The agent Turn outcome is unavailable.",
-                                502,
-                                { cause: streamCause },
-                            );
-                        } else {
-                            throw streamCause;
-                        }
-                    }
-                    if (streamInterrupted) {
-                        throw new PlatformProjectError(
-                            "TURN_STREAM_INTERRUPTED",
-                            "The live Turn stream disconnected before the response was complete.",
-                            502,
-                        );
-                    }
-                    if (outcome.kind === "failed") {
-                        throw new PlatformProjectError(outcome.code, outcome.message, 502);
-                    }
-                    if (outcome.kind === "pending") {
-                        throw new PlatformProjectError(
-                            "TURN_OUTCOME_UNAVAILABLE",
-                            "The agent Turn ended without an outcome.",
-                            502,
-                        );
-                    }
-                    return { text, stopReason: outcome.stopReason };
-                } finally {
-                    subscription.close();
-                }
-            },
-            600000,
-        );
+    ): Promise<{ readonly text: string; readonly stopReason: string }> => {
+        const socket = await this.openChatRuntimeHost(projectId, selection.runtimeId, signal);
+        socket.accept();
+        try {
+            return await runAutomatedRuntimeTurn(socket, selection, sessionId, input, signal);
+        } finally {
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.close(1000, "Turn finished");
+            }
+        }
+    };
 
     readonly nativeSessions = async (
         projectId: string,

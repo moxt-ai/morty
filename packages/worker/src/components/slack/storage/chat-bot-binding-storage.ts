@@ -70,11 +70,8 @@ export class ChatBotBindingStorage {
                     botId: value.botId,
                     connectionId: value.connectionId,
                     projectId: value.projectId,
-                    bindingId: value.bindingId,
                     runtimeId: value.runtimeId,
                     agentRef: value.agentRef,
-                    workspaceRef: value.workspaceRef,
-                    agentConfigRevision: value.agentConfigRevision,
                     instructions: value.instructions,
                 },
             })

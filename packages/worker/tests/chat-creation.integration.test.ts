@@ -1,3 +1,15 @@
+import {
+    AGENT_MESSAGE_DELTA_KIND,
+    decodeAgentMessageDeltaEvent,
+    decodeCommittedSessionEvent,
+    decodeMessageKind,
+    decodeSessionFailedEvent,
+    encodeSessionPromptCommand,
+    SESSION_EVENT_COMMITTED_KIND,
+    SESSION_FAILED_KIND,
+    SESSION_PROMPT_KIND,
+    SessionPromptDisposition,
+} from "@moxt-ai/mobius-protocol";
 import * as v from "valibot";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import worker from "../src/application.ts";
@@ -21,6 +33,7 @@ async function createChatFixture(
             nativeSessionIds,
             agentId: agent.id,
             agentName: agent.name,
+            requiredBindingId: "workspace",
         });
         const environment = cloud.environment();
         const request = (path: string, body?: object, method = body === undefined ? "GET" : "POST") =>
@@ -44,6 +57,9 @@ async function createChatFixture(
             botId: v.parse(v.string(), bots[0]?.botId),
             request,
             runtime,
+            dispatchFetch: cloud.dispatchFetch,
+            projectId: identity.projectId,
+            token: identity.token,
             close: cloud.close,
         };
     } catch (cause) {
@@ -162,4 +178,93 @@ test.each([
             await fixture.close();
         }
     },
+);
+
+test.each([
+    { id: "codex", name: "Codex" },
+    { id: "claude", name: "Claude Code" },
+] as const)(
+    "Given a $name Bot and owned native Session, When Chat sends through its Runtime channel, Then the local Agent replies",
+    async (agent) => {
+        const fixture = await createChatFixture(new Set(), agent);
+        try {
+            const configured = await fixture.request(`chat/bots/${fixture.botId}/setup`, {
+                runtimeId: fixture.runtime.runtimeId,
+                agentRef: agent.id,
+            });
+            expect(configured.status).toBe(202);
+            const opened = await fixture.request(`chat/bots/${fixture.botId}/local-sessions/create`, {
+                action: "create",
+            });
+            expect(opened.status).toBe(200);
+            const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
+            const response = await fixture.dispatchFetch(
+                `${APP_ORIGIN}/morty/api/chat/projects/${fixture.projectId}/bots/${fixture.botId}/runtime-channel`,
+                {
+                    headers: {
+                        Upgrade: "websocket",
+                        Origin: APP_ORIGIN,
+                        "Sec-WebSocket-Protocol": `morty-runtime, auth.${fixture.token}`,
+                    },
+                },
+            );
+            expect(response.status).toBe(101);
+            const socket = response.webSocket;
+            if (socket === null) {
+                throw new Error("The Runtime channel did not upgrade");
+            }
+            socket.accept();
+            const commandId = "bot_prompt_1";
+            const reply = new Promise<string>((resolve, reject) => {
+                socket.addEventListener("close", () => reject(new Error("Runtime channel closed before replying")), {
+                    once: true,
+                });
+                socket.addEventListener("message", (event) => {
+                    if (
+                        typeof event.data !== "string" ||
+                        decodeMessageKind(event.data) !== SESSION_EVENT_COMMITTED_KIND
+                    ) {
+                        return;
+                    }
+                    const committed = decodeCommittedSessionEvent(event.data);
+                    const kind = decodeMessageKind(committed.payload);
+                    if (kind === SESSION_FAILED_KIND) {
+                        const failure = decodeSessionFailedEvent(committed.payload);
+                        if (failure.commandId === commandId) {
+                            reject(new Error(failure.code));
+                        }
+                        return;
+                    }
+                    if (kind !== AGENT_MESSAGE_DELTA_KIND) {
+                        return;
+                    }
+                    const delta = decodeAgentMessageDeltaEvent(committed.payload);
+                    if (delta.commandId === commandId) {
+                        resolve(delta.text);
+                    }
+                });
+            });
+            socket.send(
+                encodeSessionPromptCommand({
+                    additionalDirectoryIds: [],
+                    agentId: agent.id,
+                    bindingId: fixture.botId,
+                    commandId,
+                    directoryId: "default",
+                    disposition: SessionPromptDisposition.Reject,
+                    images: [],
+                    kind: SESSION_PROMPT_KIND,
+                    prompt: "Hello from Chat",
+                    resources: [],
+                    sessionId,
+                    targetCommandId: "",
+                }),
+            );
+            expect(await reply).toContain("Hello from Chat");
+            socket.close(1000, "Test complete");
+        } finally {
+            await fixture.close();
+        }
+    },
+    15_000,
 );

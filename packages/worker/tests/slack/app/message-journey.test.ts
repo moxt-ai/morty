@@ -136,6 +136,8 @@ describe("Slack message journeys", () => {
             event: { ...first.event, type: "message", text: "continue", ts: "101.0" },
         });
         expect(app.mobius.runs[1]?.conversationId).toBe(app.mobius.runs[0]?.conversationId);
+        expect(app.mobius.runs[0]?.conversationId).not.toMatch(/^slack_/u);
+        expect(app.mobius.runs[0]?.agentRef).toBe("codex");
 
         await send(app, {
             ...event,

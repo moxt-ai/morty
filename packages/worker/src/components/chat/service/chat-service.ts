@@ -185,7 +185,7 @@ export class ChatService {
         }
         const discovered = await this.#platform.discoverChatAgentSettings(
             scope.projectId,
-            { runtimeId: bot.configuration.runtimeId, agentRef, workspaceRef: "default" },
+            { runtimeId: bot.configuration.runtimeId, agentRef },
             scope.signal,
         );
         this.#logger.info(
@@ -217,11 +217,7 @@ export class ChatService {
                 409,
             );
         }
-        await this.#platform.discoverChatAgentSettings(
-            scope.projectId,
-            { ...input, workspaceRef: "default" },
-            scope.signal,
-        );
+        await this.#platform.discoverChatAgentSettings(scope.projectId, input, scope.signal);
         const result = await this.#managedBots.configureBot(
             scope.userId,
             scope.botId,

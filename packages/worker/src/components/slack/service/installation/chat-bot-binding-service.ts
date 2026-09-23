@@ -51,7 +51,7 @@ export class ChatBotBindingService {
         slackBotId: string,
         connectionId: string,
         bot: LocalSlackBot & { readonly configuration: BotConfiguration },
-        selection: Pick<ChatBotBinding, "bindingId" | "agentRef" | "workspaceRef" | "agentConfigRevision">,
+        selection: Pick<ChatBotBinding, "agentRef">,
     ): ChatBotBinding => ({
         tenantId,
         slackBotId,
@@ -66,18 +66,18 @@ export class ChatBotBindingService {
     readonly #newSelection = async (
         bot: LocalSlackBot & { readonly configuration: BotConfiguration },
         signal: AbortSignal,
-    ): Promise<Pick<ChatBotBinding, "bindingId" | "agentRef" | "workspaceRef" | "agentConfigRevision">> => {
+    ): Promise<Pick<ChatBotBinding, "agentRef">> => {
         const agent = (await this.#platform.chatAgents(this.#projectId, signal)).find(
-            (candidate) => candidate.runtimeId === bot.configuration.runtimeId && candidate.online,
+            (candidate) =>
+                candidate.runtimeId === bot.configuration.runtimeId &&
+                candidate.agentRef === bot.configuration.agentRef &&
+                candidate.online,
         );
         if (agent === undefined) {
             throw new SlackServiceError("CHAT_BOT_BINDING_NOT_CONFIGURED", "Connect an Agent before using Slack");
         }
         return {
-            bindingId: `binding_${crypto.randomUUID()}`,
             agentRef: agent.agentRef,
-            workspaceRef: "default",
-            agentConfigRevision: 1,
         };
     };
 

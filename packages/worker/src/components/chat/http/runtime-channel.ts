@@ -21,6 +21,7 @@ import {
     NATIVE_SESSION_REQUEST_KIND,
     NATIVE_SESSION_RESULT_KIND,
     RUNTIME_STATUS_KIND,
+    RUNTIME_WORKSPACE_BINDING_ID,
     SESSION_CANCEL_KIND,
     SESSION_CONFIGURE_KIND,
     SESSION_ELICITATION_RESPOND_KIND,
@@ -167,7 +168,7 @@ export async function openBotRuntimeChannel(input: {
                 throw new PlatformProjectError("ACCESS_DENIED", "Delete this Session through Chat.", 403);
             }
             rememberRequest(command.requestId);
-            return encoded;
+            return JSON.stringify({ ...command, bindingId: RUNTIME_WORKSPACE_BINDING_ID });
         }
         if (kind === NATIVE_SESSION_CANCEL_KIND) {
             const command = decodeNativeSessionCancel(encoded);
@@ -182,15 +183,17 @@ export async function openBotRuntimeChannel(input: {
                 throw new PlatformProjectError("ACCESS_DENIED", "The workspace does not belong to this Bot.", 403);
             }
             rememberRequest(command.requestId);
-            return encoded;
+            return JSON.stringify({ ...command, bindingId: RUNTIME_WORKSPACE_BINDING_ID });
         }
         let sessionId: string;
+        let forwarded = encoded;
         if (kind === SESSION_PROMPT_KIND) {
             const command = decodeSessionPromptCommand(encoded);
             if (command.agentId !== configuration.agentRef || command.bindingId !== botId) {
                 throw new PlatformProjectError("ACCESS_DENIED", "The Agent does not belong to this Bot.", 403);
             }
             sessionId = command.sessionId;
+            forwarded = JSON.stringify({ ...command, bindingId: RUNTIME_WORKSPACE_BINDING_ID });
         } else if (kind === SESSION_PREPARE_KIND) {
             const command = decodeSessionPrepareCommand(encoded);
             if (command.agentId !== configuration.agentRef || command.bindingId !== botId) {
@@ -198,6 +201,7 @@ export async function openBotRuntimeChannel(input: {
             }
             rememberRequest(command.requestId);
             sessionId = command.sessionId;
+            forwarded = JSON.stringify({ ...command, bindingId: RUNTIME_WORKSPACE_BINDING_ID });
         } else if (kind === SESSION_CONFIGURE_KIND) {
             const command = decodeSessionConfigureCommand(encoded);
             if (command.agentId !== configuration.agentRef || command.bindingId !== botId) {
@@ -205,6 +209,7 @@ export async function openBotRuntimeChannel(input: {
             }
             rememberRequest(command.requestId);
             sessionId = command.sessionId;
+            forwarded = JSON.stringify({ ...command, bindingId: RUNTIME_WORKSPACE_BINDING_ID });
         } else if (kind === SESSION_CANCEL_KIND) {
             sessionId = decodeSessionCancelCommand(encoded).sessionId;
         } else if (kind === SESSION_PERMISSION_RESPOND_KIND) {
@@ -221,7 +226,7 @@ export async function openBotRuntimeChannel(input: {
         if (!(await ownsSession(sessionId))) {
             throw new PlatformProjectError("ACCESS_DENIED", "The Session does not belong to this Bot.", 403);
         }
-        return encoded;
+        return forwarded;
     };
     let inbound = Promise.resolve();
     server.addEventListener("message", (event) => {
