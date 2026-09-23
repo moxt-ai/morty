@@ -104,7 +104,16 @@ test("a Bot uses the real Platform journey for setup, chat, media, listing, and 
         expect(turn.status).toBe(200);
 
         expect(await (await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {})).json()).toMatchObject({
-            sessions: [expect.objectContaining({ id: conversationId, title: "New chat" })],
+            sessions: [expect.objectContaining({ id: conversationId, isExternal: false, title: "New chat" })],
+        });
+        const reopened = await fixture.request(`chat/bots/${fixture.botId}/managed-session`, {
+            sessionId: conversationId,
+        });
+        expect(reopened.status).toBe(200);
+        expect(await reopened.json()).toMatchObject({
+            agentRef: setup.agentRef,
+            entry: { entryId: conversationId, directoryId: "default" },
+            ready: { sessionId: conversationId },
         });
         expect(
             (

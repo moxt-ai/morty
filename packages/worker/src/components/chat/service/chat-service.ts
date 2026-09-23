@@ -236,7 +236,7 @@ export class ChatService {
                     scope.userId,
                     scope.botId,
                     {
-                        kind: "conversation",
+                        isExternal: false,
                         id: access.conversationId,
                         title: input.title ?? "New chat",
                     },
@@ -272,8 +272,14 @@ export class ChatService {
         return access;
     };
 
-    readonly managedSession = async (scope: ChatScope, sessionId: string) =>
-        await this.#chatSessions.readLocalSession(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal);
+    readonly managedSession = async (scope: ChatScope, sessionId: string) => {
+        if (
+            !(await this.#chatSessions.ownsSession(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal))
+        ) {
+            throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
+        }
+        return await this.#platform.readChatSession(scope.projectId, sessionId, scope.signal);
+    };
 
     readonly archiveManagedSession = async (scope: ChatScope, sessionId: string): Promise<Record<string, never>> => {
         await this.#chatSessions.archive(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal);
@@ -414,10 +420,9 @@ export class ChatService {
             scope.userId,
             scope.botId,
             {
-                kind: action,
+                isExternal: action === "import",
                 id: result.ready.sessionId,
                 title: result.title || "Untitled session",
-                data: JSON.stringify(stored),
             },
             scope.signal,
         );
@@ -508,21 +513,9 @@ export class ChatService {
             scope.userId,
             scope.botId,
             {
-                kind: action,
+                isExternal: action === "import",
                 id: result.ready.sessionId,
                 title: result.title || "Untitled session",
-                data: JSON.stringify({
-                    agentRef: input.agentId,
-                    result,
-                    entry: {
-                        entryId,
-                        title: result.title,
-                        directoryId: input.directoryId,
-                        directoryLabel: input.directoryId,
-                        additionalDirectories: result.ready.additionalDirectories,
-                        updatedAt: null,
-                    },
-                }),
             },
             scope.signal,
         );

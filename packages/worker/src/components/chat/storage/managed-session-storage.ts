@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import * as v from "valibot";
 import { createDatabase, type Database } from "../../../schema/project-do/database.ts";
 import { chatManagedSession } from "../../../schema/project-do/index.ts";
@@ -8,7 +8,7 @@ const summarySchema = v.pipe(
     v.object({
         projectId: platformIdentifier,
         userId: platformIdentifier,
-        kind: v.picklist(["conversation", "fork", "import"]),
+        isExternal: v.boolean(),
         id: platformIdentifier,
         title: v.pipe(v.string(), v.maxLength(500)),
     }),
@@ -35,7 +35,7 @@ export class ManagedSessionStorage {
             .select({
                 projectId: chatManagedSession.projectId,
                 userId: chatManagedSession.userId,
-                kind: chatManagedSession.kind,
+                isExternal: chatManagedSession.isExternal,
                 id: chatManagedSession.resourceId,
                 title: chatManagedSession.title,
             })
@@ -85,14 +85,7 @@ export class ManagedSessionStorage {
         projectId: string,
         userId: string,
         botId: string,
-        record:
-            | { readonly kind: "conversation"; readonly id: string; readonly title: string }
-            | {
-                  readonly kind: "fork" | "import";
-                  readonly id: string;
-                  readonly title: string;
-                  readonly data: string;
-              },
+        record: { readonly isExternal: boolean; readonly id: string; readonly title: string },
         signal: AbortSignal,
     ) => {
         const value = v.parse(summarySchema, { ...record, projectId, userId });
@@ -103,44 +96,14 @@ export class ManagedSessionStorage {
                 projectId: value.projectId,
                 userId: value.userId,
                 botId,
-                kind: value.kind,
+                isExternal: value.isExternal,
                 resourceId: value.id,
                 title: value.title,
-                forkData: record.kind === "conversation" ? null : record.data,
                 createdAt: Date.now(),
             })
             .onConflictDoNothing()
             .run();
         signal.throwIfAborted();
-    };
-
-    readonly readLocalSession = async (
-        projectId: string,
-        userId: string,
-        botId: string,
-        id: string,
-        signal: AbortSignal,
-    ) => {
-        signal.throwIfAborted();
-        const result = await this.#requireDatabase()
-            .select({ data: chatManagedSession.forkData })
-            .from(chatManagedSession)
-            .where(
-                and(
-                    eq(chatManagedSession.projectId, projectId),
-                    eq(chatManagedSession.userId, userId),
-                    eq(chatManagedSession.botId, botId),
-                    inArray(chatManagedSession.kind, ["fork", "import"]),
-                    eq(chatManagedSession.resourceId, v.parse(platformIdentifier, id)),
-                ),
-            )
-            .get();
-        signal.throwIfAborted();
-        if (result === undefined) {
-            throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
-        }
-        const data: unknown = JSON.parse(v.parse(v.object({ data: v.string() }), result).data);
-        return data;
     };
 
     readonly ownsSession = async (

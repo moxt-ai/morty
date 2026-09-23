@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
 import { check, index, integer, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 
-export const processedSlackEvent = sqliteTable(
-    "processed_slack_event",
+export const slackProcessedEvent = sqliteTable(
+    "slack_processed_event",
     {
         id: integer("id").primaryKey({ autoIncrement: true }),
         tenantId: text("tenant_id").notNull(),
@@ -16,11 +16,11 @@ export const processedSlackEvent = sqliteTable(
     },
     (table) => [
         check(
-            "processed_slack_event_status_check",
+            "slack_processed_event_status_check",
             sql`${table.status} in ('pending', 'processing', 'processed', 'failed')`,
         ),
         unique().on(table.slackAppId, table.slackEventId),
-        index("processed_slack_event_pending_idx").on(table.status, table.createdAt),
-        index("processed_slack_event_tenant_event_idx").on(table.tenantId, table.slackEventId),
+        index("slack_processed_event_pending_idx").on(table.status, table.createdAt),
+        index("slack_processed_event_tenant_event_idx").on(table.tenantId, table.slackEventId),
     ],
 );

@@ -129,7 +129,7 @@ type SessionView =
 
 export interface BotChatNavigation {
     readonly showDraft: () => void;
-    readonly showManaged: (kind: "conversation" | "fork" | "import", id: string) => void;
+    readonly showManaged: (isExternal: boolean, id: string) => void;
     readonly showContinuedSession: (sessionId: string) => void;
     readonly showForkInstead: () => void;
 }
@@ -151,7 +151,7 @@ export interface BotChatHomeStore {
     readonly removeBot: (signal: AbortSignal) => Promise<boolean>;
     readonly resetBotOperation: () => void;
     readonly newConversation: () => void;
-    readonly openManaged: (kind: "conversation" | "fork" | "import", id: string) => void;
+    readonly openManaged: (isExternal: boolean, id: string) => void;
     readonly retry: () => void;
     readonly setSessionConnectionStatus: (sessionId: string, connection: SessionConnectionKind) => void;
     readonly forkInstead: () => void;
@@ -514,13 +514,10 @@ export const createBotChatHomeStore = (
                 revision: current.revision + 1,
             }));
         },
-        openManaged: (kind, id) => {
-            options.navigation.showManaged(kind, id);
+        openManaged: (isExternal, id) => {
+            options.navigation.showManaged(isExternal, id);
             set((current) => ({
-                target:
-                    kind === "conversation"
-                        ? { kind: "conversation-access", conversationId: id }
-                        : { kind: "session-access", sessionId: id },
+                target: { kind: "session-access", sessionId: id },
                 sessionView: { kind: "conversation-access" },
                 creation: transitionConversationCreation(current.creation, { kind: "reset" }),
                 draftSettings: null,
@@ -647,7 +644,7 @@ export const createBotChatHomeStore = (
                 if (sent.kind !== "draft-message-sent") {
                     return false;
                 }
-                options.navigation.showManaged("conversation", sent.conversationId);
+                options.navigation.showManaged(false, sent.conversationId);
                 set({
                     target: { kind: "conversation-access", conversationId: sent.conversationId },
                     sessionView: { kind: "session-access", session: sent.session },

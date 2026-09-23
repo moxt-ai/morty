@@ -337,6 +337,36 @@ export class PlatformProjectGateway {
             120000,
         );
 
+    readonly readChatSession = async (projectId: string, sessionId: string, signal: AbortSignal) =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) => {
+                const session = await client.sessions.read(sessionId, signal);
+                if (session.projectId !== projectId || session.sessionId !== sessionId) {
+                    throw new PlatformProjectError(
+                        "PLATFORM_INVALID_RESPONSE",
+                        "Platform returned an unexpected Session.",
+                        502,
+                    );
+                }
+                const ready = await client.sessions.prepare(sessionId, signal);
+                return {
+                    agentRef: session.agentId,
+                    ready,
+                    entry: {
+                        entryId: session.sessionId,
+                        title: session.title,
+                        directoryId: ready.directoryId,
+                        directoryLabel: ready.directoryLabel,
+                        additionalDirectories: ready.additionalDirectories,
+                        updatedAt: session.updatedAt,
+                    },
+                };
+            },
+            120000,
+        );
+
     readonly steerChatTurn = async (projectId: string, sessionId: string, turnId: string, signal: AbortSignal) =>
         await this.#withProject(
             projectId,

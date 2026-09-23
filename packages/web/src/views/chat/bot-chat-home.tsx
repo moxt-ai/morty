@@ -80,11 +80,11 @@ export function BotChatHome({
                     url.searchParams.delete("sessionId");
                     window.history.replaceState(window.history.state, "", url);
                 },
-                showManaged: (kind, id) => {
+                showManaged: (_isExternal, id) => {
                     const url = new URL(window.location.href);
                     url.searchParams.delete("conversationId");
                     url.searchParams.delete("sessionId");
-                    url.searchParams.set(kind === "conversation" ? "conversationId" : "sessionId", id);
+                    url.searchParams.set("sessionId", id);
                     window.history.replaceState(window.history.state, "", url);
                 },
                 showContinuedSession: (sessionId) => {
@@ -229,9 +229,9 @@ export function BotChatHome({
         clearComposer();
         store.getState().newConversation();
     };
-    const openManaged = (kind: "conversation" | "fork" | "import", id: string) => {
+    const openManaged = (isExternal: boolean, id: string) => {
         clearComposer();
-        store.getState().openManaged(kind, id);
+        store.getState().openManaged(isExternal, id);
     };
     const send = async () => {
         const controller = lifetime.current;
@@ -271,8 +271,10 @@ export function BotChatHome({
                     onSelectBot={store.getState().selectBot}
                     requests={requests}
                     createTransfer={createTransfer}
-                    onOpen={(session) => openManaged(session.kind, session.id)}
-                    onOpenSession={(session) => openManaged(session.result.action, session.result.ready.sessionId)}
+                    onOpen={(session) => openManaged(session.isExternal, session.id)}
+                    onOpenSession={(session) =>
+                        openManaged(session.result.action === "import", session.result.ready.sessionId)
+                    }
                     onNewConversation={newConversation}
                     endRemoteAccess={endRemoteAccess}
                     key={active.bot.botId}
