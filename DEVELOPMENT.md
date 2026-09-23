@@ -71,7 +71,7 @@ pnpm exec wrangler r2 bucket domain add morty-staging-web-assets --domain assets
 pnpm exec wrangler r2 bucket cors set morty-staging-web-assets --file config/r2/staging-web-assets-cors.json --force
 
 pnpm exec wrangler r2 bucket create morty-production-web-assets
-pnpm exec wrangler r2 bucket domain add morty-production-web-assets --domain assets.morty.paraflow.biz --zone-id <PARAFLOW_ZONE_ID> --min-tls 1.2 --force
+pnpm exec wrangler r2 bucket domain add morty-production-web-assets --domain assets.morty.build --zone-id <MORTY_BUILD_ZONE_ID> --min-tls 1.2 --force
 pnpm exec wrangler r2 bucket cors set morty-production-web-assets --file config/r2/production-web-assets-cors.json --force
 ```
 

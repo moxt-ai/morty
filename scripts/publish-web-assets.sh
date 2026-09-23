@@ -9,8 +9,8 @@ case "${1:-}" in
     ;;
   production)
     bucket="morty-production-web-assets"
-    app_origin="https://morty.paraflow.biz"
-    asset_origin="https://assets.morty.paraflow.biz"
+    app_origin="https://morty.build"
+    asset_origin="https://assets.morty.build"
     ;;
   *)
     echo "Expected staging or production" >&2

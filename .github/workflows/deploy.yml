@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 20
     environment:
       name: ${{ inputs.environment }}
-      url: ${{ inputs.environment == 'production' && 'https://morty.paraflow.biz' || 'https://morty.paradev.biz' }}
+      url: ${{ inputs.environment == 'production' && 'https://morty.build' || 'https://morty.paradev.biz' }}
     concurrency:
       group: cloudflare-${{ inputs.environment }}
       cancel-in-progress: false

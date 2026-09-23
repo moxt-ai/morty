@@ -20,7 +20,7 @@ const assetOrigin =
     cloudflareEnvironment === "staging"
         ? "https://assets.morty.paradev.biz"
         : cloudflareEnvironment === "production"
-          ? "https://assets.morty.paraflow.biz"
+          ? "https://assets.morty.build"
           : undefined;
 
 export default defineConfig({
