@@ -72,6 +72,22 @@ function waitForText(text: string): Promise<void> {
     });
 }
 
+function waitForTextIn(container: Element, text: string): Promise<void> {
+    return new Promise((resolve) => {
+        if (container.textContent?.includes(text)) {
+            resolve();
+            return;
+        }
+        const observer = new MutationObserver(() => {
+            if (container.textContent?.includes(text)) {
+                observer.disconnect();
+                resolve();
+            }
+        });
+        observer.observe(container, { childList: true, subtree: true, characterData: true });
+    });
+}
+
 function waitForTextGone(text: string): Promise<void> {
     return new Promise((resolve) => {
         const observer = new MutationObserver(() => {
@@ -267,10 +283,11 @@ async function renderChat(identity: Awaited<ReturnType<typeof createIdentity>>, 
         );
     });
     return {
+        container,
         close: async () => {
             await act(async () => root.unmount());
             transport.close();
-            document.body.replaceChildren();
+            container.remove();
         },
     };
 }
@@ -360,6 +377,66 @@ test("Given a Bot paired with a real local Runtime, When its owner sends a promp
         await runtime[Symbol.asyncDispose]();
     }
 }, 60_000);
+
+test("Given two open views of one Bot Session, When one sends a prompt, Then both show its prompt and live Agent output", async () => {
+    const identity = await createIdentity();
+    const cloud = activeFixture();
+    const bots = await chatRequest(identity, `projects/${identity.projectId}/management/bots`);
+    expect(bots.status).toBe(200);
+    const listing = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await bots.json());
+    const botId = listing.bots[0]?.botId;
+    if (botId === undefined) {
+        throw new Error("The Project has no Bot.");
+    }
+    const runtime = await connectRealRuntime(cloud, identity.projectId);
+    const configured = await chatRequest(identity, `chat/projects/${identity.projectId}/bots/${botId}/setup`, {
+        runtimeId: runtime.runtimeId,
+        agentRef: "claude",
+    });
+    expect(configured.status).toBe(202);
+    const sessionId = await importAgentSession(cloud, identity, botId, runtime, [
+        { role: "user", text: "Earlier prompt" },
+        { role: "assistant", text: "Earlier reply" },
+    ]);
+    const first = await renderChat(identity, sessionId);
+    await waitForTextIn(first.container, "Earlier reply");
+    const second = await renderChat(identity, sessionId);
+    try {
+        await waitForTextIn(second.container, "Earlier reply");
+        const draft = first.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]');
+        if (draft === null) {
+            throw new Error("The first message input was not shown.");
+        }
+        await act(async () => {
+            const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+            setter?.call(draft, "hold after first delta");
+            draft.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        const send = first.container.querySelector<HTMLButtonElement>('button[aria-label="Send message"]');
+        if (send === null || send.disabled) {
+            throw new Error("The first view cannot send a prompt.");
+        }
+        await act(async () => send.click());
+        await waitForTextIn(first.container, "Partial reply");
+        await waitForTextIn(second.container, "hold after first delta");
+        await waitForTextIn(second.container, "Partial reply");
+        for (const view of [first, second]) {
+            const transcript = view.container.querySelector('[role="log"]');
+            expect(
+                [...(transcript?.querySelectorAll('article[aria-label="Message from you"]') ?? [])].filter((item) =>
+                    item.textContent?.includes("hold after first delta"),
+                ),
+            ).toHaveLength(1);
+            expect(transcript?.querySelectorAll('article[aria-label="Current Agent response"]')).toHaveLength(1);
+            expect(transcript?.textContent).toContain("Partial reply");
+        }
+        expect(second.container.querySelector('button[aria-label="Send message"]')).toBeNull();
+    } finally {
+        await first.close();
+        await second.close();
+        await runtime[Symbol.asyncDispose]();
+    }
+}, 30_000);
 
 test("Given a long native ACP Session, When Chat opens it through the real Runtime, Then loading, recent history, and truncation are visible", async () => {
     const identity = await createIdentity();

@@ -6,7 +6,11 @@ import {
     type SessionPermissionRequestedEvent,
     type SessionPermissionResolvedEvent,
 } from "@moxt-ai/mobius-protocol";
-import { connectMobiusChannelClient, type MobiusChannelClient } from "@moxt-ai/mobius-sdk/channel";
+import {
+    connectMobiusChannelClient,
+    type LiveSessionMessage,
+    type MobiusChannelClient,
+} from "@moxt-ai/mobius-sdk/channel";
 import * as v from "valibot";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 
@@ -76,6 +80,7 @@ export class BotChatApi {
         signal: AbortSignal,
         callbacks: {
             readonly onActivity: () => void;
+            readonly onLiveMessage?: (message: LiveSessionMessage) => void;
             readonly onStatus: (online: boolean) => void;
             readonly onPermission?: (event: SessionPermissionRequestedEvent) => void;
             readonly onPermissionResolved?: (event: SessionPermissionResolvedEvent) => void;
@@ -97,6 +102,7 @@ export class BotChatApi {
             relayUrl: endpoint.toString(),
             protocols: ["morty-runtime", `auth.${token}`],
             onActivity: callbacks.onActivity,
+            ...(callbacks.onLiveMessage === undefined ? {} : { onLiveMessage: callbacks.onLiveMessage }),
             onStatus: callbacks.onStatus,
             ...(callbacks.onPermission === undefined ? {} : { onPermission: callbacks.onPermission }),
             ...(callbacks.onPermissionResolved === undefined

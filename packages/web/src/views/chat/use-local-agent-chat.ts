@@ -4,6 +4,12 @@ import type {
     SessionElicitationRequestedEvent,
     SessionPermissionRequestedEvent,
 } from "@moxt-ai/mobius-protocol";
+import {
+    AGENT_MESSAGE_DELTA_KIND,
+    SESSION_COMPLETED_KIND,
+    SESSION_FAILED_KIND,
+    SESSION_PROMPT_KIND,
+} from "@moxt-ai/mobius-protocol";
 import type { MobiusChannelClient } from "@moxt-ai/mobius-sdk/channel";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
@@ -198,6 +204,62 @@ export function useLocalAgentChat({
                 controller.signal.throwIfAborted();
                 const client = await requests.connectLocalRuntime(bot.botId, controller.signal, {
                     onActivity: () => {},
+                    onLiveMessage: (message) => {
+                        const selected = historyStore.getState().state;
+                        if (selected.kind === "none" || selected.sessionId !== message.sessionId) {
+                            return;
+                        }
+                        switch (message.kind) {
+                            case SESSION_PROMPT_KIND:
+                                setTurn((current) =>
+                                    current.kind === "running" && current.commandId === message.commandId
+                                        ? current
+                                        : {
+                                              kind: "running",
+                                              commandId: message.commandId,
+                                              sessionId: message.sessionId,
+                                              prompt: message.prompt,
+                                              text: "",
+                                          },
+                                );
+                                return;
+                            case AGENT_MESSAGE_DELTA_KIND:
+                                setTurn((current) =>
+                                    current.kind === "running" && current.commandId === message.commandId
+                                        ? { ...current, text: current.text + message.text }
+                                        : current,
+                                );
+                                return;
+                            case SESSION_COMPLETED_KIND: {
+                                const connection = connectionRef.current;
+                                if (connection !== null) {
+                                    void refreshHistory(
+                                        connection.client,
+                                        connection.agentRef,
+                                        message.sessionId,
+                                        controller.signal,
+                                    );
+                                }
+                                setTurn((current) =>
+                                    current.kind === "running" && current.commandId === message.commandId
+                                        ? { kind: "idle" }
+                                        : current,
+                                );
+                                return;
+                            }
+                            case SESSION_FAILED_KIND:
+                                setTurn((current) =>
+                                    current.kind === "running" && current.commandId === message.commandId
+                                        ? { kind: "unknown", prompt: current.prompt, message: message.message }
+                                        : current,
+                                );
+                                return;
+                            default: {
+                                const remaining: never = message;
+                                return remaining;
+                            }
+                        }
+                    },
                     onPermission: (request) => {
                         const selected = historyStore.getState().state;
                         if (selected.kind !== "none" && request.sessionId === selected.sessionId) {
@@ -374,14 +436,6 @@ export function useLocalAgentChat({
                               },
                           ],
                 sessionId,
-                observer: {
-                    onDelta: (text) =>
-                        setTurn((current) =>
-                            current.kind === "running" && current.commandId === commandId
-                                ? { ...current, text: current.text + text }
-                                : current,
-                        ),
-                },
             });
             if (lifetime.current !== null) {
                 await refreshHistory(runtime.client, runtime.agentRef, sessionId, lifetime.current.signal);
