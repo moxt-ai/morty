@@ -20,6 +20,9 @@ replacement confirmation.
 ## Run
 
 1. Use the server-provided Chat origin exactly: `BASE_URL="{{BASE_URL}}"`.
+   Assign shell variables before the command that expands them. Never use
+   `BASE_URL=... node ... --base-url "$BASE_URL"`; the shell expands `BASE_URL`
+   before that command-scoped assignment takes effect.
    The script calls the Chat API at `{{BASE_URL}}/morty/api/*`.
    The server supplies the Runtime URL separately as `pairing.relayUrl`.
 
@@ -42,6 +45,10 @@ The command exits after registering the Runtime with the per-user Mobius manager
 the manager and all paired Runtime connections remain online independently.
 
 ```sh
+BASE_URL="{{BASE_URL}}"
+SCRIPT_DIR="<private directory containing setup.mjs>"
+HARNESS="<codex, claude, opencode, or oh-my-pi>"
+SESSION_ID="<current harness session ID>"
 node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --cwd "$PWD" --harness "$HARNESS" --session-id "$SESSION_ID"
 ```
 
