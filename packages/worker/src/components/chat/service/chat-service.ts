@@ -225,9 +225,17 @@ export class ChatService {
             scope.signal,
         );
         if (result !== "configured") {
-            throw result === "runtime-mismatch"
-                ? new PlatformProjectError("BOT_RUNTIME_FIXED", "Create a new Bot to pair a different Runtime.", 409)
-                : new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);
+            if (result === "runtime-mismatch") {
+                throw new PlatformProjectError(
+                    "BOT_RUNTIME_FIXED",
+                    "Create a new Bot to pair a different Runtime.",
+                    409,
+                );
+            }
+            if (result === "agent-fixed") {
+                throw new PlatformProjectError("BOT_AGENT_FIXED", "Create a new Bot to use a different Agent.", 409);
+            }
+            throw new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);
         }
         this.#logger.info(
             { event: "bot-setup-requested", userId: scope.userId, projectId: scope.projectId, botId: scope.botId },

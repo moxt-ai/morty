@@ -24,7 +24,14 @@ afterEach(() => vi.useRealTimers());
 
 async function createChatFixture(
     nativeSessionIds: ReadonlySet<string> = new Set(),
-    agent: { readonly id: "codex" | "claude" | "opencode" | "pi"; readonly name: string } = {
+    agent: {
+        readonly id: "codex" | "claude" | "opencode" | "pi";
+        readonly name: string;
+        readonly additionalAgents?: readonly {
+            readonly id: "codex" | "claude" | "opencode" | "pi";
+            readonly name: string;
+        }[];
+    } = {
         id: "codex",
         name: "Codex",
     },
@@ -36,6 +43,7 @@ async function createChatFixture(
             nativeSessionIds,
             agentId: agent.id,
             agentName: agent.name,
+            ...(agent.additionalAgents === undefined ? {} : { additionalAgents: agent.additionalAgents }),
             requiredBindingId: "workspace",
         });
         const environment = cloud.environment();
@@ -70,6 +78,37 @@ async function createChatFixture(
         throw cause;
     }
 }
+
+test("Given a Bot with an existing Codex Session, When its owner selects Claude Code on the same Runtime, Then the old Session remains bound to Codex", async () => {
+    const fixture = await createChatFixture(new Set(), {
+        id: "codex",
+        name: "Codex",
+        additionalAgents: [{ id: "claude", name: "Claude Code" }],
+    });
+    try {
+        const configure = (agentRef: "codex" | "claude") =>
+            fixture.request(`chat/bots/${fixture.botId}/setup`, {
+                runtimeId: fixture.runtime.runtimeId,
+                agentRef,
+            });
+        expect((await configure("claude")).status).toBe(202);
+        expect((await configure("codex")).status).toBe(202);
+        const created = await fixture.request(`chat/bots/${fixture.botId}/local-sessions/create`, {
+            action: "create",
+        });
+        expect(created.status).toBe(200);
+        const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await created.json());
+
+        const changed = await configure("claude");
+        expect(changed.status).toBe(409);
+        expect(await changed.json()).toMatchObject({ error: { code: "BOT_AGENT_FIXED" } });
+        const access = await fixture.request(`chat/bots/${fixture.botId}/local-session-access`, { sessionId });
+        expect(access.status).toBe(200);
+        expect(await access.json()).toMatchObject({ configuration: { agentRef: "codex" } });
+    } finally {
+        await fixture.close();
+    }
+});
 
 test("given a configured Bot, when a user opens a conversation, then the unavailable feature is explicit", async () => {
     const fixture = await createChatFixture();
