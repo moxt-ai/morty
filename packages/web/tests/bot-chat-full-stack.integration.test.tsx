@@ -107,6 +107,25 @@ function waitForInput(label: string): Promise<HTMLInputElement> {
     });
 }
 
+function waitForImage(name: string): Promise<HTMLImageElement> {
+    return new Promise((resolve) => {
+        const find = () => [...document.querySelectorAll<HTMLImageElement>("img")].find((image) => image.alt === name);
+        const current = find();
+        if (current !== undefined) {
+            resolve(current);
+            return;
+        }
+        const observer = new MutationObserver(() => {
+            const image = find();
+            if (image !== undefined) {
+                observer.disconnect();
+                resolve(image);
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+    });
+}
+
 function longHistory(): readonly NativeHistoryMessage[] {
     const messages: NativeHistoryMessage[] = [];
     for (let index = 1; index <= 84; index += 1) {
@@ -349,5 +368,87 @@ test("Given two Bot Sessions, When an older history response arrives late, Then 
     } finally {
         releaseFirst.resolve();
         await app.close();
+    }
+}, 30_000);
+
+test("Given a Bot Session with an image, When the page reloads during history recovery, Then sending waits and the image returns", async () => {
+    const identity = await createIdentity();
+    const cloud = activeFixture();
+    const bots = await chatRequest(identity, `projects/${identity.projectId}/management/bots`);
+    expect(bots.status).toBe(200);
+    const listing = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await bots.json());
+    const botId = listing.bots[0]?.botId;
+    if (botId === undefined) {
+        throw new Error("The Project has no Bot.");
+    }
+    const reloadRequested = Promise.withResolvers<void>();
+    const releaseReload = Promise.withResolvers<void>();
+    let historyCount = 0;
+    const runtime = await cloud.connectAgent(identity.projectId, {
+        agentId: "codex",
+        loadNativeHistory: async (_sessionId, signal) => {
+            historyCount += 1;
+            if (historyCount === 2) {
+                reloadRequested.resolve();
+                await releaseReload.promise;
+            }
+            signal.throwIfAborted();
+            return {
+                status: "available",
+                messages: [
+                    {
+                        role: "user",
+                        text: "What is in this image?",
+                        images: [{ data: "AQ==", mimeType: "image/png", name: "sample.png" }],
+                    },
+                ],
+                truncated: false,
+                coveredCommandIds: [],
+                coveredMessageIds: [],
+            };
+        },
+    });
+    const configured = await chatRequest(identity, `chat/projects/${identity.projectId}/bots/${botId}/setup`, {
+        runtimeId: runtime.runtimeId,
+        agentRef: "codex",
+    });
+    expect(configured.status).toBe(202);
+    const firstPage = await renderChat(identity);
+    let sessionId: string;
+    try {
+        await waitForMessageInput();
+        const newConversation = await waitForButton("New conversation");
+        await act(async () => newConversation.click());
+        await waitForImage("sample.png");
+        const selected = new URL(window.location.href).searchParams.get("sessionId");
+        if (selected === null) {
+            throw new Error("The Bot Session was not selected in the URL.");
+        }
+        sessionId = selected;
+    } finally {
+        await firstPage.close();
+    }
+    const reloadedPage = await renderChat(identity, sessionId);
+    try {
+        await reloadRequested.promise;
+        await waitForText("Loading conversation");
+        const draft = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]');
+        if (draft === null) {
+            throw new Error("The message input was not shown.");
+        }
+        await act(async () => {
+            const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+            setter?.call(draft, "Duplicate prompt");
+            draft.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        const send = document.querySelector<HTMLButtonElement>('button[aria-label="Send message"]');
+        expect(send?.disabled).toBe(true);
+        releaseReload.resolve();
+        const image = await waitForImage("sample.png");
+        expect(image.getAttribute("src")).toBe("data:image/png;base64,AQ==");
+        expect(send?.disabled).toBe(false);
+    } finally {
+        releaseReload.resolve();
+        await reloadedPage.close();
     }
 }, 30_000);
