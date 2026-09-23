@@ -228,7 +228,7 @@ test("Given a paired Bot, When a user filters its models and requests an image, 
     ]);
 });
 
-test("Given an Agent links a local file location, When a user opens it, Then the source file is previewed", {
+test("Given an Agent links a local file location, When a user opens it, Then the file path omits the source location", {
     timeout: 30_000,
 }, async () => {
     const created = await renderWorkspace();
@@ -238,14 +238,12 @@ test("Given an Agent links a local file location, When a user opens it, Then the
         return await waitForElement(`[data-testid="${dataTestId.messageComposer}"]`);
     });
 
-    await sendPrompt(composer as HTMLTextAreaElement, "Create an image");
+    await sendPrompt(composer as HTMLTextAreaElement, "Open [Generated source](</fake/generated-image.png:104>)");
     const link = await Promise.race([waitForElement(`[data-testid="${dataTestId.localFileLink}"]`), failure]);
     await act(async () => link.click());
 
-    await act(
-        async () =>
-            await waitForText(`[data-testid="${dataTestId.filePreviewContent}"]`, "export const generated = true;"),
-    );
+    await act(async () => await waitForElement(`[data-testid="${dataTestId.filePreview}"]`));
+    await vi.waitFor(() => expect(document.querySelector('[title="/fake/generated-image.png"]')).not.toBeNull());
 });
 
 test("Given a user follows the latest message, When a response streams, Then the latest content remains visible", {
