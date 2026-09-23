@@ -56,7 +56,6 @@ export const createSessionDeliveryStore = (options: {
             const accepted = await options.submit(
                 {
                     additionalDirectoryIds: journal.request.additionalDirectoryIds,
-                    artifactIds: journal.request.artifactIds,
                     content: journal.request.content,
                     images: journal.request.images,
                     resources: journal.request.resources,

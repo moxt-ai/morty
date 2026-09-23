@@ -54,7 +54,6 @@ const agentSettingsInput = v.strictObject({ agentRef: platformIdentifier });
 const turnInput = v.strictObject({
     sessionId: platformIdentifier,
     additionalDirectoryIds: v.pipe(v.array(nativeDirectoryId), v.maxLength(16)),
-    artifactIds: v.pipe(v.array(platformIdentifier), v.maxLength(100)),
     content: v.pipe(v.string(), v.maxLength(100000)),
     disposition: v.optional(v.pipe(v.string(), v.maxLength(64))),
     idempotencyKey: platformIdentifier,
@@ -205,7 +204,6 @@ export function createBotChatRoutes() {
                     await context.env.services.chat.submitTurn(context.get("chatScope"), {
                         sessionId: input.sessionId,
                         additionalDirectoryIds: input.additionalDirectoryIds,
-                        artifactIds: input.artifactIds,
                         content: input.content,
                         idempotencyKey: input.idempotencyKey,
                         images: input.images,

@@ -521,10 +521,16 @@ class ConnectedTransport extends TransportConnection {
         let failureCode = "";
         let failureMessage = "";
         let stopReason = "";
-        const subscription = await clients.scoped.events.subscribe(
+        let streamInterrupted = false;
+        let turnSubmissionStarted = false;
+        const subscription = await clients.scoped.events.subscribeLive(
             sessionId,
-            "",
             {
+                reconcile: async (connection) => {
+                    if (connection.kind === "reconnected" && turnSubmissionStarted) {
+                        streamInterrupted = true;
+                    }
+                },
                 receive: async (event) => {
                     const payload = event.payload;
                     if (!("commandId" in payload) || payload.commandId !== commandId) {
@@ -585,11 +591,11 @@ class ConnectedTransport extends TransportConnection {
         this.#publicCommandIds.add(commandId);
         let acceptedTurnId = "";
         try {
+            turnSubmissionStarted = true;
             const accepted = await clients.scoped.turns.submit(
                 sessionId,
                 {
                     additionalDirectoryIds: request.additionalDirectoryIds ?? [],
-                    artifactIds: [],
                     content: request.prompt,
                     idempotencyKey: commandId,
                     images: request.images ?? [],
@@ -602,6 +608,7 @@ class ConnectedTransport extends TransportConnection {
             try {
                 await subscription.completed;
             } catch (streamError) {
+                streamInterrupted = true;
                 const outcome = await clients.scoped.turns.read(sessionId, accepted.turnId, signal);
                 if (outcome.state instanceof MobiusSucceededTurnState) {
                     stopReason = outcome.state.stopReason;
@@ -615,6 +622,12 @@ class ConnectedTransport extends TransportConnection {
                 } else {
                     throw streamError;
                 }
+            }
+            if (streamInterrupted) {
+                throw new MobiusChannelError(
+                    "turn_stream_interrupted",
+                    "The live Turn stream disconnected before the response was complete",
+                );
             }
             if (failureCode.length > 0) {
                 throw new MobiusChannelError(failureCode, failureMessage);

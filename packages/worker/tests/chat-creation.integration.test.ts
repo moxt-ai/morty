@@ -95,7 +95,6 @@ test("a Bot uses the real Platform journey for setup, chat, media, listing, and 
         const turn = await fixture.request(`chat/bots/${fixture.botId}/turns`, {
             sessionId: conversationId,
             additionalDirectoryIds: [],
-            artifactIds: [],
             content: "Create an image",
             idempotencyKey: "command-1",
             images: [{ data: "AQ==", mimeType: "image/png", name: "pixel.png" }],

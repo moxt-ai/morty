@@ -264,7 +264,6 @@ export const sessionActiveTurnEntry = (sessionId: string): LocalStorageEntry<Sto
 const journalSubmitRequestSchema = v.pipe(
     v.object({
         additionalDirectoryIds: v.pipe(v.array(v.string()), v.readonly()),
-        artifactIds: v.pipe(v.array(v.string()), v.readonly()),
         content: v.string(),
         disposition: v.optional(v.string()),
         images: v.pipe(

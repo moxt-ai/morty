@@ -126,7 +126,6 @@ class BrowserSessionTransport implements MobiusHttpTransport, MobiusLiveEventTra
 }
 
 class BrowserSessionClient implements MobiusClient {
-    readonly artifacts: MobiusClient["artifacts"];
     readonly attempts: MobiusClient["attempts"];
     readonly capabilities: MobiusClient["capabilities"];
     readonly credentials: MobiusClient["credentials"];
@@ -144,7 +143,6 @@ class BrowserSessionClient implements MobiusClient {
         const client = new MobiusClient(options);
         this.#client = client;
         this.#sessionTransport = transport;
-        this.artifacts = client.artifacts;
         this.attempts = client.attempts;
         this.capabilities = client.capabilities;
         this.credentials = client.credentials;
