@@ -216,19 +216,12 @@ export class LocalStack {
         return {
             run: async (_directory, args, cwd, signal) => {
                 signal.throwIfAborted();
-                const child = await this.startRuntime(args, cwd);
-                if (child.pid === undefined) {
+                const manager = await this.startRuntime(args, cwd);
+                if (manager.pid === undefined) {
                     throw new Error("Runtime process did not start");
                 }
-                const code = await new Promise<number | null>((resolveExit, reject) => {
-                    child.once("error", reject);
-                    child.once("exit", resolveExit);
-                });
                 signal.throwIfAborted();
-                if (code !== 0) {
-                    throw new Error(`Runtime command exited with code ${String(code)}`);
-                }
-                return { pid: child.pid, logPath: join(this.harness.artifactDirectory, "mobius.log") };
+                return { pid: manager.pid, logPath: join(this.harness.artifactDirectory, "mobius.log") };
             },
         };
     }
