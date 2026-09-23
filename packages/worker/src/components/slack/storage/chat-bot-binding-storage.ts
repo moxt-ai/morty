@@ -3,7 +3,6 @@ import * as v from "valibot";
 import type { Database } from "../../../schema/project-do/database.ts";
 import { managedBot, slackApp, slackChatBotBinding } from "../../../schema/project-do/index.ts";
 import { botConfigurationSchema } from "../../management/entity/bot-configuration.ts";
-import { type ChatBotBinding, chatBotBindingSchema } from "../entity/chat-bot-binding";
 import type { TenantContext } from "../entity/tenant-context";
 
 const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
@@ -16,6 +15,16 @@ const localBotSchema = v.pipe(
     v.readonly(),
 );
 export type LocalSlackBot = v.InferOutput<typeof localBotSchema>;
+const storedBindingSchema = v.pipe(
+    v.object({
+        tenantId: identifier,
+        slackBotId: identifier,
+        botId: identifier,
+        connectionId: identifier,
+    }),
+    v.readonly(),
+);
+export type StoredChatBotBinding = v.InferOutput<typeof storedBindingSchema>;
 
 export class ChatBotBindingStorage {
     readonly #database: Database;
@@ -53,10 +62,10 @@ export class ChatBotBindingStorage {
 
     readonly saveBinding = async (
         tenant: TenantContext,
-        binding: ChatBotBinding,
+        binding: StoredChatBotBinding,
         signal: AbortSignal,
     ): Promise<void> => {
-        const value = v.parse(chatBotBindingSchema, binding);
+        const value = v.parse(storedBindingSchema, binding);
         if (value.tenantId !== tenant.tenantId) {
             throw new Error("The Chat Bot binding tenant does not match the authorized tenant.");
         }
@@ -69,10 +78,6 @@ export class ChatBotBindingStorage {
                 set: {
                     botId: value.botId,
                     connectionId: value.connectionId,
-                    projectId: value.projectId,
-                    runtimeId: value.runtimeId,
-                    agentRef: value.agentRef,
-                    instructions: value.instructions,
                 },
             })
             .run();
@@ -84,7 +89,7 @@ export class ChatBotBindingStorage {
         tenantId: string,
         slackBotId: string,
         signal: AbortSignal,
-    ): Promise<ChatBotBinding | null> => {
+    ): Promise<StoredChatBotBinding | null> => {
         signal.throwIfAborted();
         const row = await this.#database
             .select()
@@ -92,7 +97,7 @@ export class ChatBotBindingStorage {
             .where(and(eq(slackChatBotBinding.tenantId, tenantId), eq(slackChatBotBinding.slackBotId, slackBotId)))
             .get();
         signal.throwIfAborted();
-        const parsed = v.safeParse(chatBotBindingSchema, row);
+        const parsed = v.safeParse(storedBindingSchema, row);
         return parsed.success ? parsed.output : null;
     };
 

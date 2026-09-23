@@ -4,7 +4,7 @@ import { createTestRuntime } from "./test-runtime.ts";
 
 export { expect } from "@playwright/test";
 
-function agentTest(agentId: "claude" | "opencode") {
+function agentTest(agentId: "claude" | "opencode" | "pi") {
     return base.extend<{ readonly runtime: Awaited<ReturnType<typeof createTestRuntime>> }>({
         // biome-ignore lint/correctness/noEmptyPattern: Playwright requires a destructured fixture dependency list.
         runtime: async ({}, use, testInfo) => {
@@ -28,3 +28,4 @@ function agentTest(agentId: "claude" | "opencode") {
 
 export const test = agentTest("opencode");
 export const claudeTest = agentTest("claude");
+export const piTest = agentTest("pi");

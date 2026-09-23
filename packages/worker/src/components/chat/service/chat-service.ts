@@ -148,7 +148,6 @@ export class ChatService {
             scope.userId,
             scope.botId,
             {
-                isExternal: false,
                 id: sessionId,
                 title: selected.title,
                 directoryId: selected.directoryId,

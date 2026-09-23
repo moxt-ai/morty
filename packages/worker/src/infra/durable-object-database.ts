@@ -18,6 +18,8 @@ import renameSlackProcessedEvent from "../../migrations/project-do/0017_smooth_a
 import replaceManagedSessionMetadata from "../../migrations/project-do/0018_bumpy_ares.sql?raw";
 import addManagedBotAgentRef from "../../migrations/project-do/0019_grey_clea.sql?raw";
 import addLocalSessionDirectories from "../../migrations/project-do/0020_minor_vision.sql?raw";
+import simplifySlackBinding from "../../migrations/project-do/0021_black_hairball.sql?raw";
+import simplifyChatSessionAndSlackBinding from "../../migrations/project-do/0022_eminent_wiccan.sql?raw";
 
 const migrations = [
     management,
@@ -40,6 +42,8 @@ const migrations = [
     replaceManagedSessionMetadata,
     addManagedBotAgentRef,
     addLocalSessionDirectories,
+    simplifySlackBinding,
+    simplifyChatSessionAndSlackBinding,
 ];
 
 type BoundValue = ArrayBuffer | string | number | null;

@@ -8,7 +8,6 @@ const summarySchema = v.pipe(
     v.object({
         projectId: platformIdentifier,
         userId: platformIdentifier,
-        isExternal: v.boolean(),
         id: platformIdentifier,
         title: v.pipe(v.string(), v.maxLength(500)),
         directoryId: v.pipe(v.string(), v.minLength(1), v.maxLength(2048)),
@@ -37,7 +36,6 @@ export class ManagedSessionStorage {
             .select({
                 projectId: chatManagedSession.projectId,
                 userId: chatManagedSession.userId,
-                isExternal: chatManagedSession.isExternal,
                 id: chatManagedSession.resourceId,
                 title: chatManagedSession.title,
                 directoryId: chatManagedSession.directoryId,
@@ -96,7 +94,6 @@ export class ManagedSessionStorage {
         userId: string,
         botId: string,
         record: {
-            readonly isExternal: boolean;
             readonly id: string;
             readonly title: string;
             readonly directoryId?: string;
@@ -118,7 +115,6 @@ export class ManagedSessionStorage {
                 projectId: value.projectId,
                 userId: value.userId,
                 botId,
-                isExternal: value.isExternal,
                 resourceId: value.id,
                 title: value.title,
                 directoryId: value.directoryId,

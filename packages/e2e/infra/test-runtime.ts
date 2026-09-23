@@ -8,25 +8,50 @@ import type { E2EHarness } from "./harness.ts";
 import { LocalStack, repository } from "./local-stack.ts";
 import { followSetupInstructions } from "./setup-instructions.ts";
 
-export async function createTestRuntime(harness: E2EHarness, agentId: "claude" | "opencode" = "opencode") {
+const agentProfiles = {
+    claude: {
+        adapterOverrideVariable: "MOBIUS_CLAUDE_ACP_PATH",
+        agentOverrideVariable: "MOBIUS_CLAUDE_PATH",
+        label: "Claude Code",
+        nativeIdArgument: "",
+        version: "2.1.278",
+    },
+    opencode: {
+        adapterOverrideVariable: "MOBIUS_OPENCODE_PATH",
+        agentOverrideVariable: null,
+        label: "OpenCode",
+        nativeIdArgument: "--opencode-native-id",
+        version: "1.18.29",
+    },
+    pi: {
+        adapterOverrideVariable: "MOBIUS_PI_ACP_PATH",
+        agentOverrideVariable: "MOBIUS_PI_PATH",
+        label: "Pi",
+        nativeIdArgument: "",
+        version: "0.85.0",
+    },
+} as const;
+
+export async function createTestRuntime(harness: E2EHarness, agentId: keyof typeof agentProfiles = "opencode") {
     // The stateful ACP agent implements sessions and replies without requiring
     // model-provider credentials. Chat, Platform and Runtime are real processes.
     const binary = join(harness.workDirectory, "agent.sh");
+    const profile = agentProfiles[agentId];
     await mkdir(join(harness.workDirectory, "agent-state"), { recursive: true });
     const agent = join(repository, "third-party/mobius/tests/agent-daemon/fixtures/fake-acp-agent/src/cli.ts");
     await writeFile(
         binary,
-        `#!/bin/sh\nif [ "$1" = "--version" ]; then echo '${agentId === "claude" ? "2.1.278" : "1.18.29"}'; exit 0; fi\nexport MOBIUS_FAKE_ACP_STATE_DIRECTORY=${JSON.stringify(join(harness.workDirectory, "agent-state"))}\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(agent)} --agent-name ${JSON.stringify(agentId === "claude" ? "Claude Code" : "OpenCode")} ${agentId === "claude" ? "" : "--opencode-native-id"} "$@"\n`,
+        `#!/bin/sh\nif [ "$1" = "--version" ]; then echo '${profile.version}'; exit 0; fi\nexport MOBIUS_FAKE_ACP_STATE_DIRECTORY=${JSON.stringify(join(harness.workDirectory, "agent-state"))}\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(agent)} --agent-name ${JSON.stringify(profile.label)} ${profile.nativeIdArgument} "$@"\n`,
     );
     await chmod(binary, 0o700);
     const stack = await LocalStack.create(harness, {
         acpBinary: binary,
-        adapterOverrideVariable: agentId === "claude" ? "MOBIUS_CLAUDE_ACP_PATH" : "MOBIUS_OPENCODE_PATH",
+        adapterOverrideVariable: profile.adapterOverrideVariable,
         description: `stateful fake ${agentId} ACP agent`,
         id: agentId,
-        label: agentId === "claude" ? "Claude Code" : "OpenCode",
+        label: profile.label,
         publishableKey: "pk_test_c21hc2hpbmctc3BpZGVyLTg1NzQuY2xlcmsuYWNjb3VudHMuZGV2JA",
-        runtimeEnvironment: agentId === "claude" ? { MOBIUS_CLAUDE_PATH: binary } : {},
+        runtimeEnvironment: profile.agentOverrideVariable === null ? {} : { [profile.agentOverrideVariable]: binary },
     });
     await stack.startChat(await stack.startPlatform());
     const browser = await chromium.launch({ channel: "chrome", headless: true });

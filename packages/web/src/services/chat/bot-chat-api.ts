@@ -13,7 +13,6 @@ import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
 const managedSessionSchema = v.pipe(
     v.object({
-        isExternal: v.boolean(),
         id: identifier,
         title: v.string(),
         directoryLabel: v.string(),

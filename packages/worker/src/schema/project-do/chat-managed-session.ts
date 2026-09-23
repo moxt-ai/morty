@@ -6,7 +6,6 @@ export const chatManagedSession = sqliteTable(
         projectId: text("project_id").notNull(),
         userId: text("user_id").notNull(),
         botId: text("bot_id").notNull(),
-        isExternal: integer("is_external", { mode: "boolean" }).notNull(),
         resourceId: text("resource_id").notNull(),
         directoryId: text("directory_id").notNull().default("default"),
         additionalDirectoryIdsJson: text("additional_directory_ids_json").notNull().default("[]"),
