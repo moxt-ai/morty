@@ -9,8 +9,6 @@ catalog:
   '@clerk/backend': 3.17.1
   '@clerk/react': 6.15.1
   '@cloudflare/vite-plugin': 1.54.4
-  '@moxt-ai/mobius-protocol': 0.0.16
-  '@moxt-ai/mobius-sdk': 0.0.23
   '@playwright/test': 1.63.0
   '@radix-ui/react-select': 2.3.7
   '@sentry/react': ^10.73.0
