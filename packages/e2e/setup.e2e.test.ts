@@ -17,6 +17,10 @@ test("Given a saved setup handoff, When its Runtime reconnects, Then setup waits
     expect(statuses.indexOf("runtime_reused")).toBeLessThan(statuses.indexOf("runtime_paired"));
     expect(statuses.indexOf("runtime_paired")).toBeLessThan(statuses.indexOf("runtime_online"));
     expect(statuses.indexOf("runtime_online")).toBeLessThan(statuses.indexOf("binding_activated"));
+    expect(connected.configuration).not.toHaveProperty("pairing");
+    expect(connected.configuration).not.toHaveProperty("pairing_key");
+    expect(connected.configuration).not.toHaveProperty("expected_runtime_id");
+    expect(connected.configuration).not.toHaveProperty("runtime_process");
 });
 
 test("Given a setup handoff, When a user imports a native session, Then the handoff persists until access is revoked", async ({

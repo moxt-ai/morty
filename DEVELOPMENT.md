@@ -26,7 +26,8 @@ An unbound Bot can create a fresh Runtime identity; pairing another machine
 requires another Bot.
 `/setup.md` is reserved for standalone testing and external sharing, including
 social posts. That flow requires the current harness session ID, creates or reuses a
-local identity, reconnects its matching active Runtime or creates a fresh one, and
+local identity, lists manager connections through a private temporary JSON file,
+reconnects a local connection for the matching App ID or creates a fresh one, and
 returns a browser handoff carrying the validated harness and native
 session ID. The ready result includes the exact URL, its expiry, an owner-only PNG QR
 code, and the path to a private temporary text file containing a terminal-safe QR
@@ -87,7 +88,9 @@ generated JavaScript is not checked in. `pnpm build` builds it before the applic
 QR encoding, PNG reading, and QR decoding are included in that bundle and do not require
 packages to be installed separately on the user's machine.
 The bundle also exports `runSetup(args, host)` for integrations, with cancellable
-Runtime and clock ports. The CLI supplies the local OS Runtime implementation.
+Runtime and clock ports. The CLI supplies the local manager implementation. Setup
+persists identity and Bot configuration but not App, Runtime, Connection, Channel, or
+pairing identifiers.
 
 The Worker serves `/setup.mjs` from the fixed `artifacts/setup.mjs` object in the
 existing `CHAT_ATTACHMENTS_APAC` bucket.

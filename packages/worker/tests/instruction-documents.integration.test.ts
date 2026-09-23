@@ -68,8 +68,9 @@ test("Given setup and pairing documents, When users fetch them from configured a
         expect(document).not.toMatch(/\{\{.*\}\}|preview\.example|paradev\.biz|paraflow\.biz|token=ticket/);
     }
     expect(documents.get("pair")).toContain("existing user, Bot, and workspace");
-    expect(documents.get("pair")).toContain("reconnect saved Runtime state");
-    expect(documents.get("setup")).toContain("first reconnects a matching saved Runtime");
+    expect(documents.get("pair")).toContain("Mobius owns Runtime connection state and identifiers");
+    expect(documents.get("setup")).toContain("first reconnects a Mobius-managed");
+    expect(documents.get("setup")).toContain("Do not retain or back up App");
 
     for (const origin of ["https://custom.example", "http://localhost:5173"]) {
         for (const name of ["setup", "pair"]) {

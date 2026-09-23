@@ -21,7 +21,7 @@ export function AttemptFailure({
     const code = "code" in attempt && typeof attempt.code === "string" ? attempt.code : "";
     const command =
         code === "binding_not_approved" && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(botId)
-            ? `npx --yes @moxt-ai/mobius@latest bot approve --bot ${botId}`
+            ? `mobius bot approve --bot ${botId}`
             : "";
     return (
         <div

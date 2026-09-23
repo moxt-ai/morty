@@ -10,11 +10,12 @@ Reuse the user's saved identity or create an anonymous identity and personal Bot
 No Clerk registration is required. Web-generated instructions use `/pair.md?token=...`.
 Only setup loads local configuration before connecting. It reuses the saved user
 token and Bot selection for this origin, including an identity saved by pair, or
-creates an identity if none is available. It first reconnects a matching saved Runtime
-when Platform confirms its pairing is active; otherwise it creates a fresh Runtime.
-The previous file is backed up, and the selected Runtime state is saved with the identity to `config.json`.
-Configuration from another environment is backed up and replaced for this origin.
-Do not ask for an additional replacement confirmation.
+creates an identity if none is available. It first reconnects a Mobius-managed
+connection for the App when Platform confirms its pairing is active; otherwise it
+creates a fresh Runtime pairing. Only Chat identity, Bot, handoff, and workspace
+configuration is backed up or saved in `config.json`. Do not retain or back up App,
+Runtime, Connection, Channel, or pairing identifiers, and do not ask for an additional
+replacement confirmation.
 
 ## Run
 
@@ -24,8 +25,8 @@ Do not ask for an additional replacement confirmation.
 
    Use `DOCUMENT_DIR` from the environment if provided; otherwise resolve the user's
    absolute document directory and ask if unavailable. Never guess a repository path.
-2. Ensure Node.js 22.13.0 or newer, npm, and npx are available. Check their versions
-   and install or repair missing dependencies using the host's normal tools.
+2. Ensure Node.js 22.13.0 or newer and npm are available. Install or update the
+   persistent manager with `npm install --global @moxt-ai/mobius@latest`.
 3. Download `{{BASE_URL}}/setup.mjs` into a private local directory, with
    finite timeouts and no redirects. Inspect it before running.
 4. Set `HARNESS` to your own harness ID: `codex`, `claude`, `opencode`, or
@@ -36,27 +37,29 @@ Do not ask for an additional replacement confirmation.
 5. Run the command from the user's current working directory. The script resolves and
    validates `$PWD`, then uses it as the paired Runtime's default Morty workspace.
 
-Start this command with your harness's background execution support, then poll its
-output every five seconds until it reports `status: "ready"` or an error. A successful
-invocation intentionally never completes on its own: the script owns the Runtime daemon
-and must remain running to keep that daemon alive. After `status: "ready"`, stop polling
-but leave the background process running. Do not wait for it to exit, which would block
-forever while the Runtime is online, and do not terminate it, which would stop the
-Runtime. Closing this conversation stops the Runtime it started.
+Run this command normally and wait until it reports `status: "ready"` or an error.
+The command exits after registering the Runtime with the per-user Mobius manager;
+the manager and all paired Runtime connections remain online independently.
 
 ```sh
 node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --cwd "$PWD" --harness "$HARNESS" --session-id "$SESSION_ID"
 ```
 
 The command handles identity, Runtime pairing, Runtime launch, Bot binding, and
-readiness. The selected Runtime uses the command's current working directory and stays attached to this
-agent session; it exits when your session ends. It does not stop any other local
-Mobius Runtime process. No separate prepare, bind, or finish commands are needed.
+readiness. The selected Runtime uses the command's current working directory and joins
+the same singleton manager as every existing pairing. No separate prepare, bind, or
+finish commands are needed.
+It writes an empty private temporary JSON file and asks
+`mobius pair list --output-json=<that-file>` for the current local connections. A
+connection is reused when its App ID matches the Chat workspace, and its Runtime ID
+comes from that local connection record. Otherwise the script creates a new pairing.
+App, Runtime, Connection, Channel, and
+pairing identifiers are not saved in the setup configuration.
 
 ## Observe and finish
 
-The script streams timestamped JSON progress and reports the Runtime PID and private
-log path. Waits are cancellable and bounded to five minutes. Only `status: "ready"`
+The script streams timestamped JSON progress. Waits are cancellable and bounded to
+five minutes. Only `status: "ready"`
 means the binding is active and the selected Runtime/agent is online; it does not
 claim a successful test message.
 
@@ -76,12 +79,11 @@ expires. Keep the Runtime online. You can bind an account later if you want.**
 
 On failure, use `error.code`, its sanitized `error.cause` chain, and the private
 Runtime log. Fix the problem and rerun
-the same command. It reuses the saved user identity and reconnects its active Runtime when possible. Preserve `$DOCUMENT_DIR/morty`
+the same command. It reuses the saved user identity and reconnects a Mobius-managed
+connection for the App when possible. Preserve `$DOCUMENT_DIR/morty`
 credentials on network errors, cancellation, and timeouts. An unavailable identity
 requires user resolution; creating another user does not recover conversations.
-Existing configuration is backed up to `config-backup-<id>.json` automatically.
-Report the backup path from `configuration_backed_up` when replacement occurs.
 If `SETUP_BUSY` persists, confirm the previous setup process exited before removing
 its stale `.setup-lock` directory. Rerun for an expired/revoked Runtime pairing;
-the script replaces its saved connection state. Never print the config or expose durable credentials in
+Mobius remains the owner of saved connection state. Never print the config or expose durable credentials in
 arguments, URLs, logs, or chat. Rerun this command to obtain a fresh browser handoff.
