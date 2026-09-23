@@ -10,11 +10,11 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-async function createChatFixture() {
+async function createChatFixture(nativeSessionIds: ReadonlySet<string> = new Set()) {
     const cloud = await createIdentityFixture();
     try {
         const identity = await cloud.createAnonymousUser();
-        const runtime = await cloud.connectAgent(identity.projectId);
+        const runtime = await cloud.connectAgent(identity.projectId, { nativeSessionIds });
         const environment = cloud.environment();
         const request = (path: string, body?: object, method = body === undefined ? "GET" : "POST") =>
             worker.fetch(
@@ -112,7 +112,8 @@ test("given a configured Bot, when a user opens a conversation, then the unavail
 });
 
 test("Given a configured Bot, When its owner starts a local conversation, Then Chat records only the Session ownership needed for Runtime access", async () => {
-    const fixture = await createChatFixture();
+    const existingSessionId = crypto.randomUUID();
+    const fixture = await createChatFixture(new Set([existingSessionId]));
     try {
         expect(
             (
@@ -122,10 +123,10 @@ test("Given a configured Bot, When its owner starts a local conversation, Then C
                 })
             ).status,
         ).toBe(202);
-        const created = await fixture.request(`chat/bots/${fixture.botId}/local-sessions/create`, {});
+        const created = await fixture.request(`chat/bots/${fixture.botId}/local-sessions/create`, { action: "create" });
         expect(created.status).toBe(200);
         const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await created.json());
-        expect(sessionId).toMatch(/^chat_/);
+        expect(sessionId).toMatch(/^[0-9a-f-]{36}$/iu);
 
         const listed = await fixture.request(`chat/bots/${fixture.botId}/local-sessions`, {});
         expect(listed.status).toBe(200);
@@ -138,6 +139,13 @@ test("Given a configured Bot, When its owner starts a local conversation, Then C
             sessionId: "chat_unowned",
         });
         expect(unrelated.status).toBe(404);
+
+        const imported = await fixture.request(`chat/bots/${fixture.botId}/local-sessions/create`, {
+            action: "import",
+            sessionId: existingSessionId,
+        });
+        expect(imported.status).toBe(200);
+        expect(await imported.json()).toMatchObject({ sessionId: existingSessionId });
     } finally {
         await fixture.close();
     }

@@ -163,14 +163,67 @@ export class ChatService {
         return bot.configuration;
     };
 
-    readonly createLocalSession = async (scope: ChatScope) => {
+    readonly createLocalSession = async (
+        scope: ChatScope,
+        input: { readonly action: "create" } | { readonly action: "import"; readonly sessionId: string },
+    ) => {
         const runtime = await this.localRuntime(scope);
-        const sessionId = `chat_${crypto.randomUUID()}`;
+        const selected = await (async () => {
+            if (input.action === "create") {
+                const result = await this.#platform.nativeSessions(
+                    scope.projectId,
+                    runtime.runtimeId,
+                    {
+                        action: "create",
+                        agentId: runtime.agentRef,
+                        directoryId: "default",
+                        additionalDirectoryIds: [],
+                    },
+                    scope.signal,
+                );
+                if (result.action !== "create") {
+                    throw new PlatformProjectError("INVALID_SESSION", "Codex did not create a Session.", 502);
+                }
+                return {
+                    sessionId: result.nativeSessionId,
+                    title: "New chat",
+                    directoryId: "default",
+                    additionalDirectoryIds: [],
+                };
+            }
+            const found = await this.#platform.findNativeSessionByNativeSessionId(
+                scope.projectId,
+                runtime.runtimeId,
+                {
+                    agentId: runtime.agentRef,
+                    directoryId: "default",
+                    additionalDirectoryIds: [],
+                    nativeSessionId: input.sessionId,
+                },
+                scope.signal,
+            );
+            if (found.entry.nativeSessionId !== input.sessionId) {
+                throw new PlatformProjectError("INVALID_SESSION", "Codex returned a different Session.", 502);
+            }
+            return {
+                sessionId: found.entry.nativeSessionId,
+                title: found.entry.title || "New chat",
+                directoryId: found.entry.directoryId,
+                additionalDirectoryIds: found.entry.additionalDirectories.map((item) => item.directoryId),
+            };
+        })();
+        const sessionId = selected.sessionId;
         await this.#chatSessions.save(
             scope.projectId,
             scope.userId,
             scope.botId,
-            { isExternal: false, id: sessionId, title: "New chat" },
+            {
+                isExternal: false,
+                id: sessionId,
+                title: selected.title,
+                directoryId: selected.directoryId,
+                additionalDirectoryIds: selected.additionalDirectoryIds,
+            },
             scope.signal,
         );
         this.#logger.info(

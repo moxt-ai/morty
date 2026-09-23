@@ -11,6 +11,8 @@ const summarySchema = v.pipe(
         isExternal: v.boolean(),
         id: platformIdentifier,
         title: v.pipe(v.string(), v.maxLength(500)),
+        directoryId: v.pipe(v.string(), v.minLength(1), v.maxLength(2048)),
+        additionalDirectoryIds: v.array(v.pipe(v.string(), v.minLength(1), v.maxLength(2048))),
     }),
     v.readonly(),
 );
@@ -38,6 +40,8 @@ export class ManagedSessionStorage {
                 isExternal: chatManagedSession.isExternal,
                 id: chatManagedSession.resourceId,
                 title: chatManagedSession.title,
+                directoryId: chatManagedSession.directoryId,
+                additionalDirectoryIdsJson: chatManagedSession.additionalDirectoryIdsJson,
             })
             .from(chatManagedSession)
             .where(
@@ -50,7 +54,13 @@ export class ManagedSessionStorage {
             )
             .orderBy(desc(chatManagedSession.createdAt), chatManagedSession.resourceId);
         signal.throwIfAborted();
-        return v.parse(v.array(summarySchema), result);
+        return v.parse(
+            v.array(summarySchema),
+            result.map((row) => {
+                const additionalDirectoryIds: unknown = JSON.parse(row.additionalDirectoryIdsJson);
+                return { ...row, additionalDirectoryIds };
+            }),
+        );
     };
 
     readonly archive = async (
@@ -85,10 +95,22 @@ export class ManagedSessionStorage {
         projectId: string,
         userId: string,
         botId: string,
-        record: { readonly isExternal: boolean; readonly id: string; readonly title: string },
+        record: {
+            readonly isExternal: boolean;
+            readonly id: string;
+            readonly title: string;
+            readonly directoryId?: string;
+            readonly additionalDirectoryIds?: readonly string[];
+        },
         signal: AbortSignal,
     ) => {
-        const value = v.parse(summarySchema, { ...record, projectId, userId });
+        const value = v.parse(summarySchema, {
+            ...record,
+            directoryId: record.directoryId ?? "default",
+            additionalDirectoryIds: record.additionalDirectoryIds ?? [],
+            projectId,
+            userId,
+        });
         signal.throwIfAborted();
         await this.#requireDatabase()
             .insert(chatManagedSession)
@@ -99,6 +121,8 @@ export class ManagedSessionStorage {
                 isExternal: value.isExternal,
                 resourceId: value.id,
                 title: value.title,
+                directoryId: value.directoryId,
+                additionalDirectoryIdsJson: JSON.stringify(value.additionalDirectoryIds),
                 createdAt: Date.now(),
             })
             .onConflictDoNothing()

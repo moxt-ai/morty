@@ -939,9 +939,6 @@ async function readChannelHistoryWithSignal(channelId: string, signal: AbortSign
                 throw new PairingApiError("invalid_relay_response", "The runtime returned an invalid session list.");
             }
             for (const entry of result.entries) {
-                if (entry.mobiusSessionIds.length === 0) {
-                    continue;
-                }
                 const history = await client.manageNativeSession(
                     {
                         ...identity,
@@ -958,24 +955,22 @@ async function readChannelHistoryWithSignal(channelId: string, signal: AbortSign
                         "The runtime returned invalid session history.",
                     );
                 }
-                for (const sessionId of entry.mobiusSessionIds) {
-                    sessions.push(
-                        new RecordedSession(
-                            "codex",
-                            "workspace",
-                            1,
-                            entry.directoryId,
-                            connection.runtimeId,
-                            sessionId,
-                            entry.title,
-                            entry.updatedAt ?? new Date(0).toISOString(),
-                            history.history,
-                            [],
-                            [],
-                            entry.additionalDirectories.map((directory) => directory.directoryId),
-                        ),
-                    );
-                }
+                sessions.push(
+                    new RecordedSession(
+                        "codex",
+                        "workspace",
+                        1,
+                        entry.directoryId,
+                        connection.runtimeId,
+                        entry.nativeSessionId,
+                        entry.title,
+                        entry.updatedAt ?? new Date(0).toISOString(),
+                        history.history,
+                        [],
+                        [],
+                        entry.additionalDirectories.map((directory) => directory.directoryId),
+                    ),
+                );
             }
             cursor = result.nextCursor;
         } while (cursor !== null);

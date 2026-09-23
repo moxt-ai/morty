@@ -58,19 +58,20 @@ async function localHistory(
     botId: string,
     agentRef: string,
     sessionId: string,
+    directoryId: string,
+    additionalDirectoryIds: readonly string[],
     signal: AbortSignal,
 ): Promise<{ readonly entry: NativeSessionEntry | null; readonly messages: readonly NativeHistoryMessage[] }> {
     const result = await client.manageNativeSession(
         {
             ...nativeRequest(botId, agentRef, crypto.randomUUID()),
+            directoryId,
+            additionalDirectoryIds,
             action: "linked-history",
             targetSessionId: sessionId,
         },
         signal,
     );
-    if (result.action === "unlinked-history") {
-        return { entry: null, messages: [] };
-    }
     if (result.action !== "linked-history") {
         throw new Error("Codex returned invalid history.");
     }
@@ -113,7 +114,21 @@ export function LocalCodexChat({
     const refreshHistory = useCallback(
         async (client: MobiusChannelClient, agentRef: string, sessionId: string, signal: AbortSignal) => {
             try {
-                const history = await localHistory(client, bot.botId, agentRef, sessionId, signal);
+                const saved = (await requests.localSessions(bot.botId, signal)).find(
+                    (session) => session.id === sessionId,
+                );
+                if (saved === undefined) {
+                    throw new Error("The Chat session is no longer available.");
+                }
+                const history = await localHistory(
+                    client,
+                    bot.botId,
+                    agentRef,
+                    sessionId,
+                    saved.directoryId,
+                    saved.additionalDirectoryIds,
+                    signal,
+                );
                 signal.throwIfAborted();
                 if (selectedRef.current !== sessionId) {
                     return;
@@ -130,7 +145,7 @@ export function LocalCodexChat({
                 }
             }
         },
-        [bot.botId],
+        [bot.botId, requests],
     );
 
     useEffect(() => {
@@ -244,10 +259,11 @@ export function LocalCodexChat({
         };
     }, [bot.botId, refreshHistory, requests]);
 
-    const open = async (sessionId: string) => {
+    const open = async (session: ManagedChatSession) => {
         if (runtime.kind !== "ready" || lifetime.current === null) {
             return;
         }
+        const sessionId = session.id;
         setSelectedId(sessionId);
         selectedRef.current = sessionId;
         setMessages([]);
@@ -259,14 +275,24 @@ export function LocalCodexChat({
         window.history.replaceState(window.history.state, "", url);
         await refreshHistory(runtime.client, runtime.agentRef, sessionId, lifetime.current.signal);
     };
-    const newChat = async (): Promise<string | null> => {
+    const newChat = async (): Promise<ManagedChatSession | null> => {
         if (runtime.kind !== "ready" || lifetime.current === null) {
             return null;
         }
-        const created = await requests.createLocalSession(bot.botId, lifetime.current.signal);
-        setSessions(await requests.localSessions(bot.botId, lifetime.current.signal));
-        await open(created.sessionId);
-        return created.sessionId;
+        try {
+            const created = await requests.createLocalSession(bot.botId, { action: "create" }, lifetime.current.signal);
+            const saved = await requests.localSessions(bot.botId, lifetime.current.signal);
+            const session = saved.find((item) => item.id === created.sessionId);
+            if (session === undefined) {
+                throw new Error("The new Codex session was not saved by Chat.");
+            }
+            setSessions(saved);
+            await open(session);
+            return session;
+        } catch (error) {
+            setHistoryError(failureMessage(error));
+            return null;
+        }
     };
     const send = async () => {
         if (
@@ -279,10 +305,11 @@ export function LocalCodexChat({
             return;
         }
         const prompt = draft.trim();
-        const sessionId = selectedId ?? (await newChat());
-        if (sessionId === null) {
+        const session = selectedId === null ? await newChat() : sessions.find((item) => item.id === selectedId);
+        if (session === null || session === undefined) {
             return;
         }
+        const sessionId = session.id;
         const commandId = crypto.randomUUID();
         setDraft("");
         setTurn({ kind: "running", commandId, sessionId, prompt, text: "" });
@@ -291,7 +318,8 @@ export function LocalCodexChat({
                 agentId: runtime.agentRef,
                 bindingId: bot.botId,
                 commandId,
-                directoryId: "default",
+                directoryId: session.directoryId,
+                additionalDirectoryIds: session.additionalDirectoryIds,
                 prompt,
                 sessionConfigurations: [
                     {
@@ -349,22 +377,19 @@ export function LocalCodexChat({
             return;
         }
         try {
-            const created = await requests.createLocalSession(bot.botId, lifetime.current.signal);
-            const result = await runtime.client.manageNativeSession(
-                {
-                    ...nativeRequest(bot.botId, runtime.agentRef, crypto.randomUUID()),
-                    action: "import",
-                    entryId: entry.entryId,
-                    targetSessionId: created.sessionId,
-                },
+            const created = await requests.createLocalSession(
+                bot.botId,
+                { action: "import", sessionId: entry.nativeSessionId },
                 lifetime.current.signal,
             );
-            if (result.action !== "import") {
-                throw new Error("Codex could not import this session.");
+            const saved = await requests.localSessions(bot.botId, lifetime.current.signal);
+            const session = saved.find((item) => item.id === created.sessionId);
+            if (session === undefined) {
+                throw new Error("The imported Codex session was not saved by Chat.");
             }
-            setSessions(await requests.localSessions(bot.botId, lifetime.current.signal));
+            setSessions(saved);
             setNativeEntries(null);
-            await open(created.sessionId);
+            await open(session);
         } catch (error) {
             setHistoryError(failureMessage(error));
         }
@@ -467,7 +492,7 @@ export function LocalCodexChat({
                             aria-current={selectedId === session.id ? "page" : undefined}
                             className="min-h-10 rounded-lg px-2 text-left text-sm hover:bg-muted aria-[current=page]:bg-muted"
                             key={session.id}
-                            onClick={() => void open(session.id)}
+                            onClick={() => void open(session)}
                             type="button"
                         >
                             {titles.get(session.id) ?? session.title}

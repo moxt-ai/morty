@@ -45,6 +45,8 @@ const managedSessionSchema = v.pipe(
         id: identifier,
         title: v.string(),
         directoryLabel: v.string(),
+        directoryId: v.string(),
+        additionalDirectoryIds: v.array(v.string()),
         projectId: identifier,
         userId: identifier,
     }),
@@ -86,7 +88,7 @@ const sessionAccessSchema = v.object({
 });
 const localSessionEntrySchema = v.object({
     entryId: identifier,
-    mobiusSessionIds: v.optional(v.array(identifier), []),
+    nativeSessionId: identifier,
     title: v.string(),
     directoryId: v.string(),
     directoryLabel: v.string(),
@@ -193,10 +195,14 @@ export class BotChatApi {
             v.object({ sessions: v.array(managedSessionSchema) }),
             await this.#request(botId, "local-sessions", {}, signal),
         ).sessions;
-    readonly createLocalSession = async (botId: string, signal: AbortSignal) =>
+    readonly createLocalSession = async (
+        botId: string,
+        input: { readonly action: "create" } | { readonly action: "import"; readonly sessionId: string },
+        signal: AbortSignal,
+    ) =>
         v.parse(
             v.object({ sessionId: identifier, runtimeId: identifier, agentRef: identifier }),
-            await this.#request(botId, "local-sessions/create", {}, signal),
+            await this.#request(botId, "local-sessions/create", input, signal),
         );
     readonly connectLocalRuntime = async (
         botId: string,
@@ -330,7 +336,7 @@ export class BotChatApi {
         },
         entry: {
             entryId: access.sessionId,
-            mobiusSessionIds: [],
+            nativeSessionId: access.sessionId,
             title: "",
             directoryId: access.workspaceRef,
             directoryLabel,

@@ -36,6 +36,13 @@ const nativeContinuationInput = v.strictObject({
     sessionId: platformIdentifier,
 });
 const nativeSessionInput = v.strictObject({ sessionId: platformIdentifier });
+const localNativeSessionInput = v.variant("action", [
+    v.strictObject({ action: v.literal("create") }),
+    v.strictObject({
+        action: v.literal("import"),
+        sessionId: v.pipe(v.string(), v.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu)),
+    }),
+]);
 const steerTurnInput = v.strictObject({ sessionId: platformIdentifier, turnId: platformIdentifier });
 const sessionConfiguration = v.strictObject({
     booleanValue: v.boolean(),
@@ -189,9 +196,19 @@ export function createBotChatRoutes() {
                     timing: context.get("operationTiming"),
                 }),
         )
-        .post("/bots/:botId/local-sessions/create", authenticatedSession, authorizedChat(), async (context) => {
-            return privateJson(await context.env.services.chat.createLocalSession(context.get("chatScope")));
-        })
+        .post(
+            "/bots/:botId/local-sessions/create",
+            authenticatedSession,
+            authorizedChat(),
+            bodyParser<AuthorizedChatEnvironment, typeof localNativeSessionInput>(localNativeSessionInput),
+            async (context) =>
+                privateJson(
+                    await context.env.services.chat.createLocalSession(
+                        context.get("chatScope"),
+                        context.req.valid("json"),
+                    ),
+                ),
+        )
         .post(
             "/bots/:botId/local-session-access",
             authenticatedSession,

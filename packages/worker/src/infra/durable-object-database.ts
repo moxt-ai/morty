@@ -17,6 +17,7 @@ import removeUnusedSlackConfigToken from "../../migrations/project-do/0016_damp_
 import renameSlackProcessedEvent from "../../migrations/project-do/0017_smooth_abomination.sql?raw";
 import replaceManagedSessionMetadata from "../../migrations/project-do/0018_bumpy_ares.sql?raw";
 import addManagedBotAgentRef from "../../migrations/project-do/0019_grey_clea.sql?raw";
+import addLocalSessionDirectories from "../../migrations/project-do/0020_minor_vision.sql?raw";
 
 const migrations = [
     management,
@@ -38,6 +39,7 @@ const migrations = [
     renameSlackProcessedEvent,
     replaceManagedSessionMetadata,
     addManagedBotAgentRef,
+    addLocalSessionDirectories,
 ];
 
 type BoundValue = ArrayBuffer | string | number | null;
