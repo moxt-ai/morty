@@ -12,9 +12,6 @@
     },
     "devDependencies": {
         "@moxt-ai/mobius-sdk": "workspace:*",
-        "@playwright/test": "catalog:",
-        "@types/pngjs": "catalog:",
-        "jsqr": "catalog:",
-        "pngjs": "catalog:"
+        "@playwright/test": "catalog:"
     }
 }
