@@ -1,4 +1,4 @@
-import { ChevronDown, Laptop, LoaderCircle, MessageSquare, RefreshCw, Share2, SquarePen } from "lucide-react";
+import { ChevronDown, Laptop, LoaderCircle, LogOut, MessageSquare, RefreshCw, Share2, SquarePen } from "lucide-react";
 import { ContextMenu, Tooltip } from "radix-ui";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
@@ -10,6 +10,7 @@ import type { IdentityTransfer } from "../../services/identity/anonymous-identit
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import type { BotConnectionStatus, BotOperation } from "../../view-models/chat/bot-chat-home-store.ts";
 import { createConversationDirectoryStore } from "../../view-models/chat/conversation-directory-store.ts";
+import { createRemoteAccessStore } from "../../view-models/chat/remote-access-store.ts";
 import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
 import { BotSwitcherMenu } from "./bot-switcher-menu.tsx";
 import { MachineSharing } from "./machine-sharing.tsx";
@@ -82,6 +83,8 @@ export function ConversationSidebar({
     const [expanded, setExpanded] = useState(false);
     const [dialog, setDialog] = useState(false);
     const [sharing, setSharing] = useState(false);
+    const [remoteAccess] = useState(() => createRemoteAccessStore(endRemoteAccess));
+    const access = useStore(remoteAccess);
     const lifetime = useRef<AbortController | null>(null);
     const sessions =
         directory.kind === "ready" || directory.kind === "refreshing" || directory.kind === "stale"
@@ -284,28 +287,42 @@ export function ConversationSidebar({
                                 >
                                     Archive conversation
                                 </ContextMenu.Item>
-                                {activeId === session.id && (
-                                    <ContextMenu.Item
-                                        className="cursor-pointer rounded-md px-3 py-2 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-accent"
-                                        onSelect={() => {
-                                            const controller = lifetime.current;
-                                            if (controller !== null) {
-                                                void endRemoteAccess(controller.signal);
-                                            }
-                                        }}
-                                    >
-                                        End remote access
-                                    </ContextMenu.Item>
-                                )}
                             </ContextMenu.Content>
                         </ContextMenu.Portal>
                     </ContextMenu.Root>
                 ))}
             </div>
-            <div className="mt-3 border-t border-black/[0.06] pt-3">
+            <div className="mt-3 flex items-center gap-1 border-t border-black/[0.06] pt-3">
+                {access.state.kind !== "ended" && (
+                    <Tooltip.Provider delayDuration={150}>
+                        <Tooltip.Root>
+                            <Tooltip.Trigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="min-h-10 shrink-0 rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                    aria-label="End remote access"
+                                    onClick={access.requestEnd}
+                                >
+                                    <LogOut className="size-4" aria-hidden="true" />
+                                </Button>
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal>
+                                <Tooltip.Content
+                                    className="z-[70] rounded-lg bg-foreground px-2.5 py-1.5 text-xs text-background shadow-lg"
+                                    side="top"
+                                    sideOffset={6}
+                                >
+                                    End remote access
+                                    <Tooltip.Arrow className="fill-foreground" />
+                                </Tooltip.Content>
+                            </Tooltip.Portal>
+                        </Tooltip.Root>
+                    </Tooltip.Provider>
+                )}
                 <Button
                     variant="ghost"
-                    className="w-full min-h-10 justify-start rounded-xl px-3 text-copy-secondary hover:bg-white/70"
+                    className="min-h-10 flex-1 justify-start rounded-xl px-3 text-copy-secondary hover:bg-white/70"
                     data-testid={dataTestId.shareMachine}
                     onClick={() => setSharing(true)}
                 >
@@ -332,6 +349,39 @@ export function ConversationSidebar({
                     onClose={() => setSharing(false)}
                 >
                     <MachineSharing createTransfer={createTransfer} />
+                </Dialog>
+            )}
+            {(access.state.kind === "confirming" ||
+                access.state.kind === "ending" ||
+                access.state.kind === "failed") && (
+                <Dialog
+                    busy={access.state.kind === "ending"}
+                    title="End remote access?"
+                    description="This will sign out every browser using this access link and prevent the link from being used again. Your local Runtime and task will keep running."
+                    onClose={access.cancelEnd}
+                >
+                    {access.state.kind === "failed" && (
+                        <p className="text-sm text-destructive" role="alert">
+                            {access.state.message}
+                        </p>
+                    )}
+                    <div className="mt-5 flex justify-end gap-2">
+                        <Button disabled={access.state.kind === "ending"} onClick={access.cancelEnd} variant="ghost">
+                            Cancel
+                        </Button>
+                        <Button
+                            disabled={access.state.kind === "ending"}
+                            onClick={() => {
+                                const controller = lifetime.current;
+                                if (controller !== null) {
+                                    void access.end(controller.signal);
+                                }
+                            }}
+                            variant="destructive"
+                        >
+                            {access.state.kind === "ending" ? "Ending…" : "End remote access"}
+                        </Button>
+                    </div>
                 </Dialog>
             )}
         </aside>

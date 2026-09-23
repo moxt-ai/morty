@@ -285,7 +285,6 @@ export function BotChatHome({
                     key={model.sessionView.session.result.ready.sessionId}
                     session={model.sessionView.session}
                     initialMessage={model.creation.kind === "draft-message-sent" ? model.creation.message : undefined}
-                    endRemoteAccess={endRemoteAccess}
                     onConnectionStatusChange={onConnectionStatusChange}
                     onStatusChange={onStatusChange}
                 />

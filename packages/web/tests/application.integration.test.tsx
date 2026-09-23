@@ -148,6 +148,24 @@ test("Given the conversation directory is loading, When the workspace appears, T
     expect((await loadingStatus).getAttribute("aria-label")).toBe("Loading conversations");
 });
 
+test("Given a shared workspace, When the user chooses to end remote access from the sidebar footer, Then they must confirm the transfer-wide revocation", {
+    timeout: 30_000,
+}, async () => {
+    await renderWorkspace();
+    const endAccess = await act(async () => await waitForElement('button[aria-label="End remote access"]'));
+    const shareMachine = await act(async () => await waitForElement(`[data-testid="${dataTestId.shareMachine}"]`));
+
+    expect(endAccess.parentElement).toBe(shareMachine.parentElement);
+    await act(async () => endAccess.click());
+
+    const dialog = await act(async () => await waitForElement('[role="dialog"]'));
+    expect(dialog.textContent).toContain("End remote access?");
+    expect(dialog.textContent).toContain("every browser using this access link");
+    expect(dialog.textContent).toContain("Your local Runtime and task will keep running");
+    expect(dialog.textContent).toContain("Cancel");
+    expect(dialog.textContent).toContain("End remote access");
+});
+
 test("Given a conversation is working, When a user starts a new conversation, Then the background conversation keeps its working indicator", {
     timeout: 30_000,
 }, async () => {

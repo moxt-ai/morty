@@ -33,7 +33,6 @@ export function MobiusSessionPane({
     initialMessage,
     botId,
     requests,
-    endRemoteAccess,
     onConnectionStatusChange,
     onStatusChange,
 }: {
@@ -41,7 +40,6 @@ export function MobiusSessionPane({
     readonly initialMessage?: QueuedDraftMessage | undefined;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession" | "steerTurn" | "submitTurn">;
-    readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
     readonly onConnectionStatusChange: (sessionId: string, connection: SessionConnectionKind) => void;
     readonly onStatusChange: (sessionId: string, status: SessionActivityState) => void;
 }) {
@@ -51,7 +49,6 @@ export function MobiusSessionPane({
             session,
             botId,
             requests,
-            endRemoteAccess,
         }),
     );
     const model = useStore(pane.store);
