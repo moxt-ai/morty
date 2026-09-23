@@ -105,38 +105,66 @@ export function useLocalAgentChat({
     const [nativeEntries, setNativeEntries] = useState<readonly NativeSessionEntry[] | null>(null);
     const lifetime = useRef<AbortController | null>(null);
     const connectionRef = useRef<{ readonly client: MobiusChannelClient; readonly agentRef: string } | null>(null);
+    const historyRequest = useRef<{
+        readonly sessionId: string;
+        readonly controller: AbortController;
+        readonly completion: Promise<void>;
+    } | null>(null);
     const onlineRef = useRef(false);
     const refreshHistory = useCallback(
-        async (client: MobiusChannelClient, agentRef: string, sessionId: string, signal: AbortSignal) => {
-            const revision = historyStore.getState().begin(sessionId);
-            if (revision === null) {
+        async (client: MobiusChannelClient, agentRef: string, sessionId: string, parent: AbortSignal) => {
+            const previous = historyRequest.current;
+            if (previous?.sessionId === sessionId) {
+                await previous.completion;
                 return;
             }
+            previous?.controller.abort(new Error("Another Session was selected"));
+            const controller = new AbortController();
+            const signal = AbortSignal.any([parent, controller.signal]);
+            const completion = (async () => {
+                await previous?.completion;
+                if (signal.aborted) {
+                    return;
+                }
+                const revision = historyStore.getState().begin(sessionId);
+                if (revision === null) {
+                    return;
+                }
+                try {
+                    const saved = (await requests.localSessions(bot.botId, signal)).find(
+                        (session) => session.id === sessionId,
+                    );
+                    if (saved === undefined) {
+                        throw new Error("The Chat session is no longer available.");
+                    }
+                    const history = await localHistory(
+                        client,
+                        bot.botId,
+                        agentRef,
+                        sessionId,
+                        saved.directoryId,
+                        saved.additionalDirectoryIds,
+                        signal,
+                    );
+                    signal.throwIfAborted();
+                    historyStore.getState().complete(sessionId, revision, history);
+                    const firstPrompt = history.messages.find((message) => message.role === "user")?.text.trim();
+                    if (firstPrompt) {
+                        setTitles((current) => new Map(current).set(sessionId, firstPrompt.slice(0, 60)));
+                    }
+                } catch (error) {
+                    if (!signal.aborted) {
+                        historyStore.getState().fail(sessionId, revision, failureMessage(error));
+                    }
+                }
+            })();
+            const current = { sessionId, controller, completion };
+            historyRequest.current = current;
             try {
-                const saved = (await requests.localSessions(bot.botId, signal)).find(
-                    (session) => session.id === sessionId,
-                );
-                if (saved === undefined) {
-                    throw new Error("The Chat session is no longer available.");
-                }
-                const history = await localHistory(
-                    client,
-                    bot.botId,
-                    agentRef,
-                    sessionId,
-                    saved.directoryId,
-                    saved.additionalDirectoryIds,
-                    signal,
-                );
-                signal.throwIfAborted();
-                historyStore.getState().complete(sessionId, revision, history);
-                const firstPrompt = history.messages.find((message) => message.role === "user")?.text.trim();
-                if (firstPrompt) {
-                    setTitles((current) => new Map(current).set(sessionId, firstPrompt.slice(0, 60)));
-                }
-            } catch (error) {
-                if (!signal.aborted) {
-                    historyStore.getState().fail(sessionId, revision, failureMessage(error));
+                await completion;
+            } finally {
+                if (historyRequest.current === current) {
+                    historyRequest.current = null;
                 }
             }
         },
@@ -247,6 +275,7 @@ export function useLocalAgentChat({
         })();
         return () => {
             controller.abort();
+            historyRequest.current?.controller.abort();
             connectionRef.current = null;
             onlineRef.current = false;
             if (lifetime.current === controller) {

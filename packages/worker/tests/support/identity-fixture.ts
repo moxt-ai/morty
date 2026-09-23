@@ -128,6 +128,7 @@ export async function createIdentityFixture(
         return {
             baseConfiguration,
             connectAgent: platform.connectAgent,
+            platformRequest: platform.app.request,
             createAnonymousUser,
             dispatchFetch: cloudflare.dispatchFetch.bind(cloudflare),
             environment,
