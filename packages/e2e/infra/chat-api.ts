@@ -101,6 +101,13 @@ export class ChatApi {
         });
     }
 
+    async createAgentPairing() {
+        const identity = this.#requireIdentity();
+        return await this.#request("/morty/api/identity/pairings", {
+            body: { botId: identity.botId },
+        });
+    }
+
     readonly cancelSessionTurn = async (sessionId: string, turnId: string) => {
         const identity = this.#requireIdentity();
         const access = await this.#request(

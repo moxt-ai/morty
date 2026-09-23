@@ -1,7 +1,23 @@
 import { readFile, realpath, stat } from "node:fs/promises";
 import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
+import { text } from "./infra/chat-api.ts";
 import { expect, test } from "./infra/test.ts";
+
+test("Given another Project has a managed Runtime, When pair redeems a Bot ticket, Then it creates a fresh Runtime for the ticket Project", async ({
+    runtime,
+}) => {
+    await runtime.openChat();
+    await runtime.connectUnrelatedRuntime();
+    const instructionUrl = await runtime.createPairInstruction();
+
+    const connected = await runtime.followInstructions(instructionUrl);
+    const statuses = connected.events.map((event) => event.status);
+
+    expect(statuses).toContain("prepared");
+    expect(statuses).not.toContain("runtime_reused");
+    expect(statuses).toContain("ready");
+});
 
 test("Given a saved setup handoff, When its Runtime reconnects, Then setup waits for the agent to come online", async ({
     runtime,
@@ -42,10 +58,12 @@ test("Given a setup handoff, When a user imports a native session, Then the hand
         expect(connected.workspace).toBe(await realpath(runtime.workspace));
         const statuses = connected.events.map((event) => event.status);
         expect(statuses.indexOf("runtime_paired")).toBeLessThan(statuses.indexOf("binding_activated"));
-        expect((await stat(connected.qrTextPath)).mode & 0o777).toBe(0o600);
-        expect(await readFile(connected.qrTextPath, "utf8")).toContain("█");
-        expect((await stat(connected.qrPath)).mode & 0o777).toBe(0o600);
-        const image = PNG.sync.read(await readFile(connected.qrPath));
+        const qrTextPath = text(connected.qrTextPath, "terminal QR path");
+        const qrPath = text(connected.qrPath, "QR path");
+        expect((await stat(qrTextPath)).mode & 0o777).toBe(0o600);
+        expect(await readFile(qrTextPath, "utf8")).toContain("█");
+        expect((await stat(qrPath)).mode & 0o777).toBe(0o600);
+        const image = PNG.sync.read(await readFile(qrPath));
         const decoder: unknown = jsQrImport;
         expect(typeof decoder).toBe("function");
         if (typeof decoder === "function") {

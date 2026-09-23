@@ -64,11 +64,17 @@ test("Given setup and pairing documents, When users fetch them from configured a
         const document = await response.text();
         documents.set(name, document);
         expect(document).toContain('BASE_URL="https://chat.example"');
+        expect(document).toContain('BASE_URL="https://chat.example"\n');
+        expect(document).not.toMatch(/^BASE_URL=.*\bnode\b/mu);
         expect(document).toContain("https://chat.example/setup.mjs");
         expect(document).not.toMatch(/\{\{.*\}\}|preview\.example|paradev\.biz|paraflow\.biz|token=ticket/);
     }
     expect(documents.get("pair")).toContain("existing user, Bot, and workspace");
+    expect(documents.get("pair")).toContain('TOKEN="<one-use token from the supplied URL>"');
+    expect(documents.get("pair")).toContain('node "$SCRIPT_DIR/setup.mjs" pair --base-url "$BASE_URL"');
     expect(documents.get("pair")).toContain("Mobius owns Runtime connection state and identifiers");
+    expect(documents.get("setup")).toContain('SESSION_ID="<current harness session ID>"');
+    expect(documents.get("setup")).toContain('node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL"');
     expect(documents.get("setup")).toContain("first reconnects a Mobius-managed");
     expect(documents.get("setup")).toContain("Do not retain or back up App");
 

@@ -11,7 +11,7 @@
         "typecheck": "tsc --project tsconfig.json"
     },
     "devDependencies": {
-        "@moxt-ai/mobius-sdk": "workspace:*",
+        "@moxt-ai/mobius-sdk": "catalog:",
         "@playwright/test": "catalog:",
         "@types/pngjs": "catalog:",
         "jsqr": "catalog:",
