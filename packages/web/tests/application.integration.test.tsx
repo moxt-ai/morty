@@ -228,6 +228,26 @@ test("Given a paired Bot, When a user filters its models and requests an image, 
     ]);
 });
 
+test("Given an Agent links a local file location, When a user opens it, Then the source file is previewed", {
+    timeout: 30_000,
+}, async () => {
+    const created = await renderWorkspace();
+    const { failure } = await act(async () => await created.connectAgent());
+    const composer = await act(async () => {
+        await waitForText(`[data-testid="${dataTestId.botConnectionStatus}"]`, "Connected");
+        return await waitForElement(`[data-testid="${dataTestId.messageComposer}"]`);
+    });
+
+    await sendPrompt(composer as HTMLTextAreaElement, "Create an image");
+    const link = await Promise.race([waitForElement(`[data-testid="${dataTestId.localFileLink}"]`), failure]);
+    await act(async () => link.click());
+
+    await act(
+        async () =>
+            await waitForText(`[data-testid="${dataTestId.filePreviewContent}"]`, "export const generated = true;"),
+    );
+});
+
 test("Given a user follows the latest message, When a response streams, Then the latest content remains visible", {
     timeout: 30_000,
 }, async () => {
