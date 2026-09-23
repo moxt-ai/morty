@@ -64,7 +64,10 @@ test("Given a setup handoff, When a user imports a native session, Then the hand
     });
 
     await test.step("end remote access", async () => {
-        await page.locator('[aria-current="page"]').click({ button: "right" });
-        await page.getByText("End remote access", { exact: true }).click();
+        await page.getByRole("button", { name: "End remote access", exact: true }).click();
+        const dialog = page.getByRole("dialog", { name: "End remote access?" });
+        await expect(dialog).toContainText("every browser using this access link");
+        await dialog.getByRole("button", { name: "End remote access", exact: true }).click();
+        await expect(dialog).toBeHidden();
     });
 });
