@@ -39,7 +39,7 @@ export function BotChatHome({
     readonly selectedBotPreference: SelectedBotPreference;
 }) {
     const [home, setHome] = useState<HomeState>({ kind: "loading" });
-    const [connected, setConnected] = useState(false);
+    const [connectedBotId, setConnectedBotId] = useState<string | null>(null);
     const [pairingOpen, setPairingOpen] = useState(false);
     const [botName, setBotName] = useState("");
     const [operationError, setOperationError] = useState<string | null>(null);
@@ -69,6 +69,7 @@ export function BotChatHome({
     }, [requests, selectedBotPreference]);
 
     const selectedId = home.kind === "ready" ? home.selected.botId : null;
+    const connected = selectedId !== null && connectedBotId === selectedId;
     useEffect(() => {
         if (selectedId === null) {
             return;
@@ -83,16 +84,16 @@ export function BotChatHome({
                     if (workspace.status === "active") {
                         const configuration = await requests.localRuntime(selectedId, controller.signal);
                         controller.signal.throwIfAborted();
-                        setConnected(
+                        if (
                             workspace.agents.some(
                                 (agent) =>
                                     agent.runtimeId === configuration.runtimeId &&
                                     agent.agentRef === configuration.agentRef &&
                                     agent.online,
-                            ),
-                        );
-                    } else {
-                        setConnected(false);
+                            )
+                        ) {
+                            setConnectedBotId(selectedId);
+                        }
                     }
                     await requests.waitForWorkspaceChange(selectedId, controller.signal);
                 } catch (cause) {
@@ -102,7 +103,6 @@ export function BotChatHome({
                     if (cause instanceof DOMException && cause.name === "TimeoutError") {
                         continue;
                     }
-                    setConnected(false);
                     setOperationError(errorMessage(cause));
                     return;
                 }
@@ -121,7 +121,7 @@ export function BotChatHome({
             return;
         }
         selectedBotPreference.write(botId);
-        setConnected(false);
+        setConnectedBotId(null);
         setHome({ ...home, selected });
     };
     const createBot = async () => {
@@ -140,6 +140,7 @@ export function BotChatHome({
                     : { kind: "ready", bots: [bot], selected: bot },
             );
             setBotName("");
+            setConnectedBotId(null);
             setPairingOpen(true);
         } catch (cause) {
             setOperationError(errorMessage(cause));
@@ -162,6 +163,7 @@ export function BotChatHome({
             }
             selectedBotPreference.write(selected.botId);
             setHome({ kind: "ready", bots, selected });
+            setConnectedBotId(null);
         } catch (cause) {
             setOperationError(errorMessage(cause));
         } finally {
@@ -178,6 +180,30 @@ export function BotChatHome({
             </main>
         );
     }
+    const botActions = (
+        <>
+            <input
+                aria-label="New Bot name"
+                className="w-full rounded border px-2 py-1 text-sm"
+                maxLength={80}
+                onChange={(event) => setBotName(event.target.value)}
+                value={botName}
+            />
+            <Button className="w-full" disabled={busy || botName.trim().length === 0} onClick={() => void createBot()}>
+                Add Bot
+            </Button>
+            {home.bots.length > 1 && (
+                <Button className="w-full" disabled={busy} onClick={() => void removeBot()} variant="outline">
+                    Remove Bot
+                </Button>
+            )}
+            {connected && (
+                <Button className="w-full" onClick={() => setPairingOpen(true)} variant="outline">
+                    Pair
+                </Button>
+            )}
+        </>
+    );
     return (
         <>
             {connected ? (
@@ -186,6 +212,7 @@ export function BotChatHome({
                     bot={home.selected}
                     bots={home.bots}
                     onSelectBot={selectBot}
+                    botActions={botActions}
                     requests={requests}
                 />
             ) : (
@@ -194,31 +221,12 @@ export function BotChatHome({
                         <h1 className="text-2xl font-semibold">{home.selected.displayName}</h1>
                         <p className="text-muted-foreground">Connect a local Agent to start chatting.</p>
                         <Button onClick={() => setPairingOpen(true)}>Pair Agent</Button>
+                        <div className="space-y-2">{botActions}</div>
                     </div>
                 </main>
             )}
-            <div className="fixed bottom-4 right-4 flex gap-2 rounded-lg border bg-background p-2 shadow-md">
-                <input
-                    aria-label="New Bot name"
-                    className="w-32 rounded border px-2 text-sm"
-                    maxLength={80}
-                    onChange={(event) => setBotName(event.target.value)}
-                    value={botName}
-                />
-                <Button disabled={busy || botName.trim().length === 0} onClick={() => void createBot()}>
-                    Add Bot
-                </Button>
-                {home.bots.length > 1 && (
-                    <Button disabled={busy} onClick={() => void removeBot()} variant="outline">
-                        Remove Bot
-                    </Button>
-                )}
-                <Button onClick={() => setPairingOpen(true)} variant="outline">
-                    Pair
-                </Button>
-            </div>
             {operationError !== null && (
-                <p className="fixed bottom-20 right-4 bg-background p-2 text-destructive" role="alert">
+                <p className="fixed bottom-4 right-4 bg-background p-2 text-destructive" role="alert">
                     {operationError}
                 </p>
             )}

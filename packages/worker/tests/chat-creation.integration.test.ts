@@ -24,7 +24,7 @@ afterEach(() => vi.useRealTimers());
 
 async function createChatFixture(
     nativeSessionIds: ReadonlySet<string> = new Set(),
-    agent: { readonly id: "codex" | "claude"; readonly name: string } = { id: "codex", name: "Codex" },
+    agent: { readonly id: "codex" | "claude" | "opencode"; readonly name: string } = { id: "codex", name: "Codex" },
 ) {
     const cloud = await createIdentityFixture();
     try {
@@ -135,10 +135,12 @@ test("given a configured Bot, when a user opens a conversation, then the unavail
 test.each([
     { id: "codex", name: "Codex" },
     { id: "claude", name: "Claude Code" },
+    { id: "opencode", name: "OpenCode" },
 ] as const)(
     "Given a configured $name Bot, When its owner starts a local conversation, Then Chat records only the Session ownership needed for Runtime access",
     async (agent) => {
-        const existingSessionId = crypto.randomUUID();
+        const existingSessionId =
+            agent.id === "opencode" ? `ses_${crypto.randomUUID().replaceAll("-", "")}` : crypto.randomUUID();
         const fixture = await createChatFixture(new Set([existingSessionId]), agent);
         try {
             expect(
@@ -154,7 +156,7 @@ test.each([
             });
             expect(created.status).toBe(200);
             const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await created.json());
-            expect(sessionId).toMatch(/^[0-9a-f-]{36}$/iu);
+            expect(sessionId).toMatch(agent.id === "opencode" ? /^ses_[a-z0-9]+$/iu : /^[0-9a-f-]{36}$/iu);
 
             const listed = await fixture.request(`chat/bots/${fixture.botId}/local-sessions`, {});
             expect(listed.status).toBe(200);
@@ -183,6 +185,7 @@ test.each([
 test.each([
     { id: "codex", name: "Codex" },
     { id: "claude", name: "Claude Code" },
+    { id: "opencode", name: "OpenCode" },
 ] as const)(
     "Given a $name Bot and owned native Session, When Chat sends through its Runtime channel, Then the local Agent replies",
     async (agent) => {

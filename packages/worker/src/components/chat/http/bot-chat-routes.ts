@@ -18,7 +18,7 @@ const localSessionInput = v.variant("action", [
     v.strictObject({ action: v.literal("create") }),
     v.strictObject({
         action: v.literal("import"),
-        sessionId: v.pipe(v.string(), v.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu)),
+        sessionId: platformIdentifier,
     }),
 ]);
 

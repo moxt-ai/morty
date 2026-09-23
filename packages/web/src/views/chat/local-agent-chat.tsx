@@ -6,7 +6,7 @@ import type {
 } from "@moxt-ai/mobius-protocol";
 import type { MobiusChannelClient } from "@moxt-ai/mobius-sdk/channel";
 import { History, LoaderCircle, Plus, Send, StopCircle } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
@@ -73,11 +73,13 @@ export function LocalAgentChat({
     bot,
     bots,
     onSelectBot,
+    botActions,
     requests,
 }: {
     readonly bot: ManagedBot;
     readonly bots: readonly ManagedBot[];
     readonly onSelectBot: (botId: string) => void;
+    readonly botActions: ReactNode;
     readonly requests: Pick<
         BotChatApi,
         "localRuntime" | "localSessions" | "createLocalSession" | "connectLocalRuntime" | "agentSettings"
@@ -487,6 +489,7 @@ export function LocalAgentChat({
                         </button>
                     ))}
                 </nav>
+                <div className="mt-3 space-y-2 border-t border-border pt-3">{botActions}</div>
             </aside>
             <section className="flex min-w-0 flex-1 flex-col">
                 <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-4 text-sm font-medium">
