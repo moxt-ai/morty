@@ -18,18 +18,22 @@ function isSafeLink(href: string): boolean {
     );
 }
 
+function withoutSourceLocation(path: string): string {
+    return path.replace(/:\d+(?::\d+)?$/u, "");
+}
+
 function localFilePath(href: string): string | null {
     if (href.startsWith("file:")) {
         try {
             const url = new URL(href);
-            return url.protocol === "file:" && url.host.length === 0 ? href : null;
+            return url.protocol === "file:" && url.host.length === 0 ? withoutSourceLocation(href) : null;
         } catch {
             return null;
         }
     }
     try {
         const decoded = decodeURI(href);
-        return decoded.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(decoded) ? decoded : null;
+        return decoded.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(decoded) ? withoutSourceLocation(decoded) : null;
     } catch {
         return null;
     }
