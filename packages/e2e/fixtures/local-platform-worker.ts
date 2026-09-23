@@ -42,7 +42,6 @@ const worker = createPlatformApplication(
 export default worker;
 
 export {
-    PlatformSessionRelay,
     ProjectRelay,
     RuntimeRelay,
 } from "../../../third-party/mobius/packages/relay-cloudflare-platform/src/worker.ts";

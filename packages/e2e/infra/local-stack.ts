@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { appendFile, mkdir } from "node:fs/promises";
 import { createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -226,25 +226,30 @@ export class LocalStack {
     }
 
     async startRuntime(args: readonly string[], workspace = this.directories.workspace) {
-        return await this.harness.start(
-            "mobius",
-            process.execPath,
-            [join(mobiusRepository, "packages", "cli", "dist", "cli.js"), ...args],
-            {
-                env: {
-                    MOBIUS_E2E_ACP_TRACE_DIRECTORY: join(this.harness.artifactDirectory, "acp"),
-                    MOBIUS_E2E_ACP_REAL_BIN: this.agent.acpBinary,
-                    MOBIUS_DEFAULT_WORKSPACE: workspace,
-                    PATH: dirname(process.execPath),
-                    [this.agent.adapterOverrideVariable]: acpProxy,
-                    MOBIUS_STATE_DIRECTORY: this.directories.runtime,
-                    XDG_CACHE_HOME: this.directories["xdg-cache"],
-                    XDG_CONFIG_HOME: this.directories["xdg-config"],
-                    XDG_DATA_HOME: this.directories["xdg-data"],
-                    XDG_STATE_HOME: this.directories["xdg-state"],
-                    ...this.agent.runtimeEnvironment,
-                },
-            },
-        );
+        const executable = join(mobiusRepository, "packages", "cli", "dist", "cli.js");
+        const environment = {
+            MOBIUS_E2E_ACP_TRACE_DIRECTORY: join(this.harness.artifactDirectory, "acp"),
+            MOBIUS_E2E_ACP_REAL_BIN: this.agent.acpBinary,
+            MOBIUS_DEFAULT_WORKSPACE: workspace,
+            PATH: dirname(process.execPath),
+            [this.agent.adapterOverrideVariable]: acpProxy,
+            MOBIUS_STATE_DIRECTORY: this.directories.runtime,
+            XDG_CACHE_HOME: this.directories["xdg-cache"],
+            XDG_CONFIG_HOME: this.directories["xdg-config"],
+            XDG_DATA_HOME: this.directories["xdg-data"],
+            XDG_STATE_HOME: this.directories["xdg-state"],
+            ...this.agent.runtimeEnvironment,
+        };
+        const manager =
+            this.harness.children.find((process) => process.name === "mobius")?.child ??
+            (await this.harness.start("mobius", process.execPath, [executable, "__manager"], {
+                env: environment,
+            }));
+        const result = await this.harness.run(process.execPath, [executable, ...args], {
+            env: environment,
+            label: `mobius ${args[0] ?? ""}`,
+        });
+        await appendFile(join(this.harness.artifactDirectory, "mobius.log"), result.stdout + result.stderr);
+        return manager;
     }
 }
