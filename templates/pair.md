@@ -50,17 +50,13 @@ HARNESS="<codex, claude, opencode, or oh-my-pi>"
 node "$SCRIPT_DIR/setup.mjs" pair --base-url "$BASE_URL" --cwd "$PWD" --token="$TOKEN" --harness "$HARNESS"
 ```
 
-This single command exchanges the ticket, reconnects a matching Mobius-managed
-connection or creates a fresh pairing for the current working directory, saves only
+This single command exchanges the ticket, creates a fresh Runtime pairing for the
+Project and Bot returned by that ticket and the current working directory, saves only
 the private Chat identity and Bot configuration, and launches the Runtime through the
 singleton local manager. After Runtime pairing reports
 the requested harness, the script immediately requests
-its Bot binding and checks readiness. Existing managed Runtime connections remain online.
-It creates a private temporary JSON file, runs
-`mobius pair list --output-json=<that-file>`, and reuses the Connection ID whose
-App ID matches the Chat request. The Runtime ID comes from that local connection
-record. If no match exists, it creates
-a new pairing. The setup configuration does not persist App, Runtime, Connection,
+its Bot binding and checks readiness. It does not list or reuse managed Runtime
+connections; those remain online. The setup configuration does not persist App, Runtime, Connection,
 Channel, or pairing identifiers.
 
 ## Observe and finish

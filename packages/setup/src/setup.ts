@@ -496,19 +496,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
-    async function prepareRuntime(context: Context, cwd: string): Promise<RuntimeSelection> {
-        progress("pairing", "Preparing the Runtime connection.");
-        const project = await request(context, "/management/project");
-        const appId = identifier(project.appId);
-        const existing = (await listManagedConnections(context, cwd)).find((connection) => connection.appId === appId);
-        if (existing !== undefined) {
-            emit({
-                status: "runtime_reused",
-                runtimeId: existing.runtimeId,
-                connectionId: existing.connectionId,
-            });
-            return { kind: "existing", ...existing };
-        }
+    async function createRuntimePairing(context: Context, appId: string): Promise<RuntimeSelection> {
         const pairing = await request(context, "/management/runtime-pairings", {
             idempotencyKey: crypto.randomUUID(),
         });
@@ -527,6 +515,25 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
         emit({ status: "prepared", botId: context.config.bot_id });
         return selection;
+    }
+
+    async function prepareRuntime(context: Context, cwd: string, mode: Options["mode"]): Promise<RuntimeSelection> {
+        progress("pairing", "Preparing the Runtime connection.");
+        const project = await request(context, "/management/project");
+        const appId = identifier(project.appId);
+        if (mode === "pair") {
+            return await createRuntimePairing(context, appId);
+        }
+        const existing = (await listManagedConnections(context, cwd)).find((connection) => connection.appId === appId);
+        if (existing !== undefined) {
+            emit({
+                status: "runtime_reused",
+                runtimeId: existing.runtimeId,
+                connectionId: existing.connectionId,
+            });
+            return { kind: "existing", ...existing };
+        }
+        return await createRuntimePairing(context, appId);
     }
 
     function runtimeArguments(runtime: RuntimeSelection, cwd: string): readonly string[] {
@@ -775,7 +782,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             context = identity.context;
             context = await verifyIdentityAndBot(context, options.mode);
             emit({ status: "identity_ready", userId: context.config.user_id, botId: context.config.bot_id });
-            const runtime = await prepareRuntime(context, cwd);
+            const runtime = await prepareRuntime(context, cwd, options.mode);
             validateExpectedRuntime(identity, runtime);
             context = await startRuntime(context, runtime, cwd);
             await waitForRuntime(context, runtime, options.harness);

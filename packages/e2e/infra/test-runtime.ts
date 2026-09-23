@@ -4,7 +4,7 @@ import { mock } from "node:test";
 import { chromium } from "playwright-core";
 import { dataTestId } from "../../web/src/data-testid.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../web/src/services/identity/anonymous-identity-api.ts";
-import { ChatApi, text } from "./chat-api.ts";
+import { ChatApi, jsonRequest, text } from "./chat-api.ts";
 import type { E2EHarness } from "./harness.ts";
 import { LocalStack, repository } from "./local-stack.ts";
 import { followSetupInstructions } from "./setup-instructions.ts";
@@ -61,6 +61,7 @@ export async function createTestRuntime(harness: E2EHarness) {
             workspace: stack.directories.workspace,
             openChat,
             sendMessage,
+            createPairInstruction: async () => text((await chat.createAgentPairing()).url, "pair instruction URL"),
             seedNativeSession: async (sessionId: string, prompt: string) => {
                 await writeFile(
                     join(harness.workDirectory, "agent-state", `${encodeURIComponent(sessionId)}.json`),
@@ -97,6 +98,23 @@ export async function createTestRuntime(harness: E2EHarness) {
             },
             disconnectRuntime: async () => await stack.stopMobiusManager(),
             disconnectPlatform: async () => await stack.harness.terminate("mobius-platform"),
+            connectUnrelatedRuntime: async () => {
+                const unrelated = new ChatApi(stack.chatOrigin, harness.signal);
+                await unrelated.useBrowserIdentity(
+                    await jsonRequest(stack.chatOrigin, "/morty/api/identity/anonymous-users", {
+                        body: {},
+                        signal: harness.signal,
+                    }),
+                );
+                const pairing = await unrelated.createPairing();
+                await stack.startMobius(pairing);
+                await unrelated.waitForAgent(
+                    harness,
+                    text(pairing.pairingId, "unrelated pairingId"),
+                    stack.agent.id,
+                    stack.agent.label,
+                );
+            },
             followInstructions: async (instructionUrl: string, sessionId?: string) => {
                 const url = new URL(instructionUrl, stack.chatOrigin);
                 mock.timers.enable({ apis: ["Date", "setTimeout"], now: new Date("2026-09-15T12:00:00Z") });

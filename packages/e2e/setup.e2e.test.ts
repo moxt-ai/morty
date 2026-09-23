@@ -3,6 +3,21 @@ import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
 import { expect, test } from "./infra/test.ts";
 
+test("Given another Project has a managed Runtime, When pair redeems a Bot ticket, Then it creates a fresh Runtime for the ticket Project", async ({
+    runtime,
+}) => {
+    await runtime.openChat();
+    await runtime.connectUnrelatedRuntime();
+    const instructionUrl = await runtime.createPairInstruction();
+
+    const connected = await runtime.followInstructions(instructionUrl);
+    const statuses = connected.events.map((event) => event.status);
+
+    expect(statuses).toContain("prepared");
+    expect(statuses).not.toContain("runtime_reused");
+    expect(statuses).toContain("ready");
+});
+
 test("Given a saved setup handoff, When its Runtime reconnects, Then setup waits for the agent to come online", async ({
     runtime,
 }) => {
