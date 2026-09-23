@@ -57,7 +57,7 @@ Platform control-plane tables live under `<platformPersist>/v3/d1/<hash>/`:
 
 ```sh
 sqlite3 -header -column <platform-d1.sqlite> \
-  'select app_id, display_name, cloud_retention from platform_apps;'
+  'select app_id, display_name, lifecycle from platform_apps;'
 ```
 
 Durable Object and D1 files are WAL-backed. If a value looks stale, the Worker is
