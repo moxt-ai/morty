@@ -224,7 +224,7 @@ export function ConversationSidebar({
                     <p className="px-2 py-3 text-xs text-muted-foreground">Your Chat conversations will appear here.</p>
                 )}
                 {sessions?.map((session) => (
-                    <ContextMenu.Root key={`${session.kind}:${session.id}`}>
+                    <ContextMenu.Root key={session.id}>
                         <ContextMenu.Trigger asChild>
                             <button
                                 data-testid={dataTestId.managedConversation}

@@ -36,7 +36,7 @@ const accessSchema = v.pipe(
 export type ChatAccess = v.InferOutput<typeof accessSchema>;
 const managedSessionSchema = v.pipe(
     v.object({
-        kind: v.picklist(["conversation", "fork", "import"]),
+        isExternal: v.boolean(),
         id: identifier,
         title: v.string(),
         directoryLabel: v.string(),
@@ -79,18 +79,24 @@ const sessionAccessSchema = v.object({
     expiresAt: v.pipe(v.string(), v.isoTimestamp()),
     endpoint: v.pipe(v.string(), v.url()),
 });
+const localSessionEntrySchema = v.object({
+    entryId: identifier,
+    mobiusSessionIds: v.optional(v.array(identifier), []),
+    title: v.string(),
+    directoryId: v.string(),
+    directoryLabel: v.string(),
+    additionalDirectories: v.array(v.object({ directoryId: v.string(), name: v.string() })),
+    updatedAt: v.nullable(v.string()),
+});
+const managedSdkSessionSchema = v.object({
+    agentRef: identifier,
+    ready: v.unknown(),
+    entry: localSessionEntrySchema,
+});
 const localSessionSchema = v.object({
     agentRef: identifier,
     result: v.unknown(),
-    entry: v.object({
-        entryId: identifier,
-        mobiusSessionIds: v.optional(v.array(identifier), []),
-        title: v.string(),
-        directoryId: v.string(),
-        directoryLabel: v.string(),
-        additionalDirectories: v.array(v.object({ directoryId: v.string(), name: v.string() })),
-        updatedAt: v.nullable(v.string()),
-    }),
+    entry: localSessionEntrySchema,
 });
 
 function sessionEndpoint(value: string): string {
@@ -287,14 +293,26 @@ export class BotChatApi {
     };
     readonly managedSession = async (botId: string, sessionId: string, signal: AbortSignal) => {
         const stored = v.parse(
-            localSessionSchema,
+            managedSdkSessionSchema,
             await this.#request(botId, "managed-session", { sessionId }, signal),
         );
-        const result = decodeNativeSessionResult(JSON.stringify(stored.result));
-        if ((result.action !== "fork" && result.action !== "import") || result.ready.sessionId !== sessionId) {
+        const ready = decodeSessionReadyEvent(JSON.stringify(stored.ready));
+        if (ready.sessionId !== sessionId) {
             throw new CloudApiError("INVALID_SESSION", "The saved Chat session is invalid.");
         }
-        return { ...stored, result };
+        return {
+            agentRef: stored.agentRef,
+            entry: stored.entry,
+            result: {
+                action: "managed" as const,
+                targetSessionId: sessionId,
+                ready,
+                history: {
+                    status: "unavailable" as const,
+                    cause: { code: "history_loading", message: "Session history will load after connecting." },
+                },
+            },
+        };
     };
     readonly continueNativeSession = async (
         botId: string,

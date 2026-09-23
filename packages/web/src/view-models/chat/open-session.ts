@@ -17,6 +17,12 @@ export interface OpenMobiusSession {
               readonly targetSessionId: string;
               readonly history: Extract<NativeSessionHistory, { readonly status: "unavailable" }>;
               readonly activeTurn: ConversationActiveTurn;
+          }
+        | {
+              readonly action: "managed";
+              readonly targetSessionId: string;
+              readonly ready: SessionReadyEvent;
+              readonly history: Extract<NativeSessionHistory, { readonly status: "unavailable" }>;
           };
     readonly entry: NativeSessionEntry;
 }
