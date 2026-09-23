@@ -4,8 +4,8 @@ import { dataTestId } from "../../data-testid.ts";
 import type { ThinkingEntry, ThinkingPresentation, ToolThinkingEntry } from "../../services/chat/agent-reply.ts";
 import { AgentMarkdown } from "../agents/agent-markdown.tsx";
 import { FollowLatestScrollArea } from "../utils/follow-latest-scroll-area.tsx";
-import { ToolCallStatus } from "./tool-call-status.tsx";
-import { renderRegisteredTool } from "./tool-renderer-registry.tsx";
+import { ToolCallStatus } from "./tools/tool-call-status.tsx";
+import { renderRegisteredTool } from "./tools/tool-renderer-registry.tsx";
 
 type ReasoningEntry = Extract<ThinkingEntry, { readonly kind: "reasoning" }>;
 type ToolEntry = ToolThinkingEntry;

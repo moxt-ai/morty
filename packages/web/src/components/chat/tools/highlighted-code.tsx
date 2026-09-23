@@ -1,4 +1,4 @@
-import { AgentMarkdown } from "../agents/agent-markdown.tsx";
+import { AgentMarkdown } from "../../agents/agent-markdown.tsx";
 
 const LANGUAGE_BY_EXTENSION: Readonly<Record<string, string>> = {
     bash: "bash",

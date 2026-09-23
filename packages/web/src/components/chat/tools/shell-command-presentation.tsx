@@ -1,5 +1,5 @@
 import { Terminal } from "lucide-react";
-import { AgentRichContent } from "../agents/agent-rich-content.tsx";
+import { AgentRichContent } from "../../agents/agent-rich-content.tsx";
 import { HighlightedCode } from "./highlighted-code.tsx";
 import { ToolCallStatus, useToolCallDisclosure } from "./tool-call-status.tsx";
 import { toolRichContent } from "./tool-display-content.ts";

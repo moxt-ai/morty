@@ -1,5 +1,5 @@
 import type { ComponentType, ReactNode } from "react";
-import type { ToolThinkingEntry } from "../../services/chat/agent-reply.ts";
+import type { ToolThinkingEntry } from "../../../services/chat/agent-reply.ts";
 import { CwdShellCommandToolCall, matchesCwdShellCommandToolCall } from "./cwd-shell-command-tool-call.tsx";
 import { FilePathReadToolCall, matchesFilePathReadToolCall } from "./file-path-read-tool-call.tsx";
 import { GlobToolCall, matchesGlobToolCall } from "./glob-tool-call.tsx";

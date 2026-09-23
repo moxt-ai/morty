@@ -1,5 +1,5 @@
 import { Search } from "lucide-react";
-import { AgentRichContent } from "../agents/agent-rich-content.tsx";
+import { AgentRichContent } from "../../agents/agent-rich-content.tsx";
 import { ToolCallStatus, useToolCallDisclosure } from "./tool-call-status.tsx";
 import { toolRichContent, toolTextContent } from "./tool-display-content.ts";
 import type { ToolRendererProps } from "./tool-renderer.ts";
