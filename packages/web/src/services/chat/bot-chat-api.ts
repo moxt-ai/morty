@@ -4,6 +4,7 @@ import {
     decodeNativeSessionResult,
     decodeSessionReadyEvent,
     decodeWorkspaceEntriesEvent,
+    type SessionConfigOption,
     type SessionConfigurationSelection,
 } from "@moxt-ai/mobius-protocol";
 import {
@@ -64,6 +65,9 @@ export interface ChatDraftConfiguration {
     readonly workspaceRef: string;
     readonly workspaceLabel: string;
     readonly configurations: readonly SessionConfigurationSelection[];
+}
+interface AgentSettingsResult {
+    readonly options: readonly SessionConfigOption[];
 }
 export type ConversationActiveTurn =
     | { readonly kind: "idle" }
@@ -160,6 +164,7 @@ class BrowserSessionClient implements MobiusClient {
 }
 
 export class BotChatApi {
+    readonly #agentSettingsCache = new Map<string, AgentSettingsResult>();
     readonly #fetchRequest: (request: Request) => Promise<Response>;
     readonly #origin: string;
     readonly #projectId: string;
@@ -308,13 +313,30 @@ export class BotChatApi {
         }
         return { ...stored, result };
     };
-    readonly agentSettings = async (botId: string, agentRef: string, signal: AbortSignal) => {
+    readonly agentSettings = async (
+        botId: string,
+        agentRef: string,
+        refresh: boolean,
+        signal: AbortSignal,
+    ): Promise<AgentSettingsResult> => {
+        signal.throwIfAborted();
+        const requestedBotId = v.parse(identifier, botId);
+        const requestedAgentRef = v.parse(identifier, agentRef);
+        const cacheKey = JSON.stringify([requestedBotId, requestedAgentRef]);
+        if (refresh) {
+            this.#agentSettingsCache.delete(cacheKey);
+        } else {
+            const cached = this.#agentSettingsCache.get(cacheKey);
+            if (cached !== undefined) {
+                return cached;
+            }
+        }
         const result = v.parse(
             v.object({ settings: v.unknown() }),
-            await this.#request(botId, "agent-settings", { agentRef: v.parse(identifier, agentRef) }, signal),
+            await this.#request(requestedBotId, "agent-settings", { agentRef: requestedAgentRef }, signal),
         );
         const discovered = decodeAgentSettingsDiscoveredEvent(JSON.stringify(result.settings));
-        return {
+        const settings = {
             options: discovered.settings.map(({ defaultValue, ...setting }) => ({
                 ...setting,
                 currentValue:
@@ -323,6 +345,8 @@ export class BotChatApi {
                         : defaultValue,
             })),
         };
+        this.#agentSettingsCache.set(cacheKey, settings);
+        return settings;
     };
     readonly createPairingInstruction = async (botId: string, signal: AbortSignal) => {
         const ticket = v.parse(

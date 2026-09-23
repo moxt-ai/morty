@@ -1,4 +1,4 @@
-import { ChevronDown, LoaderCircle, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, LoaderCircle, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 import { dataTestId } from "@/data-testid";
 import { Select } from "../ui/option-select.tsx";
@@ -30,9 +30,11 @@ export type ChatConfigurationControl = ChatConfigurationSelectControl | ChatConf
 
 export function ChatConfigurationMenu({
     controls,
+    onRefresh,
     settingsLoading = false,
 }: {
     readonly controls: readonly ChatConfigurationControl[];
+    readonly onRefresh?: (() => void) | undefined;
     readonly settingsLoading?: boolean;
 }) {
     const [open, setOpen] = useState(false);
@@ -97,60 +99,83 @@ export function ChatConfigurationMenu({
                             </button>
                         ))}
                     </div>
-                    <div aria-busy={settingsLoading} className="grid min-h-44 content-start gap-3 p-3" role="tabpanel">
-                        {settingsLoading ? (
-                            <div
-                                className="flex min-h-36 items-center justify-center"
-                                data-testid={dataTestId.agentSettingsLoading}
-                                role="status"
-                            >
-                                <LoaderCircle
-                                    aria-label="Loading harness settings"
-                                    className="size-5 animate-spin text-muted-foreground motion-reduce:animate-none"
-                                />
+                    <div
+                        aria-busy={settingsLoading}
+                        className="grid min-h-44 grid-rows-[auto_1fr] gap-2 p-3"
+                        role="tabpanel"
+                    >
+                        {onRefresh !== undefined && (
+                            <div className="flex justify-end">
+                                <button
+                                    aria-label="Refresh agent settings"
+                                    className="flex size-8 items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
+                                    disabled={settingsLoading}
+                                    onClick={onRefresh}
+                                    title="Refresh agent settings"
+                                    type="button"
+                                >
+                                    <RefreshCw aria-hidden="true" className="size-4" />
+                                </button>
                             </div>
-                        ) : settings.length === 0 ? (
-                            <p className="self-center text-center text-xs text-muted-foreground">
-                                This harness has no configurable settings.
-                            </p>
-                        ) : (
-                            settings.map((control) => (
-                                <div className="grid gap-1.5" key={control.id}>
-                                    <span className="px-1 text-xs font-medium text-copy-tertiary">{control.label}</span>
-                                    {control.kind === "select" ? (
-                                        <Select
-                                            disabled={control.disabled}
-                                            label={control.label}
-                                            onValueChange={control.onValueChange}
-                                            options={control.options}
-                                            searchable={control.searchable}
-                                            testId={control.testId}
-                                            value={control.value}
-                                        />
-                                    ) : (
-                                        <button
-                                            aria-checked={control.checked}
-                                            className="flex h-11 items-center justify-between rounded-xl border border-border bg-surface-subtle px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                                            data-testid={control.testId}
-                                            disabled={control.disabled}
-                                            onClick={control.onCheckedChange}
-                                            role="switch"
-                                            type="button"
-                                        >
-                                            <span>{control.checked ? "On" : "Off"}</span>
-                                            <span
-                                                aria-hidden="true"
-                                                className={`flex h-6 w-10 items-center rounded-full p-0.5 transition-colors ${control.checked ? "bg-primary" : "bg-muted"}`}
-                                            >
-                                                <span
-                                                    className={`size-5 rounded-full bg-white shadow-sm transition-transform ${control.checked ? "translate-x-4" : "translate-x-0"}`}
-                                                />
-                                            </span>
-                                        </button>
-                                    )}
-                                </div>
-                            ))
                         )}
+                        <div className="grid content-start gap-3">
+                            {settingsLoading ? (
+                                <div
+                                    className="flex min-h-36 items-center justify-center"
+                                    data-testid={dataTestId.agentSettingsLoading}
+                                    role="status"
+                                >
+                                    <LoaderCircle
+                                        aria-hidden="true"
+                                        className="size-5 animate-spin text-muted-foreground motion-reduce:animate-none"
+                                    />
+                                    <span className="sr-only">Loading harness settings…</span>
+                                </div>
+                            ) : settings.length === 0 ? (
+                                <p className="self-center text-center text-xs text-muted-foreground">
+                                    This harness has no configurable settings.
+                                </p>
+                            ) : (
+                                settings.map((control) => (
+                                    <div className="grid gap-1.5" key={control.id}>
+                                        <span className="px-1 text-xs font-medium text-copy-tertiary">
+                                            {control.label}
+                                        </span>
+                                        {control.kind === "select" ? (
+                                            <Select
+                                                disabled={control.disabled}
+                                                label={control.label}
+                                                onValueChange={control.onValueChange}
+                                                options={control.options}
+                                                searchable={control.searchable}
+                                                testId={control.testId}
+                                                value={control.value}
+                                            />
+                                        ) : (
+                                            <button
+                                                aria-checked={control.checked}
+                                                className="flex h-11 items-center justify-between rounded-xl border border-border bg-surface-subtle px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                                                data-testid={control.testId}
+                                                disabled={control.disabled}
+                                                onClick={control.onCheckedChange}
+                                                role="switch"
+                                                type="button"
+                                            >
+                                                <span>{control.checked ? "On" : "Off"}</span>
+                                                <span
+                                                    aria-hidden="true"
+                                                    className={`flex h-6 w-10 items-center rounded-full p-0.5 transition-colors ${control.checked ? "bg-primary" : "bg-muted"}`}
+                                                >
+                                                    <span
+                                                        className={`size-5 rounded-full bg-white shadow-sm transition-transform ${control.checked ? "translate-x-4" : "translate-x-0"}`}
+                                                    />
+                                                </span>
+                                            </button>
+                                        )}
+                                    </div>
+                                ))
+                            )}
+                        </div>
                     </div>
                 </Popover.Content>
             </Popover.Portal>
