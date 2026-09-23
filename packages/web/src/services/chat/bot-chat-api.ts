@@ -84,6 +84,7 @@ const localSessionSchema = v.object({
     result: v.unknown(),
     entry: v.object({
         entryId: identifier,
+        mobiusSessionIds: v.optional(v.array(identifier), []),
         title: v.string(),
         directoryId: v.string(),
         directoryLabel: v.string(),
@@ -260,6 +261,7 @@ export class BotChatApi {
         },
         entry: {
             entryId: access.sessionId,
+            mobiusSessionIds: [],
             title: "",
             directoryId: access.workspaceRef,
             directoryLabel,
