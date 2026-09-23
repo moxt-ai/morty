@@ -472,7 +472,7 @@ test("Given anonymous and signed-in users with Bots, When pairing tickets are is
 });
 
 test("Given Morty configuration and sessions, When public and account endpoints authenticate them, Then only valid active identities are disclosed", async () => {
-    const publicConfiguration = await worker.fetch(
+    const publicConfiguration = await fetchPublicApplication(
         new Request(`${APP_ORIGIN}/morty/api/config`),
         fixture.baseConfiguration,
     );

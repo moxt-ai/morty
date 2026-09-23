@@ -29,6 +29,7 @@ export const cloudRoutes = new Hono<CloudHttpEnvironment>()
     .all("*", (context) => managementApplication.fetch(context.req.raw, context.var.dependencies));
 
 export const publicCloudRoutes = new Hono<{ readonly Bindings: CloudBindings }>()
+    .get("/config", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .post("/identity/anonymous-users", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .post("/identity/pairings/redeem", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .get("/projects/:projectId/session", (context) => cloudRoutes.fetch(context.req.raw, context.env))
