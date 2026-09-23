@@ -134,8 +134,8 @@ export async function createIdentityFixture(
             environment,
             origin: ready.origin,
             close: async () => {
-                await cloudflare.dispose();
                 await platform.close();
+                await cloudflare.dispose();
             },
         };
     } catch (cause) {

@@ -141,7 +141,6 @@ export class LocalStack {
             const application = await jsonRequest(this.platformOrigin, "/mobius/api/dashboard/v1/apps", {
                 ...authentication,
                 body: {
-                    cloudRetention: false,
                     displayName: "Mobius Chat live E2E",
                     tenantId: text(tenant.tenantId, "tenantId"),
                 },

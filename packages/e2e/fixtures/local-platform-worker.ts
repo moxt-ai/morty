@@ -39,26 +39,9 @@ const worker = createPlatformApplication(
     { create: createLiveSessionEventRpcTarget },
 );
 
-export default {
-    fetch: async (request: Request, environment: Cloudflare.Env, context: ExecutionContext): Promise<Response> => {
-        const url = new URL(request.url);
-        if (request.method === "GET" && /\/sessions\/[^/]+\/messages$/.test(url.pathname)) {
-            return Response.json(
-                {
-                    error: {
-                        code: "session_history_not_retained",
-                        message: "The non-cloud Session does not retain Platform message history",
-                    },
-                },
-                { status: 404 },
-            );
-        }
-        return await worker.fetch(request, environment, context);
-    },
-} satisfies ExportedHandler<Cloudflare.Env>;
+export default worker;
 
 export {
-    NonCloudRetentionSessionRelayDO,
     PlatformSessionRelay,
     ProjectRelay,
     RuntimeRelay,

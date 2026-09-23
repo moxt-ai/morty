@@ -12,8 +12,8 @@
     },
     "dependencies": {
         "@clerk/react": "catalog:",
-        "@moxt-ai/mobius-protocol": "catalog:",
-        "@moxt-ai/mobius-sdk": "catalog:",
+        "@moxt-ai/mobius-protocol": "workspace:*",
+        "@moxt-ai/mobius-sdk": "workspace:*",
         "@radix-ui/react-select": "catalog:",
         "@sentry/react": "catalog:",
         "@streamdown/code": "catalog:",

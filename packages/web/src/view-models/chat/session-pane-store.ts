@@ -920,13 +920,7 @@ export function createSessionPaneModel(options: {
                             return true;
                         },
                     };
-                    const summary = await connected.sessions.read(sessionId, signal);
-                    const subscription = summary.cloudRetention
-                        ? await (async () => {
-                              await observer.reconcile({ kind: "initial" });
-                              return await connected.events.subscribe(sessionId, "", observer, signal);
-                          })()
-                        : await connected.events.subscribeLive(sessionId, observer, signal);
+                    const subscription = await connected.events.subscribeLive(sessionId, observer, signal);
                     signal.throwIfAborted();
                     set({ connection: { kind: "ready", client: connected } });
                     await subscription.completed;

@@ -508,6 +508,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             const reused = await saveConfiguration(context, {
                 pairing,
                 pairing_key: candidate.config.pairing_key,
+                connection_id: identifier(saved.connection_id),
             });
             emit({ status: "runtime_reused", runtimeId: pairing.runtimeId, channelId: pairing.channelId });
             return reused;
@@ -529,7 +530,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             fail("RUNTIME_PAIRING_UNAVAILABLE");
         }
         return status.status === "paired"
-            ? ["start", "--channel", identifier(pairing.channelId)]
+            ? ["start", "--connection", identifier(context.config.connection_id)]
             : [
                   "pair",
                   "--url",
@@ -593,6 +594,20 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         } finally {
             await log.close();
         }
+    }
+
+    async function saveRuntimeConnection(context: Context): Promise<Context> {
+        if (context.config.connection_id !== undefined) {
+            return context;
+        }
+        const process = object(context.config.runtime_process);
+        const logPath = text(process.log_path);
+        const log = await readFile(logPath, "utf8");
+        const connectionId = log.match(/^Connection ID: (mcn_[a-f0-9]{32})$/mu)?.[1];
+        if (connectionId === undefined) {
+            fail("RUNTIME_CONNECTION_UNAVAILABLE");
+        }
+        return await saveConfiguration(context, { connection_id: connectionId });
     }
 
     async function waitForRuntime(context: Context, harness: string) {
@@ -811,6 +826,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             context = await prepareRuntimePairing(context);
             context = await startRuntime(context, await runtimeArguments(context, cwd), cwd);
             await waitForRuntime(context, options.harness);
+            context = await saveRuntimeConnection(context);
             context = await bindAgent(context, options.harness);
             await finishSetup(context, options);
         } finally {
