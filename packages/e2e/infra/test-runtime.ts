@@ -17,7 +17,7 @@ export async function createTestRuntime(harness: E2EHarness) {
     const agent = join(repository, "third-party/mobius/tests/agent-daemon/fixtures/fake-acp-agent/src/cli.ts");
     await writeFile(
         binary,
-        `#!/bin/sh\nif [ "$1" = "--version" ]; then echo '1.2.0'; exit 0; fi\nexport MOBIUS_FAKE_ACP_STATE_DIRECTORY=${JSON.stringify(join(harness.workDirectory, "agent-state"))}\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(agent)} --agent-name OpenCode "$@"\n`,
+        `#!/bin/sh\nif [ "$1" = "--version" ]; then echo '1.18.29'; exit 0; fi\nexport MOBIUS_FAKE_ACP_STATE_DIRECTORY=${JSON.stringify(join(harness.workDirectory, "agent-state"))}\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(agent)} --agent-name OpenCode "$@"\n`,
     );
     await chmod(binary, 0o700);
     const stack = await LocalStack.create(harness, {

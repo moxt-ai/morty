@@ -179,7 +179,8 @@ export class E2EHarness {
     }
 
     async terminate(name: string, signal: NodeJS.Signals = "SIGTERM") {
-        const processRecord = this.children.find((candidate) => candidate.name === name);
+        const processIndex = this.children.findIndex((candidate) => candidate.name === name);
+        const processRecord = this.children[processIndex];
         if (
             processRecord === undefined ||
             processRecord.child.pid === undefined ||
@@ -193,6 +194,8 @@ export class E2EHarness {
             new Promise((resolveExit) => processRecord.child.once("exit", resolveExit)),
             new Promise((_, reject) => setTimeout(() => reject(new Error(`${name} did not stop in time`)), 2_000)),
         ]);
+        this.children.splice(processIndex, 1);
+        closeSync(processRecord.output);
     }
 
     async waitFor<T>(

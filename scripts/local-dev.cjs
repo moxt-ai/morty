@@ -32,10 +32,10 @@ const MOBIUS_INSTALLED_LOCKFILE = path.join(MOBIUS_ROOT, "node_modules", ".pnpm"
 const MOBIUS_GENERATED_MIGRATIONS = path.join(
     MOBIUS_ROOT,
     "packages",
-    "relay-cloudflare-platform",
+    "relay-core",
     "src",
     "generated",
-    "session-relay-do-migrations.ts",
+    "session-do-migrations.ts",
 );
 const SETUP_BUNDLE = "packages/setup/dist/setup.mjs";
 const CHAT_ATTACHMENTS_BUCKET = "mobius-chat-local-e2e-attachments";
