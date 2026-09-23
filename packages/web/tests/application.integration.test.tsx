@@ -78,6 +78,21 @@ async function waitForEnabled(selector: string): Promise<HTMLButtonElement> {
     );
 }
 
+async function waitForDialog(title: string): Promise<HTMLElement> {
+    return await vi.waitFor(
+        () => {
+            const dialog = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].find((candidate) =>
+                candidate.textContent?.includes(title),
+            );
+            if (dialog === undefined) {
+                throw new Error(`Dialog did not appear: ${title}; page: ${document.body.textContent}`);
+            }
+            return dialog;
+        },
+        { timeout: 12_000 },
+    );
+}
+
 async function renderWorkspace(created?: Application): Promise<Application> {
     const current = created ?? (await environment.createApplication());
     application = current;
@@ -158,7 +173,7 @@ test("Given a shared workspace, When the user chooses to end remote access from 
     expect(endAccess.parentElement).toBe(shareMachine.parentElement);
     await act(async () => endAccess.click());
 
-    const dialog = await act(async () => await waitForElement('[role="dialog"]'));
+    const dialog = await act(async () => await waitForDialog("End remote access?"));
     expect(dialog.textContent).toContain("End remote access?");
     expect(dialog.textContent).toContain("every browser using this access link");
     expect(dialog.textContent).toContain("Your local Runtime and task will keep running");
