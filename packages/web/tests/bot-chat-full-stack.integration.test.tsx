@@ -399,10 +399,12 @@ test("Given two open views of one Bot Session, When one sends a prompt, Then bot
         { role: "assistant", text: "Earlier reply" },
     ]);
     const first = await renderChat(identity, sessionId);
-    await waitForTextIn(first.container, "Earlier reply");
     const second = await renderChat(identity, sessionId);
     try {
-        await waitForTextIn(second.container, "Earlier reply");
+        await Promise.all([
+            waitForTextIn(first.container, "Earlier reply"),
+            waitForTextIn(second.container, "Earlier reply"),
+        ]);
         const draft = first.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]');
         if (draft === null) {
             throw new Error("The first message input was not shown.");
