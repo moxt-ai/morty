@@ -29,14 +29,6 @@ const CHAT_CONFIG = "packages/e2e/fixtures/wrangler.chat.jsonc";
 const MOBIUS_ROOT = path.join(REPO_ROOT, "third-party", "mobius");
 const MOBIUS_LOCKFILE = path.join(MOBIUS_ROOT, "pnpm-lock.yaml");
 const MOBIUS_INSTALLED_LOCKFILE = path.join(MOBIUS_ROOT, "node_modules", ".pnpm", "lock.yaml");
-const MOBIUS_GENERATED_MIGRATIONS = path.join(
-    MOBIUS_ROOT,
-    "packages",
-    "relay-core",
-    "src",
-    "generated",
-    "session-do-migrations.ts",
-);
 const SETUP_BUNDLE = "packages/setup/dist/setup.mjs";
 const CHAT_ATTACHMENTS_BUCKET = "morty-local-e2e-attachments";
 const PLATFORM_AUTH_HEADERS = {
@@ -265,7 +257,6 @@ async function waitForHttp(url, accept, timeoutMilliseconds, description, proces
 
 async function ensureMobiusDependencies() {
     const installed =
-        fs.existsSync(MOBIUS_GENERATED_MIGRATIONS) &&
         fs.existsSync(MOBIUS_INSTALLED_LOCKFILE) &&
         fs.readFileSync(MOBIUS_LOCKFILE).equals(fs.readFileSync(MOBIUS_INSTALLED_LOCKFILE));
     if (installed) {
