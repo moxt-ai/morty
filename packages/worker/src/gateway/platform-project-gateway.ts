@@ -261,8 +261,6 @@ export class PlatformProjectGateway {
             throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Platform could not complete Runtime setup.", 502, {
                 cause,
             });
-        } finally {
-            client.close();
         }
     };
 

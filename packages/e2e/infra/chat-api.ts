@@ -1,4 +1,3 @@
-import { MobiusClient } from "@moxt-ai/mobius-sdk";
 import type { E2EHarness } from "./harness.ts";
 
 interface RequestOptions {
@@ -107,31 +106,6 @@ export class ChatApi {
             body: { botId: identity.botId },
         });
     }
-
-    readonly cancelSessionTurn = async (sessionId: string, turnId: string) => {
-        const identity = this.#requireIdentity();
-        const access = await this.#request(
-            `/morty/api/chat/projects/${encodeURIComponent(identity.projectId)}/bots/${encodeURIComponent(identity.botId)}/session-access`,
-            {
-                body: { sessionId },
-            },
-        );
-        const client = new MobiusClient({
-            endpoint: text(access.endpoint, "session endpoint"),
-            projectId: text(access.projectId, "project ID"),
-            credentialProvider: {
-                credential: async (signal) => {
-                    signal.throwIfAborted();
-                    return text(access.credential, "credential");
-                },
-            },
-        });
-        try {
-            await client.turns.cancel(sessionId, turnId, { idempotencyKey: crypto.randomUUID() }, this.signal);
-        } finally {
-            client.close();
-        }
-    };
 
     async waitForAgent(harness: E2EHarness, pairingId: string, agentId: string, agentLabel: string) {
         const paired = await harness.waitFor(

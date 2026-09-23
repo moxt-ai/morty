@@ -239,9 +239,6 @@ importers:
 
   packages/e2e:
     devDependencies:
-      '@moxt-ai/mobius-sdk':
-        specifier: workspace:*
-        version: link:../../third-party/mobius/packages/mobius-sdk
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.63.0
