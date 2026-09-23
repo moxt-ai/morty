@@ -1,39 +1,12 @@
 import {
-    decodeAgentContentEvent,
-    decodeSessionElicitationRequestedEvent,
-    decodeSessionElicitationResolvedEvent,
-    decodeSessionPermissionRequestedEvent,
-    decodeSessionPermissionResolvedEvent,
-    HttpTransport,
-    MobiusAgentActivityEvent,
-    MobiusAgentMessageEvent,
-    MobiusApiError,
-    MobiusAttemptEventSource,
-    type MobiusBrowserCredential,
-    MobiusBrowserCredentialRequest,
-    MobiusCancelledTurnState,
-    MobiusClient,
-    MobiusControlEvent,
-    MobiusElicitationResponseRequest,
     MobiusError,
-    MobiusFailedTurnState,
-    MobiusIndeterminateTurnState,
-    MobiusPermissionResponseRequest,
-    MobiusRecordingPolicy,
-    type MobiusSession,
-    MobiusSucceededTurnState,
-    MobiusTurnCompletedEvent,
-    MobiusTurnFailedEvent,
-    MobiusTurnStartedEvent,
     mobiusApiUrl,
     type NativeSessionRequest,
     type NativeSessionResult,
     type SessionConfigOption,
     type SessionConfigUpdatedEvent,
     type SessionReadyEvent,
-    StaticMobiusCredentialProvider,
     type WorkspaceEntriesEvent,
-    WsTransport,
 } from "@moxt-ai/mobius-sdk";
 import {
     type AgentInstallCancelRequest,
@@ -51,7 +24,6 @@ import {
     type SessionPrepareRequest,
     type WorkspaceListRequest,
 } from "@moxt-ai/mobius-sdk/channel";
-import { DirectMobiusTransport } from "@/services/chat/direct-mobius-transport";
 import { readSessionConfigPreferences, saveSessionConfigPreferences } from "@/services/chat/session-config-preferences";
 import { readChannelConnection } from "@/services/pairing/pairing-api";
 import { type ChannelConnection, RecordedActivity } from "@/view-models/chat/channel";
@@ -112,83 +84,6 @@ function boundaryFailure(error: unknown): BoundaryFailure {
           };
 }
 
-const BROWSER_CREDENTIAL_LIFETIME_SECONDS = 5 * 60;
-const BROWSER_CREDENTIAL_REFRESH_WINDOW_MILLISECONDS = 30_000;
-const PUBLIC_SESSION_RETENTION_MILLISECONDS = 30 * 24 * 60 * 60 * 1_000;
-const PUBLIC_SESSION_CONTENT_LIMIT_BYTES = 6_000_000;
-
-class RefreshingBrowserCredentialProvider {
-    readonly #owner: MobiusClient;
-    #credential: MobiusBrowserCredential;
-
-    constructor(owner: MobiusClient, credential: MobiusBrowserCredential) {
-        this.#credential = credential;
-        this.#owner = owner;
-    }
-
-    readonly credential = async (signal: AbortSignal): Promise<string> => {
-        signal.throwIfAborted();
-        if (Date.parse(this.#credential.expiresAt) - Date.now() <= BROWSER_CREDENTIAL_REFRESH_WINDOW_MILLISECONDS) {
-            this.#credential = await this.#owner.credentials.issue(
-                new MobiusBrowserCredentialRequest(BROWSER_CREDENTIAL_LIFETIME_SECONDS),
-                signal,
-            );
-        }
-        signal.throwIfAborted();
-        return this.#credential.token;
-    };
-}
-
-class BrowserServiceClients {
-    readonly owner: MobiusClient;
-    readonly scoped: MobiusClient;
-    readonly #transport: WsTransport;
-
-    constructor(owner: MobiusClient, scoped: MobiusClient, transport: WsTransport) {
-        this.owner = owner;
-        this.scoped = scoped;
-        this.#transport = transport;
-    }
-
-    readonly close = (): void => {
-        this.scoped.close();
-        this.owner.close();
-        this.#transport.close();
-    };
-}
-
-async function connectBrowserServiceClients(connection: ChannelConnection): Promise<BrowserServiceClients> {
-    const transport = new WsTransport();
-    const directTransport = new DirectMobiusTransport(connection.appId, transport, new HttpTransport());
-    const owner = new MobiusClient({
-        credentialProvider: new StaticMobiusCredentialProvider(connection.accessToken),
-        endpoint: connection.mobiusBaseUrl,
-        projectId: connection.projectId,
-        transport: directTransport,
-    });
-    const signal = AbortSignal.timeout(20_000);
-    try {
-        const credential = await owner.credentials.issue(
-            new MobiusBrowserCredentialRequest(BROWSER_CREDENTIAL_LIFETIME_SECONDS),
-            signal,
-        );
-        return new BrowserServiceClients(
-            owner,
-            new MobiusClient({
-                credentialProvider: new RefreshingBrowserCredentialProvider(owner, credential),
-                endpoint: connection.mobiusBaseUrl,
-                projectId: connection.projectId,
-                transport: directTransport,
-            }),
-            transport,
-        );
-    } catch (error) {
-        owner.close();
-        transport.close();
-        throw error;
-    }
-}
-
 abstract class TransportConnection {
     abstract readonly readFile: (sessionId: string, path: string, signal: AbortSignal) => Promise<FileReadResult>;
     abstract readonly nativeSession: (
@@ -243,18 +138,11 @@ class DisconnectedTransport extends TransportConnection {
 class ConnectedTransport extends TransportConnection {
     readonly #channelId: string;
     readonly #client: Promise<MobiusChannelClient>;
-    readonly #connection: ChannelConnection;
     readonly #preparingRequestIds = new Set<string>();
-    readonly #promptControllers = new Set<AbortController>();
-    readonly #publicCommandIds = new Set<string>();
-    readonly #serviceClients: Promise<BrowserServiceClients>;
-    readonly #turnIds = new Map<string, string>();
 
     constructor(connection: ChannelConnection, onActivity: () => void) {
         super();
         this.#channelId = connection.channelId;
-        this.#connection = connection;
-        this.#serviceClients = connectBrowserServiceClients(connection);
         this.#client = connectMobiusChannelClient({
             onActivity,
             onCommands: (event) => {
@@ -264,9 +152,7 @@ class ConnectedTransport extends TransportConnection {
                 useChatStore.getState().applySessionConfig(event);
             },
             onContent: (event) => {
-                if (!this.#publicCommandIds.has(event.commandId)) {
-                    useChatStore.getState().recordAgentContent(event);
-                }
+                useChatStore.getState().recordAgentContent(event);
             },
             onInstallCancelled: (event) => {
                 useChatStore.getState().applyAgentInstallCancelled(event);
@@ -286,9 +172,7 @@ class ConnectedTransport extends TransportConnection {
                 useChatStore.getState().applyAgentInstallStarted(event);
             },
             onElicitation: (event) => {
-                if (!this.#publicCommandIds.has(event.commandId)) {
-                    useChatStore.getState().applySessionElicitation(event);
-                }
+                useChatStore.getState().applySessionElicitation(event);
             },
             onElicitationResolved: (event) => {
                 useChatStore.getState().resolveSessionElicitation(event);
@@ -302,9 +186,7 @@ class ConnectedTransport extends TransportConnection {
                 }
             },
             onPermission: (event) => {
-                if (!this.#publicCommandIds.has(event.commandId)) {
-                    useChatStore.getState().applySessionPermission(event);
-                }
+                useChatStore.getState().applySessionPermission(event);
             },
             onPermissionResolved: (event) => {
                 useChatStore.getState().resolveSessionPermission(event.interactionId, event.sessionId);
@@ -334,25 +216,14 @@ class ConnectedTransport extends TransportConnection {
             store.setRuntime(new UnavailableRuntimeState());
             store.setErrorMessage(failureMessage(error));
         });
-        void this.#serviceClients.catch((error: unknown) => {
-            useChatStore.getState().setErrorMessage(failureMessage(error));
-        });
     }
 
     readonly close = async (): Promise<void> => {
-        for (const controller of this.#promptControllers) {
-            controller.abort(new Error("The Mobius transport closed"));
-        }
-        this.#promptControllers.clear();
         const channelClose = this.#client.then(
             (client) => client.close(),
             () => undefined,
         );
-        const serviceClose = this.#serviceClients.then(
-            (clients) => clients.close(),
-            () => undefined,
-        );
-        await Promise.all([channelClose, serviceClose]);
+        await channelClose;
     };
 
     readonly readFile = async (sessionId: string, path: string, signal: AbortSignal): Promise<FileReadResult> => {
@@ -371,17 +242,8 @@ class ConnectedTransport extends TransportConnection {
     };
 
     readonly cancel = async (request: CancelRequest): Promise<void> => {
-        const clients = await this.#serviceClients;
-        const turnId = this.#turnIds.get(this.turnKey(request.sessionId, request.commandId));
-        if (turnId === undefined) {
-            throw new MobiusChannelError("turn_not_found", "The active Turn is not available for cancellation");
-        }
-        await clients.scoped.turns.cancel(
-            request.sessionId,
-            turnId,
-            { idempotencyKey: `cancel-${crypto.randomUUID()}` },
-            AbortSignal.timeout(20_000),
-        );
+        const client = await this.#client;
+        client.cancel(request);
     };
 
     readonly cancelAgentInstallation = async (request: AgentInstallCancelRequest): Promise<void> => {
@@ -402,19 +264,8 @@ class ConnectedTransport extends TransportConnection {
     };
 
     readonly elicit = async (request: ElicitationResponseRequest): Promise<void> => {
-        const clients = await this.#serviceClients;
-        await clients.scoped.interactions.respond(
-            request.sessionId,
-            request.interactionId,
-            new MobiusElicitationResponseRequest("mobius-web", request.action, request.content),
-            AbortSignal.timeout(20_000),
-        );
-        useChatStore.getState().resolveSessionElicitation({
-            action: request.action,
-            interactionId: request.interactionId,
-            kind: "session.elicitation.resolved",
-            sessionId: request.sessionId,
-        });
+        const client = await this.#client;
+        await client.respondElicitation(request);
     };
 
     readonly listWorkspace = async (
@@ -433,14 +284,8 @@ class ConnectedTransport extends TransportConnection {
     };
 
     readonly permission = async (request: PermissionResponseRequest): Promise<void> => {
-        const clients = await this.#serviceClients;
-        await clients.scoped.interactions.respond(
-            request.sessionId,
-            request.interactionId,
-            new MobiusPermissionResponseRequest("mobius-web", request.outcome, request.optionId),
-            AbortSignal.timeout(20_000),
-        );
-        useChatStore.getState().resolveSessionPermission(request.interactionId, request.sessionId);
+        const client = await this.#client;
+        await client.respondPermission(request);
     };
 
     readonly prepare = async (request: SessionPrepareRequest, signal: AbortSignal): Promise<SessionReadyEvent> => {
@@ -503,231 +348,9 @@ class ConnectedTransport extends TransportConnection {
     };
 
     readonly prompt = async (request: PromptRequest): Promise<PromptResult> => {
-        const controller = new AbortController();
-        this.#promptControllers.add(controller);
-        try {
-            return await this.runPrompt(request, controller.signal);
-        } finally {
-            this.#promptControllers.delete(controller);
-        }
+        const client = await this.#client;
+        return await client.prompt(request);
     };
-
-    private readonly runPrompt = async (request: PromptRequest, signal: AbortSignal): Promise<PromptResult> => {
-        const clients = await this.#serviceClients;
-        const sessionId = request.sessionId ?? crypto.randomUUID();
-        const commandId = request.commandId ?? crypto.randomUUID();
-        await this.ensureSession(clients.scoped, request, sessionId, signal);
-        let attemptId = "";
-        let failureCode = "";
-        let failureMessage = "";
-        let stopReason = "";
-        let streamInterrupted = false;
-        let turnSubmissionStarted = false;
-        const subscription = await clients.scoped.events.subscribeLive(
-            sessionId,
-            {
-                reconcile: async (connection) => {
-                    if (connection.kind === "reconnected" && turnSubmissionStarted) {
-                        streamInterrupted = true;
-                    }
-                },
-                receive: async (event) => {
-                    const payload = event.payload;
-                    if (!("commandId" in payload) || payload.commandId !== commandId) {
-                        return true;
-                    }
-                    if (payload instanceof MobiusTurnStartedEvent) {
-                        attemptId = payload.attemptId;
-                        request.observer?.onStarted?.(payload.attemptId);
-                        return true;
-                    }
-                    if (payload instanceof MobiusAgentMessageEvent) {
-                        request.observer?.onDelta?.(payload.text, event.sequence);
-                        return true;
-                    }
-                    if (payload instanceof MobiusAgentActivityEvent) {
-                        const sourceAttemptId =
-                            event.source instanceof MobiusAttemptEventSource ? event.source.attemptId : attemptId;
-                        request.observer?.onActivity?.({
-                            activityId: payload.activityId,
-                            activityType: payload.activityType,
-                            commandId: payload.commandId,
-                            content: payload.content,
-                            detail: payload.detail,
-                            input: payload.input,
-                            kind: payload.kind,
-                            locations: payload.locations,
-                            name: payload.name,
-                            output: payload.output,
-                            sequence: payload.sequence,
-                            sessionId: payload.sessionId,
-                            status: payload.status,
-                            title: payload.title,
-                            toolKind: payload.toolKind,
-                        });
-                        if (attemptId.length === 0) {
-                            attemptId = sourceAttemptId;
-                        }
-                        return true;
-                    }
-                    if (payload instanceof MobiusControlEvent) {
-                        this.applyPublicControlEvent(payload);
-                        return true;
-                    }
-                    if (payload instanceof MobiusTurnCompletedEvent) {
-                        stopReason = payload.stopReason;
-                        return false;
-                    }
-                    if (payload instanceof MobiusTurnFailedEvent) {
-                        failureCode = payload.code;
-                        failureMessage = payload.message;
-                        return false;
-                    }
-                    return true;
-                },
-            },
-            signal,
-        );
-        this.#publicCommandIds.add(commandId);
-        let acceptedTurnId = "";
-        try {
-            turnSubmissionStarted = true;
-            const accepted = await clients.scoped.turns.submit(
-                sessionId,
-                {
-                    additionalDirectoryIds: request.additionalDirectoryIds ?? [],
-                    content: request.prompt,
-                    idempotencyKey: commandId,
-                    images: request.images ?? [],
-                    resources: request.resources ?? [],
-                },
-                signal,
-            );
-            acceptedTurnId = accepted.turnId;
-            this.#turnIds.set(this.turnKey(sessionId, commandId), accepted.turnId);
-            try {
-                await subscription.completed;
-            } catch (streamError) {
-                streamInterrupted = true;
-                const outcome = await clients.scoped.turns.read(sessionId, accepted.turnId, signal);
-                if (outcome.state instanceof MobiusSucceededTurnState) {
-                    stopReason = outcome.state.stopReason;
-                } else if (outcome.state instanceof MobiusCancelledTurnState) {
-                    stopReason = "cancelled";
-                } else if (outcome.state instanceof MobiusFailedTurnState) {
-                    failureCode = outcome.state.code;
-                    failureMessage = outcome.state.message;
-                } else if (outcome.state instanceof MobiusIndeterminateTurnState) {
-                    throw new MobiusChannelError("turn_indeterminate", outcome.state.reason, { cause: streamError });
-                } else {
-                    throw streamError;
-                }
-            }
-            if (streamInterrupted) {
-                throw new MobiusChannelError(
-                    "turn_stream_interrupted",
-                    "The live Turn stream disconnected before the response was complete",
-                );
-            }
-            if (failureCode.length > 0) {
-                throw new MobiusChannelError(failureCode, failureMessage);
-            }
-            if (stopReason.length === 0) {
-                throw new MobiusChannelError("turn_outcome_unavailable", "The Turn ended without a terminal outcome");
-            }
-            return { sessionId, stopReason };
-        } finally {
-            subscription.close();
-            if (acceptedTurnId.length > 0) {
-                this.#turnIds.delete(this.turnKey(sessionId, commandId));
-            }
-            this.#publicCommandIds.delete(commandId);
-        }
-    };
-
-    private readonly applyPublicControlEvent = (event: MobiusControlEvent): void => {
-        const store = useChatStore.getState();
-        if (event.kind === "agent.content") {
-            store.recordAgentContent(decodeAgentContentEvent(event.encodedPayload));
-            return;
-        }
-        if (event.kind === "session.permission.requested") {
-            store.applySessionPermission(decodeSessionPermissionRequestedEvent(event.encodedPayload));
-            return;
-        }
-        if (event.kind === "session.permission.resolved") {
-            const resolved = decodeSessionPermissionResolvedEvent(event.encodedPayload);
-            store.resolveSessionPermission(resolved.interactionId, resolved.sessionId);
-            return;
-        }
-        if (event.kind === "session.elicitation.requested") {
-            store.applySessionElicitation(decodeSessionElicitationRequestedEvent(event.encodedPayload));
-            return;
-        }
-        if (event.kind === "session.elicitation.resolved") {
-            store.resolveSessionElicitation(decodeSessionElicitationResolvedEvent(event.encodedPayload));
-        }
-    };
-
-    private readonly ensureSession = async (
-        client: MobiusClient,
-        request: PromptRequest,
-        sessionId: string,
-        signal: AbortSignal,
-    ): Promise<void> => {
-        let session: MobiusSession;
-        try {
-            session = await client.sessions.read(sessionId, signal);
-        } catch (error) {
-            if (!(error instanceof MobiusApiError) || error.code !== "session_not_found") {
-                throw error;
-            }
-            await client.sessions.create(
-                {
-                    agentId: request.agentId,
-                    bindingId: request.bindingId,
-                    directoryId: request.directoryId ?? "default",
-                    policy: new MobiusRecordingPolicy(
-                        "full",
-                        PUBLIC_SESSION_RETENTION_MILLISECONDS,
-                        1_000,
-                        PUBLIC_SESSION_CONTENT_LIMIT_BYTES,
-                    ),
-                    runtimeId: this.#connection.runtimeId,
-                    sessionId,
-                    title: "",
-                },
-                signal,
-            );
-            return;
-        }
-        const directoryId = request.directoryId ?? "default";
-        if (session.runtimeId !== this.#connection.runtimeId || session.agentId !== request.agentId) {
-            throw new MobiusChannelError(
-                "session_binding_conflict",
-                "The Session is bound to another Runtime or Agent",
-            );
-        }
-        if (
-            session.defaultBinding.bindingId !== request.bindingId ||
-            session.defaultBinding.agentRef !== request.agentId ||
-            session.defaultBinding.workspaceRef !== directoryId
-        ) {
-            await client.sessions.configure(
-                sessionId,
-                {
-                    agentRef: request.agentId,
-                    bindingId: request.bindingId,
-                    configRevision: session.defaultBinding.configRevision + 1,
-                    runtimeId: this.#connection.runtimeId,
-                    workspaceRef: directoryId,
-                },
-                signal,
-            );
-        }
-    };
-
-    private readonly turnKey = (sessionId: string, commandId: string): string => `${sessionId}\u0000${commandId}`;
 
     readonly #refreshAgentCatalog = async (): Promise<void> => {
         try {

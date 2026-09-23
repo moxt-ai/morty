@@ -3,7 +3,6 @@ import { projectBindings } from "../../../composition/project-bindings.ts";
 import { ClerkGateway } from "../../../gateway/clerk-gateway.ts";
 import { IdentityGateway } from "../../../gateway/identity-gateway.ts";
 import { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
-import { projectObject } from "../../../gateway/project-object-routing.ts";
 import { SlackWebApi } from "../../../gateway/slack-web-gateway.ts";
 import {
     type CloudBindings,
@@ -20,12 +19,7 @@ import { CloudflareBotTriggerLimiter } from "../do/cloudflare-bot-trigger-limite
 import { createSlackFileHandler } from "../http/bot-tools/slack-file-handler.ts";
 import { createSlackApplication } from "../http/slack-api-routes.ts";
 import { CloudflareSlackQueue } from "../infra/cloudflare-slack-queue.ts";
-import {
-    type ProjectQueueDelivery,
-    type ProjectQueueMessage,
-    projectQueueMessageSchema,
-    type SlackQueueMessage,
-} from "../infra/queue-message.ts";
+import type { ProjectQueueDelivery, ProjectQueueMessage, SlackQueueMessage } from "../infra/queue-message.ts";
 import { slackLogger } from "../infra/util/logger.ts";
 import { SecretCipher } from "../infra/util/secret-cipher.ts";
 import { SlackQueueHandler } from "../queue/slack-queue-handler.ts";
@@ -131,6 +125,18 @@ const slack = createSlackWorker<
 
 export const slackWorker = {
     fetch: async (request: Request, bindings: CloudBindings, context?: ExecutionContext) => {
+        if (new URL(request.url).pathname === "/mobius-slack/api/slack/events") {
+            return json(
+                {
+                    error: {
+                        code: "SLACK_CHAT_UNAVAILABLE",
+                        message:
+                            "Slack conversations are temporarily unavailable while Sessions move to the local Runtime.",
+                    },
+                },
+                503,
+            );
+        }
         if (!hasSlackBindings(bindings)) {
             return json(
                 { error: { code: "SLACK_UNAVAILABLE", message: "Slack integration is temporarily unavailable." } },
@@ -139,32 +145,10 @@ export const slackWorker = {
         }
         return await slack.fetch(request, bindings, context);
     },
-    queue: async (batch, bindings) => {
+    queue: async (batch, _bindings) => {
         for (const message of batch.messages) {
-            const parsed = v.safeParse(projectQueueMessageSchema, message.body);
-            if (!parsed.success) {
-                message.ack();
-                continue;
-            }
-            try {
-                const delivery = {
-                    attempts: message.attempts,
-                    id: message.id,
-                    message: parsed.output,
-                    timestamp: message.timestamp.toISOString(),
-                };
-                const response = await projectObject(bindings, parsed.output.projectId).fetch(
-                    new Request("https://project.internal/__project/queue", {
-                        body: JSON.stringify(delivery),
-                        headers: { "content-type": "application/json" },
-                        method: "POST",
-                        signal: AbortSignal.timeout(840_000),
-                    }),
-                );
-                response.ok ? message.ack() : message.retry();
-            } catch {
-                message.retry();
-            }
+            // Queued conversation events cannot be executed without a local Runtime Session.
+            message.ack();
         }
     },
 } satisfies ExportedHandler<CloudBindings, unknown>;

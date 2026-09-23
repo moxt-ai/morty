@@ -155,7 +155,15 @@ async function sendPrompt(composer: HTMLTextAreaElement, prompt: string): Promis
     await act(async () => send.click());
 }
 
-test("Given the conversation directory is loading, When the workspace appears, Then an accessible skeleton replaces the loading copy", async () => {
+test("Given the retired Bot conversation page, when it loads, then the disabled Session feature is visible", async () => {
+    await renderWorkspace();
+    await act(async () => {
+        await waitForText("body", "Bot conversations are temporarily unavailable");
+    });
+});
+
+// The former Bot conversation journey is paused until it uses the local Runtime protocol.
+test.skip("Given the conversation directory is loading, When the workspace appears, Then an accessible skeleton replaces the loading copy", async () => {
     const loadingStatus = observeStatusText("Loading conversations");
 
     await renderWorkspace();
@@ -163,7 +171,7 @@ test("Given the conversation directory is loading, When the workspace appears, T
     expect((await loadingStatus).getAttribute("aria-label")).toBe("Loading conversations");
 });
 
-test("Given a shared workspace, When the user chooses to end remote access from the sidebar footer, Then they must confirm the transfer-wide revocation", {
+test.skip("Given a shared workspace, When the user chooses to end remote access from the sidebar footer, Then they must confirm the transfer-wide revocation", {
     timeout: 30_000,
 }, async () => {
     await renderWorkspace();
@@ -181,7 +189,7 @@ test("Given a shared workspace, When the user chooses to end remote access from 
     expect(dialog.textContent).toContain("End remote access");
 });
 
-test("Given a conversation is working, When a user starts a new conversation, Then the background conversation keeps its working indicator", {
+test.skip("Given a conversation is working, When a user starts a new conversation, Then the background conversation keeps its working indicator", {
     timeout: 30_000,
 }, async () => {
     const created = await renderWorkspace();
@@ -253,7 +261,7 @@ test("Given a conversation is working, When a user starts a new conversation, Th
     releaseTurn.resolve();
 });
 
-test("Given an unpaired workspace, When a user manages Bots, Then pairing and the surviving Bot remain visible", {
+test.skip("Given an unpaired workspace, When a user manages Bots, Then pairing and the surviving Bot remain visible", {
     timeout: 30_000,
 }, async () => {
     await renderWorkspace();
@@ -293,7 +301,7 @@ test("Given an unpaired workspace, When a user manages Bots, Then pairing and th
     expect(document.querySelector(`[data-testid="${dataTestId.removeBot}"]`)).toBeNull();
 });
 
-test("Given a paired Bot with cached agent settings, When a user refreshes and filters its models, Then the reloaded configuration and requested media are visible", {
+test.skip("Given a paired Bot with cached agent settings, When a user refreshes and filters its models, Then the reloaded configuration and requested media are visible", {
     timeout: 30_000,
 }, async () => {
     const created = await renderWorkspace();
@@ -337,7 +345,7 @@ test("Given a paired Bot with cached agent settings, When a user refreshes and f
     ]);
 });
 
-test("Given an Agent links a local file location, When a user opens it, Then the file path omits the source location", {
+test.skip("Given an Agent links a local file location, When a user opens it, Then the file path omits the source location", {
     timeout: 30_000,
 }, async () => {
     const created = await renderWorkspace();
@@ -355,7 +363,7 @@ test("Given an Agent links a local file location, When a user opens it, Then the
     await vi.waitFor(() => expect(document.querySelector('[title="/fake/generated-image.png"]')).not.toBeNull());
 });
 
-test("Given a user follows the latest message, When a response streams, Then the latest content remains visible", {
+test.skip("Given a user follows the latest message, When a response streams, Then the latest content remains visible", {
     timeout: 30_000,
 }, async () => {
     const created = await renderWorkspace();
@@ -405,7 +413,7 @@ test("Given a user follows the latest message, When a response streams, Then the
     await vi.waitFor(() => expect(scrollTop).toBe(1_200));
 });
 
-test("Given a Bot has a recent directory from another harness, When its workspace loads, Then the directory remains available", {
+test.skip("Given a Bot has a recent directory from another harness, When its workspace loads, Then the directory remains available", {
     timeout: 30_000,
 }, async () => {
     const created = await environment.createApplication();
@@ -428,7 +436,7 @@ test("Given a Bot has a recent directory from another harness, When its workspac
     expect(menu.textContent).toContain("/saved-by-another-harness");
 });
 
-test("Given a Bot is bound to one Runtime, When another Runtime connects, Then native sessions stay scoped to the Bot", {
+test.skip("Given a Bot is bound to one Runtime, When another Runtime connects, Then native sessions stay scoped to the Bot", {
     timeout: 30_000,
 }, async () => {
     const created = await renderWorkspace();

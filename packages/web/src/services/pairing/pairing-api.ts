@@ -1,18 +1,16 @@
 import {
     decodeMobiusAgentCapabilities,
     decodeRecordedAgentContentValue,
-    MobiusApiError,
     MobiusClient,
     MobiusError,
-    MobiusPageRequest,
     type MobiusRuntimeDescriptor,
     type MobiusRuntimePairing,
     MobiusRuntimePairingRequest,
     type MobiusRuntimePairingStatus,
-    type MobiusSession,
     mobiusApiUrl,
     StaticMobiusCredentialProvider,
 } from "@moxt-ai/mobius-sdk";
+import { connectMobiusChannelClient } from "@moxt-ai/mobius-sdk/channel";
 import { centralLocalStorage, channelCredentialEntry } from "@/services/local-storage/central-local-storage";
 import {
     AgentIntegrationOption,
@@ -32,7 +30,6 @@ import {
     MissingAgentOption,
     PairingApiError,
     RecordedSession,
-    type RecordedTurn,
     WaitingBrowserPairingStatus,
 } from "@/view-models/chat/channel";
 
@@ -789,18 +786,6 @@ export async function readChannelHistory(channelId: string): Promise<ChannelHist
     return await readChannelHistoryWithSignal(channelId, AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS));
 }
 
-interface RestoredChannelSession {
-    readonly session: RecordedSession;
-    readonly turns: RecordedTurn[];
-}
-
-function isConcurrentSessionRemoval(error: unknown): boolean {
-    return (
-        (error instanceof PairingApiError || error instanceof MobiusApiError) &&
-        (error.code === "session_not_found" || error.code === "session_deleted")
-    );
-}
-
 function publicServiceClient(credential: BrowserChannelCredential): MobiusClient {
     return new MobiusClient({
         credentialProvider: new StaticMobiusCredentialProvider(credential.hostToken),
@@ -925,89 +910,81 @@ export async function revokeProjectRuntime(
 }
 
 async function readChannelHistoryWithSignal(channelId: string, signal: AbortSignal): Promise<ChannelHistory> {
-    const credential = readChannelCredential(channelId);
-    const client = publicServiceClient(credential);
+    const connection = await readChannelConnection(channelId, signal);
+    if (!connection.agents.some((agent) => agent.id === "codex")) {
+        return new ChannelHistory([]);
+    }
+    const relayUrl = mobiusApiUrl(connection.mobiusBaseUrl, `/channels/${encodeURIComponent(channelId)}/host`);
+    relayUrl.searchParams.set("token", connection.accessToken);
+    relayUrl.searchParams.set("appId", connection.appId);
+    relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
+    const client = await connectMobiusChannelClient({ relayUrl: relayUrl.toString() });
     try {
-        const directory = await client.sessions.list(new MobiusPageRequest(100, ""), signal);
-        const summaries = directory.sessions.map((session) => decodeRecordedSession(session, credential));
-        const restoredBySessionId = new Map<string, RestoredChannelSession>();
-        await Promise.all(
-            summaries.map(async (session) => {
-                try {
-                    const nativeHistory = await client.sessions.queryNativeMessages(session.sessionId, signal);
-                    const turns: RecordedTurn[] = [];
-                    restoredBySessionId.set(session.sessionId, {
-                        turns,
-                        session: new RecordedSession(
-                            session.agentId,
-                            session.bindingId,
-                            session.configRevision,
-                            session.directoryId,
-                            session.runtimeId,
-                            session.sessionId,
-                            session.title,
-                            session.updatedAt,
-                            nativeHistory,
-                            [],
-                            [],
-                            session.additionalDirectoryIds,
-                            session.lastCommittedSeq,
-                        ),
-                    });
-                } catch (error) {
-                    if (!isConcurrentSessionRemoval(error)) {
-                        throw error;
-                    }
-                }
-            }),
-        );
-        const restored: RestoredChannelSession[] = [];
-        for (const session of summaries) {
-            const value = restoredBySessionId.get(session.sessionId);
-            if (value !== undefined) {
-                restored.push(value);
+        const identity = {
+            additionalDirectoryIds: [],
+            agentId: "codex",
+            bindingId: "workspace",
+            directoryId: "default",
+            sessionId: channelId,
+        };
+        let cursor: string | null = null;
+        const sessions: RecordedSession[] = [];
+        do {
+            signal.throwIfAborted();
+            const result = await client.manageNativeSession(
+                { ...identity, action: "list", cursor, kind: "native.session.request", requestId: crypto.randomUUID() },
+                signal,
+            );
+            if (result.action !== "list") {
+                throw new PairingApiError("invalid_relay_response", "The runtime returned an invalid session list.");
             }
-        }
-        const sessions = restored.map(({ session }) => session);
-        const turns: RecordedTurn[] = [];
-        for (const { turns: sessionTurns } of restored) {
-            sessionTurns.sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
-            turns.push(...sessionTurns);
-        }
-        return new ChannelHistory(turns, sessions);
+            for (const entry of result.entries) {
+                if (entry.mobiusSessionIds.length === 0) {
+                    continue;
+                }
+                const history = await client.manageNativeSession(
+                    {
+                        ...identity,
+                        action: "history",
+                        entryId: entry.entryId,
+                        kind: "native.session.request",
+                        requestId: crypto.randomUUID(),
+                    },
+                    signal,
+                );
+                if (history.action !== "history") {
+                    throw new PairingApiError(
+                        "invalid_relay_response",
+                        "The runtime returned invalid session history.",
+                    );
+                }
+                for (const sessionId of entry.mobiusSessionIds) {
+                    sessions.push(
+                        new RecordedSession(
+                            "codex",
+                            "workspace",
+                            1,
+                            entry.directoryId,
+                            connection.runtimeId,
+                            sessionId,
+                            entry.title,
+                            entry.updatedAt ?? new Date(0).toISOString(),
+                            history.history,
+                            [],
+                            [],
+                            entry.additionalDirectories.map((directory) => directory.directoryId),
+                        ),
+                    );
+                }
+            }
+            cursor = result.nextCursor;
+        } while (cursor !== null);
+        return new ChannelHistory([], sessions);
     } catch (error) {
         return throwPublicApiFailure(error);
     } finally {
         client.close();
     }
-}
-
-function decodeRecordedSession(value: MobiusSession, credential: BrowserChannelCredential): RecordedSession {
-    const binding = value.defaultBinding;
-    if (
-        value.projectId !== credential.projectId ||
-        value.state.kind !== "ready" ||
-        binding.sessionId !== value.sessionId ||
-        binding.agentRef !== value.agentId ||
-        binding.runtimeId !== value.runtimeId
-    ) {
-        throw new PairingApiError("invalid_relay_response", "The relay returned an inconsistent session summary.");
-    }
-    return new RecordedSession(
-        value.agentId,
-        binding.bindingId,
-        binding.configRevision,
-        binding.workspaceRef,
-        value.runtimeId,
-        value.sessionId,
-        value.title,
-        value.updatedAt,
-        null,
-        [],
-        [],
-        [],
-        value.lastCommittedSequence,
-    );
 }
 
 function decodeActivityDetail(value: unknown): ActivityDetailResult {
