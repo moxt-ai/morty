@@ -424,8 +424,10 @@ test("Given two owned Sessions on one Runtime channel, When committed events arr
         const payload = (sessionId: string, text: string) =>
             encodeAgentMessageDeltaEvent({
                 commandId: crypto.randomUUID(),
+                epoch: crypto.randomUUID(),
                 kind: "agent.message.delta",
                 messageId: crypto.randomUUID(),
+                sequence: 1,
                 sessionId,
                 text,
             });

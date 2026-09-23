@@ -3,18 +3,7 @@ import { type ReactNode, useRef } from "react";
 import { flushSync } from "react-dom";
 import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
 import type { LocalHistoryState } from "../../view-models/chat/local-history-store.ts";
-
-export type TurnState =
-    | { readonly kind: "idle" }
-    | {
-          readonly kind: "running";
-          readonly commandId: string;
-          readonly sessionId: string;
-          readonly prompt: string;
-          readonly text: string;
-          readonly truncated: boolean;
-      }
-    | { readonly kind: "unknown"; readonly message: string; readonly prompt: string };
+import type { TurnState } from "../../view-models/chat/local-live-turn-store.ts";
 
 export function LocalAgentTranscript({
     messages,

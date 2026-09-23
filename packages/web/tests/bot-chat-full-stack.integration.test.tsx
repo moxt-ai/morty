@@ -378,7 +378,7 @@ test("Given a Bot paired with a real local Runtime, When its owner sends a promp
     }
 }, 60_000);
 
-test.each(["before the prompt", "after the first delta"] as const)(
+test.each(["before the prompt", "after the first delta", "after the first delta and release"] as const)(
     "Given a Bot Session, When another view joins %s, Then both show its prompt and live Agent output",
     async (joinTime) => {
         const identity = await createIdentity();
@@ -401,6 +401,8 @@ test.each(["before the prompt", "after the first delta"] as const)(
             { role: "assistant", text: "Earlier reply" },
         ]);
         const first = await renderChat(identity, sessionId);
+        const promptText =
+            joinTime === "after the first delta and release" ? "release after first delta" : "hold after first delta";
         let second: Awaited<ReturnType<typeof renderChat>> | null =
             joinTime === "before the prompt" ? await renderChat(identity, sessionId) : null;
         try {
@@ -414,7 +416,7 @@ test.each(["before the prompt", "after the first delta"] as const)(
             }
             await act(async () => {
                 const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-                setter?.call(draft, "hold after first delta");
+                setter?.call(draft, promptText);
                 draft.dispatchEvent(new Event("input", { bubbles: true }));
             });
             const send = first.container.querySelector<HTMLButtonElement>('button[aria-label="Send message"]');
@@ -426,19 +428,29 @@ test.each(["before the prompt", "after the first delta"] as const)(
             if (second === null) {
                 second = await renderChat(identity, sessionId);
             }
-            await waitForTextIn(second.container, "hold after first delta");
+            await waitForTextIn(second.container, promptText);
             await waitForTextIn(second.container, "Partial reply");
             for (const view of [first, second]) {
                 const transcript = view.container.querySelector('[role="log"]');
                 expect(
                     [...(transcript?.querySelectorAll('article[aria-label="Message from you"]') ?? [])].filter((item) =>
-                        item.textContent?.includes("hold after first delta"),
+                        item.textContent?.includes(promptText),
                     ),
                 ).toHaveLength(1);
                 expect(transcript?.querySelectorAll('article[aria-label="Current Agent response"]')).toHaveLength(1);
                 expect(transcript?.textContent).toContain("Partial reply");
             }
             expect(second.container.querySelector('button[aria-label="Send message"]')).toBeNull();
+            if (joinTime === "after the first delta and release") {
+                await writeFile(resolve(runtime.stateDirectory, "agent/resume-turn"), "*");
+                await waitForTextIn(second.container, "Partial reply and more");
+                const responses = second.container.querySelectorAll(
+                    'article[aria-label="Current Agent response"], article[aria-label="Agent response"]',
+                );
+                expect(
+                    [...responses].filter((item) => item.textContent?.includes("Partial reply and more")),
+                ).toHaveLength(1);
+            }
         } finally {
             await first.close();
             await second?.close();

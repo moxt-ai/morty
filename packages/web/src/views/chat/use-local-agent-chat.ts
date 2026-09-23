@@ -16,8 +16,8 @@ import { useStore } from "zustand";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import { createLocalHistoryStore } from "../../view-models/chat/local-history-store.ts";
+import { createLocalLiveTurnStore } from "../../view-models/chat/local-live-turn-store.ts";
 import type { PendingInteraction } from "./local-agent-interactions.tsx";
-import type { TurnState } from "./local-agent-transcript.tsx";
 
 type RuntimeState =
     | { readonly kind: "connecting" }
@@ -30,7 +30,6 @@ type RuntimeState =
           readonly modelSettingId: string | null;
           readonly models: readonly { readonly value: string; readonly name: string }[];
       };
-const LIVE_TEXT_LIMIT = 100_000;
 function failureMessage(error: unknown): string {
     return error instanceof Error ? error.message : "The local Agent Runtime is unavailable.";
 }
@@ -115,6 +114,7 @@ export function useLocalAgentChat({
     const [runtime, setRuntime] = useState<RuntimeState>({ kind: "connecting" });
     const [sessions, setSessions] = useState<readonly ManagedChatSession[]>([]);
     const [historyStore] = useState(createLocalHistoryStore);
+    const [turnStore] = useState(createLocalLiveTurnStore);
     const routeSessionRef = useRef(routeSessionId);
     routeSessionRef.current = routeSessionId;
     const selectRouteRef = useRef(selectRouteSession);
@@ -129,7 +129,7 @@ export function useLocalAgentChat({
     const historyError = history.kind === "failed" ? history.message : operationError;
     const [draft, setDraft] = useState("");
     const [selectedModel, setSelectedModel] = useState("");
-    const [turn, setTurn] = useState<TurnState>({ kind: "idle" });
+    const { state: turn } = useStore(turnStore);
     const [interaction, setInteraction] = useState<PendingInteraction | null>(null);
     const [elicitationValues, setElicitationValues] = useState<Readonly<Record<string, string>>>({});
     const [nativeEntries, setNativeEntries] = useState<readonly NativeSessionEntry[] | null>(null);
@@ -140,49 +140,64 @@ export function useLocalAgentChat({
         readonly controller: AbortController;
         readonly completion: Promise<void>;
     } | null>(null);
-    const activeRequest = useRef<AbortController | null>(null);
+    const activeRequest = useRef<{
+        readonly sessionId: string;
+        readonly controller: AbortController;
+        readonly completion: Promise<void>;
+    } | null>(null);
     const onlineRef = useRef(false);
     const refreshActiveTurn = useCallback(
-        async (client: MobiusChannelClient, agentRef: string, sessionId: string, parent: AbortSignal) => {
-            activeRequest.current?.abort(new Error("Another active Turn was requested"));
+        async (
+            client: MobiusChannelClient,
+            agentRef: string,
+            sessionId: string,
+            parent: AbortSignal,
+            force = false,
+        ) => {
+            const previous = activeRequest.current;
+            if (!force && previous?.sessionId === sessionId) {
+                await previous.completion;
+                return;
+            }
+            previous?.controller.abort(new Error("Another active Turn was requested"));
             const controller = new AbortController();
-            activeRequest.current = controller;
             const signal = AbortSignal.any([parent, controller.signal]);
-            try {
-                const session = (await requests.localSessions(bot.botId, signal)).find((item) => item.id === sessionId);
-                if (session === undefined) {
-                    return;
-                }
-                const snapshot = await localActiveTurn(client, bot.botId, agentRef, session, signal);
-                signal.throwIfAborted();
-                const selected = historyStore.getState().state;
-                if (selected.kind === "none" || selected.sessionId !== sessionId || snapshot === null) {
-                    return;
-                }
-                setTurn((current) => {
-                    if (current.kind === "running" && current.commandId !== snapshot.commandId) {
-                        return current;
+            const before = turnStore.getState().state;
+            const completion = (async () => {
+                try {
+                    const session = (await requests.localSessions(bot.botId, signal)).find(
+                        (item) => item.id === sessionId,
+                    );
+                    if (session === undefined) {
+                        return;
                     }
-                    return {
-                        kind: "running",
-                        commandId: snapshot.commandId,
-                        sessionId,
-                        prompt: snapshot.prompt,
-                        text: snapshot.text,
-                        truncated: snapshot.truncated,
-                    };
-                });
-            } catch (error) {
-                if (!signal.aborted) {
-                    setOperationError(failureMessage(error));
+                    const snapshot = await localActiveTurn(client, bot.botId, agentRef, session, signal);
+                    signal.throwIfAborted();
+                    const selected = historyStore.getState().state;
+                    if (selected.kind === "none" || selected.sessionId !== sessionId) {
+                        return;
+                    }
+                    if (snapshot === null && turnStore.getState().state !== before) {
+                        return;
+                    }
+                    turnStore.getState().receiveSnapshot(sessionId, snapshot);
+                } catch (error) {
+                    if (!signal.aborted) {
+                        setOperationError(failureMessage(error));
+                    }
                 }
+            })();
+            const current = { sessionId, controller, completion };
+            activeRequest.current = current;
+            try {
+                await completion;
             } finally {
-                if (activeRequest.current === controller) {
+                if (activeRequest.current === current) {
                     activeRequest.current = null;
                 }
             }
         },
-        [bot.botId, historyStore, requests],
+        [bot.botId, historyStore, requests, turnStore],
     );
     const refreshHistory = useCallback(
         async (client: MobiusChannelClient, agentRef: string, sessionId: string, parent: AbortSignal) => {
@@ -249,7 +264,7 @@ export function useLocalAgentChat({
         lifetime.current = controller;
         setRuntime({ kind: "connecting" });
         historyStore.getState().select(null);
-        setTurn({ kind: "idle" });
+        turnStore.getState().reset();
         setInteraction(null);
         connectionRef.current = null;
         onlineRef.current = false;
@@ -278,31 +293,27 @@ export function useLocalAgentChat({
                         }
                         switch (message.kind) {
                             case SESSION_PROMPT_KIND:
-                                setTurn((current) =>
-                                    current.kind === "running" && current.commandId === message.commandId
-                                        ? current
-                                        : {
-                                              kind: "running",
-                                              commandId: message.commandId,
-                                              sessionId: message.sessionId,
-                                              prompt: message.prompt,
-                                              text: "",
-                                              truncated: false,
-                                          },
-                                );
+                                turnStore.getState().receivePrompt(message);
                                 return;
                             case AGENT_MESSAGE_DELTA_KIND:
-                                setTurn((current) =>
-                                    current.kind === "running" && current.commandId === message.commandId
-                                        ? {
-                                              ...current,
-                                              text: (current.text + message.text).slice(-LIVE_TEXT_LIMIT),
-                                              truncated:
-                                                  current.truncated ||
-                                                  current.text.length + message.text.length > LIVE_TEXT_LIMIT,
-                                          }
-                                        : current,
-                                );
+                                if (turnStore.getState().receiveDelta(message) === "resync") {
+                                    const connection = connectionRef.current;
+                                    if (connection !== null) {
+                                        void refreshActiveTurn(
+                                            connection.client,
+                                            connection.agentRef,
+                                            message.sessionId,
+                                            controller.signal,
+                                            true,
+                                        );
+                                        void refreshHistory(
+                                            connection.client,
+                                            connection.agentRef,
+                                            message.sessionId,
+                                            controller.signal,
+                                        );
+                                    }
+                                }
                                 return;
                             case SESSION_COMPLETED_KIND: {
                                 const connection = connectionRef.current;
@@ -314,19 +325,11 @@ export function useLocalAgentChat({
                                         controller.signal,
                                     );
                                 }
-                                setTurn((current) =>
-                                    current.kind === "running" && current.commandId === message.commandId
-                                        ? { kind: "idle" }
-                                        : current,
-                                );
+                                turnStore.getState().complete(message.commandId);
                                 return;
                             }
                             case SESSION_FAILED_KIND:
-                                setTurn((current) =>
-                                    current.kind === "running" && current.commandId === message.commandId
-                                        ? { kind: "unknown", prompt: current.prompt, message: message.message }
-                                        : current,
-                                );
+                                turnStore.getState().uncertain(message.commandId, message.message);
                                 return;
                             default: {
                                 const remaining: never = message;
@@ -373,12 +376,21 @@ export function useLocalAgentChat({
                     onStatus: (online) => {
                         const reconnected = online && !onlineRef.current;
                         onlineRef.current = online;
+                        if (!online) {
+                            activeRequest.current?.controller.abort(new Error("Runtime disconnected"));
+                        }
                         setRuntime((current) => (current.kind === "ready" ? { ...current, online } : current));
                         const current = historyStore.getState().state;
                         const selected = current.kind === "none" ? null : current.sessionId;
                         const connection = connectionRef.current;
                         if (reconnected && selected !== null && connection !== null) {
-                            void refreshActiveTurn(connection.client, connection.agentRef, selected, controller.signal);
+                            void refreshActiveTurn(
+                                connection.client,
+                                connection.agentRef,
+                                selected,
+                                controller.signal,
+                                true,
+                            );
                             void refreshHistory(connection.client, connection.agentRef, selected, controller.signal);
                         }
                     },
@@ -415,14 +427,14 @@ export function useLocalAgentChat({
         return () => {
             controller.abort();
             historyRequest.current?.controller.abort();
-            activeRequest.current?.abort();
+            activeRequest.current?.controller.abort();
             connectionRef.current = null;
             onlineRef.current = false;
             if (lifetime.current === controller) {
                 lifetime.current = null;
             }
         };
-    }, [bot.botId, historyStore, refreshActiveTurn, refreshHistory, requests]);
+    }, [bot.botId, historyStore, refreshActiveTurn, refreshHistory, requests, turnStore]);
 
     const loadSession = useCallback(
         async (session: ManagedChatSession) => {
@@ -432,12 +444,12 @@ export function useLocalAgentChat({
             const sessionId = session.id;
             historyStore.getState().select(sessionId);
             setOperationError(null);
-            setTurn({ kind: "idle" });
+            turnStore.getState().reset();
             setInteraction(null);
             void refreshActiveTurn(runtime.client, runtime.agentRef, sessionId, lifetime.current.signal);
             await refreshHistory(runtime.client, runtime.agentRef, sessionId, lifetime.current.signal);
         },
-        [historyStore, refreshActiveTurn, refreshHistory, runtime],
+        [historyStore, refreshActiveTurn, refreshHistory, runtime, turnStore],
     );
     useEffect(() => {
         if (routeSessionId === null || runtime.kind !== "ready") {
@@ -494,7 +506,7 @@ export function useLocalAgentChat({
         const sessionId = session.id;
         const commandId = crypto.randomUUID();
         setDraft("");
-        setTurn({ kind: "running", commandId, sessionId, prompt, text: "", truncated: false });
+        turnStore.getState().start(commandId, sessionId, prompt);
         try {
             await runtime.client.prompt({
                 agentId: runtime.agentRef,
@@ -519,17 +531,16 @@ export function useLocalAgentChat({
             if (lifetime.current !== null) {
                 await refreshHistory(runtime.client, runtime.agentRef, sessionId, lifetime.current.signal);
             }
-            setTurn((current) =>
-                current.kind === "running" && current.commandId === commandId ? { kind: "idle" } : current,
-            );
+            turnStore.getState().complete(commandId);
         } catch (error) {
             const current = historyStore.getState().state;
             if (current.kind !== "none" && current.sessionId === sessionId) {
-                setTurn({
-                    kind: "unknown",
-                    prompt,
-                    message: `Delivery could not be confirmed: ${failureMessage(error)}. Check local history before sending again.`,
-                });
+                turnStore
+                    .getState()
+                    .uncertain(
+                        commandId,
+                        `Delivery could not be confirmed: ${failureMessage(error)}. Check local history before sending again.`,
+                    );
             }
         }
     };
@@ -654,7 +665,7 @@ export function useLocalAgentChat({
         selectedModel,
         setSelectedModel,
         turn,
-        setTurn,
+        markTurnUncertain: turnStore.getState().uncertain,
         interaction,
         elicitationValues,
         setElicitationValues,

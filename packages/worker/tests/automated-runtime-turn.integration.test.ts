@@ -37,8 +37,10 @@ test("Given a connected Runtime, When Slack sends a Turn, Then the native Agent 
             sendEvent(
                 {
                     commandId: command.commandId,
+                    epoch: command.commandId,
                     kind: AGENT_MESSAGE_DELTA_KIND,
                     messageId: "message_1",
+                    sequence: 1,
                     sessionId: command.sessionId,
                     text: "Hello from Claude Code",
                 },

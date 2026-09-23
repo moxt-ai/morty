@@ -53,7 +53,7 @@ export function LocalAgentChat({
         selectedModel,
         setSelectedModel,
         turn,
-        setTurn,
+        markTurnUncertain,
         interaction,
         elicitationValues,
         setElicitationValues,
@@ -182,12 +182,10 @@ export function LocalAgentChat({
                                                 commandId: turn.commandId,
                                                 sessionId: turn.sessionId,
                                             });
-                                            setTurn({
-                                                kind: "unknown",
-                                                prompt: turn.prompt,
-                                                message:
-                                                    "Cancellation requested. Check local history before sending again.",
-                                            });
+                                            markTurnUncertain(
+                                                turn.commandId,
+                                                "Cancellation requested. Check local history before sending again.",
+                                            );
                                         }}
                                         type="button"
                                     >
