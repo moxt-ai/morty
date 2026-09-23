@@ -373,9 +373,11 @@ async function keepAlive(stack, options) {
 }
 
 async function prepare(options) {
-    const validModes = new Set(["web", "web-server"]);
+    const validModes = new Set(["web", "web-server", "web-server-mobius", "web-server-mobius-cli"]);
     if (!validModes.has(options.mode)) {
-        throw new Error(`Unknown mode ${options.mode}; use web or web-server`);
+        throw new Error(
+            `Unknown mode ${options.mode}; use web, web-server, web-server-mobius, or web-server-mobius-cli`,
+        );
     }
     if (options.mode === "web") {
         return prepareWeb(options);
@@ -554,10 +556,22 @@ async function prepare(options) {
             logPath: chatLog,
         });
 
+        let cliLog;
+        if (options.mode === "web-server-mobius-cli") {
+            cliLog = path.join(stateDir, "cli.log");
+            log("checking local Mobius CLI");
+            await run("pnpm", ["--dir", "third-party/mobius", "mobius", "agents"], {
+                cwd: REPO_ROOT,
+            }).then(({ stdout, stderr }) => fs.writeFileSync(cliLog, `${stdout}${stderr}`, { mode: 0o600 }));
+        }
+
         stack = {
             ...stack,
             appId,
             mode: options.mode,
+            cliCommand:
+                options.mode === "web-server-mobius-cli" ? "pnpm --dir third-party/mobius mobius agents" : undefined,
+            ...(cliLog === undefined ? {} : { cliLog }),
             chatConfig: CHAT_CONFIG,
             chatLog,
             chatOrigin,
@@ -600,11 +614,10 @@ function readPairRecord(line) {
 }
 
 /**
- * Runs the Chat-served setup bundle's `pair` flow with every writable
- * location isolated under the stack's state directory:
- * `documents/` backs the setup script's private configuration,
- * `cli-state/` backs the Runtime CLI's saved connections, and `workspace/`
- * is the paired default workspace. Nothing lands in the user's home.
+ * Runs the Chat-served setup bundle's `pair` flow with Morty's writable
+ * location isolated under the stack's state directory. `documents/` isolates
+ * Morty's saved setup files, while Mobius uses its normal singleton manager and
+ * connection state. `workspace/` is the paired default workspace.
  */
 async function pair(options) {
     const stack = options.stateDir === undefined ? null : readStack(options.stateDir);
@@ -616,9 +629,8 @@ async function pair(options) {
     }
     const harness = options.harness ?? "codex";
     const documents = path.join(stack.stateDir, "documents");
-    const cliState = path.join(stack.stateDir, "cli-state");
     const workspace = path.resolve(options.workspace ?? path.join(stack.stateDir, "workspace"));
-    for (const directory of [documents, cliState, workspace]) {
+    for (const directory of [documents, workspace]) {
         fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     }
     const origin = new URL(stack.chatOrigin).origin;
@@ -653,17 +665,13 @@ async function pair(options) {
     fs.writeFileSync(pairLog, "", { mode: 0o600 });
     const shimDirectory = path.join(stack.stateDir, "local-cli-bin");
     fs.mkdirSync(shimDirectory, { recursive: true, mode: 0o700 });
-    const shim = path.join(shimDirectory, "npx");
+    const shim = path.join(shimDirectory, "mobius");
     fs.writeFileSync(
         shim,
         `#!/usr/bin/env node
 const { spawnSync } = require("node:child_process");
 const args = process.argv.slice(2);
-if (args[0] !== "--yes" || args[1] !== "@moxt-ai/mobius@latest") {
-    process.stderr.write("The local Mobius CLI shim received an unsupported command.\\n");
-    process.exit(2);
-}
-const result = spawnSync("pnpm", ["--dir", ${JSON.stringify(MOBIUS_ROOT)}, "mobius", ...args.slice(2)], {
+const result = spawnSync(process.execPath, [${JSON.stringify(path.join(MOBIUS_ROOT, "packages/cli/src/cli.ts"))}, ...args], {
     stdio: "inherit",
 });
 process.exit(result.status ?? 1);
@@ -678,7 +686,6 @@ process.exit(result.status ?? 1);
         process.execPath,
         {
             DOCUMENT_DIR: documents,
-            MOBIUS_STATE_DIRECTORY: cliState,
             PATH: `${shimDirectory}${path.delimiter}${process.env.PATH ?? ""}`,
         },
         workspace,
@@ -686,7 +693,7 @@ process.exit(result.status ?? 1);
 
     const deadline = Date.now() + PAIR_READY_TIMEOUT_MILLISECONDS;
     let ready = null;
-    let runtimeStarted = null;
+    let runtimeId = null;
     for (;;) {
         const records = fs
             .readFileSync(pairLog, "utf8")
@@ -698,7 +705,12 @@ process.exit(result.status ?? 1);
             await stopProcess(runtimePid);
             fail(`pair failed: ${JSON.stringify(failure.error)}`);
         }
-        runtimeStarted = records.findLast((record) => record !== null && record.status === "runtime_started");
+        const selected = records.findLast(
+            (record) => record !== null && (record.status === "runtime_reused" || record.status === "runtime_paired"),
+        );
+        if (selected !== undefined && selected !== null && typeof selected.runtimeId === "string") {
+            runtimeId = selected.runtimeId;
+        }
         const completed = records.findLast((record) => record !== null && record.status === "ready");
         if (completed !== undefined && completed !== null) {
             ready = completed;
@@ -713,17 +725,51 @@ process.exit(result.status ?? 1);
         await stopProcess(runtimePid);
         fail(`the pair runtime did not report ready within ${PAIR_READY_TIMEOUT_MILLISECONDS / 1000}s; see ${pairLog}`);
     }
+    if (runtimeId === null) {
+        fail("the pair runtime did not report its Runtime ID");
+    }
+    const pairList = path.join(stack.stateDir, `.pair-list-${crypto.randomUUID()}.json`);
+    fs.writeFileSync(pairList, "", { mode: 0o600, flag: "wx" });
+    let connectionId;
+    try {
+        await run(process.execPath, [
+            path.join(MOBIUS_ROOT, "packages/cli/src/cli.ts"),
+            "pair",
+            "list",
+            `--output-json=${pairList}`,
+        ]);
+        const listed = JSON.parse(fs.readFileSync(pairList, "utf8"));
+        if (!Array.isArray(listed)) {
+            fail("Mobius returned an invalid connection list");
+        }
+        const connection = listed.find(
+            (item) =>
+                item !== null &&
+                typeof item === "object" &&
+                item.app_id === stack.appId &&
+                item.runtime_id === runtimeId,
+        );
+        if (
+            connection === undefined ||
+            typeof connection.connection_id !== "string" ||
+            !/^mcn_[a-f0-9]{32}$/u.test(connection.connection_id)
+        ) {
+            fail("Mobius did not report the paired connection");
+        }
+        connectionId = connection.connection_id;
+    } finally {
+        fs.rmSync(pairList, { force: true });
+    }
 
     const record = {
         chatOrigin: stack.chatOrigin,
         pairLog,
         runtimePid,
-        daemonPid: runtimeStarted !== null && Number.isInteger(runtimeStarted.pid) ? runtimeStarted.pid : undefined,
         browserIdentity: { token, userId: identity.userId, projectId },
         botId,
+        connectionId,
         harness,
         documents,
-        cliState,
         workspace,
     };
     const previous = Array.isArray(stack.runtimes) ? stack.runtimes : [];
@@ -778,10 +824,7 @@ async function logs(options) {
         fail("pass --state-dir for a stack created by prepare");
     }
     const worker = options.worker ?? "chat";
-    const runtimeLogs = (Array.isArray(stack.runtimes) ? stack.runtimes : []).flatMap((runtime) => [
-        runtime.pairLog,
-        typeof runtime.cliState === "string" ? path.join(runtime.cliState, "logs", "daemon.log") : undefined,
-    ]);
+    const runtimeLogs = (Array.isArray(stack.runtimes) ? stack.runtimes : []).map((runtime) => runtime.pairLog);
     const uniqueRuntimeLogs = [...new Set(runtimeLogs.filter((file) => typeof file === "string"))];
     const files =
         worker === "all"
@@ -841,7 +884,20 @@ async function logs(options) {
 
 async function stopRecorded(stack) {
     for (const runtime of Array.isArray(stack.runtimes) ? stack.runtimes : []) {
-        log(`stopping paired runtime (pid ${runtime.runtimePid})`);
+        if (typeof runtime.connectionId === "string" && /^mcn_[a-f0-9]{32}$/u.test(runtime.connectionId)) {
+            log(`stopping paired connection ${runtime.connectionId}`);
+            try {
+                await run(process.execPath, [
+                    path.join(MOBIUS_ROOT, "packages/cli/src/cli.ts"),
+                    "pair",
+                    "stop",
+                    "--connection",
+                    runtime.connectionId,
+                ]);
+            } catch (cause) {
+                log(`could not stop paired connection: ${cause instanceof Error ? cause.message : String(cause)}`);
+            }
+        }
         await stopProcess(runtime.runtimePid);
     }
     if (stack.chatPid !== undefined) {
@@ -880,7 +936,7 @@ function usage() {
     process.stdout.write(
         [
             "Usage:",
-            "  node scripts/local-dev.cjs prepare <web|web-server> [--state-dir DIR] [--platform-port N] [--chat-port N] [--app-id ID --app-secret SECRET] [--force] [--no-build] [--background]",
+            "  node scripts/local-dev.cjs prepare <web|web-server|web-server-mobius|web-server-mobius-cli> [--state-dir DIR] [--platform-port N] [--chat-port N] [--app-id ID --app-secret SECRET] [--force] [--no-build] [--background]",
             "  node scripts/local-dev.cjs pair    --state-dir DIR [--harness ID] [--workspace DIR]",
             "  node scripts/local-dev.cjs status --state-dir DIR",
             "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|platform|runtime|all] [--lines N] [--filter REGEX] [--follow]",

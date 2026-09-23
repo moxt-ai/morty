@@ -214,32 +214,52 @@ export class LocalStack {
 
     setupRuntime(): SetupRuntime {
         return {
-            start: async (_directory, args, cwd, signal) => {
+            run: async (_directory, args, cwd, signal) => {
                 signal.throwIfAborted();
                 const child = await this.startRuntime(args, cwd);
                 if (child.pid === undefined) {
                     throw new Error("Runtime process did not start");
+                }
+                const code = await new Promise<number | null>((resolveExit, reject) => {
+                    child.once("error", reject);
+                    child.once("exit", resolveExit);
+                });
+                signal.throwIfAborted();
+                if (code !== 0) {
+                    throw new Error(`Runtime command exited with code ${String(code)}`);
                 }
                 return { pid: child.pid, logPath: join(this.harness.artifactDirectory, "mobius.log") };
             },
         };
     }
 
-    async startRuntime(args: readonly string[], workspace = this.directories.workspace) {
-        const executable = join(mobiusRepository, "packages", "cli", "dist", "cli.js");
-        const environment = {
+    async stopMobiusManager(): Promise<void> {
+        await this.harness.run(
+            process.execPath,
+            [join(mobiusRepository, "packages", "cli", "dist", "cli.js"), "quit"],
+            { env: this.runtimeEnvironment() },
+        );
+    }
+
+    private runtimeEnvironment(): Readonly<Record<string, string>> {
+        return {
             MOBIUS_E2E_ACP_TRACE_DIRECTORY: join(this.harness.artifactDirectory, "acp"),
             MOBIUS_E2E_ACP_REAL_BIN: this.agent.acpBinary,
-            MOBIUS_DEFAULT_WORKSPACE: workspace,
+            MOBIUS_DEFAULT_WORKSPACE: this.directories.workspace,
             PATH: dirname(process.execPath),
             [this.agent.adapterOverrideVariable]: acpProxy,
             MOBIUS_STATE_DIRECTORY: this.directories.runtime,
-            XDG_CACHE_HOME: this.directories["xdg-cache"],
-            XDG_CONFIG_HOME: this.directories["xdg-config"],
-            XDG_DATA_HOME: this.directories["xdg-data"],
-            XDG_STATE_HOME: this.directories["xdg-state"],
+            XDG_CACHE_HOME: this.directories["xdg-cache"] ?? "",
+            XDG_CONFIG_HOME: this.directories["xdg-config"] ?? "",
+            XDG_DATA_HOME: this.directories["xdg-data"] ?? "",
+            XDG_STATE_HOME: this.directories["xdg-state"] ?? "",
             ...this.agent.runtimeEnvironment,
         };
+    }
+
+    async startRuntime(args: readonly string[], workspace = this.directories.workspace) {
+        const executable = join(mobiusRepository, "packages", "cli", "dist", "cli.js");
+        const environment = { ...this.runtimeEnvironment(), MOBIUS_DEFAULT_WORKSPACE: workspace };
         const manager =
             this.harness.children.find((process) => process.name === "mobius")?.child ??
             (await this.harness.start("mobius", process.execPath, [executable, "__manager"], {

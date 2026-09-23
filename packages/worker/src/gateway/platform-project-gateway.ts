@@ -114,7 +114,8 @@ export class PlatformProjectGateway {
                     502,
                 );
             }
-            return { ...pairing, relayUrl: this.configuration().origin };
+            const configuration = this.configuration();
+            return { ...pairing, appId: configuration.appId, relayUrl: configuration.origin };
         });
 
     readonly chatAgents = async (projectId: string, signal: AbortSignal) =>

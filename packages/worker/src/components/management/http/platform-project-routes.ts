@@ -23,7 +23,9 @@ export function createPlatformProjectRoutes() {
         )
         .get("/project", authenticatedSession, async (context) => {
             const session = context.get("session");
+            const { appId } = context.env.gateways.platformProjects.configuration();
             return json({
+                appId,
                 project: await context.env.services.management.readProject(
                     session.userId,
                     AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(15000)]),
