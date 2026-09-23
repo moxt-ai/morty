@@ -1,4 +1,4 @@
-# Mobius Chat design
+# Morty design
 
 ## Product flow
 

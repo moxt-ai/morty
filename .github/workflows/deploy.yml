@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 20
     environment:
       name: ${{ inputs.environment }}
-      url: ${{ inputs.environment == 'production' && 'https://mobius-chat.paraflow.biz' || 'https://mobius-chat.paradev.biz' }}
+      url: ${{ inputs.environment == 'production' && 'https://morty.paraflow.biz' || 'https://morty.paradev.biz' }}
     concurrency:
       group: cloudflare-${{ inputs.environment }}
       cancel-in-progress: false
@@ -108,7 +108,7 @@ jobs:
 
       - name: Publish setup artifact
         run: >-
-          pnpm exec wrangler r2 object put "mobius-chat-${{ inputs.environment }}-apac-attachments/artifacts/setup.mjs"
+          pnpm exec wrangler r2 object put "morty-${{ inputs.environment }}-apac-attachments/artifacts/setup.mjs"
           --file packages/setup/dist/setup.mjs --content-type "text/javascript; charset=utf-8"
           --env "${{ inputs.environment }}" --remote
         env:

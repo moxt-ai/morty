@@ -66,13 +66,13 @@ Provision the buckets and their custom domains once, replacing each zone ID
 with the Cloudflare zone that owns the domain:
 
 ```sh
-pnpm exec wrangler r2 bucket create mobius-chat-staging-web-assets
-pnpm exec wrangler r2 bucket domain add mobius-chat-staging-web-assets --domain assets.mobius-chat.paradev.biz --zone-id <PARADEV_ZONE_ID> --min-tls 1.2 --force
-pnpm exec wrangler r2 bucket cors set mobius-chat-staging-web-assets --file config/r2/staging-web-assets-cors.json --force
+pnpm exec wrangler r2 bucket create morty-staging-web-assets
+pnpm exec wrangler r2 bucket domain add morty-staging-web-assets --domain assets.morty.paradev.biz --zone-id <PARADEV_ZONE_ID> --min-tls 1.2 --force
+pnpm exec wrangler r2 bucket cors set morty-staging-web-assets --file config/r2/staging-web-assets-cors.json --force
 
-pnpm exec wrangler r2 bucket create mobius-chat-production-web-assets
-pnpm exec wrangler r2 bucket domain add mobius-chat-production-web-assets --domain assets.mobius-chat.paraflow.biz --zone-id <PARAFLOW_ZONE_ID> --min-tls 1.2 --force
-pnpm exec wrangler r2 bucket cors set mobius-chat-production-web-assets --file config/r2/production-web-assets-cors.json --force
+pnpm exec wrangler r2 bucket create morty-production-web-assets
+pnpm exec wrangler r2 bucket domain add morty-production-web-assets --domain assets.morty.paraflow.biz --zone-id <PARAFLOW_ZONE_ID> --min-tls 1.2 --force
+pnpm exec wrangler r2 bucket cors set morty-production-web-assets --file config/r2/production-web-assets-cors.json --force
 ```
 
 The deployment token needs R2 object-write permission for both web asset
@@ -101,7 +101,7 @@ development R2:
 
 ```sh
 pnpm build:setup
-pnpm exec wrangler r2 object put mobius-chat-local-apac-attachments/artifacts/setup.mjs --file packages/setup/dist/setup.mjs --local
+pnpm exec wrangler r2 object put morty-local-apac-attachments/artifacts/setup.mjs --file packages/setup/dist/setup.mjs --local
 ```
 
 ### Project Durable Objects

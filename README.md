@@ -1,7 +1,7 @@
 # Mobius Cloud
 
-[![CI](https://github.com/moxt-ai/mobius-chat/actions/workflows/ci.yml/badge.svg)](https://github.com/moxt-ai/mobius-chat/actions/workflows/ci.yml)
-[![Coverage](https://codecov.io/gh/moxt-ai/mobius-chat/branch/main/graph/badge.svg)](https://codecov.io/gh/moxt-ai/mobius-chat)
+[![CI](https://github.com/moxt-ai/morty/actions/workflows/ci.yml/badge.svg)](https://github.com/moxt-ai/morty/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/moxt-ai/morty/branch/main/graph/badge.svg)](https://codecov.io/gh/moxt-ai/morty)
 
 CI runs static verification and test coverage as parallel jobs. `pnpm ci:check`
 reproduces them serially; routine local work should use `pnpm lint`, `pnpm

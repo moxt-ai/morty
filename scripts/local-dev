@@ -2,13 +2,13 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-APP_ID=${MOBIUS_CHAT_LOCAL_APP_ID:-}
-APP_SECRET=${MOBIUS_CHAT_LOCAL_APP_SECRET:-}
+APP_ID=${MORTY_LOCAL_APP_ID:-}
+APP_SECRET=${MORTY_LOCAL_APP_SECRET:-}
 
 case "${1:-}" in
     web)
         [ -n "$APP_ID" ] && [ -n "$APP_SECRET" ] || {
-            echo "MOBIUS_CHAT_LOCAL_APP_ID and MOBIUS_CHAT_LOCAL_APP_SECRET are required" >&2
+            echo "MORTY_LOCAL_APP_ID and MORTY_LOCAL_APP_SECRET are required" >&2
             exit 2
         }
         MODE=$1

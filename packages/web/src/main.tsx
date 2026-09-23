@@ -3,12 +3,12 @@ import { ErrorBoundary, reactErrorHandler } from "@sentry/react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ToastProvider } from "./components/ui/toast.tsx";
-import { installMobiusChatDebugBridge } from "./debug-bridge.ts";
+import { installMortyDebugBridge } from "./debug-bridge.ts";
 import { Page } from "./views/application/app.tsx";
 import { Bootstrap } from "./views/application/bootstrap.tsx";
 import "./styles.css";
 
-installMobiusChatDebugBridge();
+installMortyDebugBridge();
 
 const rootElement = document.getElementById("root");
 if (rootElement === null) {

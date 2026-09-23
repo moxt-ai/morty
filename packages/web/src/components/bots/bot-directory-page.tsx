@@ -59,7 +59,7 @@ export function BotDirectoryPage({
                             <h2 className="text-xl font-semibold tracking-[-0.025em]">Chat Bots</h2>
                             <p className="mt-1 text-sm text-muted-foreground">
                                 Bot identities, instructions, Agent selection, conversations, and Slack bindings are
-                                owned by Mobius Chat.
+                                owned by Morty.
                             </p>
                         </div>
                         <Button onClick={viewModel.openCreation}>

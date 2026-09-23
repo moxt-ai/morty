@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 "use strict";
 
-// Local full-stack development helper for Mobius Chat.
+// Local full-stack development helper for Morty.
 //
 // Dependency-free CommonJS. Requires the repository's pinned Node.js (>= 24).
 //
@@ -38,10 +38,10 @@ const MOBIUS_GENERATED_MIGRATIONS = path.join(
     "session-relay-do-migrations.ts",
 );
 const SETUP_BUNDLE = "packages/setup/dist/setup.mjs";
-const CHAT_ATTACHMENTS_BUCKET = "mobius-chat-local-e2e-attachments";
+const CHAT_ATTACHMENTS_BUCKET = "morty-local-e2e-attachments";
 const PLATFORM_AUTH_HEADERS = {
     "content-type": "application/json",
-    authorization: "Bearer mobius-chat-local-e2e",
+    authorization: "Bearer morty-local-e2e",
     "x-mobius-oidc-provider": "e2e",
 };
 
@@ -347,7 +347,7 @@ async function prepareWeb(options) {
         logPath,
         "pnpm",
         {
-            VITE_MOBIUS_BASE_URL: process.env.MOBIUS_CHAT_LOCAL_PLATFORM_URL ?? DEFAULT_STAGING_PLATFORM,
+            VITE_MOBIUS_BASE_URL: process.env.MORTY_LOCAL_PLATFORM_URL ?? DEFAULT_STAGING_PLATFORM,
             VITE_MOBIUS_APP_ID: appId,
         },
     );
@@ -473,7 +473,7 @@ async function prepare(options) {
             const application = await httpJson(`${platformOrigin}/mobius/api/dashboard/v1/apps`, {
                 headers: PLATFORM_AUTH_HEADERS,
                 body: {
-                    displayName: `Mobius Chat local dev ${path.basename(stateDir)}`,
+                    displayName: `Morty local dev ${path.basename(stateDir)}`,
                     tenantId,
                 },
             });
