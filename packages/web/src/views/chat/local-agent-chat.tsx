@@ -7,10 +7,12 @@ import type {
 import type { MobiusChannelClient } from "@moxt-ai/mobius-sdk/channel";
 import { History, LoaderCircle, Plus, Send, StopCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
+import { LocalAgentInteractions, type PendingInteraction } from "./local-agent-interactions.tsx";
+import { LocalAgentSessionsDialog } from "./local-agent-sessions-dialog.tsx";
+import { LocalAgentTranscript, type TurnState } from "./local-agent-transcript.tsx";
 
 type RuntimeState =
     | { readonly kind: "connecting" }
@@ -20,25 +22,11 @@ type RuntimeState =
           readonly agentRef: string;
           readonly client: MobiusChannelClient;
           readonly online: boolean;
-          readonly modelSettingId: string;
+          readonly modelSettingId: string | null;
           readonly models: readonly { readonly value: string; readonly name: string }[];
       };
-type TurnState =
-    | { readonly kind: "idle" }
-    | {
-          readonly kind: "running";
-          readonly commandId: string;
-          readonly sessionId: string;
-          readonly prompt: string;
-          readonly text: string;
-      }
-    | { readonly kind: "unknown"; readonly message: string; readonly prompt: string };
-type PendingInteraction =
-    | { readonly kind: "permission"; readonly request: SessionPermissionRequestedEvent }
-    | { readonly kind: "elicitation"; readonly request: SessionElicitationRequestedEvent };
-
 function failureMessage(error: unknown): string {
-    return error instanceof Error ? error.message : "The local Codex Runtime is unavailable.";
+    return error instanceof Error ? error.message : "The local Agent Runtime is unavailable.";
 }
 
 function nativeRequest(botId: string, agentRef: string, sessionId: string) {
@@ -73,7 +61,7 @@ async function localHistory(
         signal,
     );
     if (result.action !== "linked-history") {
-        throw new Error("Codex returned invalid history.");
+        throw new Error("The Agent returned invalid history.");
     }
     if (result.history.status === "unavailable") {
         throw new Error(result.history.cause.message);
@@ -81,7 +69,7 @@ async function localHistory(
     return { entry: null, messages: result.history.messages };
 }
 
-export function LocalCodexChat({
+export function LocalAgentChat({
     bot,
     bots,
     onSelectBot,
@@ -173,9 +161,6 @@ export function LocalCodexChat({
                 const model = discovered.options.find(
                     (option) => option.category === "model" && option.type === "select",
                 );
-                if (model === undefined || model.type !== "select" || model.values.length === 0) {
-                    throw new Error("Codex did not offer a model for this Bot.");
-                }
                 controller.signal.throwIfAborted();
                 const client = await requests.connectLocalRuntime(bot.botId, controller.signal, {
                     onActivity: () => {},
@@ -231,10 +216,10 @@ export function LocalCodexChat({
                     agentRef: configuration.agentRef,
                     client,
                     online: true,
-                    modelSettingId: model.id,
-                    models: model.values,
+                    modelSettingId: model?.id ?? null,
+                    models: model?.type === "select" ? model.values : [],
                 });
-                setSelectedModel(model.currentValue);
+                setSelectedModel(model?.type === "select" ? model.currentValue : "");
                 setSessions(saved);
                 const urlSession = new URL(window.location.href).searchParams.get("sessionId");
                 const initial = saved.find((session) => session.id === urlSession)?.id ?? saved[0]?.id ?? null;
@@ -284,7 +269,7 @@ export function LocalCodexChat({
             const saved = await requests.localSessions(bot.botId, lifetime.current.signal);
             const session = saved.find((item) => item.id === created.sessionId);
             if (session === undefined) {
-                throw new Error("The new Codex session was not saved by Chat.");
+                throw new Error("The new Agent session was not saved by Chat.");
             }
             setSessions(saved);
             await open(session);
@@ -321,14 +306,17 @@ export function LocalCodexChat({
                 directoryId: session.directoryId,
                 additionalDirectoryIds: session.additionalDirectoryIds,
                 prompt,
-                sessionConfigurations: [
-                    {
-                        booleanValue: false,
-                        configId: runtime.modelSettingId,
-                        value: selectedModel,
-                        valueType: "select",
-                    },
-                ],
+                sessionConfigurations:
+                    runtime.modelSettingId === null
+                        ? []
+                        : [
+                              {
+                                  booleanValue: false,
+                                  configId: runtime.modelSettingId,
+                                  value: selectedModel,
+                                  valueType: "select",
+                              },
+                          ],
                 sessionId,
                 observer: {
                     onDelta: (text) =>
@@ -365,7 +353,7 @@ export function LocalCodexChat({
                 lifetime.current.signal,
             );
             if (result.action !== "list") {
-                throw new Error("Codex returned an invalid session list.");
+                throw new Error("The Agent returned an invalid session list.");
             }
             setNativeEntries(result.entries);
         } catch (error) {
@@ -385,7 +373,7 @@ export function LocalCodexChat({
             const saved = await requests.localSessions(bot.botId, lifetime.current.signal);
             const session = saved.find((item) => item.id === created.sessionId);
             if (session === undefined) {
-                throw new Error("The imported Codex session was not saved by Chat.");
+                throw new Error("The imported Agent session was not saved by Chat.");
             }
             setSessions(saved);
             setNativeEntries(null);
@@ -484,7 +472,7 @@ export function LocalCodexChat({
                     <Plus className="size-4" /> New conversation
                 </Button>
                 <Button className="mt-2 justify-start gap-2" onClick={() => void browse()} variant="outline">
-                    <History className="size-4" /> Local Codex sessions
+                    <History className="size-4" /> Local Agent sessions
                 </Button>
                 <nav aria-label="Conversations" className="mt-4 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
                     {sessions.map((session) => (
@@ -502,8 +490,8 @@ export function LocalCodexChat({
             </aside>
             <section className="flex min-w-0 flex-1 flex-col">
                 <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-4 text-sm font-medium">
-                    <span>{bot.displayName} · Codex</span>
-                    {runtime.kind === "ready" && (
+                    <span>{bot.displayName}</span>
+                    {runtime.kind === "ready" && runtime.models.length > 0 && (
                         <select
                             aria-label="Model"
                             className="rounded-lg border border-border bg-background p-2 text-sm"
@@ -520,7 +508,7 @@ export function LocalCodexChat({
                 </header>
                 {runtime.kind === "connecting" && (
                     <p className="m-auto flex items-center gap-2" role="status">
-                        <LoaderCircle className="size-4 animate-spin" /> Connecting to Codex…
+                        <LoaderCircle className="size-4 animate-spin" /> Connecting to Agent…
                     </p>
                 )}
                 {runtime.kind === "failed" && (
@@ -530,164 +518,20 @@ export function LocalCodexChat({
                 )}
                 {runtime.kind === "ready" && (
                     <>
-                        <div aria-label="Messages" className="flex-1 space-y-5 overflow-y-auto px-6 py-5" role="log">
-                            {messages.map((message, index) => (
-                                <article
-                                    aria-label={message.role === "user" ? "Message from you" : "Agent response"}
-                                    className="mx-auto max-w-3xl"
-                                    key={`${index.toString()}:${message.role}`}
-                                >
-                                    <p className="mb-1 text-xs font-semibold text-muted-foreground">
-                                        {message.role === "user" ? "You" : "Codex"}
-                                    </p>
-                                    <AgentMarkdown markdown={message.text} readImage={readImage} streaming={false} />
-                                    {message.images?.map((image) => (
-                                        <img
-                                            alt={image.name}
-                                            className="mt-2 max-h-96 max-w-full rounded-lg"
-                                            key={`${image.name}:${image.mimeType}:${image.data.slice(0, 32)}`}
-                                            src={`data:${image.mimeType};base64,${image.data}`}
-                                        />
-                                    ))}
-                                </article>
-                            ))}
-                            {turn.kind === "running" && (
-                                <>
-                                    <article aria-label="Message from you" className="mx-auto max-w-3xl">
-                                        <p className="mb-1 text-xs font-semibold text-muted-foreground">You</p>
-                                        <AgentMarkdown markdown={turn.prompt} readImage={readImage} streaming={false} />
-                                    </article>
-                                    <article aria-label="Current Codex response" className="mx-auto max-w-3xl">
-                                        <p className="text-xs font-semibold text-muted-foreground">Codex is working</p>
-                                        <AgentMarkdown markdown={turn.text} readImage={readImage} streaming />
-                                    </article>
-                                </>
-                            )}
-                            {turn.kind === "unknown" && (
-                                <div role="alert">
-                                    <p>{turn.message}</p>
-                                    <p className="mt-2 whitespace-pre-wrap">{turn.prompt}</p>
-                                </div>
-                            )}
-                            {historyError !== null && <p role="alert">{historyError}</p>}
-                            {interaction?.kind === "permission" && (
-                                <fieldset
-                                    aria-label="Codex permission request"
-                                    className="mx-auto max-w-3xl rounded-xl border border-border bg-card p-4"
-                                >
-                                    <p className="font-medium">{interaction.request.title}</p>
-                                    <div className="mt-3 flex flex-wrap gap-2">
-                                        {interaction.request.options.map((option) => (
-                                            <Button
-                                                key={option.optionId}
-                                                onClick={() =>
-                                                    void answerPermission(interaction.request, option.optionId)
-                                                }
-                                                type="button"
-                                                variant="outline"
-                                            >
-                                                {option.name}
-                                            </Button>
-                                        ))}
-                                    </div>
-                                </fieldset>
-                            )}
-                            {interaction?.kind === "elicitation" && (
-                                <fieldset
-                                    aria-label="Codex input request"
-                                    className="mx-auto max-w-3xl space-y-3 rounded-xl border border-border bg-card p-4"
-                                >
-                                    <p className="font-medium">{interaction.request.message}</p>
-                                    {interaction.request.mode === "url" && (
-                                        <a
-                                            className="underline"
-                                            href={interaction.request.url}
-                                            rel="noreferrer"
-                                            target="_blank"
-                                        >
-                                            Open authorization page
-                                        </a>
-                                    )}
-                                    {interaction.request.mode === "form" &&
-                                        interaction.request.fields.map((field) => (
-                                            <div className="block text-sm" key={field.name}>
-                                                <label className="mb-1 block" htmlFor={`elicitation-${field.name}`}>
-                                                    {field.title}
-                                                </label>
-                                                {field.type === "boolean" ? (
-                                                    <input
-                                                        checked={elicitationValues[field.name] === "true"}
-                                                        id={`elicitation-${field.name}`}
-                                                        onChange={(event) =>
-                                                            setElicitationValues((current) => ({
-                                                                ...current,
-                                                                [field.name]: String(event.target.checked),
-                                                            }))
-                                                        }
-                                                        type="checkbox"
-                                                    />
-                                                ) : field.type === "select" ? (
-                                                    <select
-                                                        className="w-full rounded border border-border bg-background p-2"
-                                                        id={`elicitation-${field.name}`}
-                                                        onChange={(event) =>
-                                                            setElicitationValues((current) => ({
-                                                                ...current,
-                                                                [field.name]: event.target.value,
-                                                            }))
-                                                        }
-                                                        value={elicitationValues[field.name] ?? ""}
-                                                    >
-                                                        <option value="">Choose…</option>
-                                                        {field.options.map((option) => (
-                                                            <option key={option.value} value={option.value}>
-                                                                {option.label}
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                ) : (
-                                                    <input
-                                                        className="w-full rounded border border-border bg-background p-2"
-                                                        id={`elicitation-${field.name}`}
-                                                        onChange={(event) =>
-                                                            setElicitationValues((current) => ({
-                                                                ...current,
-                                                                [field.name]: event.target.value,
-                                                            }))
-                                                        }
-                                                        type={
-                                                            field.type === "number" || field.type === "integer"
-                                                                ? "number"
-                                                                : "text"
-                                                        }
-                                                        value={elicitationValues[field.name] ?? ""}
-                                                    />
-                                                )}
-                                                {field.description && (
-                                                    <span className="block text-xs text-muted-foreground">
-                                                        {field.description}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        ))}
-                                    <div className="flex gap-2">
-                                        <Button
-                                            onClick={() => void answerElicitation(interaction.request, "accept")}
-                                            type="button"
-                                        >
-                                            Continue
-                                        </Button>
-                                        <Button
-                                            onClick={() => void answerElicitation(interaction.request, "decline")}
-                                            type="button"
-                                            variant="outline"
-                                        >
-                                            Decline
-                                        </Button>
-                                    </div>
-                                </fieldset>
-                            )}
-                        </div>
+                        <LocalAgentTranscript
+                            messages={messages}
+                            turn={turn}
+                            historyError={historyError}
+                            readImage={readImage}
+                        >
+                            <LocalAgentInteractions
+                                interaction={interaction}
+                                elicitationValues={elicitationValues}
+                                setElicitationValues={setElicitationValues}
+                                answerPermission={answerPermission}
+                                answerElicitation={answerElicitation}
+                            />
+                        </LocalAgentTranscript>
                         <form
                             className="border-t border-border p-4"
                             onSubmit={(event) => {
@@ -706,7 +550,7 @@ export function LocalCodexChat({
                                             void send();
                                         }
                                     }}
-                                    placeholder="Ask Codex…"
+                                    placeholder="Ask Agent…"
                                     value={draft}
                                 />
                                 {turn.kind === "running" ? (
@@ -742,34 +586,11 @@ export function LocalCodexChat({
                     </>
                 )}
             </section>
-            {nativeEntries !== null && (
-                <div
-                    aria-label="Local Codex sessions"
-                    className="fixed inset-0 z-50 grid place-items-center bg-black/30"
-                    role="dialog"
-                >
-                    <div className="max-h-[80vh] w-[min(600px,90vw)] overflow-y-auto rounded-xl bg-card p-5 shadow-xl">
-                        <div className="mb-3 flex items-center justify-between">
-                            <h2 className="font-semibold">Local Codex sessions</h2>
-                            <Button onClick={() => setNativeEntries(null)} variant="outline">
-                                Close
-                            </Button>
-                        </div>
-                        {nativeEntries.length === 0 && <p>No local sessions were found.</p>}
-                        {nativeEntries.map((entry) => (
-                            <button
-                                className="block w-full rounded-lg p-3 text-left hover:bg-muted"
-                                key={entry.entryId}
-                                onClick={() => void importSession(entry)}
-                                type="button"
-                            >
-                                <span className="block text-sm font-medium">{entry.title}</span>
-                                <span className="block text-xs text-muted-foreground">{entry.directoryLabel}</span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
+            <LocalAgentSessionsDialog
+                entries={nativeEntries}
+                onClose={() => setNativeEntries(null)}
+                onImport={importSession}
+            />
         </main>
     );
 }
