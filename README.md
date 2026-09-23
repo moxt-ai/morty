@@ -1,4 +1,4 @@
-# Mobius Cloud
+# Morty
 
 [![CI](https://github.com/moxt-ai/morty/actions/workflows/ci.yml/badge.svg)](https://github.com/moxt-ai/morty/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/moxt-ai/morty/branch/main/graph/badge.svg)](https://codecov.io/gh/moxt-ai/morty)
@@ -10,7 +10,7 @@ across lines, statements, functions, and branches; falling short of the target i
 visible but does not fail the build. See
 [Testing](TESTING.md) for scope and commands.
 
-Mobius Cloud is one web application and one Cloudflare Worker. Clerk authenticates
+Morty is one web application and one Cloudflare Worker. Clerk authenticates
 individual users; Clerk Organizations and Cloud workspaces are not used. A signed-in
 user can create or select a Mobius bot, chat with it, and connect it to Slack.
 

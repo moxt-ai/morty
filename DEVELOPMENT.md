@@ -155,8 +155,8 @@ Every Project has a SQLite-backed `ProjectDurableObject`. The validated Project 
 selects the object and its `CHAT_ATTACHMENTS_APAC` or `CHAT_ATTACHMENTS_WNAM` R2
 bucket. The object verifies user ownership independently.
 The browser persists `{ userId, projectId }`. Chat requests use
-`/mobius-cloud/api/chat/projects/:projectId/...`; project-scoped identity and
-management requests use `/mobius-cloud/api/projects/:projectId/...`.
+`/morty/api/chat/projects/:projectId/...`; project-scoped identity and
+management requests use `/morty/api/projects/:projectId/...`.
 The path selects the Project object before authentication; ownership is checked
 inside the selected Project. Project headers are not used.
 Only one-time pairing and transfer tickets embed Project context; anonymous

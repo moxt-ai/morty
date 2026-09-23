@@ -1,6 +1,6 @@
 {
     "$schema": "node_modules/wrangler/config-schema.json",
-    "name": "mobius-cloud-local",
+    "name": "morty-local",
     "main": "packages/worker/src/index.ts",
     "compatibility_date": "2026-09-07",
     "keep_vars": false,
@@ -16,14 +16,7 @@
     "assets": {
         "binding": "ASSETS",
         "not_found_handling": "single-page-application",
-        "run_worker_first": [
-            "/mobius-cloud/api/*",
-            "/mobius-cloud/ws",
-            "/mobius-slack/api/*",
-            "/setup.md",
-            "/pair.md",
-            "/setup.mjs"
-        ]
+        "run_worker_first": ["/morty/api/*", "/morty/ws", "/mobius-slack/api/*", "/setup.md", "/pair.md", "/setup.mjs"]
     },
     "queues": {
         "producers": [{ "binding": "EVENTS", "queue": "app-slack-events" }],

@@ -302,7 +302,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             authenticated && !route.startsWith("/chat/projects/")
                 ? `/projects/${identifier(context.config.project_id)}${route}`
                 : route;
-        const response = await fetch(new URL(`/mobius-cloud/api${path}`, context.base), {
+        const response = await fetch(new URL(`/morty/api${path}`, context.base), {
             method: body === undefined ? "GET" : "POST",
             headers,
             redirect: "error",

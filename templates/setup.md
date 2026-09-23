@@ -19,7 +19,7 @@ Do not ask for an additional replacement confirmation.
 ## Run
 
 1. Use the server-provided Chat origin exactly: `BASE_URL="{{BASE_URL}}"`.
-   The script calls the Chat API at `{{BASE_URL}}/mobius-cloud/api/*`.
+   The script calls the Chat API at `{{BASE_URL}}/morty/api/*`.
    The server supplies the Runtime URL separately as `pairing.relayUrl`.
 
    Use `DOCUMENT_DIR` from the environment if provided; otherwise resolve the user's

@@ -243,7 +243,7 @@ export class AnonymousIdentityApi {
                 ? `/projects/${encodeURIComponent(workspace.projectId)}${path}`
                 : path;
         const response = await this.#fetchRequest(
-            new Request(new URL(`/mobius-cloud/api${scopedPath}`, this.#origin), { ...init, headers, signal }),
+            new Request(new URL(`/morty/api${scopedPath}`, this.#origin), { ...init, headers, signal }),
         );
         const value: unknown = response.status === 204 ? null : await response.json();
         signal.throwIfAborted();

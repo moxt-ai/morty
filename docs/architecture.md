@@ -1,6 +1,6 @@
 # Architecture
 
-Mobius Cloud consists of `packages/web` and `packages/worker`.
+Morty consists of `packages/web` and `packages/worker`.
 
 The web package presents a user-owned bot flow: manage bots, chat, and connect Slack.
 Visitors receive a browser-persisted anonymous credential and can manage bots and Chat

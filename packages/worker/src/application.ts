@@ -54,12 +54,12 @@ const application: Hono<{ readonly Bindings: CloudBindings }> = new Hono<{ reado
             (context) => createApplicationDependencies(context.env).logger,
         ),
     )
-    .use("/mobius-cloud/api/*", bodyLimit({ maxSize: MAXIMUM_REQUEST_BODY_BYTES }))
-    .all("/mobius-cloud/api", notFound)
+    .use("/morty/api/*", bodyLimit({ maxSize: MAXIMUM_REQUEST_BODY_BYTES }))
+    .all("/morty/api", notFound)
     .all("/mobius-slack/api", notFound)
     .route("/", instructionDocumentRoutes)
     .route("/", setupArtifact)
-    .get("/mobius-cloud/ws", (context) => {
+    .get("/morty/ws", (context) => {
         const logger = createApplicationDependencies(context.env).logger;
         return createWebSocketApiBridge(
             context.req.raw,
@@ -71,7 +71,7 @@ const application: Hono<{ readonly Bindings: CloudBindings }> = new Hono<{ reado
         );
     })
     .post("/__project/bootstrap", (context) => bootstrapProject(context.req.raw, context.env))
-    .route("/mobius-cloud/api", cloudRoutes)
+    .route("/morty/api", cloudRoutes)
     .route("/mobius-slack/api", slackRoutes)
     .notFound(notFound);
 
@@ -83,11 +83,11 @@ const publicApplication = new Hono<{ readonly Bindings: CloudBindings }>()
             (context) => createApplicationDependencies(context.env).logger,
         ),
     )
-    .use("/mobius-cloud/api/*", bodyLimit({ maxSize: MAXIMUM_REQUEST_BODY_BYTES }))
+    .use("/morty/api/*", bodyLimit({ maxSize: MAXIMUM_REQUEST_BODY_BYTES }))
     .route("/", instructionDocumentRoutes)
     .route("/", setupArtifact)
-    .get("/mobius-cloud/ws", (context) => application.fetch(context.req.raw, context.env))
-    .route("/mobius-cloud/api", publicCloudRoutes)
+    .get("/morty/ws", (context) => application.fetch(context.req.raw, context.env))
+    .route("/morty/api", publicCloudRoutes)
     .route("/mobius-slack/api", publicSlackRoutes)
     .notFound(notFound);
 

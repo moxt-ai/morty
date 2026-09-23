@@ -95,13 +95,13 @@ For a contract-level reproduction, call the Chat HTTP API directly against
 `chatOrigin`. A first-time visitor must mint an anonymous identity first:
 
 ```sh
-curl -sS -X POST "$CHAT_ORIGIN/mobius-cloud/api/identity/anonymous-users" \
+curl -sS -X POST "$CHAT_ORIGIN/morty/api/identity/anonymous-users" \
   -H 'content-type: application/json' -d '{}'
 ```
 
 The response carries the browser identity, including the Project ID and token.
 Reuse those as `authorization: Bearer <token>` against
-`/mobius-cloud/api/chat/projects/<projectId>/...`. Keep tokens out of transcripts
+`/morty/api/chat/projects/<projectId>/...`. Keep tokens out of transcripts
 and logs.
 
 ## Escalating to deployed environments

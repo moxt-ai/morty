@@ -624,20 +624,17 @@ async function pair(options) {
     const origin = new URL(stack.chatOrigin).origin;
 
     log("minting a browser identity and pairing ticket");
-    const identity = await httpJson(`${origin}/mobius-cloud/api/identity/anonymous-users`, { body: {} });
+    const identity = await httpJson(`${origin}/morty/api/identity/anonymous-users`, { body: {} });
     const token = typeof identity.token === "string" ? identity.token : "";
     const projectId = typeof identity.projectId === "string" ? identity.projectId : "";
     const botId = typeof identity.bot === "object" && identity.bot !== null ? identity.bot.botId : undefined;
     if (token.length === 0 || projectId.length === 0 || typeof botId !== "string" || botId.length === 0) {
         fail("the Chat Worker did not return a usable anonymous identity");
     }
-    const pairing = await httpJson(
-        `${origin}/mobius-cloud/api/projects/${encodeURIComponent(projectId)}/identity/pairings`,
-        {
-            headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-            body: { botId },
-        },
-    );
+    const pairing = await httpJson(`${origin}/morty/api/projects/${encodeURIComponent(projectId)}/identity/pairings`, {
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: { botId },
+    });
     const ticket = new URL(typeof pairing.url === "string" ? pairing.url : "about:invalid");
     const pairingToken = ticket.searchParams.get("token") ?? "";
     if (pairingToken.length === 0) {

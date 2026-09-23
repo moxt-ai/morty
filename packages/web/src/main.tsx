@@ -24,7 +24,7 @@ createRoot(rootElement, {
             <ErrorBoundary
                 fallback={
                     <Page>
-                        <p role="alert">Mobius Cloud encountered an error. Please reload to try again.</p>
+                        <p role="alert">Morty encountered an error. Please reload to try again.</p>
                     </Page>
                 }
             >

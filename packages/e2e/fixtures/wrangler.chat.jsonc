@@ -1,20 +1,13 @@
 {
     "$schema": "../../../node_modules/wrangler/config-schema.json",
     "name": "morty-local-e2e",
-    "main": "../../../dist/mobius_cloud_local/index.js",
+    "main": "../../../dist/morty_local/index.js",
     "compatibility_date": "2026-09-07",
     "assets": {
         "binding": "ASSETS",
         "directory": "../../../dist/client",
         "not_found_handling": "single-page-application",
-        "run_worker_first": [
-            "/mobius-cloud/api/*",
-            "/mobius-cloud/ws",
-            "/mobius-slack/api/*",
-            "/pair.md",
-            "/setup.md",
-            "/setup.mjs"
-        ]
+        "run_worker_first": ["/morty/api/*", "/morty/ws", "/mobius-slack/api/*", "/pair.md", "/setup.md", "/setup.mjs"]
     },
     "r2_buckets": [
         { "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-local-e2e-attachments" },

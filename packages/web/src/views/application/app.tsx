@@ -15,18 +15,14 @@ function AppHeader({ account, navigation }: { readonly account?: ReactNode; read
     return (
         <header className="shrink-0 border-b border-border bg-card">
             <div className="mx-auto flex min-h-16 max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-                <a
-                    className="flex items-center gap-3 font-semibold tracking-tight"
-                    href="/"
-                    aria-label="Mobius Cloud home"
-                >
+                <a className="flex items-center gap-3 font-semibold tracking-tight" href="/" aria-label="Morty home">
                     <span
                         aria-hidden="true"
                         className="flex size-9 items-center justify-center rounded-lg bg-primary text-2xl text-primary-foreground"
                     >
                         ∞
                     </span>
-                    Mobius Cloud
+                    Morty
                 </a>
                 <div className="flex flex-wrap items-center gap-3">
                     {navigation}
@@ -60,7 +56,7 @@ export function App({ state }: { readonly state: AppState }) {
             return (
                 <main className="grid min-h-dvh place-items-center bg-background">
                     <div className="flex min-h-40 items-center justify-center">
-                        <Spinner label="Loading Mobius Cloud" />
+                        <Spinner label="Loading Morty" />
                     </div>
                 </main>
             );

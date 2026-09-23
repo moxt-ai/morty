@@ -78,7 +78,7 @@ export class WebSocketApiTransport {
         const url = new URL(request.url);
         if (
             url.origin !== this.#origin ||
-            (!url.pathname.startsWith("/mobius-cloud/api/") && !url.pathname.startsWith("/mobius-slack/api/"))
+            (!url.pathname.startsWith("/morty/api/") && !url.pathname.startsWith("/mobius-slack/api/"))
         ) {
             throw new Error("The API request cannot use the Chat WebSocket bridge.");
         }
@@ -197,7 +197,7 @@ export class WebSocketApiTransport {
         if (this.#state.kind === "connecting") {
             return await this.#waitForConnection(this.#state.connection, signal);
         }
-        const endpoint = new URL("/mobius-cloud/ws", this.#origin);
+        const endpoint = new URL("/morty/ws", this.#origin);
         endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
         const socket = new WebSocket(endpoint);
         socket.binaryType = "arraybuffer";

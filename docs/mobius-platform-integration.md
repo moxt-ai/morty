@@ -69,7 +69,7 @@ in the existing staging and production Tenants. Environment-specific user and
 resource identifiers are maintained in deployment configuration and Platform
 storage rather than this document.
 
-`POST /mobius-cloud/api/identity/anonymous-users` creates the identity, provisions
+`POST /morty/api/identity/anonymous-users` creates the identity, provisions
 its internal Project, creates a Chat-owned Bot locally, and persists ownership
 before returning `{ token, userId, bot }`. The Worker uses
 `MobiusPlatformAppClient` with its server-held AppCredential. Users never configure
@@ -113,8 +113,8 @@ typed errors at Cloud's boundary.
 
 ### 3. Runtime and Bot management
 
-Chat now exposes `POST /mobius-cloud/api/management/runtime-pairings` with an
-`idempotencyKey` and `GET /mobius-cloud/api/management/runtime-pairings/:pairingId`.
+Chat now exposes `POST /morty/api/management/runtime-pairings` with an
+`idempotencyKey` and `GET /morty/api/management/runtime-pairings/:pairingId`.
 Both authenticate the Cloud user, resolve their persisted Project mapping, and
 call the server SDK with Chat's AppCredential. Responses include the actual
 Runtime pairing identifiers and relay URL; AppCredentials are never returned.
