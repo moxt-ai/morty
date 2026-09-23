@@ -110,6 +110,110 @@ test("Given a Bot with an existing Codex Session, When its owner selects Claude 
     }
 });
 
+test("Given two Bots on one Runtime, When only one imports a native Session, Then the other Bot cannot use it until importing it", async () => {
+    const nativeSessionId = crypto.randomUUID();
+    const fixture = await createChatFixture(new Set([nativeSessionId]));
+    try {
+        const second = await fixture.request("management/bots", { displayName: "Second Bot" });
+        expect(second.status).toBe(201);
+        const { botId: secondBotId } = v.parse(v.object({ botId: v.string() }), await second.json());
+        for (const botId of [fixture.botId, secondBotId]) {
+            const configured = await fixture.request(`chat/bots/${botId}/setup`, {
+                runtimeId: fixture.runtime.runtimeId,
+                agentRef: "codex",
+            });
+            expect(configured.status).toBe(202);
+        }
+        const firstImport = await fixture.request(`chat/bots/${fixture.botId}/local-sessions/create`, {
+            action: "import",
+            sessionId: nativeSessionId,
+        });
+        expect(firstImport.status).toBe(200);
+        const secondAccess = await fixture.request(`chat/bots/${secondBotId}/local-session-access`, {
+            sessionId: nativeSessionId,
+        });
+        expect(secondAccess.status).toBe(404);
+        const secondList = await fixture.request(`chat/bots/${secondBotId}/local-sessions`, {});
+        expect(secondList.status).toBe(200);
+        expect(await secondList.json()).toMatchObject({ sessions: [] });
+
+        const openSecondChannel = async () => {
+            const response = await fixture.dispatchFetch(
+                `${APP_ORIGIN}/morty/api/chat/projects/${fixture.projectId}/bots/${secondBotId}/runtime-channel`,
+                {
+                    headers: {
+                        Upgrade: "websocket",
+                        Origin: APP_ORIGIN,
+                        "Sec-WebSocket-Protocol": `morty-runtime, auth.${fixture.token}`,
+                    },
+                },
+            );
+            expect(response.status).toBe(101);
+            const socket = response.webSocket;
+            if (socket === null) {
+                throw new Error("The second Bot Runtime channel did not upgrade.");
+            }
+            socket.accept();
+            return socket;
+        };
+        const prompt = (commandId: string) =>
+            encodeSessionPromptCommand({
+                additionalDirectoryIds: [],
+                agentId: "codex",
+                bindingId: secondBotId,
+                commandId,
+                directoryId: "default",
+                disposition: SessionPromptDisposition.Reject,
+                images: [],
+                kind: SESSION_PROMPT_KIND,
+                prompt: "Hello from the second Bot",
+                resources: [],
+                sessionId: nativeSessionId,
+                targetCommandId: "",
+            });
+        const deniedSocket = await openSecondChannel();
+        const denied = new Promise<number>((resolve) =>
+            deniedSocket.addEventListener("close", (event) => resolve(event.code), { once: true }),
+        );
+        deniedSocket.send(prompt("unowned_prompt"));
+        expect(await denied).toBe(1008);
+
+        const secondImport = await fixture.request(`chat/bots/${secondBotId}/local-sessions/create`, {
+            action: "import",
+            sessionId: nativeSessionId,
+        });
+        expect(secondImport.status).toBe(200);
+        const allowedSocket = await openSecondChannel();
+        const reply = new Promise<string>((resolve, reject) => {
+            allowedSocket.addEventListener(
+                "close",
+                () => reject(new Error("Imported Session channel closed before replying")),
+                {
+                    once: true,
+                },
+            );
+            allowedSocket.addEventListener("message", (event) => {
+                if (typeof event.data !== "string" || decodeMessageKind(event.data) !== SESSION_EVENT_COMMITTED_KIND) {
+                    return;
+                }
+                const committed = decodeCommittedSessionEvent(event.data);
+                if (decodeMessageKind(committed.payload) !== AGENT_MESSAGE_DELTA_KIND) {
+                    return;
+                }
+                const delta = decodeAgentMessageDeltaEvent(committed.payload);
+                if (delta.commandId === "imported_prompt") {
+                    resolve(delta.text);
+                }
+            });
+        });
+        allowedSocket.send(prompt("imported_prompt"));
+        expect(await reply).toContain("Hello from the second Bot");
+        allowedSocket.close(1000, "Test complete");
+    } finally {
+        await fixture.close();
+    }
+}, 15_000);
+
 test("given a configured Bot, when a user opens a conversation, then the unavailable feature is explicit", async () => {
     const fixture = await createChatFixture();
     try {
