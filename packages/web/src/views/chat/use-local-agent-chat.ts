@@ -6,8 +6,10 @@ import type {
 } from "@moxt-ai/mobius-protocol";
 import type { MobiusChannelClient } from "@moxt-ai/mobius-sdk/channel";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useStore } from "zustand";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
+import { createLocalHistoryStore } from "../../view-models/chat/local-history-store.ts";
 import type { PendingInteraction } from "./local-agent-interactions.tsx";
 import type { TurnState } from "./local-agent-transcript.tsx";
 
@@ -46,7 +48,7 @@ async function localHistory(
     directoryId: string,
     additionalDirectoryIds: readonly string[],
     signal: AbortSignal,
-): Promise<{ readonly entry: NativeSessionEntry | null; readonly messages: readonly NativeHistoryMessage[] }> {
+): Promise<{ readonly messages: readonly NativeHistoryMessage[]; readonly truncated: boolean }> {
     const result = await client.manageNativeSession(
         {
             ...nativeRequest(botId, agentRef, crypto.randomUUID()),
@@ -63,14 +65,18 @@ async function localHistory(
     if (result.history.status === "unavailable") {
         throw new Error(result.history.cause.message);
     }
-    return { entry: null, messages: result.history.messages };
+    return { messages: result.history.messages, truncated: result.history.truncated };
 }
 
 export function useLocalAgentChat({
     bot,
     requests,
+    routeSessionId,
+    selectRouteSession,
 }: {
     readonly bot: ManagedBot;
+    readonly routeSessionId: string | null;
+    readonly selectRouteSession: (sessionId: string) => void;
     readonly requests: Pick<
         BotChatApi,
         "localRuntime" | "localSessions" | "createLocalSession" | "connectLocalRuntime" | "agentSettings"
@@ -78,10 +84,19 @@ export function useLocalAgentChat({
 }) {
     const [runtime, setRuntime] = useState<RuntimeState>({ kind: "connecting" });
     const [sessions, setSessions] = useState<readonly ManagedChatSession[]>([]);
-    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [historyStore] = useState(createLocalHistoryStore);
+    const routeSessionRef = useRef(routeSessionId);
+    routeSessionRef.current = routeSessionId;
+    const selectRouteRef = useRef(selectRouteSession);
+    selectRouteRef.current = selectRouteSession;
+    const { state: history } = useStore(historyStore);
+    const selectedId = history.kind === "none" ? null : history.sessionId;
+    const data =
+        history.kind === "ready" || history.kind === "refreshing" || history.kind === "failed" ? history.data : null;
+    const messages = data === null ? [] : data.messages.slice(-data.visibleCount);
     const [titles, setTitles] = useState<ReadonlyMap<string, string>>(() => new Map());
-    const [messages, setMessages] = useState<readonly NativeHistoryMessage[]>([]);
-    const [historyError, setHistoryError] = useState<string | null>(null);
+    const [operationError, setOperationError] = useState<string | null>(null);
+    const historyError = history.kind === "failed" ? history.message : operationError;
     const [draft, setDraft] = useState("");
     const [selectedModel, setSelectedModel] = useState("");
     const [turn, setTurn] = useState<TurnState>({ kind: "idle" });
@@ -89,11 +104,14 @@ export function useLocalAgentChat({
     const [elicitationValues, setElicitationValues] = useState<Readonly<Record<string, string>>>({});
     const [nativeEntries, setNativeEntries] = useState<readonly NativeSessionEntry[] | null>(null);
     const lifetime = useRef<AbortController | null>(null);
-    const selectedRef = useRef<string | null>(null);
     const connectionRef = useRef<{ readonly client: MobiusChannelClient; readonly agentRef: string } | null>(null);
     const onlineRef = useRef(false);
     const refreshHistory = useCallback(
         async (client: MobiusChannelClient, agentRef: string, sessionId: string, signal: AbortSignal) => {
+            const revision = historyStore.getState().begin(sessionId);
+            if (revision === null) {
+                return;
+            }
             try {
                 const saved = (await requests.localSessions(bot.botId, signal)).find(
                     (session) => session.id === sessionId,
@@ -111,30 +129,25 @@ export function useLocalAgentChat({
                     signal,
                 );
                 signal.throwIfAborted();
-                if (selectedRef.current !== sessionId) {
-                    return;
-                }
-                setMessages(history.messages);
-                setHistoryError(null);
+                historyStore.getState().complete(sessionId, revision, history);
                 const firstPrompt = history.messages.find((message) => message.role === "user")?.text.trim();
                 if (firstPrompt) {
                     setTitles((current) => new Map(current).set(sessionId, firstPrompt.slice(0, 60)));
                 }
             } catch (error) {
-                if (!signal.aborted && selectedRef.current === sessionId) {
-                    setHistoryError(failureMessage(error));
+                if (!signal.aborted) {
+                    historyStore.getState().fail(sessionId, revision, failureMessage(error));
                 }
             }
         },
-        [bot.botId, requests],
+        [bot.botId, historyStore, requests],
     );
 
     useEffect(() => {
         const controller = new AbortController();
         lifetime.current = controller;
         setRuntime({ kind: "connecting" });
-        setMessages([]);
-        setSelectedId(null);
+        historyStore.getState().select(null);
         setTurn({ kind: "idle" });
         setInteraction(null);
         connectionRef.current = null;
@@ -158,7 +171,8 @@ export function useLocalAgentChat({
                 const client = await requests.connectLocalRuntime(bot.botId, controller.signal, {
                     onActivity: () => {},
                     onPermission: (request) => {
-                        if (request.sessionId === selectedRef.current) {
+                        const selected = historyStore.getState().state;
+                        if (selected.kind !== "none" && request.sessionId === selected.sessionId) {
                             setInteraction({ kind: "permission", request });
                         }
                     },
@@ -168,7 +182,8 @@ export function useLocalAgentChat({
                         );
                     },
                     onElicitation: (request) => {
-                        if (request.sessionId === selectedRef.current) {
+                        const selected = historyStore.getState().state;
+                        if (selected.kind !== "none" && request.sessionId === selected.sessionId) {
                             setElicitationValues(
                                 Object.fromEntries(
                                     request.fields.map((field) => [
@@ -195,7 +210,8 @@ export function useLocalAgentChat({
                         const reconnected = online && !onlineRef.current;
                         onlineRef.current = online;
                         setRuntime((current) => (current.kind === "ready" ? { ...current, online } : current));
-                        const selected = selectedRef.current;
+                        const current = historyStore.getState().state;
+                        const selected = current.kind === "none" ? null : current.sessionId;
                         const connection = connectionRef.current;
                         if (reconnected && selected !== null && connection !== null) {
                             void refreshHistory(connection.client, connection.agentRef, selected, controller.signal);
@@ -214,11 +230,13 @@ export function useLocalAgentChat({
                 });
                 setSelectedModel(model?.type === "select" ? model.currentValue : "");
                 setSessions(saved);
-                const urlSession = new URL(window.location.href).searchParams.get("sessionId");
-                const initial = saved.find((session) => session.id === urlSession)?.id ?? saved[0]?.id ?? null;
-                setSelectedId(initial);
-                selectedRef.current = initial;
+                const initial =
+                    saved.find((session) => session.id === routeSessionRef.current)?.id ?? saved[0]?.id ?? null;
+                historyStore.getState().select(initial);
                 if (initial !== null) {
+                    if (initial !== routeSessionRef.current) {
+                        selectRouteRef.current(initial);
+                    }
                     await refreshHistory(client, configuration.agentRef, initial, controller.signal);
                 }
             } catch (error) {
@@ -235,23 +253,38 @@ export function useLocalAgentChat({
                 lifetime.current = null;
             }
         };
-    }, [bot.botId, refreshHistory, requests]);
+    }, [bot.botId, historyStore, refreshHistory, requests]);
 
-    const open = async (session: ManagedChatSession) => {
-        if (runtime.kind !== "ready" || lifetime.current === null) {
+    const loadSession = useCallback(
+        async (session: ManagedChatSession) => {
+            if (runtime.kind !== "ready" || lifetime.current === null) {
+                return;
+            }
+            const sessionId = session.id;
+            historyStore.getState().select(sessionId);
+            setOperationError(null);
+            setTurn({ kind: "idle" });
+            setInteraction(null);
+            await refreshHistory(runtime.client, runtime.agentRef, sessionId, lifetime.current.signal);
+        },
+        [historyStore, refreshHistory, runtime],
+    );
+    useEffect(() => {
+        if (routeSessionId === null || runtime.kind !== "ready") {
             return;
         }
-        const sessionId = session.id;
-        setSelectedId(sessionId);
-        selectedRef.current = sessionId;
-        setMessages([]);
-        setHistoryError(null);
-        setTurn({ kind: "idle" });
-        setInteraction(null);
-        const url = new URL(window.location.href);
-        url.searchParams.set("sessionId", sessionId);
-        window.history.replaceState(window.history.state, "", url);
-        await refreshHistory(runtime.client, runtime.agentRef, sessionId, lifetime.current.signal);
+        const current = historyStore.getState().state;
+        if (current.kind !== "none" && current.sessionId === routeSessionId) {
+            return;
+        }
+        const session = sessions.find((item) => item.id === routeSessionId);
+        if (session !== undefined) {
+            void loadSession(session);
+        }
+    }, [historyStore, loadSession, routeSessionId, runtime, sessions]);
+    const open = async (session: ManagedChatSession) => {
+        selectRouteSession(session.id);
+        await loadSession(session);
     };
     const newChat = async (): Promise<ManagedChatSession | null> => {
         if (runtime.kind !== "ready" || lifetime.current === null) {
@@ -268,7 +301,7 @@ export function useLocalAgentChat({
             await open(session);
             return session;
         } catch (error) {
-            setHistoryError(failureMessage(error));
+            setOperationError(failureMessage(error));
             return null;
         }
     };
@@ -278,6 +311,7 @@ export function useLocalAgentChat({
             !runtime.online ||
             lifetime.current === null ||
             draft.trim().length === 0 ||
+            (history.kind !== "ready" && history.kind !== "none") ||
             turn.kind === "running"
         ) {
             return;
@@ -327,7 +361,8 @@ export function useLocalAgentChat({
                 current.kind === "running" && current.commandId === commandId ? { kind: "idle" } : current,
             );
         } catch (error) {
-            if (selectedRef.current === sessionId) {
+            const current = historyStore.getState().state;
+            if (current.kind !== "none" && current.sessionId === sessionId) {
                 setTurn({
                     kind: "unknown",
                     prompt,
@@ -350,7 +385,7 @@ export function useLocalAgentChat({
             }
             setNativeEntries(result.entries);
         } catch (error) {
-            setHistoryError(failureMessage(error));
+            setOperationError(failureMessage(error));
         }
     };
     const importSession = async (entry: NativeSessionEntry) => {
@@ -372,7 +407,7 @@ export function useLocalAgentChat({
             setNativeEntries(null);
             await open(session);
         } catch (error) {
-            setHistoryError(failureMessage(error));
+            setOperationError(failureMessage(error));
         }
     };
     const readImage = useCallback(
@@ -398,7 +433,7 @@ export function useLocalAgentChat({
             });
             setInteraction(null);
         } catch (error) {
-            setHistoryError(failureMessage(error));
+            setOperationError(failureMessage(error));
         }
     };
     const answerElicitation = async (
@@ -439,7 +474,7 @@ export function useLocalAgentChat({
             });
             setInteraction(null);
         } catch (error) {
-            setHistoryError(failureMessage(error));
+            setOperationError(failureMessage(error));
         }
     };
 
@@ -449,6 +484,8 @@ export function useLocalAgentChat({
         selectedId,
         titles,
         messages,
+        history,
+        loadMore: historyStore.getState().loadMore,
         historyError,
         draft,
         setDraft,

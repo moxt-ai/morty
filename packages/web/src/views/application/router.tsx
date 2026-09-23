@@ -68,7 +68,18 @@ export function createApplicationRouter<TConnection extends ChannelReference>(
         const route = createRoute({
             getParentRoute: () => root,
             path,
-            validateSearch: (search) => ({ channel: Reflect.get(search, "channel") }),
+            validateSearch: (search) => {
+                const sessionId = Reflect.get(search, "sessionId");
+                return {
+                    channel: Reflect.get(search, "channel"),
+                    sessionId:
+                        view === "chat" &&
+                        typeof sessionId === "string" &&
+                        /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(sessionId)
+                            ? sessionId
+                            : undefined,
+                };
+            },
             loaderDeps: ({ search }) => ({ channel: search.channel }),
             loader: async ({ abortController, deps }) => {
                 const saved: SavedChannel<TConnection> =

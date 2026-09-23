@@ -1,6 +1,8 @@
 import type { NativeHistoryMessage } from "@moxt-ai/mobius-protocol";
-import type { ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
+import { flushSync } from "react-dom";
 import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
+import type { LocalHistoryState } from "../../view-models/chat/local-history-store.ts";
 
 export type TurnState =
     | { readonly kind: "idle" }
@@ -15,12 +17,16 @@ export type TurnState =
 
 export function LocalAgentTranscript({
     messages,
+    history,
+    loadMore,
     turn,
     historyError,
     readImage,
     children,
 }: {
     readonly messages: readonly NativeHistoryMessage[];
+    readonly history: LocalHistoryState;
+    readonly loadMore: () => void;
     readonly turn: TurnState;
     readonly historyError: string | null;
     readonly readImage: (
@@ -29,13 +35,36 @@ export function LocalAgentTranscript({
     ) => Promise<{ readonly bytes: Uint8Array; readonly mediaType: string }>;
     readonly children: ReactNode;
 }) {
+    const transcript = useRef<HTMLDivElement>(null);
+    const data =
+        history.kind === "ready" || history.kind === "refreshing" || history.kind === "failed" ? history.data : null;
+    const hiddenCount = data === null ? 0 : data.messages.length - data.visibleCount;
+    const firstIndex = data === null ? 0 : hiddenCount;
+    const revealOlder = () => {
+        const viewport = transcript.current;
+        if (viewport === null) {
+            return;
+        }
+        const previousHeight = viewport.scrollHeight;
+        const previousTop = viewport.scrollTop;
+        flushSync(loadMore);
+        viewport.scrollTop = previousTop + viewport.scrollHeight - previousHeight;
+    };
     return (
-        <div aria-label="Messages" className="flex-1 space-y-5 overflow-y-auto px-6 py-5" role="log">
+        <div aria-label="Messages" className="flex-1 space-y-5 overflow-y-auto px-6 py-5" ref={transcript} role="log">
+            {history.kind === "loading" && <p role="status">Loading conversation…</p>}
+            {history.kind === "refreshing" && <p role="status">Refreshing conversation…</p>}
+            {data?.truncated && <p>Older messages are unavailable because the local history was truncated.</p>}
+            {hiddenCount > 0 && (
+                <button onClick={revealOlder} type="button">
+                    Load more
+                </button>
+            )}
             {messages.map((message, index) => (
                 <article
                     aria-label={message.role === "user" ? "Message from you" : "Agent response"}
                     className="mx-auto max-w-3xl"
-                    key={`${index.toString()}:${message.role}`}
+                    key={`${(firstIndex + index).toString()}:${message.role}`}
                 >
                     <p className="mb-1 text-xs font-semibold text-muted-foreground">
                         {message.role === "user" ? "You" : "Agent"}

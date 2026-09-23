@@ -1,3 +1,4 @@
+import { useRouter, useRouterState } from "@tanstack/react-router";
 import { History, LoaderCircle, Plus, Send, StopCircle } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
@@ -24,12 +25,28 @@ export function LocalAgentChat({
         "localRuntime" | "localSessions" | "createLocalSession" | "connectLocalRuntime" | "agentSettings"
     >;
 }) {
+    const router = useRouter();
+    const routeSessionId = useRouterState({
+        select: (state) => {
+            const value = Reflect.get(state.location.search, "sessionId");
+            return typeof value === "string" ? value : null;
+        },
+    });
+    const selectRouteSession = (sessionId: string) => {
+        void router.navigate({
+            to: "/chat",
+            search: { ...router.state.location.search, sessionId },
+            replace: true,
+        });
+    };
     const {
         runtime,
         sessions,
         selectedId,
         titles,
         messages,
+        history,
+        loadMore,
         historyError,
         draft,
         setDraft,
@@ -50,7 +67,7 @@ export function LocalAgentChat({
         readImage,
         answerPermission,
         answerElicitation,
-    } = useLocalAgentChat({ bot, requests });
+    } = useLocalAgentChat({ bot, requests, routeSessionId, selectRouteSession });
     return (
         <main aria-label="Chat" className="fixed inset-0 flex min-h-0 bg-background text-foreground">
             <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-card p-3 max-sm:w-44">
@@ -122,6 +139,8 @@ export function LocalAgentChat({
                     <>
                         <LocalAgentTranscript
                             messages={messages}
+                            history={history}
+                            loadMore={loadMore}
                             turn={turn}
                             historyError={historyError}
                             readImage={readImage}
@@ -177,7 +196,11 @@ export function LocalAgentChat({
                                 ) : (
                                     <Button
                                         aria-label="Send message"
-                                        disabled={!runtime.online || draft.trim().length === 0}
+                                        disabled={
+                                            !runtime.online ||
+                                            (history.kind !== "ready" && history.kind !== "none") ||
+                                            draft.trim().length === 0
+                                        }
                                         type="submit"
                                     >
                                         <Send className="size-4" />
