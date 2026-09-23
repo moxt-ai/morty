@@ -1,4 +1,4 @@
-import type { AgentMessageDeltaEvent, NativeSessionResult, SessionPromptCommand } from "@moxt-ai/mobius-protocol";
+import type { AgentMessageDeltaEvent, NativeSessionResult, SessionStartedEvent } from "@moxt-ai/mobius-protocol";
 import { createStore } from "zustand/vanilla";
 
 const LIVE_TEXT_LIMIT = 100_000;
@@ -25,7 +25,7 @@ interface LiveTurnStore {
     readonly state: TurnState;
     readonly reset: () => void;
     readonly start: (commandId: string, sessionId: string, prompt: string) => void;
-    readonly receivePrompt: (message: SessionPromptCommand) => void;
+    readonly receiveStarted: (message: SessionStartedEvent) => void;
     readonly receiveSnapshot: (sessionId: string, snapshot: ActiveTurnSnapshot) => void;
     readonly receiveDelta: (message: AgentMessageDeltaEvent) => "applied" | "duplicate" | "resync";
     readonly complete: (commandId: string) => void;
@@ -56,12 +56,27 @@ export const createLocalLiveTurnStore = () =>
                     stream: { kind: "unconfirmed" },
                 },
             }),
-        receivePrompt: (message) => {
+        receiveStarted: (message) => {
             const current = get().state;
-            if (current.kind === "running" && current.commandId === message.commandId) {
+            if (
+                current.kind === "running" &&
+                current.commandId === message.commandId &&
+                current.stream.kind === "sequenced" &&
+                current.stream.epoch === message.epoch
+            ) {
                 return;
             }
-            get().start(message.commandId, message.sessionId, message.prompt);
+            set({
+                state: {
+                    kind: "running",
+                    commandId: message.commandId,
+                    sessionId: message.sessionId,
+                    prompt: message.prompt,
+                    text: "",
+                    truncated: false,
+                    stream: { kind: "sequenced", epoch: message.epoch, sequence: message.sequence },
+                },
+            });
         },
         receiveSnapshot: (sessionId, snapshot) => {
             const current = get().state;

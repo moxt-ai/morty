@@ -293,13 +293,6 @@ export async function openBotRuntimeChannel(input: {
                     envelope.kind === SESSION_EVENT_COMMITTED_KIND &&
                     envelope.sessionId !== undefined &&
                     (await ownsSession(envelope.sessionId));
-                const promptEcho =
-                    envelope.kind === SESSION_PROMPT_KIND &&
-                    envelope.sessionId !== undefined &&
-                    (await ownsSession(envelope.sessionId));
-                if (promptEcho) {
-                    decodeSessionPromptCommand(encoded);
-                }
                 if (committed) {
                     const event = decodeCommittedSessionEvent(encoded);
                     const payload = decodeRecordedSessionEvent(event.payload);
@@ -307,7 +300,7 @@ export async function openBotRuntimeChannel(input: {
                         throw new PlatformProjectError("INVALID_MESSAGE", "The Runtime event is invalid.", 400);
                     }
                 }
-                const forward = envelope.kind === RUNTIME_STATUS_KIND || requestResult || committed || promptEcho;
+                const forward = envelope.kind === RUNTIME_STATUS_KIND || requestResult || committed;
                 if (forward) {
                     server.send(encoded);
                     if (

@@ -8,7 +8,7 @@ import {
     AGENT_MESSAGE_DELTA_KIND,
     SESSION_COMPLETED_KIND,
     SESSION_FAILED_KIND,
-    SESSION_PROMPT_KIND,
+    SESSION_STARTED_KIND,
 } from "@moxt-ai/mobius-protocol";
 import type { MobiusChannelClient } from "@moxt-ai/mobius-sdk/channel";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -292,8 +292,8 @@ export function useLocalAgentChat({
                             return;
                         }
                         switch (message.kind) {
-                            case SESSION_PROMPT_KIND:
-                                turnStore.getState().receivePrompt(message);
+                            case SESSION_STARTED_KIND:
+                                turnStore.getState().receiveStarted(message);
                                 return;
                             case AGENT_MESSAGE_DELTA_KIND:
                                 if (turnStore.getState().receiveDelta(message) === "resync") {
