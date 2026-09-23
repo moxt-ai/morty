@@ -11,7 +11,6 @@ export const chatManagedSession = sqliteTable(
         additionalDirectoryIdsJson: text("additional_directory_ids_json").notNull().default("[]"),
         title: text("title").notNull(),
         createdAt: integer("created_at").notNull(),
-        archivedAt: integer("archived_at"),
     },
     (table) => [
         primaryKey({ columns: [table.projectId, table.userId, table.botId, table.resourceId] }),

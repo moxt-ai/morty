@@ -78,6 +78,13 @@
             "when": 1790191797053,
             "tag": "0022_eminent_wiccan",
             "breakpoints": true
+        },
+        {
+            "idx": 23,
+            "version": "6",
+            "when": 1790197398357,
+            "tag": "0023_smiling_zaladane",
+            "breakpoints": true
         }
     ]
 }

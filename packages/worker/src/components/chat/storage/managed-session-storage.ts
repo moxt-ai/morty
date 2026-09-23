@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import * as v from "valibot";
 import { createDatabase, type Database } from "../../../schema/project-do/database.ts";
 import { chatManagedSession } from "../../../schema/project-do/index.ts";
@@ -47,7 +47,6 @@ export class ManagedSessionStorage {
                     eq(chatManagedSession.projectId, projectId),
                     eq(chatManagedSession.userId, userId),
                     eq(chatManagedSession.botId, botId),
-                    isNull(chatManagedSession.archivedAt),
                 ),
             )
             .orderBy(desc(chatManagedSession.createdAt), chatManagedSession.resourceId);
@@ -59,34 +58,6 @@ export class ManagedSessionStorage {
                 return { ...row, additionalDirectoryIds };
             }),
         );
-    };
-
-    readonly archive = async (
-        projectId: string,
-        userId: string,
-        botId: string,
-        id: string,
-        signal: AbortSignal,
-    ): Promise<void> => {
-        signal.throwIfAborted();
-        const archived = await this.#requireDatabase()
-            .update(chatManagedSession)
-            .set({ archivedAt: Date.now() })
-            .where(
-                and(
-                    eq(chatManagedSession.projectId, projectId),
-                    eq(chatManagedSession.userId, userId),
-                    eq(chatManagedSession.botId, botId),
-                    eq(chatManagedSession.resourceId, v.parse(platformIdentifier, id)),
-                    isNull(chatManagedSession.archivedAt),
-                ),
-            )
-            .returning({ id: chatManagedSession.resourceId })
-            .get();
-        signal.throwIfAborted();
-        if (archived === undefined) {
-            throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
-        }
     };
 
     readonly save = async (
