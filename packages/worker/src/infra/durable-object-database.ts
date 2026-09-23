@@ -12,6 +12,8 @@ import slackChatBotBinding from "../../migrations/project-do/0011_slack_chat_bot
 import removeLegacyBotMigration from "../../migrations/project-do/0012_remove_legacy_bot_migration.sql?raw";
 import pairingExpectedRuntime from "../../migrations/project-do/0013_volatile_colossus.sql?raw";
 import managedSessionArchive from "../../migrations/project-do/0014_bouncy_may_parker.sql?raw";
+import removeLegacyManagedBotColumns from "../../migrations/project-do/0015_red_forge.sql?raw";
+import removeUnusedSlackConfigToken from "../../migrations/project-do/0016_damp_fat_cobra.sql?raw";
 
 const migrations = [
     management,
@@ -28,6 +30,8 @@ const migrations = [
     removeLegacyBotMigration,
     pairingExpectedRuntime,
     managedSessionArchive,
+    removeLegacyManagedBotColumns,
+    removeUnusedSlackConfigToken,
 ];
 
 type BoundValue = ArrayBuffer | string | number | null;

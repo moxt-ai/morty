@@ -2,8 +2,8 @@ import { readdir, readFile } from "node:fs/promises";
 import { drizzle } from "drizzle-orm/d1";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { afterEach, beforeEach, vi } from "vitest";
-import type { Database } from "../../../src/schema/d1/database.ts";
-import * as schema from "../../../src/schema/d1/index.ts";
+import type { Database } from "../../../src/schema/project-do/database.ts";
+import * as schema from "../../../src/schema/project-do/index.ts";
 
 class TestDatabase {
     readonly binding: D1Database;
@@ -41,7 +41,7 @@ export async function createTestDatabase(): Promise<TestDatabase> {
         }),
     );
     const d1 = await runtime.getD1Database("DATABASE");
-    const migrationDirectory = new URL("../../../migrations/d1/", import.meta.url);
+    const migrationDirectory = new URL("../../../migrations/project-do/", import.meta.url);
     const migrationNames = (await readdir(migrationDirectory, { withFileTypes: true }))
         .filter((entry) => entry.isFile() && entry.name.endsWith(".sql"))
         .map((entry) => entry.name)

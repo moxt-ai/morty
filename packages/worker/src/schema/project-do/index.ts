@@ -9,7 +9,6 @@ export { platformProjectMapping } from "./platform-project-mapping.ts";
 export { processedSlackEvent } from "./processed-slack-event.ts";
 export { slackApp } from "./slack-app.ts";
 export { slackChatBotBinding } from "./slack-chat-bot-binding.ts";
-export { slackConfigToken } from "./slack-config-token.ts";
 export { slackConversationLease } from "./slack-conversation-lease.ts";
 export { slackConversationMapping } from "./slack-conversation-mapping.ts";
 export { slackInstallation } from "./slack-installation.ts";

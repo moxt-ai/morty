@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
-import { createDatabase, type Database } from "../../../schema/d1/database.ts";
-import { platformProjectMapping } from "../../../schema/d1/index.ts";
+import { createDatabase, type Database } from "../../../schema/project-do/database.ts";
+import { platformProjectMapping } from "../../../schema/project-do/index.ts";
 import { type PlatformProject, PlatformProjectError, platformProjectSchema } from "../entity/platform-project.ts";
 
 export class PlatformProjectStorage {

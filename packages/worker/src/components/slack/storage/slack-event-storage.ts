@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, isNull, lte, ne, sql } from "drizzle-orm";
 import * as v from "valibot";
-import type { Database } from "../../../schema/d1/database.ts";
+import type { Database } from "../../../schema/project-do/database.ts";
 import {
     processedSlackEvent,
     slackApp,
@@ -11,7 +11,7 @@ import {
     slackMessageDelivery,
     slackPendingMessage,
     slackUserConfigToken,
-} from "../../../schema/d1/index.ts";
+} from "../../../schema/project-do/index.ts";
 import type { SlackConversationInput, SlackConversationKey, SlackMessageReplyContext } from "../entity/conversation";
 import { type SlackEventCallbackPayload, slackEventCallbackPayloadSchema } from "../entity/events";
 import type {
