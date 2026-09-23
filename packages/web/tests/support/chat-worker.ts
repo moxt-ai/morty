@@ -58,8 +58,10 @@ export async function createChatWorkerEnvironment() {
         transport.open();
         return {
             botId,
-            connectAgent: async () => {
-                const runtime = await cloud.connectAgent(identity.projectId);
+            connectAgent: async (behavior?: {
+                readonly afterSessionStarted?: (signal: AbortSignal) => Promise<void>;
+            }) => {
+                const runtime = await cloud.connectAgent(identity.projectId, behavior);
                 const setup = await request(`chat/projects/${identity.projectId}/bots/${botId}/setup`, {
                     runtimeId: runtime.runtimeId,
                     agentRef: "codex",

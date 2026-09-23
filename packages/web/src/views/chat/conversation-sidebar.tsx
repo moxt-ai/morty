@@ -10,6 +10,7 @@ import type { IdentityTransfer } from "../../services/identity/anonymous-identit
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import type { BotConnectionStatus, BotOperation } from "../../view-models/chat/bot-chat-home-store.ts";
 import { createConversationDirectoryStore } from "../../view-models/chat/conversation-directory-store.ts";
+import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
 import { BotSwitcherMenu } from "./bot-switcher-menu.tsx";
 import { MachineSharing } from "./machine-sharing.tsx";
 import { NativeSessionDialog, type OpenMobiusSession } from "./native-session-dialog.tsx";
@@ -49,7 +50,7 @@ export function ConversationSidebar({
     onNewConversation,
     endRemoteAccess,
     createTransfer,
-    activeSession,
+    sessionStatuses,
     directoryRevision,
 }: {
     readonly activeBot: ManagedBot;
@@ -72,14 +73,7 @@ export function ConversationSidebar({
     readonly onNewConversation: () => void;
     readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
-    readonly activeSession:
-        | { readonly kind: "none" }
-        | {
-              readonly kind: "active";
-              readonly directoryLabel: string;
-              readonly id: string;
-              readonly status: "idle" | "working" | "failed";
-          };
+    readonly sessionStatuses: ReadonlyMap<string, SessionActivityState>;
 }) {
     const botId = activeBot.botId;
     const [store] = useState(() => createConversationDirectoryStore(botId, requests));
@@ -251,30 +245,28 @@ export function ConversationSidebar({
                                         </span>
                                     )}
                                 </span>
-                                {activeSession.kind === "active" &&
-                                    activeSession.id === session.id &&
-                                    (activeSession.status === "working" ? (
-                                        <span
-                                            aria-label="Session working"
-                                            className="inline-flex text-primary"
-                                            data-testid={dataTestId.sessionStatus}
-                                            role="status"
-                                        >
-                                            <LoaderCircle
-                                                aria-hidden="true"
-                                                className="size-4 animate-spin motion-reduce:animate-none"
-                                            />
-                                        </span>
-                                    ) : activeSession.status === "failed" ? (
-                                        <span
-                                            aria-label="Session failed"
-                                            className="text-xs text-destructive"
-                                            data-testid={dataTestId.sessionStatus}
-                                            role="status"
-                                        >
-                                            Failed
-                                        </span>
-                                    ) : null)}
+                                {sessionStatuses.get(session.id)?.kind === "working" ? (
+                                    <span
+                                        aria-label="Session working"
+                                        className="inline-flex text-primary"
+                                        data-testid={dataTestId.sessionStatus}
+                                        role="status"
+                                    >
+                                        <LoaderCircle
+                                            aria-hidden="true"
+                                            className="size-4 animate-spin motion-reduce:animate-none"
+                                        />
+                                    </span>
+                                ) : sessionStatuses.get(session.id)?.kind === "failed" ? (
+                                    <span
+                                        aria-label="Session failed"
+                                        className="text-xs text-destructive"
+                                        data-testid={dataTestId.sessionStatus}
+                                        role="status"
+                                    >
+                                        Failed
+                                    </span>
+                                ) : null}
                             </button>
                         </ContextMenu.Trigger>
                         <ContextMenu.Portal>

@@ -31,10 +31,6 @@ import { MobiusSessionPane } from "./mobius-session-pane.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
 import { WorkspaceRegionSelector } from "./workspace-region-selector.tsx";
 
-type ActiveSessionStatus =
-    | { readonly kind: "none" }
-    | { readonly kind: "status"; readonly sessionId: string; readonly status: SessionActivityState };
-
 export function BotChatHome({
     requests,
     createTransfer,
@@ -113,7 +109,7 @@ export function BotChatHome({
     const [failureDialogOpen, setFailureDialogOpen] = useState(false);
     const [disconnectedNotificationDismissed, setDisconnectedNotificationDismissed] = useState(false);
     const [attachments, setAttachments] = useState<readonly ComposerAttachment[]>([]);
-    const [activeSessionStatus, setActiveSessionStatus] = useState<ActiveSessionStatus>({ kind: "none" });
+    const [sessionStatuses, setSessionStatuses] = useState<ReadonlyMap<string, SessionActivityState>>(() => new Map());
     const lifetime = useRef<AbortController | null>(null);
     const messageList = useRef<HTMLDivElement | null>(null);
     const messageContent = useRef<HTMLDivElement | null>(null);
@@ -208,7 +204,15 @@ export function BotChatHome({
               : null;
     const switching = model.view.kind === "switching";
     const onStatusChange = useCallback((sessionId: string, status: SessionActivityState): void => {
-        setActiveSessionStatus({ kind: "status", sessionId, status });
+        setSessionStatuses((current) => {
+            const next = new Map(current);
+            if (status.kind === "idle") {
+                next.delete(sessionId);
+            } else {
+                next.set(sessionId, status);
+            }
+            return next;
+        });
     }, []);
     const onConnectionStatusChange = useCallback(
         (sessionId: string, connection: SessionConnectionKind) => {
@@ -216,19 +220,6 @@ export function BotChatHome({
         },
         [store],
     );
-    const activeSession =
-        model.sessionView.kind === "session-access"
-            ? {
-                  kind: "active" as const,
-                  directoryLabel: model.sessionView.session.entry.directoryLabel,
-                  id: model.sessionView.session.result.ready.sessionId,
-                  status:
-                      activeSessionStatus.kind === "status" &&
-                      activeSessionStatus.sessionId === model.sessionView.session.result.ready.sessionId
-                          ? activeSessionStatus.status.kind
-                          : "idle",
-              }
-            : { kind: "none" as const };
     const clearComposer = () => {
         setDraft("");
         setAttachments([]);
@@ -261,7 +252,7 @@ export function BotChatHome({
             {active !== null && (
                 <ConversationSidebar
                     activeBot={active.bot}
-                    activeSession={activeSession}
+                    sessionStatuses={sessionStatuses}
                     activeId={
                         model.target.kind === "conversation-access"
                             ? model.target.conversationId

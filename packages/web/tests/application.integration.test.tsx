@@ -148,6 +148,78 @@ test("Given the conversation directory is loading, When the workspace appears, T
     expect((await loadingStatus).getAttribute("aria-label")).toBe("Loading conversations");
 });
 
+test("Given a conversation is working, When a user starts a new conversation, Then the background conversation keeps its working indicator", {
+    timeout: 30_000,
+}, async () => {
+    const created = await renderWorkspace();
+    const turnStarted = Promise.withResolvers<void>();
+    const releaseTurn = Promise.withResolvers<void>();
+    const { failure } = await act(
+        async () =>
+            await created.connectAgent({
+                afterSessionStarted: async (signal) => {
+                    turnStarted.resolve();
+                    await new Promise<void>((resolve, reject) => {
+                        let settled = false;
+                        const settle = (complete: () => void): void => {
+                            if (settled) {
+                                return;
+                            }
+                            settled = true;
+                            signal.removeEventListener("abort", abort);
+                            complete();
+                        };
+                        const release = (): void => {
+                            settle(resolve);
+                        };
+                        const abort = (): void => {
+                            settle(() => reject(signal.reason));
+                        };
+                        signal.addEventListener("abort", abort, { once: true });
+                        void releaseTurn.promise.then(release);
+                    });
+                },
+            }),
+    );
+    const composer = await act(async () => {
+        await waitForText(`[data-testid="${dataTestId.botConnectionStatus}"]`, "Connected");
+        return await waitForElement(`[data-testid="${dataTestId.messageComposer}"]`);
+    });
+
+    await sendPrompt(composer as HTMLTextAreaElement, "Keep working in the background");
+    await Promise.race([turnStarted.promise, failure]);
+    await act(async () => await waitForElement('[aria-label="Session working"]'));
+    await act(async () => {
+        (await waitForElement(`[data-testid="${dataTestId.newConversation}"]`)).click();
+    });
+
+    const backgroundConversation = await act(async () => {
+        return await vi.waitFor(
+            () => {
+                const conversations = [
+                    ...document.querySelectorAll<HTMLElement>(`[data-testid="${dataTestId.managedConversation}"]`),
+                ];
+                const conversation = conversations.find((candidate) =>
+                    candidate.textContent?.includes("Keep working in the background"),
+                );
+                if (conversation === undefined) {
+                    throw new Error(`The background conversation is unavailable: ${document.body.textContent}`);
+                }
+                const indicator = conversation.querySelector<HTMLElement>('[aria-label="Session working"]');
+                if (indicator === null) {
+                    throw new Error(
+                        `The background conversation is not shown as working: ${document.body.textContent}`,
+                    );
+                }
+                return conversation;
+            },
+            { timeout: 12_000 },
+        );
+    });
+    expect(backgroundConversation.getAttribute("aria-current")).toBeNull();
+    releaseTurn.resolve();
+});
+
 test("Given an unpaired workspace, When a user manages Bots, Then pairing and the surviving Bot remain visible", {
     timeout: 30_000,
 }, async () => {
