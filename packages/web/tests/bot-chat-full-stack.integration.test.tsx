@@ -1,3 +1,4 @@
+import { existsSync, watch } from "node:fs";
 import { unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
@@ -174,6 +175,25 @@ function waitForImage(name: string): Promise<HTMLImageElement> {
             }
         });
         observer.observe(document.body, { childList: true, subtree: true });
+    });
+}
+
+function waitForAgentMarker(directory: string, name: string): Promise<void> {
+    const path = resolve(directory, "agent", name);
+    if (existsSync(path)) {
+        return Promise.resolve();
+    }
+    return new Promise((resolveMarker) => {
+        const watcher = watch(resolve(directory, "agent"), () => {
+            if (existsSync(path)) {
+                watcher.close();
+                resolveMarker();
+            }
+        });
+        if (existsSync(path)) {
+            watcher.close();
+            resolveMarker();
+        }
     });
 }
 
@@ -378,7 +398,12 @@ test("Given a Bot paired with a real local Runtime, When its owner sends a promp
     }
 }, 60_000);
 
-test.each(["before the prompt", "after the first delta", "after the first delta and release"] as const)(
+test.each([
+    "before the prompt",
+    "after acceptance before the first delta",
+    "after the first delta",
+    "after the first delta and release",
+] as const)(
     "Given a Bot Session, When another view joins %s, Then both show its prompt and live Agent output",
     async (joinTime) => {
         const identity = await createIdentity();
@@ -402,7 +427,11 @@ test.each(["before the prompt", "after the first delta", "after the first delta 
         ]);
         const first = await renderChat(identity, sessionId);
         const promptText =
-            joinTime === "after the first delta and release" ? "release after first delta" : "hold after first delta";
+            joinTime === "after acceptance before the first delta"
+                ? "release before first delta"
+                : joinTime === "after the first delta and release"
+                  ? "release after first delta"
+                  : "hold after first delta";
         let second: Awaited<ReturnType<typeof renderChat>> | null =
             joinTime === "before the prompt" ? await renderChat(identity, sessionId) : null;
         try {
@@ -424,12 +453,18 @@ test.each(["before the prompt", "after the first delta", "after the first delta 
                 throw new Error("The first view cannot send a prompt.");
             }
             await act(async () => send.click());
-            await waitForTextIn(first.container, "Partial reply");
+            if (joinTime !== "after acceptance before the first delta") {
+                await waitForTextIn(first.container, "Partial reply");
+            } else {
+                await waitForAgentMarker(runtime.stateDirectory, "prompt-paused");
+            }
             if (second === null) {
                 second = await renderChat(identity, sessionId);
             }
             await waitForTextIn(second.container, promptText);
-            await waitForTextIn(second.container, "Partial reply");
+            if (joinTime !== "after acceptance before the first delta") {
+                await waitForTextIn(second.container, "Partial reply");
+            }
             for (const view of [first, second]) {
                 const transcript = view.container.querySelector('[role="log"]');
                 expect(
@@ -437,10 +472,21 @@ test.each(["before the prompt", "after the first delta", "after the first delta 
                         item.textContent?.includes(promptText),
                     ),
                 ).toHaveLength(1);
-                expect(transcript?.querySelectorAll('article[aria-label="Current Agent response"]')).toHaveLength(1);
-                expect(transcript?.textContent).toContain("Partial reply");
+                if (joinTime !== "after acceptance before the first delta") {
+                    expect(transcript?.querySelectorAll('article[aria-label="Current Agent response"]')).toHaveLength(
+                        1,
+                    );
+                    expect(transcript?.textContent).toContain("Partial reply");
+                }
             }
-            expect(second.container.querySelector('button[aria-label="Send message"]')).toBeNull();
+            if (joinTime === "after acceptance before the first delta") {
+                expect(second.container.querySelector('button[aria-label="Send message"]')).toBeNull();
+                expect(second.container.querySelector('[role="log"]')?.textContent).not.toContain("Partial reply");
+                await writeFile(resolve(runtime.stateDirectory, "agent/resume-turn"), "*");
+                await waitForTextIn(second.container, "Claude Code turn 2: release before first delta");
+            } else {
+                expect(second.container.querySelector('button[aria-label="Send message"]')).toBeNull();
+            }
             if (joinTime === "after the first delta and release") {
                 await writeFile(resolve(runtime.stateDirectory, "agent/resume-turn"), "*");
                 await waitForTextIn(second.container, "Partial reply and more");
