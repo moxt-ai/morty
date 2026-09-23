@@ -1,12 +1,11 @@
 # Cloud storage
 
-Morty has one D1 database and one R2 attachment bucket per deployment
-environment.
+Morty stores each workspace in a Project Durable Object and uses regional R2
+buckets for attachments.
 
-- `DATABASE` stores all Slack integration records using
-  `packages/worker/migrations/d1/0001_initial.sql`.
-- `ATTACHMENTS` stores Slack files under user-prefixed object keys.
+- Project Durable Object SQLite stores management, chat, and Slack integration
+  records using `packages/worker/migrations/project-do`.
+- Regional attachment buckets store Slack files under user-prefixed object keys.
 
-There is no shard inventory, region placement, Clerk Organization metadata, or
-runtime storage router. D1 and R2 binding values are validated at the Worker boundary;
-missing bindings fail closed.
+Database and R2 binding values are validated at the Worker boundary; missing
+bindings fail closed.

@@ -1,4 +1,4 @@
-import { createDatabase, type Database } from "../../../schema/d1/database.ts";
+import { createDatabase, type Database } from "../../../schema/project-do/database.ts";
 import type { AttachmentStorageResolver } from "./attachment-storage-resolver.ts";
 import { R2SlackAttachmentStorage } from "./r2-slack-attachment-storage.ts";
 

@@ -4,7 +4,6 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "db:generate:d1": "drizzle-kit generate --config ../../drizzle/drizzle.d1.config.ts",
         "db:generate:project-do": "drizzle-kit generate --config ../../drizzle/drizzle.project-do.config.ts",
         "mobius:codegen": "node ../../third-party/mobius/scripts/generate-sql-modules.ts",
         "pretest": "pnpm mobius:codegen",
@@ -25,7 +24,7 @@
     },
     "dependencies": {
         "@clerk/backend": "catalog:",
-        "@moxt-ai/mobius-sdk": "catalog:",
+        "@moxt-ai/mobius-sdk": "workspace:*",
         "drizzle-orm": "catalog:",
         "hono": "catalog:",
         "pino": "catalog:",

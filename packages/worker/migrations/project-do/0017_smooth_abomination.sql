@@ -20,4 +20,6 @@ PRAGMA foreign_keys=ON;--> statement-breakpoint
 CREATE INDEX `slack_processed_event_pending_idx` ON `slack_processed_event` (`status`,`created_at`);--> statement-breakpoint
 CREATE INDEX `slack_processed_event_tenant_event_idx` ON `slack_processed_event` (`tenant_id`,`slack_event_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `slack_processed_event_slack_app_id_slack_event_id_unique` ON `slack_processed_event` (`slack_app_id`,`slack_event_id`);--> statement-breakpoint
-ALTER TABLE `chat_managed_session` ADD `is_external` integer GENERATED ALWAYS AS (kind = 'import') VIRTUAL;
+DROP INDEX `chat_managed_session_directory`;--> statement-breakpoint
+ALTER TABLE `chat_managed_session` ADD `is_external` integer GENERATED ALWAYS AS (kind = 'import') VIRTUAL;--> statement-breakpoint
+CREATE INDEX `chat_managed_session_directory` ON `chat_managed_session` (`project_id`,`user_id`,`bot_id`,`created_at`,`resource_id`);

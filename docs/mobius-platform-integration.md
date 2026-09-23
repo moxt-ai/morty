@@ -89,12 +89,11 @@ the hint to its storage resources and persists the resolved placement. The retur
 Project mapping is persisted by Cloud user, Platform origin, and App; it survives
 reloads and is isolated from other users. AppCredentials stay server-side.
 
-Before running this flow, apply `packages/worker/migrations/d1/0003_platform_project.sql`
-through Wrangler D1 migrations.
+Project Durable Objects apply the committed migrations under
+`packages/worker/migrations/project-do` when they initialize.
 Cloudflare request metadata selects placement, with an `apac` fallback defined in code;
 Platform resolves storage placement. Bindings are recorded
-in `wrangler.jsonc`. The deployment workflow applies Cloud D1 migrations before
-deploying each environment. Staging anonymous provisioning and persistence after
+in `wrangler.jsonc`. Staging anonymous provisioning and persistence after
 reload were verified with `agent-browser` against the deployed services.
 Subsequent Bot operations authorize the user's saved Project and locally owned Bot.
 Runtime, Session, and turn operations call Mobius with the AppCredential.

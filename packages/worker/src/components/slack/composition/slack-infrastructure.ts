@@ -2,7 +2,7 @@ import type { BotTriggerLimiter } from "../../../gateway/bot-trigger-limiter";
 import type { ClerkGateway } from "../../../gateway/clerk-gateway.ts";
 import type { IdentityGateway } from "../../../gateway/identity-gateway";
 import type { SlackWebApi } from "../../../gateway/slack-web-gateway";
-import type { Database } from "../../../schema/d1/database.ts";
+import type { Database } from "../../../schema/project-do/database.ts";
 import type { AuthenticationConfiguration } from "../../management/storage/authentication-configuration.ts";
 import type { SlackPlatformGateway } from "../entity/slack-platform-gateway.ts";
 import type { SlackQueue } from "../infra/slack-queue";

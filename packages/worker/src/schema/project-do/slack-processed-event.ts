@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, index, integer, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 
-export const slackProcessedEvent = sqliteTable(
+export const processedSlackEvent = sqliteTable(
     "slack_processed_event",
     {
         id: integer("id").primaryKey({ autoIncrement: true }),

@@ -12,9 +12,10 @@ import slackChatBotBinding from "../../migrations/project-do/0011_slack_chat_bot
 import removeLegacyBotMigration from "../../migrations/project-do/0012_remove_legacy_bot_migration.sql?raw";
 import pairingExpectedRuntime from "../../migrations/project-do/0013_volatile_colossus.sql?raw";
 import managedSessionArchive from "../../migrations/project-do/0014_bouncy_may_parker.sql?raw";
-import removeLegacyBotConfiguration from "../../migrations/project-do/0015_red_forge.sql?raw";
-import renameSlackProcessedEvent from "../../migrations/project-do/0016_legal_christian_walker.sql?raw";
-import replaceManagedSessionMetadata from "../../migrations/project-do/0017_lovely_wallop.sql?raw";
+import removeLegacyManagedBotColumns from "../../migrations/project-do/0015_red_forge.sql?raw";
+import removeUnusedSlackConfigToken from "../../migrations/project-do/0016_damp_fat_cobra.sql?raw";
+import renameSlackProcessedEvent from "../../migrations/project-do/0017_smooth_abomination.sql?raw";
+import replaceManagedSessionMetadata from "../../migrations/project-do/0018_bumpy_ares.sql?raw";
 
 const migrations = [
     management,
@@ -31,7 +32,8 @@ const migrations = [
     removeLegacyBotMigration,
     pairingExpectedRuntime,
     managedSessionArchive,
-    removeLegacyBotConfiguration,
+    removeLegacyManagedBotColumns,
+    removeUnusedSlackConfigToken,
     renameSlackProcessedEvent,
     replaceManagedSessionMetadata,
 ];

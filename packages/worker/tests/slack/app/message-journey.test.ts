@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { describe, expect, it, vi } from "vitest";
 import type { SlackEventCallbackPayload } from "../../../src/components/slack/service/events/events";
-import { processedSlackEvent, slackMessageDelivery } from "../../../src/schema/d1/index.ts";
+import { processedSlackEvent, slackMessageDelivery } from "../../../src/schema/project-do/index.ts";
 import { createSignedRequest } from "./signed-request";
 import { createConnectedTestApplication } from "./test-app";
 
@@ -173,7 +173,7 @@ describe("Slack message journeys", () => {
         gate.complete();
     });
 
-    it("Given an app stored in Cloud D1, When its queued message runs, Then the app is discovered and replies", async () => {
+    it("Given an app stored in Project DO SQLite, When its queued message runs, Then the app is discovered and replies", async () => {
         const app = await createConnectedTestApplication();
         await send(app);
         expect(app.slack.messages[0]?.text).toBe("Investigation complete");

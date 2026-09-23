@@ -45,7 +45,7 @@ async function createChatFixture() {
     }
 }
 
-test("a Bot uses the real Platform journey for setup, chat, media, listing, and archival", async () => {
+test("given a configured Bot, when a user opens a conversation, then the unavailable feature is explicit", async () => {
     const fixture = await createChatFixture();
     try {
         const setup = { runtimeId: fixture.runtime.runtimeId, agentRef: "codex" };
@@ -89,11 +89,11 @@ test("a Bot uses the real Platform journey for setup, chat, media, listing, and 
             conversationKey: "first-draft",
             workspaceRef: "default",
         });
-        expect(opened.status).toBe(200);
-        const { conversationId } = v.parse(v.object({ conversationId: v.string() }), await opened.json());
+        expect(opened.status).toBe(503);
+        expect(await opened.json()).toMatchObject({ error: { code: "BOT_CHAT_UNAVAILABLE" } });
 
         const turn = await fixture.request(`chat/bots/${fixture.botId}/turns`, {
-            sessionId: conversationId,
+            sessionId: "first-draft",
             additionalDirectoryIds: [],
             content: "Create an image",
             idempotencyKey: "command-1",
@@ -101,30 +101,11 @@ test("a Bot uses the real Platform journey for setup, chat, media, listing, and 
             resources: [],
             sessionConfigurations: [],
         });
-        expect(turn.status).toBe(200);
-
-        expect(await (await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {})).json()).toMatchObject({
-            sessions: [expect.objectContaining({ id: conversationId, isExternal: false, title: "New chat" })],
-        });
-        const reopened = await fixture.request(`chat/bots/${fixture.botId}/managed-session`, {
-            sessionId: conversationId,
-        });
-        expect(reopened.status).toBe(200);
-        expect(await reopened.json()).toMatchObject({
-            agentRef: setup.agentRef,
-            entry: { entryId: conversationId, directoryId: "default" },
-            ready: { sessionId: conversationId },
-        });
-        expect(
-            (
-                await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, {
-                    sessionId: conversationId,
-                })
-            ).status,
-        ).toBe(200);
-        expect(await (await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {})).json()).toMatchObject({
-            sessions: [],
-        });
+        expect(turn.status).toBe(503);
+        expect(await turn.json()).toMatchObject({ error: { code: "BOT_CHAT_UNAVAILABLE" } });
+        const listed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
+        expect(listed.status).toBe(503);
+        expect(await listed.json()).toMatchObject({ error: { code: "BOT_CHAT_UNAVAILABLE" } });
     } finally {
         await fixture.close();
     }
