@@ -109,7 +109,7 @@ function waitForInput(label: string): Promise<HTMLInputElement> {
 
 function longHistory(): readonly NativeHistoryMessage[] {
     const messages: NativeHistoryMessage[] = [];
-    for (let index = 1; index <= 44; index += 1) {
+    for (let index = 1; index <= 84; index += 1) {
         messages.push({ role: "user", text: `Question ${index.toString()}` });
     }
     messages.push({ role: "assistant", text: "Recent answer", activities: [], content: [] });
@@ -278,11 +278,76 @@ test("Given a long native Session behind the real Platform, When Chat opens it, 
         transcript.scrollTop = 120;
         await act(async () => more.click());
         expect([...transcript.querySelectorAll("article")].some((item) => item.textContent === "YouQuestion 1")).toBe(
+            false,
+        );
+        expect([...transcript.querySelectorAll("article")].some((item) => item.textContent === "YouQuestion 6")).toBe(
+            true,
+        );
+        expect(transcript.scrollTop).toBe(120);
+        await act(async () => more.click());
+        expect([...transcript.querySelectorAll("article")].some((item) => item.textContent === "YouQuestion 1")).toBe(
             true,
         );
         expect(transcript.scrollTop).toBe(120);
     } finally {
         releaseHistory.resolve();
+        await app.close();
+    }
+}, 30_000);
+
+test("Given two Bot Sessions, When an older history response arrives late, Then the selected transcript stays on the newer Session", async () => {
+    const identity = await createIdentity();
+    const cloud = activeFixture();
+    const bots = await chatRequest(identity, `projects/${identity.projectId}/management/bots`);
+    expect(bots.status).toBe(200);
+    const listing = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await bots.json());
+    const botId = listing.bots[0]?.botId;
+    if (botId === undefined) {
+        throw new Error("The Project has no Bot.");
+    }
+    const firstRequested = Promise.withResolvers<void>();
+    const releaseFirst = Promise.withResolvers<void>();
+    let historyCount = 0;
+    const runtime = await cloud.connectAgent(identity.projectId, {
+        agentId: "codex",
+        loadNativeHistory: async (_sessionId, signal) => {
+            historyCount += 1;
+            const current = historyCount;
+            if (current === 1) {
+                firstRequested.resolve();
+                await releaseFirst.promise;
+            }
+            signal.throwIfAborted();
+            return {
+                status: "available",
+                messages: [{ role: "user", text: current === 1 ? "First session prompt" : "Second session prompt" }],
+                truncated: false,
+                coveredCommandIds: [],
+                coveredMessageIds: [],
+            };
+        },
+    });
+    const configured = await chatRequest(identity, `chat/projects/${identity.projectId}/bots/${botId}/setup`, {
+        runtimeId: runtime.runtimeId,
+        agentRef: "codex",
+    });
+    expect(configured.status).toBe(202);
+    const app = await renderChat(identity);
+    try {
+        await waitForMessageInput();
+        const newConversation = await waitForButton("New conversation");
+        await act(async () => newConversation.click());
+        await firstRequested.promise;
+        await act(async () => newConversation.click());
+        await waitForText("Second session prompt");
+        const transcript = document.querySelector('[role="log"]');
+        expect(transcript?.textContent).toContain("Second session prompt");
+        releaseFirst.resolve();
+        await waitForText("First session prompt");
+        expect(transcript?.textContent).toContain("Second session prompt");
+        expect(transcript?.textContent).not.toContain("First session prompt");
+    } finally {
+        releaseFirst.resolve();
         await app.close();
     }
 }, 30_000);
