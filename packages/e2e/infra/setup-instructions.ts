@@ -55,7 +55,7 @@ export async function followSetupInstructions(options: {
     const ready = events.find((event) => event.status === "ready");
     assert.ok(ready);
     const configuration = object(
-        JSON.parse(await readFile(join(options.documents, "mobius-chat/config.json"), "utf8")),
+        JSON.parse(await readFile(join(options.documents, "morty/config.json"), "utf8")),
         "local configuration",
     );
     return {

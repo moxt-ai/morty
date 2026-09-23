@@ -3,7 +3,7 @@
 After this, an operator can update individual runtime variables and secrets in
 GitHub and see them applied to Cloudflare by the next successful CD deployment.
 
-Both `moxt-ai/mobius-chat` and `moxt-ai/mobius` use separate `staging` and
+Both `moxt-ai/morty` and `moxt-ai/mobius` use separate `staging` and
 `production` GitHub Environments. Each runtime setting has its own GitHub name;
 the workflows explicitly map those names to Worker bindings. Configuration is
 validated by `scripts/validate-worker-config.ts` before migrations/deployment.

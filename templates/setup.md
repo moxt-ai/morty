@@ -1,9 +1,9 @@
 ---
-name: mobius-chat-setup
-description: Set up Mobius Chat from an externally shared instruction and return a browser handoff.
+name: morty-setup
+description: Set up Morty from an externally shared instruction and return a browser handoff.
 ---
 
-# Set up Mobius Chat
+# Set up Morty
 
 This is the standalone entry for testing and external sharing, such as Twitter.
 Reuse the user's saved identity or create an anonymous identity and personal Bot.
@@ -34,7 +34,7 @@ Do not ask for an additional replacement confirmation.
    Honor an explicit user choice instead. Complete that harness's installation and
    authentication if needed; do not ask the user to choose when your own harness is available.
 5. Run the command from the user's current working directory. The script resolves and
-   validates `$PWD`, then uses it as the paired Runtime's default Mobius Chat workspace.
+   validates `$PWD`, then uses it as the paired Runtime's default Morty workspace.
 
 Start this command with your harness's background execution support, then poll its
 output every five seconds until it reports `status: "ready"` or an error. A successful
@@ -76,7 +76,7 @@ expires. Keep the Runtime online. You can bind an account later if you want.**
 
 On failure, use `error.code`, its sanitized `error.cause` chain, and the private
 Runtime log. Fix the problem and rerun
-the same command. It reuses the saved user identity and reconnects its active Runtime when possible. Preserve `$DOCUMENT_DIR/mobius-chat`
+the same command. It reuses the saved user identity and reconnects its active Runtime when possible. Preserve `$DOCUMENT_DIR/morty`
 credentials on network errors, cancellation, and timeouts. An unavailable identity
 requires user resolution; creating another user does not recover conversations.
 Existing configuration is backed up to `config-backup-<id>.json` automatically.

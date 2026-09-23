@@ -168,7 +168,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (!isAbsolute(text(documents))) {
             fail("DOCUMENT_DIR_REQUIRED");
         }
-        const directory = join(await realpath(documents), "mobius-chat");
+        const directory = join(await realpath(documents), "morty");
         await mkdir(directory, { mode: 0o700, recursive: true });
         await privatePath(directory, true);
         return directory;
@@ -779,7 +779,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 botId,
                 url: context.base,
                 workspace,
-                message: "Return to your Mobius Chat page to start chatting. Keep the Runtime online.",
+                message: "Return to your Morty page to start chatting. Keep the Runtime online.",
             });
             return;
         }

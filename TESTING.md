@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Tests are the executable control surface for Mobius Chat. Each supported behavior
+Tests are the executable control surface for Morty. Each supported behavior
 has one primary owner:
 
 - a browser E2E journey owns a critical successful user path;

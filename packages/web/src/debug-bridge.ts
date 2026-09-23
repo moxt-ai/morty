@@ -1,27 +1,27 @@
-export interface MobiusChatDebugSession {
+export interface MortyDebugSession {
     readonly sessionId: string;
     readonly blocks: () => readonly unknown[];
 }
 
-interface MobiusChatDebugBridge {
-    readonly currentSession: () => MobiusChatDebugSession | null;
+interface MortyDebugBridge {
+    readonly currentSession: () => MortyDebugSession | null;
 }
 
 declare global {
-    var _mobiusChat: MobiusChatDebugBridge;
+    var _morty: MortyDebugBridge;
 }
 
-let currentSession: MobiusChatDebugSession | null = null;
+let currentSession: MortyDebugSession | null = null;
 
-const bridge: MobiusChatDebugBridge = Object.freeze({
+const bridge: MortyDebugBridge = Object.freeze({
     currentSession: () => currentSession,
 });
 
-export function installMobiusChatDebugBridge(): void {
-    globalThis._mobiusChat = bridge;
+export function installMortyDebugBridge(): void {
+    globalThis._morty = bridge;
 }
 
-export function registerMobiusChatDebugSession(session: MobiusChatDebugSession): () => void {
+export function registerMortyDebugSession(session: MortyDebugSession): () => void {
     const registered = Object.freeze(session);
     currentSession = registered;
     return () => {

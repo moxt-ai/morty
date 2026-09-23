@@ -6,7 +6,7 @@ The Platform route cleanup was merged in Mobius PR #161 and the Clerk/CORS
 deployment configuration in Mobius PR #164. The Cloud SDK migration
 is still in progress.
 Both control-plane databases were bootstrapped on 2026-09-11 with an active
-Tenant, an active Mobius Chat App, a default AppCredential, and two audit events.
+Tenant, an active Morty App, a default AppCredential, and two audit events.
 The credential digest was verified against the locally retained secret.
 
 | Environment | Endpoint |
@@ -23,8 +23,8 @@ to the staging Platform endpoint listed above.
 
 | Chat Worker | `MOBIUS_BASE_URL` |
 | --- | --- |
-| `mobius-chat-staging` | `https://mobius.moxt.ai` |
-| `mobius-chat-production` | `https://mobius.moxt.ai` |
+| `morty-staging` | `https://mobius.moxt.ai` |
+| `morty-production` | `https://mobius.moxt.ai` |
 
 On 2026-09-14, each AppCredential was authenticated and authorized for its App's
 Project provisioning endpoint before updating `MOBIUS_BASE_URL`, `MOBIUS_APP_ID`,
@@ -43,7 +43,7 @@ stored in D1. Developer memberships were added separately as described below;
 no Project has been created. Plaintext
 credentials are held in GitHub Environment secrets, outside the repository.
 `MOBIUS_APP_ID` and `MOBIUS_BASE_URL` are Worker variables; `MOBIUS_APP_SECRET`
-is a Worker secret on `mobius-chat-staging` and `mobius-chat-production`.
+is a Worker secret on `morty-staging` and `morty-production`.
 
 ## Remaining requirements
 
@@ -104,7 +104,7 @@ Runtime, Session, and turn operations call Mobius with the AppCredential.
 The Worker depends on the published `@moxt-ai/mobius-sdk` package and uses its
 `@moxt-ai/mobius-sdk/platform` export for Project provisioning. Use
 `@moxt-ai/mobius-sdk/server` for generic Project, Runtime, Session, and turn
-operations. Mobius Chat does not use Mobius Bot resources during normal operation.
+operations. Morty does not use Mobius Bot resources during normal operation.
 
 Replace `x-mobius-app-id` / `x-mobius-app-secret` authentication with
 `Authorization: Bearer mapp_...`. Keep the AppCredential server-side. Retain
@@ -171,7 +171,7 @@ header, from any browser origin. A successful preflight does not authorize the
 actual request: an unauthenticated GET must still return 401, and a credential
 without the requested operation's permission must still be denied.
 
-The deployment workflow validates the `mobius-chat-*` Worker names configured
+The deployment workflow validates the `morty-*` Worker names configured
 in `wrangler.jsonc` before checking required remote runtime settings.
 
 ### 6. Acceptance slice

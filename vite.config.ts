@@ -18,9 +18,9 @@ const sentry = v.parse(
 const cloudflareEnvironment = v.parse(v.optional(v.picklist(["staging", "production"])), process.env["CLOUDFLARE_ENV"]);
 const assetOrigin =
     cloudflareEnvironment === "staging"
-        ? "https://assets.mobius-chat.paradev.biz"
+        ? "https://assets.morty.paradev.biz"
         : cloudflareEnvironment === "production"
-          ? "https://assets.mobius-chat.paraflow.biz"
+          ? "https://assets.morty.paraflow.biz"
           : undefined;
 
 export default defineConfig({

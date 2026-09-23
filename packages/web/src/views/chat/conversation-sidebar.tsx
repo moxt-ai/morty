@@ -113,7 +113,7 @@ export function ConversationSidebar({
                     <MessageSquare className="size-[18px]" aria-hidden="true" />
                 </span>
                 <span className="min-w-0">
-                    <h1 className="truncate text-[15px] leading-5 font-semibold tracking-[-0.015em]">Mobius Chat</h1>
+                    <h1 className="truncate text-[15px] leading-5 font-semibold tracking-[-0.015em]">Morty</h1>
                     <span className="block text-[11px] leading-4 text-muted-foreground">Local workspace</span>
                 </span>
             </div>

@@ -1,11 +1,11 @@
 ---
 name: worker-debug
-description: Debug retained or live Cloudflare Worker failures for Mobius Chat staging or production. Use when a user asks to inspect deployed Worker logs, investigate an online API error, correlate a browser request with Worker execution, or compare staging and production behavior.
+description: Debug retained or live Cloudflare Worker failures for Morty staging or production. Use when a user asks to inspect deployed Worker logs, investigate an online API error, correlate a browser request with Worker execution, or compare staging and production behavior.
 ---
 
 # Worker Debugging
 
-Investigate a deployed Mobius Chat Worker from evidence to root cause. Prefer
+Investigate a deployed Morty Worker from evidence to root cause. Prefer
 retained Workers Observability events for failures that already happened;
 `wrangler tail` only observes new events.
 
@@ -17,8 +17,8 @@ Use only configuration read from this checkout:
 
 | Environment | Worker | Origin |
 | --- | --- | --- |
-| staging | `mobius-chat-staging` | `https://mobius-chat.paradev.biz` |
-| production | `mobius-chat-production` | `https://mobius-chat.paraflow.biz` |
+| staging | `morty-staging` | `https://morty.paradev.biz` |
+| production | `morty-production` | `https://morty.paraflow.biz` |
 
 Treat “online” as ambiguous. Infer the environment only from a supplied URL or
 other concrete evidence; otherwise ask. Never default a destructive operation to
@@ -93,7 +93,7 @@ larger than 100, and `dry: true`. Example body shape:
         "key": "$metadata.service",
         "operation": "eq",
         "type": "string",
-        "value": "mobius-chat-staging"
+        "value": "morty-staging"
       }
     ]
   }

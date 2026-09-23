@@ -17,7 +17,7 @@ import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
-import { registerMobiusChatDebugSession } from "../../debug-bridge.ts";
+import { registerMortyDebugSession } from "../../debug-bridge.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { SessionConnectionKind } from "../../view-models/chat/bot-chat-home-store.ts";
 import type { QueuedDraftMessage } from "../../view-models/chat/conversation-creation-machine.ts";
@@ -92,7 +92,7 @@ export function MobiusSessionPane({
     }, [filePreview, pane]);
     useEffect(
         () =>
-            registerMobiusChatDebugSession({
+            registerMortyDebugSession({
                 sessionId,
                 blocks: () => sessionDebugBlocks(pane.store.getState()),
             }),
