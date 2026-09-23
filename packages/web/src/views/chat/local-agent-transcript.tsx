@@ -12,6 +12,7 @@ export type TurnState =
           readonly sessionId: string;
           readonly prompt: string;
           readonly text: string;
+          readonly truncated: boolean;
       }
     | { readonly kind: "unknown"; readonly message: string; readonly prompt: string };
 
@@ -88,6 +89,7 @@ export function LocalAgentTranscript({
                     </article>
                     <article aria-label="Current Agent response" className="mx-auto max-w-3xl">
                         <p className="text-xs font-semibold text-muted-foreground">Agent is working</p>
+                        {turn.truncated && <p>Earlier live output is unavailable in this view.</p>}
                         <AgentMarkdown markdown={turn.text} readImage={readImage} streaming />
                     </article>
                 </>

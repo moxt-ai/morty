@@ -30,6 +30,7 @@ type RuntimeState =
           readonly modelSettingId: string | null;
           readonly models: readonly { readonly value: string; readonly name: string }[];
       };
+const LIVE_TEXT_LIMIT = 100_000;
 function failureMessage(error: unknown): string {
     return error instanceof Error ? error.message : "The local Agent Runtime is unavailable.";
 }
@@ -74,6 +75,29 @@ async function localHistory(
     return { messages: result.history.messages, truncated: result.history.truncated };
 }
 
+async function localActiveTurn(
+    client: MobiusChannelClient,
+    botId: string,
+    agentRef: string,
+    session: ManagedChatSession,
+    signal: AbortSignal,
+) {
+    const result = await client.manageNativeSession(
+        {
+            ...nativeRequest(botId, agentRef, crypto.randomUUID()),
+            directoryId: session.directoryId,
+            additionalDirectoryIds: session.additionalDirectoryIds,
+            action: "active-turn",
+            targetSessionId: session.id,
+        },
+        signal,
+    );
+    if (result.action !== "active-turn") {
+        throw new Error("The Runtime returned an invalid active Turn.");
+    }
+    return result.turn;
+}
+
 export function useLocalAgentChat({
     bot,
     requests,
@@ -116,7 +140,50 @@ export function useLocalAgentChat({
         readonly controller: AbortController;
         readonly completion: Promise<void>;
     } | null>(null);
+    const activeRequest = useRef<AbortController | null>(null);
     const onlineRef = useRef(false);
+    const refreshActiveTurn = useCallback(
+        async (client: MobiusChannelClient, agentRef: string, sessionId: string, parent: AbortSignal) => {
+            activeRequest.current?.abort(new Error("Another active Turn was requested"));
+            const controller = new AbortController();
+            activeRequest.current = controller;
+            const signal = AbortSignal.any([parent, controller.signal]);
+            try {
+                const session = (await requests.localSessions(bot.botId, signal)).find((item) => item.id === sessionId);
+                if (session === undefined) {
+                    return;
+                }
+                const snapshot = await localActiveTurn(client, bot.botId, agentRef, session, signal);
+                signal.throwIfAborted();
+                const selected = historyStore.getState().state;
+                if (selected.kind === "none" || selected.sessionId !== sessionId || snapshot === null) {
+                    return;
+                }
+                setTurn((current) => {
+                    if (current.kind === "running" && current.commandId !== snapshot.commandId) {
+                        return current;
+                    }
+                    return {
+                        kind: "running",
+                        commandId: snapshot.commandId,
+                        sessionId,
+                        prompt: snapshot.prompt,
+                        text: snapshot.text,
+                        truncated: snapshot.truncated,
+                    };
+                });
+            } catch (error) {
+                if (!signal.aborted) {
+                    setOperationError(failureMessage(error));
+                }
+            } finally {
+                if (activeRequest.current === controller) {
+                    activeRequest.current = null;
+                }
+            }
+        },
+        [bot.botId, historyStore, requests],
+    );
     const refreshHistory = useCallback(
         async (client: MobiusChannelClient, agentRef: string, sessionId: string, parent: AbortSignal) => {
             const previous = historyRequest.current;
@@ -220,13 +287,20 @@ export function useLocalAgentChat({
                                               sessionId: message.sessionId,
                                               prompt: message.prompt,
                                               text: "",
+                                              truncated: false,
                                           },
                                 );
                                 return;
                             case AGENT_MESSAGE_DELTA_KIND:
                                 setTurn((current) =>
                                     current.kind === "running" && current.commandId === message.commandId
-                                        ? { ...current, text: current.text + message.text }
+                                        ? {
+                                              ...current,
+                                              text: (current.text + message.text).slice(-LIVE_TEXT_LIMIT),
+                                              truncated:
+                                                  current.truncated ||
+                                                  current.text.length + message.text.length > LIVE_TEXT_LIMIT,
+                                          }
                                         : current,
                                 );
                                 return;
@@ -304,12 +378,14 @@ export function useLocalAgentChat({
                         const selected = current.kind === "none" ? null : current.sessionId;
                         const connection = connectionRef.current;
                         if (reconnected && selected !== null && connection !== null) {
+                            void refreshActiveTurn(connection.client, connection.agentRef, selected, controller.signal);
                             void refreshHistory(connection.client, connection.agentRef, selected, controller.signal);
                         }
                     },
                 });
                 controller.signal.throwIfAborted();
                 connectionRef.current = { client, agentRef: configuration.agentRef };
+                onlineRef.current = true;
                 setRuntime({
                     kind: "ready",
                     agentRef: configuration.agentRef,
@@ -327,6 +403,7 @@ export function useLocalAgentChat({
                     if (initial !== routeSessionRef.current) {
                         selectRouteRef.current(initial);
                     }
+                    void refreshActiveTurn(client, configuration.agentRef, initial, controller.signal);
                     await refreshHistory(client, configuration.agentRef, initial, controller.signal);
                 }
             } catch (error) {
@@ -338,13 +415,14 @@ export function useLocalAgentChat({
         return () => {
             controller.abort();
             historyRequest.current?.controller.abort();
+            activeRequest.current?.abort();
             connectionRef.current = null;
             onlineRef.current = false;
             if (lifetime.current === controller) {
                 lifetime.current = null;
             }
         };
-    }, [bot.botId, historyStore, refreshHistory, requests]);
+    }, [bot.botId, historyStore, refreshActiveTurn, refreshHistory, requests]);
 
     const loadSession = useCallback(
         async (session: ManagedChatSession) => {
@@ -356,9 +434,10 @@ export function useLocalAgentChat({
             setOperationError(null);
             setTurn({ kind: "idle" });
             setInteraction(null);
+            void refreshActiveTurn(runtime.client, runtime.agentRef, sessionId, lifetime.current.signal);
             await refreshHistory(runtime.client, runtime.agentRef, sessionId, lifetime.current.signal);
         },
-        [historyStore, refreshHistory, runtime],
+        [historyStore, refreshActiveTurn, refreshHistory, runtime],
     );
     useEffect(() => {
         if (routeSessionId === null || runtime.kind !== "ready") {
@@ -415,7 +494,7 @@ export function useLocalAgentChat({
         const sessionId = session.id;
         const commandId = crypto.randomUUID();
         setDraft("");
-        setTurn({ kind: "running", commandId, sessionId, prompt, text: "" });
+        setTurn({ kind: "running", commandId, sessionId, prompt, text: "", truncated: false });
         try {
             await runtime.client.prompt({
                 agentId: runtime.agentRef,

@@ -160,7 +160,10 @@ export async function openBotRuntimeChannel(input: {
                 throw new PlatformProjectError("ACCESS_DENIED", "The Agent does not belong to this Bot.", 403);
             }
             if (
-                (command.action === "import" || command.action === "fork" || command.action === "linked-history") &&
+                (command.action === "import" ||
+                    command.action === "fork" ||
+                    command.action === "linked-history" ||
+                    command.action === "active-turn") &&
                 !(await ownsSession(command.targetSessionId))
             ) {
                 throw new PlatformProjectError("ACCESS_DENIED", "The Session does not belong to this Bot.", 403);
