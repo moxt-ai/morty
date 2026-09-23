@@ -80,17 +80,18 @@ export function DraftChatControls({
         );
     }
     const switching = settings.kind === "switching";
+    const settingsLoading = switching || settings.kind === "refreshing";
     const selectedHarness = switching
         ? settings.selectedHarness
         : `${settings.selectedAgent.runtimeId}:${settings.selectedAgent.agentRef}`;
-    const options = switching ? [] : settings.options;
+    const options = settings.kind === "ready" ? settings.options : [];
     const model = options.find((option) => option.category === "model" && option.type !== "boolean");
     return (
         <div className="flex min-w-0 items-center gap-1">
             <ChatConfigurationMenu
                 controls={[
                     {
-                        disabled: disabled || switching,
+                        disabled: disabled || settingsLoading,
                         id: "harness",
                         kind: "select" as const,
                         label: "Harness",
@@ -133,10 +134,16 @@ export function DraftChatControls({
                               },
                     ),
                 ]}
-                settingsLoading={switching}
+                onRefresh={() => {
+                    const controller = operation.current;
+                    if (controller !== null) {
+                        void viewModel.refreshAgentSettings(controller.signal);
+                    }
+                }}
+                settingsLoading={settingsLoading}
             />
             <CwdSelector
-                disabled={disabled || switching}
+                disabled={disabled || settingsLoading}
                 signal={operation.current?.signal ?? AbortSignal.abort()}
                 viewModel={viewModel}
             />

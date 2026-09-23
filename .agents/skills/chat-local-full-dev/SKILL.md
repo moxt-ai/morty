@@ -30,22 +30,28 @@ Modes:
 | --- | --- | --- |
 | `web` | local Chat web/Worker | staging Platform |
 | `web-server` | local Chat web/Worker + local Mobius Platform | local |
+| `web-server-mobius` | compatibility alias for `web-server` | local |
+| `web-server-mobius-cli` | mode above + checkout Mobius CLI check | local |
 
 Examples:
 
 ```sh
 scripts/local-dev web
 scripts/local-dev web-server
+scripts/local-dev web-server-mobius
+scripts/local-dev web-server-mobius-cli
 ```
 
 Use `node scripts/local-dev.cjs ...` for status, logs, and removal. The
 `prepare` command remains available for automation and accepts explicit
-`--app-id` and `--app-secret` arguments. The local Platform uses the live Session relay.
+`--app-id` and `--app-secret` arguments. The local Platform uses the live Session
+relay and is non-cloud-only; `local-dev.cjs` does not launch a separate standalone
+Mobius Worker.
 
 `prepare` stays attached in the foreground after it prints its ready record.
 For agent-driven development, start the wrapper in the background and poll
 `node scripts/local-dev.cjs status --state-dir <stateDir>`; the record contains
-the Chat URL and local Platform URL. Stop it
+the Chat URL and, for server modes, the local Platform URL. Stop it
 with Ctrl-C or use `remove` when finished.
 
 `prepare` prints one JSON object on stdout. Progress goes to stderr, so stdout
@@ -126,11 +132,11 @@ node scripts/local-dev.cjs remove --state-dir <stateDir>
   from the built Worker bundle with the built SPA as assets. It owns
   `ProjectDurableObject`, `BotTriggerRateLimiter`, the attachments R2 buckets,
   and the `EVENTS` queue.
-- **Platform fixture** - pinned Wrangler runs
+- **Platform fixture and relay** - pinned Wrangler runs
   `packages/e2e/fixtures/wrangler.platform.jsonc` with an explicit
   `--persist-to`. It authenticates local developer calls with provider `e2e` and
-  token `morty-local-e2e`. `prepare` creates or updates its App with
-  the live Session relay.
+  token `morty-local-e2e`. `prepare` creates or updates its App on the non-cloud-only
+  live Session relay.
 - **Configuration** - `prepare` passes variables through Wrangler `--var`
   arguments instead of writing `.dev.vars`, so the checkout is never modified and
   no credentials land on disk. Treat the generated values as local-only secrets.
@@ -146,12 +152,12 @@ node scripts/local-dev.cjs pair --state-dir <stateDir> [--harness codex] [--work
 
 `pair` mints a fresh browser identity and one-time pairing ticket against the
 local Chat Worker, downloads the served `setup.mjs`, and runs its `pair` flow
-with Mobius configuration and state isolated under the state directory:
+with Morty's files isolated under the state directory:
 
 - `DOCUMENT_DIR` is set to `<stateDir>/documents`, so the setup script writes
   its private configuration there instead of the user's documents directory.
-- `MOBIUS_STATE_DIRECTORY` is set to `<stateDir>/cli-state`, so the Runtime CLI
-  saves connections and audit data there instead of `~/.mobius`.
+- Mobius uses its normal local state and singleton manager. The dev helper never
+  starts a second manager with an isolated `MOBIUS_STATE_DIRECTORY`.
 - `--workspace` defaults to `<stateDir>/workspace`, the paired default
   workspace.
 
@@ -171,12 +177,12 @@ localStorage.setItem(
 );
 ```
 
-Paired runtimes are recorded in the stack record; `remove` stops them with the
-rest of the stack. The pairing ticket binds to the freshly minted identity, so
-a browser that already holds another identity must clear or overwrite the two
-localStorage keys above. Runtime setup output is written to `pairLog`; bounded
-daemon diagnostics are under `<cliState>/logs/daemon.log`. Read both with
-`logs --worker runtime`.
+Paired setup commands and their Connection IDs are recorded in the stack record.
+`remove` stops those connections by Connection ID without stopping the shared
+Mobius manager or its other connections. The pairing ticket binds to the freshly
+minted identity, so a browser that already holds another identity must clear or
+overwrite the two localStorage keys above. Runtime setup output is written to
+`pairLog` and is available through `logs --worker runtime`.
 
 ## Debugging
 
@@ -223,8 +229,8 @@ Details, inspection commands, and a failure-mode table are in
     The local Platform App is provisioned automatically.
 - `pair --state-dir DIR [--harness ID] [--workspace DIR]`
   - pair a local agent Runtime through the served setup bundle with
-    `DOCUMENT_DIR` and `MOBIUS_STATE_DIRECTORY` isolated under the state
-    directory; prints the browser identity to adopt.
+    `DOCUMENT_DIR` isolated under the state directory while using the normal
+    singleton Mobius manager; prints the browser identity to adopt.
 - `status --state-dir DIR` - report process and HTTP health for a stack.
 - `logs --state-dir DIR [--worker chat|platform|runtime|all] [--lines N] [--filter REGEX] [--follow]`
   - read or follow captured Worker and paired Runtime logs.

@@ -114,7 +114,8 @@ export class PlatformProjectGateway {
                     502,
                 );
             }
-            return { ...pairing, relayUrl: this.configuration().origin };
+            const configuration = this.configuration();
+            return { ...pairing, appId: configuration.appId, relayUrl: configuration.origin };
         });
 
     readonly chatAgents = async (projectId: string, signal: AbortSignal) =>
@@ -414,16 +415,22 @@ export class PlatformProjectGateway {
             signal,
             async (client) => {
                 let text = "";
+                let streamInterrupted = false;
+                let turnSubmissionStarted = false;
                 let outcome:
                     | { readonly kind: "pending" }
                     | { readonly kind: "completed"; readonly stopReason: string }
                     | { readonly kind: "failed"; readonly code: string; readonly message: string } = {
                     kind: "pending",
                 };
-                const subscription = await client.events.subscribe(
+                const subscription = await client.events.subscribeLive(
                     sessionId,
-                    "",
                     {
+                        reconcile: async (connection) => {
+                            if (connection.kind === "reconnected" && turnSubmissionStarted) {
+                                streamInterrupted = true;
+                            }
+                        },
                         receive: async (event) => {
                             const payload = event.payload;
                             if (payload instanceof MobiusAgentMessageEvent && payload.commandId === input.commandId) {
@@ -447,11 +454,11 @@ export class PlatformProjectGateway {
                     signal,
                 );
                 try {
+                    turnSubmissionStarted = true;
                     const turn = await client.turns.submit(
                         sessionId,
                         {
                             additionalDirectoryIds: [],
-                            artifactIds: [],
                             content: input.prompt,
                             idempotencyKey: input.commandId,
                             images: [],
@@ -473,6 +480,7 @@ export class PlatformProjectGateway {
                     try {
                         await subscription.completed;
                     } catch (streamCause) {
+                        streamInterrupted = true;
                         const current = await client.turns.read(sessionId, turn.turnId, signal);
                         if (current.state instanceof MobiusSucceededTurnState) {
                             outcome = { kind: "completed", stopReason: current.state.stopReason };
@@ -490,6 +498,13 @@ export class PlatformProjectGateway {
                         } else {
                             throw streamCause;
                         }
+                    }
+                    if (streamInterrupted) {
+                        throw new PlatformProjectError(
+                            "TURN_STREAM_INTERRUPTED",
+                            "The live Turn stream disconnected before the response was complete.",
+                            502,
+                        );
                     }
                     if (outcome.kind === "failed") {
                         throw new PlatformProjectError(outcome.code, outcome.message, 502);

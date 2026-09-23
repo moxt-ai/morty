@@ -9,11 +9,11 @@ The user supplied `follow <origin>/pair.md?token=...`. That token is a one-use
 ticket, valid for **10 minutes**, for their existing user, Bot, and workspace.
 Fetching this document does not consume it. Do not create another user or Bot.
 Pairing takes its identity and Bot only from the supplied ticket. After redemption,
-it may reconnect saved Runtime state only when that state belongs to the exact same
-Chat origin, user, workspace, and Bot, matches the Runtime selected by the ticket, and
-Platform confirms that the pairing remains active. Otherwise it creates a fresh Runtime pairing. The previous file is backed up,
-then the verified identity and Runtime connection state are saved to `config.json`.
-Do not ask for an additional replacement confirmation.
+it fully validates the returned identity, Bot, workspace, and expected Runtime before
+continuing. The verified Chat identity, Bot, and workspace are saved to `config.json`;
+Mobius owns Runtime connection state and identifiers. Do not retain or back up App,
+Runtime, Connection, Channel, or pairing identifiers, and do not ask for an additional
+replacement confirmation.
 
 ## Run
 
@@ -24,8 +24,8 @@ Do not ask for an additional replacement confirmation.
    Use `DOCUMENT_DIR` from the environment if provided; otherwise resolve the user's
    absolute document directory. Ask if unavailable; do not use a repository directory
    as a substitute.
-2. Ensure Node.js 22.13.0 or newer, npm, and npx are available. Check their versions
-   and install or repair missing dependencies using the host's normal tools.
+2. Ensure Node.js 22.13.0 or newer and npm are available. Install or update the
+   persistent manager with `npm install --global @moxt-ai/mobius@latest`.
 3. Download `{{BASE_URL}}/setup.mjs` to a private local directory, with a
    finite timeout and no redirects. Inspect it before running.
 4. Set `TOKEN` from the supplied URL. Set `HARNESS` to **your own harness ID**:
@@ -36,19 +36,25 @@ Do not ask for an additional replacement confirmation.
 5. Run the command from the user's current working directory. The script resolves and
    validates `$PWD`, then uses it as the paired Runtime's default Morty workspace.
 
-Run this command in the background so it keeps running after this reply. Closing
-this conversation stops the Runtime it started.
+Run this command normally. It registers the Runtime with the per-user Mobius manager,
+which remains online after this command and the current conversation exit.
 
 ```sh
 node "$SCRIPT_DIR/setup.mjs" pair --base-url "$BASE_URL" --cwd "$PWD" --token="$TOKEN" --harness "$HARNESS"
 ```
 
-This single command exchanges the ticket, reconnects a matching saved Runtime or
-creates a fresh pairing for the current working directory, saves private credentials,
-and launches the Runtime attached to this agent session. After Runtime pairing reports
+This single command exchanges the ticket, reconnects a matching Mobius-managed
+connection or creates a fresh pairing for the current working directory, saves only
+the private Chat identity and Bot configuration, and launches the Runtime through the
+singleton local manager. After Runtime pairing reports
 the requested harness, the script immediately requests
-its Bot binding and checks readiness. It does not stop any other local Mobius
-Runtime process. The Runtime exits when your agent session ends.
+its Bot binding and checks readiness. Existing managed Runtime connections remain online.
+It creates a private temporary JSON file, runs
+`mobius pair list --output-json=<that-file>`, and reuses the Connection ID whose
+App ID matches the Chat request. The Runtime ID comes from that local connection
+record. If no match exists, it creates
+a new pairing. The setup configuration does not persist App, Runtime, Connection,
+Channel, or pairing identifiers.
 
 ## Observe and finish
 
@@ -68,9 +74,6 @@ pairing fresh; its ready result includes a browser handoff as described in `/set
 `HARNESS_UNAVAILABLE` reports the advertised alternatives; repair authentication or
 ask the user before selecting a different harness. Pair always redeems its ticket;
 an expired or consumed ticket requires a fresh web instruction to run pair again.
-Previous configuration is preserved in `config-backup-<id>.json`.
-Backup progress reports paths, never credentials. Report the backup path when a
-replacement occurs.
 
 Durable credentials belong only in private files under `$DOCUMENT_DIR/morty`, not
 command arguments, URLs, chat output, or logs. The CLI `--token` accepts only the

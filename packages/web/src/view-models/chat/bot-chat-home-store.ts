@@ -617,7 +617,6 @@ export const createBotChatHomeStore = (
                     access.sessionId,
                     {
                         additionalDirectoryIds: [],
-                        artifactIds: [],
                         content: sending.message.content,
                         idempotencyKey: sending.message.commandId,
                         images: sending.message.attachments.flatMap((attachment) =>

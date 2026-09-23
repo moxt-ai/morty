@@ -293,7 +293,7 @@ test("Given an unpaired workspace, When a user manages Bots, Then pairing and th
     expect(document.querySelector(`[data-testid="${dataTestId.removeBot}"]`)).toBeNull();
 });
 
-test("Given a paired Bot, When a user filters its models and requests an image, Then the selected configuration and media are visible", {
+test("Given a paired Bot with cached agent settings, When a user refreshes and filters its models, Then the reloaded configuration and requested media are visible", {
     timeout: 30_000,
 }, async () => {
     const created = await renderWorkspace();
@@ -308,6 +308,10 @@ test("Given a paired Bot, When a user filters its models and requests an image, 
 
     await act(async () => {
         (await waitForElement(`[data-testid="${dataTestId.agentConfiguration}"]`)).click();
+        const loading = observeStatusText("Loading harness settings");
+        (await waitForElement('button[aria-label="Refresh agent settings"]')).click();
+        await loading;
+        await waitForEnabled(`[data-testid="${dataTestId.agentSetting("model")}"]`);
         (await waitForEnabled(`[data-testid="${dataTestId.agentSetting("model")}"]`)).click();
         const search = await waitForElement(`[data-testid="${dataTestId.modelSearch}"]`);
         changeValue(search as HTMLInputElement, "large");

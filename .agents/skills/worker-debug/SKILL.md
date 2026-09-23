@@ -18,7 +18,7 @@ Use only configuration read from this checkout:
 | Environment | Worker | Origin |
 | --- | --- | --- |
 | staging | `morty-staging` | `https://morty.paradev.biz` |
-| production | `morty-production` | `https://morty.paraflow.biz` |
+| production | `morty-production` | `https://morty.build` |
 
 Treat “online” as ambiguous. Infer the environment only from a supplied URL or
 other concrete evidence; otherwise ask. Never default a destructive operation to

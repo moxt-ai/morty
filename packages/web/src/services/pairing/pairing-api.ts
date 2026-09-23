@@ -320,6 +320,7 @@ function decodeCreatedPairing(value: unknown): CreatedPairing {
     if (!isRecord(value)) {
         throw new PairingApiError("invalid_relay_response", "The relay returned an invalid pairing request.");
     }
+    const appId = value["appId"] ?? import.meta.env.VITE_MOBIUS_APP_ID;
     const pairingId = value["pairingId"];
     const pairingCode = value["pairingCode"];
     const pollToken = value["pollToken"];
@@ -329,6 +330,8 @@ function decodeCreatedPairing(value: unknown): CreatedPairing {
     const projectId = value["projectId"];
     const runtimeId = value["runtimeId"];
     if (
+        typeof appId !== "string" ||
+        !isIdentifier(appId) ||
         typeof pairingId !== "string" ||
         !isIdentifier(pairingId) ||
         typeof pairingCode !== "string" ||
@@ -349,6 +352,7 @@ function decodeCreatedPairing(value: unknown): CreatedPairing {
         throw new PairingApiError("invalid_relay_response", "The relay returned an invalid pairing request.");
     }
     return new CreatedPairing(
+        appId,
         pairingId,
         pairingCode,
         pollToken,
@@ -1084,5 +1088,5 @@ export async function readChannelHistoryForSynchronization(
 }
 
 export function pairingCommand(pairing: CreatedPairing): string {
-    return `npx --yes @moxt-ai/mobius pair --url ${JSON.stringify(window.location.origin)} --code ${pairing.pairingCode}`;
+    return `npm install --global @moxt-ai/mobius@latest && mobius pair --app-id ${JSON.stringify(pairing.appId)} --url ${JSON.stringify(window.location.origin)} --pairing ${JSON.stringify(pairing.pairingId)} --code ${JSON.stringify(pairing.pairingCode)}`;
 }

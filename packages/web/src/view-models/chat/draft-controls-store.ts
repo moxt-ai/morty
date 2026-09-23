@@ -20,6 +20,12 @@ type DraftSettingsState =
           readonly workspace: ChatWorkspace;
       }
     | {
+          readonly kind: "refreshing";
+          readonly workspace: ChatWorkspace;
+          readonly selectedAgent: ChatWorkspace["agents"][number];
+          readonly cwd: WorkspaceEntriesEvent;
+      }
+    | {
           readonly kind: "ready";
           readonly workspace: ChatWorkspace;
           readonly selectedAgent: ChatWorkspace["agents"][number];
@@ -47,6 +53,7 @@ export interface DraftControlsStore {
     readonly forgetRecentCwd: (directoryId: string) => void;
     readonly load: (signal: AbortSignal) => Promise<void>;
     readonly openCwd: () => void;
+    readonly refreshAgentSettings: (signal: AbortSignal) => Promise<void>;
     readonly saveCwd: (signal: AbortSignal) => Promise<void>;
     readonly selectRecentCwd: (directoryId: string, signal: AbortSignal) => Promise<void>;
     readonly selectHarness: (value: string, disabled: boolean, signal: AbortSignal) => Promise<void>;
@@ -148,6 +155,37 @@ export const createDraftControlsStore = (
             set({ settings: ready, cwdBrowser: { kind: "closed" }, recentCwds });
             publishSettings(ready);
         };
+        const applyAgentSettings = (
+            workspace: ChatWorkspace,
+            selectedAgent: ChatWorkspace["agents"][number],
+            cwd: WorkspaceEntriesEvent,
+            options: readonly SessionConfigOption[],
+        ): void => {
+            const restoredSettings = restoreLastAgentSettings(botId, selectedAgent.agentRef, options);
+            const ready = {
+                kind: "ready" as const,
+                workspace,
+                selectedAgent,
+                cwd,
+                options: restoredSettings.options,
+            };
+            changedOptionIds.clear();
+            for (const configId of restoredSettings.restoredIds) {
+                changedOptionIds.add(configId);
+            }
+            const existingRecentCwds = readRecentCwdPreferences(botId);
+            saveLastCwdPreference(botId, selectedAgent.runtimeId, selectedAgent.agentRef, cwd.directoryId);
+            const recentCwds =
+                existingRecentCwds === null
+                    ? saveRecentCwdPreference(
+                          botId,
+                          { directoryId: cwd.directoryId, directoryLabel: cwd.directoryLabel },
+                          [],
+                      )
+                    : existingRecentCwds;
+            set({ settings: ready, recentCwds });
+            publishSettings(ready);
+        };
         const browseCwd = async (directoryId: string, lifetimeSignal: AbortSignal): Promise<void> => {
             const settings = get().settings;
             if (settings.kind !== "ready") {
@@ -247,7 +285,7 @@ export const createDraftControlsStore = (
                     );
                     if (selected !== undefined) {
                         const [result, defaultCwd] = await Promise.all([
-                            requests.agentSettings(botId, selected.agentRef, signal),
+                            requests.agentSettings(botId, selected.agentRef, false, signal),
                             requests.workspaceDirectory(botId, "default", signal),
                         ]);
                         signal.throwIfAborted();
@@ -261,30 +299,7 @@ export const createDraftControlsStore = (
                                 signal.throwIfAborted();
                             }
                         }
-                        const restoredSettings = restoreLastAgentSettings(botId, selected.agentRef, result.options);
-                        const ready = {
-                            kind: "ready" as const,
-                            workspace,
-                            selectedAgent: selected,
-                            cwd,
-                            options: restoredSettings.options,
-                        };
-                        changedOptionIds.clear();
-                        for (const configId of restoredSettings.restoredIds) {
-                            changedOptionIds.add(configId);
-                        }
-                        const existingRecentCwds = readRecentCwdPreferences(botId);
-                        saveLastCwdPreference(botId, selected.runtimeId, selected.agentRef, cwd.directoryId);
-                        const recentCwds =
-                            existingRecentCwds === null
-                                ? saveRecentCwdPreference(
-                                      botId,
-                                      { directoryId: cwd.directoryId, directoryLabel: cwd.directoryLabel },
-                                      [],
-                                  )
-                                : existingRecentCwds;
-                        set({ settings: ready, recentCwds });
-                        publishSettings(ready);
+                        applyAgentSettings(workspace, selected, cwd, result.options);
                         return;
                     }
                     await wait(signal);
@@ -326,6 +341,35 @@ export const createDraftControlsStore = (
                 const settings = get().settings;
                 if (settings.kind === "ready") {
                     set({ cwdBrowser: { kind: "ready", directory: settings.cwd, path: settings.cwd.directoryLabel } });
+                }
+            },
+            refreshAgentSettings: async (signal) => {
+                const settings = get().settings;
+                if (settings.kind !== "ready") {
+                    return;
+                }
+                set({
+                    settings: {
+                        kind: "refreshing",
+                        workspace: settings.workspace,
+                        selectedAgent: settings.selectedAgent,
+                        cwd: settings.cwd,
+                    },
+                });
+                onSettings(null);
+                try {
+                    const result = await requests.agentSettings(botId, settings.selectedAgent.agentRef, true, signal);
+                    signal.throwIfAborted();
+                    applyAgentSettings(settings.workspace, settings.selectedAgent, settings.cwd, result.options);
+                } catch (cause) {
+                    if (!signal.aborted) {
+                        set({
+                            settings: {
+                                kind: "failed",
+                                message: cause instanceof Error ? cause.message : "Harness settings are unavailable.",
+                            },
+                        });
+                    }
                 }
             },
             saveCwd: async (signal) => {

@@ -95,7 +95,7 @@ export async function createTestRuntime(harness: E2EHarness) {
                 await chat.waitForBinding(harness, stack.agent.id, stack.agent.label);
                 await page.reload();
             },
-            disconnectRuntime: async () => await stack.harness.terminate("mobius", "SIGKILL"),
+            disconnectRuntime: async () => await stack.stopMobiusManager(),
             disconnectPlatform: async () => await stack.harness.terminate("mobius-platform"),
             followInstructions: async (instructionUrl: string, sessionId?: string) => {
                 const url = new URL(instructionUrl, stack.chatOrigin);
@@ -122,6 +122,7 @@ export async function createTestRuntime(harness: E2EHarness) {
                     });
                     return {
                         botId: text(result.ready.botId, "ready Bot"),
+                        configuration: result.configuration,
                         events: result.events,
                         url: text(result.ready.url, "Chat URL"),
                         expiresAt: result.ready.expiresAt,

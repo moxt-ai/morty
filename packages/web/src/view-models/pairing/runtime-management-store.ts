@@ -214,5 +214,5 @@ export function runtimeDisplayName(runtime: MobiusRuntimeDescriptor): string {
 }
 
 export function runtimePairingCommand(pairing: MobiusRuntimePairing): string {
-    return `npx --yes @moxt-ai/mobius pair --url ${JSON.stringify(window.location.origin)} --code ${pairing.pairingCode}`;
+    return `npm install --global @moxt-ai/mobius@latest && mobius pair --app-id ${JSON.stringify(import.meta.env.VITE_MOBIUS_APP_ID)} --url ${JSON.stringify(window.location.origin)} --pairing ${JSON.stringify(pairing.pairingId)} --code ${JSON.stringify(pairing.pairingCode)}`;
 }

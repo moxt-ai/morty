@@ -59,6 +59,7 @@ export async function followSetupInstructions(options: {
         "local configuration",
     );
     return {
+        configuration,
         events,
         ready,
         identity: {

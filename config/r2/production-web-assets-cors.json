@@ -2,7 +2,7 @@
     "rules": [
         {
             "allowed": {
-                "origins": ["https://morty.paraflow.biz"],
+                "origins": ["https://morty.build"],
                 "methods": ["GET"],
                 "headers": ["*"]
             },

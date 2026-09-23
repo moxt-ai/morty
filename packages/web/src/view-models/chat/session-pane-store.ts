@@ -1001,7 +1001,6 @@ export function createSessionPaneModel(options: {
                             resources: current.attachments.flatMap((attachment) =>
                                 attachment.kind === "resource" ? [attachment.resource] : [],
                             ),
-                            artifactIds: [],
                         },
                         signal,
                     );
@@ -1112,7 +1111,6 @@ export function createSessionPaneModel(options: {
                         resources: current.attachments.flatMap((attachment) =>
                             attachment.kind === "resource" ? [attachment.resource] : [],
                         ),
-                        artifactIds: [],
                     },
                     signal,
                 );
@@ -1146,7 +1144,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 await tasks.getState().compact(
-                    { ...request, artifactIds: [], images: [], resources: [] },
+                    { ...request, images: [], resources: [] },
                     (commandId, prompt) => {
                         command = commandId;
                         set((state) =>

@@ -18,7 +18,7 @@ jobs:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
-      vars.ENABLE_AUTOMATIC_MOBIUS_DEPLOY == 'true' &&
+      vars.ENABLE_AUTOMATIC_MORTY_PRODUCTION_DEPLOY == 'true' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     uses: ./.github/workflows/deploy.yml
     secrets: inherit

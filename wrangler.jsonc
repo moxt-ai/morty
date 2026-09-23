@@ -106,7 +106,7 @@
             },
             "routes": [
                 {
-                    "pattern": "morty.paraflow.biz",
+                    "pattern": "morty.build",
                     "custom_domain": true
                 }
             ],
