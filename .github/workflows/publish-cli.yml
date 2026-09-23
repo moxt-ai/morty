@@ -1,0 +1,68 @@
+name: Publish Mobius CLI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - third-party/mobius
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-mobius-cli
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: npm
+    if: github.repository == 'moxt-ai/mobius-chat'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve Mobius revisions
+        id: mobius
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: node scripts/ci-resolve-mobius-revisions.cjs
+
+      - name: Checkout Mobius
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: moxt-ai/mobius-moxt
+          ref: ${{ steps.mobius.outputs.current }}
+          path: third-party/mobius
+          fetch-depth: 0
+          persist-credentials: false
+          token: ${{ secrets.MOBIUS_READ_TOKEN }}
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: third-party/mobius/.nvmrc
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      - name: Detect CLI version change
+        id: cli-version
+        env:
+          PREVIOUS_MOBIUS_SHA: ${{ steps.mobius.outputs.previous }}
+        run: node scripts/ci-detect-mobius-cli-version.cjs
+
+      - name: Enable pnpm
+        if: steps.cli-version.outputs.changed == 'true'
+        run: corepack enable && pnpm --version && npm --version
+
+      - name: Install release dependencies
+        if: steps.cli-version.outputs.changed == 'true'
+        run: pnpm --dir third-party/mobius install --frozen-lockfile
+
+      - name: Publish CLI
+        if: steps.cli-version.outputs.changed == 'true'
+        run: node scripts/ci-publish-mobius-release.cjs cli
