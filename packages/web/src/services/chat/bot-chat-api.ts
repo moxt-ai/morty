@@ -354,7 +354,7 @@ export class BotChatApi {
         await this.#waitForChange(
             new Request(
                 new URL(
-                    `/mobius-cloud/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/workspace`,
+                    `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/workspace`,
                     this.#origin,
                 ),
                 { method: "POST", headers: { authorization: `Bearer ${token}` }, signal },
@@ -492,8 +492,8 @@ export class BotChatApi {
             new Request(
                 new URL(
                     operation === "pairing-instruction"
-                        ? `/mobius-cloud/api/projects/${encodeURIComponent(this.#projectId)}/identity/pairings`
-                        : `/mobius-cloud/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(requestedBotId)}/${operation}`,
+                        ? `/morty/api/projects/${encodeURIComponent(this.#projectId)}/identity/pairings`
+                        : `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(requestedBotId)}/${operation}`,
                     this.#origin,
                 ),
                 {

@@ -13,7 +13,7 @@ The local execution boundary is the only authority allowed to approve local side
 
 ## Deployment topology
 
-- Staging Chat (`mobius-chat.paradev.biz`) is configured to call the production Platform relay (`mobius.moxt.ai`). For cross-service staging incidents, inspect `mobius-platform-production`, not the staging Platform Worker.
+- Staging Chat (`morty.paradev.biz`) is configured to call the production Platform relay (`mobius.moxt.ai`). For cross-service staging incidents, inspect `mobius-platform-production`, not the staging Platform Worker.
 
 ## State Modeling
 

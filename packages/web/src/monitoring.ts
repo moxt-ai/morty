@@ -28,7 +28,7 @@ const configuration = v.parse(
     v.object({
         VITE_SENTRY_DSN: v.optional(v.string(), ""),
         VITE_SENTRY_ENVIRONMENT: v.optional(v.picklist(["development", "staging", "production"]), "development"),
-        VITE_SENTRY_RELEASE: v.optional(v.string(), "mobius-cloud@development"),
+        VITE_SENTRY_RELEASE: v.optional(v.string(), "morty@development"),
     }),
     import.meta.env,
 );

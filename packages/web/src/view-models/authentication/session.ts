@@ -45,10 +45,10 @@ export async function verifySession(
         throw new SessionError("FORBIDDEN");
     }
     const result = await fetchRequest(
-        new Request(
-            new URL(`/mobius-cloud/api/projects/${encodeURIComponent(projectId)}/session`, window.location.origin),
-            { headers: { Authorization: `Bearer ${token}` }, signal },
-        ),
+        new Request(new URL(`/morty/api/projects/${encodeURIComponent(projectId)}/session`, window.location.origin), {
+            headers: { Authorization: `Bearer ${token}` },
+            signal,
+        }),
     );
     if (!result.ok) {
         throw new SessionError(result.status === 401 ? "FORBIDDEN" : "UNAVAILABLE");

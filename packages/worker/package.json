@@ -1,5 +1,5 @@
 {
-    "name": "@moxt-ai/mobius-cloud-worker",
+    "name": "@moxt-ai/morty-worker",
     "version": "0.0.1",
     "private": true,
     "type": "module",

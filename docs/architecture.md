@@ -1,6 +1,6 @@
 # Architecture
 
-Mobius Cloud consists of `packages/web` and `packages/worker`.
+Morty consists of `packages/web` and `packages/worker`.
 
 The web package presents a user-owned bot flow: manage bots, chat, and connect Slack.
 Visitors receive a browser-persisted anonymous credential and can manage bots and Chat
@@ -23,7 +23,7 @@ anonymous credentials are never stored server-side. Device transfer URLs carry a
 separate 15-minute, one-use code in the URL fragment; redeeming it issues another
 credential for the same internal user.
 
-Mobius Chat calls the user-owned environment a **Workspace**. At the Mobius Platform
+Morty calls the user-owned environment a **Workspace**. At the Mobius Platform
 boundary, the same resource remains a **Project**; Platform SDK types, `projectId`
 fields, Project-scoped routes, and Project error contracts retain Mobius terminology.
 

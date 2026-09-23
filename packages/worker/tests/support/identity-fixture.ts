@@ -9,10 +9,9 @@ import worker from "../../src/application.ts";
 import { APP_ORIGIN, clerk as issuer } from "./clerk.ts";
 
 export function accountRequest(token?: string, projectId?: string): Request {
-    return new Request(
-        `${APP_ORIGIN}/mobius-cloud/api${projectId === undefined ? "" : `/projects/${projectId}`}/session`,
-        { headers: token === undefined ? {} : { Authorization: `Bearer ${token}` } },
-    );
+    return new Request(`${APP_ORIGIN}/morty/api${projectId === undefined ? "" : `/projects/${projectId}`}/session`, {
+        headers: token === undefined ? {} : { Authorization: `Bearer ${token}` },
+    });
 }
 
 export async function createIdentityFixture(
@@ -117,7 +116,7 @@ export async function createIdentityFixture(
         });
         const createAnonymousUser = async () => {
             const response = await worker.fetch(
-                new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/anonymous-users`, { method: "POST" }),
+                new Request(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, { method: "POST" }),
                 environment(),
             );
             expect(response.status).toBe(201);

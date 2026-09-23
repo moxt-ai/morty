@@ -347,7 +347,7 @@ export const sidebarLayoutEntry = customLocalStorageEntry<StoredSidebarLayout>({
 
 export const userChannelEntry = (userId: string): LocalStorageEntry<string> =>
     stringLocalStorageEntry({
-        key: scopedKey("mobius-cloud:user-channel:", userId),
+        key: scopedKey("morty:user-channel:", userId),
         schema: identifierSchema,
     });
 

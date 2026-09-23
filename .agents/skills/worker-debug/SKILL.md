@@ -1,11 +1,11 @@
 ---
 name: worker-debug
-description: Debug retained or live Cloudflare Worker failures for Mobius Chat staging or production. Use when a user asks to inspect deployed Worker logs, investigate an online API error, correlate a browser request with Worker execution, or compare staging and production behavior.
+description: Debug retained or live Cloudflare Worker failures for Morty staging or production. Use when a user asks to inspect deployed Worker logs, investigate an online API error, correlate a browser request with Worker execution, or compare staging and production behavior.
 ---
 
 # Worker Debugging
 
-Investigate a deployed Mobius Chat Worker from evidence to root cause. Prefer
+Investigate a deployed Morty Worker from evidence to root cause. Prefer
 retained Workers Observability events for failures that already happened;
 `wrangler tail` only observes new events.
 
@@ -17,8 +17,8 @@ Use only configuration read from this checkout:
 
 | Environment | Worker | Origin |
 | --- | --- | --- |
-| staging | `mobius-chat-staging` | `https://mobius-chat.paradev.biz` |
-| production | `mobius-chat-production` | `https://mobius-chat.paraflow.biz` |
+| staging | `morty-staging` | `https://morty.paradev.biz` |
+| production | `morty-production` | `https://morty.paraflow.biz` |
 
 Treat “online” as ambiguous. Infer the environment only from a supplied URL or
 other concrete evidence; otherwise ask. Never default a destructive operation to
@@ -93,7 +93,7 @@ larger than 100, and `dry: true`. Example body shape:
         "key": "$metadata.service",
         "operation": "eq",
         "type": "string",
-        "value": "mobius-chat-staging"
+        "value": "morty-staging"
       }
     ]
   }
@@ -147,8 +147,7 @@ an already-fixed deployment mismatch from a defect still present on current
 ### Read deployed D1 or Durable Object data
 
 When retained telemetry cannot reveal the persisted value needed to diagnose a
-staging or production failure, follow the temporary helper pattern documented by
-the `worker-data-migration` skill. Deploy a separate, short-lived, token-gated
+staging or production failure, deploy a separate, short-lived, token-gated
 Worker in the same account and bind the target deployment's D1 database or
 Durable Object class with `script_name`. Query only the records required for the
 diagnosis through an existing internal read boundary, then delete the helper on
@@ -156,8 +155,8 @@ success or failure.
 
 Do not upload diagnostic code as a version of the application Worker, alter its
 active deployment, copy an encrypted application secret, weaken an authorization
-gate, or run the migration endpoint merely to read data. State the exact staging
-or production target before deploying the helper, keep its token in a mode `0600`
+gate, or run a migration merely to read data. State the exact staging or
+production target before deploying the helper, keep its token in a mode `0600`
 file, never print it, and independently verify that the helper was deleted.
 
 ## Implement and verify a fix

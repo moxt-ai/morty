@@ -57,7 +57,7 @@ Platform control-plane tables live under `<platformPersist>/v3/d1/<hash>/`:
 
 ```sh
 sqlite3 -header -column <platform-d1.sqlite> \
-  'select app_id, display_name, cloud_retention from platform_apps;'
+  'select app_id, display_name, lifecycle from platform_apps;'
 ```
 
 Durable Object and D1 files are WAL-backed. If a value looks stale, the Worker is
@@ -95,13 +95,13 @@ For a contract-level reproduction, call the Chat HTTP API directly against
 `chatOrigin`. A first-time visitor must mint an anonymous identity first:
 
 ```sh
-curl -sS -X POST "$CHAT_ORIGIN/mobius-cloud/api/identity/anonymous-users" \
+curl -sS -X POST "$CHAT_ORIGIN/morty/api/identity/anonymous-users" \
   -H 'content-type: application/json' -d '{}'
 ```
 
 The response carries the browser identity, including the Project ID and token.
 Reuse those as `authorization: Bearer <token>` against
-`/mobius-cloud/api/chat/projects/<projectId>/...`. Keep tokens out of transcripts
+`/morty/api/chat/projects/<projectId>/...`. Keep tokens out of transcripts
 and logs.
 
 ## Escalating to deployed environments

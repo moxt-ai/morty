@@ -1,6 +1,6 @@
 {
     "$schema": "node_modules/wrangler/config-schema.json",
-    "name": "mobius-cloud-local",
+    "name": "morty-local",
     "main": "packages/worker/src/index.ts",
     "compatibility_date": "2026-09-07",
     "keep_vars": false,
@@ -16,22 +16,15 @@
     "assets": {
         "binding": "ASSETS",
         "not_found_handling": "single-page-application",
-        "run_worker_first": [
-            "/mobius-cloud/api/*",
-            "/mobius-cloud/ws",
-            "/mobius-slack/api/*",
-            "/setup.md",
-            "/pair.md",
-            "/setup.mjs"
-        ]
+        "run_worker_first": ["/morty/api/*", "/morty/ws", "/mobius-slack/api/*", "/setup.md", "/pair.md", "/setup.mjs"]
     },
     "queues": {
         "producers": [{ "binding": "EVENTS", "queue": "app-slack-events" }],
         "consumers": [{ "queue": "app-slack-events", "max_batch_size": 1, "max_retries": 5 }]
     },
     "r2_buckets": [
-        { "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "mobius-chat-local-apac-attachments" },
-        { "binding": "CHAT_ATTACHMENTS_WNAM", "bucket_name": "mobius-chat-local-wnam-attachments" }
+        { "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-local-apac-attachments" },
+        { "binding": "CHAT_ATTACHMENTS_WNAM", "bucket_name": "morty-local-wnam-attachments" }
     ],
     "durable_objects": {
         "bindings": [
@@ -51,7 +44,7 @@
     ],
     "env": {
         "staging": {
-            "name": "mobius-chat-staging",
+            "name": "morty-staging",
             "placement": { "mode": "off" },
             "secrets": {
                 "required": [
@@ -63,7 +56,7 @@
             },
             "routes": [
                 {
-                    "pattern": "mobius-chat.paradev.biz",
+                    "pattern": "morty.paradev.biz",
                     "custom_domain": true
                 }
             ],
@@ -84,8 +77,8 @@
                 ]
             },
             "r2_buckets": [
-                { "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "mobius-chat-staging-apac-attachments" },
-                { "binding": "CHAT_ATTACHMENTS_WNAM", "bucket_name": "mobius-chat-staging-wnam-attachments" }
+                { "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-staging-apac-attachments" },
+                { "binding": "CHAT_ATTACHMENTS_WNAM", "bucket_name": "morty-staging-wnam-attachments" }
             ],
             "durable_objects": {
                 "bindings": [
@@ -101,7 +94,7 @@
             }
         },
         "production": {
-            "name": "mobius-chat-production",
+            "name": "morty-production",
             "placement": { "mode": "off" },
             "secrets": {
                 "required": [
@@ -113,7 +106,7 @@
             },
             "routes": [
                 {
-                    "pattern": "mobius-chat.paraflow.biz",
+                    "pattern": "morty.paraflow.biz",
                     "custom_domain": true
                 }
             ],
@@ -146,8 +139,8 @@
                 ]
             },
             "r2_buckets": [
-                { "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "mobius-chat-production-apac-attachments" },
-                { "binding": "CHAT_ATTACHMENTS_WNAM", "bucket_name": "mobius-chat-production-wnam-attachments" }
+                { "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-production-apac-attachments" },
+                { "binding": "CHAT_ATTACHMENTS_WNAM", "bucket_name": "morty-production-wnam-attachments" }
             ]
         }
     },

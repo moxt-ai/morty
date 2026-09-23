@@ -461,7 +461,7 @@ export class PlatformProjectGateway {
                                     : [
                                           {
                                               type: "embedded",
-                                              uri: "mobius-chat://bot/instructions",
+                                              uri: "morty://bot/instructions",
                                               name: "Bot instructions",
                                               mimeType: "text/plain",
                                               text: input.instructions,

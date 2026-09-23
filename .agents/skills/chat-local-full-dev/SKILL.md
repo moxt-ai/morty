@@ -1,6 +1,6 @@
 ---
 name: chat-local-full-dev
-description: Prepare, debug, and remove an isolated local Mobius Chat Worker plus the local Platform fixture it depends on. Use when a user asks to run the local Worker, reproduce an API failure locally, watch Worker logs, inspect local D1 or Durable Object SQLite, exercise the browser app against local code, or tear the local Worker down. Do not use it to inspect or change a deployed staging or production Worker; use the worker-debug skill for that.
+description: Prepare, debug, and remove an isolated local Morty Worker plus the local Platform fixture it depends on. Use when a user asks to run the local Worker, reproduce an API failure locally, watch Worker logs, inspect local D1 or Durable Object SQLite, exercise the browser app against local code, or tear the local Worker down. Do not use it to inspect or change a deployed staging or production Worker; use the worker-debug skill for that.
 ---
 
 # Local Full-Stack Development
@@ -21,8 +21,8 @@ scripts/local-dev web-server
 
 The repository provides one local-development entrypoint, `scripts/local-dev`.
 The `web-server` mode provisions an isolated local Platform App automatically.
-The `web` mode reads owner-provided `MOBIUS_CHAT_LOCAL_APP_ID` and
-`MOBIUS_CHAT_LOCAL_APP_SECRET` values for the configured remote Platform.
+The `web` mode reads owner-provided `MORTY_LOCAL_APP_ID` and
+`MORTY_LOCAL_APP_SECRET` values for the configured remote Platform.
 
 Modes:
 
@@ -129,7 +129,7 @@ node scripts/local-dev.cjs remove --state-dir <stateDir>
 - **Platform fixture** - pinned Wrangler runs
   `packages/e2e/fixtures/wrangler.platform.jsonc` with an explicit
   `--persist-to`. It authenticates local developer calls with provider `e2e` and
-  token `mobius-chat-local-e2e`. `prepare` creates or updates its App with
+  token `morty-local-e2e`. `prepare` creates or updates its App with
   the live Session relay.
 - **Configuration** - `prepare` passes variables through Wrangler `--var`
   arguments instead of writing `.dev.vars`, so the checkout is never modified and

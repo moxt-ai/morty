@@ -91,10 +91,7 @@ export class ManagementApi {
         }
         const response = await this.#fetchRequest(
             new Request(
-                new URL(
-                    `/mobius-cloud/api/projects/${encodeURIComponent(this.#projectId)}/management${path}`,
-                    this.#origin,
-                ),
+                new URL(`/morty/api/projects/${encodeURIComponent(this.#projectId)}/management${path}`, this.#origin),
                 {
                     method,
                     signal,
