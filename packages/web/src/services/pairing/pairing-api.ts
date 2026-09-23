@@ -35,7 +35,7 @@ import {
 
 const REQUEST_TIMEOUT_MILLISECONDS = 20_000;
 
-export type ActivityDetailResult =
+type ActivityDetailResult =
     | {
           readonly artifactId: string;
           readonly content: readonly ReturnType<typeof decodeRecordedAgentContentValue>[];
@@ -387,9 +387,9 @@ class LegacyBrowserChannelCredential extends BrowserChannelCredential {
     readonly authority = "legacy";
 }
 
-export abstract class RuntimeManagementAccess {}
+abstract class RuntimeManagementAccess {}
 
-export class OwnerRuntimeManagementAccess extends RuntimeManagementAccess {}
+class OwnerRuntimeManagementAccess extends RuntimeManagementAccess {}
 
 class ReadOnlyRuntimeManagementAccess extends RuntimeManagementAccess {}
 
@@ -625,7 +625,7 @@ function decodeChannelConnection(
     );
 }
 
-export async function createBrowserPairing(signal: AbortSignal, token: string | null): Promise<CreatedPairing> {
+async function _createBrowserPairing(signal: AbortSignal, token: string | null): Promise<CreatedPairing> {
     const pairing = decodeCreatedPairing(
         await requestJson(
             mobiusApiUrl(window.location.origin, "/pairings"),
@@ -640,7 +640,7 @@ export async function createBrowserPairing(signal: AbortSignal, token: string | 
     return pairing;
 }
 
-export async function readBrowserPairingStatus(pairing: CreatedPairing): Promise<BrowserPairingStatus> {
+async function _readBrowserPairingStatus(pairing: CreatedPairing): Promise<BrowserPairingStatus> {
     const endpoint = mobiusApiUrl(window.location.origin, `/pairings/${encodeURIComponent(pairing.pairingId)}`);
     endpoint.searchParams.set("token", pairing.pollToken);
     const value = await requestJson(endpoint, { method: "GET" });
@@ -665,7 +665,7 @@ export async function readBrowserPairingStatus(pairing: CreatedPairing): Promise
     );
 }
 
-export async function createChannelAccessGrant(
+async function _createChannelAccessGrant(
     channelId: string,
     cancellationSignal: AbortSignal,
 ): Promise<CreatedChannelAccessGrant> {
@@ -683,7 +683,7 @@ export async function createChannelAccessGrant(
     );
 }
 
-export async function readLinkedChannelDevices(
+async function readLinkedChannelDevices(
     channelId: string,
     cancellationSignal: AbortSignal,
 ): Promise<readonly LinkedChannelDevice[]> {
@@ -701,7 +701,7 @@ export async function readLinkedChannelDevices(
     );
 }
 
-export async function redeemChannelAccessGrantFromLocation(
+async function _redeemChannelAccessGrantFromLocation(
     channelId: string,
     cancellationSignal: AbortSignal,
 ): Promise<void> {
@@ -742,7 +742,7 @@ export async function redeemChannelAccessGrantFromLocation(
     }
 }
 
-export async function revokeLinkedChannelDevice(
+async function _revokeLinkedChannelDevice(
     channelId: string,
     credentialId: string,
     cancellationSignal: AbortSignal,
@@ -782,7 +782,7 @@ export async function readChannelConnection(
     );
 }
 
-export async function readChannelHistory(channelId: string): Promise<ChannelHistory> {
+async function _readChannelHistory(channelId: string): Promise<ChannelHistory> {
     return await readChannelHistoryWithSignal(channelId, AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS));
 }
 
@@ -812,7 +812,7 @@ function throwPublicApiFailure(error: unknown): never {
     throw error;
 }
 
-export async function readRuntimeManagementAccess(
+async function _readRuntimeManagementAccess(
     channelId: string,
     projectId: string,
     cancellationSignal: AbortSignal,
@@ -843,7 +843,7 @@ export async function readRuntimeManagementAccess(
     }
 }
 
-export async function createProjectRuntimePairing(
+async function _createProjectRuntimePairing(
     channelId: string,
     projectId: string,
     idempotencyKey: string,
@@ -862,7 +862,7 @@ export async function createProjectRuntimePairing(
     }
 }
 
-export async function readProjectRuntimePairing(
+async function _readProjectRuntimePairing(
     channelId: string,
     projectId: string,
     pairingId: string,
@@ -878,7 +878,7 @@ export async function readProjectRuntimePairing(
     }
 }
 
-export async function readProjectRuntimes(
+async function _readProjectRuntimes(
     channelId: string,
     projectId: string,
     cancellationSignal: AbortSignal,
@@ -893,7 +893,7 @@ export async function readProjectRuntimes(
     }
 }
 
-export async function revokeProjectRuntime(
+async function _revokeProjectRuntime(
     channelId: string,
     projectId: string,
     runtimeId: string,
@@ -1036,7 +1036,7 @@ function decodeActivityDetail(value: unknown): ActivityDetailResult {
     };
 }
 
-export async function readToolCallDetail(
+async function _readToolCallDetail(
     channelId: string,
     sessionId: string,
     attemptId: string,
@@ -1054,7 +1054,7 @@ export async function readToolCallDetail(
     }
 }
 
-export async function readChannelHistoryForSynchronization(
+async function _readChannelHistoryForSynchronization(
     channelId: string,
     cancellationSignal: AbortSignal,
 ): Promise<ChannelHistory> {
@@ -1064,6 +1064,6 @@ export async function readChannelHistoryForSynchronization(
     );
 }
 
-export function pairingCommand(pairing: CreatedPairing): string {
+function _pairingCommand(pairing: CreatedPairing): string {
     return `npm install --global @moxt-ai/mobius@latest && mobius pair --url ${JSON.stringify(window.location.origin)} --pairing ${JSON.stringify(pairing.pairingId)} --code ${JSON.stringify(pairing.pairingCode)}`;
 }

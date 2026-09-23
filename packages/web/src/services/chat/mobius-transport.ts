@@ -368,12 +368,12 @@ export async function readFile(sessionId: string, path: string, signal: AbortSig
     return await transport.readFile(sessionId, path, signal);
 }
 
-export function initializeMobiusTransport(connection: ChannelConnection, onActivity: () => void): void {
+function _initializeMobiusTransport(connection: ChannelConnection, onActivity: () => void): void {
     void transport.close();
     transport = new ConnectedTransport(connection, onActivity);
 }
 
-export async function prepareActiveSession(expectedSessionId = ""): Promise<void> {
+async function prepareActiveSession(expectedSessionId = ""): Promise<void> {
     const initialStore = useChatStore.getState();
     const conversation = selectActiveConversation(initialStore);
     if (
@@ -421,7 +421,7 @@ export async function prepareActiveSession(expectedSessionId = ""): Promise<void
     }
 }
 
-export async function listWorkspace(
+async function _listWorkspace(
     directoryId: string,
     signal: AbortSignal = AbortSignal.timeout(120_000),
 ): Promise<WorkspaceEntriesEvent> {
@@ -447,13 +447,13 @@ type NativeSessionAction =
           readonly entryId: string;
       };
 
-export interface NativeSessionScope {
+interface NativeSessionScope {
     readonly agentId: string;
     readonly directoryId: string;
     readonly sessionId: string;
 }
 
-export async function manageNativeSession(
+async function _manageNativeSession(
     scope: NativeSessionScope,
     action: NativeSessionAction,
     signal: AbortSignal,
@@ -480,7 +480,7 @@ export async function manageNativeSession(
     }
 }
 
-export type SessionConfigurationResult =
+type SessionConfigurationResult =
     | { readonly kind: "applied" }
     | { readonly kind: "ignored" }
     | {
@@ -489,7 +489,7 @@ export type SessionConfigurationResult =
           readonly message: string;
       };
 
-export async function configureSessionOption(
+async function _configureSessionOption(
     expectedAgentId: string,
     expectedSessionId: string,
     expectedDirectoryId: string,
@@ -569,7 +569,7 @@ export async function configureSessionOption(
     }
 }
 
-export async function respondToPermission(request: PermissionResponseRequest): Promise<void> {
+async function _respondToPermission(request: PermissionResponseRequest): Promise<void> {
     try {
         await transport.permission(request);
         useChatStore.getState().setErrorMessage("");
@@ -578,7 +578,7 @@ export async function respondToPermission(request: PermissionResponseRequest): P
     }
 }
 
-export async function respondToElicitation(request: ElicitationResponseRequest): Promise<void> {
+async function _respondToElicitation(request: ElicitationResponseRequest): Promise<void> {
     try {
         await transport.elicit(request);
         useChatStore.getState().setErrorMessage("");
@@ -587,7 +587,7 @@ export async function respondToElicitation(request: ElicitationResponseRequest):
     }
 }
 
-export async function sendPrompt(prompt: string): Promise<void> {
+async function _sendPrompt(prompt: string): Promise<void> {
     const normalizedPrompt = prompt.trim();
     await prepareActiveSession();
     const initialStore = useChatStore.getState();
@@ -654,7 +654,7 @@ export async function sendPrompt(prompt: string): Promise<void> {
     }
 }
 
-export async function stopActiveTurn(): Promise<void> {
+async function _stopActiveTurn(): Promise<void> {
     const initialStore = useChatStore.getState();
     const conversation = selectActiveConversation(initialStore);
     if (!conversation.canStop) {
@@ -705,12 +705,12 @@ async function recheckLocalAgent(agentId: string): Promise<void> {
     }
 }
 
-export async function recheckLocalAgents(): Promise<void> {
+async function _recheckLocalAgents(): Promise<void> {
     const agentIds = useChatStore.getState().installableAgents.map((agent) => agent.id);
     await Promise.all(agentIds.map(recheckLocalAgent));
 }
 
-export async function closeMobiusTransport(): Promise<void> {
+async function _closeMobiusTransport(): Promise<void> {
     const previous = transport;
     transport = new DisconnectedTransport();
     await previous.close();

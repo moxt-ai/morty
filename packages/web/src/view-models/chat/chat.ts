@@ -245,7 +245,7 @@ class PreparingSessionState extends AgentSessionState {
     ): PreparingSessionState => new PreparingSessionState(elicitations, permissions);
 }
 
-export class SessionPreparationFailedState extends AgentSessionState {
+class SessionPreparationFailedState extends AgentSessionState {
     readonly autoPrepare = false;
     readonly error: string;
     readonly isPreparing = false;
@@ -671,7 +671,7 @@ export abstract class ChatMessage {
     }
 }
 
-export class NativeHistoryChatMessage extends ChatMessage {
+class NativeHistoryChatMessage extends ChatMessage {
     readonly history: NativeSessionHistory;
 
     constructor(sessionId: string, history: NativeSessionHistory) {

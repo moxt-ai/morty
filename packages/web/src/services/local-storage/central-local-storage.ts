@@ -323,10 +323,10 @@ const sidebarLayoutValueSchema = v.pipe(
     v.readonly(),
 );
 
-export type StoredSidebarLayout = v.InferOutput<typeof sidebarLayoutValueSchema>;
+type StoredSidebarLayout = v.InferOutput<typeof sidebarLayoutValueSchema>;
 
 /** Falls back to null for values the layout state cannot represent. */
-export const sidebarLayoutEntry = customLocalStorageEntry<StoredSidebarLayout>({
+const _sidebarLayoutEntry = customLocalStorageEntry<StoredSidebarLayout>({
     key: "mobius:conversation-sidebar-layout",
     schema: sidebarLayoutValueSchema,
     encode: (value) => JSON.stringify(value),

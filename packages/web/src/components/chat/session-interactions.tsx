@@ -4,14 +4,12 @@ import { ExternalLink, HelpCircle, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { encodeElicitationForm, readMultiselectDefaults } from "@/services/chat/elicitation-form";
-import { respondToElicitation, respondToPermission } from "@/services/chat/mobius-transport";
 import type {
     ElicitationInteraction,
     ElicitationInteractionResponse,
     PermissionInteraction,
     PermissionInteractionResponse,
 } from "@/view-models/chat/session-pane-types";
-import { selectActiveConversation, useChatStore } from "@/view-models/chat-store";
 
 export type {
     ElicitationInteraction,
@@ -451,25 +449,5 @@ export function SessionInteractionCards({
                 </p>
             )}
         </div>
-    );
-}
-
-export function SessionInteractions() {
-    const conversation = useChatStore(selectActiveConversation);
-    return (
-        <SessionInteractionCards
-            elicitations={conversation.session.elicitations.map(({ accepted, ...elicitation }) => ({
-                ...elicitation,
-                state: accepted
-                    ? { action: "accept" as const, content: "", kind: "submitted" as const }
-                    : { kind: "pending" as const },
-            }))}
-            permissions={conversation.session.permissions.map((permission) => ({
-                ...permission,
-                state: { kind: "pending" as const },
-            }))}
-            onElicitationResponse={respondToElicitation}
-            onPermissionResponse={respondToPermission}
-        />
     );
 }

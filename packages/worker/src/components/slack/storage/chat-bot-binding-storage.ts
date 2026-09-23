@@ -33,6 +33,7 @@ export class ChatBotBindingStorage {
             .select({
                 botId: managedBot.botId,
                 runtimeId: managedBot.runtimeId,
+                agentRef: managedBot.agentRef,
                 instructions: managedBot.instructions,
             })
             .from(managedBot)
