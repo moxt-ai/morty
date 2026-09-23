@@ -229,18 +229,6 @@ export function MobiusSessionPane({
                             </div>
                         );
                     })}
-                    <div className="mx-auto w-full min-w-0 max-w-[920px]">
-                        <SessionInteractionCards
-                            elicitations={model.interactions.flatMap((interaction) =>
-                                interaction.kind === "elicitation" ? [interaction.elicitation] : [],
-                            )}
-                            permissions={model.interactions.flatMap((interaction) =>
-                                interaction.kind === "permission" ? [interaction.permission] : [],
-                            )}
-                            onElicitationResponse={respondToElicitation}
-                            onPermissionResponse={respondToPermission}
-                        />
-                    </div>
                 </FollowLatestScrollArea>
                 <LoadMoreTrigger
                     container={messageList}
@@ -259,6 +247,24 @@ export function MobiusSessionPane({
                         runAndFollow(async (signal) => await pane.store.getState().steerQueued(commandId, signal))
                     }
                 />
+                {model.interactions.some((interaction) =>
+                    interaction.kind === "elicitation"
+                        ? interaction.elicitation.state.kind === "pending"
+                        : interaction.permission.state.kind === "pending",
+                ) && (
+                    <div className="mx-auto mt-4 max-h-[50vh] w-full max-w-[920px] shrink-0 overflow-y-auto px-3 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:mt-5 sm:px-5">
+                        <SessionInteractionCards
+                            elicitations={model.interactions.flatMap((interaction) =>
+                                interaction.kind === "elicitation" ? [interaction.elicitation] : [],
+                            )}
+                            permissions={model.interactions.flatMap((interaction) =>
+                                interaction.kind === "permission" ? [interaction.permission] : [],
+                            )}
+                            onElicitationResponse={respondToElicitation}
+                            onPermissionResponse={respondToPermission}
+                        />
+                    </div>
+                )}
                 <BotChatComposer
                     actions={
                         <ChatComposerMoreMenu

@@ -168,7 +168,7 @@ function PermissionCard({
     const confirmed = permission.state.kind !== "pending";
     return (
         <section
-            className="max-w-[444px] rounded-lg border-[0.5px] border-input bg-white px-4 pt-5 pb-4 text-sm"
+            className="w-full rounded-lg border-[0.5px] border-input bg-white px-4 pt-5 pb-4 text-sm"
             role="alertdialog"
             aria-label="Agent permission request"
         >
@@ -250,7 +250,7 @@ function ElicitationCard({
 
     return (
         <section
-            className="max-w-[444px] rounded-lg border-[0.5px] border-input bg-white px-4 pt-5 pb-4 text-sm"
+            className="w-full rounded-lg border-[0.5px] border-input bg-white px-4 pt-5 pb-4 text-sm"
             role="dialog"
             aria-label="Agent information request"
         >
@@ -397,7 +397,14 @@ export function SessionInteractionCards({
     readonly onPermissionResponse: (response: PermissionInteractionResponse) => Promise<void>;
 }) {
     const [operation, setOperation] = useState<InteractionOperation>({ kind: "idle" });
-    if (permissions.length === 0 && elicitations.length === 0) {
+    const answeredInteractionId = operation.kind === "submitted" ? operation.interactionId : "";
+    const visiblePermissions = permissions.filter(
+        (permission) => permission.state.kind === "pending" && permission.interactionId !== answeredInteractionId,
+    );
+    const visibleElicitations = elicitations.filter(
+        (elicitation) => elicitation.state.kind === "pending" && elicitation.interactionId !== answeredInteractionId,
+    );
+    if (visiblePermissions.length === 0 && visibleElicitations.length === 0) {
         return null;
     }
     const submit = (interactionId: string, response: () => Promise<void>): void => {
@@ -421,8 +428,8 @@ export function SessionInteractionCards({
     const busyInteractionId =
         operation.kind === "submitting" || operation.kind === "submitted" ? operation.interactionId : "";
     return (
-        <div className="mt-4 mb-12 grid w-full max-w-[444px] gap-3">
-            {permissions.map((permission) => (
+        <div className="grid w-full gap-3">
+            {visiblePermissions.map((permission) => (
                 <PermissionCard
                     busy={busyInteractionId === permission.interactionId}
                     key={permission.interactionId}
@@ -430,7 +437,7 @@ export function SessionInteractionCards({
                     respond={(response) => submit(permission.interactionId, () => onPermissionResponse(response))}
                 />
             ))}
-            {elicitations.map((elicitation) => (
+            {visibleElicitations.map((elicitation) => (
                 <ElicitationCard
                     busy={busyInteractionId === elicitation.interactionId}
                     elicitation={elicitation}

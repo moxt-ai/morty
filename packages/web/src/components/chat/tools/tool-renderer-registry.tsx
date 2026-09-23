@@ -8,6 +8,7 @@ import { InputDiffEditToolCall, matchesInputDiffEditToolCall } from "./input-dif
 import { matchesOutputDiffEditToolCall, OutputDiffEditToolCall } from "./output-diff-edit-tool-call.tsx";
 import { matchesPatchEditToolCall, PatchEditToolCall } from "./patch-edit-tool-call.tsx";
 import { matchesPathReadToolCall, PathReadToolCall } from "./path-read-tool-call.tsx";
+import { matchesQuestionToolCall, QuestionToolCall } from "./question-tool-call.tsx";
 import type { ToolRendererProps } from "./tool-renderer.ts";
 import { matchesWorkdirShellCommandToolCall, WorkdirShellCommandToolCall } from "./workdir-shell-command-tool-call.tsx";
 
@@ -17,6 +18,10 @@ interface ToolRenderer {
 }
 
 const TOOL_RENDERERS: readonly ToolRenderer[] = [
+    {
+        Component: QuestionToolCall,
+        matches: matchesQuestionToolCall,
+    },
     {
         Component: InputDiffEditToolCall,
         matches: matchesInputDiffEditToolCall,

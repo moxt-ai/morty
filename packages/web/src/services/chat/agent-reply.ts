@@ -14,6 +14,7 @@ export type ToolThinkingEntry = {
     readonly id: string;
     readonly input: string;
     readonly kind: "tool";
+    readonly name: string;
     readonly output: string;
     readonly state: ToolCallState;
     readonly title: string;
@@ -85,12 +86,16 @@ export function describeAgentReply(
         if (activity.activityType !== "tool") {
             return [];
         }
+        if (phase === "waiting" && activity.output.length === 0) {
+            return [];
+        }
         return [
             {
                 content: activity.content,
                 id: activity.activityId,
                 input: activity.input,
                 kind: "tool",
+                name: activity.name,
                 output: activity.output,
                 state: toolCallState(activity.status),
                 title: activity.title || activity.name || activity.toolKind || "Tool call",
