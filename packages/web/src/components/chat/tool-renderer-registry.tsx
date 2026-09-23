@@ -1,61 +1,65 @@
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { ToolThinkingEntry } from "../../services/chat/agent-reply.ts";
-import { EditTool, matchesEditTool } from "./edit-tool.tsx";
-import { matchesReadTool, ReadTool } from "./read-tool.tsx";
-import { matchesSearchToolCall, SearchToolCall } from "./search-tool-call.tsx";
-import { matchesShellCommandToolCall, ShellCommandToolCall } from "./shell-command-tool-call.tsx";
+import { CwdShellCommandToolCall, matchesCwdShellCommandToolCall } from "./cwd-shell-command-tool-call.tsx";
+import { FilePathReadToolCall, matchesFilePathReadToolCall } from "./file-path-read-tool-call.tsx";
+import { GlobToolCall, matchesGlobToolCall } from "./glob-tool-call.tsx";
+import { GrepToolCall, matchesGrepToolCall } from "./grep-tool-call.tsx";
+import { InputDiffEditToolCall, matchesInputDiffEditToolCall } from "./input-diff-edit-tool-call.tsx";
+import { matchesOutputDiffEditToolCall, OutputDiffEditToolCall } from "./output-diff-edit-tool-call.tsx";
+import { matchesPatchEditToolCall, PatchEditToolCall } from "./patch-edit-tool-call.tsx";
+import { matchesPathReadToolCall, PathReadToolCall } from "./path-read-tool-call.tsx";
+import type { ToolRendererProps } from "./tool-renderer.ts";
+import { matchesWorkdirShellCommandToolCall, WorkdirShellCommandToolCall } from "./workdir-shell-command-tool-call.tsx";
 
 interface ToolRenderer {
+    readonly Component: ComponentType<ToolRendererProps>;
     readonly matches: (entry: ToolThinkingEntry) => boolean;
-    readonly render: (entry: ToolThinkingEntry, autoOpen: boolean) => ReactNode;
 }
 
 const TOOL_RENDERERS: readonly ToolRenderer[] = [
     {
-        matches: (entry) => matchesEditTool(entry.input, entry.output),
-        render: (entry, autoOpen) => (
-            <EditTool
-                autoOpen={autoOpen}
-                content={entry.content}
-                input={entry.input}
-                output={entry.output}
-                state={entry.state}
-                title={entry.title}
-            />
-        ),
+        Component: InputDiffEditToolCall,
+        matches: matchesInputDiffEditToolCall,
     },
     {
-        matches: (entry) => matchesShellCommandToolCall(entry.input),
-        render: (entry, autoOpen) => (
-            <ShellCommandToolCall autoOpen={autoOpen} output={entry.output} state={entry.state} title={entry.title} />
-        ),
+        Component: OutputDiffEditToolCall,
+        matches: matchesOutputDiffEditToolCall,
     },
     {
-        matches: (entry) => matchesReadTool(entry.input, entry.output),
-        render: (entry, autoOpen) => (
-            <ReadTool
-                autoOpen={autoOpen}
-                input={entry.input}
-                output={entry.output}
-                state={entry.state}
-                title={entry.title}
-            />
-        ),
+        Component: PatchEditToolCall,
+        matches: matchesPatchEditToolCall,
     },
     {
-        matches: (entry) => matchesSearchToolCall(entry.input),
-        render: (entry, autoOpen) => (
-            <SearchToolCall
-                autoOpen={autoOpen}
-                input={entry.input}
-                output={entry.output}
-                state={entry.state}
-                title={entry.title}
-            />
-        ),
+        Component: CwdShellCommandToolCall,
+        matches: matchesCwdShellCommandToolCall,
+    },
+    {
+        Component: WorkdirShellCommandToolCall,
+        matches: matchesWorkdirShellCommandToolCall,
+    },
+    {
+        Component: PathReadToolCall,
+        matches: matchesPathReadToolCall,
+    },
+    {
+        Component: FilePathReadToolCall,
+        matches: matchesFilePathReadToolCall,
+    },
+    {
+        Component: GrepToolCall,
+        matches: matchesGrepToolCall,
+    },
+    {
+        Component: GlobToolCall,
+        matches: matchesGlobToolCall,
     },
 ];
 
 export function renderRegisteredTool(entry: ToolThinkingEntry, autoOpen: boolean): ReactNode | null {
-    return TOOL_RENDERERS.find((renderer) => renderer.matches(entry))?.render(entry, autoOpen) ?? null;
+    const renderer = TOOL_RENDERERS.find((candidate) => candidate.matches(entry));
+    if (renderer === undefined) {
+        return null;
+    }
+    const Component = renderer.Component;
+    return <Component autoOpen={autoOpen} entry={entry} />;
 }
