@@ -110,3 +110,35 @@ test("given a configured Bot, when a user opens a conversation, then the unavail
         await fixture.close();
     }
 });
+
+test("Given a configured Bot, When its owner starts a local conversation, Then Chat records only the Session ownership needed for Runtime access", async () => {
+    const fixture = await createChatFixture();
+    try {
+        expect(
+            (
+                await fixture.request(`chat/bots/${fixture.botId}/setup`, {
+                    runtimeId: fixture.runtime.runtimeId,
+                    agentRef: "codex",
+                })
+            ).status,
+        ).toBe(202);
+        const created = await fixture.request(`chat/bots/${fixture.botId}/local-sessions/create`, {});
+        expect(created.status).toBe(200);
+        const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await created.json());
+        expect(sessionId).toMatch(/^chat_/);
+
+        const listed = await fixture.request(`chat/bots/${fixture.botId}/local-sessions`, {});
+        expect(listed.status).toBe(200);
+        expect(await listed.json()).toMatchObject({ sessions: [{ id: sessionId, isExternal: false }] });
+
+        expect((await fixture.request(`chat/bots/${fixture.botId}/local-session-access`, { sessionId })).status).toBe(
+            200,
+        );
+        const unrelated = await fixture.request(`chat/bots/${fixture.botId}/local-session-access`, {
+            sessionId: "chat_unowned",
+        });
+        expect(unrelated.status).toBe(404);
+    } finally {
+        await fixture.close();
+    }
+});

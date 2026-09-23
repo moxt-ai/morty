@@ -155,6 +155,46 @@ export class ChatService {
         };
     };
 
+    readonly localRuntime = async (scope: ChatScope) => {
+        const bot = await this.#bot(scope);
+        if (bot.configuration === null) {
+            throw new PlatformProjectError("AGENT_REQUIRED", "Connect Codex to this Bot first.", 409);
+        }
+        return bot.configuration;
+    };
+
+    readonly createLocalSession = async (scope: ChatScope) => {
+        const runtime = await this.localRuntime(scope);
+        const sessionId = `chat_${crypto.randomUUID()}`;
+        await this.#chatSessions.save(
+            scope.projectId,
+            scope.userId,
+            scope.botId,
+            { isExternal: false, id: sessionId, title: "New chat" },
+            scope.signal,
+        );
+        this.#logger.info(
+            { event: "chat-session-created", projectId: scope.projectId, userId: scope.userId, botId: scope.botId },
+            "Chat audit event",
+        );
+        return { sessionId, runtimeId: runtime.runtimeId, agentRef: runtime.agentRef };
+    };
+
+    readonly localSessions = async (scope: ChatScope) => ({
+        sessions: (await this.#chatSessions.list(scope.projectId, scope.userId, scope.botId, scope.signal)).map(
+            (session) => ({ ...session, directoryLabel: "" }),
+        ),
+    });
+
+    readonly requireLocalSession = async (scope: ChatScope, sessionId: string) => {
+        if (
+            !(await this.#chatSessions.ownsSession(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal))
+        ) {
+            throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
+        }
+        return await this.localRuntime(scope);
+    };
+
     readonly managedSessions = async (scope: ChatScope) => {
         const sessions = await this.#chatSessions.list(scope.projectId, scope.userId, scope.botId, scope.signal);
         return {
@@ -558,7 +598,7 @@ export class ChatService {
         const result = await this.#managedBots.configureBot(
             scope.userId,
             scope.botId,
-            { runtimeId: input.runtimeId },
+            { runtimeId: input.runtimeId, agentRef: input.agentRef },
             Date.now(),
             scope.signal,
         );

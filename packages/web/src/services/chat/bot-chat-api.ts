@@ -6,6 +6,10 @@ import {
     decodeWorkspaceEntriesEvent,
     type SessionConfigOption,
     type SessionConfigurationSelection,
+    type SessionElicitationRequestedEvent,
+    type SessionElicitationResolvedEvent,
+    type SessionPermissionRequestedEvent,
+    type SessionPermissionResolvedEvent,
 } from "@moxt-ai/mobius-protocol";
 import {
     HttpTransport,
@@ -15,6 +19,7 @@ import {
     type MobiusTransportSessionEvent,
     WsTransport,
 } from "@moxt-ai/mobius-sdk";
+import { connectMobiusChannelClient, type MobiusChannelClient } from "@moxt-ai/mobius-sdk/channel";
 import * as v from "valibot";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 
@@ -178,6 +183,64 @@ export class BotChatApi {
     readonly listBots: ManagementApi["listBots"];
     readonly createBot: ManagementApi["createBot"];
     readonly deleteBot: ManagementApi["deleteBot"];
+    readonly localRuntime = async (botId: string, signal: AbortSignal) =>
+        v.parse(
+            v.object({ runtimeId: identifier, agentRef: identifier }),
+            await this.#request(botId, "local-runtime", {}, signal),
+        );
+    readonly localSessions = async (botId: string, signal: AbortSignal) =>
+        v.parse(
+            v.object({ sessions: v.array(managedSessionSchema) }),
+            await this.#request(botId, "local-sessions", {}, signal),
+        ).sessions;
+    readonly createLocalSession = async (botId: string, signal: AbortSignal) =>
+        v.parse(
+            v.object({ sessionId: identifier, runtimeId: identifier, agentRef: identifier }),
+            await this.#request(botId, "local-sessions/create", {}, signal),
+        );
+    readonly connectLocalRuntime = async (
+        botId: string,
+        signal: AbortSignal,
+        callbacks: {
+            readonly onActivity: () => void;
+            readonly onStatus: (online: boolean) => void;
+            readonly onPermission?: (event: SessionPermissionRequestedEvent) => void;
+            readonly onPermissionResolved?: (event: SessionPermissionResolvedEvent) => void;
+            readonly onElicitation?: (event: SessionElicitationRequestedEvent) => void;
+            readonly onElicitationResolved?: (event: SessionElicitationResolvedEvent) => void;
+        },
+    ): Promise<MobiusChannelClient> => {
+        signal.throwIfAborted();
+        const token = await this.#getToken(signal);
+        if (token === null) {
+            throw new CloudApiError("UNAUTHENTICATED", "Your session is unavailable.");
+        }
+        const endpoint = new URL(
+            `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/runtime-channel`,
+            this.#origin,
+        );
+        endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
+        const client = await connectMobiusChannelClient({
+            relayUrl: endpoint.toString(),
+            protocols: ["morty-runtime", `auth.${token}`],
+            onActivity: callbacks.onActivity,
+            onStatus: callbacks.onStatus,
+            ...(callbacks.onPermission === undefined ? {} : { onPermission: callbacks.onPermission }),
+            ...(callbacks.onPermissionResolved === undefined
+                ? {}
+                : { onPermissionResolved: callbacks.onPermissionResolved }),
+            ...(callbacks.onElicitation === undefined ? {} : { onElicitation: callbacks.onElicitation }),
+            ...(callbacks.onElicitationResolved === undefined
+                ? {}
+                : { onElicitationResolved: callbacks.onElicitationResolved }),
+        });
+        if (signal.aborted) {
+            client.close();
+            signal.throwIfAborted();
+        }
+        signal.addEventListener("abort", () => client.close(), { once: true });
+        return client;
+    };
     constructor(options: {
         readonly fetchRequest: (request: Request) => Promise<Response>;
         readonly origin: string;

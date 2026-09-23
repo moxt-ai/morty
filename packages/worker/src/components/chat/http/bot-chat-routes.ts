@@ -9,6 +9,7 @@ import { PlatformProjectError, platformIdentifier } from "../../management/entit
 import { authenticatedSession } from "../../management/http/authenticated-session.ts";
 import type { ChatScope } from "../service/chat-service.ts";
 import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
+import { openBotRuntimeChannel } from "./runtime-channel.ts";
 
 const setupInput = v.strictObject({
     runtimeId: platformIdentifier,
@@ -144,7 +145,12 @@ export function createBotChatRoutes() {
                 operation !== "workspace" &&
                 operation !== "workspace/directory" &&
                 operation !== "agent-settings" &&
-                operation !== "setup"
+                operation !== "setup" &&
+                operation !== "local-sessions" &&
+                operation !== "local-sessions/create" &&
+                operation !== "local-runtime" &&
+                operation !== "local-session-access" &&
+                operation !== "runtime-channel"
             ) {
                 throw new PlatformProjectError(
                     "BOT_CHAT_UNAVAILABLE",
@@ -166,6 +172,39 @@ export function createBotChatRoutes() {
         .post("/bots/:botId/workspace", authenticatedSession, authorizedChat(), async (context) => {
             return privateJson(await context.env.services.chat.workspace(context.get("chatScope")));
         })
+        .post("/bots/:botId/local-sessions", authenticatedSession, authorizedChat(), async (context) => {
+            return privateJson(await context.env.services.chat.localSessions(context.get("chatScope")));
+        })
+        .post("/bots/:botId/local-runtime", authenticatedSession, authorizedChat(), async (context) => {
+            return privateJson(await context.env.services.chat.localRuntime(context.get("chatScope")));
+        })
+        .get(
+            "/bots/:botId/runtime-channel",
+            async (context) =>
+                await openBotRuntimeChannel({
+                    request: context.req.raw,
+                    projectId: context.req.param("projectId") ?? "",
+                    botId: context.req.param("botId"),
+                    dependencies: context.env,
+                    timing: context.get("operationTiming"),
+                }),
+        )
+        .post("/bots/:botId/local-sessions/create", authenticatedSession, authorizedChat(), async (context) => {
+            return privateJson(await context.env.services.chat.createLocalSession(context.get("chatScope")));
+        })
+        .post(
+            "/bots/:botId/local-session-access",
+            authenticatedSession,
+            authorizedChat(),
+            bodyParser<AuthorizedChatEnvironment, typeof nativeSessionInput>(nativeSessionInput),
+            async (context) =>
+                privateJson({
+                    configuration: await context.env.services.chat.requireLocalSession(
+                        context.get("chatScope"),
+                        context.req.valid("json").sessionId,
+                    ),
+                }),
+        )
         .post(
             "/bots/:botId/workspace/directory",
             authenticatedSession,

@@ -27,6 +27,7 @@ import type { SessionActivityState } from "../../view-models/chat/session-activi
 import { reportApplicationError } from "../../view-models/report-error.ts";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
+import { LocalCodexChat } from "./local-codex-chat.tsx";
 import { MobiusSessionPane } from "./mobius-session-pane.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
 import { WorkspaceRegionSelector } from "./workspace-region-selector.tsx";
@@ -61,6 +62,10 @@ export function BotChatHome({
         | "conversationSession"
         | "submitTurn"
         | "agentSettings"
+        | "localRuntime"
+        | "localSessions"
+        | "createLocalSession"
+        | "connectLocalRuntime"
     >;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
     readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
@@ -242,6 +247,17 @@ export function BotChatHome({
             clearComposer();
         }
     };
+
+    if (active !== null && connectionStatus.kind === "connected") {
+        return (
+            <LocalCodexChat
+                bot={active.bot}
+                bots={model.bots}
+                onSelectBot={store.getState().selectBot}
+                requests={requests}
+            />
+        );
+    }
 
     return (
         <main

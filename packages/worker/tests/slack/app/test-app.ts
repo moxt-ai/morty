@@ -124,6 +124,7 @@ export async function createTestApplication() {
             "chat-bot-1",
             {
                 runtimeId: "runtime-1",
+                agentRef: "codex",
             },
             now,
             signal,

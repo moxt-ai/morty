@@ -7,6 +7,7 @@ export const managedBot = sqliteTable(
         botId: text("bot_id").primaryKey().notNull(),
         displayName: text("display_name").notNull(),
         runtimeId: text("runtime_id"),
+        agentRef: text("agent_ref"),
         instructions: text("instructions").notNull().default(""),
         createdAt: integer("created_at").notNull(),
         updatedAt: integer("updated_at").notNull(),

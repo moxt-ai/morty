@@ -132,6 +132,32 @@ export class PlatformProjectGateway {
             );
         });
 
+    readonly openChatRuntimeHost = async (
+        projectId: string,
+        runtimeId: string,
+        signal: AbortSignal,
+    ): Promise<WebSocket> => {
+        signal.throwIfAborted();
+        const endpoint = new URL(this.configuration().origin);
+        endpoint.pathname = `/mobius/api/v1/projects/${encodeURIComponent(v.parse(platformIdentifier, projectId))}/runtimes/${encodeURIComponent(v.parse(platformIdentifier, runtimeId))}/host`;
+        endpoint.searchParams.set("token", v.parse(platformCredentialBindingsSchema, this.#bindings).MOBIUS_APP_SECRET);
+        const handshake = new AbortController();
+        const abort = () => handshake.abort(signal.reason);
+        signal.addEventListener("abort", abort, { once: true });
+        const timeout = setTimeout(() => handshake.abort(new Error("Runtime connection timed out.")), 20_000);
+        let response: Response;
+        try {
+            response = await fetch(endpoint, { headers: { Upgrade: "websocket" }, signal: handshake.signal });
+        } finally {
+            clearTimeout(timeout);
+            signal.removeEventListener("abort", abort);
+        }
+        if (response.status !== 101 || response.webSocket === null) {
+            throw new PlatformProjectError("RUNTIME_UNAVAILABLE", "The local Runtime could not be connected.", 503);
+        }
+        return response.webSocket;
+    };
+
     readonly listChatWorkspace = async (
         projectId: string,
         runtimeId: string,
