@@ -30,7 +30,7 @@ export async function createChatWorkerEnvironment() {
         wranglerConfiguration: pathToFileURL(resolve(process.cwd(), "../../wrangler.jsonc")),
     });
     const createApplication = async () => {
-        const identityResponse = await cloud.dispatchFetch(`${origin}/mobius-cloud/api/identity/anonymous-users`, {
+        const identityResponse = await cloud.dispatchFetch(`${origin}/morty/api/identity/anonymous-users`, {
             method: "POST",
         });
         if (identityResponse.status !== 201) {
@@ -41,7 +41,7 @@ export async function createChatWorkerEnvironment() {
             await identityResponse.json(),
         );
         const request = async (path: string, body?: object, method = body === undefined ? "GET" : "POST") =>
-            await cloud.dispatchFetch(`${origin}/mobius-cloud/api/${path}`, {
+            await cloud.dispatchFetch(`${origin}/morty/api/${path}`, {
                 method,
                 headers: {
                     authorization: `Bearer ${identity.token}`,
@@ -58,8 +58,10 @@ export async function createChatWorkerEnvironment() {
         transport.open();
         return {
             botId,
-            connectAgent: async () => {
-                const runtime = await cloud.connectAgent(identity.projectId);
+            connectAgent: async (behavior?: {
+                readonly afterSessionStarted?: (signal: AbortSignal) => Promise<void>;
+            }) => {
+                const runtime = await cloud.connectAgent(identity.projectId, behavior);
                 const setup = await request(`chat/projects/${identity.projectId}/bots/${botId}/setup`, {
                     runtimeId: runtime.runtimeId,
                     agentRef: "codex",

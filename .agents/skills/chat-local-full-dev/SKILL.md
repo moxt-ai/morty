@@ -1,6 +1,6 @@
 ---
 name: chat-local-full-dev
-description: Prepare, debug, and remove an isolated local Mobius Chat Worker plus the local Platform fixture it depends on. Use when a user asks to run the local Worker, reproduce an API failure locally, watch Worker logs, inspect local D1 or Durable Object SQLite, exercise the browser app against local code, or tear the local Worker down. Do not use it to inspect or change a deployed staging or production Worker; use the worker-debug skill for that.
+description: Prepare, debug, and remove an isolated local Morty Worker plus the local Platform fixture it depends on. Use when a user asks to run the local Worker, reproduce an API failure locally, watch Worker logs, inspect local D1 or Durable Object SQLite, exercise the browser app against local code, or tear the local Worker down. Do not use it to inspect or change a deployed staging or production Worker; use the worker-debug skill for that.
 ---
 
 # Local Full-Stack Development
@@ -16,43 +16,36 @@ For deployed logs and incidents use `worker-debug`.
 ## Quick start
 
 ```sh
-scripts/local-dev web-server-mobius
+scripts/local-dev web-server
 ```
 
 The repository provides one local-development entrypoint, `scripts/local-dev`.
-It reads the owner-provided `MOBIUS_CHAT_LOCAL_APP_ID` and
-`MOBIUS_CHAT_LOCAL_APP_SECRET` values and passes them as explicit arguments to
-the dependency-free worker supervisor; `scripts/local-dev.cjs` never reads
-those environment variables directly.
+The `web-server` mode provisions an isolated local Platform App automatically.
+The `web` mode reads owner-provided `MORTY_LOCAL_APP_ID` and
+`MORTY_LOCAL_APP_SECRET` values for the configured remote Platform.
 
 Modes:
 
 | Mode | Services | Platform |
 | --- | --- | --- |
 | `web` | local Chat web/Worker | staging Platform |
-| `web-server` | local Chat web/Worker + local Platform | supplied app credential |
-| `web-server-mobius` | local Chat + local Platform + local Mobius relay | local |
-| `web-server-mobius-cli` | mode above + local Mobius CLI | local |
+| `web-server` | local Chat web/Worker + local Mobius Platform | local |
 
 Examples:
 
 ```sh
 scripts/local-dev web
 scripts/local-dev web-server
-scripts/local-dev web-server-mobius
-scripts/local-dev web-server-mobius-cli
 ```
 
 Use `node scripts/local-dev.cjs ...` for status, logs, and removal. The
 `prepare` command remains available for automation and accepts explicit
-`--app-id` and `--app-secret` arguments. Full-stack modes also force the local
-Platform App to `cloudRetention: false`, including reused and owner-supplied
-Apps, so history restoration always exercises the non-cloud-retention path.
+`--app-id` and `--app-secret` arguments. The local Platform uses the live Session relay.
 
 `prepare` stays attached in the foreground after it prints its ready record.
 For agent-driven development, start the wrapper in the background and poll
 `node scripts/local-dev.cjs status --state-dir <stateDir>`; the record contains
-the Chat URL and, for server modes, the local Platform and Mobius URLs. Stop it
+the Chat URL and local Platform URL. Stop it
 with Ctrl-C or use `remove` when finished.
 
 `prepare` prints one JSON object on stdout. Progress goes to stderr, so stdout
@@ -99,7 +92,7 @@ specific tool.
    Install locked root dependencies only when missing or stale; never upgrade them.
    The local-development entrypoint checks the Mobius submodule's independent
    `pnpm-lock.yaml`, installs its dependencies when they are missing or stale,
-   and builds relay web assets for Mobius modes.
+   and generates its migration modules.
    If diagnosing startup manually, use
    `pnpm --dir third-party/mobius install --frozen-lockfile`; a root `pnpm install`
    does not install the submodule workspace.
@@ -136,8 +129,8 @@ node scripts/local-dev.cjs remove --state-dir <stateDir>
 - **Platform fixture** - pinned Wrangler runs
   `packages/e2e/fixtures/wrangler.platform.jsonc` with an explicit
   `--persist-to`. It authenticates local developer calls with provider `e2e` and
-  token `mobius-chat-local-e2e`. `prepare` creates or updates its App with
-  cloud retention disabled.
+  token `morty-local-e2e`. `prepare` creates or updates its App with
+  the live Session relay.
 - **Configuration** - `prepare` passes variables through Wrangler `--var`
   arguments instead of writing `.dev.vars`, so the checkout is never modified and
   no credentials land on disk. Treat the generated values as local-only secrets.
@@ -227,7 +220,7 @@ Details, inspection commands, and a failure-mode table are in
 - `prepare [--state-dir DIR] [--platform-port N] [--chat-port N] [--force] [--no-build]`
   - provision Platform, seed R2, start both Workers, verify readiness, print the
     JSON descriptor. Idempotent: a live stack is reused, a dead one is replaced.
-    Full-stack modes force the local App to non-cloud retention.
+    The local Platform App is provisioned automatically.
 - `pair --state-dir DIR [--harness ID] [--workspace DIR]`
   - pair a local agent Runtime through the served setup bundle with
     `DOCUMENT_DIR` and `MOBIUS_STATE_DIRECTORY` isolated under the state

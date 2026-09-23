@@ -1,9 +1,9 @@
 ---
-name: mobius-chat-pair
-description: Connect this agent to the existing user and Bot from a Mobius Chat web page.
+name: morty-pair
+description: Connect this agent to the existing user and Bot from a Morty web page.
 ---
 
-# Pair Mobius Chat
+# Pair Morty
 
 The user supplied `follow <origin>/pair.md?token=...`. That token is a one-use
 ticket, valid for **10 minutes**, for their existing user, Bot, and workspace.
@@ -18,7 +18,7 @@ Do not ask for an additional replacement confirmation.
 ## Run
 
 1. Use the server-provided Chat origin exactly: `BASE_URL="{{BASE_URL}}"`.
-   The script calls the Chat API at `{{BASE_URL}}/mobius-cloud/api/*`.
+   The script calls the Chat API at `{{BASE_URL}}/morty/api/*`.
    The server supplies the Runtime URL separately as `pairing.relayUrl`.
 
    Use `DOCUMENT_DIR` from the environment if provided; otherwise resolve the user's
@@ -34,7 +34,7 @@ Do not ask for an additional replacement confirmation.
    Honor an explicit user choice instead. Do not ask the user to choose when your
    own harness is available. Complete its installation/authentication if needed.
 5. Run the command from the user's current working directory. The script resolves and
-   validates `$PWD`, then uses it as the paired Runtime's default Mobius Chat workspace.
+   validates `$PWD`, then uses it as the paired Runtime's default Morty workspace.
 
 Run this command in the background so it keeps running after this reply. Closing
 this conversation stops the Runtime it started.
@@ -57,7 +57,7 @@ log path. It waits at most five minutes. `runtime_started` or `binding_activated
 progress; only `status: "ready"` confirms
 an active binding and online Runtime. A successful chat reply is a separate check.
 
-When ready, tell the user: **Your Bot is connected. Return to your Mobius Chat page
+When ready, tell the user: **Your Bot is connected. Return to your Morty page
 to start chatting. Keep the Runtime online.** Include the returned URL, Bot ID, and workspace.
 
 On failure, use `error.code` and the private Runtime log to resolve the problem.
@@ -72,6 +72,6 @@ Previous configuration is preserved in `config-backup-<id>.json`.
 Backup progress reports paths, never credentials. Report the backup path when a
 replacement occurs.
 
-Durable credentials belong only in private files under `$DOCUMENT_DIR/mobius-chat`, not
+Durable credentials belong only in private files under `$DOCUMENT_DIR/morty`, not
 command arguments, URLs, chat output, or logs. The CLI `--token` accepts only the
 one-time ticket. Never generate a browser identity-transfer link in this flow.

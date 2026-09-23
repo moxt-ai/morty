@@ -1,6 +1,6 @@
 # Cloud storage
 
-Mobius Cloud has one D1 database and one R2 attachment bucket per deployment
+Morty has one D1 database and one R2 attachment bucket per deployment
 environment.
 
 - `DATABASE` stores all Slack integration records using

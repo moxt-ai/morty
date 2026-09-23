@@ -13,7 +13,7 @@ import type { CloudBindings } from "../infra/cloud-bindings.ts";
 import { projectBindings } from "./project-bindings.ts";
 
 const logger = pino({
-    base: { service: "mobius-chat" },
+    base: { service: "morty" },
     browser: { asObject: true },
     level: "info",
 });

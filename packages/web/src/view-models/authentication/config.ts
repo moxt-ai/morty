@@ -12,7 +12,7 @@ export async function getPublicConfig(
     signal: AbortSignal,
 ): Promise<v.InferOutput<typeof publicConfigSchema>> {
     const response = await fetchRequest(
-        new Request(new URL("/mobius-cloud/api/config", window.location.origin), {
+        new Request(new URL("/morty/api/config", window.location.origin), {
             signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
         }),
     );

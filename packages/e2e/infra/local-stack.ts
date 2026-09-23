@@ -131,7 +131,7 @@ export class LocalStack {
             );
         });
         return await this.harness.stage("provision-platform-application", async () => {
-            const authentication = { provider: "e2e", token: "mobius-chat-local-e2e", signal: this.harness.signal };
+            const authentication = { provider: "e2e", token: "morty-local-e2e", signal: this.harness.signal };
             const inventory = await jsonRequest(
                 this.platformOrigin,
                 "/mobius/api/dashboard/v1/platform/tenants",
@@ -141,8 +141,7 @@ export class LocalStack {
             const application = await jsonRequest(this.platformOrigin, "/mobius/api/dashboard/v1/apps", {
                 ...authentication,
                 body: {
-                    cloudRetention: false,
-                    displayName: "Mobius Chat live E2E",
+                    displayName: "Morty live E2E",
                     tenantId: text(tenant.tenantId, "tenantId"),
                 },
             });
@@ -172,7 +171,7 @@ export class LocalStack {
             "r2",
             "object",
             "put",
-            "mobius-chat-local-e2e-attachments/artifacts/setup.mjs",
+            "morty-local-e2e-attachments/artifacts/setup.mjs",
             "--file",
             join(repository, "packages/setup/dist/setup.mjs"),
             "--local",
@@ -183,7 +182,7 @@ export class LocalStack {
         ]);
         await this.harness.stage("start-chat", async () => {
             const variableArguments = Object.entries(variables).flatMap(([key, value]) => ["--var", `${key}:${value}`]);
-            await this.harness.start("mobius-chat", wranglerExecutable, [
+            await this.harness.start("morty", wranglerExecutable, [
                 "dev",
                 "--config",
                 chatConfiguration,
@@ -197,7 +196,7 @@ export class LocalStack {
                 this.directories.chat,
                 ...variableArguments,
             ]);
-            await this.harness.waitForHttp(this.chatOrigin, "mobius-chat", (response) => response.status === 200);
+            await this.harness.waitForHttp(this.chatOrigin, "morty", (response) => response.status === 200);
         });
     }
 

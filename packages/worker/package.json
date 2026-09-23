@@ -1,5 +1,5 @@
 {
-    "name": "@moxt-ai/mobius-cloud-worker",
+    "name": "@moxt-ai/morty-worker",
     "version": "0.0.1",
     "private": true,
     "type": "module",
@@ -25,7 +25,7 @@
     },
     "dependencies": {
         "@clerk/backend": "catalog:",
-        "@moxt-ai/mobius-sdk": "catalog:",
+        "@moxt-ai/mobius-sdk": "workspace:*",
         "drizzle-orm": "catalog:",
         "hono": "catalog:",
         "pino": "catalog:",

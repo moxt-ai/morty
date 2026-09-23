@@ -7,7 +7,7 @@ import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
 
 export function createChatApplication() {
     return new Hono<ChatHttpEnvironment>()
-        .basePath("/mobius-cloud/api/chat/projects/:projectId")
+        .basePath("/morty/api/chat/projects/:projectId")
         .onError(rethrowHttpError)
         .use(
             "*",

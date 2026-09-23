@@ -8,7 +8,7 @@ import type { ManagementHttpEnvironment } from "./management-http-environment.ts
 import { createPlatformProjectRoutes } from "./platform-project-routes.ts";
 import { createRuntimePairingRoutes } from "./runtime-pairing-routes.ts";
 
-export function createManagementApplication(basePath = "/mobius-cloud/api") {
+export function createManagementApplication(basePath = "/morty/api") {
     return new Hono<ManagementHttpEnvironment>()
         .basePath(basePath)
         .onError(rethrowHttpError)

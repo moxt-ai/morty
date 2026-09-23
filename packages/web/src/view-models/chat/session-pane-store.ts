@@ -30,7 +30,6 @@ import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
-import { createRemoteAccessStore } from "./remote-access-store.ts";
 import { createSessionActiveTurn, type SessionActiveTurn } from "./session-active-turn.ts";
 import {
     type SessionActivityState,
@@ -263,7 +262,6 @@ export interface SessionPaneStore {
     readonly respondToPermission: (response: PermissionInteractionResponse, signal: AbortSignal) => Promise<void>;
     readonly respondToElicitation: (response: ElicitationInteractionResponse, signal: AbortSignal) => Promise<void>;
     readonly stop: (signal: AbortSignal) => Promise<void>;
-    readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
 }
 
 export function sessionPanePresentation(
@@ -374,7 +372,6 @@ export function createSessionPaneModel(options: {
     readonly session: OpenMobiusSession;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession" | "steerTurn" | "submitTurn">;
-    readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
 }) {
     const { session, botId, requests } = options;
     const sessionId = session.result.ready.sessionId;
@@ -445,7 +442,6 @@ export function createSessionPaneModel(options: {
     if (openedActiveTurn.kind === "accepted") {
         tasks.getState().start(openedActiveTurn.commandId, openedActiveTurn.turnId);
     }
-    const remoteAccess = createRemoteAccessStore(options.endRemoteAccess);
     const messageQueue = createSessionMessageQueueStore({
         cancel: async (turnId, idempotencyKey, signal) => {
             if (client === null) {
@@ -920,13 +916,7 @@ export function createSessionPaneModel(options: {
                             return true;
                         },
                     };
-                    const summary = await connected.sessions.read(sessionId, signal);
-                    const subscription = summary.cloudRetention
-                        ? await (async () => {
-                              await observer.reconcile({ kind: "initial" });
-                              return await connected.events.subscribe(sessionId, "", observer, signal);
-                          })()
-                        : await connected.events.subscribeLive(sessionId, observer, signal);
+                    const subscription = await connected.events.subscribeLive(sessionId, observer, signal);
                     signal.throwIfAborted();
                     set({ connection: { kind: "ready", client: connected } });
                     await subscription.completed;
@@ -1240,13 +1230,6 @@ export function createSessionPaneModel(options: {
                 }
             },
             stop: async (signal) => await tasks.getState().stop(signal),
-            endRemoteAccess: async (signal) => {
-                await remoteAccess.getState().end(signal);
-                if (remoteAccess.getState().state.kind === "ended") {
-                    client?.close();
-                    client = null;
-                }
-            },
         };
     });
     return {
@@ -1254,7 +1237,6 @@ export function createSessionPaneModel(options: {
         delivery,
         messageQueue,
         tasks,
-        remoteAccess,
         readFile: async (path: string, signal: AbortSignal) => {
             signal.throwIfAborted();
             if (client === null) {

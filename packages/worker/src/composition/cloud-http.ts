@@ -11,7 +11,7 @@ type CloudHttpEnvironment = {
 };
 
 const managementApplication = createManagementApplication();
-const projectManagementApplication = createManagementApplication("/mobius-cloud/api/projects/:projectId");
+const projectManagementApplication = createManagementApplication("/morty/api/projects/:projectId");
 const chatApplication = createChatApplication();
 
 export const cloudRoutes = new Hono<CloudHttpEnvironment>()

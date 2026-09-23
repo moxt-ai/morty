@@ -12,7 +12,7 @@ function LandingPage() {
         <Page>
             <section className="mx-auto max-w-xl rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
                 <p className="mb-3 text-xs font-medium text-primary">A place for your agents</p>
-                <h1 className="text-3xl font-semibold leading-tight tracking-tight">Welcome to Mobius Cloud</h1>
+                <h1 className="text-3xl font-semibold leading-tight tracking-tight">Welcome to Morty</h1>
                 <p className="mt-4 leading-7 text-zinc-600">Sign in to your account, or create one to get started.</p>
                 <div className="mt-8 flex flex-wrap gap-3">
                     <Button asChild>
@@ -34,7 +34,7 @@ function LoginPage({ register = false }: { readonly register?: boolean }) {
             <section className="flex min-w-0 flex-col justify-between gap-6 bg-zinc-950 px-5 py-5 text-white md:min-h-dvh md:gap-18 md:px-[clamp(2rem,7vw,6.25rem)] md:py-10 md:pb-18">
                 <Link className="flex items-center gap-3 font-semibold" to="/">
                     <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-2xl">∞</span>
-                    Mobius Cloud
+                    Morty
                 </Link>
                 <div>
                     <p className="text-xs font-medium text-emerald-300">Agent workspace</p>
@@ -70,7 +70,7 @@ function LoginPage({ register = false }: { readonly register?: boolean }) {
                         />
                     )}
                     <Button asChild variant="ghost" className="mt-5 w-full">
-                        <Link to="/">Back to Mobius Cloud</Link>
+                        <Link to="/">Back to Morty</Link>
                     </Button>
                 </div>
             </section>
@@ -152,7 +152,7 @@ function ContinuePage() {
                             {state.kind === "failed" ? state.message : "This transfer link is invalid."}
                         </p>
                         <Button asChild variant="ghost" className="mt-5">
-                            <Link to="/">Return to Mobius Cloud</Link>
+                            <Link to="/">Return to Morty</Link>
                         </Button>
                     </>
                 )}
@@ -167,7 +167,7 @@ const rootRoute = createRootRoute({
         <Page>
             <h1 className="text-3xl font-semibold">Page not found</h1>
             <Button asChild variant="ghost" className="mt-5">
-                <Link to="/">Back to Mobius Cloud</Link>
+                <Link to="/">Back to Morty</Link>
             </Button>
         </Page>
     ),

@@ -17,11 +17,11 @@ export function BotOverviewPage() {
     return (
         <div className="mx-auto max-w-3xl p-5 sm:p-8">
             <section className="rounded-2xl border border-black/10 bg-white p-6">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Mobius Chat Bot</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Morty Bot</p>
                 <h2 className="mt-2 text-xl font-semibold">Profile and instructions</h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    This Bot identity and its configuration are owned by Mobius Chat. Runtime execution uses generic
-                    Mobius Sessions and turns.
+                    This Bot identity and its configuration are owned by Morty. Runtime execution uses generic Mobius
+                    Sessions and turns.
                 </p>
                 {viewModel.state.kind === "ready" && (
                     <div className="mt-5 grid gap-4">

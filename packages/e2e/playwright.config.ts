@@ -5,8 +5,8 @@ export default defineConfig({
     testMatch: "*.e2e.test.ts",
     globalSetup: "./infra/global-setup.ts",
     fullyParallel: true,
-    // Build once before workers start; each journey owns its local stack and browser.
-    workers: 3,
+    // Each journey starts two Wrangler Workers and a local Runtime.
+    workers: 1,
     timeout: Number(process.env.MOBIUS_E2E_TIMEOUT_MS ?? 600000),
     expect: { timeout: 30000 },
     reporter: "list",

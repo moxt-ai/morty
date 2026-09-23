@@ -78,6 +78,21 @@ async function waitForEnabled(selector: string): Promise<HTMLButtonElement> {
     );
 }
 
+async function waitForDialog(title: string): Promise<HTMLElement> {
+    return await vi.waitFor(
+        () => {
+            const dialog = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].find((candidate) =>
+                candidate.textContent?.includes(title),
+            );
+            if (dialog === undefined) {
+                throw new Error(`Dialog did not appear: ${title}; page: ${document.body.textContent}`);
+            }
+            return dialog;
+        },
+        { timeout: 12_000 },
+    );
+}
+
 async function renderWorkspace(created?: Application): Promise<Application> {
     const current = created ?? (await environment.createApplication());
     application = current;
@@ -146,6 +161,96 @@ test("Given the conversation directory is loading, When the workspace appears, T
     await renderWorkspace();
 
     expect((await loadingStatus).getAttribute("aria-label")).toBe("Loading conversations");
+});
+
+test("Given a shared workspace, When the user chooses to end remote access from the sidebar footer, Then they must confirm the transfer-wide revocation", {
+    timeout: 30_000,
+}, async () => {
+    await renderWorkspace();
+    const endAccess = await act(async () => await waitForElement('button[aria-label="End remote access"]'));
+    const shareMachine = await act(async () => await waitForElement(`[data-testid="${dataTestId.shareMachine}"]`));
+
+    expect(endAccess.parentElement).toBe(shareMachine.parentElement);
+    await act(async () => endAccess.click());
+
+    const dialog = await act(async () => await waitForDialog("End remote access?"));
+    expect(dialog.textContent).toContain("End remote access?");
+    expect(dialog.textContent).toContain("every browser using this access link");
+    expect(dialog.textContent).toContain("Your local Runtime and task will keep running");
+    expect(dialog.textContent).toContain("Cancel");
+    expect(dialog.textContent).toContain("End remote access");
+});
+
+test("Given a conversation is working, When a user starts a new conversation, Then the background conversation keeps its working indicator", {
+    timeout: 30_000,
+}, async () => {
+    const created = await renderWorkspace();
+    const turnStarted = Promise.withResolvers<void>();
+    const releaseTurn = Promise.withResolvers<void>();
+    const { failure } = await act(
+        async () =>
+            await created.connectAgent({
+                afterSessionStarted: async (signal) => {
+                    turnStarted.resolve();
+                    await new Promise<void>((resolve, reject) => {
+                        let settled = false;
+                        const settle = (complete: () => void): void => {
+                            if (settled) {
+                                return;
+                            }
+                            settled = true;
+                            signal.removeEventListener("abort", abort);
+                            complete();
+                        };
+                        const release = (): void => {
+                            settle(resolve);
+                        };
+                        const abort = (): void => {
+                            settle(() => reject(signal.reason));
+                        };
+                        signal.addEventListener("abort", abort, { once: true });
+                        void releaseTurn.promise.then(release);
+                    });
+                },
+            }),
+    );
+    const composer = await act(async () => {
+        await waitForText(`[data-testid="${dataTestId.botConnectionStatus}"]`, "Connected");
+        return await waitForElement(`[data-testid="${dataTestId.messageComposer}"]`);
+    });
+
+    await sendPrompt(composer as HTMLTextAreaElement, "Keep working in the background");
+    await Promise.race([turnStarted.promise, failure]);
+    await act(async () => await waitForElement('[aria-label="Session working"]'));
+    await act(async () => {
+        (await waitForElement(`[data-testid="${dataTestId.newConversation}"]`)).click();
+    });
+
+    const backgroundConversation = await act(async () => {
+        return await vi.waitFor(
+            () => {
+                const conversations = [
+                    ...document.querySelectorAll<HTMLElement>(`[data-testid="${dataTestId.managedConversation}"]`),
+                ];
+                const conversation = conversations.find((candidate) =>
+                    candidate.textContent?.includes("Keep working in the background"),
+                );
+                if (conversation === undefined) {
+                    throw new Error(`The background conversation is unavailable: ${document.body.textContent}`);
+                }
+                const indicator = conversation.querySelector<HTMLElement>('[aria-label="Session working"]');
+                if (indicator === null) {
+                    throw new Error(
+                        `The background conversation is not shown as working: ${document.body.textContent}`,
+                    );
+                }
+                return conversation;
+            },
+            { timeout: 12_000 },
+        );
+    });
+    expect(backgroundConversation.getAttribute("aria-current")).toBeNull();
+    releaseTurn.resolve();
 });
 
 test("Given an unpaired workspace, When a user manages Bots, Then pairing and the surviving Bot remain visible", {

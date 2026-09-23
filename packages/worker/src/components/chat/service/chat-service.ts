@@ -301,7 +301,7 @@ export class ChatService {
         ) {
             throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
         }
-        const instructionUri = "mobius-chat://bot/instructions";
+        const instructionUri = "morty://bot/instructions";
         return await this.#platform.submitChatTurn(
             scope.projectId,
             sessionId,

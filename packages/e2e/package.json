@@ -1,5 +1,5 @@
 {
-    "name": "@moxt-ai/mobius-chat-e2e",
+    "name": "@moxt-ai/morty-e2e",
     "version": "0.0.1",
     "private": true,
     "type": "module",
@@ -11,7 +11,7 @@
         "typecheck": "tsc --project tsconfig.json"
     },
     "devDependencies": {
-        "@moxt-ai/mobius-sdk": "catalog:",
+        "@moxt-ai/mobius-sdk": "workspace:*",
         "@playwright/test": "catalog:",
         "@types/pngjs": "catalog:",
         "jsqr": "catalog:",

@@ -17,7 +17,7 @@ import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
-import { registerMobiusChatDebugSession } from "../../debug-bridge.ts";
+import { registerMortyDebugSession } from "../../debug-bridge.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { SessionConnectionKind } from "../../view-models/chat/bot-chat-home-store.ts";
 import type { QueuedDraftMessage } from "../../view-models/chat/conversation-creation-machine.ts";
@@ -33,7 +33,6 @@ export function MobiusSessionPane({
     initialMessage,
     botId,
     requests,
-    endRemoteAccess,
     onConnectionStatusChange,
     onStatusChange,
 }: {
@@ -41,7 +40,6 @@ export function MobiusSessionPane({
     readonly initialMessage?: QueuedDraftMessage | undefined;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession" | "steerTurn" | "submitTurn">;
-    readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
     readonly onConnectionStatusChange: (sessionId: string, connection: SessionConnectionKind) => void;
     readonly onStatusChange: (sessionId: string, status: SessionActivityState) => void;
 }) {
@@ -51,7 +49,6 @@ export function MobiusSessionPane({
             session,
             botId,
             requests,
-            endRemoteAccess,
         }),
     );
     const model = useStore(pane.store);
@@ -92,7 +89,7 @@ export function MobiusSessionPane({
     }, [filePreview, pane]);
     useEffect(
         () =>
-            registerMobiusChatDebugSession({
+            registerMortyDebugSession({
                 sessionId,
                 blocks: () => sessionDebugBlocks(pane.store.getState()),
             }),
@@ -247,7 +244,7 @@ export function MobiusSessionPane({
                 </FollowLatestScrollArea>
                 <LoadMoreTrigger
                     container={messageList}
-                    hasMore={model.hasOlderHistory}
+                    hasMore={model.connection.kind === "ready" && model.hasOlderHistory}
                     loading={model.historyLoading}
                     onLoadMore={loadOlderMessages}
                     revision={model.messages.length}

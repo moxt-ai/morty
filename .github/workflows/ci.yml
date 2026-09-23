@@ -111,7 +111,10 @@ jobs:
 
   deploy:
     needs: [validate-worker-config]
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && vars.ENABLE_AUTOMATIC_MOBIUS_DEPLOY == 'true'))
     uses: ./.github/workflows/deploy.yml
     secrets: inherit
     with:

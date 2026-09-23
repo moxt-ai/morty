@@ -1,5 +1,5 @@
 {
-    "name": "@moxt-ai/mobius-cloud-web",
+    "name": "@moxt-ai/morty-web",
     "version": "0.0.1",
     "private": true,
     "type": "module",
@@ -12,8 +12,8 @@
     },
     "dependencies": {
         "@clerk/react": "catalog:",
-        "@moxt-ai/mobius-protocol": "catalog:",
-        "@moxt-ai/mobius-sdk": "catalog:",
+        "@moxt-ai/mobius-protocol": "workspace:*",
+        "@moxt-ai/mobius-sdk": "workspace:*",
         "@radix-ui/react-select": "catalog:",
         "@sentry/react": "catalog:",
         "@streamdown/code": "catalog:",

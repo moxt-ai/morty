@@ -42,10 +42,8 @@ export async function jsonRequest(
         headers["x-mobius-oidc-provider"] = provider;
     }
     const scopedPath =
-        project !== undefined &&
-        path.startsWith("/mobius-cloud/api/") &&
-        !path.startsWith("/mobius-cloud/api/chat/projects/")
-            ? path.replace("/mobius-cloud/api/", `/mobius-cloud/api/projects/${encodeURIComponent(project)}/`)
+        project !== undefined && path.startsWith("/morty/api/") && !path.startsWith("/morty/api/chat/projects/")
+            ? path.replace("/morty/api/", `/morty/api/projects/${encodeURIComponent(project)}/`)
             : path;
     const response = await fetch(new URL(scopedPath, origin), {
         method: body === undefined ? "GET" : "POST",
@@ -80,7 +78,7 @@ export class ChatApi {
         const identity = object(value, "anonymous identity");
         const projectId = text(identity.projectId, "projectId");
         const token = text(identity.token, "anonymous token");
-        const directory = await jsonRequest(this.origin, "/mobius-cloud/api/management/bots", {
+        const directory = await jsonRequest(this.origin, "/morty/api/management/bots", {
             project: projectId,
             token,
             signal: this.signal,
@@ -98,7 +96,7 @@ export class ChatApi {
     }
 
     async createPairing() {
-        return await this.#request("/mobius-cloud/api/management/runtime-pairings", {
+        return await this.#request("/morty/api/management/runtime-pairings", {
             body: { idempotencyKey: crypto.randomUUID() },
         });
     }
@@ -106,7 +104,7 @@ export class ChatApi {
     readonly cancelSessionTurn = async (sessionId: string, turnId: string) => {
         const identity = this.#requireIdentity();
         const access = await this.#request(
-            `/mobius-cloud/api/chat/projects/${encodeURIComponent(identity.projectId)}/bots/${encodeURIComponent(identity.botId)}/session-access`,
+            `/morty/api/chat/projects/${encodeURIComponent(identity.projectId)}/bots/${encodeURIComponent(identity.botId)}/session-access`,
             {
                 body: { sessionId },
             },
@@ -131,7 +129,7 @@ export class ChatApi {
     async waitForAgent(harness: E2EHarness, pairingId: string, agentId: string, agentLabel: string) {
         const paired = await harness.waitFor(
             `Mobius pairing with ${agentLabel}`,
-            () => this.#request(`/mobius-cloud/api/management/runtime-pairings/${encodeURIComponent(pairingId)}`),
+            () => this.#request(`/morty/api/management/runtime-pairings/${encodeURIComponent(pairingId)}`),
             (status) =>
                 status.status === "paired" &&
                 Array.isArray(status.agents) &&
@@ -143,7 +141,7 @@ export class ChatApi {
     async bindAgent(runtimeId: string, agentId: string) {
         const identity = this.#requireIdentity();
         await this.#request(
-            `/mobius-cloud/api/chat/projects/${encodeURIComponent(identity.projectId)}/bots/${encodeURIComponent(identity.botId)}/setup`,
+            `/morty/api/chat/projects/${encodeURIComponent(identity.projectId)}/bots/${encodeURIComponent(identity.botId)}/setup`,
             {
                 body: { runtimeId, agentRef: agentId },
             },
@@ -156,7 +154,7 @@ export class ChatApi {
             `${agentLabel} Bot binding`,
             () =>
                 this.#request(
-                    `/mobius-cloud/api/chat/projects/${encodeURIComponent(identity.projectId)}/bots/${encodeURIComponent(identity.botId)}/workspace`,
+                    `/morty/api/chat/projects/${encodeURIComponent(identity.projectId)}/bots/${encodeURIComponent(identity.botId)}/workspace`,
                     {
                         body: {},
                     },

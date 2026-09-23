@@ -3,14 +3,14 @@ set -euo pipefail
 
 case "${1:-}" in
   staging)
-    bucket="mobius-chat-staging-web-assets"
-    app_origin="https://mobius-chat.paradev.biz"
-    asset_origin="https://assets.mobius-chat.paradev.biz"
+    bucket="morty-staging-web-assets"
+    app_origin="https://morty.paradev.biz"
+    asset_origin="https://assets.morty.paradev.biz"
     ;;
   production)
-    bucket="mobius-chat-production-web-assets"
-    app_origin="https://mobius-chat.paraflow.biz"
-    asset_origin="https://assets.mobius-chat.paraflow.biz"
+    bucket="morty-production-web-assets"
+    app_origin="https://morty.paraflow.biz"
+    asset_origin="https://assets.morty.paraflow.biz"
     ;;
   *)
     echo "Expected staging or production" >&2

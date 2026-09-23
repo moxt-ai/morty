@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 "use strict";
 
-// Local full-stack development helper for Mobius Chat.
+// Local full-stack development helper for Morty.
 //
 // Dependency-free CommonJS. Requires the repository's pinned Node.js (>= 24).
 //
@@ -27,16 +27,6 @@ const WRANGLER = path.join(REPO_ROOT, "node_modules", ".bin", "wrangler");
 const PLATFORM_CONFIG = "packages/e2e/fixtures/wrangler.platform.jsonc";
 const CHAT_CONFIG = "packages/e2e/fixtures/wrangler.chat.jsonc";
 const MOBIUS_ROOT = path.join(REPO_ROOT, "third-party", "mobius");
-const MOBIUS_WRANGLER = path.join(
-    MOBIUS_ROOT,
-    "node_modules",
-    ".pnpm",
-    "node_modules",
-    "wrangler",
-    "bin",
-    "wrangler.js",
-);
-const MOBIUS_CONFIG = "packages/relay-cloudflare-standalone/wrangler.jsonc";
 const MOBIUS_LOCKFILE = path.join(MOBIUS_ROOT, "pnpm-lock.yaml");
 const MOBIUS_INSTALLED_LOCKFILE = path.join(MOBIUS_ROOT, "node_modules", ".pnpm", "lock.yaml");
 const MOBIUS_GENERATED_MIGRATIONS = path.join(
@@ -45,14 +35,13 @@ const MOBIUS_GENERATED_MIGRATIONS = path.join(
     "relay-cloudflare-platform",
     "src",
     "generated",
-    "non-cloud-retention-session-relay-do-migrations.ts",
+    "session-relay-do-migrations.ts",
 );
-const MOBIUS_WEB_ASSETS = path.join(MOBIUS_ROOT, "packages", "web", "dist");
 const SETUP_BUNDLE = "packages/setup/dist/setup.mjs";
-const CHAT_ATTACHMENTS_BUCKET = "mobius-chat-local-e2e-attachments";
+const CHAT_ATTACHMENTS_BUCKET = "morty-local-e2e-attachments";
 const PLATFORM_AUTH_HEADERS = {
     "content-type": "application/json",
-    authorization: "Bearer mobius-chat-local-e2e",
+    authorization: "Bearer morty-local-e2e",
     "x-mobius-oidc-provider": "e2e",
 };
 
@@ -128,10 +117,6 @@ function parseArguments(argv) {
                 options.chatPort = Number.parseInt(requireValue(index, token), 10);
                 index += 1;
                 break;
-            case "--mobius-port":
-                options.mobiusPort = Number.parseInt(requireValue(index, token), 10);
-                index += 1;
-                break;
             case "--worker":
                 options.worker = requireValue(index, token);
                 index += 1;
@@ -202,10 +187,6 @@ function wrangler(args) {
     return run(WRANGLER, args);
 }
 
-function mobiusWrangler(args) {
-    return run(process.execPath, [MOBIUS_WRANGLER, ...args], { cwd: MOBIUS_ROOT });
-}
-
 function startProcess(name, args, logPath, command = WRANGLER, env = {}, cwd = REPO_ROOT) {
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
     const output = fs.openSync(logPath, "a", 0o600);
@@ -222,10 +203,6 @@ function startProcess(name, args, logPath, command = WRANGLER, env = {}, cwd = R
     }
     log(`started ${name} pid=${child.pid}`);
     return child.pid;
-}
-
-function startMobiusProcess(name, args, logPath) {
-    return startProcess(name, [MOBIUS_WRANGLER, ...args], logPath, process.execPath, {}, MOBIUS_ROOT);
 }
 
 function isAlive(pid) {
@@ -288,7 +265,6 @@ async function waitForHttp(url, accept, timeoutMilliseconds, description, proces
 
 async function ensureMobiusDependencies() {
     const installed =
-        fs.existsSync(MOBIUS_WRANGLER) &&
         fs.existsSync(MOBIUS_GENERATED_MIGRATIONS) &&
         fs.existsSync(MOBIUS_INSTALLED_LOCKFILE) &&
         fs.readFileSync(MOBIUS_LOCKFILE).equals(fs.readFileSync(MOBIUS_INSTALLED_LOCKFILE));
@@ -333,34 +309,6 @@ function writeStack(stack) {
     });
 }
 
-/** Local full-stack Sessions always exercise the non-cloud-retention path. */
-async function ensureNonCloudRetention(platformOrigin, appId) {
-    if (typeof platformOrigin !== "string" || typeof appId !== "string" || appId.length === 0) {
-        throw new Error("The local stack has invalid Platform application metadata");
-    }
-    const origin = new URL(platformOrigin);
-    if (origin.protocol !== "http:" && origin.protocol !== "https:") {
-        throw new Error("The local stack has an invalid Platform origin");
-    }
-    const url = new URL(`/mobius/api/dashboard/v1/apps/${encodeURIComponent(appId)}`, origin);
-    const app = await httpJson(url, { headers: PLATFORM_AUTH_HEADERS });
-    if (app.cloudRetention === false) {
-        return;
-    }
-    log("forcing the local Platform application to non-cloud retention");
-    await httpJson(url, {
-        headers: PLATFORM_AUTH_HEADERS,
-        method: "PUT",
-        body: {
-            cloudRetention: false,
-            displayName:
-                typeof app.displayName === "string" && app.displayName.length <= 500
-                    ? app.displayName
-                    : "Mobius Chat local dev",
-        },
-    });
-}
-
 function clerkPublishableKey() {
     const configured = process.env.CHAT_LOCAL_CLERK_PUBLISHABLE_KEY;
     if (configured !== undefined && /^pk_(test|live)_[A-Za-z0-9_-]+$/u.test(configured)) {
@@ -399,7 +347,7 @@ async function prepareWeb(options) {
         logPath,
         "pnpm",
         {
-            VITE_MOBIUS_BASE_URL: process.env.MOBIUS_CHAT_LOCAL_PLATFORM_URL ?? DEFAULT_STAGING_PLATFORM,
+            VITE_MOBIUS_BASE_URL: process.env.MORTY_LOCAL_PLATFORM_URL ?? DEFAULT_STAGING_PLATFORM,
             VITE_MOBIUS_APP_ID: appId,
         },
     );
@@ -425,17 +373,12 @@ async function keepAlive(stack, options) {
 }
 
 async function prepare(options) {
-    const validModes = new Set(["web", "web-server", "web-server-mobius", "web-server-mobius-cli"]);
+    const validModes = new Set(["web", "web-server"]);
     if (!validModes.has(options.mode)) {
-        throw new Error(
-            `Unknown mode ${options.mode}; use web, web-server, web-server-mobius, or web-server-mobius-cli`,
-        );
+        throw new Error(`Unknown mode ${options.mode}; use web or web-server`);
     }
     if (options.mode === "web") {
         return prepareWeb(options);
-    }
-    if (options.mode === "web-server" && (options.appId === undefined || options.appSecret === undefined)) {
-        throw new Error("web-server requires --app-id and --app-secret");
     }
     const platformPort = options.platformPort ?? (await availablePort());
     const chatPort = options.chatPort ?? (await availablePort());
@@ -446,7 +389,6 @@ async function prepare(options) {
     if (existing !== null) {
         if (options.force !== true && isAlive(existing.chatPid) && isAlive(existing.platformPid)) {
             log(`reusing live stack at ${stateDir}`);
-            await ensureNonCloudRetention(existing.platformOrigin, existing.appId);
             process.stdout.write(`${JSON.stringify(existing)}\n`);
             return;
         }
@@ -460,10 +402,6 @@ async function prepare(options) {
     const platformLog = path.join(stateDir, "platform.log");
     const chatOrigin = `http://localhost:${chatPort}`;
     const platformOrigin = `http://127.0.0.1:${platformPort}`;
-    const mobiusPort = options.mobiusPort ?? (await availablePort());
-    const mobiusOrigin = `http://127.0.0.1:${mobiusPort}`;
-    const mobiusPersist = path.join(stateDir, "mobius");
-    const mobiusLog = path.join(stateDir, "mobius.log");
     let stack = {
         mode: options.mode,
         chatLog,
@@ -473,9 +411,6 @@ async function prepare(options) {
         platformLog,
         platformOrigin,
         platformPersist,
-        ...(options.mode === "web-server-mobius" || options.mode === "web-server-mobius-cli"
-            ? { mobiusLog, mobiusOrigin, mobiusPersist }
-            : {}),
         ready: false,
         stateDir,
     };
@@ -483,23 +418,6 @@ async function prepare(options) {
 
     try {
         await ensureMobiusDependencies();
-        if (
-            (options.mode === "web-server-mobius" || options.mode === "web-server-mobius-cli") &&
-            options.build !== false
-        ) {
-            log("building Mobius relay web assets");
-            await run("pnpm", ["--filter", "@moxt-ai/mobius-web", "build"], {
-                cwd: MOBIUS_ROOT,
-                env: { VITE_CLERK_PUBLISHABLE_KEY: "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k" },
-            });
-        }
-        if (
-            (options.mode === "web-server-mobius" || options.mode === "web-server-mobius-cli") &&
-            !fs.existsSync(MOBIUS_WEB_ASSETS)
-        ) {
-            throw new Error("Missing Mobius relay web assets; run without --no-build");
-        }
-
         log("applying Platform migrations");
         await wrangler([
             "d1",
@@ -555,8 +473,7 @@ async function prepare(options) {
             const application = await httpJson(`${platformOrigin}/mobius/api/dashboard/v1/apps`, {
                 headers: PLATFORM_AUTH_HEADERS,
                 body: {
-                    cloudRetention: false,
-                    displayName: `Mobius Chat local dev ${path.basename(stateDir)}`,
+                    displayName: `Morty local dev ${path.basename(stateDir)}`,
                     tenantId,
                 },
             });
@@ -571,7 +488,6 @@ async function prepare(options) {
         ) {
             throw new Error("Set --app-id and --app-secret, or allow local app provisioning");
         }
-        await ensureNonCloudRetention(platformOrigin, appId);
 
         if (options.build !== false) {
             log("building Chat Worker and setup bundle");
@@ -638,65 +554,10 @@ async function prepare(options) {
             logPath: chatLog,
         });
 
-        let mobiusPid;
-        let cliLog;
-        if (options.mode === "web-server-mobius" || options.mode === "web-server-mobius-cli") {
-            log("applying Mobius relay migrations");
-            await mobiusWrangler([
-                "d1",
-                "migrations",
-                "apply",
-                "DIRECTORY_DATABASE",
-                "--local",
-                "--persist-to",
-                mobiusPersist,
-                "--config",
-                MOBIUS_CONFIG,
-            ]);
-            log("starting Mobius relay");
-            mobiusPid = startMobiusProcess(
-                "mobius",
-                [
-                    "dev",
-                    "--config",
-                    MOBIUS_CONFIG,
-                    "--ip",
-                    "127.0.0.1",
-                    "--port",
-                    String(mobiusPort),
-                    "--inspector-port",
-                    "0",
-                    "--persist-to",
-                    mobiusPersist,
-                ],
-                mobiusLog,
-            );
-            stack = { ...stack, mobiusPid };
-            writeStack(stack);
-            await waitForHttp(
-                `${mobiusOrigin}/mobius/api/health`,
-                (response) => response.ok,
-                90_000,
-                "Mobius relay health",
-                { pid: mobiusPid, logPath: mobiusLog },
-            );
-            if (options.mode === "web-server-mobius-cli") {
-                cliLog = path.join(stateDir, "cli.log");
-                log("checking local Mobius CLI");
-                await run("pnpm", ["--dir", "third-party/mobius", "mobius", "agents"], {
-                    cwd: REPO_ROOT,
-                }).then(({ stdout, stderr }) => fs.writeFileSync(cliLog, `${stdout}${stderr}`, { mode: 0o600 }));
-            }
-        }
-
         stack = {
             ...stack,
             appId,
             mode: options.mode,
-            cliCommand:
-                options.mode === "web-server-mobius-cli" ? "pnpm --dir third-party/mobius mobius agents" : undefined,
-            ...(mobiusPid === undefined ? {} : { mobiusLog, mobiusOrigin, mobiusPersist, mobiusPid }),
-            ...(cliLog === undefined ? {} : { cliLog }),
             chatConfig: CHAT_CONFIG,
             chatLog,
             chatOrigin,
@@ -763,20 +624,17 @@ async function pair(options) {
     const origin = new URL(stack.chatOrigin).origin;
 
     log("minting a browser identity and pairing ticket");
-    const identity = await httpJson(`${origin}/mobius-cloud/api/identity/anonymous-users`, { body: {} });
+    const identity = await httpJson(`${origin}/morty/api/identity/anonymous-users`, { body: {} });
     const token = typeof identity.token === "string" ? identity.token : "";
     const projectId = typeof identity.projectId === "string" ? identity.projectId : "";
     const botId = typeof identity.bot === "object" && identity.bot !== null ? identity.bot.botId : undefined;
     if (token.length === 0 || projectId.length === 0 || typeof botId !== "string" || botId.length === 0) {
         fail("the Chat Worker did not return a usable anonymous identity");
     }
-    const pairing = await httpJson(
-        `${origin}/mobius-cloud/api/projects/${encodeURIComponent(projectId)}/identity/pairings`,
-        {
-            headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-            body: { botId },
-        },
-    );
+    const pairing = await httpJson(`${origin}/morty/api/projects/${encodeURIComponent(projectId)}/identity/pairings`, {
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: { botId },
+    });
     const ticket = new URL(typeof pairing.url === "string" ? pairing.url : "about:invalid");
     const pairingToken = ticket.searchParams.get("token") ?? "";
     if (pairingToken.length === 0) {
@@ -793,14 +651,12 @@ async function pair(options) {
 
     const pairLog = path.join(stack.stateDir, "pair.log");
     fs.writeFileSync(pairLog, "", { mode: 0o600 });
-    const pairEnvironment = {};
-    if (stack.mode === "web-server-mobius-cli") {
-        const shimDirectory = path.join(stack.stateDir, "local-cli-bin");
-        fs.mkdirSync(shimDirectory, { recursive: true, mode: 0o700 });
-        const shim = path.join(shimDirectory, "npx");
-        fs.writeFileSync(
-            shim,
-            `#!/usr/bin/env node
+    const shimDirectory = path.join(stack.stateDir, "local-cli-bin");
+    fs.mkdirSync(shimDirectory, { recursive: true, mode: 0o700 });
+    const shim = path.join(shimDirectory, "npx");
+    fs.writeFileSync(
+        shim,
+        `#!/usr/bin/env node
 const { spawnSync } = require("node:child_process");
 const args = process.argv.slice(2);
 if (args[0] !== "--yes" || args[1] !== "@moxt-ai/mobius@latest") {
@@ -812,10 +668,8 @@ const result = spawnSync("pnpm", ["--dir", ${JSON.stringify(MOBIUS_ROOT)}, "mobi
 });
 process.exit(result.status ?? 1);
 `,
-            { mode: 0o700 },
-        );
-        pairEnvironment.PATH = `${shimDirectory}${path.delimiter}${process.env.PATH ?? ""}`;
-    }
+        { mode: 0o700 },
+    );
     log(`pairing harness "${harness}" against workspace ${workspace}`);
     const runtimePid = startProcess(
         "pair runtime",
@@ -825,7 +679,7 @@ process.exit(result.status ?? 1);
         {
             DOCUMENT_DIR: documents,
             MOBIUS_STATE_DIRECTORY: cliState,
-            ...pairEnvironment,
+            PATH: `${shimDirectory}${path.delimiter}${process.env.PATH ?? ""}`,
         },
         workspace,
     );
@@ -1001,10 +855,6 @@ async function stopRecorded(stack) {
         log(`stopping Platform (pid ${stack.platformPid})`);
         await stopProcess(stack.platformPid);
     }
-    if (stack.mobiusPid !== undefined) {
-        log(`stopping Mobius relay (pid ${stack.mobiusPid})`);
-        await stopProcess(stack.mobiusPid);
-    }
 }
 
 async function remove(options) {
@@ -1030,7 +880,7 @@ function usage() {
     process.stdout.write(
         [
             "Usage:",
-            "  node scripts/local-dev.cjs prepare <web|web-server|web-server-mobius|web-server-mobius-cli> [--state-dir DIR] [--platform-port N] [--chat-port N] [--mobius-port N] [--app-id ID --app-secret SECRET] [--force] [--no-build] [--background]",
+            "  node scripts/local-dev.cjs prepare <web|web-server> [--state-dir DIR] [--platform-port N] [--chat-port N] [--app-id ID --app-secret SECRET] [--force] [--no-build] [--background]",
             "  node scripts/local-dev.cjs pair    --state-dir DIR [--harness ID] [--workspace DIR]",
             "  node scripts/local-dev.cjs status --state-dir DIR",
             "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|platform|runtime|all] [--lines N] [--filter REGEX] [--follow]",

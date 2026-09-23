@@ -19,7 +19,7 @@ function bridgedUrl(path: string): URL {
     const url = new URL(path, BRIDGE_ORIGIN);
     if (
         url.origin !== BRIDGE_ORIGIN ||
-        (!url.pathname.startsWith("/mobius-cloud/api/") && !url.pathname.startsWith("/mobius-slack/api/"))
+        (!url.pathname.startsWith("/morty/api/") && !url.pathname.startsWith("/mobius-slack/api/"))
     ) {
         return invalidBridgeRequest();
     }

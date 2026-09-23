@@ -40,7 +40,7 @@ test("Given visitors across Cloudflare regions, When Chat provisions and reopens
     ] as const) {
         const created = await worker.fetch(
             new GeolocatedRequest(
-                new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/anonymous-users`, {
+                new Request(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, {
                     method: "POST",
                     headers: { "cf-ipcountry": "US" },
                 }),
@@ -52,7 +52,7 @@ test("Given visitors across Cloudflare regions, When Chat provisions and reopens
         expect(created.status).toBe(201);
         const identity = v.parse(v.object({ token: v.string(), projectId: v.string() }), await created.json());
         const projectRequest = () =>
-            new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/project`, {
+            new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/project`, {
                 headers: { authorization: `Bearer ${identity.token}` },
             });
         const response = await worker.fetch(projectRequest(), environment);
@@ -95,7 +95,7 @@ test("Given explicit location choices, When users create workspaces, Then every 
         ["me", "me"],
     ] as const) {
         const response = await worker.fetch(
-            new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/anonymous-users`, {
+            new Request(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, {
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify({ locationHint }),
@@ -114,7 +114,7 @@ test("Given Projects in separate regions, When users reopen and transfer their w
     class RegionalRequest extends Request {
         override readonly cf: { readonly continent: string };
         constructor(continent: string) {
-            super(`${APP_ORIGIN}/mobius-cloud/api/identity/anonymous-users`, { method: "POST" });
+            super(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, { method: "POST" });
             this.cf = { continent };
         }
     }
@@ -142,7 +142,7 @@ test("Given Projects in separate regions, When users reopen and transfer their w
         expect(await session.json()).toMatchObject({ userId: identity.userId });
         expect((await worker.fetch(accountRequest(identity.token, other.projectId), environment)).status).toBe(401);
         const transfer = await worker.fetch(
-            new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/identity/transfers`, {
+            new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/identity/transfers`, {
                 method: "POST",
                 headers: { authorization: `Bearer ${identity.token}` },
             }),
@@ -153,7 +153,7 @@ test("Given Projects in separate regions, When users reopen and transfer their w
         const code = new URLSearchParams(new URL(url).hash.slice(1)).get("code");
         const redeem = () =>
             worker.fetch(
-                new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/transfers/redeem`, {
+                new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
                     method: "POST",
                     headers: { "content-type": "application/json" },
                     body: JSON.stringify({ code }),
@@ -179,7 +179,7 @@ test("Given a first-time visitor, When their workspace and Bot are managed, Then
         userId: identity.userId,
     });
     const bots = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/bots`, {
+        new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bots`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         fixture.environment(),
@@ -192,7 +192,7 @@ test("Given a first-time visitor, When their workspace and Bot are managed, Then
     expect(availableBots).toHaveLength(1);
     const bot = v.parse(v.object({ botId: v.string(), displayName: v.literal("My Bot") }), availableBots[0]);
     const updated = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/bots/${bot.botId}`, {
+        new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bots/${bot.botId}`, {
             method: "PATCH",
             headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
             body: JSON.stringify({
@@ -210,7 +210,7 @@ test("Given a first-time visitor, When their workspace and Bot are managed, Then
         instructions: "Cite the source for every factual claim.",
     });
     const persisted = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/bots/${bot.botId}`, {
+        new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bots/${bot.botId}`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         fixture.environment(),
@@ -221,7 +221,7 @@ test("Given a first-time visitor, When their workspace and Bot are managed, Then
         instructions: "Cite the source for every factual claim.",
     });
     const projectResponse = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/project`, {
+        new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/project`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         fixture.environment(),
@@ -241,7 +241,7 @@ test("Given a first-time visitor, When their workspace and Bot are managed, Then
 test("Given a user with multiple Bots, When they remove one Bot, Then the other remains and the last Bot cannot be removed", async () => {
     const identity = await fixture.createAnonymousUser();
     const environment = fixture.environment();
-    const botsUrl = `${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/bots`;
+    const botsUrl = `${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bots`;
     const headers = { authorization: `Bearer ${identity.token}` };
     const initialResponse = await worker.fetch(new Request(botsUrl, { headers }), environment);
     const initial = v.parse(
@@ -280,24 +280,21 @@ test("Given a user with a Bot on a Project-scoped Platform, When setup checks th
     const environment = fixture.environment();
     const identity = await fixture.createAnonymousUser();
     const listed = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/bots`, {
+        new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bots`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         environment,
     );
     const { bots } = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await listed.json());
     const response = await fetchPublicApplication(
-        new Request(
-            `${APP_ORIGIN}/mobius-cloud/api/chat/projects/${identity.projectId}/bots/${bots[0]?.botId}/workspace`,
-            {
-                method: "POST",
-                headers: {
-                    authorization: `Bearer ${identity.token}`,
-                    "content-type": "application/json",
-                },
-                body: "{}",
+        new Request(`${APP_ORIGIN}/morty/api/chat/projects/${identity.projectId}/bots/${bots[0]?.botId}/workspace`, {
+            method: "POST",
+            headers: {
+                authorization: `Bearer ${identity.token}`,
+                "content-type": "application/json",
             },
-        ),
+            body: "{}",
+        }),
         environment,
     );
     expect(response.status).toBe(200);
@@ -309,7 +306,7 @@ test("Given an anonymous user, When access is transferred, revoked, and exhauste
     const owner = await fixture.createAnonymousUser();
     const createTransfer = async () => {
         const response = await worker.fetch(
-            new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${owner.projectId}/identity/transfers`, {
+            new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/transfers`, {
                 method: "POST",
                 headers: { authorization: `Bearer ${owner.token}` },
             }),
@@ -321,7 +318,7 @@ test("Given an anonymous user, When access is transferred, revoked, and exhauste
     };
     const redeem = (code: string) =>
         worker.fetch(
-            new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/transfers/redeem`, {
+            new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify({ code }),
@@ -337,7 +334,7 @@ test("Given an anonymous user, When access is transferred, revoked, and exhauste
         remoteTokens.push(v.parse(v.object({ token: v.string() }), await response.json()).token);
     }
     const ended = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${owner.projectId}/identity/remote-access`, {
+        new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/remote-access`, {
             method: "DELETE",
             headers: { authorization: `Bearer ${remoteTokens[0]}` },
         }),
@@ -378,7 +375,7 @@ test("Given anonymous and signed-in users with Bots, When pairing tickets are is
         const token = kind === "anonymous" ? identity.token : issuer.createSession(`user_pair_${kind}`, APP_ORIGIN);
         if (kind === "clerk") {
             const bound = await worker.fetch(
-                new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/identity/clerk-binding`, {
+                new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/identity/clerk-binding`, {
                     method: "POST",
                     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
                     body: JSON.stringify({ action: "bind", anonymousToken: identity.token }),
@@ -391,7 +388,7 @@ test("Given anonymous and signed-in users with Bots, When pairing tickets are is
         const session = await worker.fetch(accountRequest(token, identity.projectId), environment);
         const { userId } = v.parse(v.object({ userId: v.string() }), await session.json());
         const botsResponse = await worker.fetch(
-            new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/management/bots`, {
+            new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bots`, {
                 headers: { authorization: `Bearer ${token}` },
             }),
             environment,
@@ -404,7 +401,7 @@ test("Given anonymous and signed-in users with Bots, When pairing tickets are is
 
         if (kind === "anonymous") {
             const foreignIssue = await worker.fetch(
-                new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${foreign.projectId}/identity/pairings`, {
+                new Request(`${APP_ORIGIN}/morty/api/projects/${foreign.projectId}/identity/pairings`, {
                     method: "POST",
                     headers: { authorization: `Bearer ${foreign.token}`, "content-type": "application/json" },
                     body: JSON.stringify({ botId }),
@@ -415,7 +412,7 @@ test("Given anonymous and signed-in users with Bots, When pairing tickets are is
         }
 
         const issued = await fetchPublicApplication(
-            new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${identity.projectId}/identity/pairings`, {
+            new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/identity/pairings`, {
                 method: "POST",
                 headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
                 body: JSON.stringify({ botId }),
@@ -431,7 +428,7 @@ test("Given anonymous and signed-in users with Bots, When pairing tickets are is
 
         const redeem = () =>
             worker.fetch(
-                new Request(`${APP_ORIGIN}/mobius-cloud/api/identity/pairings/redeem`, {
+                new Request(`${APP_ORIGIN}/morty/api/identity/pairings/redeem`, {
                     method: "POST",
                     headers: { "content-type": "application/json" },
                     body: JSON.stringify({ token: pairingToken }),
@@ -453,7 +450,7 @@ test("Given anonymous and signed-in users with Bots, When pairing tickets are is
         expect(local).toMatchObject({ userId, botId, expectedRuntimeId: null });
         expect((await worker.fetch(accountRequest(local.token, local.projectId), environment)).status).toBe(200);
         const runtimePairing = await fetchPublicApplication(
-            new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${local.projectId}/management/runtime-pairings`, {
+            new Request(`${APP_ORIGIN}/morty/api/projects/${local.projectId}/management/runtime-pairings`, {
                 method: "POST",
                 headers: { authorization: `Bearer ${local.token}`, "content-type": "application/json" },
                 body: JSON.stringify({ idempotencyKey: `pairing-${kind}` }),
@@ -464,7 +461,7 @@ test("Given anonymous and signed-in users with Bots, When pairing tickets are is
         const { pairingId } = v.parse(v.object({ pairingId: v.string() }), await runtimePairing.json());
         const pairingStatus = await fetchPublicApplication(
             new Request(
-                `${APP_ORIGIN}/mobius-cloud/api/projects/${local.projectId}/management/runtime-pairings/${pairingId}`,
+                `${APP_ORIGIN}/morty/api/projects/${local.projectId}/management/runtime-pairings/${pairingId}`,
                 { headers: { authorization: `Bearer ${local.token}` } },
             ),
             environment,
@@ -474,9 +471,9 @@ test("Given anonymous and signed-in users with Bots, When pairing tickets are is
     }
 });
 
-test("Given Clerk configuration and sessions, When public and account endpoints authenticate them, Then only valid active identities are disclosed", async () => {
+test("Given Morty configuration and sessions, When public and account endpoints authenticate them, Then only valid active identities are disclosed", async () => {
     const publicConfiguration = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-cloud/api/config`),
+        new Request(`${APP_ORIGIN}/morty/api/config`),
         fixture.baseConfiguration,
     );
     expect(publicConfiguration.status).toBe(200);
@@ -496,7 +493,7 @@ test("Given Clerk configuration and sessions, When public and account endpoints 
     const local = await fixture.createAnonymousUser();
     const clerkToken = issuer.createSession("user_alice", APP_ORIGIN, "active", "org_ignored");
     const bound = await worker.fetch(
-        new Request(`${APP_ORIGIN}/mobius-cloud/api/projects/${local.projectId}/identity/clerk-binding`, {
+        new Request(`${APP_ORIGIN}/morty/api/projects/${local.projectId}/identity/clerk-binding`, {
             body: JSON.stringify({ action: "bind", anonymousToken: local.token }),
             headers: { authorization: `Bearer ${clerkToken}`, "content-type": "application/json" },
             method: "POST",

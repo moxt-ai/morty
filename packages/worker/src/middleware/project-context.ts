@@ -44,27 +44,27 @@ export const slackProjectContext = createMiddleware<{
 
 export async function cloudProjectId(request: Request): Promise<string | null> {
     const path = new URL(request.url).pathname;
-    if (path.startsWith("/mobius-cloud/api/projects/")) {
+    if (path.startsWith("/morty/api/projects/")) {
         const projectId = path.split("/")[4];
         if (projectId === undefined || projectId === "") {
             throw new ManagementError("PROJECT_REQUIRED", "Workspace context is required.", 400);
         }
         return v.parse(platformIdentifier, projectId);
     }
-    if (path.startsWith("/mobius-cloud/api/chat/projects/")) {
+    if (path.startsWith("/morty/api/chat/projects/")) {
         const projectId = path.split("/")[5];
         if (projectId === undefined || projectId === "") {
             throw new ManagementError("PROJECT_REQUIRED", "Workspace context is required.", 400);
         }
         return v.parse(platformIdentifier, projectId);
     }
-    if (path === "/mobius-cloud/api/identity/anonymous-users") {
+    if (path === "/morty/api/identity/anonymous-users") {
         return null;
     }
     const inputKey =
-        path === "/mobius-cloud/api/identity/transfers/redeem"
+        path === "/morty/api/identity/transfers/redeem"
             ? "code"
-            : path === "/mobius-cloud/api/identity/pairings/redeem"
+            : path === "/morty/api/identity/pairings/redeem"
               ? "token"
               : null;
     if (request.method === "POST" && inputKey !== null) {

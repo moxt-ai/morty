@@ -92,8 +92,8 @@ function decodeChunk(value: unknown): { readonly requestId: string; readonly bod
 
 test("Given a public HTTP client, When it requests browser-only APIs, Then Chat does not expose the endpoints", async () => {
     const [cloudResponse, projectResponse, slackResponse] = await Promise.all([
-        runtime.dispatchFetch("https://chat.test/mobius-cloud/api/config"),
-        runtime.dispatchFetch("https://chat.test/mobius-cloud/api/projects/prj_test/management/bots/bot_test"),
+        runtime.dispatchFetch("https://chat.test/morty/api/config"),
+        runtime.dispatchFetch("https://chat.test/morty/api/projects/prj_test/management/bots/bot_test"),
         runtime.dispatchFetch("https://chat.test/mobius-slack/api/slack/bots?projectId=prj_test"),
     ]);
 
@@ -104,7 +104,7 @@ test("Given a public HTTP client, When it requests browser-only APIs, Then Chat 
 });
 
 test("Given the Chat web application, When it uses the WebSocket bridge, Then API requests pass and document requests are rejected", async () => {
-    const response = await runtime.dispatchFetch("https://chat.test/mobius-cloud/ws", {
+    const response = await runtime.dispatchFetch("https://chat.test/morty/ws", {
         headers: { Origin: "https://chat.test", Upgrade: "websocket" },
     });
     expect(response.status).toBe(101);
@@ -119,7 +119,7 @@ test("Given the Chat web application, When it uses the WebSocket bridge, Then AP
             kind: "request",
             requestId: "request-1",
             method: "GET",
-            path: "/mobius-cloud/api/config",
+            path: "/morty/api/config",
             headers: [],
             body: null,
         }),
