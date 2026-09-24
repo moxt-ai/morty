@@ -8,5 +8,4 @@ const fetch = withInstructionDocumentCache(fetchPublicApplication);
 
 export default {
     fetch,
-    queue: () => Promise.resolve(),
 } satisfies ExportedHandler<CloudBindings, unknown>;
