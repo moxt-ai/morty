@@ -35,6 +35,7 @@ import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { createSessionActiveTurn, type SessionActiveTurn } from "./session-active-turn.ts";
 import {
+    continueSessionWorkAfterUserMessage,
     type SessionActivityState,
     startSessionWork,
     transitionSessionActivity,
@@ -1149,17 +1150,14 @@ export function createSessionPaneModel(options: {
                 const steered = await messageQueue.getState().steerMessage(commandId, signal);
                 signal.throwIfAborted();
                 if (steered !== null) {
-                    set((current) => ({
-                        messages: [
-                            ...current.messages,
-                            {
-                                id: `${steered.commandId}-user`,
-                                role: "user",
-                                text: steered.summary,
-                                contents: promptImageContents(steered.images),
-                            },
-                        ],
-                    }));
+                    set((current) =>
+                        continueSessionWorkAfterUserMessage(current, {
+                            id: `${steered.commandId}-user`,
+                            role: "user",
+                            text: steered.summary,
+                            contents: promptImageContents(steered.images),
+                        }),
+                    );
                 }
             },
             deleteQueued: async (commandId, signal) => {

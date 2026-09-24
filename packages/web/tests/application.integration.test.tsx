@@ -276,6 +276,94 @@ test("Given a paired Bot with cached agent settings, When a user refreshes and f
     await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
 });
 
+test("Given an active reply, When a queued message steers it, Then subsequent agent output appears after the steering message", {
+    timeout: 30_000,
+}, async () => {
+    const continueReply = Promise.withResolvers<void>();
+    const finishTurn = Promise.withResolvers<void>();
+    const created = await createTestApp({
+        agentBehavior: {
+            steering: true,
+            responseParts: () => ["Before steering.", "After steering."],
+            afterFirstDelta: async (_command, signal) => {
+                await Promise.race([
+                    continueReply.promise,
+                    new Promise<never>((_resolve, reject) => {
+                        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+                    }),
+                ]);
+            },
+            afterLastDelta: async (_command, signal) => {
+                await Promise.race([
+                    finishTurn.promise,
+                    new Promise<never>((_resolve, reject) => {
+                        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+                    }),
+                ]);
+            },
+        },
+        connectAgent: true,
+    });
+    const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
+    await created.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await created.queryElementByTestId(dataTestId.messageComposer);
+
+    await sendPrompt(created, composer as HTMLTextAreaElement, "Start a long task");
+    const before = await Promise.race([
+        created.queryElementByTestId(
+            dataTestId.agentResponse,
+            (element) => element.textContent?.includes("Before steering.") === true,
+        ),
+        failure,
+    ]);
+    const activeComposer = await created.queryElementByTestId(dataTestId.messageComposer);
+    await created.user.click(activeComposer);
+    await created.user.type(activeComposer, "Use the revised requirement");
+    await created.user.click(
+        await created.queryElementByTestId(
+            dataTestId.sendMessage,
+            (element) => element.getAttribute("aria-label") === "Send message",
+        ),
+    );
+    const queued = await created.queryElementByTestId(dataTestId.queuedMessage);
+    await created.user.click(getByLabelText(queued, "Steer queued message: Use the revised requirement"));
+    const steeringMessage = await vi.waitFor(
+        () => {
+            const message = created
+                .elementsByTestId(dataTestId.userMessage)
+                .find((element) => element.textContent?.includes("Use the revised requirement") === true);
+            if (message === undefined) {
+                throw new Error(`The steering message is unavailable: ${document.body.textContent}`);
+            }
+            return message;
+        },
+        { timeout: 12_000 },
+    );
+    continueReply.resolve();
+    const after = await Promise.race([
+        vi.waitFor(
+            () => {
+                const response = created
+                    .elementsByTestId(dataTestId.agentResponse)
+                    .find((element) => element.textContent?.includes("After steering.") === true);
+                if (response === undefined) {
+                    throw new Error(`The steered response is unavailable: ${document.body.textContent}`);
+                }
+                return response;
+            },
+            { timeout: 12_000 },
+        ),
+        failure,
+    ]);
+
+    expect(before.compareDocumentPosition(steeringMessage) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(steeringMessage.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    finishTurn.resolve();
+});
+
 test("Given a tool finishes during an active conversation, When its terminal activity arrives, Then the tool shows as succeeded", {
     timeout: 30_000,
 }, async () => {
