@@ -1,7 +1,11 @@
-import type { AgentMessageDeltaEvent, NativeSessionResult, SessionStartedEvent } from "@moxt-ai/mobius-protocol";
+import {
+    ACTIVE_TURN_TEXT_LIMIT,
+    type AgentMessageDeltaEvent,
+    type NativeSessionResult,
+    type SessionStartedEvent,
+} from "@moxt-ai/mobius-protocol";
 import { createStore } from "zustand/vanilla";
 
-const LIVE_TEXT_LIMIT = 100_000;
 type ActiveTurnSnapshot = Extract<NativeSessionResult, { readonly action: "active-turn" }>["turn"];
 
 type LiveStream =
@@ -37,7 +41,10 @@ function appendText(
     delta: string,
 ): Pick<Extract<TurnState, { readonly kind: "running" }>, "text" | "truncated"> {
     const text = current.text + delta;
-    return { text: text.slice(-LIVE_TEXT_LIMIT), truncated: current.truncated || text.length > LIVE_TEXT_LIMIT };
+    return {
+        text: text.slice(-ACTIVE_TURN_TEXT_LIMIT),
+        truncated: current.truncated || text.length > ACTIVE_TURN_TEXT_LIMIT,
+    };
 }
 
 export const createLocalLiveTurnStore = () =>

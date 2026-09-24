@@ -244,7 +244,7 @@ async function connectFakeRuntime(
     projectId: string,
     options: {
         readonly pauseHistory?: "all" | string;
-        readonly pausePrompt?: "before-delta" | "after-delta";
+        readonly pausePrompt?: "before-delta" | "after-delta" | "after-last-delta";
         readonly truncateHistory?: boolean;
     } = {},
 ) {
@@ -283,10 +283,17 @@ async function connectFakeRuntime(
                 await promptGate.wait(signal);
             }
         },
+        afterLastDelta: async (_command, signal) => {
+            if (options.pausePrompt === "after-last-delta") {
+                await promptGate.wait(signal);
+            }
+        },
         responseParts: (command, turn) =>
-            command.prompt.includes("after first delta")
-                ? ["Partial reply", " and more"]
-                : [`Claude Code turn ${turn.toString()}: ${command.prompt}`],
+            command.prompt === "hold after large output"
+                ? [...Array.from({ length: 20 }, () => "x".repeat(10_000)), "END"]
+                : command.prompt.includes("after first delta")
+                  ? ["Partial reply", " and more"]
+                  : [`Claude Code turn ${turn.toString()}: ${command.prompt}`],
         onPromptCompleted: (command, response) => {
             const previous = sessions.get(command.sessionId) ?? [];
             sessions.set(command.sessionId, [
@@ -650,6 +657,67 @@ test("Given an active Turn, When the browser reopens the Bot Session, Then it re
         if (firstOpen) {
             await first.close();
         }
+        await runtime[Symbol.asyncDispose]();
+    }
+}, 30_000);
+
+test("Given a long active Turn, When another browser joins, Then both show the full output from Runtime memory", async () => {
+    const identity = await createIdentity();
+    const cloud = activeFixture();
+    const bots = await chatRequest(identity, `projects/${identity.projectId}/management/bots`);
+    expect(bots.status).toBe(200);
+    const listing = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await bots.json());
+    const botId = listing.bots[0]?.botId;
+    if (botId === undefined) {
+        throw new Error("The Project has no Bot.");
+    }
+    const runtime = await connectFakeRuntime(cloud, identity.projectId, { pausePrompt: "after-last-delta" });
+    const configured = await chatRequest(identity, `chat/projects/${identity.projectId}/bots/${botId}/setup`, {
+        runtimeId: runtime.runtimeId,
+        agentRef: "claude",
+    });
+    expect(configured.status).toBe(202);
+    const sessionId = await importAgentSession(cloud, identity, botId, runtime, [
+        { role: "user", text: "Earlier prompt" },
+        { role: "assistant", text: "Earlier reply" },
+    ]);
+    const first = await renderChat(identity, sessionId);
+    let second: Awaited<ReturnType<typeof renderChat>> | null = null;
+    try {
+        await waitForTextIn(first.container, "Earlier reply");
+        const draft = first.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]');
+        if (draft === null) {
+            throw new Error("The first message input was not shown.");
+        }
+        await act(async () => {
+            const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+            setter?.call(draft, "hold after large output");
+            draft.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        const send = first.container.querySelector<HTMLButtonElement>('button[aria-label="Send message"]');
+        if (send === null || send.disabled) {
+            throw new Error("The first view cannot send a prompt.");
+        }
+        await act(async () => send.click());
+        await runtime.promptGate.entered;
+        const output = `${"x".repeat(200_000)}END`;
+        await waitForTextIn(first.container, "END");
+        expect(
+            first.container
+                .querySelector('article[aria-label="Current Agent response"]')
+                ?.textContent?.includes(output),
+        ).toBe(true);
+        second = await renderChat(identity, sessionId);
+        await waitForTextIn(second.container, output);
+        for (const view of [first, second]) {
+            const response = view.container.querySelector('article[aria-label="Current Agent response"]');
+            expect(response?.textContent).toContain(output);
+            expect(response?.textContent).not.toContain("Earlier live output is unavailable");
+        }
+    } finally {
+        runtime.promptGate.release();
+        await first.close();
+        await second?.close();
         await runtime[Symbol.asyncDispose]();
     }
 }, 30_000);
