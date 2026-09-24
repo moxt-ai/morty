@@ -1,8 +1,7 @@
-import type { Context } from "hono";
 import { Hono } from "hono";
 import * as v from "valibot";
 import { bodyParser } from "../../../../middleware/body-parser.ts";
-import { tenantContext } from "../../service/identity/tenant-context";
+import { type AuthenticatedBotVariables, authenticatedBot } from "../authenticated-bot.ts";
 import type { SlackHttpEnvironment } from "../slack-http-environment";
 
 const messageBodySchema = v.pipe(
@@ -49,22 +48,15 @@ const threadMessagesQuerySchema = v.pipe(
 );
 
 export function createSlackBotToolRoutes() {
-    const authenticateTools = async (context: Context<SlackHttpEnvironment>) => {
-        const { identities, botTools } = context.env.services;
-        const principal = await identities.authenticateBot(
-            context.req.header("authorization") ?? null,
-            context.req.raw.signal,
-        );
-        const tenant = tenantContext(principal.tenantId);
-        return { principal, tenant, tools: botTools };
-    };
-
-    return new Hono<SlackHttpEnvironment>()
+    return new Hono<SlackHttpEnvironment & { readonly Variables: AuthenticatedBotVariables }>()
+        .use("*", authenticatedBot)
         .post(
             "/messages",
             bodyParser<SlackHttpEnvironment, typeof messageBodySchema>(messageBodySchema),
             async (context) => {
-                const { principal, tenant, tools } = await authenticateTools(context);
+                const { botTools: tools } = context.env.services;
+                const principal = context.get("principal");
+                const tenant = context.get("tenant");
                 const input = context.req.valid("json");
                 return context.json(await tools.sendMessage(tenant, principal, input, context.req.raw.signal));
             },
@@ -73,7 +65,9 @@ export function createSlackBotToolRoutes() {
             "/direct-messages/slack-user",
             bodyParser<SlackHttpEnvironment, typeof directMessageBodySchema>(directMessageBodySchema),
             async (context) => {
-                const { principal, tenant, tools } = await authenticateTools(context);
+                const { botTools: tools } = context.env.services;
+                const principal = context.get("principal");
+                const tenant = context.get("tenant");
                 const input = context.req.valid("json");
                 return context.json(
                     await tools.sendDirectMessageToSlackUser(
@@ -87,13 +81,17 @@ export function createSlackBotToolRoutes() {
             },
         )
         .get("/channels", async (context) => {
-            const { principal, tenant, tools } = await authenticateTools(context);
+            const { botTools: tools } = context.env.services;
+            const principal = context.get("principal");
+            const tenant = context.get("tenant");
             return context.json({
                 channels: await tools.listChannels(tenant, principal, context.req.raw.signal),
             });
         })
         .get("/channel/messages", async (context) => {
-            const { principal, tenant, tools } = await authenticateTools(context);
+            const { botTools: tools } = context.env.services;
+            const principal = context.get("principal");
+            const tenant = context.get("tenant");
             const query = v.parse(channelMessagesQuerySchema, context.req.query());
             return context.json({
                 channelId: query.channelId,
@@ -107,7 +105,9 @@ export function createSlackBotToolRoutes() {
             });
         })
         .get("/thread/messages", async (context) => {
-            const { principal, tenant, tools } = await authenticateTools(context);
+            const { botTools: tools } = context.env.services;
+            const principal = context.get("principal");
+            const tenant = context.get("tenant");
             const query = v.parse(threadMessagesQuerySchema, context.req.query());
             return context.json({
                 channelId: query.channelId,
@@ -125,7 +125,9 @@ export function createSlackBotToolRoutes() {
             "/reactions",
             bodyParser<SlackHttpEnvironment, typeof reactionBodySchema>(reactionBodySchema),
             async (context) => {
-                const { principal, tenant, tools } = await authenticateTools(context);
+                const { botTools: tools } = context.env.services;
+                const principal = context.get("principal");
+                const tenant = context.get("tenant");
                 const input = context.req.valid("json");
                 await tools.addReaction(
                     tenant,
@@ -142,7 +144,9 @@ export function createSlackBotToolRoutes() {
             "/reactions",
             bodyParser<SlackHttpEnvironment, typeof reactionBodySchema>(reactionBodySchema),
             async (context) => {
-                const { principal, tenant, tools } = await authenticateTools(context);
+                const { botTools: tools } = context.env.services;
+                const principal = context.get("principal");
+                const tenant = context.get("tenant");
                 const input = context.req.valid("json");
                 await tools.removeReaction(
                     tenant,

@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
+import { decodeIdentifier } from "@moxt-ai/mobius-protocol";
 import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
 import QRCode from "qrcode";
@@ -170,7 +171,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return value;
     }
 
-    const identifier = (value: unknown) => text(value, /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u);
+    const identifier = (value: unknown) => {
+        try {
+            return decodeIdentifier(value);
+        } catch {
+            return fail("INVALID_RESPONSE");
+        }
+    };
     const credential = (value: unknown) => text(value, /^mobius_anon_v2_[A-Za-z0-9_-]{43}$/u);
 
     function origin(value: unknown) {

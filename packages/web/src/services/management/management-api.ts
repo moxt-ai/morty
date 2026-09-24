@@ -1,6 +1,7 @@
+import { decodeIdentifier, type Identifier, isIdentifier } from "@moxt-ai/mobius-protocol";
 import * as v from "valibot";
 
-const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
+const identifier = v.custom<Identifier>(isIdentifier);
 const botSchema = v.pipe(
     v.object({ botId: identifier, displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(80)) }),
     v.readonly(),
@@ -34,12 +35,12 @@ export class ManagementApi {
     readonly #fetchRequest: (request: Request) => Promise<Response>;
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly #origin: string;
-    readonly #projectId: string;
+    readonly #projectId: Identifier;
     constructor(options: ManagementApiOptions) {
         this.#fetchRequest = options.fetchRequest;
         this.#getToken = options.getToken;
         this.#origin = options.origin;
-        this.#projectId = v.parse(identifier, options.projectId);
+        this.#projectId = decodeIdentifier(options.projectId);
     }
 
     readonly listBots = async (signal: AbortSignal): Promise<readonly ManagedBot[]> =>
@@ -59,13 +60,13 @@ export class ManagementApi {
         v.parse(botSchema, await this.#request("/bots", "POST", { displayName }, signal));
 
     readonly deleteBot = async (botId: string, signal: AbortSignal): Promise<void> => {
-        await this.#request(`/bots/${encodeURIComponent(v.parse(identifier, botId))}`, "DELETE", undefined, signal);
+        await this.#request(`/bots/${encodeURIComponent(decodeIdentifier(botId))}`, "DELETE", undefined, signal);
     };
 
     readonly readBot = async (botId: string, signal: AbortSignal): Promise<ManagedBotDetail> =>
         v.parse(
             managedBotDetailSchema,
-            await this.#request(`/bots/${encodeURIComponent(v.parse(identifier, botId))}`, "GET", undefined, signal),
+            await this.#request(`/bots/${encodeURIComponent(decodeIdentifier(botId))}`, "GET", undefined, signal),
         );
 
     readonly updateBot = async (
@@ -75,7 +76,7 @@ export class ManagementApi {
     ): Promise<ManagedBotDetail> =>
         v.parse(
             managedBotDetailSchema,
-            await this.#request(`/bots/${encodeURIComponent(v.parse(identifier, botId))}`, "PATCH", input, signal),
+            await this.#request(`/bots/${encodeURIComponent(decodeIdentifier(botId))}`, "PATCH", input, signal),
         );
 
     readonly #request = async (

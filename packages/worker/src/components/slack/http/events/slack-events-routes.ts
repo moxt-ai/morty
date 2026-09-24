@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { RequestError } from "../../../../infra/request-error.ts";
 import type { SlackHttpEnvironment } from "../slack-http-environment";
 
 export function createSlackEventsRoutes() {
@@ -19,15 +20,7 @@ export function createSlackEventsRoutes() {
             case "challenge":
                 return context.json({ challenge: result.challenge });
             case "rejected":
-                return context.json(
-                    {
-                        error: {
-                            code: result.code,
-                            message: result.message,
-                        },
-                    },
-                    result.status,
-                );
+                throw new RequestError(result.code, result.message, result.status);
         }
     });
 }

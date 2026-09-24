@@ -1,3 +1,4 @@
+import { decodeIdentifier } from "@moxt-ai/mobius-protocol";
 import {
     centralLocalStorage,
     type StoredSessionActiveTurn,
@@ -14,9 +15,13 @@ type SessionActiveTurnEvent =
 function transitionSessionActiveTurn(state: SessionActiveTurn, event: SessionActiveTurnEvent): SessionActiveTurn {
     switch (event.kind) {
         case "submission-started":
-            return { commandId: event.commandId, kind: "submitting" };
+            return { commandId: decodeIdentifier(event.commandId), kind: "submitting" };
         case "submission-accepted":
-            return { commandId: event.commandId, kind: "accepted", turnId: event.turnId };
+            return {
+                commandId: decodeIdentifier(event.commandId),
+                kind: "accepted",
+                turnId: decodeIdentifier(event.turnId),
+            };
         case "turn-cleared":
             return state.kind !== "idle" && state.commandId === event.commandId ? { kind: "idle" } : state;
     }

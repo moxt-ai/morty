@@ -4,7 +4,7 @@ import { json } from "../infra/http.ts";
 import { isHttpError } from "../infra/http-error.ts";
 
 interface ErrorLogger {
-    readonly error: (value: unknown, message: string) => void;
+    readonly error: (value: Readonly<Record<string, unknown>>, message: string) => void;
 }
 
 export function rethrowHttpError(error: Error): never {

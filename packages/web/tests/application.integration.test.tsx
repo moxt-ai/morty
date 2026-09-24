@@ -331,6 +331,12 @@ test("Given an unpaired workspace, When a user manages Bots, Then pairing and th
             ]),
     );
     expect(landing.textContent).toContain("My Bot");
+    const conversationSetup = await act(
+        async () => await waitForElement(`[data-testid="${dataTestId.conversationSetupRequired}"]`),
+    );
+    expect(conversationSetup.textContent).toContain("No conversations yet");
+    expect(conversationSetup.textContent).toContain("Connect Bot");
+    expect(conversationSetup.getAttribute("role")).not.toBe("alert");
 
     const pairing = await act(async () => {
         connection.click();

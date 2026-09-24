@@ -1,3 +1,4 @@
+import { isIdentifier } from "@moxt-ai/mobius-protocol";
 import type { MobiusMessagePage } from "@moxt-ai/mobius-sdk";
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
@@ -19,10 +20,7 @@ export function AttemptFailure({
             ? attempt.message
             : "The agent could not complete this message.";
     const code = "code" in attempt && typeof attempt.code === "string" ? attempt.code : "";
-    const command =
-        code === "binding_not_approved" && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(botId)
-            ? `mobius bot approve --bot ${botId}`
-            : "";
+    const command = code === "binding_not_approved" && isIdentifier(botId) ? `mobius bot approve --bot ${botId}` : "";
     return (
         <div
             role="alert"

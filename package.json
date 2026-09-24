@@ -11,6 +11,7 @@
     "scripts": {
         "dev": "vite",
         "local-dev": "node scripts/local-dev.cjs",
+        "sync:submodules": "node scripts/sync-submodules.cjs",
         "build": "pnpm build:setup && vite build",
         "build:setup": "pnpm --filter @moxt-ai/morty-setup build",
         "publish:web-assets": "bash scripts/publish-web-assets.sh",

@@ -1,3 +1,4 @@
+import type { HttpError } from "../../../../infra/http-error.ts";
 import type { SlackTokenService } from "../identity/slack-token-service";
 import type { TenantContext } from "../identity/tenant-context";
 
@@ -39,18 +40,14 @@ export interface SlackOAuthInstallation {
     readonly teamName: string | null;
 }
 
-import type { ErrorToResponse } from "../../infra/util/error-to-response";
 import type { SlackEventStorage } from "../../storage/slack-event-storage";
 import type { ExternalIdentityService } from "../identity/external-identity-service";
 
-class SlackInstallationError extends Error implements ErrorToResponse {
-    readonly toResponse = (): Response =>
-        Response.json(
-            { error: { code: this.code, message: this.message } },
-            {
-                status: this.code === "SLACK_WORKSPACE_ALREADY_LINKED" ? 409 : 400,
-            },
-        );
+class SlackInstallationError extends Error implements HttpError {
+    readonly toHttpJson: HttpError["toHttpJson"] = () => ({
+        body: { error: { code: this.code, message: this.message } },
+        status: this.code === "SLACK_WORKSPACE_ALREADY_LINKED" ? 409 : 400,
+    });
     readonly code: "SLACK_APP_NOT_CONFIGURED" | "SLACK_WORKSPACE_ALREADY_LINKED";
 
     constructor(code: "SLACK_APP_NOT_CONFIGURED" | "SLACK_WORKSPACE_ALREADY_LINKED", message: string) {

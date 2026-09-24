@@ -1,3 +1,4 @@
+import type { HttpError } from "../../../../infra/http-error.ts";
 import type { BotSlackInstallation } from "../../entity/installation";
 import type { TenantContext } from "../identity/tenant-context";
 
@@ -16,13 +17,14 @@ export interface SlackMessage {
     readonly userId: string | null;
 }
 
-import type { ErrorToResponse } from "../../infra/util/error-to-response";
 import type { SlackEventStorage } from "../../storage/slack-event-storage";
 import type { ExternalIdentityService } from "../identity/external-identity-service";
 
-class SlackBotToolError extends Error implements ErrorToResponse {
-    readonly toResponse = (): Response =>
-        Response.json({ error: { code: this.code, message: this.message } }, { status: 400 });
+class SlackBotToolError extends Error implements HttpError {
+    readonly toHttpJson: HttpError["toHttpJson"] = () => ({
+        body: { error: { code: this.code, message: this.message } },
+        status: 400,
+    });
     readonly code: "SLACK_INSTALLATION_NOT_FOUND";
 
     constructor(code: "SLACK_INSTALLATION_NOT_FOUND", message: string) {

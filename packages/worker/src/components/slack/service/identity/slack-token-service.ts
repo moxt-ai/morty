@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import type { HttpError } from "../../../../infra/http-error.ts";
 
 const TOKEN_TTL_MILLISECONDS = 10 * 60 * 1_000;
 const encoder = new TextEncoder();
@@ -28,11 +29,11 @@ const tokenEnvelopeSchema = v.pipe(
 
 export type SlackOAuthState = v.InferOutput<typeof oauthStateSchema>;
 
-import type { ErrorToResponse } from "../../infra/util/error-to-response";
-
-class SlackTokenError extends Error implements ErrorToResponse {
-    readonly toResponse = (): Response =>
-        Response.json({ error: { code: this.code, message: this.message } }, { status: 400 });
+class SlackTokenError extends Error implements HttpError {
+    readonly toHttpJson: HttpError["toHttpJson"] = () => ({
+        body: { error: { code: this.code, message: this.message } },
+        status: 400,
+    });
     readonly code: "INVALID_SLACK_TOKEN" | "SLACK_TOKEN_EXPIRED";
 
     constructor(code: "INVALID_SLACK_TOKEN" | "SLACK_TOKEN_EXPIRED", message: string, options?: ErrorOptions) {

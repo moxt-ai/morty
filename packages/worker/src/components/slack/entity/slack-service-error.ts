@@ -1,4 +1,6 @@
-export class SlackServiceError extends Error {
+import type { HttpError } from "../../../infra/http-error.ts";
+
+export class SlackServiceError extends Error implements HttpError {
     readonly code: string;
     constructor(code: string, message: string, options?: ErrorOptions) {
         super(message, options);
@@ -6,9 +8,8 @@ export class SlackServiceError extends Error {
         this.name = "SlackServiceError";
     }
 
-    readonly toResponse = (): Response =>
-        Response.json(
-            { error: { code: this.code, message: this.message } },
-            { status: this.code === "CHAT_BOT_BINDING_NOT_CONFIGURED" ? 400 : 502 },
-        );
+    readonly toHttpJson: HttpError["toHttpJson"] = () => ({
+        body: { error: { code: this.code, message: this.message } },
+        status: this.code === "CHAT_BOT_BINDING_NOT_CONFIGURED" ? 400 : 502,
+    });
 }
