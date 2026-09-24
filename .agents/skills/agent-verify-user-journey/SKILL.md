@@ -27,7 +27,7 @@ Resolve these inputs before starting:
 | --- | --- | --- |
 | Harness | `codex` | Use the harness the user names; otherwise use `codex`. |
 | Model | `gpt 5.6 terra` | Use the model the user names; otherwise use `gpt 5.6 terra`. |
-| Browser | session-attached browser, then `agent-browser` CLI | Honor a user-specified browser first. Otherwise use the browser attached to the current session when one exists; fall back to an installed `agent-browser` CLI. |
+| Browser | session-attached browser, then headed `agent-browser` CLI | Honor a user-specified browser first. Otherwise use the browser attached to the current session when one exists; fall back to an installed `agent-browser` CLI running in the foreground. |
 | App | to-do-list web app | Preserve any app or journey requirements supplied by the user. |
 
 Treat names in example requests as parameters, not fixed requirements. Do not
@@ -154,8 +154,9 @@ result without changing its source.
 
 Use browser precedence exactly as resolved above. For an attached browser, use
 an explicit tab ID for every operation. For `agent-browser`, load its installed
-core skill/help first, create a dedicated named session, and reuse that session
-for every command.
+core skill/help first, create a dedicated named session, launch its first `open`
+command with `--headed`, and reuse that same visible foreground session for
+every command. Do not run the verification journey in a headless browser.
 
 Open the generated app's loopback URL and exercise it only through visible
 controls, labels, and text. Do not call app internals, mutate storage directly,
