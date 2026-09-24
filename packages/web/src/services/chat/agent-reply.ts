@@ -78,7 +78,7 @@ export function describeAgentReply(
     const phase = replyPhase(attempt, active);
     const entries = activities.flatMap((activity): readonly ThinkingEntry[] => {
         const status = stepsActive && activity.status === "running" ? "streaming" : "recorded";
-        if (activity.activityType === "reasoning") {
+        if (activity.activityType === "reasoning" || activity.activityType === "progress") {
             return activity.output.length === 0
                 ? []
                 : [{ id: activity.activityId, kind: "reasoning", status, text: activity.output }];

@@ -182,6 +182,88 @@ test("Given a conversation is working, When a user starts a new conversation, Th
     releaseTurn.resolve();
 });
 
+test("Given a completed conversation was locally recorded as working, When the user reopens it without an active Runtime turn, Then the conversation is idle", {
+    timeout: 30_000,
+}, async () => {
+    const releaseTurn = Promise.withResolvers<void>();
+    const turnReleased = Promise.withResolvers<void>();
+    let completed = false;
+    const prompt = "Finish while this conversation is closed";
+    const answer = "The task completed while the conversation was closed.";
+    const created = await createTestApp({
+        agentBehavior: {
+            afterLastDelta: async (_command, signal) => {
+                await Promise.race([
+                    releaseTurn.promise,
+                    new Promise<never>((_resolve, reject) =>
+                        signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+                    ),
+                ]);
+                completed = true;
+                turnReleased.resolve();
+            },
+            loadNativeHistory: async (_sessionId, signal) => {
+                signal.throwIfAborted();
+                return {
+                    coveredCommandIds: [],
+                    coveredMessageIds: [],
+                    messages: completed
+                        ? [
+                              { role: "user", text: prompt },
+                              { activities: [], content: [], role: "assistant", text: answer },
+                          ]
+                        : [],
+                    status: "available",
+                    truncated: false,
+                };
+            },
+            responseParts: () => [answer],
+        },
+        connectAgent: true,
+    });
+    const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
+    await created.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await created.queryElementByTestId(dataTestId.messageComposer);
+
+    await sendPrompt(created, composer as HTMLTextAreaElement, prompt);
+    await Promise.race([
+        created.queryElementByTestId(
+            dataTestId.agentResponse,
+            (element) => element.textContent?.includes(answer) === true,
+        ),
+        failure,
+    ]);
+    await created.user.click(await created.queryElementByTestId(dataTestId.newConversation));
+    releaseTurn.resolve();
+    await turnReleased.promise;
+    const completedConversation = await vi.waitFor(() => {
+        const conversation = created
+            .elementsByTestId(dataTestId.managedConversation)
+            .find((candidate) => candidate.textContent?.includes(prompt) === true);
+        if (conversation === undefined) {
+            throw new Error(`The completed conversation is unavailable: ${document.body.textContent}`);
+        }
+        return conversation;
+    });
+    await created.user.click(completedConversation);
+    await vi.waitFor(() => {
+        expect(
+            created
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes(answer) === true),
+        ).toBe(true);
+    });
+
+    await vi.waitFor(() => {
+        expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull();
+        expect(created.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
+        expect(created.optionalElementByTestId(dataTestId.agentReplyStatus)).toBeNull();
+    });
+});
+
 test("Given an unpaired workspace, When a user manages Bots, Then pairing and the surviving Bot remain visible", {
     timeout: 30_000,
 }, async () => {
@@ -387,6 +469,46 @@ test("Given an active reply, When a queued message steers it, Then subsequent ag
     expect(before.compareDocumentPosition(steeringMessage) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     expect(steeringMessage.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     finishTurn.resolve();
+});
+
+test("Given Codex narrates visible progress, When the activity arrives, Then it appears in the Thinking block", {
+    timeout: 30_000,
+}, async () => {
+    const progress = "Inspecting the repository trust boundary before summarizing it.";
+    const releaseTurn = Promise.withResolvers<void>();
+    const created = await createTestApp({
+        agentBehavior: {
+            afterLastDelta: async (_command, signal) => {
+                await Promise.race([
+                    releaseTurn.promise,
+                    new Promise<never>((_resolve, reject) =>
+                        signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+                    ),
+                ]);
+            },
+            progressText: () => progress,
+        },
+        connectAgent: true,
+    });
+    const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
+    await created.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await created.queryElementByTestId(dataTestId.messageComposer);
+
+    await sendPrompt(created, composer as HTMLTextAreaElement, "Analyze the repository");
+    const thinking = await Promise.race([
+        created.queryElementByTestId(
+            dataTestId.agentReasoning,
+            (element) => element.textContent?.includes(progress) === true,
+        ),
+        failure,
+    ]);
+
+    expect(thinking.textContent).toContain("Thinking");
+    expect(thinking.textContent).toContain(progress);
+    releaseTurn.resolve();
 });
 
 test("Given a tool finishes during an active conversation, When its terminal activity arrives, Then the tool shows as succeeded", {
