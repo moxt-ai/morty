@@ -166,6 +166,17 @@ export class ChatService {
         return bot.configuration;
     };
 
+    readonly #requireAvailableAgent = async (scope: ChatScope, runtimeId: string, agentRef: string) => {
+        const agents = await this.#platform.chatAgents(scope.projectId, scope.signal);
+        if (!agents.some((agent) => agent.runtimeId === runtimeId && agent.agentRef === agentRef && agent.online)) {
+            throw new PlatformProjectError(
+                "AGENT_UNAVAILABLE",
+                "Choose an available agent on your connected Runtime.",
+                409,
+            );
+        }
+    };
+
     readonly managedSessions = async (scope: ChatScope) => {
         const runtime = await this.localRuntime(scope);
         const owned = await this.#chatSessions.list(scope.projectId, scope.userId, scope.botId, scope.signal);
@@ -200,6 +211,7 @@ export class ChatService {
         if (bot?.configuration === null || bot === null) {
             throw new PlatformProjectError("AGENT_REQUIRED", "Choose a connected harness.", 409);
         }
+        await this.#requireAvailableAgent(scope, bot.configuration.runtimeId, agentRef);
         const discovered = await this.#platform.discoverChatAgentSettings(
             scope.projectId,
             { runtimeId: bot.configuration.runtimeId, agentRef, workspaceRef: "default" },
@@ -226,6 +238,9 @@ export class ChatService {
         if (runtime === null) {
             throw new PlatformProjectError("AGENT_REQUIRED", "Connect your local agent to start chatting.", 409);
         }
+        if ("conversationKey" in input) {
+            await this.#requireAvailableAgent(scope, runtime.runtimeId, input.agentRef);
+        }
         const access = await timing.measure("session", "Open Chat Session", async () =>
             this.#platform.openChatSession(
                 scope.projectId,
@@ -246,14 +261,14 @@ export class ChatService {
                                   scope.signal,
                               )
                           ).find((session) => session.sessionId === input.conversationId);
-                          if (metadata === undefined || metadata.agentId !== runtime.agentRef) {
+                          if (metadata === undefined) {
                               throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
                           }
                           return {
                               kind: "existing" as const,
                               conversationId: input.conversationId,
                               runtimeId: runtime.runtimeId,
-                              agentRef: runtime.agentRef,
+                              agentRef: metadata.agentId,
                               workspaceRef: metadata.directoryId,
                               additionalDirectoryIds: metadata.additionalDirectories.map(
                                   (directory) => directory.directoryId,
@@ -527,18 +542,7 @@ export class ChatService {
         if (current.configuration !== null && current.configuration.runtimeId !== input.runtimeId) {
             throw new PlatformProjectError("BOT_RUNTIME_FIXED", "Create a new Bot to pair a different Runtime.", 409);
         }
-        const agents = await this.#platform.chatAgents(scope.projectId, scope.signal);
-        if (
-            !agents.some(
-                (agent) => agent.runtimeId === input.runtimeId && agent.agentRef === input.agentRef && agent.online,
-            )
-        ) {
-            throw new PlatformProjectError(
-                "AGENT_UNAVAILABLE",
-                "Choose an available agent on your connected Runtime.",
-                409,
-            );
-        }
+        await this.#requireAvailableAgent(scope, input.runtimeId, input.agentRef);
         await this.#platform.discoverChatAgentSettings(
             scope.projectId,
             { ...input, workspaceRef: "default" },
@@ -547,7 +551,7 @@ export class ChatService {
         const result = await this.#managedBots.configureBot(
             scope.userId,
             scope.botId,
-            { runtimeId: decodeIdentifier(input.runtimeId), agentRef: decodeIdentifier(input.agentRef) },
+            { runtimeId: decodeIdentifier(input.runtimeId) },
             Date.now(),
             scope.signal,
         );
@@ -558,9 +562,6 @@ export class ChatService {
                     "Create a new Bot to pair a different Runtime.",
                     409,
                 );
-            }
-            if (result === "agent-fixed") {
-                throw new PlatformProjectError("BOT_AGENT_FIXED", "Create a new Bot to use a different Agent.", 409);
             }
             throw new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);
         }

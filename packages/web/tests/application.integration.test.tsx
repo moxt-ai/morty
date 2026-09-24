@@ -264,6 +264,81 @@ test("Given a completed conversation was locally recorded as working, When the u
     });
 });
 
+test("Given a Bot connected to a multi-agent Runtime, When the user reloads an OpenCode conversation, Then its native history remains visible", {
+    timeout: 30_000,
+}, async () => {
+    const prompt = "Restore this OpenCode conversation";
+    const answer = "This OpenCode conversation was restored.";
+    let completed = false;
+    const created = await createTestApp({
+        agentBehavior: {
+            agentId: "codex",
+            additionalAgents: [{ id: "opencode", name: "OpenCode" }],
+            loadNativeHistory: async (_sessionId, signal) => {
+                signal.throwIfAborted();
+                return {
+                    coveredCommandIds: [],
+                    coveredMessageIds: [],
+                    messages: completed
+                        ? [
+                              { role: "user", text: prompt },
+                              { activities: [], content: [], role: "assistant", text: answer },
+                          ]
+                        : [],
+                    status: "available",
+                    truncated: false,
+                };
+            },
+            onPromptCompleted: () => {
+                completed = true;
+            },
+            responseParts: () => [answer],
+        },
+        connectAgent: true,
+    });
+    const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
+    await created.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    await created.user.click(await created.queryElementByTestId(dataTestId.agentConfiguration));
+    await created.user.click(getByRole(document.body, "tab", { name: "OpenCode" }));
+    await created.user.keyboard("{Escape}");
+    const configuration = await created.queryElementByTestId(
+        dataTestId.agentConfiguration,
+        (element) => element.textContent?.includes("OpenCode") === true,
+    );
+    expect(configuration.textContent).not.toContain("Codex");
+
+    await sendPrompt(
+        created,
+        (await created.queryElementByTestId(dataTestId.messageComposer)) as HTMLTextAreaElement,
+        prompt,
+    );
+    await Promise.race([
+        created.queryElementByTestId(
+            dataTestId.agentResponse,
+            (element) => element.textContent?.includes(answer) === true,
+        ),
+        failure,
+    ]);
+
+    created.reload();
+
+    expect(
+        await created.queryElementByTestId(
+            dataTestId.userMessage,
+            (element) => element.textContent?.includes(prompt) === true,
+        ),
+    ).toBeInstanceOf(HTMLElement);
+    expect(
+        await created.queryElementByTestId(
+            dataTestId.agentResponse,
+            (element) => element.textContent?.includes(answer) === true,
+        ),
+    ).toBeInstanceOf(HTMLElement);
+});
+
 test("Given an unpaired workspace, When a user manages Bots, Then pairing and the surviving Bot remain visible", {
     timeout: 30_000,
 }, async () => {

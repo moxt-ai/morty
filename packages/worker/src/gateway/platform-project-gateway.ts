@@ -373,7 +373,7 @@ export class PlatformProjectGateway {
 
     readonly readChatSession = async (
         projectId: string,
-        selection: { readonly runtimeId: string; readonly agentRef: string },
+        selection: { readonly runtimeId: string },
         sessionId: string,
         signal: AbortSignal,
     ) =>
@@ -384,7 +384,7 @@ export class PlatformProjectGateway {
                 const session = (await client.runtimes.querySessions(selection.runtimeId, [sessionId], signal)).find(
                     (candidate) => candidate.sessionId === sessionId,
                 );
-                if (session === undefined || session.agentId !== selection.agentRef) {
+                if (session === undefined) {
                     throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
                 }
                 const ready = await client.sessions.load(
@@ -398,7 +398,7 @@ export class PlatformProjectGateway {
                     signal,
                 );
                 return {
-                    agentRef: selection.agentRef,
+                    agentRef: session.agentId,
                     ready,
                     entry: {
                         entryId: session.sessionId,

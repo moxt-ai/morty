@@ -10,11 +10,14 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-async function createChatFixture() {
+async function createChatFixture(includeOpenCode = false) {
     const cloud = await createIdentityFixture();
     try {
         const identity = await cloud.createAnonymousUser();
-        const runtime = await cloud.connectAgent(identity.projectId);
+        const runtime = await cloud.connectAgent(
+            identity.projectId,
+            includeOpenCode ? { additionalAgents: [{ id: "opencode", name: "OpenCode" }] } : undefined,
+        );
         const environment = cloud.environment();
         const request = (path: string, body?: object, method = body === undefined ? "GET" : "POST") =>
             worker.fetch(
@@ -100,6 +103,41 @@ test("Given a configured Bot, When its owner opens a conversation, Then Morty is
         const listed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
         expect(listed.status).toBe(200);
         expect(await listed.json()).toMatchObject({ sessions: [{ id: access.sessionId }] });
+    } finally {
+        await fixture.close();
+    }
+});
+
+test("Given a Bot connected through one Agent, When a Session uses another Agent, Then that Session reopens with its own Agent", async () => {
+    const fixture = await createChatFixture(true);
+    try {
+        const setup = { runtimeId: fixture.runtime.runtimeId, agentRef: "codex" };
+        expect((await fixture.request(`chat/bots/${fixture.botId}/setup`, setup)).status).toBe(202);
+
+        const unavailable = await fixture.request(`chat/bots/${fixture.botId}/access`, {
+            agentRef: "claude-code",
+            configurations: [],
+            conversationKey: "unavailable-agent",
+            workspaceRef: "default",
+        });
+        expect(unavailable.status).toBe(409);
+        expect(await unavailable.json()).toMatchObject({ error: { code: "AGENT_UNAVAILABLE" } });
+
+        const opened = await fixture.request(`chat/bots/${fixture.botId}/access`, {
+            agentRef: "opencode",
+            configurations: [],
+            conversationKey: "agent-mismatch",
+            workspaceRef: "default",
+        });
+        expect(opened.status).toBe(200);
+        const access = v.parse(v.object({ agentRef: v.string(), sessionId: v.string() }), await opened.json());
+        expect(access.agentRef).toBe("opencode");
+
+        const restored = await fixture.request(`chat/bots/${fixture.botId}/managed-session`, {
+            sessionId: access.sessionId,
+        });
+        expect(restored.status).toBe(200);
+        expect(await restored.json()).toMatchObject({ agentRef: "opencode" });
     } finally {
         await fixture.close();
     }
