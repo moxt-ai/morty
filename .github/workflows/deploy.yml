@@ -124,6 +124,9 @@ jobs:
         shell: bash
         run: |
           umask 077
+          pnpm exec wrangler queues consumer remove \
+            "mobius-slack-cloud-${DEPLOY_ENVIRONMENT}-events" \
+            "morty-${DEPLOY_ENVIRONMENT}"
           secrets_file="$(mktemp "$RUNNER_TEMP/worker-secrets.XXXXXX.json")"
           trap 'rm -f "$secrets_file"' EXIT
           node scripts/validate-worker-config.ts secrets > "$secrets_file"
