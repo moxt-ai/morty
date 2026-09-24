@@ -54,17 +54,53 @@ export function MobiusManagement() {
         },
         [identity.projectId, transport.fetch],
     );
-    const endRemoteAccess = useCallback(
+    const currentUserToken = useCallback(
         async (signal: AbortSignal) => {
             const api = new AnonymousIdentityApi({
                 fetchRequest: transport.fetch,
                 origin: window.location.origin,
             });
             const localIdentity = await api.loadExisting(signal);
-            if (localIdentity === null) {
-                throw new Error("Remote access is no longer available.");
+            const token =
+                localIdentity?.projectId === identity.projectId
+                    ? localIdentity.token
+                    : identity.kind === "anonymous"
+                      ? await identity.getToken(signal)
+                      : null;
+            if (token === null) {
+                throw new Error("The current user token is unavailable.");
             }
-            await api.endRemoteAccess(localIdentity.token, signal);
+            return {
+                accessToken: token,
+                token: await api.createRecoveryToken(token, identity.projectId, signal),
+            };
+        },
+        [identity, transport.fetch],
+    );
+    const endRemoteAccess = useCallback(
+        async (token: string, signal: AbortSignal) => {
+            const api = new AnonymousIdentityApi({
+                fetchRequest: transport.fetch,
+                origin: window.location.origin,
+            });
+            await api.endRemoteAccess(token, signal);
+            signal.throwIfAborted();
+            window.location.reload();
+        },
+        [transport.fetch],
+    );
+    const replaceCurrentUser = useCallback(
+        async (currentAccessToken: string, replacementToken: string, signal: AbortSignal) => {
+            const api = new AnonymousIdentityApi({
+                fetchRequest: transport.fetch,
+                origin: window.location.origin,
+            });
+            await api.resolveIdentity(replacementToken, signal);
+            await api.endRemoteAccess(currentAccessToken, signal);
+            signal.throwIfAborted();
+            const replacement = await api.resolveIdentity(replacementToken, signal);
+            api.saveIdentity(replacement);
+            window.location.reload();
         },
         [transport.fetch],
     );
@@ -87,7 +123,9 @@ export function MobiusManagement() {
         <BotChatHome
             requests={requests}
             createTransfer={createTransfer}
+            currentUserToken={currentUserToken}
             endRemoteAccess={endRemoteAccess}
+            replaceCurrentUser={replaceCurrentUser}
             projectId={identity.projectId}
             selectedBotPreference={selectedBotPreference}
             {...(identity.kind === "anonymous" ? { replaceWorkspace } : {})}

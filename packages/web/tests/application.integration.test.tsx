@@ -37,21 +37,50 @@ async function sendPrompt(app: TestApp, composer: HTMLTextAreaElement, prompt: s
     await app.user.click(send);
 }
 
-test("Given a shared workspace, When the user chooses to end remote access from the sidebar footer, Then they must confirm the transfer-wide revocation", {
+test("Given a shared workspace, When the user opens the user menu, Then they can back up their token before replacing the current user", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp();
-    const endAccess = await app.queryElementByTestId(dataTestId.endRemoteAccess);
+    await app.user.click(await app.queryElementByTestId(dataTestId.userMenu));
+    await app.user.click(await app.queryElementByTestId(dataTestId.replaceCurrentUser));
+
+    const dialog = await app.queryElementByTestId(dataTestId.replaceCurrentUserDialog);
+    expect(dialog.textContent).toContain("Replace current user");
+    expect(dialog.textContent).toContain("Back up this token");
+    expect(app.elementByTestId(dataTestId.currentUserToken, dialog)).toHaveProperty(
+        "value",
+        expect.stringMatching(/^mobius_recovery_v1\./u),
+    );
+    expect(app.elementByTestId(dataTestId.copyUserToken, dialog).getAttribute("aria-label")).toBe(
+        "Copy current user token",
+    );
+    expect(app.elementByTestId(dataTestId.replacementUserToken, dialog).getAttribute("aria-label")).toBe(
+        "Replacement user token",
+    );
+});
+
+test("Given a shared workspace, When the user chooses to end remote access from the user menu, Then they must confirm the transfer-wide revocation and can back up their token", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp();
     const shareMachine = await app.queryElementByTestId(dataTestId.shareMachine);
 
-    expect(endAccess.parentElement).toBe(shareMachine.parentElement);
     await app.user.click(await app.queryElementByTestId(dataTestId.closeDialog));
+    const userMenu = await app.queryElementByTestId(dataTestId.userMenu);
+    expect(userMenu.parentElement).toBe(shareMachine.parentElement);
+    await app.user.click(userMenu);
+    const endAccess = await app.queryElementByTestId(dataTestId.endRemoteAccess);
     await app.user.click(endAccess);
 
     const dialog = await app.queryElementByTestId(dataTestId.endRemoteAccessDialog);
     expect(dialog.textContent).toContain("End remote access?");
     expect(dialog.textContent).toContain("every browser using this access link");
     expect(dialog.textContent).toContain("Your local Runtime and task will keep running");
+    expect(dialog.textContent).toContain("Back up this token");
+    expect(app.elementByTestId(dataTestId.currentUserToken, dialog)).toHaveProperty(
+        "value",
+        expect.stringMatching(/^mobius_recovery_v1\./u),
+    );
     expect(dialog.textContent).toContain("Cancel");
     expect(dialog.textContent).toContain("End remote access");
 });

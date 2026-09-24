@@ -5,10 +5,20 @@ import {
     workspaceEntry,
 } from "../local-storage/central-local-storage.ts";
 
-const tokenSchema = v.pipe(v.string(), v.regex(/^mobius_anon_v2_[A-Za-z0-9_-]{43}$/u));
+const tokenSchema = v.pipe(
+    v.string(),
+    v.regex(
+        /^(?:mobius_anon_v2_[A-Za-z0-9_-]{43}|mobius_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
+    ),
+);
+const recoveryTokenSchema = v.pipe(
+    v.string(),
+    v.regex(/^mobius_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43}$/u),
+);
+const projectIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u));
 const workspaceSchema = v.object({
     userId: v.string(),
-    projectId: v.pipe(v.string(), v.regex(/^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u)),
+    projectId: projectIdSchema,
 });
 const identitySchema = v.pipe(v.object({ token: tokenSchema, ...workspaceSchema.entries }), v.readonly());
 
@@ -159,6 +169,42 @@ export class AnonymousIdentityApi {
         centralLocalStorage.remove(anonymousCredentialEntry);
         centralLocalStorage.remove(workspaceEntry);
     };
+
+    readonly createRecoveryToken = async (
+        accessToken: string,
+        projectId: string,
+        signal: AbortSignal,
+    ): Promise<string> => {
+        const result = v.parse(
+            v.object({ token: recoveryTokenSchema }),
+            await this.#request(
+                `/projects/${encodeURIComponent(v.parse(projectIdSchema, projectId))}/identity/recovery-token`,
+                { method: "POST", headers: { authorization: `Bearer ${v.parse(tokenSchema, accessToken)}` } },
+                signal,
+            ),
+        );
+        return result.token;
+    };
+
+    readonly resolveIdentity = async (token: string, signal: AbortSignal): Promise<AnonymousIdentity> => {
+        const parsedToken = v.safeParse(recoveryTokenSchema, token);
+        if (!parsedToken.success) {
+            throw new Error("Enter a valid recovery token.");
+        }
+        const projectPart = parsedToken.output.split(".")[1];
+        const parsedProjectId = v.parse(projectIdSchema, projectPart);
+        const session = await this.#anonymousSession(
+            { token: parsedToken.output, projectId: parsedProjectId, userId: "" },
+            signal,
+        );
+        if (session === null) {
+            throw new Error("This user token is invalid or no longer active.");
+        }
+        return { token: parsedToken.output, projectId: parsedProjectId, userId: session.userId };
+    };
+
+    readonly saveIdentity = (identity: AnonymousIdentity): void =>
+        this.#saveIdentity(v.parse(identitySchema, identity));
 
     readonly clerkBinding = async (clerkToken: string, signal: AbortSignal): Promise<ClerkBinding> =>
         v.parse(

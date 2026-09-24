@@ -355,7 +355,12 @@ export const userChannelEntry = (userId: string): LocalStorageEntry<string> =>
 // Anonymous identity credentials
 // ---------------------------------------------------------------------------
 
-const anonymousTokenSchema = v.pipe(v.string(), v.regex(/^mobius_anon_v2_[A-Za-z0-9_-]{43}$/u));
+const anonymousTokenSchema = v.pipe(
+    v.string(),
+    v.regex(
+        /^(?:mobius_anon_v2_[A-Za-z0-9_-]{43}|mobius_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
+    ),
+);
 const workspaceProjectIdSchema = v.pipe(
     v.string(),
     v.regex(/^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u),

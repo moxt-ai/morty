@@ -122,6 +122,17 @@ export function createAuthenticationRoutes() {
             url.hash = `code=${transfer.code}`;
             return json({ expiresAt: new Date(transfer.expiresAt).toISOString(), url: url.toString() }, 201);
         })
+        .post("/identity/recovery-token", async (context) => {
+            const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(15000)]);
+            const token = await context.env.services.authentication.createRecoveryToken(
+                context.get("bearerToken"),
+                signal,
+            );
+            if (token === null) {
+                throw new ManagementError("UNAUTHENTICATED", "Anonymous identity is required.", 401);
+            }
+            return json({ token }, 201, { "Cache-Control": "no-store" });
+        })
         .post(
             "/identity/pairings",
             bodyParser<ManagementHttpEnvironment, typeof pairingInput>(pairingInput),
@@ -179,10 +190,9 @@ export function createAuthenticationRoutes() {
                 context.req.raw.signal,
             );
             switch (result.kind) {
-                case "ended":
+                case "ended-credential":
+                case "ended-transfer":
                     return new Response(null, { status: 204 });
-                case "not-remote":
-                    throw new ManagementError("REMOTE_ACCESS_REQUIRED", "This device is not using remote access.", 409);
                 case "unauthenticated":
                     throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
             }

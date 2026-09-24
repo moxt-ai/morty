@@ -1,9 +1,23 @@
-import { ChevronDown, Laptop, LoaderCircle, LogOut, MessageSquare, RefreshCw, Share2, SquarePen } from "lucide-react";
-import { ContextMenu, Tooltip } from "radix-ui";
+import {
+    Check,
+    ChevronDown,
+    Copy,
+    Laptop,
+    LoaderCircle,
+    LogOut,
+    MessageSquare,
+    RefreshCw,
+    Repeat2,
+    Share2,
+    SquarePen,
+    UserRound,
+} from "lucide-react";
+import { ContextMenu, DropdownMenu, Tooltip } from "radix-ui";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
+import { Input } from "../../components/ui/input.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
@@ -34,6 +48,52 @@ function SidebarActionTooltip({ children, label }: { readonly children: ReactNod
     );
 }
 
+function UserTokenBackup({ token }: { readonly token: string }) {
+    const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
+    return (
+        <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
+            <p className="text-sm font-medium">Back up this token</p>
+            <p className="text-xs text-muted-foreground">
+                Save this recovery token somewhere secure. It remains usable after remote access ends.
+            </p>
+            <div className="flex items-center gap-2">
+                <Input
+                    aria-label="Current user token"
+                    className="font-mono text-xs"
+                    data-testid={dataTestId.currentUserToken}
+                    onFocus={(event) => event.currentTarget.select()}
+                    readOnly
+                    value={token}
+                />
+                <Button
+                    aria-label="Copy current user token"
+                    data-testid={dataTestId.copyUserToken}
+                    onClick={() => {
+                        if (navigator.clipboard === undefined) {
+                            setCopy("failed");
+                            return;
+                        }
+                        void navigator.clipboard.writeText(token).then(
+                            () => setCopy("copied"),
+                            () => setCopy("failed"),
+                        );
+                    }}
+                    size="icon"
+                    title="Copy current user token"
+                    variant="outline"
+                >
+                    {copy === "copied" ? (
+                        <Check aria-hidden="true" className="size-4" />
+                    ) : (
+                        <Copy aria-hidden="true" className="size-4" />
+                    )}
+                </Button>
+            </div>
+            {copy === "failed" && <p className="text-xs text-destructive">Select and copy the token manually.</p>}
+        </div>
+    );
+}
+
 export function ConversationSidebar({
     activeBot,
     bots,
@@ -49,7 +109,9 @@ export function ConversationSidebar({
     onOpen,
     onOpenSession,
     onNewConversation,
+    currentUserToken,
     endRemoteAccess,
+    replaceCurrentUser,
     createTransfer,
     sessionStatuses,
     directoryRevision,
@@ -74,7 +136,11 @@ export function ConversationSidebar({
     readonly onOpen: (session: ManagedChatSession) => void;
     readonly onOpenSession: (session: OpenMobiusSession) => void;
     readonly onNewConversation: () => void;
-    readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
+    readonly currentUserToken: (
+        signal: AbortSignal,
+    ) => Promise<{ readonly accessToken: string; readonly token: string }>;
+    readonly endRemoteAccess: (token: string, signal: AbortSignal) => Promise<void>;
+    readonly replaceCurrentUser: (currentToken: string, replacementToken: string, signal: AbortSignal) => Promise<void>;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
     readonly sessionStatuses: ReadonlyMap<string, SessionActivityState>;
 }) {
@@ -85,7 +151,9 @@ export function ConversationSidebar({
     const [expanded, setExpanded] = useState(false);
     const [dialog, setDialog] = useState(false);
     const [sharing, setSharing] = useState(false);
-    const [remoteAccess] = useState(() => createRemoteAccessStore(endRemoteAccess));
+    const [remoteAccess] = useState(() =>
+        createRemoteAccessStore({ currentToken: currentUserToken, endRemoteAccess, replaceCurrentUser }),
+    );
     const access = useStore(remoteAccess);
     const lifetime = useRef<AbortController | null>(null);
     const sessions =
@@ -316,32 +384,59 @@ export function ConversationSidebar({
             </div>
             <div className="mt-3 flex items-center gap-1 border-t border-black/[0.06] pt-3">
                 {access.state.kind !== "ended" && (
-                    <Tooltip.Provider delayDuration={150}>
-                        <Tooltip.Root>
-                            <Tooltip.Trigger asChild>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="min-h-10 shrink-0 rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                    aria-label="End remote access"
+                    <DropdownMenu.Root>
+                        <DropdownMenu.Trigger asChild>
+                            <Button
+                                aria-label="User menu"
+                                className="min-h-10 shrink-0 rounded-full"
+                                data-testid={dataTestId.userMenu}
+                                disabled={access.state.kind === "loading"}
+                                size="icon"
+                                variant="ghost"
+                            >
+                                {access.state.kind === "loading" ? (
+                                    <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                                ) : (
+                                    <UserRound aria-hidden="true" className="size-4" />
+                                )}
+                            </Button>
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Portal>
+                            <DropdownMenu.Content
+                                align="start"
+                                className="z-[110] min-w-52 rounded-lg border border-border bg-background p-1 text-sm text-foreground shadow-lg"
+                                side="top"
+                                sideOffset={6}
+                            >
+                                <DropdownMenu.Item
+                                    className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 outline-none data-[highlighted]:bg-accent"
+                                    data-testid={dataTestId.replaceCurrentUser}
+                                    onSelect={() => {
+                                        const controller = lifetime.current;
+                                        if (controller !== null) {
+                                            void access.requestReplacement(controller.signal);
+                                        }
+                                    }}
+                                >
+                                    <Repeat2 aria-hidden="true" className="size-4" />
+                                    Replace current user
+                                </DropdownMenu.Item>
+                                <DropdownMenu.Item
+                                    className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-destructive outline-none data-[highlighted]:bg-destructive/10"
                                     data-testid={dataTestId.endRemoteAccess}
-                                    onClick={access.requestEnd}
+                                    onSelect={() => {
+                                        const controller = lifetime.current;
+                                        if (controller !== null) {
+                                            void access.requestEnd(controller.signal);
+                                        }
+                                    }}
                                 >
-                                    <LogOut className="size-4" aria-hidden="true" />
-                                </Button>
-                            </Tooltip.Trigger>
-                            <Tooltip.Portal>
-                                <Tooltip.Content
-                                    className="z-[70] rounded-lg bg-foreground px-2.5 py-1.5 text-xs text-background shadow-lg"
-                                    side="top"
-                                    sideOffset={6}
-                                >
+                                    <LogOut aria-hidden="true" className="size-4" />
                                     End remote access
-                                    <Tooltip.Arrow className="fill-foreground" />
-                                </Tooltip.Content>
-                            </Tooltip.Portal>
-                        </Tooltip.Root>
-                    </Tooltip.Provider>
+                                </DropdownMenu.Item>
+                            </DropdownMenu.Content>
+                        </DropdownMenu.Portal>
+                    </DropdownMenu.Root>
                 )}
                 <Button
                     variant="ghost"
@@ -374,7 +469,7 @@ export function ConversationSidebar({
                     <MachineSharing createTransfer={createTransfer} />
                 </Dialog>
             )}
-            {(access.state.kind === "confirming" ||
+            {(access.state.kind === "confirming-end" ||
                 access.state.kind === "ending" ||
                 access.state.kind === "failed") && (
                 <Dialog
@@ -382,15 +477,16 @@ export function ConversationSidebar({
                     title="End remote access?"
                     description="This will sign out every browser using this access link and prevent the link from being used again. Your local Runtime and task will keep running."
                     testId={dataTestId.endRemoteAccessDialog}
-                    onClose={access.cancelEnd}
+                    onClose={access.cancel}
                 >
+                    <UserTokenBackup token={access.state.token} />
                     {access.state.kind === "failed" && (
-                        <p className="text-sm text-destructive" role="alert">
+                        <p className="mt-3 text-sm text-destructive" role="alert">
                             {access.state.message}
                         </p>
                     )}
                     <div className="mt-5 flex justify-end gap-2">
-                        <Button disabled={access.state.kind === "ending"} onClick={access.cancelEnd} variant="ghost">
+                        <Button disabled={access.state.kind === "ending"} onClick={access.cancel} variant="ghost">
                             Cancel
                         </Button>
                         <Button
@@ -404,6 +500,56 @@ export function ConversationSidebar({
                             variant="destructive"
                         >
                             {access.state.kind === "ending" ? "Ending…" : "End remote access"}
+                        </Button>
+                    </div>
+                </Dialog>
+            )}
+            {(access.state.kind === "editing-replacement" ||
+                access.state.kind === "replacement-failed" ||
+                access.state.kind === "replacing") && (
+                <Dialog
+                    busy={access.state.kind === "replacing"}
+                    description="Back up the current token, then enter another user token for this workspace. Replacing the user ends remote access for the current user first."
+                    onClose={access.cancel}
+                    testId={dataTestId.replaceCurrentUserDialog}
+                    title="Replace current user"
+                >
+                    <UserTokenBackup token={access.state.currentToken} />
+                    <label className="mt-5 block space-y-2 font-medium" htmlFor="replacement-user-token">
+                        Replacement user token
+                        <Input
+                            aria-label="Replacement user token"
+                            autoComplete="off"
+                            className="font-mono text-xs"
+                            data-testid={dataTestId.replacementUserToken}
+                            disabled={access.state.kind === "replacing"}
+                            id="replacement-user-token"
+                            onChange={(event) => access.updateReplacementToken(event.currentTarget.value)}
+                            placeholder="mobius_recovery_v1.…"
+                            value={access.state.replacementToken}
+                        />
+                    </label>
+                    {access.state.kind === "replacement-failed" && (
+                        <p className="mt-3 text-sm text-destructive" role="alert">
+                            {access.state.message}
+                        </p>
+                    )}
+                    <div className="mt-5 flex justify-end gap-2">
+                        <Button disabled={access.state.kind === "replacing"} onClick={access.cancel} variant="ghost">
+                            Cancel
+                        </Button>
+                        <Button
+                            disabled={
+                                access.state.kind === "replacing" || access.state.replacementToken.trim().length === 0
+                            }
+                            onClick={() => {
+                                const controller = lifetime.current;
+                                if (controller !== null) {
+                                    void access.replace(controller.signal);
+                                }
+                            }}
+                        >
+                            {access.state.kind === "replacing" ? "Replacing…" : "Replace current user"}
                         </Button>
                     </div>
                 </Dialog>
