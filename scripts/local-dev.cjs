@@ -545,6 +545,7 @@ async function prepare(options) {
             log("checking local Mobius CLI");
             await run("pnpm", ["--dir", "third-party/mobius", "mobius", "agents"], {
                 cwd: REPO_ROOT,
+                env: { MOBIUS_STATE_DIRECTORY: path.join(stateDir, "mobius") },
             }).then(({ stdout, stderr }) => fs.writeFileSync(cliLog, `${stdout}${stderr}`, { mode: 0o600 }));
         }
 
@@ -599,8 +600,8 @@ function readPairRecord(line) {
 /**
  * Runs the Chat-served setup bundle's `pair` flow with Morty's writable
  * location isolated under the stack's state directory. `documents/` isolates
- * Morty's saved setup files, while Mobius uses its normal singleton manager and
- * connection state. `workspace/` is the paired default workspace.
+ * Morty's saved setup files, `mobius/` isolates its CLI manager and connection
+ * state, and `workspace/` is the paired default workspace.
  */
 async function pair(options) {
     const stack = options.stateDir === undefined ? null : readStack(options.stateDir);
@@ -612,8 +613,9 @@ async function pair(options) {
     }
     const harness = options.harness ?? "codex";
     const documents = path.join(stack.stateDir, "documents");
+    const mobiusStateDirectory = path.join(stack.stateDir, "mobius");
     const workspace = path.resolve(options.workspace ?? path.join(stack.stateDir, "workspace"));
-    for (const directory of [documents, workspace]) {
+    for (const directory of [documents, mobiusStateDirectory, workspace]) {
         fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     }
     const origin = new URL(stack.chatOrigin).origin;
@@ -669,6 +671,7 @@ process.exit(result.status ?? 1);
         process.execPath,
         {
             DOCUMENT_DIR: documents,
+            MOBIUS_STATE_DIRECTORY: mobiusStateDirectory,
             PATH: `${shimDirectory}${path.delimiter}${process.env.PATH ?? ""}`,
         },
         workspace,
@@ -715,12 +718,11 @@ process.exit(result.status ?? 1);
     fs.writeFileSync(pairList, "", { mode: 0o600, flag: "wx" });
     let connectionId;
     try {
-        await run(process.execPath, [
-            path.join(MOBIUS_ROOT, "packages/cli/src/cli.ts"),
-            "pair",
-            "list",
-            `--output-json=${pairList}`,
-        ]);
+        await run(
+            process.execPath,
+            [path.join(MOBIUS_ROOT, "packages/cli/src/cli.ts"), "pair", "list", `--output-json=${pairList}`],
+            { env: { MOBIUS_STATE_DIRECTORY: mobiusStateDirectory } },
+        );
         const listed = JSON.parse(fs.readFileSync(pairList, "utf8"));
         if (!Array.isArray(listed)) {
             fail("Mobius returned an invalid connection list");
@@ -753,6 +755,7 @@ process.exit(result.status ?? 1);
         connectionId,
         harness,
         documents,
+        mobiusStateDirectory,
         workspace,
     };
     const previous = Array.isArray(stack.runtimes) ? stack.runtimes : [];
@@ -870,13 +873,22 @@ async function stopRecorded(stack) {
         if (typeof runtime.connectionId === "string" && /^mcn_[a-f0-9]{32}$/u.test(runtime.connectionId)) {
             log(`stopping paired connection ${runtime.connectionId}`);
             try {
-                await run(process.execPath, [
-                    path.join(MOBIUS_ROOT, "packages/cli/src/cli.ts"),
-                    "pair",
-                    "stop",
-                    "--connection",
-                    runtime.connectionId,
-                ]);
+                const mobiusStateDirectory = path.join(stack.stateDir, "mobius");
+                const environment =
+                    runtime.mobiusStateDirectory === mobiusStateDirectory
+                        ? { MOBIUS_STATE_DIRECTORY: mobiusStateDirectory }
+                        : {};
+                await run(
+                    process.execPath,
+                    [
+                        path.join(MOBIUS_ROOT, "packages/cli/src/cli.ts"),
+                        "pair",
+                        "stop",
+                        "--connection",
+                        runtime.connectionId,
+                    ],
+                    { env: environment },
+                );
             } catch (cause) {
                 log(`could not stop paired connection: ${cause instanceof Error ? cause.message : String(cause)}`);
             }

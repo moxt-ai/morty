@@ -70,6 +70,9 @@ stays parseable. Read these fields instead of assuming defaults:
 Every start uses Wrangler's local `--persist-to`, so each state directory owns its
 own D1, Durable Objects, R2, and KV data. Wrangler still keeps a small per-project
 registry under `<repo>/.wrangler/state`, so run one stack per checkout at a time.
+Omit `--state-dir` for `prepare`: the CLI generates a fresh temporary directory so
+concurrent checkouts do not share local state or Mobius CLI managers. Use the
+returned `stateDir` for all later `pair`, `status`, `logs`, and `remove` commands.
 
 Check health before debugging:
 
@@ -155,8 +158,9 @@ with Morty's files isolated under the state directory:
 
 - `DOCUMENT_DIR` is set to `<stateDir>/documents`, so the setup script writes
   its private configuration there instead of the user's documents directory.
-- Mobius uses its normal local state and singleton manager. The dev helper never
-  starts a second manager with an isolated `MOBIUS_STATE_DIRECTORY`.
+- Mobius receives `MOBIUS_STATE_DIRECTORY=<stateDir>/mobius`, so every generated
+  stack uses an isolated CLI manager and connection state. This prevents another
+  checkout with a different CLI version from restarting or replacing its manager.
 - `--workspace` defaults to `<stateDir>/workspace`, the paired default
   workspace.
 
