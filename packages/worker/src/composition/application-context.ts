@@ -3,6 +3,7 @@ import { ChatService } from "../components/chat/service/chat-service.ts";
 import { ManagedSessionStorage } from "../components/chat/storage/managed-session-storage.ts";
 import { AuthenticationService } from "../components/management/service/authentication-service.ts";
 import { ManagementService } from "../components/management/service/management-service.ts";
+import { AgentPairingStorage } from "../components/management/storage/agent-pairing-storage.ts";
 import { ConfigurationStorage } from "../components/management/storage/configuration-storage.ts";
 import { IdentityStorage } from "../components/management/storage/identity-storage.ts";
 import { ManagedBotStorage } from "../components/management/storage/managed-bot-storage.ts";
@@ -25,6 +26,7 @@ export interface ApplicationContext {
     readonly storages: {
         readonly configuration: ConfigurationStorage;
         readonly identities: IdentityStorage;
+        readonly agentPairings: AgentPairingStorage;
         readonly managedBots: ManagedBotStorage;
         readonly chatSessions: ManagedSessionStorage;
         readonly platformProjects: PlatformProjectStorage;
@@ -45,6 +47,7 @@ export function createApplicationDependencies(bindings: CloudBindings): Applicat
     const storages = Object.freeze({
         configuration: new ConfigurationStorage(infrastructure),
         identities: new IdentityStorage(bindings.DATABASE, bindings.CHAT_PROJECT_ID ?? null),
+        agentPairings: new AgentPairingStorage(bindings.DATABASE, bindings.CHAT_PROJECT_ID ?? null),
         managedBots: new ManagedBotStorage(bindings.DATABASE),
         chatSessions: new ManagedSessionStorage(bindings.DATABASE),
         platformProjects: new PlatformProjectStorage(bindings.DATABASE),
