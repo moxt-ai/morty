@@ -140,17 +140,14 @@ export class ChatApi {
                         body: {},
                     },
                 ),
-            (workspace) =>
-                workspace.status === "active" &&
-                Array.isArray(workspace.runtimes) &&
-                workspace.runtimes.some((value) => {
-                    const runtime = object(value, "runtime");
-                    return (
-                        runtime.online === true &&
-                        Array.isArray(runtime.agents) &&
-                        runtime.agents.some((agent) => object(agent, "agent").agentRef === agentId)
-                    );
-                }),
+            (workspace) => {
+                const runtime = object(workspace.runtime, "runtime");
+                return (
+                    runtime.online === true &&
+                    Array.isArray(runtime.agents) &&
+                    runtime.agents.some((agent) => object(agent, "agent").agentRef === agentId)
+                );
+            },
         );
     }
 

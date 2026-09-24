@@ -114,7 +114,20 @@ export class ChatService {
         return { userId, projectId, botId, signal };
     };
 
-    readonly workspace = async (scope: ChatScope) => await this.#localWorkspace(scope);
+    readonly workspace = async (scope: ChatScope) => {
+        const runtime = await this.localRuntime(scope);
+        return {
+            runtime: await this.#platform.getChatRuntimeAgents(scope.projectId, runtime.runtimeId, scope.signal),
+        };
+    };
+
+    readonly setupRuntimes = async (scope: ChatScope) => {
+        const bot = await this.#bot(scope);
+        if (bot.configuration !== null) {
+            throw new PlatformProjectError("BOT_RUNTIME_FIXED", "This Bot already has a configured Runtime.", 409);
+        }
+        return { runtimes: await this.#platform.chatRuntimes(scope.projectId, scope.signal) };
+    };
 
     readonly listWorkspace = async (scope: ChatScope, directoryId: string) => {
         const bot = await this.#bot(scope);
@@ -145,20 +158,6 @@ export class ChatService {
             throw new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);
         }
         return bot;
-    };
-
-    readonly #localWorkspace = async (scope: ChatScope) => {
-        const bot = await this.#bot(scope);
-        const runtimeId = bot.configuration?.runtimeId ?? null;
-        const runtimes =
-            runtimeId === null
-                ? await this.#platform.chatRuntimes(scope.projectId, scope.signal)
-                : [await this.#platform.getChatRuntimeAgents(scope.projectId, runtimeId, scope.signal)];
-        return {
-            status: bot.configuration === null ? "draft" : "active",
-            runtimeId,
-            runtimes,
-        };
     };
 
     readonly localRuntime = async (scope: ChatScope) => {

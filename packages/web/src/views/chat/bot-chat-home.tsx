@@ -44,12 +44,14 @@ export function BotChatHome({
     readonly requests: Pick<
         BotChatApi,
         | "listBots"
+        | "readBot"
         | "createBot"
         | "deleteBot"
         | "access"
         | "archiveManagedSession"
         | "workspace"
         | "workspaceDirectory"
+        | "waitForSetupChange"
         | "waitForWorkspaceChange"
         | "nativeSessions"
         | "nativeSession"

@@ -51,23 +51,19 @@ const managedSessionSchema = v.pipe(
     v.readonly(),
 );
 export type ManagedChatSession = v.InferOutput<typeof managedSessionSchema>;
-const workspaceSchema = v.object({
-    status: v.string(),
-    runtimeId: v.nullable(identifier),
-    runtimes: v.array(
+const chatRuntimeSchema = v.object({
+    runtimeId: identifier,
+    machineName: v.string(),
+    online: v.boolean(),
+    agents: v.array(
         v.object({
-            runtimeId: identifier,
-            machineName: v.string(),
-            online: v.boolean(),
-            agents: v.array(
-                v.object({
-                    agentRef: identifier,
-                    label: v.string(),
-                }),
-            ),
+            agentRef: identifier,
+            label: v.string(),
         }),
     ),
 });
+export type ChatRuntime = v.InferOutput<typeof chatRuntimeSchema>;
+const workspaceSchema = v.object({ runtime: chatRuntimeSchema });
 export type ChatWorkspace = v.InferOutput<typeof workspaceSchema>;
 export type ChatAgentSelection = {
     readonly runtimeId: Identifier;
@@ -75,16 +71,14 @@ export type ChatAgentSelection = {
     readonly agentRef: Identifier;
     readonly label: string;
 };
-export function connectedChatWorkspaceAgents(workspace: ChatWorkspace): readonly ChatAgentSelection[] {
-    return workspace.runtimes.flatMap((runtime) =>
-        runtime.online
-            ? runtime.agents.map((agent) => ({
-                  runtimeId: runtime.runtimeId,
-                  machineName: runtime.machineName,
-                  ...agent,
-              }))
-            : [],
-    );
+export function connectedChatRuntimeAgents(runtime: ChatRuntime): readonly ChatAgentSelection[] {
+    return runtime.online
+        ? runtime.agents.map((agent) => ({
+              runtimeId: runtime.runtimeId,
+              machineName: runtime.machineName,
+              ...agent,
+          }))
+        : [];
 }
 export interface ChatDraftConfiguration {
     readonly agentRef: string;
@@ -205,6 +199,7 @@ export class BotChatApi {
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly #waitForChange: (request: Request) => Promise<void>;
     readonly listBots: ManagementApi["listBots"];
+    readonly readBot: ManagementApi["readBot"];
     readonly createBot: ManagementApi["createBot"];
     readonly deleteBot: ManagementApi["deleteBot"];
     constructor(options: {
@@ -221,6 +216,7 @@ export class BotChatApi {
         this.#waitForChange = options.waitForChange;
         const management = new ManagementApi(options);
         this.listBots = management.listBots;
+        this.readBot = management.readBot;
         this.createBot = management.createBot;
         this.deleteBot = management.deleteBot;
     }
@@ -405,7 +401,11 @@ export class BotChatApi {
         decodeWorkspaceEntriesEvent(
             JSON.stringify(await this.#request(botId, "workspace/directory", { directoryId }, signal)),
         );
-    readonly waitForWorkspaceChange = async (botId: string, parent: AbortSignal): Promise<void> => {
+    readonly #waitForBotChange = async (
+        botId: string,
+        resource: "setup/runtimes" | "workspace",
+        parent: AbortSignal,
+    ) => {
         const signal = AbortSignal.any([parent, AbortSignal.timeout(10 * 60 * 1000)]);
         const token = await this.#getToken(signal);
         if (token === null) {
@@ -414,13 +414,17 @@ export class BotChatApi {
         await this.#waitForChange(
             new Request(
                 new URL(
-                    `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/workspace`,
+                    `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/${resource}`,
                     this.#origin,
                 ),
                 { method: "POST", headers: { authorization: `Bearer ${token}` }, signal },
             ),
         );
     };
+    readonly waitForSetupChange = async (botId: string, parent: AbortSignal): Promise<void> =>
+        await this.#waitForBotChange(botId, "setup/runtimes", parent);
+    readonly waitForWorkspaceChange = async (botId: string, parent: AbortSignal): Promise<void> =>
+        await this.#waitForBotChange(botId, "workspace", parent);
     readonly nativeSessions = async (
         botId: string,
         runtimeId: string,

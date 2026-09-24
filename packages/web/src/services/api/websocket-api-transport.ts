@@ -123,7 +123,11 @@ export class WebSocketApiTransport {
     readonly waitForChange = async (request: Request): Promise<void> => {
         request.signal.throwIfAborted();
         const url = new URL(request.url);
-        if (url.origin !== this.#origin || !url.pathname.endsWith("/workspace") || request.method !== "POST") {
+        if (
+            url.origin !== this.#origin ||
+            (!url.pathname.endsWith("/workspace") && !url.pathname.endsWith("/setup/runtimes")) ||
+            request.method !== "POST"
+        ) {
             throw new Error("The API request cannot be watched through the Chat WebSocket bridge.");
         }
         const headers: [string, string][] = [];

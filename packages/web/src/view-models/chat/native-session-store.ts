@@ -3,7 +3,7 @@ import { createStore } from "zustand/vanilla";
 import {
     type BotChatApi,
     type ChatAgentSelection,
-    connectedChatWorkspaceAgents,
+    connectedChatRuntimeAgents,
 } from "../../services/chat/bot-chat-api.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 
@@ -66,15 +66,7 @@ export const createNativeSessionStore = (
             try {
                 const workspace = await requests.workspace(botId, signal);
                 signal.throwIfAborted();
-                // A Bot's native sessions import through the Runtime its harness is bound to.
-                // Older pairings of the same machine remain listed as separate Runtimes, so
-                // unscoped agents would repeat every agent once per pairing. Scope to the
-                // bound Runtime exactly like the harness selection does.
-                const connectedAgents = connectedChatWorkspaceAgents(workspace);
-                const agents =
-                    workspace.runtimeId === null
-                        ? connectedAgents
-                        : connectedAgents.filter((agent) => agent.runtimeId === workspace.runtimeId);
+                const agents = connectedChatRuntimeAgents(workspace.runtime);
                 set({ agents });
                 const selected = get().selected;
                 const agent = agents.find((item) => `${item.runtimeId}:${item.agentRef}` === selected) ?? agents[0];

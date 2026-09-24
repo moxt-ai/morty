@@ -578,18 +578,19 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return await saveConfiguration(context, { workspace: cwd });
     }
 
-    function hasOnlineRuntimeAgent(workspace: Record<string, unknown>, runtimeId: string, agentRef: string): boolean {
+    function hasOnlineRuntimeAgent(runtime: Record<string, unknown>, runtimeId: string, agentRef: string): boolean {
         return (
-            Array.isArray(workspace.runtimes) &&
-            workspace.runtimes.some((value) => {
-                const runtime = object(value);
-                return (
-                    runtime.runtimeId === runtimeId &&
-                    runtime.online === true &&
-                    Array.isArray(runtime.agents) &&
-                    runtime.agents.some((agent) => object(agent).agentRef === agentRef)
-                );
-            })
+            runtime.runtimeId === runtimeId &&
+            runtime.online === true &&
+            Array.isArray(runtime.agents) &&
+            runtime.agents.some((agent) => object(agent).agentRef === agentRef)
+        );
+    }
+
+    function setupHasOnlineRuntimeAgent(setup: Record<string, unknown>, runtimeId: string, agentRef: string): boolean {
+        return (
+            Array.isArray(setup.runtimes) &&
+            setup.runtimes.some((runtime) => hasOnlineRuntimeAgent(object(runtime), runtimeId, agentRef))
         );
     }
 
@@ -628,12 +629,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         attempts = 0;
         while (true) {
             signal.throwIfAborted();
-            const workspace = await request(
+            const setup = await request(
                 context,
-                `/chat/projects/${context.config.project_id}/bots/${context.config.bot_id}/workspace`,
+                `/chat/projects/${context.config.project_id}/bots/${context.config.bot_id}/setup/runtimes`,
                 {},
             );
-            if (hasOnlineRuntimeAgent(workspace, runtimeId, harness)) {
+            if (setupHasOnlineRuntimeAgent(setup, runtimeId, harness)) {
                 if (runtime.kind === "existing") {
                     emit({ status: "runtime_paired", runtimeId, harness });
                 }
@@ -667,10 +668,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     function hasReadyBinding(context: Context, runtime: RuntimeSelection, workspace: Record<string, unknown>) {
         const runtimeId = runtime.runtimeId;
         if (
-            workspace.status !== "active" ||
-            workspace.runtimeId !== runtimeId ||
             typeof context.config.agent_ref !== "string" ||
-            !hasOnlineRuntimeAgent(workspace, runtimeId, context.config.agent_ref)
+            !hasOnlineRuntimeAgent(object(workspace.runtime), runtimeId, context.config.agent_ref)
         ) {
             return false;
         }
@@ -688,9 +687,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             );
             if (hasReadyBinding(context, runtime, workspace)) {
                 return;
-            }
-            if (workspace.status !== "draft" && workspace.status !== "active") {
-                fail("BOT_UNAVAILABLE");
             }
             if (attempts++ % 10 === 0) {
                 progress("activation", "Waiting for the Bot binding to become active.");

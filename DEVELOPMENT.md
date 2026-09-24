@@ -186,6 +186,9 @@ New Conversation opens a browser-local draft. Its Harness selector chooses a pai
 agent. For a bound Bot, Chat reads that Bot's Runtime-scoped Agent catalog instead of
 filtering the Project-wide Runtime directory. Chat discovers the selected Agent's
 settings directly without creating a temporary Session.
+Bot setup and active Chat use separate resource shapes: `setup/runtimes` lists the
+Runtime options for an unconfigured Bot, while `workspace` requires a configured Bot
+and returns exactly its one Runtime.
 The cwd selector beside the model controls browses the selected Runtime and accepts an
 absolute path. The Runtime resolves and authorizes that path, and Chat applies the selected
 canonical directory only to the new conversation.
