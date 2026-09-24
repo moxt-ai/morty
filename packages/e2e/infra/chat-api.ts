@@ -142,8 +142,15 @@ export class ChatApi {
                 ),
             (workspace) =>
                 workspace.status === "active" &&
-                Array.isArray(workspace.agents) &&
-                workspace.agents.some((agent) => object(agent, "agent").agentRef === agentId),
+                Array.isArray(workspace.runtimes) &&
+                workspace.runtimes.some((value) => {
+                    const runtime = object(value, "runtime");
+                    return (
+                        runtime.online === true &&
+                        Array.isArray(runtime.agents) &&
+                        runtime.agents.some((agent) => object(agent, "agent").agentRef === agentId)
+                    );
+                }),
         );
     }
 

@@ -26,6 +26,7 @@ export interface TestApp extends Application {
     readonly elementByTestId: (testId: string | RegExp, container?: HTMLElement) => HTMLElement;
     readonly elementsByTestId: (testId: string | RegExp) => HTMLElement[];
     readonly optionalElementByTestId: (testId: string | RegExp) => HTMLElement | null;
+    readonly reload: () => void;
     readonly queryElementByTestId: (
         testId: string | RegExp,
         accept?: (element: HTMLElement) => boolean,
@@ -57,24 +58,27 @@ export async function createTestApp(
     } else {
         window.location.href = `${current.origin}/chat`;
     }
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const rendered = render(
-        <ApiTransportProvider transport={current.transport}>
-            <ToastProvider>
-                {page.kind === "continue" ? (
-                    <App state={{ kind: "authentication", router: authenticationRouter }} />
-                ) : (
-                    <WorkspaceApplication
-                        activeIdentity={current.identity}
-                        authorize={async (signal) => signal.throwIfAborted()}
-                        userId={current.userId}
-                    />
-                )}
-            </ToastProvider>
-        </ApiTransportProvider>,
-        { container },
-    );
+    let container = document.createElement("div");
+    const mount = () => {
+        document.body.appendChild(container);
+        return render(
+            <ApiTransportProvider transport={current.transport}>
+                <ToastProvider>
+                    {page.kind === "continue" ? (
+                        <App state={{ kind: "authentication", router: authenticationRouter }} />
+                    ) : (
+                        <WorkspaceApplication
+                            activeIdentity={current.identity}
+                            authorize={async (signal) => signal.throwIfAborted()}
+                            userId={current.userId}
+                        />
+                    )}
+                </ToastProvider>
+            </ApiTransportProvider>,
+            { container },
+        );
+    };
+    let rendered = mount();
     let closed = false;
     const app: TestApp = {
         ...current,
@@ -92,6 +96,12 @@ export async function createTestApp(
         elementByTestId: (testId, scope = document.body) => getByTestId(scope, testId),
         elementsByTestId: (testId) => getAllByTestId(document.body, testId),
         optionalElementByTestId: (testId) => queryByTestId(document.body, testId),
+        reload: () => {
+            rendered.unmount();
+            container.remove();
+            container = document.createElement("div");
+            rendered = mount();
+        },
         queryElementByTestId: async (testId, accept = () => true) =>
             await vi.waitFor(
                 () => {

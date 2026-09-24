@@ -1,6 +1,12 @@
 import type { SessionConfigOption, WorkspaceEntriesEvent } from "@moxt-ai/mobius-protocol";
 import { createStore } from "zustand/vanilla";
-import type { BotChatApi, ChatDraftConfiguration, ChatWorkspace } from "@/services/chat/bot-chat-api";
+import {
+    type BotChatApi,
+    type ChatAgentSelection,
+    type ChatDraftConfiguration,
+    type ChatWorkspace,
+    connectedChatWorkspaceAgents,
+} from "@/services/chat/bot-chat-api";
 import { restoreLastAgentSettings, saveLastAgentSettings } from "@/services/chat/last-agent-settings";
 import {
     forgetRecentCwdPreference,
@@ -22,13 +28,13 @@ type DraftSettingsState =
     | {
           readonly kind: "refreshing";
           readonly workspace: ChatWorkspace;
-          readonly selectedAgent: ChatWorkspace["agents"][number];
+          readonly selectedAgent: ChatAgentSelection;
           readonly cwd: WorkspaceEntriesEvent;
       }
     | {
           readonly kind: "ready";
           readonly workspace: ChatWorkspace;
-          readonly selectedAgent: ChatWorkspace["agents"][number];
+          readonly selectedAgent: ChatAgentSelection;
           readonly cwd: WorkspaceEntriesEvent;
           readonly options: readonly SessionConfigOption[];
       };
@@ -177,7 +183,7 @@ export const createDraftControlsStore = (
         };
         const applyAgentSettings = (
             workspace: ChatWorkspace,
-            selectedAgent: ChatWorkspace["agents"][number],
+            selectedAgent: ChatAgentSelection,
             cwd: WorkspaceEntriesEvent,
             options: readonly SessionConfigOption[],
         ): void => {
@@ -303,10 +309,9 @@ export const createDraftControlsStore = (
             try {
                 while (!signal.aborted) {
                     const workspace = await requests.workspace(botId, signal);
-                    const selected = workspace.agents.find(
+                    const selected = connectedChatWorkspaceAgents(workspace).find(
                         (agent) =>
-                            agent.online &&
-                            agent.runtimeId === workspace.runtimeId &&
+                            (workspace.runtimeId === null || agent.runtimeId === workspace.runtimeId) &&
                             (selectedHarness === "" || `${agent.runtimeId}:${agent.agentRef}` === selectedHarness),
                     );
                     if (selected !== undefined) {
@@ -491,8 +496,8 @@ export const createDraftControlsStore = (
                 if (settings.kind !== "ready" || disabled) {
                     return;
                 }
-                const agent = settings.workspace.agents.find(
-                    (item) => `${item.runtimeId}:${item.agentRef}` === value && item.online,
+                const agent = connectedChatWorkspaceAgents(settings.workspace).find(
+                    (item) => `${item.runtimeId}:${item.agentRef}` === value,
                 );
                 if (agent === undefined) {
                     return;

@@ -128,7 +128,7 @@ export function BotChatHome({
     const queuedInitialMessage = queuedDraftMessage(model.creation);
     const setupView = model.view.kind === "setup" ? model.view : null;
     const disconnectedBot =
-        setupView !== null && (setupView.reason === "agent-offline" || setupView.reason === "agent-required");
+        setupView !== null && (setupView.reason === "runtime-offline" || setupView.reason === "agent-required");
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: Store revision explicitly restarts route loading.
     useEffect(() => {

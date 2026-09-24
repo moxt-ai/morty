@@ -19,7 +19,7 @@ export type SetupReason =
     | "inactive"
     | "no-selection"
     | "agent-missing"
-    | "agent-offline"
+    | "runtime-offline"
     | "agent-required";
 
 type Target =
@@ -100,7 +100,7 @@ function runtimeConnectionStatus(workspace: ChatWorkspace): BotConnectionStatus 
     if (workspace.status !== "active") {
         return { kind: "disconnected", label: "Disconnected" };
     }
-    return workspace.agents.some((agent) => agent.runtimeId === workspace.runtimeId && agent.online)
+    return workspace.runtimes.some((runtime) => runtime.runtimeId === workspace.runtimeId && runtime.online)
         ? { kind: "connected", label: "Connected" }
         : { kind: "disconnected", label: "Disconnected" };
 }
@@ -191,11 +191,11 @@ function setupReason(workspace: ChatWorkspace): SetupReason | null {
     if (workspace.runtimeId === null) {
         return "no-selection";
     }
-    const agents = workspace.agents.filter((candidate) => candidate.runtimeId === workspace.runtimeId);
-    if (agents.length === 0) {
+    const runtime = workspace.runtimes.find((candidate) => candidate.runtimeId === workspace.runtimeId);
+    if (runtime === undefined || runtime.agents.length === 0) {
         return "agent-missing";
     }
-    return agents.some((agent) => agent.online) ? null : "agent-offline";
+    return runtime.online ? null : "runtime-offline";
 }
 
 export function setupDescription(reason: SetupReason): string {
@@ -208,8 +208,8 @@ export function setupDescription(reason: SetupReason): string {
             return "Your workspace is loaded, but this Bot is not connected to a Runtime. Use the instruction below to connect one.";
         case "agent-missing":
             return "Your workspace is loaded, but its connected Runtime no longer reports any agents. Start the paired Runtime, or use the instruction below to pair it again.";
-        case "agent-offline":
-            return "Your workspace is loaded, but every agent on its connected Runtime is offline. Start the paired Runtime and check its internet connection, or use the instruction below to pair it again.";
+        case "runtime-offline":
+            return "Your workspace is loaded, but its connected Runtime is offline. Start the paired Runtime and check its internet connection, or use the instruction below to pair it again.";
         case "agent-required":
             return "Your workspace is loaded, but the server could not connect Chat to an available agent. Check that your local agent is running, or use the instruction below to pair it again.";
     }

@@ -99,6 +99,13 @@
             "when": 1790244139152,
             "tag": "0025_misty_scarlet_witch",
             "breakpoints": true
+        },
+        {
+            "idx": 26,
+            "version": "6",
+            "when": 1790256629002,
+            "tag": "0026_slimy_ink",
+            "breakpoints": true
         }
     ]
 }

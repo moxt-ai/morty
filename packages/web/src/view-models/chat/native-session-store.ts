@@ -1,6 +1,10 @@
 import type { NativeSessionEntry, NativeSessionResult } from "@moxt-ai/mobius-sdk/channel";
 import { createStore } from "zustand/vanilla";
-import type { BotChatApi, ChatWorkspace } from "../../services/chat/bot-chat-api.ts";
+import {
+    type BotChatApi,
+    type ChatAgentSelection,
+    connectedChatWorkspaceAgents,
+} from "../../services/chat/bot-chat-api.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 
 type NativeSessionDirectory =
@@ -30,7 +34,7 @@ type NativeSessionPreview =
 type Operation = "idle" | "more" | "import" | "fork";
 
 export interface NativeSessionStore {
-    readonly agents: ChatWorkspace["agents"];
+    readonly agents: readonly ChatAgentSelection[];
     readonly selected: string;
     readonly directory: NativeSessionDirectory;
     readonly preview: NativeSessionPreview;
@@ -66,15 +70,14 @@ export const createNativeSessionStore = (
                 // Older pairings of the same machine remain listed as separate Runtimes, so
                 // unscoped agents would repeat every agent once per pairing. Scope to the
                 // bound Runtime exactly like the harness selection does.
+                const connectedAgents = connectedChatWorkspaceAgents(workspace);
                 const agents =
                     workspace.runtimeId === null
-                        ? workspace.agents
-                        : workspace.agents.filter((agent) => agent.runtimeId === workspace.runtimeId);
+                        ? connectedAgents
+                        : connectedAgents.filter((agent) => agent.runtimeId === workspace.runtimeId);
                 set({ agents });
                 const selected = get().selected;
-                const agent =
-                    agents.find((item) => `${item.runtimeId}:${item.agentRef}` === selected) ??
-                    agents.find((item) => item.online);
+                const agent = agents.find((item) => `${item.runtimeId}:${item.agentRef}` === selected) ?? agents[0];
                 if (agent === undefined) {
                     set({ directory: { kind: "empty" } });
                     return;

@@ -45,7 +45,7 @@ export function NativeSessionDialog({
             void action(controller.signal);
         }
     };
-    const fallback = model.agents.find((agent) => agent.online);
+    const fallback = model.agents[0];
     return (
         <Dialog
             title="Native Sessions"

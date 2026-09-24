@@ -64,7 +64,16 @@ export async function routeProjectObject(
     const timer = setTimeout(() => deadline.abort(), 120_000);
     const signal = AbortSignal.any([request.signal, deadline.signal]);
     try {
-        return await stub.fetch(new Request(request, { signal }));
+        const body = request.body === null ? null : await request.arrayBuffer();
+        signal.throwIfAborted();
+        return await stub.fetch(
+            new Request(request.url, {
+                body,
+                headers: request.headers,
+                method: request.method,
+                signal,
+            }),
+        );
     } catch (cause) {
         request.signal.throwIfAborted();
         throw new PlatformProjectError(

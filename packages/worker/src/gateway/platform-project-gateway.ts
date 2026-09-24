@@ -130,21 +130,18 @@ export class PlatformProjectGateway {
             return { ...pairing, appId: configuration.appId, relayUrl: configuration.origin };
         });
 
-    readonly chatAgents = async (projectId: string, signal: AbortSignal) =>
+    readonly chatRuntimes = async (projectId: string, signal: AbortSignal) =>
         await this.#withProject(projectId, signal, async (client) => {
             const runtimes = await client.runtimes.list(signal);
-            return runtimes.flatMap((runtime) =>
-                runtime.agents.map((agent) => ({
-                    runtimeId: runtime.runtimeId,
-                    agentRef: agent.id,
-                    label: agent.label,
-                    machineName: runtime.machineName,
-                    online: runtime.online,
-                })),
-            );
+            return runtimes.map((runtime) => ({
+                runtimeId: runtime.runtimeId,
+                machineName: runtime.machineName,
+                online: runtime.online,
+                agents: runtime.agents.map((agent) => ({ agentRef: agent.id, label: agent.label })),
+            }));
         });
 
-    readonly getChatAgents = async (projectId: string, runtimeId: string, parent: AbortSignal) => {
+    readonly getChatRuntimeAgents = async (projectId: string, runtimeId: string, parent: AbortSignal) => {
         const parsedProjectId = v.parse(platformIdentifier, projectId);
         const parsedRuntimeId = v.parse(platformIdentifier, runtimeId);
         const signal = AbortSignal.any([parent, AbortSignal.timeout(15000)]);
@@ -175,13 +172,12 @@ export class PlatformProjectGateway {
                     502,
                 );
             }
-            return runtime.agents.map((agent) => ({
+            return {
                 runtimeId: runtime.runtimeId,
-                agentRef: agent.id,
-                label: agent.label,
                 machineName: runtime.machineName,
                 online: runtime.online,
-            }));
+                agents: runtime.agents.map((agent) => ({ agentRef: agent.id, label: agent.label })),
+            };
         } catch (cause) {
             parent.throwIfAborted();
             if (signal.aborted) {
@@ -437,7 +433,7 @@ export class PlatformProjectGateway {
 
     readonly readChatSession = async (
         projectId: string,
-        selection: { readonly runtimeId: string; readonly agentRef: string },
+        selection: { readonly runtimeId: string },
         sessionId: string,
         signal: AbortSignal,
     ) =>
@@ -448,7 +444,7 @@ export class PlatformProjectGateway {
                 const session = (await client.runtimes.querySessions(selection.runtimeId, [sessionId], signal)).find(
                     (candidate) => candidate.sessionId === sessionId,
                 );
-                if (session === undefined || session.agentId !== selection.agentRef) {
+                if (session === undefined) {
                     throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
                 }
                 const ready = await client.sessions.load(
@@ -462,7 +458,7 @@ export class PlatformProjectGateway {
                     signal,
                 );
                 return {
-                    agentRef: selection.agentRef,
+                    agentRef: session.agentId,
                     ready,
                     entry: {
                         entryId: session.sessionId,
