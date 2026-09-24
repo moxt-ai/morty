@@ -295,11 +295,11 @@ test("Given an Agent links local file URLs, When they render and a user opens on
     const composer = await created.queryElementByTestId(dataTestId.messageComposer);
 
     await sendPrompt(created, composer as HTMLTextAreaElement, "Show the generated local artifacts");
-    const link = await Promise.race([created.queryElementByTestId(dataTestId.localFileLink), failure]);
+    await Promise.race([created.queryElementByTestId(dataTestId.localFileLink), failure]);
     await vi.waitFor(() =>
         expect(getByRole(document.body, "img", { name: "QR code" })).toBeInstanceOf(HTMLImageElement),
     );
-    await created.user.click(link);
+    await created.user.click(await created.queryElementByTestId(dataTestId.localFileLink));
 
     const preview = await created.queryElementByTestId(dataTestId.filePreview);
     expect(preview.textContent).not.toContain(":104");
