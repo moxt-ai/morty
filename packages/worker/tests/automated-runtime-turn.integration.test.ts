@@ -23,12 +23,10 @@ test("Given a connected Runtime, When Slack sends a Turn, Then the native Agent 
             const sendEvent = (payload: object, sequence: number) => {
                 runtime.send(
                     encodeCommittedSessionEvent({
-                        cursor: `event_${sequence}`,
                         eventId: `event_${sequence}`,
                         kind: SESSION_EVENT_COMMITTED_KIND,
                         payload: JSON.stringify(payload),
                         recordedAt: "2026-09-24T00:00:00.000Z",
-                        sequence: String(sequence),
                         sessionId: command.sessionId,
                         source: { kind: "runtime", sourceSeq: String(sequence) },
                     }),
