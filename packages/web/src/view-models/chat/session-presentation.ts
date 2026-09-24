@@ -7,7 +7,7 @@ import {
     type MobiusSessionEvent,
     type PromptImage,
 } from "@moxt-ai/mobius-sdk";
-import type { RecordedAgentActivity } from "../../services/chat/agent-activities.ts";
+import { agentActivityKey, type RecordedAgentActivity } from "../../services/chat/agent-activities.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 
 export type SessionMessage =
@@ -62,10 +62,11 @@ export function historySessionPresentation(
     if (history.status !== "available") {
         return { activities: new Map(), messages: [] };
     }
+    const messages = history.messages;
     const commandIdsByMessageIndex = new Map<number, string>();
-    let historyIndex = history.messages.length;
+    let historyIndex = messages.length;
     if (activeCommandId !== null) {
-        const activeUserIndex = history.messages.findLastIndex((message) => message.role === "user");
+        const activeUserIndex = messages.findLastIndex((message) => message.role === "user");
         if (activeUserIndex >= 0) {
             for (let index = activeUserIndex; index < historyIndex; index += 1) {
                 commandIdsByMessageIndex.set(index, activeCommandId);
@@ -75,11 +76,11 @@ export function historySessionPresentation(
     }
     for (const commandId of history.coveredCommandIds) {
         let assistantStartIndex = historyIndex;
-        while (assistantStartIndex > 0 && history.messages[assistantStartIndex - 1]?.role === "assistant") {
+        while (assistantStartIndex > 0 && messages[assistantStartIndex - 1]?.role === "assistant") {
             assistantStartIndex -= 1;
         }
         const userIndex = assistantStartIndex - 1;
-        if (assistantStartIndex === historyIndex || history.messages[userIndex]?.role !== "user") {
+        if (assistantStartIndex === historyIndex || messages[userIndex]?.role !== "user") {
             break;
         }
         commandIdsByMessageIndex.set(userIndex, commandId);
@@ -89,27 +90,30 @@ export function historySessionPresentation(
         historyIndex = userIndex;
     }
     const activities = new Map<string, RecordedAgentActivity>();
-    const messages = history.messages.map((message, index): SessionMessage => {
+    const presentedMessages = messages.map((message, index): SessionMessage => {
         const coveredCommandId = commandIdsByMessageIndex.get(index);
         const id =
             coveredCommandId === undefined
                 ? `history-${index.toString()}`
-                : `${coveredCommandId}-${message.role === "user" ? "user" : "reply"}`;
+                : message.role === "user"
+                  ? `${coveredCommandId}-user`
+                  : `${coveredCommandId}-reply-${index.toString()}`;
         if (message.role === "user") {
             return { id, role: "user", text: message.text, contents: promptImageContents(message.images) };
         }
         const commandId = coveredCommandId ?? `native-message-${index.toString()}`;
         const activityIds = message.activities.map((activity) => {
-            const key = `native-message-${index.toString()}-activity-${activity.activityId}`;
+            const presented = new MobiusAgentActivityEvent({
+                ...activity,
+                commandId,
+                detail: { kind: "unrecorded" },
+                kind: "agent.activity",
+                sessionId,
+            });
+            const key = agentActivityKey(presented);
             activities.set(key, {
                 sequence: BigInt(activity.sequence),
-                activity: new MobiusAgentActivityEvent({
-                    ...activity,
-                    commandId,
-                    detail: { kind: "unrecorded" },
-                    kind: "agent.activity",
-                    sessionId,
-                }),
+                activity: presented,
             });
             return key;
         });
@@ -129,7 +133,7 @@ export function historySessionPresentation(
             ],
         };
     });
-    return { activities, messages };
+    return { activities, messages: presentedMessages };
 }
 
 export function placeAgentActivity(

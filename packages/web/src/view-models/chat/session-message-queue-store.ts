@@ -9,6 +9,25 @@ interface QueuedMessageValue {
     readonly turnId: string;
 }
 
+interface SessionMessageQueueJournalStore {
+    readonly messagesBySession: ReadonlyMap<string, readonly QueuedMessageValue[]>;
+    readonly write: (sessionId: string, messages: readonly QueuedMessageValue[]) => void;
+}
+
+const sessionMessageQueueJournal = createStore<SessionMessageQueueJournalStore>()((set) => ({
+    messagesBySession: new Map(),
+    write: (sessionId, messages) =>
+        set((state) => {
+            const messagesBySession = new Map(state.messagesBySession);
+            if (messages.length === 0) {
+                messagesBySession.delete(sessionId);
+            } else {
+                messagesBySession.set(sessionId, messages);
+            }
+            return { messagesBySession };
+        }),
+}));
+
 export type ChatQueuedMessage =
     | ({ readonly kind: "queued" } & QueuedMessageValue)
     | ({ readonly kind: "steering" } & QueuedMessageValue)
@@ -36,6 +55,7 @@ export interface SessionMessageQueueStore {
         signal: AbortSignal,
     ) => Promise<ChatQueuedMessage | null>;
     readonly steerMessage: (commandId: string, signal: AbortSignal) => Promise<ChatQueuedMessage | null>;
+    readonly reconcile: (commandIds: readonly string[]) => void;
     readonly takeStarted: (commandId: string) => ChatQueuedMessage | null;
 }
 
@@ -51,10 +71,25 @@ function updateMessage(
     return messages.map((message) => (message.commandId === commandId ? { ...message, kind } : message));
 }
 
-export const createSessionMessageQueueStore = (port: SessionMessageQueuePort) =>
-    createStore<SessionMessageQueueStore>()((set, get) => ({
+export const createSessionMessageQueueStore = (options: {
+    readonly port: SessionMessageQueuePort;
+    readonly sessionId: string;
+}) => {
+    const restored = sessionMessageQueueJournal.getState().messagesBySession.get(options.sessionId) ?? [];
+    const record = (messages: readonly ChatQueuedMessage[]): void => {
+        sessionMessageQueueJournal.getState().write(
+            options.sessionId,
+            messages.map((message) => ({
+                commandId: message.commandId,
+                images: message.images,
+                summary: message.summary,
+                turnId: message.turnId,
+            })),
+        );
+    };
+    return createStore<SessionMessageQueueStore>()((set, get) => ({
         feedback: { kind: "none" },
-        messages: [],
+        messages: restored.map((message) => ({ ...message, kind: "queued" })),
         operation: { kind: "idle" },
         deleteMessage: async (commandId, parent) => {
             const message = get().messages.find((candidate) => candidate.commandId === commandId);
@@ -67,9 +102,13 @@ export const createSessionMessageQueueStore = (port: SessionMessageQueuePort) =>
             }));
             const signal = AbortSignal.any([parent, AbortSignal.timeout(15_000)]);
             try {
-                await port.cancel(message.turnId, crypto.randomUUID(), signal);
+                await options.port.cancel(message.turnId, crypto.randomUUID(), signal);
                 signal.throwIfAborted();
-                set((state) => ({ messages: state.messages.filter((candidate) => candidate.commandId !== commandId) }));
+                set((state) => {
+                    const messages = state.messages.filter((candidate) => candidate.commandId !== commandId);
+                    record(messages);
+                    return { messages };
+                });
                 return message;
             } catch (cause) {
                 if (parent.aborted) {
@@ -94,7 +133,7 @@ export const createSessionMessageQueueStore = (port: SessionMessageQueuePort) =>
             set({ feedback: { kind: "none" }, operation: { commandId, kind: "submitting" } });
             const signal = AbortSignal.any([parent, AbortSignal.timeout(45_000)]);
             try {
-                const accepted = await port.submit(
+                const accepted = await options.port.submit(
                     {
                         ...request,
                         disposition: SessionPromptDisposition.Queue,
@@ -111,7 +150,11 @@ export const createSessionMessageQueueStore = (port: SessionMessageQueuePort) =>
                     summary,
                     turnId: accepted.turnId,
                 };
-                set((state) => ({ messages: [...state.messages, message], operation: { kind: "idle" } }));
+                set((state) => {
+                    const messages = [...state.messages, message];
+                    record(messages);
+                    return { messages, operation: { kind: "idle" } };
+                });
                 return message;
             } catch (cause) {
                 if (parent.aborted) {
@@ -135,9 +178,13 @@ export const createSessionMessageQueueStore = (port: SessionMessageQueuePort) =>
             }));
             const signal = AbortSignal.any([parent, AbortSignal.timeout(15_000)]);
             try {
-                await port.steer(message.turnId, signal);
+                await options.port.steer(message.turnId, signal);
                 signal.throwIfAborted();
-                set((state) => ({ messages: state.messages.filter((candidate) => candidate.commandId !== commandId) }));
+                set((state) => {
+                    const messages = state.messages.filter((candidate) => candidate.commandId !== commandId);
+                    record(messages);
+                    return { messages };
+                });
                 return message;
             } catch (cause) {
                 if (parent.aborted) {
@@ -153,12 +200,22 @@ export const createSessionMessageQueueStore = (port: SessionMessageQueuePort) =>
                 return null;
             }
         },
+        reconcile: (commandIds) => {
+            const messages = get().messages.filter((message) => !commandIds.includes(message.commandId));
+            record(messages);
+            set({ messages });
+        },
         takeStarted: (commandId) => {
             const message = get().messages.find((candidate) => candidate.commandId === commandId);
             if (message === undefined || message.kind !== "queued") {
                 return null;
             }
-            set((state) => ({ messages: state.messages.filter((candidate) => candidate.commandId !== commandId) }));
+            set((state) => {
+                const messages = state.messages.filter((candidate) => candidate.commandId !== commandId);
+                record(messages);
+                return { messages };
+            });
             return message;
         },
     }));
+};
