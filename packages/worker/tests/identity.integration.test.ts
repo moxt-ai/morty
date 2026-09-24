@@ -333,6 +333,18 @@ test("Given an anonymous user, When access is transferred, revoked, and exhauste
         expect(response.status).toBe(200);
         remoteTokens.push(v.parse(v.object({ token: v.string() }), await response.json()).token);
     }
+    const recoveryResponse = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/recovery-token`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${remoteTokens[0]}` },
+        }),
+        environment,
+    );
+    expect(recoveryResponse.status).toBe(201);
+    const recoveryToken = v.parse(
+        v.object({ token: v.pipe(v.string(), v.startsWith("mobius_recovery_v1.")) }),
+        await recoveryResponse.json(),
+    ).token;
     const ended = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/remote-access`, {
             method: "DELETE",
@@ -345,6 +357,7 @@ test("Given an anonymous user, When access is transferred, revoked, and exhauste
         expect((await worker.fetch(accountRequest(token, owner.projectId), environment)).status).toBe(401);
     }
     expect((await redeem(remoteTransfer.code)).status).toBe(410);
+    expect((await worker.fetch(accountRequest(recoveryToken, owner.projectId), environment)).status).toBe(200);
     expect((await worker.fetch(accountRequest(owner.token, owner.projectId), environment)).status).toBe(200);
 
     const limitedTransfer = await createTransfer();
@@ -364,6 +377,32 @@ test("Given an anonymous user, When access is transferred, revoked, and exhauste
     const exhausted = await redeem(limitedTransfer.code);
     expect(exhausted.status).toBe(410);
     expect(await exhausted.json()).toMatchObject({ error: { code: "TRANSFER_UNAVAILABLE" } });
+});
+
+test("Given the first browser for a workspace, When remote access ends after a recovery token is created, Then the browser credential is revoked and recovery remains available", async () => {
+    const environment = fixture.environment();
+    const identity = await fixture.createAnonymousUser();
+    const recoveryResponse = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/identity/recovery-token`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${identity.token}` },
+        }),
+        environment,
+    );
+    expect(recoveryResponse.status).toBe(201);
+    const recoveryToken = v.parse(v.object({ token: v.string() }), await recoveryResponse.json()).token;
+
+    const ended = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/identity/remote-access`, {
+            method: "DELETE",
+            headers: { authorization: `Bearer ${identity.token}` },
+        }),
+        environment,
+    );
+
+    expect(ended.status).toBe(204);
+    expect((await worker.fetch(accountRequest(identity.token, identity.projectId), environment)).status).toBe(401);
+    expect((await worker.fetch(accountRequest(recoveryToken, identity.projectId), environment)).status).toBe(200);
 });
 
 test("Given anonymous and signed-in users with Bots, When pairing tickets are issued and redeemed, Then ownership and one-time use are enforced", async () => {

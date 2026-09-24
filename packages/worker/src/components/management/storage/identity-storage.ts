@@ -18,7 +18,12 @@ import {
     requireIdentityDatabase,
 } from "./identity-storage-common.ts";
 
-const anonymousToken = v.pipe(v.string(), v.regex(/^mobius_anon_v2_[A-Za-z0-9_-]{43}$/u));
+const anonymousToken = v.pipe(
+    v.string(),
+    v.regex(
+        /^(?:mobius_anon_v2_[A-Za-z0-9_-]{43}|mobius_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
+    ),
+);
 const userRow = v.pipe(v.object({ userId: v.string() }), v.readonly());
 const identityTransferLifetime = 24 * 60 * 60 * 1000;
 
@@ -33,8 +38,8 @@ export type BindingResult =
     | { readonly kind: "invalid-local-user" };
 
 export type EndRemoteAccessResult =
-    | { readonly kind: "ended"; readonly transferId: string; readonly userId: string }
-    | { readonly kind: "not-remote" }
+    | { readonly kind: "ended-credential"; readonly credentialId: string; readonly userId: string }
+    | { readonly kind: "ended-transfer"; readonly transferId: string; readonly userId: string }
     | { readonly kind: "unauthenticated" };
 
 export class IdentityStorage {
@@ -116,6 +121,23 @@ export class IdentityStorage {
         return { code, expiresAt };
     };
 
+    readonly createRecoveryToken = async (userId: string, now: number, signal: AbortSignal): Promise<string> => {
+        signal.throwIfAborted();
+        const token = createProjectCredential("mobius_recovery_v1", v.parse(v.string(), this.#projectId));
+        await requireIdentityDatabase(this.#database)
+            .insert(anonymousCredential)
+            .values({
+                id: `cred_${crypto.randomUUID()}`,
+                userId,
+                tokenHash: await digest(token),
+                status: "active",
+                createdAt: now,
+            })
+            .run();
+        signal.throwIfAborted();
+        return token;
+    };
+
     readonly redeemTransfer = async (
         code: string,
         now: number,
@@ -188,6 +210,7 @@ export class IdentityStorage {
         const database = requireIdentityDatabase(this.#database);
         const credential = await database
             .select({
+                credentialId: anonymousCredential.id,
                 transferId: anonymousCredential.remoteTransferId,
                 userId: anonymousCredential.userId,
             })
@@ -211,7 +234,25 @@ export class IdentityStorage {
             return { kind: "unauthenticated" };
         }
         if (credential.transferId === null) {
-            return { kind: "not-remote" };
+            const revoked = await database
+                .update(anonymousCredential)
+                .set({ status: "revoked", revokedAt: now })
+                .where(
+                    and(
+                        eq(anonymousCredential.id, credential.credentialId),
+                        eq(anonymousCredential.userId, credential.userId),
+                        eq(anonymousCredential.status, "active"),
+                    ),
+                )
+                .run();
+            signal.throwIfAborted();
+            return revoked.meta.changes === 1
+                ? {
+                      kind: "ended-credential",
+                      credentialId: credential.credentialId,
+                      userId: credential.userId,
+                  }
+                : { kind: "unauthenticated" };
         }
         const results = await database.batch([
             database
@@ -238,7 +279,7 @@ export class IdentityStorage {
         if (results[0]?.meta.changes !== 1) {
             return { kind: "unauthenticated" };
         }
-        return { kind: "ended", transferId: credential.transferId, userId: credential.userId };
+        return { kind: "ended-transfer", transferId: credential.transferId, userId: credential.userId };
     };
 
     readonly clerkBinding = async (clerkUserId: string, signal: AbortSignal): Promise<string | null> => {

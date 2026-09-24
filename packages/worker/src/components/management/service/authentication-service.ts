@@ -49,7 +49,7 @@ export class AuthenticationService {
         if (token === undefined) {
             return { kind: "unauthenticated" };
         }
-        if (token.startsWith("mobius_anon_")) {
+        if (token.startsWith("mobius_anon_") || token.startsWith("mobius_recovery_")) {
             const userId = await this.identities.authenticateAnonymous(token, signal);
             return userId === null
                 ? { kind: "unauthenticated" }
@@ -131,6 +131,19 @@ export class AuthenticationService {
         return transfer;
     };
 
+    readonly createRecoveryToken = async (token: string | undefined, signal: AbortSignal): Promise<string | null> => {
+        if (token === undefined) {
+            return null;
+        }
+        const userId = await this.identities.authenticateAnonymous(token, signal);
+        if (userId === null) {
+            return null;
+        }
+        const recoveryToken = await this.identities.createRecoveryToken(userId, Date.now(), signal);
+        this.logger.info({ event: "identity-recovery-token-created", userId }, "Identity audit event");
+        return recoveryToken;
+    };
+
     readonly redeemTransfer = async (code: string, signal: AbortSignal): Promise<AnonymousIdentity | null> => {
         const identity = await this.identities.redeemTransfer(code, Date.now(), signal);
         this.logger.info(
@@ -153,8 +166,9 @@ export class AuthenticationService {
             {
                 event: "remote-access-ended",
                 outcome: result.kind,
-                userId: result.kind === "ended" ? result.userId : undefined,
-                transferId: result.kind === "ended" ? result.transferId : undefined,
+                userId: result.kind === "unauthenticated" ? undefined : result.userId,
+                transferId: result.kind === "ended-transfer" ? result.transferId : undefined,
+                credentialId: result.kind === "ended-credential" ? result.credentialId : undefined,
             },
             "Identity audit event",
         );

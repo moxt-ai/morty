@@ -39,8 +39,11 @@ page disables its actions and marks the selected action. A failure remains on th
 user can explicitly retry or choose the other action; import never falls back to a fork. Native
 session IDs are not returned by ordinary directory listings. The redeemed browser credential
 remains bound to that transfer's 24-hour lifetime. A user can choose **End remote access**
-from the continued Session; this revokes the entry and every browser credential redeemed from
-it without stopping the local Runtime or task.
+from any browser Session. For a shared-link credential this revokes the transfer and every browser
+credential redeemed from it; otherwise it revokes that browser credential. Neither path stops the
+local Runtime or task. Before revocation, Chat can issue a separate
+project-routed recovery token on the user's explicit request. Recovery tokens are not bound to
+the remote transfer, remain valid after it ends, and must be stored as securely as a password.
 Both instruction documents are Markdown templates in `templates/`, outside the
 static public assets. The Worker renders them at `/setup.md` and `/pair.md` at
 request time. `{{BASE_URL}}` uses `APP_ORIGIN` when set, otherwise the
