@@ -546,8 +546,17 @@ test("Given a tool finishes during an active conversation, When its terminal act
 test("Given an Agent links a local file location, When a user opens it, Then the file path omits the source location", {
     timeout: 30_000,
 }, async () => {
+    const releaseTurn = Promise.withResolvers<void>();
     const created = await createTestApp({
         agentBehavior: {
+            afterLastDelta: async (_command, signal) => {
+                await Promise.race([
+                    releaseTurn.promise,
+                    new Promise<never>((_resolve, reject) =>
+                        signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+                    ),
+                ]);
+            },
             responseParts: () => [
                 "Open [Generated source](</fake/generated-source.ts:104>)\n\n![QR code](file:///fake/generated-image.png)",
             ],
@@ -572,6 +581,7 @@ test("Given an Agent links a local file location, When a user opens it, Then the
     expect(preview.textContent).not.toContain(":104");
     const content = await created.queryElementByTestId(dataTestId.filePreviewContent);
     expect(content.textContent).toContain("export const generated = true;");
+    releaseTurn.resolve();
 });
 
 test("Given a Bot has a recent directory from another harness, When its workspace loads, Then the directory remains available", {
