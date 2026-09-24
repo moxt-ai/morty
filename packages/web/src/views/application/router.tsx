@@ -65,7 +65,7 @@ export function createApplicationRouter<TConnection extends ChannelReference>(
             </layouts.Standard>
         ),
     });
-    function page(path: "/" | "/chat" | "/slack", view: ApplicationConnectionProps<TConnection>["view"]) {
+    function page(path: "/" | "/chat", view: ApplicationConnectionProps<TConnection>["view"]) {
         const route = createRoute({
             getParentRoute: () => root,
             path,
@@ -73,7 +73,7 @@ export function createApplicationRouter<TConnection extends ChannelReference>(
                 const sessionId = Reflect.get(search, "sessionId");
                 return {
                     channel: Reflect.get(search, "channel"),
-                    sessionId: view !== "slack" && isIdentifier(sessionId) ? sessionId : undefined,
+                    sessionId: isIdentifier(sessionId) ? sessionId : undefined,
                 };
             },
             loaderDeps: ({ search }) => ({ channel: search.channel }),
@@ -97,7 +97,7 @@ export function createApplicationRouter<TConnection extends ChannelReference>(
         return route;
     }
     return createRouter({
-        routeTree: root.addChildren([page("/", "overview"), page("/chat", "chat"), page("/slack", "slack")]),
+        routeTree: root.addChildren([page("/", "overview"), page("/chat", "chat")]),
         defaultOnCatch: (error) => reportApplicationError(error, "application-route"),
         scrollRestoration: true,
     });

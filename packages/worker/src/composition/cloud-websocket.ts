@@ -17,10 +17,7 @@ function invalidBridgeRequest(): never {
 
 function bridgedUrl(path: string): URL {
     const url = new URL(path, BRIDGE_ORIGIN);
-    if (
-        url.origin !== BRIDGE_ORIGIN ||
-        (!url.pathname.startsWith("/morty/api/") && !url.pathname.startsWith("/mobius-slack/api/"))
-    ) {
+    if (url.origin !== BRIDGE_ORIGIN || !url.pathname.startsWith("/morty/api/")) {
         return invalidBridgeRequest();
     }
     return url;

@@ -12,7 +12,7 @@ visible but does not fail the build. See
 
 Morty is one web application and one Cloudflare Worker. Clerk authenticates
 individual users; Clerk Organizations and Cloud workspaces are not used. A signed-in
-user can create or select a Mobius bot, chat with it, and connect it to Slack.
+user can create or select a Mobius bot and chat with it.
 
 Mobius runs as a separate HTTP service. Management records Clerk user-to-bot ownership
 in D1. Chat issues revocable, bot-scoped access tokens so the browser can communicate
@@ -27,14 +27,13 @@ packages/
     migrations/0001_initial.sql # Single Cloud D1 schema
     src/components/chat/       # Access-token and chat-session APIs
     src/components/management/ # Clerk authentication and owned-bot management
-    src/components/slack/      # Slack domain, HTTP, queue, D1, R2, and DO code
     src/gateway/               # Request dispatch and all external gateways
 ```
 
 Published Mobius protocol and SDK packages supply the application dependencies. The
 pinned source under `third-party/mobius` supplies unpublished test infrastructure for
-the local end-to-end stack. Each deployment environment uses regional Chat databases
-and attachment buckets plus one Slack database and attachment bucket.
+the local end-to-end stack. Each deployment environment uses an artifact bucket and
+Project Durable Objects.
 
 ## Development
 

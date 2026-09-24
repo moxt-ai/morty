@@ -1,11 +1,11 @@
 # Cloud storage
 
-Morty stores each workspace in a Project Durable Object and uses regional R2
-buckets for attachments.
+Morty stores each workspace in a Project Durable Object and uses R2 for the setup
+artifact.
 
-- Project Durable Object SQLite stores management, chat, and Slack integration
-  records using `packages/worker/migrations/project-do`.
-- Regional attachment buckets store Slack files under user-prefixed object keys.
+- Project Durable Object SQLite stores management and chat records using
+  `packages/worker/migrations/project-do`.
+- The APAC attachment bucket stores the setup artifact.
 
 Database and R2 binding values are validated at the Worker boundary; missing
 bindings fail closed.

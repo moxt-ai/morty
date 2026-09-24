@@ -62,7 +62,7 @@ export async function createIdentityFixture(
                 options.wranglerConfiguration ?? new URL("../../../../wrangler.jsonc", import.meta.url),
             ),
             modules: true,
-            r2Buckets: ["CHAT_ATTACHMENTS_APAC", "CHAT_ATTACHMENTS_WNAM"],
+            r2Buckets: ["CHAT_ATTACHMENTS_APAC"],
             script: output.text,
         }),
     );
@@ -108,11 +108,6 @@ export async function createIdentityFixture(
             APP_ORIGIN: appOrigin,
             ASSETS: { fetch: () => Promise.resolve(new Response()) },
             CHAT_PROJECTS: chatProjects,
-            EVENTS: { send: () => Promise.resolve() },
-            SLACK_MOBIUS_AUTH_TOKEN: "service-token",
-            SLACK_OAUTH_STATE_SIGNING_KEY: "state-signing-key",
-            SLACK_SERVER_BASE_URL: appOrigin,
-            SLACK_TOKEN_ENCRYPTION_KEY: btoa("a".repeat(32)),
         });
         const createAnonymousUser = async () => {
             const response = await worker.fetch(

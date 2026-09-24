@@ -74,7 +74,7 @@ its internal Project, creates a Chat-owned Bot locally, and persists ownership
 before returning `{ token, userId, bot }`. The Worker uses
 `MobiusPlatformAppClient` with its server-held AppCredential. Users never configure
 Projects in the web application: the browser opens headerless Chat directly.
-Slack navigation and the manual Bot claim/Project setup screens are hidden or removed.
+The manual Bot claim and Project setup screens are hidden or removed.
 Clerk remains an optional identity binding; OIDC is for Platform developer operations.
 
 Platform's Project creation route composes AppCredential and developer OIDC
@@ -129,15 +129,15 @@ the Platform Wrangler configuration must use that same ledger.
 
 Chat migration `0001_management.sql` creates management tables for deployments
 whose recorded initial migration predates those tables, before identity backfill.
-The renamed staging Worker has the required runtime settings and owns the existing
-Slack queue consumer. The Chat landing view resolves its Bot from the authenticated
-backend and does not require browser build-time App configuration.
+The renamed staging Worker has the required runtime settings. The Chat landing view
+resolves its Bot from the authenticated backend and does not require browser build-time
+App configuration.
 
 Chat uses the SDK's Project-scoped `runtimePairings.create/read` and
 `runtimes.list` operations. It provisions a Project first, shows the returned
 pairing code, and retains Runtime identity and online state independently.
 Bot profile, instructions, Runtime, Agent, and workspace selections are owned by
-Chat management routes. Slack binds directly to those Chat Bot IDs.
+Chat management routes.
 
 ### 4. Conversation-scoped browser access
 

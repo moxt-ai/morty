@@ -76,10 +76,7 @@ export class WebSocketApiTransport {
     readonly fetch = async (request: Request): Promise<Response> => {
         request.signal.throwIfAborted();
         const url = new URL(request.url);
-        if (
-            url.origin !== this.#origin ||
-            (!url.pathname.startsWith("/morty/api/") && !url.pathname.startsWith("/mobius-slack/api/"))
-        ) {
+        if (url.origin !== this.#origin || !url.pathname.startsWith("/morty/api/")) {
             throw new Error("The API request cannot use the Chat WebSocket bridge.");
         }
         const headers: [string, string][] = [];

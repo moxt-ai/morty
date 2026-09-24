@@ -25,7 +25,6 @@ import {
     platformCredentialBindingsSchema,
     platformEndpointBindingsSchema,
 } from "../infra/cloud-bindings.ts";
-import { runAutomatedRuntimeTurn } from "./automated-runtime-turn.ts";
 
 export type ChatConversationInput =
     | {
@@ -415,81 +414,6 @@ export class PlatformProjectGateway {
             },
             120000,
         );
-
-    readonly openAutomatedChatSession = async (
-        projectId: string,
-        selection: {
-            readonly runtimeId: string;
-            readonly agentRef: string;
-        },
-        sessionId: string,
-        title: string,
-        signal: AbortSignal,
-    ): Promise<string> =>
-        await this.#withProject(
-            projectId,
-            signal,
-            async (client) => {
-                const existing = (await client.runtimes.querySessions(selection.runtimeId, [sessionId], signal)).find(
-                    (session) => session.sessionId === sessionId,
-                );
-                const ready =
-                    existing === undefined
-                        ? await client.sessions.create(
-                              {
-                                  additionalDirectoryIds: [],
-                                  agentId: selection.agentRef,
-                                  bindingId: `binding_${crypto.randomUUID()}`,
-                                  directoryId: "default",
-                                  policy: new MobiusRecordingPolicy("full", 30 * 24 * 60 * 60 * 1000, 1000, 6_000_000),
-                                  runtimeId: selection.runtimeId,
-                                  sessionId,
-                                  title,
-                              },
-                              signal,
-                          )
-                        : await client.sessions.load(
-                              selection.runtimeId,
-                              sessionId,
-                              {
-                                  additionalDirectoryIds: existing.additionalDirectories.map(
-                                      (directory) => directory.directoryId,
-                                  ),
-                                  agentId: existing.agentId,
-                                  directoryId: existing.directoryId,
-                              },
-                              signal,
-                          );
-                if (ready.sessionId !== sessionId || ready.agentId !== selection.agentRef) {
-                    throw new PlatformProjectError(
-                        "PLATFORM_INVALID_RESPONSE",
-                        "Platform returned an unexpected Session.",
-                        502,
-                    );
-                }
-                return sessionId;
-            },
-            120000,
-        );
-
-    readonly submitAutomatedChatTurn = async (
-        projectId: string,
-        selection: { readonly runtimeId: string; readonly agentRef: string },
-        sessionId: string,
-        input: {
-            readonly commandId: string;
-            readonly prompt: string;
-            readonly instructions: string;
-        },
-        signal: AbortSignal,
-    ): Promise<{ readonly text: string; readonly stopReason: string }> => {
-        const socket = await this.openChatRuntimeHost(projectId, selection.runtimeId, signal);
-        try {
-            return await runAutomatedRuntimeTurn(socket, selection, sessionId, input, signal);
-        } finally {
-            socket.close(1000, "Automated Turn complete");
-        }
-    };
 
     readonly nativeSessionAccess = async (
         projectId: string,

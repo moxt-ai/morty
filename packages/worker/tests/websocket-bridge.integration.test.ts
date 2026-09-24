@@ -91,13 +91,12 @@ function decodeChunk(value: unknown): { readonly requestId: string; readonly bod
 }
 
 test("Given a public HTTP client, When it requests browser-only APIs, Then Chat does not expose the endpoints", async () => {
-    const [cloudResponse, projectResponse, slackResponse] = await Promise.all([
+    const [cloudResponse, projectResponse] = await Promise.all([
         runtime.dispatchFetch("https://chat.test/morty/api/config"),
         runtime.dispatchFetch("https://chat.test/morty/api/projects/prj_test/management/bots/bot_test"),
-        runtime.dispatchFetch("https://chat.test/mobius-slack/api/slack/bots?projectId=prj_test"),
     ]);
 
-    for (const response of [cloudResponse, projectResponse, slackResponse]) {
+    for (const response of [cloudResponse, projectResponse]) {
         expect(response.status).toBe(404);
         await expect(response.json()).resolves.toEqual({ error: { code: "NOT_FOUND", message: "Not found." } });
     }

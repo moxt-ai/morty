@@ -12,12 +12,7 @@
             "entry": ["*.e2e.test.ts", "fixtures/local-platform-worker.ts", "infra/acp-proxy.ts"]
         },
         "packages/web": {
-            "entry": [
-                "src/main.tsx",
-                "tests/**/*.integration.test.tsx",
-                "src/views/applications/slack-management.tsx",
-                "src/components/ui/*.tsx"
-            ]
+            "entry": ["src/main.tsx", "tests/**/*.integration.test.tsx", "src/components/ui/*.tsx"]
         },
         "packages/worker": {
             "entry": ["src/index.ts", "src/schema/*/index.ts"]

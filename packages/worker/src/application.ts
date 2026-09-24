@@ -3,8 +3,6 @@ import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
 import { instructionDocumentRoutes } from "./components/instruction-documents/http/index.ts";
 import { platformIdentifier, platformProjectSchema } from "./components/management/entity/platform-project.ts";
-import { slackWorker } from "./components/slack/composition/cloudflare-slack-worker.ts";
-import { publicSlackRoutes, slackRoutes } from "./components/slack/http/index.ts";
 import { createApplicationDependencies } from "./composition/application-context.ts";
 import { cloudRoutes, publicCloudRoutes } from "./composition/cloud-http.ts";
 import { createCloudWebSocketHandlers } from "./composition/cloud-websocket.ts";
@@ -56,7 +54,6 @@ const application: Hono<{ readonly Bindings: CloudBindings }> = new Hono<{ reado
     )
     .use("/morty/api/*", bodyLimit({ maxSize: MAXIMUM_REQUEST_BODY_BYTES }))
     .all("/morty/api", notFound)
-    .all("/mobius-slack/api", notFound)
     .route("/", instructionDocumentRoutes)
     .route("/", setupArtifact)
     .get("/morty/ws", (context) => {
@@ -72,7 +69,6 @@ const application: Hono<{ readonly Bindings: CloudBindings }> = new Hono<{ reado
     })
     .post("/__project/bootstrap", (context) => bootstrapProject(context.req.raw, context.env))
     .route("/morty/api", cloudRoutes)
-    .route("/mobius-slack/api", slackRoutes)
     .notFound(notFound);
 
 const publicApplication = new Hono<{ readonly Bindings: CloudBindings }>()
@@ -88,7 +84,6 @@ const publicApplication = new Hono<{ readonly Bindings: CloudBindings }>()
     .route("/", setupArtifact)
     .get("/morty/ws", (context) => application.fetch(context.req.raw, context.env))
     .route("/morty/api", publicCloudRoutes)
-    .route("/mobius-slack/api", publicSlackRoutes)
     .notFound(notFound);
 
 export async function fetchPublicApplication(
@@ -116,8 +111,5 @@ export default {
         };
         const response = await application.fetch(request, instrumented, context);
         return metrics.appendServerTiming(response);
-    },
-    async queue(batch, bindings): Promise<void> {
-        await slackWorker.queue(batch, bindings);
     },
 } satisfies ExportedHandler<CloudBindings, unknown>;

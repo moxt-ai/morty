@@ -10,7 +10,7 @@ export type SavedChannel<TConnection> =
     | { readonly kind: "connected"; readonly connection: TConnection };
 
 export interface ApplicationConnectionProps<TConnection> {
-    readonly view: "overview" | "chat" | "slack";
+    readonly view: "overview" | "chat";
     readonly userId: string;
     readonly initialConnection: SavedChannel<TConnection>;
 }

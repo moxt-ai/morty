@@ -92,6 +92,13 @@
             "when": 1790213968023,
             "tag": "0024_fair_blizzard",
             "breakpoints": true
+        },
+        {
+            "idx": 25,
+            "version": "6",
+            "when": 1790244139152,
+            "tag": "0025_misty_scarlet_witch",
+            "breakpoints": true
         }
     ]
 }

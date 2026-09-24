@@ -7,20 +7,11 @@
         "binding": "ASSETS",
         "directory": "../../../dist/client",
         "not_found_handling": "single-page-application",
-        "run_worker_first": ["/morty/api/*", "/morty/ws", "/mobius-slack/api/*", "/pair.md", "/setup.md", "/setup.mjs"]
+        "run_worker_first": ["/morty/api/*", "/morty/ws", "/pair.md", "/setup.md", "/setup.mjs"]
     },
-    "r2_buckets": [
-        { "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-local-e2e-attachments" },
-        { "binding": "CHAT_ATTACHMENTS_WNAM", "bucket_name": "morty-local-e2e-wnam-attachments" }
-    ],
+    "r2_buckets": [{ "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-local-e2e-attachments" }],
     "durable_objects": {
-        "bindings": [
-            { "name": "CHAT_PROJECTS", "class_name": "ProjectDurableObject" },
-            { "name": "BOT_TRIGGER_RATE_LIMITER", "class_name": "BotTriggerRateLimiter" }
-        ]
+        "bindings": [{ "name": "CHAT_PROJECTS", "class_name": "ProjectDurableObject" }]
     },
-    "migrations": [
-        { "tag": "v1", "new_sqlite_classes": ["BotTriggerRateLimiter"] },
-        { "tag": "v2", "new_sqlite_classes": ["ProjectDurableObject"] }
-    ]
+    "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ProjectDurableObject"] }]
 }
