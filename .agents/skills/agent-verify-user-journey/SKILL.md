@@ -45,8 +45,9 @@ required by `chat-local-full-dev`, and preserve all existing changes.
 
 Create these locations without overwriting existing content:
 
-- App workspace: a randomized directory under `~/tmp/`, such as one created by
-  `mktemp -d "$HOME/tmp/agent-verify-user-journey.XXXXXX"`.
+- App workspace: a randomized directory under `~/Documents/tmp/`. Create the
+  parent directory if needed, then use
+  `mktemp -d "$HOME/Documents/tmp/agent-verify-user-journey.XXXXXX"`.
 - Local-stack state: a separate randomized directory under the approved system
   temporary root. Never put local Worker state in the app workspace.
 - Evidence: `<original-cwd>/test-results/agent-verify-user-journey/<run-name>/`.

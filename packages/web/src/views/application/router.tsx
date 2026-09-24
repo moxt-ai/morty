@@ -73,7 +73,7 @@ export function createApplicationRouter<TConnection extends ChannelReference>(
                 const sessionId = Reflect.get(search, "sessionId");
                 return {
                     channel: Reflect.get(search, "channel"),
-                    sessionId: view === "chat" && isIdentifier(sessionId) ? sessionId : undefined,
+                    sessionId: view !== "slack" && isIdentifier(sessionId) ? sessionId : undefined,
                 };
             },
             loaderDeps: ({ search }) => ({ channel: search.channel }),
