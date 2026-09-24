@@ -1,14 +1,11 @@
-import { existsSync, watch } from "node:fs";
-import { unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { NativeHistoryMessage } from "@moxt-ai/mobius-protocol";
+import type { NativeHistoryImage, NativeHistoryMessage, NativeSessionHistory } from "@moxt-ai/mobius-protocol";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import * as v from "valibot";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { createTestLocalRuntime } from "../../../third-party/mobius/tests/infra/platform-real-runtime.ts";
 import worker from "../../worker/src/application.ts";
 import { createIdentityFixture } from "../../worker/tests/support/identity-fixture.ts";
 import { ToastProvider } from "../src/components/ui/toast.tsx";
@@ -178,23 +175,29 @@ function waitForImage(name: string): Promise<HTMLImageElement> {
     });
 }
 
-function waitForAgentMarker(directory: string, name: string): Promise<void> {
-    const path = resolve(directory, "agent", name);
-    if (existsSync(path)) {
-        return Promise.resolve();
-    }
-    return new Promise((resolveMarker) => {
-        const watcher = watch(resolve(directory, "agent"), () => {
-            if (existsSync(path)) {
-                watcher.close();
-                resolveMarker();
-            }
-        });
-        if (existsSync(path)) {
-            watcher.close();
-            resolveMarker();
-        }
-    });
+function pauseGate() {
+    const entered = Promise.withResolvers<void>();
+    const released = Promise.withResolvers<void>();
+    return {
+        entered: entered.promise,
+        release: () => released.resolve(),
+        wait: async (signal: AbortSignal) => {
+            entered.resolve();
+            signal.throwIfAborted();
+            await new Promise<void>((resolveWait, rejectWait) => {
+                const cleanup = () => signal.removeEventListener("abort", abort);
+                const abort = () => {
+                    cleanup();
+                    rejectWait(signal.reason);
+                };
+                signal.addEventListener("abort", abort, { once: true });
+                void released.promise.then(() => {
+                    cleanup();
+                    resolveWait();
+                });
+            });
+        },
+    };
 }
 
 function longHistory(): readonly NativeHistoryMessage[] {
@@ -236,29 +239,114 @@ async function chatRequest(identity: Awaited<ReturnType<typeof createIdentity>>,
     });
 }
 
-async function connectRealRuntime(cloud: Awaited<ReturnType<typeof createIdentityFixture>>, projectId: string) {
-    return await createTestLocalRuntime({
-        credential: cloud.baseConfiguration.MOBIUS_APP_SECRET,
-        fakeAgentPath: resolve(
-            process.cwd(),
-            "../../third-party/mobius/tests/agent-daemon/fixtures/fake-acp-agent/src/cli.ts",
-        ),
-        origin: cloud.baseConfiguration.MOBIUS_BASE_URL,
-        projectId,
-        request: cloud.platformRequest,
-        signal: AbortSignal.timeout(60_000),
+async function connectFakeRuntime(
+    cloud: Awaited<ReturnType<typeof createIdentityFixture>>,
+    projectId: string,
+    options: {
+        readonly pauseHistory?: "all" | string;
+        readonly pausePrompt?: "before-delta" | "after-delta";
+        readonly truncateHistory?: boolean;
+    } = {},
+) {
+    const sessions = new Map<string, readonly NativeHistoryMessage[]>();
+    const sessionIds = new Set<string>();
+    let pausedHistory = options.pauseHistory;
+    const historyGate = pauseGate();
+    const promptGate = pauseGate();
+    const runtime = await cloud.connectAgent(projectId, {
+        agentId: "claude",
+        agentName: "Claude Code",
+        nativeSessionIds: sessionIds,
+        nativeSessionTitle: (sessionId) => sessions.get(sessionId)?.[0]?.text ?? "New chat",
+        loadNativeHistory: async (sessionId, signal): Promise<NativeSessionHistory> => {
+            if (pausedHistory === "all" || pausedHistory === sessionId) {
+                await historyGate.wait(signal);
+            }
+            const messages = sessions.get(sessionId);
+            return messages === undefined
+                ? { status: "unavailable", cause: { code: "native_session_not_found", message: "Session not found" } }
+                : {
+                      status: "available",
+                      messages: options.truncateHistory ? messages.slice(-10) : messages,
+                      truncated: options.truncateHistory === true && messages.length > 10,
+                      coveredCommandIds: [],
+                      coveredMessageIds: [],
+                  };
+        },
+        afterSessionStarted: async (_command, signal) => {
+            if (options.pausePrompt === "before-delta") {
+                await promptGate.wait(signal);
+            }
+        },
+        afterFirstDelta: async (_command, signal) => {
+            if (options.pausePrompt === "after-delta") {
+                await promptGate.wait(signal);
+            }
+        },
+        responseParts: (command, turn) =>
+            command.prompt.includes("after first delta")
+                ? ["Partial reply", " and more"]
+                : [`Claude Code turn ${turn.toString()}: ${command.prompt}`],
+        onPromptCompleted: (command, response) => {
+            const previous = sessions.get(command.sessionId) ?? [];
+            sessions.set(command.sessionId, [
+                ...previous,
+                { role: "user", text: command.prompt },
+                { role: "assistant", text: response, activities: [], content: [] },
+            ]);
+        },
     });
+    return {
+        ...runtime,
+        historyGate,
+        promptGate,
+        holdHistory: (sessionId: string) => {
+            pausedHistory = sessionId;
+        },
+        seedNativeSession: async (
+            sessionId: string,
+            messages: readonly {
+                readonly role: "user" | "assistant";
+                readonly text: string;
+                readonly images?: readonly {
+                    readonly data: string;
+                    readonly mimeType: NativeHistoryImage["mimeType"];
+                }[];
+            }[],
+        ) => {
+            sessionIds.add(sessionId);
+            sessions.set(
+                sessionId,
+                messages.map((message) =>
+                    message.role === "user"
+                        ? {
+                              role: "user",
+                              text: message.text,
+                              ...(message.images === undefined
+                                  ? {}
+                                  : {
+                                        images: message.images.map((image, index) => ({
+                                            ...image,
+                                            name: `Image ${(index + 1).toString()}`,
+                                        })),
+                                    }),
+                          }
+                        : { role: "assistant", text: message.text, activities: [], content: [] },
+                ),
+            );
+        },
+    };
 }
 
 async function importAgentSession(
     cloud: Awaited<ReturnType<typeof createIdentityFixture>>,
     identity: Awaited<ReturnType<typeof createIdentity>>,
     botId: string,
-    runtime: Awaited<ReturnType<typeof createTestLocalRuntime>>,
+    runtime: Awaited<ReturnType<typeof connectFakeRuntime>>,
     messages: readonly {
         readonly role: "user" | "assistant";
         readonly text: string;
-        readonly images?: readonly { readonly data: string; readonly mimeType: string }[];
+        readonly images?: readonly { readonly data: string; readonly mimeType: NativeHistoryImage["mimeType"] }[];
     }[],
 ): Promise<string> {
     const sessionId = crypto.randomUUID();
@@ -358,7 +446,7 @@ test("Given a workspace Bot, When the owner adds another Bot, Then Chat selects 
     }
 }, 30_000);
 
-test("Given a Bot paired with a real local Runtime, When its owner sends a prompt, Then the fake ACP Agent reply appears in Chat", async () => {
+test("Given a Bot paired with a fake daemon, When its owner sends a prompt, Then the reply appears in Chat", async () => {
     const identity = await createIdentity();
     const cloud = activeFixture();
     const bots = await chatRequest(identity, `projects/${identity.projectId}/management/bots`);
@@ -368,7 +456,7 @@ test("Given a Bot paired with a real local Runtime, When its owner sends a promp
     if (botId === undefined) {
         throw new Error("The Project has no Bot.");
     }
-    const runtime = await connectRealRuntime(cloud, identity.projectId);
+    const runtime = await connectFakeRuntime(cloud, identity.projectId);
     const configured = await chatRequest(identity, `chat/projects/${identity.projectId}/bots/${botId}/setup`, {
         runtimeId: runtime.runtimeId,
         agentRef: "claude",
@@ -415,7 +503,9 @@ test.each([
         if (botId === undefined) {
             throw new Error("The Project has no Bot.");
         }
-        const runtime = await connectRealRuntime(cloud, identity.projectId);
+        const runtime = await connectFakeRuntime(cloud, identity.projectId, {
+            pausePrompt: joinTime === "after acceptance before the first delta" ? "before-delta" : "after-delta",
+        });
         const configured = await chatRequest(identity, `chat/projects/${identity.projectId}/bots/${botId}/setup`, {
             runtimeId: runtime.runtimeId,
             agentRef: "claude",
@@ -456,7 +546,7 @@ test.each([
             if (joinTime !== "after acceptance before the first delta") {
                 await waitForTextIn(first.container, "Partial reply");
             } else {
-                await waitForAgentMarker(runtime.stateDirectory, "prompt-paused");
+                await runtime.promptGate.entered;
             }
             if (second === null) {
                 second = await renderChat(identity, sessionId);
@@ -482,13 +572,13 @@ test.each([
             if (joinTime === "after acceptance before the first delta") {
                 expect(second.container.querySelector('button[aria-label="Send message"]')).toBeNull();
                 expect(second.container.querySelector('[role="log"]')?.textContent).not.toContain("Partial reply");
-                await writeFile(resolve(runtime.stateDirectory, "agent/resume-turn"), "*");
-                await waitForTextIn(second.container, "Claude Code turn 2: release before first delta");
+                runtime.promptGate.release();
+                await waitForTextIn(second.container, "Claude Code turn 1: release before first delta");
             } else {
                 expect(second.container.querySelector('button[aria-label="Send message"]')).toBeNull();
             }
             if (joinTime === "after the first delta and release") {
-                await writeFile(resolve(runtime.stateDirectory, "agent/resume-turn"), "*");
+                runtime.promptGate.release();
                 await waitForTextIn(second.container, "Partial reply and more");
                 const responses = second.container.querySelectorAll(
                     'article[aria-label="Current Agent response"], article[aria-label="Agent response"]',
@@ -498,6 +588,7 @@ test.each([
                 ).toHaveLength(1);
             }
         } finally {
+            runtime.promptGate.release();
             await first.close();
             await second?.close();
             await runtime[Symbol.asyncDispose]();
@@ -506,7 +597,7 @@ test.each([
     30_000,
 );
 
-test("Given a long native ACP Session, When Chat opens it through the real Runtime, Then loading, recent history, and truncation are visible", async () => {
+test("Given an active Turn, When the browser reopens the Bot Session, Then it restores the partial reply before sending is allowed", async () => {
     const identity = await createIdentity();
     const cloud = activeFixture();
     const bots = await chatRequest(identity, `projects/${identity.projectId}/management/bots`);
@@ -516,7 +607,67 @@ test("Given a long native ACP Session, When Chat opens it through the real Runti
     if (botId === undefined) {
         throw new Error("The Project has no Bot.");
     }
-    const runtime = await connectRealRuntime(cloud, identity.projectId);
+    const runtime = await connectFakeRuntime(cloud, identity.projectId, { pausePrompt: "after-delta" });
+    const configured = await chatRequest(identity, `chat/projects/${identity.projectId}/bots/${botId}/setup`, {
+        runtimeId: runtime.runtimeId,
+        agentRef: "claude",
+    });
+    expect(configured.status).toBe(202);
+    const sessionId = await importAgentSession(cloud, identity, botId, runtime, [
+        { role: "user", text: "Earlier prompt" },
+        { role: "assistant", text: "Earlier reply" },
+    ]);
+    const first = await renderChat(identity, sessionId);
+    let firstOpen = true;
+    let reopened: Awaited<ReturnType<typeof renderChat>> | null = null;
+    try {
+        await waitForTextIn(first.container, "Earlier reply");
+        const draft = first.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]');
+        if (draft === null) {
+            throw new Error("The message input was not shown.");
+        }
+        await act(async () => {
+            const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+            setter?.call(draft, "hold after first delta");
+            draft.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        const send = first.container.querySelector<HTMLButtonElement>('button[aria-label="Send message"]');
+        if (send === null || send.disabled) {
+            throw new Error("The first view cannot send a prompt.");
+        }
+        await act(async () => send.click());
+        await waitForTextIn(first.container, "Partial reply");
+        await first.close();
+        firstOpen = false;
+        reopened = await renderChat(identity, sessionId);
+        await waitForTextIn(reopened.container, "Partial reply");
+        expect(reopened.container.querySelector('button[aria-label="Send message"]')).toBeNull();
+        runtime.promptGate.release();
+        await waitForTextIn(reopened.container, "Partial reply and more");
+    } finally {
+        runtime.promptGate.release();
+        await reopened?.close();
+        if (firstOpen) {
+            await first.close();
+        }
+        await runtime[Symbol.asyncDispose]();
+    }
+}, 30_000);
+
+test("Given a long native Session, When Chat opens it through a fake daemon, Then loading, recent history, and truncation are visible", async () => {
+    const identity = await createIdentity();
+    const cloud = activeFixture();
+    const bots = await chatRequest(identity, `projects/${identity.projectId}/management/bots`);
+    expect(bots.status).toBe(200);
+    const listing = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await bots.json());
+    const botId = listing.bots[0]?.botId;
+    if (botId === undefined) {
+        throw new Error("The Project has no Bot.");
+    }
+    const runtime = await connectFakeRuntime(cloud, identity.projectId, {
+        pauseHistory: "all",
+        truncateHistory: true,
+    });
     const configured = await chatRequest(identity, `chat/projects/${identity.projectId}/bots/${botId}/setup`, {
         runtimeId: runtime.runtimeId,
         agentRef: "claude",
@@ -529,11 +680,10 @@ test("Given a long native ACP Session, When Chat opens it through the real Runti
         runtime,
         longHistory().map((message) => ({ role: message.role, text: message.text })),
     );
-    await writeFile(resolve(runtime.stateDirectory, "agent/pause-load"), "*");
     const app = await renderChat(identity, sessionId);
     try {
         await waitForText("Loading conversation");
-        await unlink(resolve(runtime.stateDirectory, "agent/pause-load"));
+        runtime.historyGate.release();
         await waitForTextGone("Loading conversation");
         await waitForText("Recent answer");
         const transcript = document.querySelector<HTMLElement>('[role="log"]');
@@ -551,7 +701,59 @@ test("Given a long native ACP Session, When Chat opens it through the real Runti
             false,
         );
     } finally {
-        await unlink(resolve(runtime.stateDirectory, "agent/pause-load")).catch(() => undefined);
+        runtime.historyGate.release();
+        await app.close();
+        await runtime[Symbol.asyncDispose]();
+    }
+}, 30_000);
+
+test("Given more than two chunks of native history, When the reader clicks Load more, Then one older chunk appears without moving the reader", async () => {
+    const identity = await createIdentity();
+    const cloud = activeFixture();
+    const bots = await chatRequest(identity, `projects/${identity.projectId}/management/bots`);
+    expect(bots.status).toBe(200);
+    const listing = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await bots.json());
+    const botId = listing.bots[0]?.botId;
+    if (botId === undefined) {
+        throw new Error("The Project has no Bot.");
+    }
+    const runtime = await connectFakeRuntime(cloud, identity.projectId);
+    const configured = await chatRequest(identity, `chat/projects/${identity.projectId}/bots/${botId}/setup`, {
+        runtimeId: runtime.runtimeId,
+        agentRef: "claude",
+    });
+    expect(configured.status).toBe(202);
+    const sessionId = await importAgentSession(
+        cloud,
+        identity,
+        botId,
+        runtime,
+        longHistory().map((message) => ({ role: message.role, text: message.text })),
+    );
+    const app = await renderChat(identity, sessionId);
+    try {
+        await waitForText("Recent answer");
+        const transcript = app.container.querySelector<HTMLElement>('[role="log"]');
+        if (transcript === null) {
+            throw new Error("The transcript was not shown.");
+        }
+        const shows = (question: number) =>
+            [...transcript.querySelectorAll('article[aria-label="Message from you"]')].some(
+                (item) => item.textContent === `YouQuestion ${question.toString()}`,
+            );
+        const loadMore = () => transcript.querySelector<HTMLButtonElement>("button")?.click();
+        transcript.scrollTop = 125;
+        expect(shows(46)).toBe(true);
+        expect(shows(45)).toBe(false);
+        await act(async () => loadMore());
+        expect(shows(6)).toBe(true);
+        expect(shows(5)).toBe(false);
+        expect(transcript.scrollTop).toBe(125);
+        await act(async () => loadMore());
+        expect(shows(1)).toBe(true);
+        expect(transcript.scrollTop).toBe(125);
+        expect(transcript.querySelector("button")?.textContent).not.toBe("Load more");
+    } finally {
         await app.close();
         await runtime[Symbol.asyncDispose]();
     }
@@ -567,7 +769,7 @@ test("Given two native Sessions, When the reader switches while the first histor
     if (botId === undefined) {
         throw new Error("The Project has no Bot.");
     }
-    const runtime = await connectRealRuntime(cloud, identity.projectId);
+    const runtime = await connectFakeRuntime(cloud, identity.projectId);
     const configured = await chatRequest(identity, `chat/projects/${identity.projectId}/bots/${botId}/setup`, {
         runtimeId: runtime.runtimeId,
         agentRef: "claude",
@@ -581,7 +783,7 @@ test("Given two native Sessions, When the reader switches while the first histor
         { role: "user", text: "Second session prompt" },
         { role: "assistant", text: "Second session answer" },
     ]);
-    await writeFile(resolve(runtime.stateDirectory, "agent/pause-load"), firstSessionId);
+    runtime.holdHistory(firstSessionId);
     const app = await renderChat(identity, firstSessionId);
     try {
         await waitForText("Loading conversation");
@@ -590,10 +792,10 @@ test("Given two native Sessions, When the reader switches while the first histor
         await waitForText("Second session answer");
         const transcript = document.querySelector('[role="log"]');
         expect(transcript?.textContent).toContain("Second session answer");
-        await unlink(resolve(runtime.stateDirectory, "agent/pause-load"));
+        runtime.historyGate.release();
         expect(transcript?.textContent).not.toContain("First session answer");
     } finally {
-        await unlink(resolve(runtime.stateDirectory, "agent/pause-load")).catch(() => undefined);
+        runtime.historyGate.release();
         await app.close();
         await runtime[Symbol.asyncDispose]();
     }
@@ -609,7 +811,7 @@ test("Given a Bot Session with an image, When the page reloads during history re
     if (botId === undefined) {
         throw new Error("The Project has no Bot.");
     }
-    const runtime = await connectRealRuntime(cloud, identity.projectId);
+    const runtime = await connectFakeRuntime(cloud, identity.projectId);
     const configured = await chatRequest(identity, `chat/projects/${identity.projectId}/bots/${botId}/setup`, {
         runtimeId: runtime.runtimeId,
         agentRef: "claude",
@@ -627,7 +829,7 @@ test("Given a Bot Session with an image, When the page reloads during history re
     } finally {
         await firstPage.close();
     }
-    await writeFile(resolve(runtime.stateDirectory, "agent/pause-load"), "*");
+    runtime.holdHistory(sessionId);
     const reloadedPage = await renderChat(identity, sessionId);
     try {
         await waitForText("Loading conversation");
@@ -642,12 +844,13 @@ test("Given a Bot Session with an image, When the page reloads during history re
         });
         const send = document.querySelector<HTMLButtonElement>('button[aria-label="Send message"]');
         expect(send?.disabled).toBe(true);
-        await unlink(resolve(runtime.stateDirectory, "agent/pause-load"));
+        runtime.historyGate.release();
         const image = await waitForImage("Image 1");
         expect(image.getAttribute("src")).toBe("data:image/png;base64,AQ==");
+        await waitForEnabledSendButton();
         expect(send?.disabled).toBe(false);
     } finally {
-        await unlink(resolve(runtime.stateDirectory, "agent/pause-load")).catch(() => undefined);
+        runtime.historyGate.release();
         await reloadedPage.close();
         await runtime[Symbol.asyncDispose]();
     }
