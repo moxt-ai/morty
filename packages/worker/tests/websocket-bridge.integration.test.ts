@@ -102,7 +102,7 @@ test("Given a public HTTP client, When it requests browser-only APIs, Then Chat 
     }
 });
 
-test("Given the Chat web application, When it uses the WebSocket bridge, Then API requests pass and document requests are rejected", async () => {
+test("Given browsers with different empty-body representations, When the Chat web application uses the WebSocket bridge, Then API requests pass and document requests are rejected", async () => {
     const response = await runtime.dispatchFetch("https://chat.test/morty/ws", {
         headers: { Origin: "https://chat.test", Upgrade: "websocket" },
     });
@@ -120,7 +120,7 @@ test("Given the Chat web application, When it uses the WebSocket bridge, Then AP
             method: "GET",
             path: "/morty/api/config",
             headers: [],
-            body: null,
+            body: "",
         }),
     );
     const frames = await reply;

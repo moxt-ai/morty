@@ -38,17 +38,15 @@ function bridgedHeaders(values: readonly (readonly [string, string])[]): Headers
 function resolveRequest(input: WebSocketBridgeRequest, operation: "request" | "watch", signal: AbortSignal): Request {
     const url = bridgedUrl(input.path);
     const headers = bridgedHeaders(input.headers);
-    if (
-        operation === "watch" &&
-        (input.method !== "POST" || !url.pathname.endsWith("/workspace") || input.body !== null)
-    ) {
+    const body = input.body === "" ? null : input.body;
+    if (operation === "watch" && (input.method !== "POST" || !url.pathname.endsWith("/workspace") || body !== null)) {
         return invalidBridgeRequest();
     }
     return new Request(url, {
         method: input.method,
         headers,
         signal,
-        ...(input.body === null ? {} : { body: input.body }),
+        ...(body === null ? {} : { body }),
     });
 }
 
