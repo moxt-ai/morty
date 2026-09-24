@@ -1,4 +1,4 @@
-import { queryByTestId } from "@testing-library/dom";
+import { getByRole, queryByRole, queryByTestId } from "@testing-library/dom";
 import { afterAll, afterEach, expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { closeTestApps, closeTestEnvironment, createTestApp, type TestApp } from "./infra/test-app.tsx";
@@ -26,6 +26,39 @@ function observeTestId(testId: string): Promise<HTMLElement> {
         observer.observe(document.body, { childList: true, subtree: true });
     });
 }
+
+test("Given a native session handoff, When importing fails, Then the choice page shows progress and allows a fork retry", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({
+        page: {
+            harness: "codex",
+            kind: "continue",
+            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
+        },
+    });
+    const importSession = await vi.waitFor(() => getByRole(document.body, "button", { name: "Import session" }));
+    const forkSession = getByRole(document.body, "button", { name: "Fork session" });
+    if (!(importSession instanceof HTMLButtonElement) || !(forkSession instanceof HTMLButtonElement)) {
+        throw new Error("The native session actions are not buttons.");
+    }
+
+    await app.user.click(importSession);
+
+    expect(importSession.disabled).toBe(true);
+    expect(forkSession.disabled).toBe(true);
+    expect(getByRole(importSession, "status", { name: "Importing session" })).toBeInstanceOf(HTMLElement);
+    expect(queryByRole(document.body, "status", { name: "Securely transferring the workspace" })).toBeNull();
+
+    await vi.waitFor(() => expect(getByRole(document.body, "alert")).toBeInstanceOf(HTMLElement));
+    expect(getByRole(document.body, "heading", { name: "Continue native session" })).toBeInstanceOf(HTMLElement);
+    expect(importSession.disabled).toBe(false);
+    expect(forkSession.disabled).toBe(false);
+
+    await app.user.click(forkSession);
+
+    expect(getByRole(forkSession, "status", { name: "Forking session" })).toBeInstanceOf(HTMLElement);
+});
 
 async function sendPrompt(app: TestApp, composer: HTMLTextAreaElement, prompt: string): Promise<void> {
     await app.user.click(composer);
@@ -213,10 +246,17 @@ test("Given a paired Bot with cached agent settings, When a user refreshes and f
     await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
 });
 
-test("Given an Agent links a local file location, When a user opens it, Then the file path omits the source location", {
+test("Given an Agent links local file URLs, When they render and a user opens one, Then the image and source are available", {
     timeout: 30_000,
 }, async () => {
-    const created = await createTestApp({ connectAgent: true });
+    const created = await createTestApp({
+        agentBehavior: {
+            responseParts: () => [
+                "Open [Generated source](</fake/generated-source.ts:104>)\n\n![QR code](file:///fake/generated-image.png)",
+            ],
+        },
+        connectAgent: true,
+    });
     const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
     await created.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -224,16 +264,17 @@ test("Given an Agent links a local file location, When a user opens it, Then the
     );
     const composer = await created.queryElementByTestId(dataTestId.messageComposer);
 
-    await sendPrompt(
-        created,
-        composer as HTMLTextAreaElement,
-        "Open [Generated source](</fake/generated-image.png:104>)",
-    );
+    await sendPrompt(created, composer as HTMLTextAreaElement, "Show the generated local artifacts");
     const link = await Promise.race([created.queryElementByTestId(dataTestId.localFileLink), failure]);
+    await vi.waitFor(() =>
+        expect(getByRole(document.body, "img", { name: "QR code" })).toBeInstanceOf(HTMLImageElement),
+    );
     await created.user.click(link);
 
     const preview = await created.queryElementByTestId(dataTestId.filePreview);
     expect(preview.textContent).not.toContain(":104");
+    const content = await created.queryElementByTestId(dataTestId.filePreviewContent);
+    expect(content.textContent).toContain("export const generated = true;");
 });
 
 test("Given a Bot has a recent directory from another harness, When its workspace loads, Then the directory remains available", {

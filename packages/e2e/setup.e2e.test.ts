@@ -15,7 +15,7 @@ test("Given another Project has a managed Runtime, When pair redeems a Bot ticke
     expect(statuses).toContain("ready");
 });
 
-test("Given a saved setup handoff, When its Runtime reconnects, Then setup waits for the agent to come online", async ({
+test("Given a saved setup handoff, When its Runtime reconnects, Then setup waits and returns a browser-renderable QR code", async ({
     runtime,
 }) => {
     await runtime.followInstructions("/setup.md", "setup-reconnect-session");
@@ -33,4 +33,5 @@ test("Given a saved setup handoff, When its Runtime reconnects, Then setup waits
     expect(connected.configuration).not.toHaveProperty("pairing_key");
     expect(connected.configuration).not.toHaveProperty("expected_runtime_id");
     expect(connected.configuration).not.toHaveProperty("runtime_process");
+    expect(connected.qrDataUrl).toMatch(/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/u);
 });

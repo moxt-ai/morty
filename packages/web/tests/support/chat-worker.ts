@@ -73,6 +73,13 @@ export async function createChatWorkerEnvironment() {
                 const runtime = await cloud.connectAgent(identity.projectId);
                 return { failure: runtime.failure, runtimeId: runtime.runtimeId };
             },
+            createTransferUrl: async () => {
+                const response = await request(`projects/${identity.projectId}/identity/transfers`, {});
+                if (response.status !== 201) {
+                    throw new Error(`Could not create a transfer link: ${response.status} ${await response.text()}`);
+                }
+                return v.parse(v.object({ url: v.string() }), await response.json()).url;
+            },
             identity: {
                 getToken: async (signal: AbortSignal): Promise<string> => {
                     signal.throwIfAborted();

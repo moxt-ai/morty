@@ -71,13 +71,13 @@ means the binding is active and the selected Runtime/agent is online; it does no
 claim a successful test message.
 
 Return the exact clickable browser `url`, resolved `workspace`, QR code, and `expiresAt` from the ready result.
-The QR payload is the exact same URL, and the ready result provides both QR forms:
-a terminal-safe QR code in the private text file at `qrTextPath` and an owner-only PNG
-at `qrPath`. In a TUI, read `qrTextPath` and show its contents in a plain-text block
-without changing the spacing. Choose the PNG instead only when the client reliably
-displays local images. If you show the PNG, tell the user that a text QR is also
-available and can be shown in the TUI if needed; read and render `qrTextPath` when they
-need it or when the image cannot be displayed. The link identifies this harness session
+The QR payload is the exact same URL, and the ready result provides a browser-safe PNG
+data URL at `qrDataUrl`, a terminal-safe QR code in the private text file at `qrTextPath`,
+and an owner-only PNG at `qrPath`. In a browser chat that supports Markdown images, embed
+`qrDataUrl` directly for a portable image, or embed `qrPath` when the chat renderer can
+query Runtime files by path. In a TUI, read `qrTextPath` and show its contents in a plain-text block without
+changing the spacing. Tell the user that the text QR is also available and can be shown
+in the TUI if needed. The link identifies this harness session
 so Chat can import it and open it after the handoff. The link is valid for **24 hours**, can be successfully
 opened at most **five times**, and opens the same user and Bot each time. Never open,
 preview, scan, or redeem it yourself because doing so consumes one use. Tell the user:

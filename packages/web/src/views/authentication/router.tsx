@@ -2,7 +2,7 @@ import { AuthenticateWithRedirectCallback, SignIn, SignUp, useUser } from "@cler
 import { createRootRoute, createRoute, createRouter, Link, Outlet } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useStore } from "zustand";
-import { Button, reportApplicationError } from "../../index.ts";
+import { Button, reportApplicationError, Spinner } from "../../index.ts";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import { createContinueStore } from "../../view-models/authentication/continue-store.ts";
 import { Page } from "../application/app.tsx";
@@ -83,7 +83,7 @@ function ContinuePage() {
     const [store] = useState(() => createContinueStore(transport.fetch));
     const { continueSession, continueWorkspace, redeem, state } = useStore(store);
     useEffect(() => {
-        if (state.kind !== "redeeming") {
+        if (state.kind !== "session-redeeming" && state.kind !== "workspace-redeeming") {
             return;
         }
         const controller = new AbortController();
@@ -94,56 +94,90 @@ function ContinuePage() {
         <Page>
             <section className="mx-auto max-w-xl rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
                 <h1 className="text-2xl font-semibold">
-                    {state.kind === "confirm" && state.handoff.kind === "session"
+                    {state.kind === "session-confirm" ||
+                    state.kind === "session-redeeming" ||
+                    state.kind === "session-failed"
                         ? "Continue native session"
                         : "Use this Mobius workspace"}
                 </h1>
-                {state.kind === "confirm" ? (
-                    state.handoff.kind === "session" ? (
-                        <>
-                            <p className="mt-3 leading-7 text-muted-foreground">
-                                Choose how this native session should open in Mobius.
-                            </p>
-                            <dl className="mt-5 grid gap-3 rounded-lg border border-border bg-muted/30 p-4 text-sm">
-                                <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-3">
-                                    <dt className="text-muted-foreground">Agent</dt>
-                                    <dd className="truncate font-medium">{state.handoff.harness}</dd>
-                                </div>
-                                <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-3">
-                                    <dt className="text-muted-foreground">Session ID</dt>
-                                    <dd className="break-all font-mono text-xs">{state.handoff.sessionId}</dd>
-                                </div>
-                            </dl>
-                            {state.replacesWorkspace ? (
-                                <p className="mt-4 text-sm leading-6 text-amber-700">
-                                    Continuing replaces the anonymous workspace currently stored on this device.
-                                </p>
-                            ) : null}
-                            <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                                <Button onClick={() => continueSession("import")}>Import session</Button>
-                                <Button variant="outline" onClick={() => continueSession("fork")}>
-                                    Fork session
-                                </Button>
+                {state.kind === "session-confirm" ||
+                state.kind === "session-redeeming" ||
+                state.kind === "session-failed" ? (
+                    <>
+                        <p className="mt-3 leading-7 text-muted-foreground">
+                            Choose how this native session should open in Mobius.
+                        </p>
+                        <dl className="mt-5 grid gap-3 rounded-lg border border-border bg-muted/30 p-4 text-sm">
+                            <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-3">
+                                <dt className="text-muted-foreground">Agent</dt>
+                                <dd className="truncate font-medium">{state.handoff.harness}</dd>
                             </div>
-                            <p className="mt-3 text-sm text-muted-foreground">
-                                Import continues the original session. Fork creates an independent copy.
-                            </p>
-                            <Button className="mt-3 px-0" variant="ghost" onClick={() => continueSession("skip")}>
-                                Skip
-                            </Button>
-                        </>
-                    ) : (
-                        <>
-                            <p className="mt-4 leading-7 text-muted-foreground">
+                            <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-3">
+                                <dt className="text-muted-foreground">Session ID</dt>
+                                <dd className="break-all font-mono text-xs">{state.handoff.sessionId}</dd>
+                            </div>
+                        </dl>
+                        {state.replacesWorkspace ? (
+                            <p className="mt-4 text-sm leading-6 text-amber-700">
                                 Continuing replaces the anonymous workspace currently stored on this device.
                             </p>
-                            <Button className="mt-6" onClick={continueWorkspace}>
-                                Replace and continue
+                        ) : null}
+                        {state.kind === "session-failed" ? (
+                            <p role="alert" className="mt-4 text-sm text-red-700">
+                                {state.message}
+                            </p>
+                        ) : null}
+                        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                            <Button
+                                disabled={state.kind === "session-redeeming"}
+                                onClick={() => continueSession("import")}
+                            >
+                                Import session
+                                {state.kind === "session-redeeming" && state.choice === "import" ? (
+                                    <Spinner label="Importing session" />
+                                ) : null}
                             </Button>
-                        </>
-                    )
-                ) : state.kind === "redeeming" ? (
-                    <p role="status" className="mt-4 text-muted-foreground">
+                            <Button
+                                disabled={state.kind === "session-redeeming"}
+                                variant="outline"
+                                onClick={() => continueSession("fork")}
+                            >
+                                Fork session
+                                {state.kind === "session-redeeming" && state.choice === "fork" ? (
+                                    <Spinner label="Forking session" />
+                                ) : null}
+                            </Button>
+                        </div>
+                        <p className="mt-3 text-sm text-muted-foreground">
+                            Import continues the original session. Fork creates an independent copy.
+                        </p>
+                        <Button
+                            className="mt-3 px-0"
+                            disabled={state.kind === "session-redeeming"}
+                            variant="ghost"
+                            onClick={() => continueSession("skip")}
+                        >
+                            Skip
+                            {state.kind === "session-redeeming" && state.choice === "skip" ? (
+                                <Spinner label="Skipping session" />
+                            ) : null}
+                        </Button>
+                    </>
+                ) : state.kind === "workspace-confirm" ? (
+                    <>
+                        <p className="mt-4 leading-7 text-muted-foreground">
+                            Continuing replaces the anonymous workspace currently stored on this device.
+                        </p>
+                        <Button className="mt-6" onClick={continueWorkspace}>
+                            Replace and continue
+                        </Button>
+                    </>
+                ) : state.kind === "workspace-redeeming" ? (
+                    <p
+                        role="status"
+                        aria-label="Securely transferring the workspace"
+                        className="mt-4 text-muted-foreground"
+                    >
                         Securely transferring the workspace…
                     </p>
                 ) : (

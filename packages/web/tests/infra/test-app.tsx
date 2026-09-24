@@ -4,6 +4,8 @@ import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { vi } from "vitest";
 import { ToastProvider } from "../../src/components/ui/toast.tsx";
 import { ApiTransportProvider } from "../../src/services/api/api-transport-context.tsx";
+import { App } from "../../src/views/application/app.tsx";
+import { router as authenticationRouter } from "../../src/views/authentication/router.tsx";
 import { WorkspaceApplication } from "../../src/views/authentication/session-application.tsx";
 import { createChatWorkerEnvironment } from "../support/chat-worker.ts";
 
@@ -35,6 +37,9 @@ export async function createTestApp(
     options: {
         readonly agentBehavior?: Parameters<Application["connectAgent"]>[0];
         readonly connectAgent?: boolean;
+        readonly page?:
+            | { readonly kind: "continue"; readonly harness: string; readonly sessionId: string }
+            | { readonly kind: "workspace" };
         readonly prepare?: (application: Application) => void;
     } = {},
 ): Promise<TestApp> {
@@ -42,17 +47,30 @@ export async function createTestApp(
     options.prepare?.(current);
     const agentFailure =
         options.connectAgent === true ? (await current.connectAgent(options.agentBehavior)).failure : null;
-    window.location.href = `${current.origin}/chat`;
+    const page = options.page ?? { kind: "workspace" };
+    if (page.kind === "continue") {
+        const transfer = new URL(await current.createTransferUrl());
+        transfer.searchParams.set("harness", page.harness);
+        transfer.searchParams.set("sessionId", page.sessionId);
+        window.location.href = transfer.href;
+        authenticationRouter.history.replace(`${transfer.pathname}${transfer.search}${transfer.hash}`);
+    } else {
+        window.location.href = `${current.origin}/chat`;
+    }
     const container = document.createElement("div");
     document.body.appendChild(container);
     const rendered = render(
         <ApiTransportProvider transport={current.transport}>
             <ToastProvider>
-                <WorkspaceApplication
-                    activeIdentity={current.identity}
-                    authorize={async (signal) => signal.throwIfAborted()}
-                    userId={current.userId}
-                />
+                {page.kind === "continue" ? (
+                    <App state={{ kind: "authentication", router: authenticationRouter }} />
+                ) : (
+                    <WorkspaceApplication
+                        activeIdentity={current.identity}
+                        authorize={async (signal) => signal.throwIfAborted()}
+                        userId={current.userId}
+                    />
+                )}
             </ToastProvider>
         </ApiTransportProvider>,
         { container },
