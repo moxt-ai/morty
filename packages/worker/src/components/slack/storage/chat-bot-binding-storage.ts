@@ -1,3 +1,4 @@
+import { isIdentifier } from "@moxt-ai/mobius-protocol";
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
 import type { Database } from "../../../schema/project-do/database.ts";
@@ -5,7 +6,7 @@ import { managedBot, slackApp, slackChatBotBinding } from "../../../schema/proje
 import { botConfigurationSchema } from "../../management/entity/bot-configuration.ts";
 import type { TenantContext } from "../entity/tenant-context";
 
-const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
+const identifier = v.custom<string>(isIdentifier);
 const localBotSchema = v.pipe(
     v.object({
         botId: identifier,

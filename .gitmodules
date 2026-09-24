@@ -1,3 +1,4 @@
 [submodule "third-party/mobius"]
 	path = third-party/mobius
 	url = https://github.com/moxt-ai/mobius.git
+	branch = main

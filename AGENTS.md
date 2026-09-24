@@ -2,6 +2,10 @@
 
 These rules apply to the entire repository. See [DEVELOPMENT.md](./DEVELOPMENT.md) for implementation guidance and [TESTING.md](./TESTING.md) for delivery and testing guidance.
 
+## Repository setup
+
+- Before beginning any repository work, run `pnpm sync:submodules` so every submodule is initialized and updated from its configured tracking branch.
+
 ## Trust Boundary
 
 The local execution boundary is the only authority allowed to approve local side effects.

@@ -1,3 +1,4 @@
+import { isIdentifier as isProtocolIdentifier } from "@moxt-ai/mobius-protocol";
 import type {
     AgentDisplayContent,
     AgentInstallationStage,
@@ -9,7 +10,6 @@ import type {
     SessionPermissionRequestedEvent,
 } from "@moxt-ai/mobius-sdk";
 
-const IDENTIFIER_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/;
 const TOKEN_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
 const PAIRING_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){4}$/;
 
@@ -559,7 +559,7 @@ export class PairingApiError extends Error {
 }
 
 export function isIdentifier(value: string): boolean {
-    return IDENTIFIER_PATTERN.test(value);
+    return isProtocolIdentifier(value);
 }
 
 export function isToken(value: string): boolean {

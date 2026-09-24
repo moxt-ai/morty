@@ -245,6 +245,9 @@ importers:
 
   packages/setup:
     dependencies:
+      '@moxt-ai/mobius-protocol':
+        specifier: workspace:*
+        version: link:../../third-party/mobius/packages/protocol
       jsqr:
         specifier: 'catalog:'
         version: 1.4.0

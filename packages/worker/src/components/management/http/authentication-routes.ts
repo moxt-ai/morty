@@ -1,3 +1,5 @@
+import { type Identifier, isIdentifier } from "@moxt-ai/mobius-protocol";
+import { Hono } from "hono";
 import * as v from "valibot";
 import { projectObject } from "../../../gateway/project-object-routing.ts";
 import { json } from "../../../infra/http.ts";
@@ -13,7 +15,7 @@ const anonymousUserInput = v.strictObject({
         v.picklist(["wnam", "enam", "sam", "weur", "eeur", "apac", "apac-ne", "apac-se", "oc", "afr", "me"]),
     ),
 });
-const pairingInput = v.object({ botId: v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u)) });
+const pairingInput = v.object({ botId: v.custom<Identifier>(isIdentifier) });
 const pairingRedemptionInput = v.object({ token: v.string() });
 const bindingInput = v.pipe(
     v.object({
@@ -223,5 +225,3 @@ export function createAuthenticationRoutes() {
             },
         );
 }
-
-import { Hono } from "hono";

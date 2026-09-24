@@ -1,3 +1,4 @@
+import { decodeIdentifier } from "@moxt-ai/mobius-protocol";
 import {
     decodeSessionCommandsUpdatedEvent,
     decodeSessionElicitationRequestedEvent,
@@ -289,9 +290,9 @@ export function createSessionPaneModel(options: {
     const initialActiveTurn: SessionActiveTurn =
         session.result.action === "conversation" && session.result.activeTurn.kind === "running"
             ? {
-                  commandId: session.result.activeTurn.commandId,
+                  commandId: decodeIdentifier(session.result.activeTurn.commandId),
                   kind: "accepted" as const,
-                  turnId: session.result.activeTurn.turnId,
+                  turnId: decodeIdentifier(session.result.activeTurn.turnId),
               }
             : { kind: "idle" };
     const activeTurn = createSessionActiveTurn({ initial: initialActiveTurn, sessionId });

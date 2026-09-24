@@ -1,10 +1,12 @@
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ManagedChatSession } from "@/services/chat/bot-chat-api";
+import { CloudApiError } from "@/services/management/management-api";
 
 type ConversationDirectoryState =
     | { readonly kind: "loading" }
     | { readonly kind: "ready"; readonly sessions: readonly ManagedChatSession[] }
     | { readonly kind: "refreshing"; readonly sessions: readonly ManagedChatSession[] }
+    | { readonly kind: "setup-required" }
     | { readonly kind: "stale"; readonly sessions: readonly ManagedChatSession[]; readonly message: string }
     | { readonly kind: "failed"; readonly message: string };
 
@@ -61,6 +63,7 @@ export const createConversationDirectoryStore = (
                                 },
                             };
                         case "loading":
+                        case "setup-required":
                         case "failed":
                             return { archive: { kind: "idle" }, state };
                     }
@@ -90,6 +93,10 @@ export const createConversationDirectoryStore = (
                 set({ state: { kind: "ready", sessions } });
             } catch (cause) {
                 if (!signal.aborted) {
+                    if (cause instanceof CloudApiError && cause.code === "AGENT_REQUIRED") {
+                        set({ state: { kind: "setup-required" } });
+                        return;
+                    }
                     const message = cause instanceof Error ? cause.message : "Conversations are unavailable.";
                     set({
                         state:
