@@ -149,10 +149,12 @@ export class ChatService {
 
     readonly #localWorkspace = async (scope: ChatScope) => {
         const bot = await this.#bot(scope);
+        const runtimeId = bot.configuration?.runtimeId ?? null;
+        const agents = await this.#platform.chatAgents(scope.projectId, scope.signal);
         return {
             status: bot.configuration === null ? "draft" : "active",
-            runtimeId: bot.configuration?.runtimeId ?? null,
-            agents: await this.#platform.chatAgents(scope.projectId, scope.signal),
+            runtimeId,
+            agents: runtimeId === null ? agents : agents.filter((agent) => agent.runtimeId === runtimeId),
         };
     };
 

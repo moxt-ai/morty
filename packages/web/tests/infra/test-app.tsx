@@ -40,11 +40,11 @@ export async function createTestApp(
         readonly page?:
             | { readonly kind: "continue"; readonly harness: string; readonly sessionId: string }
             | { readonly kind: "workspace" };
-        readonly prepare?: (application: Application) => void;
+        readonly prepare?: (application: Application) => void | Promise<void>;
     } = {},
 ): Promise<TestApp> {
     const current = await (await environment).createApplication();
-    options.prepare?.(current);
+    await options.prepare?.(current);
     const agentFailure =
         options.connectAgent === true ? (await current.connectAgent(options.agentBehavior)).failure : null;
     const page = options.page ?? { kind: "workspace" };
