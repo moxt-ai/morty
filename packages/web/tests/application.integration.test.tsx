@@ -213,7 +213,7 @@ test("Given a paired Bot with cached agent settings, When a user refreshes and f
     await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
 });
 
-test("Given an Agent links a local file location, When a user opens it, Then the file path omits the source location", {
+test("Given an Agent links a local file location, When a user opens it, Then its contents appear without the source location", {
     timeout: 30_000,
 }, async () => {
     const created = await createTestApp({ connectAgent: true });
@@ -224,16 +224,23 @@ test("Given an Agent links a local file location, When a user opens it, Then the
     );
     const composer = await created.queryElementByTestId(dataTestId.messageComposer);
 
-    await sendPrompt(
-        created,
-        composer as HTMLTextAreaElement,
-        "Open [Generated source](</fake/generated-image.png:104>)",
-    );
-    const link = await Promise.race([created.queryElementByTestId(dataTestId.localFileLink), failure]);
+    await sendPrompt(created, composer as HTMLTextAreaElement, "Create an image");
+    const link = await Promise.race([
+        created.queryElementByTestId(
+            dataTestId.localFileLink,
+            (element) => element.textContent?.includes("Generated source") === true,
+        ),
+        failure,
+    ]);
     await created.user.click(link);
 
     const preview = await created.queryElementByTestId(dataTestId.filePreview);
     expect(preview.textContent).not.toContain(":104");
+    const content = await created.queryElementByTestId(
+        dataTestId.filePreviewContent,
+        (element) => element.textContent?.includes("export const generated = true;") === true,
+    );
+    expect(content.textContent).toContain("export const generated = true;");
 });
 
 test("Given a Bot has a recent directory from another harness, When its workspace loads, Then the directory remains available", {
