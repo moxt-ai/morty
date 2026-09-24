@@ -99,11 +99,7 @@ jobs:
           CLERK_JWT_KEY: ${{ vars.CLERK_JWT_KEY }}
           MOBIUS_BASE_URL: ${{ vars.MOBIUS_BASE_URL }}
           MOBIUS_APP_ID: ${{ vars.MOBIUS_APP_ID }}
-          SLACK_SERVER_BASE_URL: ${{ vars.SLACK_SERVER_BASE_URL }}
           MOBIUS_APP_SECRET: ${{ secrets.MOBIUS_APP_SECRET }}
-          SLACK_MOBIUS_AUTH_TOKEN: ${{ secrets.SLACK_MOBIUS_AUTH_TOKEN }}
-          SLACK_OAUTH_STATE_SIGNING_KEY: ${{ secrets.SLACK_OAUTH_STATE_SIGNING_KEY }}
-          SLACK_TOKEN_ENCRYPTION_KEY: ${{ secrets.SLACK_TOKEN_ENCRYPTION_KEY }}
         run: node scripts/validate-worker-config.ts
 
       - name: Publish setup artifact
@@ -124,11 +120,7 @@ jobs:
           CLERK_JWT_KEY: ${{ vars.CLERK_JWT_KEY }}
           MOBIUS_BASE_URL: ${{ vars.MOBIUS_BASE_URL }}
           MOBIUS_APP_ID: ${{ vars.MOBIUS_APP_ID }}
-          SLACK_SERVER_BASE_URL: ${{ vars.SLACK_SERVER_BASE_URL }}
           MOBIUS_APP_SECRET: ${{ secrets.MOBIUS_APP_SECRET }}
-          SLACK_MOBIUS_AUTH_TOKEN: ${{ secrets.SLACK_MOBIUS_AUTH_TOKEN }}
-          SLACK_OAUTH_STATE_SIGNING_KEY: ${{ secrets.SLACK_OAUTH_STATE_SIGNING_KEY }}
-          SLACK_TOKEN_ENCRYPTION_KEY: ${{ secrets.SLACK_TOKEN_ENCRYPTION_KEY }}
         shell: bash
         run: |
           umask 077

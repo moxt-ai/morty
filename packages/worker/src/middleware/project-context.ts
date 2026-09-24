@@ -25,23 +25,6 @@ export const cloudProjectContext = createMiddleware<{
     return await next();
 });
 
-export const slackProjectContext = createMiddleware<{
-    readonly Bindings: CloudBindings;
-    readonly Variables: { readonly projectBindings: CloudBindings };
-}>(async (context, next) => {
-    const projectId = context.req.query("projectId");
-    if (projectId === undefined) {
-        throw new ManagementError("PROJECT_REQUIRED", "Workspace context is required.", 400);
-    }
-    const routed = await routeProjectObject(context.req.raw, context.env, projectId);
-    if (routed !== null) {
-        return routed;
-    }
-    const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(20000)]);
-    context.set("projectBindings", await projectBindings(context.env, projectId, signal));
-    return await next();
-});
-
 export async function cloudProjectId(request: Request): Promise<string | null> {
     const path = new URL(request.url).pathname;
     if (path.startsWith("/morty/api/projects/")) {

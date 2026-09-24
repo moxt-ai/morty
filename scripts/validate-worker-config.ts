@@ -5,14 +5,8 @@ const variableNames = [
     "CLERK_JWT_KEY",
     "MOBIUS_BASE_URL",
     "MOBIUS_APP_ID",
-    "SLACK_SERVER_BASE_URL",
 ];
-const secretNames = [
-    "MOBIUS_APP_SECRET",
-    "SLACK_MOBIUS_AUTH_TOKEN",
-    "SLACK_OAUTH_STATE_SIGNING_KEY",
-    "SLACK_TOKEN_ENCRYPTION_KEY",
-];
+const secretNames = ["MOBIUS_APP_SECRET"];
 
 const mode = process.argv[2] ?? "validate";
 if (!["validate", "vars", "secrets"].includes(mode)) {

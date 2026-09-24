@@ -6,7 +6,7 @@ Anonymous credentials and Clerk sessions resolve to a canonical internal user ID
 Clerk verifies a user session only. The application does not read Clerk Organization
 claims. Platform Project setup uses the server-held AppCredential; the Worker
 supplies a logical location hint and Platform resolves its storage placement. Bots and
-Chat support anonymous users; Slack additionally requires a verified Clerk session.
+Chat support anonymous users.
 Chat derives new Project placement from Cloudflare's server-provided `request.cf.continent`:
 Asia/Oceania use `apac`; other recognized continents use `wnam`, the other supported region.
 Missing or unrecognized metadata falls back to `apac`, defined in code.
@@ -54,7 +54,7 @@ than instructions. The Worker stores rendered documents in Cloudflare's edge cac
 for five minutes (`Cache-Control: public, max-age=0, s-maxage=300`). Cache keys include
 the request origin, document path, and resolved Chat origin, but exclude ticket tokens
 and other request query parameters. `X-Instruction-Cache` reports `HIT` or `MISS`.
-The active web flow has no Project setup or Slack navigation. The web application
+The active web flow has no Project setup navigation. The web application
 sends its anonymous credential or Clerk bearer token to Chat for ownership checks
 and conversation access. Platform independently authorizes SDK operations.
 
@@ -116,15 +116,14 @@ pnpm exec wrangler r2 object put morty-local-apac-attachments/artifacts/setup.mj
 After this, a user can reload a Project workspace through the same Chat origin
 and have its request authenticated inside that Project's Durable Object. The
 public Worker validates the Project ID and resolves one SQLite-backed object by
-name. Pairing and transfer redemption use the Project encoded in their tickets;
-Slack HTTP and queue deliveries use their validated Project context.
+name. Pairing and transfer redemption use the Project encoded in their tickets.
 
 Anonymous creation first creates the Platform Project using Cloudflare request
 metadata as the location hint, then initializes the corresponding Chat object.
 The Project ID supplies the Durable Object placement hint and selects the APAC or
 WNAM attachment bucket. Client-provided region headers have no authority.
 
-Each object owns all relational Chat, identity, and Slack state for one Project.
+Each object owns all relational Chat and identity state for one Project.
 Schema migrations run transactionally when the object starts. Chat has no D1
 binding and no regional backend Workers. The public Worker and object class deploy
 together. Runtime variables and secrets come from the corresponding GitHub
@@ -146,21 +145,18 @@ Feature logic stays below `packages/worker/src/components`:
 - `chat`: safe forwarding for `/mobius/api/*`.
 - `instruction-documents`: `/setup.md` and `/pair.md` routes and rendering service.
 - `management`: identity, Bot, Project, and Runtime management.
-- `slack`: Slack HTTP routes, services, queue processing, D1/R2 adapters, and rate limiting.
 
 Each component exports its Hono subtree from `http/index.ts`; the Worker application only mounts those subtrees.
 Cross-component HTTP assembly stays under `packages/worker/src/composition`.
 External system adapters stay directly under `packages/worker/src/gateway`; components do not contain gateway directories.
 Database table definitions stay under `packages/worker/src/schema`, with one table per file.
 
-Slack is source code in the Worker package, not an embedded package or standalone
-deployment. Shared runtime helpers remain directly under `packages/worker/src/infra`.
+Shared runtime helpers remain directly under `packages/worker/src/infra`.
 
 ## Storage
 
 Every Project has a SQLite-backed `ProjectDurableObject`. The validated Project ID
-selects the object and its `CHAT_ATTACHMENTS_APAC` or `CHAT_ATTACHMENTS_WNAM` R2
-bucket. The object verifies user ownership independently.
+selects the object, which verifies user ownership independently.
 The browser persists `{ userId, projectId }`. Chat requests use
 `/morty/api/chat/projects/:projectId/...`; project-scoped identity and
 management requests use `/morty/api/projects/:projectId/...`.
@@ -170,12 +166,6 @@ Only one-time pairing and transfer tickets embed Project context; anonymous
 credentials are opaque. The object applies the SQL files in
 `packages/worker/migrations` automatically and records their versions locally.
 Staging and production R2 resources are named in `wrangler.jsonc`.
-
-Slack management requests supply a `projectId` query parameter. Generated Slack
-event and OAuth callback URLs, and attachment links, carry a `projectId` query
-parameter. Queue deliveries contain `{ projectId, message }` so asynchronous
-processing resolves the same Project object. Callback routing does not replace
-Slack signature or OAuth-state validation.
 
 Clerk binding returns only the Chat user ID. Discarding a conflicting local
 workspace opens transfer-link recovery; it cannot discover the other Project.
@@ -224,9 +214,6 @@ active Turn. Continued Sessions persist the command ID before submission. If a t
 failure leaves acceptance uncertain, Chat displays **Delivery unknown**, never resubmits
 automatically, and offers an explicit retry that reuses the original idempotency key. Reload
 reconciliation clears that warning when the command is already present in saved messages.
-Slack resolves its locally owned Chat Bot binding and uses the same generic Project,
-Session, and turn APIs. Bot instructions are injected as trusted Chat-owned context.
-
 ## Verification
 
 Run `pnpm lint` and `pnpm typecheck` locally, plus only the tests related to the
@@ -236,8 +223,6 @@ tests use deterministic time and stateful fakes rather than request mocks.
 requires it.
 
 That command includes combined production TS/TSX coverage and executable dependency
-boundaries. `pnpm check:architecture` follows type imports and re-exports. Slack
-storage consumes shared records from `components/slack/entity` and execution ports
-from `infra`, with no dependency on services, gateways, or composition. Biome's
+boundaries. `pnpm check:architecture` follows type imports and re-exports. Biome's
 `useLiteralKeys` rule is disabled because TypeScript's index-signature access rules
 require bracket notation for untrusted records. See `TESTING.md` for report scope.

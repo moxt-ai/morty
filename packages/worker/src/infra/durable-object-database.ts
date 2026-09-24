@@ -8,19 +8,20 @@ import transferRedemptions from "../../migrations/project-do/0007_identity_trans
 import remoteAccess from "../../migrations/project-do/0008_remote_access.sql?raw";
 import managedSessionImport from "../../migrations/project-do/0009_chat_managed_import.sql?raw";
 import chatOwnedBot from "../../migrations/project-do/0010_chat_owned_bot.sql?raw";
-import slackChatBotBinding from "../../migrations/project-do/0011_slack_chat_bot_binding.sql?raw";
+import migration0011 from "../../migrations/project-do/0011_slack_chat_bot_binding.sql?raw";
 import removeLegacyBotMigration from "../../migrations/project-do/0012_remove_legacy_bot_migration.sql?raw";
 import pairingExpectedRuntime from "../../migrations/project-do/0013_volatile_colossus.sql?raw";
 import managedSessionArchive from "../../migrations/project-do/0014_bouncy_may_parker.sql?raw";
 import removeLegacyManagedBotColumns from "../../migrations/project-do/0015_red_forge.sql?raw";
-import removeUnusedSlackConfigToken from "../../migrations/project-do/0016_damp_fat_cobra.sql?raw";
-import renameSlackProcessedEvent from "../../migrations/project-do/0017_smooth_abomination.sql?raw";
+import migration0016 from "../../migrations/project-do/0016_damp_fat_cobra.sql?raw";
+import migration0017 from "../../migrations/project-do/0017_smooth_abomination.sql?raw";
 import replaceManagedSessionMetadata from "../../migrations/project-do/0018_bumpy_ares.sql?raw";
 import addManagedBotAgentRef from "../../migrations/project-do/0019_grey_clea.sql?raw";
 import addLocalSessionDirectories from "../../migrations/project-do/0020_minor_vision.sql?raw";
-import simplifySlackBinding from "../../migrations/project-do/0021_black_hairball.sql?raw";
-import simplifyChatSessionAndSlackBinding from "../../migrations/project-do/0022_eminent_wiccan.sql?raw";
+import migration0021 from "../../migrations/project-do/0021_black_hairball.sql?raw";
+import migration0022 from "../../migrations/project-do/0022_eminent_wiccan.sql?raw";
 import removeLocalSessionMetadata from "../../migrations/project-do/0024_fair_blizzard.sql?raw";
+import removeIntegrationTables from "../../migrations/project-do/0025_misty_scarlet_witch.sql?raw";
 
 const migrations = [
     management,
@@ -33,19 +34,20 @@ const migrations = [
     remoteAccess,
     managedSessionImport,
     chatOwnedBot,
-    slackChatBotBinding,
+    migration0011,
     removeLegacyBotMigration,
     pairingExpectedRuntime,
     managedSessionArchive,
     removeLegacyManagedBotColumns,
-    removeUnusedSlackConfigToken,
-    renameSlackProcessedEvent,
+    migration0016,
+    migration0017,
     replaceManagedSessionMetadata,
     addManagedBotAgentRef,
     addLocalSessionDirectories,
-    simplifySlackBinding,
-    simplifyChatSessionAndSlackBinding,
+    migration0021,
+    migration0022,
     removeLocalSessionMetadata,
+    removeIntegrationTables,
 ];
 
 type BoundValue = ArrayBuffer | string | number | null;

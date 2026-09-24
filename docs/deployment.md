@@ -22,14 +22,10 @@ Configure these **GitHub Environment variables** individually:
 - `CLERK_JWT_KEY` — multiline PEM **public verification key**, not a private key.
 - `MOBIUS_BASE_URL` — Platform origin.
 - `MOBIUS_APP_ID` — environment-specific Platform App ID.
-- `SLACK_SERVER_BASE_URL` — Slack server URL.
 
 Configure these **GitHub Environment secrets** individually:
 
 - `MOBIUS_APP_SECRET` — full `mapp_…` AppCredential.
-- `SLACK_MOBIUS_AUTH_TOKEN`.
-- `SLACK_OAUTH_STATE_SIGNING_KEY`.
-- `SLACK_TOKEN_ENCRYPTION_KEY`.
 
 Retain the deployment secrets `CLOUDFLARE_API_TOKEN`, `MOBIUS_READ_TOKEN`, and
 `SENTRY_AUTH_TOKEN`, and the variables `SENTRY_DSN`, `SENTRY_ORG`, and

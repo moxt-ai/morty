@@ -130,8 +130,7 @@ node scripts/local-dev.cjs remove --state-dir <stateDir>
 
 - **Chat Worker** - pinned Wrangler runs `packages/e2e/fixtures/wrangler.chat.jsonc`
   from the built Worker bundle with the built SPA as assets. It owns
-  `ProjectDurableObject`, `BotTriggerRateLimiter`, the attachments R2 buckets,
-  and the `EVENTS` queue.
+  `ProjectDurableObject` and the attachments R2 buckets.
 - **Platform fixture and relay** - pinned Wrangler runs
   `packages/e2e/fixtures/wrangler.platform.jsonc` with an explicit
   `--persist-to`. It authenticates local developer calls with provider `e2e` and
@@ -213,8 +212,7 @@ Details, inspection commands, and a failure-mode table are in
 
 - Local only. Never run `wrangler deploy`, `wrangler tail`, or any command that
   reaches a Cloudflare account from this skill.
-- Do not print, log, or commit the generated application secret, RSA key, or
-  Slack tokens.
+- Do not print, log, or commit the generated application secret or RSA key.
 - Keep each run inside its own state directory so runs stay isolated.
 - Use only the repository's pinned tools. Verify with `pnpm lint` and
   `pnpm typecheck`; never run `pnpm ci:check` locally.

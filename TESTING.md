@@ -7,7 +7,7 @@ has one primary owner:
 
 - a browser E2E journey owns a critical successful user path;
 - a Web application integration test owns browser-side behavior and state transitions;
-- a Worker integration test owns one HTTP, Durable Object, Slack, or storage
+- a Worker integration test owns one HTTP, Durable Object, or storage
   boundary;
 - Mobius owns its protocol, Runtime, daemon, Relay, and Agent boundaries.
 
@@ -65,7 +65,7 @@ scoping therefore live in this journey; the browser suite does not repeat them.
 ### Worker integration
 
 `packages/worker/tests` enters through a production HTTP, WebSocket, Durable
-Object, Slack application, queue, or storage boundary. Run it with:
+Object, or storage boundary. Run it with:
 
 ```bash
 pnpm test:worker
@@ -76,25 +76,21 @@ fakes, and cleanup. A suite shares its production local runtime when each case c
 create isolated users and Projects through public operations; do not rebuild the
 same Worker bundle and Platform for every case. `startTestPlatform` starts the production Platform Worker,
 Durable Objects, migrations, and HTTP/WebSocket boundary with isolated local
-Cloudflare storage; it does not simulate Platform responses. Slack tests start empty and create app registration, binding,
-OAuth, and connection state through production HTTP operations. Direct persistence
+Cloudflare storage; it does not simulate Platform responses. Direct persistence
 setup is reserved for storage and migration behavior or state owned by an upstream
 component outside the test.
 
 Keep one file per business boundary. Identity lifecycle and pairing-ticket HTTP
 behavior belong in `identity.integration.test.ts`; the setup CLI and browser
 handoff belong to the existing product journey in `packages/e2e/setup.e2e.test.ts`.
-Slack journeys stay under `slack/app`. Related state transitions should advance
-through one journey instead of rebuilding the same user, database, and Platform
-stack in separate cases. The small shared `support/identity-fixture.ts` starts real
+Related state transitions should advance through one journey instead of rebuilding
+the same user, database, and Platform stack in separate cases. The small shared
+`support/identity-fixture.ts` starts real
 Chat Durable Objects and composes them with the real local Platform. Chat creation
 uses production Chat and Platform business operations end to end; only the external
 Agent-daemon process is replaced by the shared protocol fake. Narrow peers are
 reserved for a boundary behavior that a healthy Platform cannot produce, such as
 rejecting an HTTP redirect.
-Slack journeys compose the production Slack application and queue consumer with
-stateful fakes at the external Clerk, Slack, Identity, and Platform ports.
-
 ### Mobius
 
 `third-party/mobius` has its own product E2E, protocol contracts, boundary
@@ -182,7 +178,6 @@ supported behavior. Web and browser tests prefer accessible roles and labels. Us
 shared test ID when an element has no stable semantic selector or the ID expresses a
 supported product state; do not use private application state or ad hoc selectors.
 
-Architecture rules are executable in `dependency-cruiser.config.cjs`. Shared Slack
-records live with their owning entity boundary; storage and infrastructure cannot
+Architecture rules are executable in `dependency-cruiser.config.cjs`. Storage and infrastructure cannot
 depend on services, HTTP, composition, or gateways; browser and Worker
 implementations cannot import each other.

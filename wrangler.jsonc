@@ -16,22 +16,11 @@
     "assets": {
         "binding": "ASSETS",
         "not_found_handling": "single-page-application",
-        "run_worker_first": ["/morty/api/*", "/morty/ws", "/mobius-slack/api/*", "/setup.md", "/pair.md", "/setup.mjs"]
+        "run_worker_first": ["/morty/api/*", "/morty/ws", "/setup.md", "/pair.md", "/setup.mjs"]
     },
-    "queues": {
-        "producers": [{ "binding": "EVENTS", "queue": "app-slack-events" }],
-        "consumers": [{ "queue": "app-slack-events", "max_batch_size": 1, "max_retries": 5 }]
-    },
-    "r2_buckets": [
-        { "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-local-apac-attachments" },
-        { "binding": "CHAT_ATTACHMENTS_WNAM", "bucket_name": "morty-local-wnam-attachments" }
-    ],
+    "r2_buckets": [{ "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-local-apac-attachments" }],
     "durable_objects": {
         "bindings": [
-            {
-                "name": "BOT_TRIGGER_RATE_LIMITER",
-                "class_name": "BotTriggerRateLimiter"
-            },
             {
                 "name": "CHAT_PROJECTS",
                 "class_name": "ProjectDurableObject"
@@ -40,20 +29,14 @@
     },
     "migrations": [
         { "tag": "v1", "new_sqlite_classes": ["BotTriggerRateLimiter"] },
-        { "tag": "v2", "new_sqlite_classes": ["ProjectDurableObject"] }
+        { "tag": "v2", "new_sqlite_classes": ["ProjectDurableObject"] },
+        { "tag": "v3", "deleted_classes": ["BotTriggerRateLimiter"] }
     ],
     "env": {
         "staging": {
             "name": "morty-staging",
             "placement": { "mode": "off" },
-            "secrets": {
-                "required": [
-                    "MOBIUS_APP_SECRET",
-                    "SLACK_MOBIUS_AUTH_TOKEN",
-                    "SLACK_OAUTH_STATE_SIGNING_KEY",
-                    "SLACK_TOKEN_ENCRYPTION_KEY"
-                ]
-            },
+            "secrets": { "required": ["MOBIUS_APP_SECRET"] },
             "routes": [
                 {
                     "pattern": "morty.paradev.biz",
@@ -61,31 +44,9 @@
                 }
             ],
             "workers_dev": false,
-            "queues": {
-                "producers": [
-                    {
-                        "binding": "EVENTS",
-                        "queue": "mobius-slack-cloud-staging-events"
-                    }
-                ],
-                "consumers": [
-                    {
-                        "queue": "mobius-slack-cloud-staging-events",
-                        "max_batch_size": 1,
-                        "max_retries": 5
-                    }
-                ]
-            },
-            "r2_buckets": [
-                { "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-staging-apac-attachments" },
-                { "binding": "CHAT_ATTACHMENTS_WNAM", "bucket_name": "morty-staging-wnam-attachments" }
-            ],
+            "r2_buckets": [{ "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-staging-apac-attachments" }],
             "durable_objects": {
                 "bindings": [
-                    {
-                        "name": "BOT_TRIGGER_RATE_LIMITER",
-                        "class_name": "BotTriggerRateLimiter"
-                    },
                     {
                         "name": "CHAT_PROJECTS",
                         "class_name": "ProjectDurableObject"
@@ -96,14 +57,7 @@
         "production": {
             "name": "morty-production",
             "placement": { "mode": "off" },
-            "secrets": {
-                "required": [
-                    "MOBIUS_APP_SECRET",
-                    "SLACK_MOBIUS_AUTH_TOKEN",
-                    "SLACK_OAUTH_STATE_SIGNING_KEY",
-                    "SLACK_TOKEN_ENCRYPTION_KEY"
-                ]
-            },
+            "secrets": { "required": ["MOBIUS_APP_SECRET"] },
             "routes": [
                 {
                     "pattern": "morty.build",
@@ -114,34 +68,12 @@
             "durable_objects": {
                 "bindings": [
                     {
-                        "name": "BOT_TRIGGER_RATE_LIMITER",
-                        "class_name": "BotTriggerRateLimiter"
-                    },
-                    {
                         "name": "CHAT_PROJECTS",
                         "class_name": "ProjectDurableObject"
                     }
                 ]
             },
-            "queues": {
-                "producers": [
-                    {
-                        "binding": "EVENTS",
-                        "queue": "mobius-slack-cloud-production-events"
-                    }
-                ],
-                "consumers": [
-                    {
-                        "queue": "mobius-slack-cloud-production-events",
-                        "max_batch_size": 1,
-                        "max_retries": 5
-                    }
-                ]
-            },
-            "r2_buckets": [
-                { "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-production-apac-attachments" },
-                { "binding": "CHAT_ATTACHMENTS_WNAM", "bucket_name": "morty-production-wnam-attachments" }
-            ]
+            "r2_buckets": [{ "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-production-apac-attachments" }]
         }
     },
     "account_id": "95af7a3d67be8c49b1619544e3ce53c0"

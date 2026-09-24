@@ -317,10 +317,6 @@ function clerkPublishableKey() {
     return "pk_test_local_dev_placeholder";
 }
 
-function randomToken(bytes) {
-    return crypto.randomBytes(bytes).toString("hex");
-}
-
 async function prepareWeb(options) {
     const chatPort = options.chatPort ?? (await availablePort());
     const stateDir = options.stateDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "chat-local-web-dev-"));
@@ -514,10 +510,6 @@ async function prepare(options) {
             MOBIUS_APP_ID: appId,
             MOBIUS_APP_SECRET: appSecret,
             MOBIUS_BASE_URL: platformOrigin,
-            SLACK_MOBIUS_AUTH_TOKEN: randomToken(16),
-            SLACK_OAUTH_STATE_SIGNING_KEY: randomToken(16),
-            SLACK_SERVER_BASE_URL: chatOrigin,
-            SLACK_TOKEN_ENCRYPTION_KEY: crypto.randomBytes(32).toString("base64"),
         };
         const variableArguments = Object.entries(variables).flatMap(([key, value]) => ["--var", `${key}:${value}`]);
 

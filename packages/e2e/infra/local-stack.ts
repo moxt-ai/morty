@@ -162,10 +162,6 @@ export class LocalStack {
             MOBIUS_APP_ID: application.appId,
             MOBIUS_APP_SECRET: application.appSecret,
             MOBIUS_BASE_URL: this.platformOrigin,
-            SLACK_MOBIUS_AUTH_TOKEN: "unused-in-browser-e2e",
-            SLACK_OAUTH_STATE_SIGNING_KEY: "unused-in-browser-e2e",
-            SLACK_SERVER_BASE_URL: this.chatOrigin,
-            SLACK_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
         };
         await this.harness.run(wranglerExecutable, [
             "r2",
