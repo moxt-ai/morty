@@ -67,7 +67,7 @@ function AgentMarkdownLink({
     );
 }
 
-type MarkdownImageReader = (
+export type MarkdownImageReader = (
     path: string,
     signal: AbortSignal,
 ) => Promise<{ readonly bytes: Uint8Array; readonly mediaType: string }>;

@@ -48,7 +48,4 @@ export const publicCloudRoutes = new Hono<{ readonly Bindings: CloudBindings }>(
     )
     .post("/chat/projects/:projectId/bots/:botId/agent-settings", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
-    )
-    .get("/chat/projects/:projectId/bots/:botId/runtime-channel", (context) =>
-        cloudRoutes.fetch(context.req.raw, context.env),
     );

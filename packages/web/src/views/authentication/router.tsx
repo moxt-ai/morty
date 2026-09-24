@@ -81,7 +81,7 @@ function LoginPage({ register = false }: { readonly register?: boolean }) {
 function ContinuePage() {
     const transport = useApiTransport();
     const [store] = useState(() => createContinueStore(transport.fetch));
-    const { continueWorkspace, redeem, state } = useStore(store);
+    const { continueSession, continueWorkspace, redeem, state } = useStore(store);
     useEffect(() => {
         if (state.kind !== "redeeming") {
             return;
@@ -93,16 +93,55 @@ function ContinuePage() {
     return (
         <Page>
             <section className="mx-auto max-w-xl rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
-                <h1 className="text-2xl font-semibold">Use this Mobius workspace</h1>
+                <h1 className="text-2xl font-semibold">
+                    {state.kind === "confirm" && state.handoff.kind === "session"
+                        ? "Continue native session"
+                        : "Use this Mobius workspace"}
+                </h1>
                 {state.kind === "confirm" ? (
-                    <>
-                        <p className="mt-4 leading-7 text-muted-foreground">
-                            Continuing replaces the anonymous workspace currently stored on this device.
-                        </p>
-                        <Button className="mt-6" onClick={continueWorkspace}>
-                            Replace and continue
-                        </Button>
-                    </>
+                    state.handoff.kind === "session" ? (
+                        <>
+                            <p className="mt-3 leading-7 text-muted-foreground">
+                                Choose how this native session should open in Mobius.
+                            </p>
+                            <dl className="mt-5 grid gap-3 rounded-lg border border-border bg-muted/30 p-4 text-sm">
+                                <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-3">
+                                    <dt className="text-muted-foreground">Agent</dt>
+                                    <dd className="truncate font-medium">{state.handoff.harness}</dd>
+                                </div>
+                                <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-3">
+                                    <dt className="text-muted-foreground">Session ID</dt>
+                                    <dd className="break-all font-mono text-xs">{state.handoff.sessionId}</dd>
+                                </div>
+                            </dl>
+                            {state.replacesWorkspace ? (
+                                <p className="mt-4 text-sm leading-6 text-amber-700">
+                                    Continuing replaces the anonymous workspace currently stored on this device.
+                                </p>
+                            ) : null}
+                            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                                <Button onClick={() => continueSession("import")}>Import session</Button>
+                                <Button variant="outline" onClick={() => continueSession("fork")}>
+                                    Fork session
+                                </Button>
+                            </div>
+                            <p className="mt-3 text-sm text-muted-foreground">
+                                Import continues the original session. Fork creates an independent copy.
+                            </p>
+                            <Button className="mt-3 px-0" variant="ghost" onClick={() => continueSession("skip")}>
+                                Skip
+                            </Button>
+                        </>
+                    ) : (
+                        <>
+                            <p className="mt-4 leading-7 text-muted-foreground">
+                                Continuing replaces the anonymous workspace currently stored on this device.
+                            </p>
+                            <Button className="mt-6" onClick={continueWorkspace}>
+                                Replace and continue
+                            </Button>
+                        </>
+                    )
                 ) : state.kind === "redeeming" ? (
                     <p role="status" className="mt-4 text-muted-foreground">
                         Securely transferring the workspace…

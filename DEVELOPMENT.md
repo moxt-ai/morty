@@ -179,23 +179,49 @@ workspace opens transfer-link recovery; it cannot discover the other Project.
 ## External Mobius
 
 `MOBIUS_BASE_URL` must be an HTTP loopback origin for local development or an HTTPS
-origin elsewhere. It cannot contain credentials, a path, query, fragment, or Chat's
+origin elsewhere. It cannot contain credentials, a path, query, fragment, or Cloud's
 own origin. `MOBIUS_APP_ID` and `MOBIUS_APP_SECRET` authenticate Worker operations.
-
-Chat owns Bots, their selected Runtime and Agent, user access, and the mapping from
-Bot to native Agent Session. The Bot page creates or imports a native Codex or Claude
-Code Session through the Platform Runtime API. Chat stores its native Session ID in
-`chat_managed_session`; Mobius Platform does not store Session data. The browser's
-`runtime-channel` WebSocket checks Bot and Session ownership, then forwards approved
-operations to the paired machine. It changes the Chat Bot binding identifier to the
-Runtime's workspace binding only after authorization. Prompt execution, history,
-interactions, and files remain on the local Runtime and native Agent.
-
-Slack stores one native Session ID per conversation in Chat's Project object. New
-conversations create that Session through the Runtime API; follow-up messages reuse
-it. Slack turns travel through the Runtime host channel, and Chat assembles the live
-reply for Slack delivery. Bot instructions are supplied as Chat-owned prompt context.
-The three former cloud Session binding fields are absent from Slack's current schema.
+The active Chat API issues short-lived conversation credentials after checking Bot
+ownership. The browser uses `createMobiusConversationSession` to communicate directly
+with Mobius, including history, messages, events, and credential refresh.
+Project-scoped Mobius APIs share `/mobius/api/v1/projects/:projectId/...`, including
+Conversation credential operations and `client/session` browser requests. The SDK
+places the Project ID in the path for Durable Object routing. Deploy Chat's updated SDK
+together with the corresponding Platform endpoint cutover.
+New Conversation opens a browser-local draft. Its Harness selector chooses a paired
+agent; Chat discovers that agent's settings directly without creating a temporary Session.
+The cwd selector beside the model controls browses the selected Runtime and accepts an
+absolute path. The Runtime resolves and authorizes that path, and Chat applies the selected
+canonical directory only to the new conversation.
+First Send materializes the draft as a Mobius Session with the selected
+model and approved Bot binding. The Conversation API is the creation and access path for
+these Sessions; it is not a separate user-facing chat type. Existing Sessions created by
+that path reopen by Conversation ID, including credential refresh, and keep their harness fixed.
+First Send keeps the created connection and transitions the draft in place; it
+updates the saved URL without removing the sidebar or composer to reconnect.
+Chat records materialized Sessions in `chat_managed_session`, keyed and indexed by Project ID,
+user ID, Bot ID, access-path provenance and resource ID. The sidebar lists all of them as
+Sessions. New Conversation records the first prompt as its title. Native Sessions opens a
+two-column discovery and preview dialog;
+the directory returns metadata only, selecting an entry fetches its history from
+`native-session/:id`; Import resumes it in Chat, while Fork creates a separate native
+Session. Cancelling the dialog creates no Chat-managed record. After import or fork, the
+result uses the normal Session message surface and can be stopped from the composer.
+Imported and forked Sessions reopen by `sessionId` in the saved page URL.
+The Worker discovers, imports, and forks native sessions through the Project SDK. Its
+`session-access` endpoint issues credentials scoped to the selected Session inside
+the user's Project. The browser uses those credentials with the Session SDK to
+communicate directly with Mobius; it receives no Runtime-wide host credential.
+That Session credential also permits reading and answering interactions for only
+the selected Session. Continued Sessions show pending permission and elicitation
+requests, restore them after a reload, and reconcile a decision with Mobius before
+offering it again. Closing or reloading the pane does not implicitly cancel the
+active Turn. Continued Sessions persist the command ID before submission. If a transport
+failure leaves acceptance uncertain, Chat displays **Delivery unknown**, never resubmits
+automatically, and offers an explicit retry that reuses the original idempotency key. Reload
+reconciliation clears that warning when the command is already present in saved messages.
+Slack resolves its locally owned Chat Bot binding and uses the same generic Project,
+Session, and turn APIs. Bot instructions are injected as trusted Chat-owned context.
 
 ## Verification
 

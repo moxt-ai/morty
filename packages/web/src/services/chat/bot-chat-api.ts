@@ -1,22 +1,43 @@
 import {
     decodeAgentSettingsDiscoveredEvent,
+    decodeNativeSessionHistory,
+    decodeNativeSessionResult,
+    decodeSessionReadyEvent,
+    decodeWorkspaceEntriesEvent,
     type SessionConfigOption,
-    type SessionElicitationRequestedEvent,
-    type SessionElicitationResolvedEvent,
-    type SessionPermissionRequestedEvent,
-    type SessionPermissionResolvedEvent,
+    type SessionConfigurationSelection,
 } from "@moxt-ai/mobius-protocol";
 import {
-    connectMobiusChannelClient,
-    type LiveSessionMessage,
-    type MobiusChannelClient,
-} from "@moxt-ai/mobius-sdk/channel";
+    HttpTransport,
+    MobiusClient,
+    type MobiusHttpTransport,
+    type MobiusLiveEventTransport,
+    type MobiusTransportSessionEvent,
+    WsTransport,
+} from "@moxt-ai/mobius-sdk";
 import * as v from "valibot";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 
 const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
+const accessSchema = v.pipe(
+    v.strictObject({
+        endpoint: v.pipe(v.string(), v.url()),
+        projectId: identifier,
+        conversationId: identifier,
+        sessionId: identifier,
+        credential: v.pipe(v.string(), v.regex(/^msession_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]+_[A-Za-z0-9_-]{43}$/u)),
+        expiresAt: v.pipe(v.string(), v.isoTimestamp()),
+        ready: v.unknown(),
+        agentRef: identifier,
+        workspaceRef: v.pipe(v.string(), v.minLength(1), v.maxLength(2048)),
+        instructions: v.pipe(v.string(), v.maxLength(100000)),
+    }),
+    v.readonly(),
+);
+export type ChatAccess = v.InferOutput<typeof accessSchema>;
 const managedSessionSchema = v.pipe(
     v.object({
+        isExternal: v.boolean(),
         id: identifier,
         title: v.string(),
         directoryLabel: v.string(),
@@ -42,8 +63,115 @@ const workspaceSchema = v.object({
     ),
 });
 export type ChatWorkspace = v.InferOutput<typeof workspaceSchema>;
+export interface ChatDraftConfiguration {
+    readonly agentRef: string;
+    readonly workspaceRef: string;
+    readonly workspaceLabel: string;
+    readonly configurations: readonly SessionConfigurationSelection[];
+}
 interface AgentSettingsResult {
     readonly options: readonly SessionConfigOption[];
+}
+export type ConversationActiveTurn =
+    | { readonly kind: "idle" }
+    | { readonly kind: "running"; readonly commandId: string; readonly turnId: string };
+const sessionAccessSchema = v.object({
+    sessionId: identifier,
+    projectId: identifier,
+    credential: v.pipe(v.string(), v.regex(/^msession_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]+_[A-Za-z0-9_-]{43}$/u)),
+    expiresAt: v.pipe(v.string(), v.isoTimestamp()),
+    endpoint: v.pipe(v.string(), v.url()),
+});
+const localSessionEntrySchema = v.object({
+    entryId: identifier,
+    mobiusSessionIds: v.array(identifier),
+    nativeSessionId: identifier,
+    title: v.string(),
+    directoryId: v.string(),
+    directoryLabel: v.string(),
+    additionalDirectories: v.array(v.object({ directoryId: v.string(), name: v.string() })),
+    updatedAt: v.nullable(v.string()),
+});
+const managedSdkSessionSchema = v.object({
+    agentRef: identifier,
+    instructions: v.string(),
+    ready: v.unknown(),
+    entry: localSessionEntrySchema,
+});
+const localSessionSchema = v.object({
+    agentRef: identifier,
+    instructions: v.string(),
+    result: v.unknown(),
+    entry: localSessionEntrySchema,
+});
+
+function sessionEndpoint(value: string): string {
+    const endpoint = new URL(value);
+    if (
+        endpoint.username !== "" ||
+        endpoint.password !== "" ||
+        endpoint.pathname !== "/" ||
+        endpoint.search !== "" ||
+        endpoint.hash !== "" ||
+        (endpoint.protocol !== "https:" &&
+            !(endpoint.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname)))
+    ) {
+        throw new CloudApiError("INVALID_SESSION_ENDPOINT", "The Session endpoint is invalid.");
+    }
+    return endpoint.origin;
+}
+
+class BrowserSessionTransport implements MobiusHttpTransport, MobiusLiveEventTransport {
+    readonly #http = new HttpTransport();
+    readonly #webSocket = new WsTransport();
+
+    readonly fetch = async (request: Request): Promise<Response> =>
+        await (request.headers.get("accept")?.startsWith("text/event-stream") === true ||
+        request.headers.get("accept") === "application/octet-stream"
+            ? this.#http
+            : this.#webSocket
+        ).fetch(request);
+
+    readonly openLiveSessionEvents = async (request: Request): Promise<ReadableStream<MobiusTransportSessionEvent>> =>
+        await this.#webSocket.openLiveSessionEvents(request);
+
+    readonly close = (): void => this.#webSocket.close();
+}
+
+class BrowserSessionClient implements MobiusClient {
+    readonly attempts: MobiusClient["attempts"];
+    readonly capabilities: MobiusClient["capabilities"];
+    readonly credentials: MobiusClient["credentials"];
+    readonly events: MobiusClient["events"];
+    readonly interactions: MobiusClient["interactions"];
+    readonly runtimePairings: MobiusClient["runtimePairings"];
+    readonly runtimes: MobiusClient["runtimes"];
+    readonly sessions: MobiusClient["sessions"];
+    readonly #sessionTransport: BrowserSessionTransport;
+    readonly toolCalls: MobiusClient["toolCalls"];
+    readonly turns: MobiusClient["turns"];
+    readonly #client: MobiusClient;
+
+    constructor(options: ConstructorParameters<typeof MobiusClient>[0], transport: BrowserSessionTransport) {
+        const client = new MobiusClient(options);
+        this.#client = client;
+        this.#sessionTransport = transport;
+        this.attempts = client.attempts;
+        this.capabilities = client.capabilities;
+        this.credentials = client.credentials;
+        this.events = client.events;
+        this.interactions = client.interactions;
+        this.runtimePairings = client.runtimePairings;
+        this.runtimes = client.runtimes;
+        this.sessions = client.sessions;
+        this.toolCalls = client.toolCalls;
+        this.turns = client.turns;
+    }
+
+    readonly close = (): void => {
+        this.#client.close();
+        this.#sessionTransport.close();
+    };
 }
 
 export class BotChatApi {
@@ -56,70 +184,6 @@ export class BotChatApi {
     readonly listBots: ManagementApi["listBots"];
     readonly createBot: ManagementApi["createBot"];
     readonly deleteBot: ManagementApi["deleteBot"];
-    readonly localRuntime = async (botId: string, signal: AbortSignal) =>
-        v.parse(
-            v.object({ runtimeId: identifier, agentRef: identifier }),
-            await this.#request(botId, "local-runtime", {}, signal),
-        );
-    readonly localSessions = async (botId: string, signal: AbortSignal) =>
-        v.parse(
-            v.object({ sessions: v.array(managedSessionSchema) }),
-            await this.#request(botId, "local-sessions", {}, signal),
-        ).sessions;
-    readonly createLocalSession = async (
-        botId: string,
-        input: { readonly action: "create" } | { readonly action: "import"; readonly sessionId: string },
-        signal: AbortSignal,
-    ) =>
-        v.parse(
-            v.object({ sessionId: identifier, runtimeId: identifier, agentRef: identifier }),
-            await this.#request(botId, "local-sessions/create", input, signal),
-        );
-    readonly connectLocalRuntime = async (
-        botId: string,
-        signal: AbortSignal,
-        callbacks: {
-            readonly onActivity: () => void;
-            readonly onLiveMessage?: (message: LiveSessionMessage) => void;
-            readonly onStatus: (online: boolean) => void;
-            readonly onPermission?: (event: SessionPermissionRequestedEvent) => void;
-            readonly onPermissionResolved?: (event: SessionPermissionResolvedEvent) => void;
-            readonly onElicitation?: (event: SessionElicitationRequestedEvent) => void;
-            readonly onElicitationResolved?: (event: SessionElicitationResolvedEvent) => void;
-        },
-    ): Promise<MobiusChannelClient> => {
-        signal.throwIfAborted();
-        const token = await this.#getToken(signal);
-        if (token === null) {
-            throw new CloudApiError("UNAUTHENTICATED", "Your session is unavailable.");
-        }
-        const endpoint = new URL(
-            `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/runtime-channel`,
-            this.#origin,
-        );
-        endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
-        const client = await connectMobiusChannelClient({
-            relayUrl: endpoint.toString(),
-            protocols: ["morty-runtime", `auth.${token}`],
-            onActivity: callbacks.onActivity,
-            ...(callbacks.onLiveMessage === undefined ? {} : { onLiveMessage: callbacks.onLiveMessage }),
-            onStatus: callbacks.onStatus,
-            ...(callbacks.onPermission === undefined ? {} : { onPermission: callbacks.onPermission }),
-            ...(callbacks.onPermissionResolved === undefined
-                ? {}
-                : { onPermissionResolved: callbacks.onPermissionResolved }),
-            ...(callbacks.onElicitation === undefined ? {} : { onElicitation: callbacks.onElicitation }),
-            ...(callbacks.onElicitationResolved === undefined
-                ? {}
-                : { onElicitationResolved: callbacks.onElicitationResolved }),
-        });
-        if (signal.aborted) {
-            client.close();
-            signal.throwIfAborted();
-        }
-        signal.addEventListener("abort", () => client.close(), { once: true });
-        return client;
-    };
     constructor(options: {
         readonly fetchRequest: (request: Request) => Promise<Response>;
         readonly origin: string;
@@ -137,6 +201,135 @@ export class BotChatApi {
         this.createBot = management.createBot;
         this.deleteBot = management.deleteBot;
     }
+    readonly access = async (botId: string, parent: AbortSignal, conversationId: string): Promise<ChatAccess> =>
+        v.parse(
+            accessSchema,
+            await this.#request(botId, "access", { conversationId: v.parse(identifier, conversationId) }, parent),
+        );
+    readonly createConversation = async (
+        botId: string,
+        conversationKey: string,
+        settings: ChatDraftConfiguration,
+        signal: AbortSignal,
+        title = "New chat",
+    ): Promise<ChatAccess> =>
+        v.parse(
+            accessSchema,
+            await this.#request(
+                botId,
+                "access",
+                {
+                    agentRef: settings.agentRef,
+                    configurations: settings.configurations,
+                    conversationKey,
+                    title,
+                    workspaceRef: settings.workspaceRef,
+                },
+                signal,
+            ),
+        );
+    readonly steerTurn = async (
+        botId: string,
+        sessionId: string,
+        turnId: string,
+        signal: AbortSignal,
+    ): Promise<void> => {
+        await this.#request(
+            botId,
+            "turns/steer",
+            { sessionId: v.parse(identifier, sessionId), turnId: v.parse(identifier, turnId) },
+            signal,
+        );
+    };
+    readonly conversationSession = (
+        access: ChatAccess,
+        activeTurn: ConversationActiveTurn,
+        directoryLabel = access.workspaceRef,
+    ) => ({
+        agentRef: access.agentRef,
+        instructions: access.instructions,
+        result: {
+            action: "conversation" as const,
+            access,
+            activeTurn,
+            targetSessionId: access.sessionId,
+            ready: decodeSessionReadyEvent(JSON.stringify(access.ready)),
+            history: {
+                status: "unavailable" as const,
+                cause: {
+                    code: "native_history_not_requested",
+                    message: "Native message history has not been requested yet.",
+                },
+            },
+        },
+        entry: {
+            entryId: access.sessionId,
+            mobiusSessionIds: [access.sessionId],
+            nativeSessionId: access.sessionId,
+            title: "",
+            directoryId: access.workspaceRef,
+            directoryLabel,
+            additionalDirectories: [],
+            updatedAt: null,
+        },
+    });
+    readonly managedSessions = async (botId: string, signal: AbortSignal) =>
+        v.parse(
+            v.object({ sessions: v.array(managedSessionSchema) }),
+            await this.#request(botId, "managed-sessions", {}, signal),
+        ).sessions;
+    readonly archiveManagedSession = async (botId: string, sessionId: string, signal: AbortSignal): Promise<void> => {
+        v.parse(
+            v.object({}),
+            await this.#request(
+                botId,
+                "managed-session/archive",
+                { sessionId: v.parse(identifier, sessionId) },
+                signal,
+            ),
+        );
+    };
+    readonly managedSession = async (botId: string, sessionId: string, signal: AbortSignal) => {
+        const stored = v.parse(
+            managedSdkSessionSchema,
+            await this.#request(botId, "managed-session", { sessionId }, signal),
+        );
+        const ready = decodeSessionReadyEvent(JSON.stringify(stored.ready));
+        if (ready.sessionId !== sessionId) {
+            throw new CloudApiError("INVALID_SESSION", "The saved Chat session is invalid.");
+        }
+        return {
+            agentRef: stored.agentRef,
+            instructions: stored.instructions,
+            entry: stored.entry,
+            result: {
+                action: "managed" as const,
+                targetSessionId: sessionId,
+                ready,
+                history: {
+                    status: "unavailable" as const,
+                    cause: { code: "history_loading", message: "Session history will load after connecting." },
+                },
+            },
+        };
+    };
+    readonly continueNativeSession = async (
+        botId: string,
+        harness: string,
+        sessionId: string,
+        action: "fork" | "import",
+        signal: AbortSignal,
+    ) => {
+        const stored = v.parse(
+            localSessionSchema,
+            await this.#request(botId, "continue-native-session", { action, harness, sessionId }, signal),
+        );
+        const result = decodeNativeSessionResult(JSON.stringify(stored.result));
+        if (result.action !== action || result.ready.sessionId !== result.targetSessionId) {
+            throw new CloudApiError("INVALID_SESSION", "The continued Chat session is invalid.");
+        }
+        return { ...stored, result };
+    };
     readonly agentSettings = async (
         botId: string,
         agentRef: string,
@@ -189,6 +382,10 @@ export class BotChatApi {
     };
     readonly workspace = async (botId: string, parent: AbortSignal): Promise<ChatWorkspace> =>
         v.parse(workspaceSchema, await this.#request(botId, "workspace", undefined, parent));
+    readonly workspaceDirectory = async (botId: string, directoryId: string, signal: AbortSignal) =>
+        decodeWorkspaceEntriesEvent(
+            JSON.stringify(await this.#request(botId, "workspace/directory", { directoryId }, signal)),
+        );
     readonly waitForWorkspaceChange = async (botId: string, parent: AbortSignal): Promise<void> => {
         const signal = AbortSignal.any([parent, AbortSignal.timeout(10 * 60 * 1000)]);
         const token = await this.#getToken(signal);
@@ -205,13 +402,128 @@ export class BotChatApi {
             ),
         );
     };
+    readonly nativeSessions = async (
+        botId: string,
+        runtimeId: string,
+        input: Parameters<MobiusClient["runtimes"]["nativeSessions"]>[1],
+        signal: AbortSignal,
+    ) => {
+        if (input.action === "list") {
+            return decodeNativeSessionResult(
+                JSON.stringify(await this.#request(botId, "native-sessions", { ...input, runtimeId }, signal)),
+            );
+        }
+        if (input.action !== "fork" && input.action !== "import") {
+            throw new CloudApiError("INVALID_REQUEST", "Use the session preview endpoint to read local history.");
+        }
+        const { entryId, action, ...identity } = input;
+        return decodeNativeSessionResult(
+            JSON.stringify(
+                await this.#request(
+                    botId,
+                    `native-session/${encodeURIComponent(v.parse(identifier, entryId))}/${action}`,
+                    { ...identity, runtimeId },
+                    signal,
+                ),
+            ),
+        );
+    };
+    readonly nativeSession = async (
+        botId: string,
+        runtimeId: string,
+        input: {
+            readonly entryId: string;
+            readonly discoveryId: string;
+            readonly agentId: string;
+            readonly directoryId: string;
+            readonly additionalDirectoryIds: readonly string[];
+        },
+        signal: AbortSignal,
+    ) => {
+        const { entryId, ...identity } = input;
+        const result = v.parse(
+            v.object({ title: v.string(), history: v.unknown() }),
+            await this.#request(
+                botId,
+                `native-session/${encodeURIComponent(v.parse(identifier, entryId))}`,
+                { ...identity, runtimeId },
+                signal,
+            ),
+        );
+        return { title: result.title, history: decodeNativeSessionHistory(result.history) };
+    };
+
+    readonly connectSession = async (
+        botId: string,
+        sessionId: string,
+        signal: AbortSignal,
+        initialAccess?: ChatAccess,
+    ): Promise<MobiusClient> => {
+        const readAccess = async (parent: AbortSignal) => {
+            for (let attempt = 0; attempt < 2; attempt += 1) {
+                try {
+                    return v.parse(
+                        sessionAccessSchema,
+                        await this.#request(
+                            botId,
+                            "session-access",
+                            { sessionId: v.parse(identifier, sessionId) },
+                            parent,
+                        ),
+                    );
+                } catch (cause) {
+                    parent.throwIfAborted();
+                    if (!(cause instanceof CloudApiError) || cause.code !== "CHAT_UNAVAILABLE" || attempt === 1) {
+                        throw cause;
+                    }
+                }
+            }
+            throw new CloudApiError("CHAT_UNAVAILABLE", "Chat is unavailable.");
+        };
+        let access = initialAccess ?? (await readAccess(signal));
+        const endpoint = sessionEndpoint(access.endpoint);
+        const projectId = access.projectId;
+        if (access.sessionId !== sessionId) {
+            throw new CloudApiError("INVALID_SESSION_ACCESS", "The selected Session could not be verified.");
+        }
+        const transport = new BrowserSessionTransport();
+        return new BrowserSessionClient(
+            {
+                endpoint,
+                projectId,
+                operationTimeoutMilliseconds: 120000,
+                transport,
+                credentialProvider: {
+                    credential: async (parent) => {
+                        if (Date.parse(access.expiresAt) - Date.now() < 30000) {
+                            access = await readAccess(parent);
+                        }
+                        if (
+                            sessionEndpoint(access.endpoint) !== endpoint ||
+                            access.projectId !== projectId ||
+                            access.sessionId !== sessionId
+                        ) {
+                            throw new CloudApiError("INVALID_SESSION_ACCESS", "The selected Session changed.");
+                        }
+                        return access.credential;
+                    },
+                },
+            },
+            transport,
+        );
+    };
     readonly #request = async (
         botId: string,
         operation: string,
         body: unknown,
         parent: AbortSignal,
     ): Promise<unknown> => {
-        const signal = AbortSignal.any([parent, AbortSignal.timeout(operation === "agent-settings" ? 120000 : 45000)]);
+        const signal = AbortSignal.any([
+            parent,
+            AbortSignal.timeout(
+                operation.startsWith("native-session") || operation === "agent-settings" ? 120000 : 45000,
+            ),
+        ]);
         const requestedBotId = v.parse(identifier, botId);
         const token = await this.#getToken(signal);
         if (token === null) {

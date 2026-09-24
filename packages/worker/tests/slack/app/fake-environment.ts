@@ -56,10 +56,9 @@ export class FakeIdentityGateway extends IdentityGateway {
     };
 }
 
-// Stateful fake for the native Runtime boundary used by Slack.
+// Stateful fake for the generic Project Session boundary used by Slack.
 export class FakeMobius implements SlackPlatformGateway {
     readonly runs: {
-        readonly agentRef: string;
         readonly botId: string;
         readonly clientMessageId: string;
         readonly conversationId: string;
@@ -97,31 +96,29 @@ export class FakeMobius implements SlackPlatformGateway {
 
     readonly chatAgents = async (_projectId: string, signal: AbortSignal) => {
         signal.throwIfAborted();
-        return [
-            { runtimeId: "runtime-1", agentRef: "claude", online: true },
-            { runtimeId: "runtime-1", agentRef: "codex", online: true },
-        ];
+        return [{ runtimeId: "runtime-1", agentRef: "codex", online: true }];
     };
 
-    readonly createAutomatedChatSession = async (
+    readonly openAutomatedChatSession = async (
         _projectId: string,
-        selection: { readonly agentRef: string },
-        existingSessionId: string | null,
+        selection: { readonly runtimeId: string; readonly agentRef: string },
+        sessionId: string,
+        _title: string,
         signal: AbortSignal,
     ): Promise<string> => {
         signal.throwIfAborted();
-        const sessionId = existingSessionId ?? crypto.randomUUID();
         const existing = this.#sessions.get(sessionId);
-        if (existing !== undefined && existing !== selection.agentRef) {
+        const target = `${selection.runtimeId}:${selection.agentRef}`;
+        if (existing !== undefined && existing !== target) {
             throw new Error("Session binding changed");
         }
-        this.#sessions.set(sessionId, selection.agentRef);
+        this.#sessions.set(sessionId, target);
         return sessionId;
     };
 
     readonly submitAutomatedChatTurn = async (
         _projectId: string,
-        selection: { readonly agentRef: string },
+        _selection: { readonly runtimeId: string; readonly agentRef: string },
         sessionId: string,
         input: { readonly commandId: string; readonly prompt: string; readonly instructions: string },
         signal: AbortSignal,
@@ -129,7 +126,6 @@ export class FakeMobius implements SlackPlatformGateway {
         signal.throwIfAborted();
         if (!this.results.has(input.commandId)) {
             this.runs.push({
-                agentRef: selection.agentRef,
                 botId: "chat-bot-1",
                 clientMessageId: input.commandId,
                 conversationId: sessionId,

@@ -21,6 +21,7 @@
         "class-variance-authority": "catalog:",
         "clsx": "catalog:",
         "lucide-react": "catalog:",
+        "qrcode": "catalog:",
         "radix-ui": "catalog:",
         "react": "catalog:",
         "react-dom": "catalog:",
@@ -30,6 +31,7 @@
         "zustand": "catalog:"
     },
     "devDependencies": {
+        "@types/qrcode": "catalog:",
         "@types/react": "catalog:",
         "@types/react-dom": "catalog:",
         "happy-dom": "catalog:",

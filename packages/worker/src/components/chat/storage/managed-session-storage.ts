@@ -98,4 +98,26 @@ export class ManagedSessionStorage {
         signal.throwIfAborted();
         return result !== undefined;
     };
+
+    readonly archive = async (
+        projectId: string,
+        userId: string,
+        botId: string,
+        id: string,
+        signal: AbortSignal,
+    ): Promise<void> => {
+        signal.throwIfAborted();
+        await this.#requireDatabase()
+            .delete(chatManagedSession)
+            .where(
+                and(
+                    eq(chatManagedSession.projectId, projectId),
+                    eq(chatManagedSession.userId, userId),
+                    eq(chatManagedSession.botId, botId),
+                    eq(chatManagedSession.resourceId, v.parse(platformIdentifier, id)),
+                ),
+            )
+            .run();
+        signal.throwIfAborted();
+    };
 }

@@ -6,7 +6,12 @@ import {
     MobiusPlatformAppClient,
     MobiusTimeoutError,
 } from "@moxt-ai/mobius-sdk/platform";
-import { MobiusClient, MobiusRuntimePairingRequest } from "@moxt-ai/mobius-sdk/server";
+import {
+    AGENT_DEFAULT_EXECUTION_SETTING,
+    MobiusClient,
+    MobiusRecordingPolicy,
+    MobiusRuntimePairingRequest,
+} from "@moxt-ai/mobius-sdk/server";
 import * as v from "valibot";
 import {
     PlatformProjectError,
@@ -21,6 +26,46 @@ import {
     platformEndpointBindingsSchema,
 } from "../infra/cloud-bindings.ts";
 import { runAutomatedRuntimeTurn } from "./automated-runtime-turn.ts";
+
+export type ChatConversationInput =
+    | {
+          readonly kind: "existing";
+          readonly conversationId: string;
+          readonly runtimeId: string;
+          readonly agentRef: string;
+          readonly workspaceRef: string;
+          readonly additionalDirectoryIds: readonly string[];
+      }
+    | {
+          readonly kind: "new";
+          readonly conversationKey: string;
+          readonly bindingId: string;
+          readonly runtimeId: string;
+          readonly agentRef: string;
+          readonly configurations: readonly {
+              readonly booleanValue: boolean;
+              readonly configId: string;
+              readonly value: string;
+              readonly valueType: "select" | "boolean";
+          }[];
+          readonly workspaceRef: string;
+      }
+    | {
+          readonly kind: "new";
+          readonly conversationKey: string;
+          readonly bindingId: string;
+          readonly runtimeId: string;
+          readonly agentRef: string;
+          readonly workspaceRef: string;
+          readonly permissionMode: string;
+          readonly configuration: {
+              readonly additionalDirectoryIds: readonly string[];
+              readonly booleanValue: boolean;
+              readonly configId: string;
+              readonly value: string;
+              readonly valueType: "select" | "boolean";
+          };
+      };
 
 export class PlatformProjectGateway {
     readonly #bindings: CloudBindings;
@@ -114,9 +159,22 @@ export class PlatformProjectGateway {
         return response.webSocket;
     };
 
+    readonly listChatWorkspace = async (
+        projectId: string,
+        runtimeId: string,
+        directoryId: string,
+        signal: AbortSignal,
+    ) =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) => await client.runtimes.listWorkspace(runtimeId, directoryId, signal),
+            120000,
+        );
+
     readonly discoverChatAgentSettings = async (
         projectId: string,
-        selection: { readonly runtimeId: string; readonly agentRef: string },
+        selection: { readonly runtimeId: string; readonly agentRef: string; readonly workspaceRef: string },
         signal: AbortSignal,
     ) =>
         await this.#withProject(
@@ -141,50 +199,315 @@ export class PlatformProjectGateway {
             120000,
         );
 
-    readonly createAutomatedChatSession = async (
+    readonly openChatSession = async (
+        projectId: string,
+        input: ChatConversationInput,
+        title: string,
+        signal: AbortSignal,
+    ) =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) => {
+                const sessionId = input.kind === "existing" ? input.conversationId : input.conversationKey;
+                const additionalDirectoryIds =
+                    input.kind === "new" && "configuration" in input
+                        ? input.configuration.additionalDirectoryIds
+                        : input.kind === "existing"
+                          ? input.additionalDirectoryIds
+                          : [];
+                const ready =
+                    input.kind === "new"
+                        ? await client.sessions.create(
+                              {
+                                  additionalDirectoryIds,
+                                  agentId: input.agentRef,
+                                  bindingId: input.bindingId,
+                                  directoryId: input.workspaceRef,
+                                  policy: new MobiusRecordingPolicy("full", 30 * 24 * 60 * 60 * 1000, 1000, 6_000_000),
+                                  runtimeId: input.runtimeId,
+                                  sessionId,
+                                  title,
+                              },
+                              signal,
+                          )
+                        : await client.sessions.load(
+                              input.runtimeId,
+                              sessionId,
+                              {
+                                  additionalDirectoryIds,
+                                  agentId: input.agentRef,
+                                  directoryId: input.workspaceRef,
+                              },
+                              signal,
+                          );
+                if (ready.sessionId !== sessionId) {
+                    throw new PlatformProjectError(
+                        "PLATFORM_INVALID_RESPONSE",
+                        "Platform returned an unexpected Session.",
+                        502,
+                    );
+                }
+                let configOptions = ready.configOptions;
+                if (input.kind === "new" && "configurations" in input) {
+                    for (const selection of input.configurations) {
+                        const option = configOptions.find((candidate) => candidate.id === selection.configId);
+                        if (
+                            option === undefined ||
+                            option.type !== selection.valueType ||
+                            (option.type === "select" &&
+                                !option.values.some((value) => value.value === selection.value))
+                        ) {
+                            continue;
+                        }
+                        if (option.type === "boolean" && option.booleanValue === selection.booleanValue) {
+                            continue;
+                        }
+                        if (option.type === "select" && option.currentValue === selection.value) {
+                            continue;
+                        }
+                        configOptions = (
+                            await client.sessions.updateConfiguration(
+                                input.runtimeId,
+                                sessionId,
+                                {
+                                    ...selection,
+                                    agentId: input.agentRef,
+                                    directoryId: input.workspaceRef,
+                                    additionalDirectoryIds,
+                                },
+                                signal,
+                            )
+                        ).configOptions;
+                    }
+                } else if (input.kind === "new" && "configuration" in input) {
+                    if (input.permissionMode !== AGENT_DEFAULT_EXECUTION_SETTING) {
+                        const permission = configOptions.find((option) => option.id === "permission_mode");
+                        if (
+                            permission === undefined ||
+                            permission.type !== "select" ||
+                            !permission.values.some((value) => value.value === input.permissionMode)
+                        ) {
+                            throw new PlatformProjectError(
+                                "AGENT_CONFIGURATION_REJECTED",
+                                "The harness did not offer the selected permission mode.",
+                                409,
+                            );
+                        }
+                        if (permission.currentValue !== input.permissionMode) {
+                            configOptions = (
+                                await client.sessions.updateConfiguration(
+                                    input.runtimeId,
+                                    sessionId,
+                                    {
+                                        agentId: input.agentRef,
+                                        directoryId: input.workspaceRef,
+                                        additionalDirectoryIds,
+                                        configId: permission.id,
+                                        value: input.permissionMode,
+                                        booleanValue: false,
+                                        valueType: "select",
+                                    },
+                                    signal,
+                                )
+                            ).configOptions;
+                        }
+                    }
+                    const option = configOptions.find((candidate) => candidate.id === input.configuration.configId);
+                    if (
+                        option === undefined ||
+                        option.type !== input.configuration.valueType ||
+                        (option.type === "select" &&
+                            !option.values.some((value) => value.value === input.configuration.value))
+                    ) {
+                        throw new PlatformProjectError(
+                            "AGENT_CONFIGURATION_REJECTED",
+                            "The harness did not offer the selected model.",
+                            409,
+                        );
+                    }
+                    configOptions = (
+                        await client.sessions.updateConfiguration(
+                            input.runtimeId,
+                            sessionId,
+                            {
+                                agentId: input.agentRef,
+                                directoryId: input.workspaceRef,
+                                additionalDirectoryIds,
+                                configId: input.configuration.configId,
+                                value: input.configuration.value,
+                                booleanValue: input.configuration.booleanValue,
+                                valueType: input.configuration.valueType,
+                            },
+                            signal,
+                        )
+                    ).configOptions;
+                }
+                const access = await client.sessions.createAccess(input.runtimeId, sessionId, 900, signal);
+                return {
+                    endpoint: this.configuration().origin,
+                    projectId,
+                    conversationId: sessionId,
+                    sessionId,
+                    credential: access.credential,
+                    expiresAt: access.expiresAt,
+                    ready: { ...ready, configOptions },
+                    agentRef: input.agentRef,
+                    workspaceRef: input.workspaceRef,
+                };
+            },
+            120000,
+        );
+
+    readonly queryChatSessions = async (
+        projectId: string,
+        runtimeId: string,
+        sessionIds: readonly string[],
+        signal: AbortSignal,
+    ) =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) => await client.runtimes.querySessions(runtimeId, sessionIds, signal),
+            120000,
+        );
+
+    readonly readChatSession = async (
         projectId: string,
         selection: { readonly runtimeId: string; readonly agentRef: string },
-        existingSessionId: string | null,
+        sessionId: string,
         signal: AbortSignal,
-    ): Promise<string> => {
-        signal.throwIfAborted();
-        if (existingSessionId !== null) {
-            return existingSessionId;
-        }
-        const created = await this.nativeSessions(
+    ) =>
+        await this.#withProject(
             projectId,
-            selection.runtimeId,
-            {
-                action: "create",
-                agentId: selection.agentRef,
-                directoryId: "default",
-                additionalDirectoryIds: [],
-            },
             signal,
+            async (client) => {
+                const session = (await client.runtimes.querySessions(selection.runtimeId, [sessionId], signal)).find(
+                    (candidate) => candidate.sessionId === sessionId,
+                );
+                if (session === undefined || session.agentId !== selection.agentRef) {
+                    throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
+                }
+                const ready = await client.sessions.load(
+                    selection.runtimeId,
+                    sessionId,
+                    {
+                        additionalDirectoryIds: session.additionalDirectories.map((item) => item.directoryId),
+                        agentId: session.agentId,
+                        directoryId: session.directoryId,
+                    },
+                    signal,
+                );
+                return {
+                    agentRef: selection.agentRef,
+                    ready,
+                    entry: {
+                        entryId: session.sessionId,
+                        mobiusSessionIds: [session.sessionId],
+                        nativeSessionId: session.sessionId,
+                        title: session.title,
+                        directoryId: ready.directoryId,
+                        directoryLabel: ready.directoryLabel,
+                        additionalDirectories: ready.additionalDirectories,
+                        updatedAt: session.updatedAt,
+                    },
+                };
+            },
+            120000,
         );
-        if (created.action !== "create") {
-            throw new PlatformProjectError("INVALID_SESSION", "The Runtime did not create a Session.", 502);
-        }
-        return created.nativeSessionId;
-    };
+
+    readonly steerChatTurn = async (projectId: string, sessionId: string, turnId: string, signal: AbortSignal) =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) => await client.turns.steer(sessionId, turnId, signal),
+        );
+
+    readonly openAutomatedChatSession = async (
+        projectId: string,
+        selection: {
+            readonly runtimeId: string;
+            readonly agentRef: string;
+        },
+        sessionId: string,
+        title: string,
+        signal: AbortSignal,
+    ): Promise<string> =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) => {
+                const existing = (await client.runtimes.querySessions(selection.runtimeId, [sessionId], signal)).find(
+                    (session) => session.sessionId === sessionId,
+                );
+                const ready =
+                    existing === undefined
+                        ? await client.sessions.create(
+                              {
+                                  additionalDirectoryIds: [],
+                                  agentId: selection.agentRef,
+                                  bindingId: `binding_${crypto.randomUUID()}`,
+                                  directoryId: "default",
+                                  policy: new MobiusRecordingPolicy("full", 30 * 24 * 60 * 60 * 1000, 1000, 6_000_000),
+                                  runtimeId: selection.runtimeId,
+                                  sessionId,
+                                  title,
+                              },
+                              signal,
+                          )
+                        : await client.sessions.load(
+                              selection.runtimeId,
+                              sessionId,
+                              {
+                                  additionalDirectoryIds: existing.additionalDirectories.map(
+                                      (directory) => directory.directoryId,
+                                  ),
+                                  agentId: existing.agentId,
+                                  directoryId: existing.directoryId,
+                              },
+                              signal,
+                          );
+                if (ready.sessionId !== sessionId || ready.agentId !== selection.agentRef) {
+                    throw new PlatformProjectError(
+                        "PLATFORM_INVALID_RESPONSE",
+                        "Platform returned an unexpected Session.",
+                        502,
+                    );
+                }
+                return sessionId;
+            },
+            120000,
+        );
 
     readonly submitAutomatedChatTurn = async (
         projectId: string,
         selection: { readonly runtimeId: string; readonly agentRef: string },
         sessionId: string,
-        input: { readonly commandId: string; readonly prompt: string; readonly instructions: string },
+        input: {
+            readonly commandId: string;
+            readonly prompt: string;
+            readonly instructions: string;
+        },
         signal: AbortSignal,
     ): Promise<{ readonly text: string; readonly stopReason: string }> => {
         const socket = await this.openChatRuntimeHost(projectId, selection.runtimeId, signal);
-        socket.accept();
         try {
             return await runAutomatedRuntimeTurn(socket, selection, sessionId, input, signal);
         } finally {
-            if (socket.readyState === WebSocket.OPEN) {
-                socket.close(1000, "Turn finished");
-            }
+            socket.close(1000, "Automated Turn complete");
         }
     };
+
+    readonly nativeSessionAccess = async (
+        projectId: string,
+        runtimeId: string,
+        sessionId: string,
+        signal: AbortSignal,
+    ) =>
+        await this.#withProject(projectId, signal, async (client) => {
+            const access = await client.sessions.createAccess(runtimeId, sessionId, 600, signal);
+            return { ...access, endpoint: this.configuration().origin };
+        });
 
     readonly nativeSessions = async (
         projectId: string,
