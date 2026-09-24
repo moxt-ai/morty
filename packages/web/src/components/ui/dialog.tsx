@@ -1,5 +1,6 @@
 import { Dialog as Primitive } from "radix-ui";
 import { type ReactNode, useState } from "react";
+import { dataTestId } from "../../data-testid.ts";
 import { Button } from "./cloud-button.tsx";
 
 export function Dialog({
@@ -56,6 +57,7 @@ export function Dialog({
                             variant="ghost"
                             size="icon"
                             aria-label="Close dialog"
+                            data-testid={dataTestId.closeDialog}
                             className="absolute right-3 top-3"
                         >
                             <X aria-hidden="true" className="size-4" />

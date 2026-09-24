@@ -324,6 +324,7 @@ export function ConversationSidebar({
                                     size="icon"
                                     className="min-h-10 shrink-0 rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive"
                                     aria-label="End remote access"
+                                    data-testid={dataTestId.endRemoteAccess}
                                     onClick={access.requestEnd}
                                 >
                                     <LogOut className="size-4" aria-hidden="true" />
@@ -380,6 +381,7 @@ export function ConversationSidebar({
                     busy={access.state.kind === "ending"}
                     title="End remote access?"
                     description="This will sign out every browser using this access link and prevent the link from being used again. Your local Runtime and task will keep running."
+                    testId={dataTestId.endRemoteAccessDialog}
                     onClose={access.cancelEnd}
                 >
                     {access.state.kind === "failed" && (
