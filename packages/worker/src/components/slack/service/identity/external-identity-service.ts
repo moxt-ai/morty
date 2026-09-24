@@ -49,9 +49,8 @@ export class ExternalIdentityService implements IdentityService {
         this.#mobiusBaseUrl = normalizeBaseUrl(mobiusBaseUrl);
     }
 
-    readonly authenticateHuman = async (authorization: string | null, signal: AbortSignal): Promise<HumanPrincipal> => {
-        const credential = requireBearer(authorization);
-        const session = await this.#clerk.verify(credential, this.#authentication, signal);
+    readonly authenticateHuman = async (bearerToken: string, signal: AbortSignal): Promise<HumanPrincipal> => {
+        const session = await this.#clerk.verify(bearerToken, this.#authentication, signal);
         if (session === null) {
             throw new IdentityError("AUTHENTICATION_FAILED", "User authentication failed");
         }
@@ -59,11 +58,10 @@ export class ExternalIdentityService implements IdentityService {
         return { humanId: userId, kind: "human", tenantId: userId };
     };
 
-    readonly authenticateBot = async (authorization: string | null, signal: AbortSignal): Promise<BotPrincipal> => {
-        const credential = requireBearer(authorization);
+    readonly authenticateBot = async (bearerToken: string, signal: AbortSignal): Promise<BotPrincipal> => {
         const value = await this.#gateway.request(
             `${this.#mobiusBaseUrl}/internal/v1/credentials/verify`,
-            { authorization: credential, audience: "app-slack" },
+            { authorization: bearerToken, audience: "app-slack" },
             signal,
         );
         const parsed = v.safeParse(credentialPrincipalSchema, value);
@@ -98,13 +96,6 @@ export class ExternalIdentityService implements IdentityService {
             throw new IdentityError("AUTHORIZATION_FAILED", "Bot is not active in this tenant");
         }
     };
-}
-
-function requireBearer(authorization: string | null): string {
-    if (authorization === null || !/^Bearer [^ ]+$/u.test(authorization)) {
-        throw new IdentityError("AUTHENTICATION_FAILED", "Bearer credential is required");
-    }
-    return authorization.slice("Bearer ".length);
 }
 
 function normalizeBaseUrl(value: string): string {

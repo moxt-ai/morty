@@ -1,3 +1,5 @@
+import type { HttpError } from "../../../../infra/http-error.ts";
+
 export interface HumanPrincipal {
     readonly humanId: string;
     readonly kind: "human";
@@ -11,19 +13,16 @@ export interface BotPrincipal {
 }
 
 export interface IdentityService {
-    readonly authenticateBot: (authorization: string | null, signal: AbortSignal) => Promise<BotPrincipal>;
-    readonly authenticateHuman: (authorization: string | null, signal: AbortSignal) => Promise<HumanPrincipal>;
+    readonly authenticateBot: (bearerToken: string, signal: AbortSignal) => Promise<BotPrincipal>;
+    readonly authenticateHuman: (bearerToken: string, signal: AbortSignal) => Promise<HumanPrincipal>;
 }
 
-import type { ErrorToResponse } from "../../infra/util/error-to-response";
-
-export class IdentityError extends Error implements ErrorToResponse {
+export class IdentityError extends Error implements HttpError {
     readonly code: "AUTHENTICATION_FAILED" | "AUTHORIZATION_FAILED";
-    readonly toResponse = (): Response =>
-        Response.json(
-            { error: { code: this.code, message: this.message } },
-            { status: this.code === "AUTHENTICATION_FAILED" ? 401 : 403 },
-        );
+    readonly toHttpJson: HttpError["toHttpJson"] = () => ({
+        body: { error: { code: this.code, message: this.message } },
+        status: this.code === "AUTHENTICATION_FAILED" ? 401 : 403,
+    });
 
     constructor(code: "AUTHENTICATION_FAILED" | "AUTHORIZATION_FAILED", message: string, options?: ErrorOptions) {
         super(message, options);
