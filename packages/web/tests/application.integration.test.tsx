@@ -74,6 +74,7 @@ test("Given a shared workspace, When the user opens the user menu, Then they can
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp();
+    await app.user.click(await app.queryElementByTestId(dataTestId.closeDialog));
     await app.user.click(await app.queryElementByTestId(dataTestId.userMenu));
     await app.user.click(await app.queryElementByTestId(dataTestId.replaceCurrentUser));
 
