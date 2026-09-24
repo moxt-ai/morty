@@ -245,6 +245,7 @@ async function connectFakeRuntime(
     options: {
         readonly pauseHistory?: "all" | string;
         readonly pauseActiveSnapshot?: boolean;
+        readonly pauseAfterLastDelta?: boolean;
         readonly pausePrompt?: "before-delta" | "after-delta" | "after-last-delta";
         readonly truncateHistory?: boolean;
     } = {},
@@ -252,9 +253,11 @@ async function connectFakeRuntime(
     const sessions = new Map<string, readonly NativeHistoryMessage[]>();
     const sessionIds = new Set<string>();
     let pausedHistory = options.pauseHistory;
+    let pausedActiveSnapshot = options.pauseActiveSnapshot ?? false;
     const historyGate = pauseGate();
     const activeSnapshotGate = pauseGate();
     const promptGate = pauseGate();
+    const lastDeltaGate = pauseGate();
     const runtime = await cloud.connectAgent(projectId, {
         agentId: "claude",
         agentName: "Claude Code",
@@ -276,7 +279,7 @@ async function connectFakeRuntime(
                   };
         },
         beforeActiveTurnSnapshot: async (_sessionId, signal) => {
-            if (options.pauseActiveSnapshot) {
+            if (pausedActiveSnapshot) {
                 await activeSnapshotGate.wait(signal);
             }
         },
@@ -293,6 +296,8 @@ async function connectFakeRuntime(
         afterLastDelta: async (_command, signal) => {
             if (options.pausePrompt === "after-last-delta") {
                 await promptGate.wait(signal);
+            } else if (options.pauseAfterLastDelta) {
+                await lastDeltaGate.wait(signal);
             }
         },
         responseParts: (command, turn) =>
@@ -315,8 +320,12 @@ async function connectFakeRuntime(
         historyGate,
         activeSnapshotGate,
         promptGate,
+        lastDeltaGate,
         holdHistory: (sessionId: string) => {
             pausedHistory = sessionId;
+        },
+        holdActiveSnapshot: () => {
+            pausedActiveSnapshot = true;
         },
         seedNativeSession: async (
             sessionId: string,
@@ -711,6 +720,69 @@ test("Given a Bot Session with loaded history, When the Runtime Turn snapshot is
     } finally {
         runtime.activeSnapshotGate.release();
         await app.close();
+        await runtime[Symbol.asyncDispose]();
+    }
+}, 30_000);
+
+test("Given a delayed Turn snapshot, When the Agent streams newer text, Then the joining browser receives the snapshot before the text", async () => {
+    const identity = await createIdentity();
+    const cloud = activeFixture();
+    const bots = await chatRequest(identity, `projects/${identity.projectId}/management/bots`);
+    expect(bots.status).toBe(200);
+    const listing = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await bots.json());
+    const botId = listing.bots[0]?.botId;
+    if (botId === undefined) {
+        throw new Error("The Project has no Bot.");
+    }
+    const runtime = await connectFakeRuntime(cloud, identity.projectId, {
+        pausePrompt: "after-delta",
+        pauseAfterLastDelta: true,
+    });
+    const configured = await chatRequest(identity, `chat/projects/${identity.projectId}/bots/${botId}/setup`, {
+        runtimeId: runtime.runtimeId,
+        agentRef: "claude",
+    });
+    expect(configured.status).toBe(202);
+    const sessionId = await importAgentSession(cloud, identity, botId, runtime, [
+        { role: "user", text: "Earlier prompt" },
+        { role: "assistant", text: "Earlier reply" },
+    ]);
+    const first = await renderChat(identity, sessionId);
+    let second: Awaited<ReturnType<typeof renderChat>> | null = null;
+    try {
+        await waitForTextIn(first.container, "Earlier reply");
+        const draft = first.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]');
+        const send = first.container.querySelector<HTMLButtonElement>('button[aria-label="Send message"]');
+        if (draft === null || send === null) {
+            throw new Error("The first view cannot send a prompt.");
+        }
+        await act(async () => {
+            const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+            setter?.call(draft, "hold after first delta");
+            draft.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        if (send.disabled) {
+            throw new Error("The first view cannot send a prompt.");
+        }
+        await act(async () => send.click());
+        await runtime.promptGate.entered;
+        await waitForTextIn(first.container, "Partial reply");
+        runtime.holdActiveSnapshot();
+        second = await renderChat(identity, sessionId);
+        await runtime.activeSnapshotGate.entered;
+        runtime.promptGate.release();
+        await runtime.lastDeltaGate.entered;
+        await waitForTextIn(first.container, "Partial reply and more");
+        expect(second.container.textContent).not.toContain("Partial reply and more");
+        runtime.activeSnapshotGate.release();
+        await waitForTextIn(second.container, "Partial reply and more");
+        expect(second.container.querySelectorAll('article[aria-label="Current Agent response"]')).toHaveLength(1);
+    } finally {
+        runtime.promptGate.release();
+        runtime.lastDeltaGate.release();
+        runtime.activeSnapshotGate.release();
+        await first.close();
+        await second?.close();
         await runtime[Symbol.asyncDispose]();
     }
 }, 30_000);

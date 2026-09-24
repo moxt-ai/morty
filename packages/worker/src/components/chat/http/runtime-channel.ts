@@ -4,6 +4,7 @@ import {
     decodeMessageKind,
     decodeNativeSessionCancel,
     decodeNativeSessionRequest,
+    decodeNativeSessionResult,
     decodeRecordedSessionEvent,
     decodeSessionCancelCommand,
     decodeSessionConfigureCommand,
@@ -47,6 +48,37 @@ const envelopeSchema = v.object({
     requestId: v.optional(platformIdentifier),
     sessionId: v.optional(platformIdentifier),
 });
+
+class BufferedLiveEvents {
+    #messages: string[] = [];
+    #bytes = 0;
+
+    readonly add = (encoded: string, bytes: number): boolean => {
+        if (this.#bytes + bytes > MAX_PENDING_RUNTIME_BYTES) {
+            return false;
+        }
+        this.#messages.push(encoded);
+        this.#bytes += bytes;
+        return true;
+    };
+
+    readonly drain = (): readonly string[] => {
+        const messages = this.#messages;
+        this.#messages = [];
+        this.#bytes = 0;
+        return messages;
+    };
+}
+
+type LiveSessionSubscription =
+    | { readonly kind: "none" }
+    | {
+          readonly kind: "awaiting-snapshot";
+          readonly requestId: string;
+          readonly sessionId: string;
+          readonly events: BufferedLiveEvents;
+      }
+    | { readonly kind: "live"; readonly sessionId: string };
 
 function pairingToken(request: Request): string {
     const protocols = (request.headers.get("sec-websocket-protocol") ?? "")
@@ -113,6 +145,7 @@ export async function openBotRuntimeChannel(input: {
     server.accept();
     const allowedRequests = new Set<string>();
     const allowedSessions = new Set<string>();
+    let subscription: LiveSessionSubscription = { kind: "none" };
     let closed = false;
     let timeout: ReturnType<typeof setTimeout>;
     const close = (code: number, reason: string) => {
@@ -241,6 +274,22 @@ export async function openBotRuntimeChannel(input: {
             liveness();
             try {
                 const encoded = await authorizeInbound(event.data);
+                if (decodeMessageKind(encoded) === NATIVE_SESSION_REQUEST_KIND) {
+                    const command = decodeNativeSessionRequest(encoded);
+                    if (command.action === "active-turn") {
+                        subscription = {
+                            kind: "awaiting-snapshot",
+                            requestId: command.requestId,
+                            sessionId: command.targetSessionId,
+                            events: new BufferedLiveEvents(),
+                        };
+                    }
+                } else if (decodeMessageKind(encoded) === NATIVE_SESSION_CANCEL_KIND) {
+                    const command = decodeNativeSessionCancel(encoded);
+                    if (subscription.kind === "awaiting-snapshot" && subscription.requestId === command.requestId) {
+                        subscription = { kind: "none" };
+                    }
+                }
                 upstream.send(encoded);
             } catch (error) {
                 dependencies.logger.warn(
@@ -299,10 +348,43 @@ export async function openBotRuntimeChannel(input: {
                     if (payload.sessionId !== event.sessionId) {
                         throw new PlatformProjectError("INVALID_MESSAGE", "The Runtime event is invalid.", 400);
                     }
+                    if (subscription.kind === "awaiting-snapshot" && event.sessionId === subscription.sessionId) {
+                        if (!subscription.events.add(encoded, messageBytes)) {
+                            close(1009, "Runtime channel capacity exceeded");
+                        }
+                        return;
+                    }
+                    if (subscription.kind !== "none" && event.sessionId !== subscription.sessionId) {
+                        return;
+                    }
                 }
                 const forward = envelope.kind === RUNTIME_STATUS_KIND || requestResult || committed;
                 if (forward) {
-                    server.send(encoded);
+                    if (
+                        subscription.kind === "awaiting-snapshot" &&
+                        envelope.kind === NATIVE_SESSION_RESULT_KIND &&
+                        envelope.requestId === subscription.requestId
+                    ) {
+                        const result = decodeNativeSessionResult(encoded);
+                        if (result.action !== "active-turn" || result.targetSessionId !== subscription.sessionId) {
+                            throw new PlatformProjectError("INVALID_MESSAGE", "The Runtime snapshot is invalid.", 400);
+                        }
+                        const events = subscription.events.drain();
+                        subscription = { kind: "live", sessionId: result.targetSessionId };
+                        server.send(encoded);
+                        for (const buffered of events) {
+                            server.send(buffered);
+                        }
+                    } else {
+                        if (
+                            subscription.kind === "awaiting-snapshot" &&
+                            envelope.kind === SESSION_OPERATION_FAILED_KIND &&
+                            envelope.requestId === subscription.requestId
+                        ) {
+                            subscription = { kind: "none" };
+                        }
+                        server.send(encoded);
+                    }
                     if (
                         envelope.requestId !== undefined &&
                         (envelope.kind === NATIVE_SESSION_RESULT_KIND ||
