@@ -183,7 +183,9 @@ Conversation credential operations and `client/session` browser requests. The SD
 places the Project ID in the path for Durable Object routing. Deploy Chat's updated SDK
 together with the corresponding Platform endpoint cutover.
 New Conversation opens a browser-local draft. Its Harness selector chooses a paired
-agent; Chat discovers that agent's settings directly without creating a temporary Session.
+agent. For a bound Bot, Chat asks that Bot's Runtime daemon for its Agent catalog instead
+of filtering the Project-wide Runtime directory. Chat discovers the selected Agent's
+settings directly without creating a temporary Session.
 The cwd selector beside the model controls browses the selected Runtime and accepts an
 absolute path. The Runtime resolves and authorizes that path, and Chat applies the selected
 canonical directory only to the new conversation.
