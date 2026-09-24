@@ -20,39 +20,30 @@ test("Given a connected Runtime, When Slack sends a Turn, Then the native Agent 
         runtime.addEventListener("message", (event) => {
             const command = decodeSessionPromptCommand(String(event.data));
             resolve(command);
-            const sendEvent = (payload: object, sequence: number) => {
+            const sendEvent = (payload: object) => {
                 runtime.send(
                     encodeCommittedSessionEvent({
-                        eventId: `event_${sequence}`,
                         kind: SESSION_EVENT_COMMITTED_KIND,
                         payload: JSON.stringify(payload),
-                        recordedAt: "2026-09-24T00:00:00.000Z",
                         sessionId: command.sessionId,
-                        source: { kind: "runtime", sourceSeq: String(sequence) },
                     }),
                 );
             };
-            sendEvent(
-                {
-                    commandId: command.commandId,
-                    epoch: command.commandId,
-                    kind: AGENT_MESSAGE_DELTA_KIND,
-                    messageId: "message_1",
-                    sequence: 1,
-                    sessionId: command.sessionId,
-                    text: "Hello from Claude Code",
-                },
-                1,
-            );
-            sendEvent(
-                {
-                    commandId: command.commandId,
-                    kind: SESSION_COMPLETED_KIND,
-                    sessionId: command.sessionId,
-                    stopReason: "end_turn",
-                },
-                2,
-            );
+            sendEvent({
+                commandId: command.commandId,
+                epoch: command.commandId,
+                kind: AGENT_MESSAGE_DELTA_KIND,
+                messageId: "message_1",
+                sequence: 1,
+                sessionId: command.sessionId,
+                text: "Hello from Claude Code",
+            });
+            sendEvent({
+                commandId: command.commandId,
+                kind: SESSION_COMPLETED_KIND,
+                sessionId: command.sessionId,
+                stopReason: "end_turn",
+            });
         });
     });
     const result = await runAutomatedRuntimeTurn(
