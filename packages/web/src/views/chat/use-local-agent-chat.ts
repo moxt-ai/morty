@@ -7,6 +7,7 @@ import type {
 import {
     AGENT_MESSAGE_DELTA_KIND,
     SESSION_COMPLETED_KIND,
+    SESSION_ELICITATION_REQUESTED_KIND,
     SESSION_FAILED_KIND,
     SESSION_STARTED_KIND,
 } from "@moxt-ai/mobius-protocol";
@@ -97,6 +98,21 @@ async function localActiveTurn(
     return result.turn;
 }
 
+function defaultElicitationValues(request: SessionElicitationRequestedEvent): Readonly<Record<string, string>> {
+    return Object.fromEntries(
+        request.fields.map((field) => [
+            field.name,
+            field.hasDefaultValue
+                ? field.type === "boolean"
+                    ? String(field.defaultBooleanValue)
+                    : field.type === "number" || field.type === "integer"
+                      ? String(field.defaultNumberValue)
+                      : field.defaultStringValue
+                : "",
+        ]),
+    );
+}
+
 export function useLocalAgentChat({
     bot,
     requests,
@@ -181,6 +197,13 @@ export function useLocalAgentChat({
                         return;
                     }
                     turnStore.getState().receiveSnapshot(sessionId, snapshot);
+                    const pending = snapshot?.interaction ?? null;
+                    if (pending?.kind === SESSION_ELICITATION_REQUESTED_KIND) {
+                        setElicitationValues(defaultElicitationValues(pending));
+                        setInteraction({ kind: "elicitation", request: pending });
+                    } else {
+                        setInteraction(pending === null ? null : { kind: "permission", request: pending });
+                    }
                 } catch (error) {
                     if (!signal.aborted) {
                         turnStore.getState().failRecovery(sessionId, failureMessage(error));
@@ -351,20 +374,7 @@ export function useLocalAgentChat({
                     onElicitation: (request) => {
                         const selected = historyStore.getState().state;
                         if (selected.kind !== "none" && request.sessionId === selected.sessionId) {
-                            setElicitationValues(
-                                Object.fromEntries(
-                                    request.fields.map((field) => [
-                                        field.name,
-                                        field.hasDefaultValue
-                                            ? field.type === "boolean"
-                                                ? String(field.defaultBooleanValue)
-                                                : field.type === "number" || field.type === "integer"
-                                                  ? String(field.defaultNumberValue)
-                                                  : field.defaultStringValue
-                                            : "",
-                                    ]),
-                                ),
-                            );
+                            setElicitationValues(defaultElicitationValues(request));
                             setInteraction({ kind: "elicitation", request });
                         }
                     },

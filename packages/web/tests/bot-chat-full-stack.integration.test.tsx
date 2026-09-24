@@ -1,7 +1,15 @@
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { NativeHistoryImage, NativeHistoryMessage, NativeSessionHistory } from "@moxt-ai/mobius-protocol";
+import {
+    encodeSessionElicitationRequestedEvent,
+    encodeSessionPermissionRequestedEvent,
+    type NativeHistoryImage,
+    type NativeHistoryMessage,
+    type NativeSessionHistory,
+    type SessionElicitationRequestedEvent,
+    type SessionPermissionRequestedEvent,
+} from "@moxt-ai/mobius-protocol";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import * as v from "valibot";
@@ -254,6 +262,8 @@ async function connectFakeRuntime(
     const sessionIds = new Set<string>();
     let pausedHistory = options.pauseHistory;
     let pausedActiveSnapshot = options.pauseActiveSnapshot ?? false;
+    let activeCommandId: string | null = null;
+    let activeInteraction: SessionPermissionRequestedEvent | SessionElicitationRequestedEvent | null = null;
     const historyGate = pauseGate();
     const activeSnapshotGate = pauseGate();
     const promptGate = pauseGate();
@@ -283,7 +293,9 @@ async function connectFakeRuntime(
                 await activeSnapshotGate.wait(signal);
             }
         },
+        activeInteraction: () => activeInteraction,
         afterSessionStarted: async (_command, signal) => {
+            activeCommandId = _command.commandId;
             if (options.pausePrompt === "before-delta") {
                 await promptGate.wait(signal);
             }
@@ -321,6 +333,12 @@ async function connectFakeRuntime(
         activeSnapshotGate,
         promptGate,
         lastDeltaGate,
+        activeCommandId: () => activeCommandId,
+        setActiveInteraction: (
+            interaction: SessionPermissionRequestedEvent | SessionElicitationRequestedEvent | null,
+        ) => {
+            activeInteraction = interaction;
+        },
         holdHistory: (sessionId: string) => {
             pausedHistory = sessionId;
         },
@@ -620,6 +638,92 @@ test.each([
     },
     30_000,
 );
+
+test("Given a pending Agent interaction, When a second browser joins the same Bot Session, Then it sees the permission and input requests", async () => {
+    const identity = await createIdentity();
+    const cloud = activeFixture();
+    const bots = await chatRequest(identity, `projects/${identity.projectId}/management/bots`);
+    const listing = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await bots.json());
+    const botId = listing.bots[0]?.botId;
+    if (botId === undefined) {
+        throw new Error("The Project has no Bot.");
+    }
+    const runtime = await connectFakeRuntime(cloud, identity.projectId, { pausePrompt: "after-delta" });
+    const configured = await chatRequest(identity, `chat/projects/${identity.projectId}/bots/${botId}/setup`, {
+        runtimeId: runtime.runtimeId,
+        agentRef: "claude",
+    });
+    expect(configured.status).toBe(202);
+    const sessionId = await importAgentSession(cloud, identity, botId, runtime, []);
+    const first = await renderChat(identity, sessionId);
+    let second: Awaited<ReturnType<typeof renderChat>> | null = null;
+    try {
+        await waitForMessageInput();
+        const draft = first.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]');
+        if (draft === null) {
+            throw new Error("The first message input was not shown.");
+        }
+        await act(async () => {
+            const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+            setter?.call(draft, "Ask for permission after first delta");
+            draft.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        const send = await waitForEnabledSendButton();
+        await act(async () => send.click());
+        await waitForTextIn(first.container, "Partial reply");
+        const commandId = runtime.activeCommandId();
+        if (commandId === null) {
+            throw new Error("The fake daemon did not accept the prompt.");
+        }
+        const permission: SessionPermissionRequestedEvent = {
+            commandId,
+            interactionId: "permission_one",
+            kind: "session.permission.requested",
+            options: [{ kind: "allow_once", name: "Allow once", optionId: "allow-once" }],
+            sessionId,
+            title: "Allow reading this file?",
+            toolCallId: "tool_one",
+            toolKind: "read",
+        };
+        runtime.setActiveInteraction(permission);
+        await runtime.publishSessionEvent(
+            sessionId,
+            encodeSessionPermissionRequestedEvent(permission),
+            new AbortController().signal,
+        );
+        await waitForTextIn(first.container, permission.title);
+        second = await renderChat(identity, sessionId);
+        await waitForTextIn(second.container, "Ask for permission");
+        await waitForTextIn(second.container, permission.title);
+        expect(second.container.querySelector('fieldset[aria-label="Agent permission request"]')).not.toBeNull();
+        const elicitation: SessionElicitationRequestedEvent = {
+            accepted: true,
+            commandId,
+            elicitationId: "input_one",
+            fields: [],
+            interactionId: "elicitation_one",
+            kind: "session.elicitation.requested",
+            message: "Which branch should I use?",
+            mode: "form",
+            sessionId,
+            url: "",
+        };
+        runtime.setActiveInteraction(elicitation);
+        await runtime.publishSessionEvent(
+            sessionId,
+            encodeSessionElicitationRequestedEvent(elicitation),
+            new AbortController().signal,
+        );
+        await waitForTextIn(first.container, elicitation.message);
+        await waitForTextIn(second.container, elicitation.message);
+        expect(second.container.querySelector('fieldset[aria-label="Agent input request"]')).not.toBeNull();
+    } finally {
+        runtime.promptGate.release();
+        await first.close();
+        await second?.close();
+        await runtime[Symbol.asyncDispose]();
+    }
+}, 30_000);
 
 test("Given an active Turn, When the browser reopens the Bot Session, Then it restores the partial reply before sending is allowed", async () => {
     const identity = await createIdentity();
