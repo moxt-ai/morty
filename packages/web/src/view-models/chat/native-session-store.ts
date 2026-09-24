@@ -181,7 +181,11 @@ export const createNativeSessionStore = (
                 if (result.action !== action) {
                     throw new Error(`This agent cannot ${action} the selected native session.`);
                 }
-                onOpen({ agentRef: directory.agentRef, result, entry: preview.entry });
+                onOpen({
+                    agentRef: directory.agentRef,
+                    result: { ...result, history: preview.content.history },
+                    entry: preview.entry,
+                });
             } catch (cause) {
                 if (!signal.aborted) {
                     set({ error: cause instanceof Error ? cause.message : `The session could not be ${action}ed.` });

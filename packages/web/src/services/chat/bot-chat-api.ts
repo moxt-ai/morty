@@ -328,7 +328,16 @@ export class BotChatApi {
         if (result.action !== action || result.ready.sessionId !== result.targetSessionId) {
             throw new CloudApiError("INVALID_SESSION", "The continued Chat session is invalid.");
         }
-        return { ...stored, result };
+        return {
+            ...stored,
+            result: {
+                ...result,
+                history: {
+                    status: "unavailable" as const,
+                    cause: { code: "history_loading", message: "Session history will load after connecting." },
+                },
+            },
+        };
     };
     readonly agentSettings = async (
         botId: string,

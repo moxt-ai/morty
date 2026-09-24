@@ -10,7 +10,9 @@ export interface OpenMobiusSession {
     readonly agentRef: string;
     readonly instructions?: string;
     readonly result:
-        | Extract<NativeSessionResult, { readonly ready: unknown }>
+        | (Extract<NativeSessionResult, { readonly ready: unknown }> & {
+              readonly history: NativeSessionHistory;
+          })
         | {
               readonly action: "conversation";
               readonly access: ChatAccess;

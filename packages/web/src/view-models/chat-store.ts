@@ -5,6 +5,7 @@ import type {
     AgentInstallFailedEvent,
     AgentInstallProgressEvent,
     AgentInstallStartedEvent,
+    NativeSessionHistory,
     NativeSessionResult,
     PromptImage,
     PromptResource,
@@ -57,7 +58,9 @@ const HISTORY_SYNC_ERROR_PREFIX = "history_sync_failed:";
 
 export interface ChatStore {
     readonly openNativeConversation: (
-        result: Extract<NativeSessionResult, { readonly action: "import" | "fork" }>,
+        result: Extract<NativeSessionResult, { readonly action: "import" | "fork" }> & {
+            readonly history: NativeSessionHistory;
+        },
     ) => void;
     readonly applyNativeSessionDeletion: (sessionIds: readonly string[]) => void;
     readonly addDraftImage: (image: PromptImage) => void;

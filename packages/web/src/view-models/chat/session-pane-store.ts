@@ -520,27 +520,45 @@ export function createSessionPaneModel(options: {
                                     set({ connection: { kind: "loading" } });
                                     break;
                             }
+                            const identity = {
+                                additionalDirectoryIds: session.entry.additionalDirectories.map(
+                                    (directory) => directory.directoryId,
+                                ),
+                                agentId: session.agentRef,
+                                directoryId: session.result.ready.directoryId,
+                            };
                             const loadedHistory = await connected.sessions.querySessionNativeMessages(
                                 sessionId,
-                                {
-                                    additionalDirectoryIds: session.entry.additionalDirectories.map(
-                                        (directory) => directory.directoryId,
-                                    ),
-                                    agentId: session.agentRef,
-                                    directoryId: session.result.ready.directoryId,
-                                },
+                                identity,
                                 new MobiusPageRequest(50, ""),
                                 signal,
                             );
+                            signal.throwIfAborted();
+                            const provisional = historySessionPresentation(loadedHistory, sessionId);
+                            nativeHistory = loadedHistory.status === "available" ? loadedHistory : null;
+                            historyCursor = loadedHistory.status === "available" ? loadedHistory.nextCursor : null;
+                            set({
+                                activities: provisional.activities,
+                                hasOlderHistory: historyCursor !== null,
+                                messages: provisional.messages,
+                            });
+                            const running = await connected.sessions.readActiveTurn(sessionId, identity, signal);
                             signal.throwIfAborted();
                             const authoritative = {
                                 history: loadedHistory,
                                 kind: "authoritative-state-loaded" as const,
                             };
-                            nativeHistory = authoritative.history.status === "available" ? authoritative.history : null;
-                            historyCursor =
-                                authoritative.history.status === "available" ? authoritative.history.nextCursor : null;
-                            if (
+                            if (running !== null) {
+                                command = running.commandId;
+                                lastSequence = BigInt(running.sequence);
+                                const turnId =
+                                    reconciliation.turn.kind === "accepted" &&
+                                    reconciliation.turn.commandId === running.commandId
+                                        ? reconciliation.turn.turnId
+                                        : running.commandId;
+                                tasks.getState().start(running.commandId, turnId);
+                                activeTurn.submissionAccepted(running.commandId, turnId);
+                            } else if (
                                 reconciliation.turn.kind === "accepted" &&
                                 authoritative.history.status === "available" &&
                                 authoritative.history.coveredCommandIds.includes(reconciliation.turn.commandId)
@@ -552,9 +570,16 @@ export function createSessionPaneModel(options: {
                             const native = historySessionPresentation(
                                 authoritative.history,
                                 sessionId,
-                                command === "" ? null : command,
+                                running?.commandId ?? null,
                             );
-                            const nativeMessages = native.messages;
+                            const nativeMessages =
+                                running === null
+                                    ? native.messages
+                                    : native.messages.filter((message) =>
+                                          message.role === "user"
+                                              ? message.id !== running.commandId
+                                              : message.commandId !== running.commandId,
+                                      );
                             delivery
                                 .getState()
                                 .reconcile([
@@ -566,25 +591,47 @@ export function createSessionPaneModel(options: {
                                         ? [command]
                                         : []),
                                 ]);
-                            const liveCommandMessages =
-                                command === "" ||
-                                (authoritative.history.status === "available" &&
-                                    authoritative.history.coveredCommandIds.includes(command))
+                            const snapshotMessages: readonly SessionMessage[] =
+                                running === null
                                     ? []
-                                    : get().messages.filter((message) =>
-                                          message.role === "user"
-                                              ? message.id === command &&
-                                                !nativeMessages.some(
-                                                    (nativeMessage) =>
-                                                        nativeMessage.role === "user" && nativeMessage.id === command,
-                                                )
-                                              : message.commandId === command &&
-                                                !nativeMessages.some(
-                                                    (nativeMessage) =>
-                                                        nativeMessage.role === "assistant" &&
-                                                        nativeMessage.commandId === command,
-                                                ),
-                                      );
+                                    : [
+                                          {
+                                              contents: [],
+                                              id: running.commandId,
+                                              role: "user",
+                                              text: running.prompt,
+                                          },
+                                          {
+                                              activityIds: [],
+                                              attempt: null,
+                                              commandId: running.commandId,
+                                              contents: [],
+                                              id: `${running.commandId}-reply`,
+                                              role: "assistant",
+                                              text: running.text,
+                                          },
+                                      ];
+                            const liveCommandMessages =
+                                running !== null
+                                    ? snapshotMessages
+                                    : command === "" ||
+                                        (authoritative.history.status === "available" &&
+                                            authoritative.history.coveredCommandIds.includes(command))
+                                      ? []
+                                      : get().messages.filter((message) =>
+                                            message.role === "user"
+                                                ? message.id === command &&
+                                                  !nativeMessages.some(
+                                                      (nativeMessage) =>
+                                                          nativeMessage.role === "user" && nativeMessage.id === command,
+                                                  )
+                                                : message.commandId === command &&
+                                                  !nativeMessages.some(
+                                                      (nativeMessage) =>
+                                                          nativeMessage.role === "assistant" &&
+                                                          nativeMessage.commandId === command,
+                                                  ),
+                                        );
                             const restoredFromDaemon = [...nativeMessages, ...liveCommandMessages];
                             const reconciledDelivery = delivery.getState().state;
                             const restoredMessages =
@@ -604,9 +651,36 @@ export function createSessionPaneModel(options: {
                                           { activity: { kind: "idle" }, messages: restoredMessages },
                                           { commandId: command, attempt: null },
                                       );
+                            const interactions: readonly LocalInteraction[] = (() => {
+                                const interaction = running?.interaction;
+                                if (interaction === undefined || interaction === null) {
+                                    return [];
+                                }
+                                if (interaction.kind === "session.permission.requested") {
+                                    return [
+                                        {
+                                            kind: "permission",
+                                            permission: { ...interaction, state: { kind: "pending" } },
+                                        },
+                                    ];
+                                }
+                                const { accepted, ...elicitation } = interaction;
+                                return [
+                                    {
+                                        kind: "elicitation",
+                                        elicitation: {
+                                            ...elicitation,
+                                            state: accepted
+                                                ? { action: "accept", content: "", kind: "submitted" }
+                                                : { kind: "pending" },
+                                        },
+                                    },
+                                ];
+                            })();
                             set({
                                 activities: native.activities,
                                 hasOlderHistory: historyCursor !== null,
+                                interactions,
                                 ...restoredWork,
                             });
                             switch (reconciliation.kind) {
@@ -742,14 +816,33 @@ export function createSessionPaneModel(options: {
                             }
                             if (command === "" && payload instanceof MobiusTurnStartedEvent) {
                                 command = payload.commandId;
+                                tasks.getState().start(payload.commandId, payload.commandId);
+                                activeTurn.submissionAccepted(payload.commandId, payload.commandId);
                                 if (event.sequence !== "") {
                                     lastSequence = BigInt(event.sequence);
                                 }
                                 set((current) =>
-                                    startSessionWork(current, {
-                                        commandId: payload.commandId,
-                                        attempt: new MobiusRunningAttemptSummary(payload.attemptId, event.recordedAt),
-                                    }),
+                                    startSessionWork(
+                                        {
+                                            activity: current.activity,
+                                            messages: [
+                                                ...current.messages,
+                                                {
+                                                    contents: [],
+                                                    id: payload.commandId,
+                                                    role: "user",
+                                                    text: payload.prompt,
+                                                },
+                                            ],
+                                        },
+                                        {
+                                            commandId: payload.commandId,
+                                            attempt: new MobiusRunningAttemptSummary(
+                                                payload.attemptId,
+                                                event.recordedAt,
+                                            ),
+                                        },
+                                    ),
                                 );
                                 return true;
                             }

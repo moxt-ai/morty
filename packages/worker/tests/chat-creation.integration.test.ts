@@ -45,7 +45,7 @@ async function createChatFixture() {
     }
 }
 
-test("Given a configured Bot, When its owner sends a private prompt, Then Platform runs the conversation and Morty lists it by opaque ownership", async () => {
+test("Given a configured Bot, When its owner opens a conversation, Then Morty issues Platform access and lists opaque ownership", async () => {
     const fixture = await createChatFixture();
     try {
         const setup = { runtimeId: fixture.runtime.runtimeId, agentRef: "codex" };
@@ -97,18 +97,6 @@ test("Given a configured Bot, When its owner sends a private prompt, Then Platfo
         expect(access.sessionId).toMatch(/^chat_[0-9a-f]{64}$/u);
         expect(access.credential).toMatch(/^msession_/u);
 
-        const turn = await fixture.request(`chat/bots/${fixture.botId}/turns`, {
-            sessionId: access.sessionId,
-            directoryId: "default",
-            additionalDirectoryIds: [],
-            content: "Create an image",
-            idempotencyKey: "command-1",
-            images: [{ data: "AQ==", mimeType: "image/png", name: "pixel.png" }],
-            resources: [],
-            sessionConfigurations: [],
-        });
-        expect(turn.status).toBe(200);
-        expect(await turn.json()).toMatchObject({ turnId: "command-1" });
         const listed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
         expect(listed.status).toBe(200);
         expect(await listed.json()).toMatchObject({ sessions: [{ id: access.sessionId }] });

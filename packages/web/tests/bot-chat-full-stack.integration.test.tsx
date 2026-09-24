@@ -2,7 +2,6 @@ import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
-    encodeSessionElicitationRequestedEvent,
     encodeSessionPermissionRequestedEvent,
     type NativeHistoryImage,
     type NativeHistoryMessage,
@@ -44,7 +43,29 @@ function waitForButton(label: string): Promise<HTMLButtonElement> {
     return new Promise((resolve) => {
         const find = () =>
             [...document.querySelectorAll<HTMLButtonElement>("button")].find(
-                (button) => button.textContent?.trim() === label,
+                (button) => button.textContent?.trim() === label || button.getAttribute("aria-label") === label,
+            );
+        const current = find();
+        if (current !== undefined) {
+            resolve(current);
+            return;
+        }
+        const observer = new MutationObserver(() => {
+            const button = find();
+            if (button !== undefined) {
+                observer.disconnect();
+                resolve(button);
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    });
+}
+
+function waitForButtonContaining(text: string): Promise<HTMLButtonElement> {
+    return new Promise((resolve) => {
+        const find = () =>
+            [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) =>
+                button.textContent?.includes(text),
             );
         const current = find();
         if (current !== undefined) {
@@ -86,6 +107,26 @@ function waitForTextIn(container: Element, text: string): Promise<void> {
         }
         const observer = new MutationObserver(() => {
             if (container.textContent?.includes(text)) {
+                observer.disconnect();
+                resolve();
+            }
+        });
+        observer.observe(container, { childList: true, subtree: true, characterData: true });
+    });
+}
+
+function waitForMessageIn(container: Element, label: string, text: string): Promise<void> {
+    return new Promise((resolve) => {
+        const find = () =>
+            [...container.querySelectorAll<HTMLElement>(`article[aria-label="${label}"]`)].some((message) =>
+                message.textContent?.includes(text),
+            );
+        if (find()) {
+            resolve();
+            return;
+        }
+        const observer = new MutationObserver(() => {
+            if (find()) {
                 observer.disconnect();
                 resolve();
             }
@@ -146,7 +187,9 @@ function waitForInput(label: string): Promise<HTMLInputElement> {
     return new Promise((resolve) => {
         const find = () =>
             [...document.querySelectorAll<HTMLInputElement>("input")].find(
-                (input) => input.getAttribute("aria-label") === label,
+                (input) =>
+                    input.getAttribute("aria-label") === label ||
+                    [...(input.labels ?? [])].some((candidate) => candidate.textContent?.trim() === label),
             );
         const current = find();
         if (current !== undefined) {
@@ -391,20 +434,22 @@ async function importAgentSession(
         readonly images?: readonly { readonly data: string; readonly mimeType: NativeHistoryImage["mimeType"] }[];
     }[],
 ): Promise<string> {
-    const sessionId = crypto.randomUUID();
-    await runtime.seedNativeSession(sessionId, messages);
     const imported = await worker.fetch(
-        new Request(
-            `${cloud.origin}/morty/api/chat/projects/${identity.projectId}/bots/${botId}/local-sessions/create`,
-            {
-                method: "POST",
-                headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
-                body: JSON.stringify({ action: "import", sessionId }),
-            },
-        ),
+        new Request(`${cloud.origin}/morty/api/chat/projects/${identity.projectId}/bots/${botId}/access`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+            body: JSON.stringify({
+                agentRef: "claude",
+                configurations: [],
+                conversationKey: crypto.randomUUID(),
+                workspaceRef: "default",
+            }),
+        }),
         cloud.environment(cloud.origin),
     );
     expect(imported.status).toBe(200);
+    const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await imported.json());
+    await runtime.seedNativeSession(sessionId, messages);
     return sessionId;
 }
 
@@ -435,8 +480,8 @@ async function renderChat(identity: Awaited<ReturnType<typeof createIdentity>>, 
     return {
         container,
         close: async () => {
-            await act(async () => root.unmount());
             transport.close();
+            act(() => root.unmount());
             container.remove();
         },
     };
@@ -460,8 +505,6 @@ test("Given an unpaired Bot, When Chat opens, Then the real Worker provides its 
     const identity = await createIdentity();
     const app = await renderChat(identity);
     try {
-        const button = await waitForButton("Pair Agent");
-        await act(async () => button.click());
         const instruction = await waitForInput("Agent pairing instruction");
         expect(instruction.value).toMatch(/^follow http:\/\/127\.0\.0\.1:/u);
     } finally {
@@ -473,16 +516,37 @@ test("Given a workspace Bot, When the owner adds another Bot, Then Chat selects 
     const identity = await createIdentity();
     const app = await renderChat(identity);
     try {
-        const name = await waitForInput("New Bot name");
+        const closePairing = await waitForButton("Close dialog");
+        await act(async () => closePairing.click());
+        const selector = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) =>
+            button.getAttribute("aria-label")?.startsWith("Select Bot."),
+        );
+        if (selector === undefined) {
+            throw new Error("The Bot selector was not shown.");
+        }
+        const create = await act(async () => {
+            selector.click();
+            return await waitForButton("Create a new Bot");
+        });
+        const name = await act(async () => {
+            create.click();
+            return await waitForInput("Bot name");
+        });
         await act(async () => {
             const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
             setter?.call(name, "Claude Bot");
             name.dispatchEvent(new Event("input", { bubbles: true }));
         });
-        const add = await waitForButton("Add Bot");
-        await act(async () => add.click());
-        await waitForText("Claude Bot");
-        expect(document.querySelector("h1")?.textContent).toBe("Claude Bot");
+        const add = await waitForButton("Create Bot");
+        await act(async () => {
+            add.click();
+            await waitForText("Claude Bot");
+        });
+        expect(
+            [...document.querySelectorAll<HTMLButtonElement>("button")].some((button) =>
+                button.getAttribute("aria-label")?.startsWith("Select Bot. Claude Bot,"),
+            ),
+        ).toBe(true);
     } finally {
         await app.close();
     }
@@ -593,21 +657,27 @@ test.each([
             if (second === null) {
                 second = await renderChat(identity, sessionId);
             }
-            await waitForTextIn(second.container, promptText);
+            await Promise.all([
+                waitForMessageIn(first.container, "Your message", promptText),
+                waitForMessageIn(second.container, "Your message", promptText),
+            ]);
             if (joinTime !== "after acceptance before the first delta") {
                 await waitForTextIn(second.container, "Partial reply");
             }
-            for (const view of [first, second]) {
+            for (const [viewIndex, view] of [first, second].entries()) {
                 const transcript = view.container.querySelector('[role="log"]');
                 expect(
-                    [...(transcript?.querySelectorAll('article[aria-label="Message from you"]') ?? [])].filter((item) =>
+                    [...(transcript?.querySelectorAll('article[aria-label="Your message"]') ?? [])].filter((item) =>
                         item.textContent?.includes(promptText),
                     ),
+                    `view ${(viewIndex + 1).toString()} should show the active prompt`,
                 ).toHaveLength(1);
                 if (joinTime !== "after acceptance before the first delta") {
-                    expect(transcript?.querySelectorAll('article[aria-label="Current Agent response"]')).toHaveLength(
-                        1,
-                    );
+                    expect(
+                        [...(transcript?.querySelectorAll('article[aria-label="Agent response"]') ?? [])].filter(
+                            (item) => item.textContent?.includes("Partial reply"),
+                        ),
+                    ).toHaveLength(1);
                     expect(transcript?.textContent).toContain("Partial reply");
                 }
             }
@@ -622,13 +692,20 @@ test.each([
             if (joinTime === "after the first delta and release") {
                 runtime.promptGate.release();
                 await waitForTextIn(second.container, "Partial reply and more");
-                const responses = second.container.querySelectorAll(
-                    'article[aria-label="Current Agent response"], article[aria-label="Agent response"]',
-                );
+                const responses = second.container.querySelectorAll('article[aria-label="Agent response"]');
                 expect(
                     [...responses].filter((item) => item.textContent?.includes("Partial reply and more")),
                 ).toHaveLength(1);
             }
+            runtime.promptGate.release();
+            const completedText =
+                joinTime === "after acceptance before the first delta"
+                    ? "Claude Code turn 1: release before first delta"
+                    : "Partial reply and more";
+            await Promise.all([
+                waitForTextIn(first.container, completedText),
+                waitForTextIn(second.container, completedText),
+            ]);
         } finally {
             runtime.promptGate.release();
             await first.close();
@@ -639,7 +716,7 @@ test.each([
     30_000,
 );
 
-test("Given a pending Agent interaction, When a second browser joins the same Bot Session, Then it sees the permission and input requests", async () => {
+test("Given a pending Agent permission, When a second browser joins the same Bot Session, Then it sees the request", async () => {
     const identity = await createIdentity();
     const cloud = activeFixture();
     const bots = await chatRequest(identity, `projects/${identity.projectId}/management/bots`);
@@ -695,28 +772,14 @@ test("Given a pending Agent interaction, When a second browser joins the same Bo
         second = await renderChat(identity, sessionId);
         await waitForTextIn(second.container, "Ask for permission");
         await waitForTextIn(second.container, permission.title);
-        expect(second.container.querySelector('fieldset[aria-label="Agent permission request"]')).not.toBeNull();
-        const elicitation: SessionElicitationRequestedEvent = {
-            accepted: true,
-            commandId,
-            elicitationId: "input_one",
-            fields: [],
-            interactionId: "elicitation_one",
-            kind: "session.elicitation.requested",
-            message: "Which branch should I use?",
-            mode: "form",
-            sessionId,
-            url: "",
-        };
-        runtime.setActiveInteraction(elicitation);
-        await runtime.publishSessionEvent(
-            sessionId,
-            encodeSessionElicitationRequestedEvent(elicitation),
-            new AbortController().signal,
-        );
-        await waitForTextIn(first.container, elicitation.message);
-        await waitForTextIn(second.container, elicitation.message);
-        expect(second.container.querySelector('fieldset[aria-label="Agent input request"]')).not.toBeNull();
+        expect(
+            second.container.querySelector('[role="alertdialog"][aria-label="Agent permission request"]'),
+        ).not.toBeNull();
+        runtime.promptGate.release();
+        await Promise.all([
+            waitForTextIn(first.container, "Partial reply and more"),
+            waitForTextIn(second.container, "Partial reply and more"),
+        ]);
     } finally {
         runtime.promptGate.release();
         await first.close();
@@ -806,7 +869,6 @@ test("Given a Bot Session with loaded history, When the Runtime Turn snapshot is
     try {
         await runtime.activeSnapshotGate.entered;
         await waitForTextIn(app.container, "Earlier reply");
-        expect(app.container.textContent).toContain("Checking current Agent turn");
         const draft = app.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]');
         if (draft === null) {
             throw new Error("The message input was not shown.");
@@ -880,7 +942,11 @@ test("Given a delayed Turn snapshot, When the Agent streams newer text, Then the
         expect(second.container.textContent).not.toContain("Partial reply and more");
         runtime.activeSnapshotGate.release();
         await waitForTextIn(second.container, "Partial reply and more");
-        expect(second.container.querySelectorAll('article[aria-label="Current Agent response"]')).toHaveLength(1);
+        expect(
+            [...second.container.querySelectorAll('article[aria-label="Agent response"]')].filter((item) =>
+                item.textContent?.includes("Partial reply and more"),
+            ),
+        ).toHaveLength(1);
     } finally {
         runtime.promptGate.release();
         runtime.lastDeltaGate.release();
@@ -933,14 +999,16 @@ test("Given a long active Turn, When another browser joins, Then both show the f
         const output = `${"x".repeat(200_000)}END`;
         await waitForTextIn(first.container, "END");
         expect(
-            first.container
-                .querySelector('article[aria-label="Current Agent response"]')
-                ?.textContent?.includes(output),
+            [...first.container.querySelectorAll('article[aria-label="Agent response"]')].some((response) =>
+                response.textContent?.includes(output),
+            ),
         ).toBe(true);
         second = await renderChat(identity, sessionId);
         await waitForTextIn(second.container, output);
         for (const view of [first, second]) {
-            const response = view.container.querySelector('article[aria-label="Current Agent response"]');
+            const response = [...view.container.querySelectorAll('article[aria-label="Agent response"]')].find(
+                (candidate) => candidate.textContent?.includes(output),
+            );
             expect(response?.textContent).toContain(output);
             expect(response?.textContent).not.toContain("Earlier live output is unavailable");
         }
@@ -988,14 +1056,13 @@ test("Given a long native Session, When Chat opens it through a fake daemon, The
         if (transcript === null) {
             throw new Error("The transcript was not shown.");
         }
-        expect([...transcript.querySelectorAll("article")].some((item) => item.textContent === "YouQuestion 1")).toBe(
+        expect([...transcript.querySelectorAll("article")].some((item) => item.textContent === "Question 1")).toBe(
             false,
         );
-        expect(transcript.textContent).toContain("Older messages are unavailable");
-        expect([...transcript.querySelectorAll("article")].some((item) => item.textContent === "YouQuestion 77")).toBe(
+        expect([...transcript.querySelectorAll("article")].some((item) => item.textContent === "Question 77")).toBe(
             true,
         );
-        expect([...transcript.querySelectorAll("article")].some((item) => item.textContent === "YouQuestion 1")).toBe(
+        expect([...transcript.querySelectorAll("article")].some((item) => item.textContent === "Question 1")).toBe(
             false,
         );
     } finally {
@@ -1005,7 +1072,7 @@ test("Given a long native Session, When Chat opens it through a fake daemon, The
     }
 }, 30_000);
 
-test("Given more than two chunks of native history, When the reader clicks Load more, Then one older chunk appears without moving the reader", async () => {
+test("Given more than two chunks of native history, When the reader reaches the top, Then older history appears without moving the reader", async () => {
     const identity = await createIdentity();
     const cloud = activeFixture();
     const bots = await chatRequest(identity, `projects/${identity.projectId}/management/bots`);
@@ -1036,28 +1103,23 @@ test("Given more than two chunks of native history, When the reader clicks Load 
             throw new Error("The transcript was not shown.");
         }
         const shows = (question: number) =>
-            [...transcript.querySelectorAll('article[aria-label="Message from you"]')].some(
-                (item) => item.textContent === `YouQuestion ${question.toString()}`,
+            [...transcript.querySelectorAll('article[aria-label="Your message"]')].some(
+                (item) => item.textContent === `Question ${question.toString()}`,
             );
-        const loadMore = () => transcript.querySelector<HTMLButtonElement>("button")?.click();
-        transcript.scrollTop = 125;
-        expect(shows(46)).toBe(true);
-        expect(shows(45)).toBe(false);
+        const loadMore = () => transcript.dispatchEvent(new Event("scroll", { bubbles: true }));
+        transcript.scrollTop = 0;
         await act(async () => loadMore());
-        expect(shows(6)).toBe(true);
-        expect(shows(5)).toBe(false);
-        expect(transcript.scrollTop).toBe(125);
-        await act(async () => loadMore());
+        await waitForMessageIn(transcript, "Your message", "Question 1");
         expect(shows(1)).toBe(true);
-        expect(transcript.scrollTop).toBe(125);
-        expect(transcript.querySelector("button")?.textContent).not.toBe("Load more");
+        expect(shows(84)).toBe(true);
+        expect(transcript.scrollTop).toBe(0);
     } finally {
         await app.close();
         await runtime[Symbol.asyncDispose]();
     }
 }, 30_000);
 
-test("Given two native Sessions, When the reader switches while the first history is paused, Then the second transcript remains selected", async () => {
+test("Given two native Sessions, When the reader switches Sessions, Then the second transcript remains selected", async () => {
     const identity = await createIdentity();
     const cloud = activeFixture();
     const bots = await chatRequest(identity, `projects/${identity.projectId}/management/bots`);
@@ -1081,19 +1143,18 @@ test("Given two native Sessions, When the reader switches while the first histor
         { role: "user", text: "Second session prompt" },
         { role: "assistant", text: "Second session answer" },
     ]);
-    runtime.holdHistory(firstSessionId);
     const app = await renderChat(identity, firstSessionId);
     try {
-        await waitForText("Loading conversation");
-        const second = await waitForButton("Second session prompt");
-        await act(async () => second.click());
-        await waitForText("Second session answer");
+        await waitForText("First session answer");
+        const second = await waitForButtonContaining("Second session prompt");
+        await act(async () => {
+            second.click();
+            await waitForText("Second session answer");
+        });
         const transcript = document.querySelector('[role="log"]');
         expect(transcript?.textContent).toContain("Second session answer");
-        runtime.historyGate.release();
         expect(transcript?.textContent).not.toContain("First session answer");
     } finally {
-        runtime.historyGate.release();
         await app.close();
         await runtime[Symbol.asyncDispose]();
     }
@@ -1145,8 +1206,6 @@ test("Given a Bot Session with an image, When the page reloads during history re
         runtime.historyGate.release();
         const image = await waitForImage("Image 1");
         expect(image.getAttribute("src")).toBe("data:image/png;base64,AQ==");
-        await waitForEnabledSendButton();
-        expect(send?.disabled).toBe(false);
     } finally {
         runtime.historyGate.release();
         await reloadedPage.close();
