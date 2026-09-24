@@ -31,6 +31,7 @@ export function transitionSessionActivity(
 }
 
 type AssistantAttempt = Extract<SessionMessage, { readonly role: "assistant" }>["attempt"];
+type UserMessage = Extract<SessionMessage, { readonly role: "user" }>;
 
 export function startSessionWork(
     state: { readonly activity: SessionActivityState; readonly messages: readonly SessionMessage[] },
@@ -63,6 +64,35 @@ export function startSessionWork(
         throw new Error("The active assistant response target is unavailable.");
     }
     return { activity: { commandId: event.commandId, kind: "working", messageId }, messages };
+}
+
+export function continueSessionWorkAfterUserMessage(
+    state: { readonly activity: SessionActivityState; readonly messages: readonly SessionMessage[] },
+    message: UserMessage,
+): { readonly activity: SessionActivityState; readonly messages: readonly SessionMessage[] } {
+    if (state.messages.some((candidate) => candidate.role === "user" && candidate.id === message.id)) {
+        return state;
+    }
+    if (state.activity.kind !== "working") {
+        return { ...state, messages: [...state.messages, message] };
+    }
+    const assistantMessageId = `${state.activity.commandId}-reply-after-${message.id}`;
+    return {
+        activity: { ...state.activity, messageId: assistantMessageId },
+        messages: [
+            ...state.messages,
+            message,
+            {
+                activityIds: [],
+                attempt: null,
+                commandId: state.activity.commandId,
+                contents: [],
+                id: assistantMessageId,
+                role: "assistant",
+                text: "",
+            },
+        ],
+    };
 }
 
 export function workingCommandId(state: SessionActivityState): string | null {
