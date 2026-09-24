@@ -1,3 +1,4 @@
+import { isIdentifier } from "@moxt-ai/mobius-protocol";
 import { createRootRoute, createRoute, createRouter, Outlet, useRouter, useRouterState } from "@tanstack/react-router";
 import type { ComponentType, ReactNode } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
@@ -72,12 +73,7 @@ export function createApplicationRouter<TConnection extends ChannelReference>(
                 const sessionId = Reflect.get(search, "sessionId");
                 return {
                     channel: Reflect.get(search, "channel"),
-                    sessionId:
-                        view === "chat" &&
-                        typeof sessionId === "string" &&
-                        /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(sessionId)
-                            ? sessionId
-                            : undefined,
+                    sessionId: view === "chat" && isIdentifier(sessionId) ? sessionId : undefined,
                 };
             },
             loaderDeps: ({ search }) => ({ channel: search.channel }),

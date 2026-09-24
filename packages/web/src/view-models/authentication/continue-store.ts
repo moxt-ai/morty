@@ -1,3 +1,4 @@
+import { isIdentifier } from "@moxt-ai/mobius-protocol";
 import { createStore } from "zustand/vanilla";
 import { createSelectedBotPreference } from "@/services/bots/selected-bot-preference";
 import { BotChatApi } from "@/services/chat/bot-chat-api";
@@ -37,12 +38,11 @@ function initialState(): ContinueState {
     const harness = query.get("harness");
     const sessionId = query.get("sessionId");
     window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-    const identifier = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u;
     if (
         code === null ||
         code.length === 0 ||
         (harness === null) !== (sessionId === null) ||
-        (harness !== null && (!identifier.test(harness) || sessionId === null || !identifier.test(sessionId)))
+        (harness !== null && (!isIdentifier(harness) || sessionId === null || !isIdentifier(sessionId)))
     ) {
         return { kind: "invalid" };
     }

@@ -1,4 +1,4 @@
-import * as v from "valibot";
+import { decodeIdentifier } from "@moxt-ai/mobius-protocol";
 import { centralLocalStorage, userChannelEntry } from "@/services/local-storage/central-local-storage";
 
 export interface ChannelReference {
@@ -23,8 +23,6 @@ class ChannelConnectionError extends Error {
     }
 }
 
-const channelIdSchema = v.pipe(v.string(), v.regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u));
-
 export class BrowserChannelConnection<TConnection extends ChannelReference> {
     readonly #userId: string;
     readonly #readChannel: (channelId: string, signal: AbortSignal) => Promise<TConnection>;
@@ -33,7 +31,7 @@ export class BrowserChannelConnection<TConnection extends ChannelReference> {
         this.#readChannel = readChannel;
     }
     readonly save = (connection: TConnection): void => {
-        centralLocalStorage.write(userChannelEntry(this.#userId), v.parse(channelIdSchema, connection.channelId));
+        centralLocalStorage.write(userChannelEntry(this.#userId), decodeIdentifier(connection.channelId));
     };
     readonly load = async (
         requestedChannelId: unknown,
@@ -45,7 +43,7 @@ export class BrowserChannelConnection<TConnection extends ChannelReference> {
             if (candidate === null) {
                 return { kind: "unpaired" };
             }
-            const channelId = v.parse(channelIdSchema, candidate);
+            const channelId = decodeIdentifier(candidate);
             const connection = await this.#readChannel(channelId, signal);
             signal.throwIfAborted();
             if (connection.channelId !== channelId) {

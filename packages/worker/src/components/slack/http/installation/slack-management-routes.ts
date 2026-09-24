@@ -1,3 +1,4 @@
+import { type Identifier, isIdentifier } from "@moxt-ai/mobius-protocol";
 import { Hono } from "hono";
 import * as v from "valibot";
 import { bodyParser } from "../../../../middleware/body-parser.ts";
@@ -6,7 +7,7 @@ import { authenticatedHuman } from "../authenticated-human";
 import type { SlackHttpEnvironment } from "../slack-http-environment";
 
 const chatBotBindingInputSchema = v.strictObject({
-    botId: v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u)),
+    botId: v.custom<Identifier>(isIdentifier),
 });
 const botQuerySchema = v.pipe(
     v.object({ slackBotId: v.pipe(v.string(), v.minLength(1)) }),
@@ -20,7 +21,7 @@ const configTokenBodySchema = v.pipe(
 );
 const registerAppBodySchema = v.pipe(
     v.object({
-        slackBotId: v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u)),
+        slackBotId: v.custom<Identifier>(isIdentifier),
         clientId: v.pipe(v.string(), v.minLength(1)),
         clientSecret: v.pipe(v.string(), v.minLength(1)),
         name: v.pipe(v.string(), v.minLength(1)),
@@ -32,7 +33,7 @@ const registerAppBodySchema = v.pipe(
 );
 const createAppBodySchema = v.pipe(
     v.object({
-        slackBotId: v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u)),
+        slackBotId: v.custom<Identifier>(isIdentifier),
         name: v.pipe(v.string(), v.minLength(1)),
     }),
     v.readonly(),

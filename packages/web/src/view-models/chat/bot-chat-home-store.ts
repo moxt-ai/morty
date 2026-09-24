@@ -1,3 +1,4 @@
+import { isIdentifier } from "@moxt-ai/mobius-protocol";
 import { createStore } from "zustand/vanilla";
 import type { SelectedBotPreference } from "../../services/bots/selected-bot-preference.ts";
 import type {
@@ -164,15 +165,13 @@ export interface BotChatHomeStore {
     ) => Promise<boolean>;
 }
 
-const identifierPattern = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u;
-
 function initialTarget(urlValue: string, createId: () => string): Target {
     const url = new URL(urlValue);
     const sessionId = url.searchParams.get("sessionId");
     const harness = url.searchParams.get("harness");
     const requestedAction = url.searchParams.get("nativeSessionAction");
-    if (sessionId !== null && identifierPattern.test(sessionId)) {
-        if (harness !== null && identifierPattern.test(harness)) {
+    if (sessionId !== null && isIdentifier(sessionId)) {
+        if (harness !== null && isIdentifier(harness)) {
             return requestedAction === null || requestedAction === "fork" || requestedAction === "import"
                 ? { kind: "continue", action: requestedAction ?? "fork", harness, sessionId }
                 : { kind: "draft", key: createId() };
@@ -180,7 +179,7 @@ function initialTarget(urlValue: string, createId: () => string): Target {
         return { kind: "session-access", sessionId };
     }
     const conversationId = url.searchParams.get("conversationId");
-    return conversationId !== null && identifierPattern.test(conversationId)
+    return conversationId !== null && isIdentifier(conversationId)
         ? { kind: "conversation-access", conversationId }
         : { kind: "draft", key: createId() };
 }

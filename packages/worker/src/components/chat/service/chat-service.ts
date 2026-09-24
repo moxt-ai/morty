@@ -1,3 +1,4 @@
+import { decodeIdentifier } from "@moxt-ai/mobius-protocol";
 import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
 import type { OperationTiming } from "../../../infra/operation-timing.ts";
 import { PlatformProjectError } from "../../management/entity/platform-project.ts";
@@ -553,7 +554,7 @@ export class ChatService {
         const result = await this.#managedBots.configureBot(
             scope.userId,
             scope.botId,
-            { runtimeId: input.runtimeId, agentRef: input.agentRef },
+            { runtimeId: decodeIdentifier(input.runtimeId), agentRef: decodeIdentifier(input.agentRef) },
             Date.now(),
             scope.signal,
         );
