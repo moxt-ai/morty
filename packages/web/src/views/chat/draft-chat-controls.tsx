@@ -6,7 +6,11 @@ import { dataTestId } from "@/data-testid";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
 import { CwdSelector } from "../../components/chat/cwd-selector.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
-import type { BotChatApi, ChatDraftConfiguration } from "../../services/chat/bot-chat-api.ts";
+import {
+    type BotChatApi,
+    type ChatDraftConfiguration,
+    connectedChatWorkspaceAgents,
+} from "../../services/chat/bot-chat-api.ts";
 import { createDraftControlsStore } from "../../view-models/chat/draft-controls-store.ts";
 
 export function DraftChatControls({
@@ -98,13 +102,11 @@ export function DraftChatControls({
                                 void viewModel.selectHarness(value, disabled, controller.signal);
                             }
                         },
-                        options: settings.workspace.agents
-                            .filter((agent) => agent.online)
-                            .map((agent) => ({
-                                value: `${agent.runtimeId}:${agent.agentRef}`,
-                                label: `${agent.label} · ${agent.machineName}`,
-                                tabLabel: agent.label,
-                            })),
+                        options: connectedChatWorkspaceAgents(settings.workspace).map((agent) => ({
+                            value: `${agent.runtimeId}:${agent.agentRef}`,
+                            label: `${agent.label} · ${agent.machineName}`,
+                            tabLabel: agent.label,
+                        })),
                         value: selectedHarness,
                     },
                     ...options.map((option) =>

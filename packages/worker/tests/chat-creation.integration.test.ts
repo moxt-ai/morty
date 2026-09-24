@@ -61,7 +61,26 @@ test("Given a configured Bot, When its owner opens a conversation, Then Morty is
                 )
             ).status,
         ).toBe(200);
-        expect((await fixture.request(`chat/bots/${fixture.botId}/workspace`, {})).status).toBe(200);
+        const workspaceResponse = await fixture.request(`chat/bots/${fixture.botId}/workspace`, {});
+        expect(workspaceResponse.status).toBe(200);
+        const workspace = v.parse(
+            v.strictObject({
+                status: v.string(),
+                runtimeId: v.nullable(v.string()),
+                runtimes: v.array(
+                    v.strictObject({
+                        runtimeId: v.string(),
+                        machineName: v.string(),
+                        online: v.boolean(),
+                        agents: v.array(v.strictObject({ agentRef: v.string(), label: v.string() })),
+                    }),
+                ),
+            }),
+            await workspaceResponse.json(),
+        );
+        expect(workspace).toMatchObject({
+            runtimes: [{ runtimeId: fixture.runtime.runtimeId, online: true, agents: [{ agentRef: "codex" }] }],
+        });
         expect((await fixture.request(`chat/bots/${fixture.botId}/setup`, setup)).status).toBe(202);
 
         const rebound = await fixture.request(`chat/bots/${fixture.botId}/setup`, {

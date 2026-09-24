@@ -578,6 +578,21 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return await saveConfiguration(context, { workspace: cwd });
     }
 
+    function hasOnlineRuntimeAgent(workspace: Record<string, unknown>, runtimeId: string, agentRef: string): boolean {
+        return (
+            Array.isArray(workspace.runtimes) &&
+            workspace.runtimes.some((value) => {
+                const runtime = object(value);
+                return (
+                    runtime.runtimeId === runtimeId &&
+                    runtime.online === true &&
+                    Array.isArray(runtime.agents) &&
+                    runtime.agents.some((agent) => object(agent).agentRef === agentRef)
+                );
+            })
+        );
+    }
+
     async function waitForRuntime(context: Context, runtime: RuntimeSelection, harness: string) {
         const runtimeId = runtime.runtimeId;
         let attempts = 0;
@@ -618,15 +633,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 `/chat/projects/${context.config.project_id}/bots/${context.config.bot_id}/workspace`,
                 {},
             );
-            if (
-                Array.isArray(workspace.agents) &&
-                workspace.agents.some(
-                    (agent) =>
-                        object(agent).runtimeId === runtimeId &&
-                        object(agent).agentRef === harness &&
-                        object(agent).online === true,
-                )
-            ) {
+            if (hasOnlineRuntimeAgent(workspace, runtimeId, harness)) {
                 if (runtime.kind === "existing") {
                     emit({ status: "runtime_paired", runtimeId, harness });
                 }
@@ -662,13 +669,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (
             workspace.status !== "active" ||
             workspace.runtimeId !== runtimeId ||
-            !Array.isArray(workspace.agents) ||
-            !workspace.agents.some(
-                (item) =>
-                    object(item).runtimeId === runtimeId &&
-                    object(item).agentRef === context.config.agent_ref &&
-                    object(item).online === true,
-            )
+            typeof context.config.agent_ref !== "string" ||
+            !hasOnlineRuntimeAgent(workspace, runtimeId, context.config.agent_ref)
         ) {
             return false;
         }

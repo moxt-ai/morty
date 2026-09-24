@@ -54,17 +54,38 @@ export type ManagedChatSession = v.InferOutput<typeof managedSessionSchema>;
 const workspaceSchema = v.object({
     status: v.string(),
     runtimeId: v.nullable(identifier),
-    agents: v.array(
+    runtimes: v.array(
         v.object({
             runtimeId: identifier,
-            agentRef: identifier,
-            label: v.string(),
             machineName: v.string(),
             online: v.boolean(),
+            agents: v.array(
+                v.object({
+                    agentRef: identifier,
+                    label: v.string(),
+                }),
+            ),
         }),
     ),
 });
 export type ChatWorkspace = v.InferOutput<typeof workspaceSchema>;
+export type ChatAgentSelection = {
+    readonly runtimeId: Identifier;
+    readonly machineName: string;
+    readonly agentRef: Identifier;
+    readonly label: string;
+};
+export function connectedChatWorkspaceAgents(workspace: ChatWorkspace): readonly ChatAgentSelection[] {
+    return workspace.runtimes.flatMap((runtime) =>
+        runtime.online
+            ? runtime.agents.map((agent) => ({
+                  runtimeId: runtime.runtimeId,
+                  machineName: runtime.machineName,
+                  ...agent,
+              }))
+            : [],
+    );
+}
 export interface ChatDraftConfiguration {
     readonly agentRef: string;
     readonly workspaceRef: string;

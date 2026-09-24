@@ -118,18 +118,15 @@ export class PlatformProjectGateway {
             return { ...pairing, appId: configuration.appId, relayUrl: configuration.origin };
         });
 
-    readonly chatAgents = async (projectId: string, signal: AbortSignal) =>
+    readonly chatRuntimes = async (projectId: string, signal: AbortSignal) =>
         await this.#withProject(projectId, signal, async (client) => {
             const runtimes = await client.runtimes.list(signal);
-            return runtimes.flatMap((runtime) =>
-                runtime.agents.map((agent) => ({
-                    runtimeId: runtime.runtimeId,
-                    agentRef: agent.id,
-                    label: agent.label,
-                    machineName: runtime.machineName,
-                    online: runtime.online,
-                })),
-            );
+            return runtimes.map((runtime) => ({
+                runtimeId: runtime.runtimeId,
+                machineName: runtime.machineName,
+                online: runtime.online,
+                agents: runtime.agents.map((agent) => ({ agentRef: agent.id, label: agent.label })),
+            }));
         });
 
     readonly openChatRuntimeHost = async (
