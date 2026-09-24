@@ -30,6 +30,12 @@ export function LocalAgentTranscript({
         history.kind === "ready" || history.kind === "refreshing" || history.kind === "failed" ? history.data : null;
     const hiddenCount = data === null ? 0 : data.messages.length - data.visibleCount;
     const firstIndex = data === null ? 0 : hiddenCount;
+    const visibleTurn =
+        turn.kind === "running"
+            ? turn
+            : turn.kind === "recovering" || turn.kind === "recovery-failed"
+              ? turn.previous
+              : null;
     const revealOlder = () => {
         const viewport = transcript.current;
         if (viewport === null) {
@@ -70,19 +76,21 @@ export function LocalAgentTranscript({
                     ))}
                 </article>
             ))}
-            {turn.kind === "running" && (
+            {visibleTurn !== null && (
                 <>
                     <article aria-label="Message from you" className="mx-auto max-w-3xl">
                         <p className="mb-1 text-xs font-semibold text-muted-foreground">You</p>
-                        <AgentMarkdown markdown={turn.prompt} readImage={readImage} streaming={false} />
+                        <AgentMarkdown markdown={visibleTurn.prompt} readImage={readImage} streaming={false} />
                     </article>
                     <article aria-label="Current Agent response" className="mx-auto max-w-3xl">
                         <p className="text-xs font-semibold text-muted-foreground">Agent is working</p>
-                        {turn.truncated && <p>Earlier live output is unavailable in this view.</p>}
-                        <AgentMarkdown markdown={turn.text} readImage={readImage} streaming />
+                        {visibleTurn.truncated && <p>Earlier live output is unavailable in this view.</p>}
+                        <AgentMarkdown markdown={visibleTurn.text} readImage={readImage} streaming />
                     </article>
                 </>
             )}
+            {turn.kind === "recovering" && <p role="status">Checking current Agent turn…</p>}
+            {turn.kind === "recovery-failed" && <p role="alert">{turn.message}</p>}
             {turn.kind === "unknown" && (
                 <div role="alert">
                     <p>{turn.message}</p>

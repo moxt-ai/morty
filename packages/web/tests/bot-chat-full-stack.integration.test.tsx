@@ -244,6 +244,7 @@ async function connectFakeRuntime(
     projectId: string,
     options: {
         readonly pauseHistory?: "all" | string;
+        readonly pauseActiveSnapshot?: boolean;
         readonly pausePrompt?: "before-delta" | "after-delta" | "after-last-delta";
         readonly truncateHistory?: boolean;
     } = {},
@@ -252,6 +253,7 @@ async function connectFakeRuntime(
     const sessionIds = new Set<string>();
     let pausedHistory = options.pauseHistory;
     const historyGate = pauseGate();
+    const activeSnapshotGate = pauseGate();
     const promptGate = pauseGate();
     const runtime = await cloud.connectAgent(projectId, {
         agentId: "claude",
@@ -272,6 +274,11 @@ async function connectFakeRuntime(
                       coveredCommandIds: [],
                       coveredMessageIds: [],
                   };
+        },
+        beforeActiveTurnSnapshot: async (_sessionId, signal) => {
+            if (options.pauseActiveSnapshot) {
+                await activeSnapshotGate.wait(signal);
+            }
         },
         afterSessionStarted: async (_command, signal) => {
             if (options.pausePrompt === "before-delta") {
@@ -306,6 +313,7 @@ async function connectFakeRuntime(
     return {
         ...runtime,
         historyGate,
+        activeSnapshotGate,
         promptGate,
         holdHistory: (sessionId: string) => {
             pausedHistory = sessionId;
@@ -657,6 +665,52 @@ test("Given an active Turn, When the browser reopens the Bot Session, Then it re
         if (firstOpen) {
             await first.close();
         }
+        await runtime[Symbol.asyncDispose]();
+    }
+}, 30_000);
+
+test("Given a Bot Session with loaded history, When the Runtime Turn snapshot is delayed, Then sending waits for the snapshot", async () => {
+    const identity = await createIdentity();
+    const cloud = activeFixture();
+    const bots = await chatRequest(identity, `projects/${identity.projectId}/management/bots`);
+    expect(bots.status).toBe(200);
+    const listing = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await bots.json());
+    const botId = listing.bots[0]?.botId;
+    if (botId === undefined) {
+        throw new Error("The Project has no Bot.");
+    }
+    const runtime = await connectFakeRuntime(cloud, identity.projectId, { pauseActiveSnapshot: true });
+    const configured = await chatRequest(identity, `chat/projects/${identity.projectId}/bots/${botId}/setup`, {
+        runtimeId: runtime.runtimeId,
+        agentRef: "claude",
+    });
+    expect(configured.status).toBe(202);
+    const sessionId = await importAgentSession(cloud, identity, botId, runtime, [
+        { role: "user", text: "Earlier prompt" },
+        { role: "assistant", text: "Earlier reply" },
+    ]);
+    const app = await renderChat(identity, sessionId);
+    try {
+        await runtime.activeSnapshotGate.entered;
+        await waitForTextIn(app.container, "Earlier reply");
+        expect(app.container.textContent).toContain("Checking current Agent turn");
+        const draft = app.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]');
+        if (draft === null) {
+            throw new Error("The message input was not shown.");
+        }
+        await act(async () => {
+            const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+            setter?.call(draft, "Wait for Runtime state");
+            draft.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        const send = app.container.querySelector<HTMLButtonElement>('button[aria-label="Send message"]');
+        expect(send?.disabled).toBe(true);
+        runtime.activeSnapshotGate.release();
+        await waitForEnabledSendButton();
+        expect(send?.disabled).toBe(false);
+    } finally {
+        runtime.activeSnapshotGate.release();
+        await app.close();
         await runtime[Symbol.asyncDispose]();
     }
 }, 30_000);

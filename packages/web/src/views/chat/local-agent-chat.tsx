@@ -197,6 +197,8 @@ export function LocalAgentChat({
                                         disabled={
                                             !runtime.online ||
                                             (history.kind !== "ready" && history.kind !== "none") ||
+                                            turn.kind === "recovering" ||
+                                            turn.kind === "recovery-failed" ||
                                             draft.trim().length === 0
                                         }
                                         type="submit"

@@ -162,14 +162,14 @@ export function useLocalAgentChat({
             previous?.controller.abort(new Error("Another active Turn was requested"));
             const controller = new AbortController();
             const signal = AbortSignal.any([parent, controller.signal]);
-            const before = turnStore.getState().state;
+            turnStore.getState().beginRecovery(sessionId);
             const completion = (async () => {
                 try {
                     const session = (await requests.localSessions(bot.botId, signal)).find(
                         (item) => item.id === sessionId,
                     );
                     if (session === undefined) {
-                        return;
+                        throw new Error("The Chat session is no longer available.");
                     }
                     const snapshot = await localActiveTurn(client, bot.botId, agentRef, session, signal);
                     signal.throwIfAborted();
@@ -177,13 +177,13 @@ export function useLocalAgentChat({
                     if (selected.kind === "none" || selected.sessionId !== sessionId) {
                         return;
                     }
-                    if (snapshot === null && turnStore.getState().state !== before) {
+                    if (snapshot === null && turnStore.getState().state.kind === "running") {
                         return;
                     }
                     turnStore.getState().receiveSnapshot(sessionId, snapshot);
                 } catch (error) {
                     if (!signal.aborted) {
-                        setOperationError(failureMessage(error));
+                        turnStore.getState().failRecovery(sessionId, failureMessage(error));
                     }
                 }
             })();
@@ -494,7 +494,9 @@ export function useLocalAgentChat({
             lifetime.current === null ||
             draft.trim().length === 0 ||
             (history.kind !== "ready" && history.kind !== "none") ||
-            turn.kind === "running"
+            turnStore.getState().state.kind === "running" ||
+            turnStore.getState().state.kind === "recovering" ||
+            turnStore.getState().state.kind === "recovery-failed"
         ) {
             return;
         }

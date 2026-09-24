@@ -12,22 +12,33 @@ type LiveStream =
     | { readonly kind: "unconfirmed" }
     | { readonly kind: "sequenced"; readonly epoch: string; readonly sequence: number };
 
+type RunningTurn = {
+    readonly kind: "running";
+    readonly commandId: string;
+    readonly sessionId: string;
+    readonly prompt: string;
+    readonly text: string;
+    readonly truncated: boolean;
+    readonly stream: LiveStream;
+};
+
 export type TurnState =
     | { readonly kind: "idle" }
+    | RunningTurn
+    | { readonly kind: "recovering"; readonly sessionId: string; readonly previous: RunningTurn | null }
     | {
-          readonly kind: "running";
-          readonly commandId: string;
+          readonly kind: "recovery-failed";
           readonly sessionId: string;
-          readonly prompt: string;
-          readonly text: string;
-          readonly truncated: boolean;
-          readonly stream: LiveStream;
+          readonly previous: RunningTurn | null;
+          readonly message: string;
       }
     | { readonly kind: "unknown"; readonly message: string; readonly prompt: string };
 
 interface LiveTurnStore {
     readonly state: TurnState;
     readonly reset: () => void;
+    readonly beginRecovery: (sessionId: string) => void;
+    readonly failRecovery: (sessionId: string, message: string) => void;
     readonly start: (commandId: string, sessionId: string, prompt: string) => void;
     readonly receiveStarted: (message: SessionStartedEvent) => void;
     readonly receiveSnapshot: (sessionId: string, snapshot: ActiveTurnSnapshot) => void;
@@ -51,6 +62,23 @@ export const createLocalLiveTurnStore = () =>
     createStore<LiveTurnStore>()((set, get) => ({
         state: { kind: "idle" },
         reset: () => set({ state: { kind: "idle" } }),
+        beginRecovery: (sessionId) => {
+            const current = get().state;
+            const previous =
+                current.kind === "running" && current.sessionId === sessionId
+                    ? current
+                    : (current.kind === "recovering" || current.kind === "recovery-failed") &&
+                        current.sessionId === sessionId
+                      ? current.previous
+                      : null;
+            set({ state: { kind: "recovering", sessionId, previous } });
+        },
+        failRecovery: (sessionId, message) => {
+            const current = get().state;
+            if (current.kind === "recovering" && current.sessionId === sessionId) {
+                set({ state: { kind: "recovery-failed", sessionId, previous: current.previous, message } });
+            }
+        },
         start: (commandId, sessionId, prompt) =>
             set({
                 state: {
@@ -88,20 +116,29 @@ export const createLocalLiveTurnStore = () =>
         receiveSnapshot: (sessionId, snapshot) => {
             const current = get().state;
             if (snapshot === null) {
-                if (current.kind === "running" && current.stream.kind === "sequenced") {
+                if (
+                    (current.kind === "recovering" && current.sessionId === sessionId) ||
+                    (current.kind === "running" && current.stream.kind === "sequenced")
+                ) {
                     get().reset();
                 }
                 return;
             }
-            if (current.kind === "running") {
-                if (current.commandId !== snapshot.commandId) {
+            const previous =
+                current.kind === "recovering" ? current.previous : current.kind === "running" ? current : null;
+            if (previous !== null) {
+                if (previous.commandId !== snapshot.commandId && current.kind !== "recovering") {
                     return;
                 }
                 if (
-                    current.stream.kind === "sequenced" &&
-                    current.stream.epoch === snapshot.epoch &&
-                    current.stream.sequence >= snapshot.sequence
+                    previous.commandId === snapshot.commandId &&
+                    previous.stream.kind === "sequenced" &&
+                    previous.stream.epoch === snapshot.epoch &&
+                    previous.stream.sequence >= snapshot.sequence
                 ) {
+                    if (current.kind === "recovering") {
+                        set({ state: previous });
+                    }
                     return;
                 }
             }
@@ -119,6 +156,9 @@ export const createLocalLiveTurnStore = () =>
         },
         receiveDelta: (message) => {
             const current = get().state;
+            if (current.kind === "recovering" || current.kind === "recovery-failed") {
+                return "duplicate";
+            }
             if (current.kind !== "running" || current.commandId !== message.commandId) {
                 return "resync";
             }
