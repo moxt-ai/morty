@@ -1,4 +1,4 @@
-import { getByRole, queryByRole, queryByTestId } from "@testing-library/dom";
+import { getByLabelText, getByRole, queryByRole, queryByTestId } from "@testing-library/dom";
 import { afterAll, afterEach, expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { closeTestApps, closeTestEnvironment, createTestApp, type TestApp } from "./infra/test-app.tsx";
@@ -276,7 +276,39 @@ test("Given a paired Bot with cached agent settings, When a user refreshes and f
     await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
 });
 
-test("Given an Agent links local file URLs, When they render and a user opens one, Then the image and source are available", {
+test("Given a tool finishes during an active conversation, When its terminal activity arrives, Then the tool shows as succeeded", {
+    timeout: 30_000,
+}, async () => {
+    const releaseTurn = Promise.withResolvers<void>();
+    const created = await createTestApp({
+        agentBehavior: {
+            afterLastDelta: async (_command, signal) => {
+                await Promise.race([
+                    releaseTurn.promise,
+                    new Promise<never>((_resolve, reject) =>
+                        signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+                    ),
+                ]);
+            },
+        },
+        connectAgent: true,
+    });
+    const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
+    await created.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await created.queryElementByTestId(dataTestId.messageComposer);
+
+    await sendPrompt(created, composer as HTMLTextAreaElement, "Create an image");
+    const tool = await Promise.race([created.queryElementByTestId(dataTestId.agentToolCall), failure]);
+
+    await vi.waitFor(() => expect(getByLabelText(tool, "Tool succeeded")).toBeInstanceOf(SVGElement));
+    releaseTurn.resolve();
+    await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+});
+
+test("Given an Agent links a local file location, When a user opens it, Then the file path omits the source location", {
     timeout: 30_000,
 }, async () => {
     const created = await createTestApp({

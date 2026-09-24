@@ -30,8 +30,17 @@ export function recordAgentActivity(
         return current;
     }
     const key = agentActivityKey(activity);
-    const sequence = BigInt(event.sequence);
     const previous = current.get(key);
+    if (event.sequence === "") {
+        // Runtime Session events currently arrive without committed envelope metadata.
+        // Their transport order is authoritative, while activity.sequence identifies
+        // the activity's position and remains constant across its status updates.
+        return new Map(current).set(key, {
+            sequence: previous?.sequence ?? BigInt(activity.sequence),
+            activity,
+        });
+    }
+    const sequence = BigInt(event.sequence);
     if (previous !== undefined && previous.sequence >= sequence) {
         return current;
     }
