@@ -40,6 +40,8 @@ and uploads it with the Worker version using Wrangler's `--secrets-file`. The
 file is removed when the deployment step exits. Multiline values are encoded by
 the script; enter actual multiline PEM values into GitHub.
 
+The `production` GitHub Environment uses a one-minute deployment wait timer.
+
 ## Mobius Platform
 
 Configure these **GitHub Environment variables** individually:
