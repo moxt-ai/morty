@@ -137,23 +137,6 @@ function privateJson(value: unknown) {
 
 export function createBotChatRoutes() {
     return new Hono<AuthorizedChatEnvironment>()
-        .use("*", async (context, next) => {
-            const operation = new URL(context.req.url).pathname.split("/bots/")[1]?.split("/").slice(1).join("/");
-            if (
-                operation !== undefined &&
-                operation !== "workspace" &&
-                operation !== "workspace/directory" &&
-                operation !== "agent-settings" &&
-                operation !== "setup"
-            ) {
-                throw new PlatformProjectError(
-                    "BOT_CHAT_UNAVAILABLE",
-                    "Bot conversations are temporarily unavailable while Sessions move to the local Runtime.",
-                    503,
-                );
-            }
-            await next();
-        })
         .use(
             "*",
             bodyLimit({

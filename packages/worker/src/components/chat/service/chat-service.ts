@@ -156,29 +156,37 @@ export class ChatService {
     };
 
     readonly managedSessions = async (scope: ChatScope) => {
-        const sessions = await this.#chatSessions.list(scope.projectId, scope.userId, scope.botId, scope.signal);
+        const bot = await this.#bot(scope);
+        if (bot.configuration === null) {
+            throw new PlatformProjectError("AGENT_REQUIRED", "Connect your local agent to list Sessions.", 409);
+        }
+        const ownedSessions = await this.#chatSessions.list(scope.projectId, scope.userId, scope.botId, scope.signal);
+        if (ownedSessions.length === 0) {
+            return { sessions: [] };
+        }
+        const ownership = new Map(ownedSessions.map((entry) => [entry.id, entry]));
+        const sessions = await this.#platform.querySessions(
+            scope.projectId,
+            bot.configuration.runtimeId,
+            ownedSessions.map((entry) => entry.id),
+            scope.signal,
+        );
         return {
-            sessions: await Promise.all(
-                sessions.map(async (session) => {
-                    try {
-                        const target = await this.#platform.chatSessionDirectory(
-                            scope.projectId,
-                            session.id,
-                            scope.signal,
-                        );
-                        const directory = await this.#platform.listChatWorkspace(
-                            scope.projectId,
-                            target.runtimeId,
-                            target.directoryId,
-                            scope.signal,
-                        );
-                        return { ...session, directoryLabel: directory.directoryLabel };
-                    } catch {
-                        scope.signal.throwIfAborted();
-                        return { ...session, directoryLabel: "" };
-                    }
-                }),
-            ),
+            sessions: sessions.flatMap((session) => {
+                const owner = ownership.get(session.sessionId);
+                return owner === undefined
+                    ? []
+                    : [
+                          {
+                              directoryLabel: session.directoryLabel,
+                              id: session.sessionId,
+                              isExternal: owner.isExternal,
+                              projectId: scope.projectId,
+                              title: session.title,
+                              userId: scope.userId,
+                          },
+                      ];
+            }),
         };
     };
 
@@ -213,6 +221,18 @@ export class ChatService {
         if (runtime === null) {
             throw new PlatformProjectError("AGENT_REQUIRED", "Connect your local agent to start chatting.", 409);
         }
+        if (
+            "conversationId" in input &&
+            !(await this.#chatSessions.ownsSession(
+                scope.projectId,
+                scope.userId,
+                scope.botId,
+                input.conversationId,
+                scope.signal,
+            ))
+        ) {
+            throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
+        }
         const access = await timing.measure("session", "Open Chat Session", async () =>
             this.#platform.openChatSession(
                 scope.projectId,
@@ -224,22 +244,18 @@ export class ChatService {
                           runtimeId: runtime.runtimeId,
                           conversationKey: await chatSessionId(scope.botId, input.conversationKey),
                       }
-                    : { kind: "existing", conversationId: input.conversationId },
+                    : { kind: "existing", conversationId: input.conversationId, runtimeId: runtime.runtimeId },
                 input.title ?? "New chat",
                 scope.signal,
             ),
         );
         if ("conversationKey" in input) {
-            await timing.measure("session-save", "Save managed Chat session", async () =>
+            await timing.measure("session-save", "Save Chat session ownership", async () =>
                 this.#chatSessions.save(
                     scope.projectId,
                     scope.userId,
                     scope.botId,
-                    {
-                        isExternal: false,
-                        id: access.conversationId,
-                        title: input.title ?? "New chat",
-                    },
+                    { isExternal: false, id: access.conversationId },
                     scope.signal,
                 ),
             );
@@ -258,7 +274,19 @@ export class ChatService {
     };
 
     readonly nativeSessionAccess = async (scope: ChatScope, sessionId: string) => {
-        const access = await this.#platform.nativeSessionAccess(scope.projectId, sessionId, scope.signal);
+        const bot = await this.#bot(scope);
+        if (
+            bot.configuration === null ||
+            !(await this.#chatSessions.ownsSession(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal))
+        ) {
+            throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
+        }
+        const access = await this.#platform.nativeSessionAccess(
+            scope.projectId,
+            bot.configuration.runtimeId,
+            sessionId,
+            scope.signal,
+        );
         this.#logger.info(
             {
                 event: "session-access-issued",
@@ -278,27 +306,39 @@ export class ChatService {
         ) {
             throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
         }
-        return await this.#platform.readChatSession(scope.projectId, sessionId, scope.signal);
+        const bot = await this.#bot(scope);
+        if (bot.configuration === null) {
+            throw new PlatformProjectError("AGENT_REQUIRED", "Connect your local agent to open this Session.", 409);
+        }
+        const session = await this.#platform.localSession(
+            scope.projectId,
+            bot.configuration.runtimeId,
+            sessionId,
+            scope.signal,
+        );
+        return {
+            agentRef: session.entry.agentId,
+            history: session.history,
+            ready: session.ready,
+            entry: {
+                additionalDirectories: session.entry.additionalDirectories,
+                directoryId: session.entry.directoryId,
+                directoryLabel: session.entry.directoryLabel,
+                entryId: session.entry.sessionId,
+                title: session.entry.title,
+                updatedAt: session.entry.updatedAt,
+            },
+        };
     };
 
     readonly archiveManagedSession = async (scope: ChatScope, sessionId: string): Promise<Record<string, never>> => {
         await this.#chatSessions.archive(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal);
-        this.#logger.info(
-            {
-                event: "chat-managed-session-archived",
-                userId: scope.userId,
-                projectId: scope.projectId,
-                botId: scope.botId,
-                sessionId,
-            },
-            "Chat audit event",
-        );
         return {};
     };
 
     readonly submitTurn = async (
         scope: ChatScope,
-        input: Parameters<PlatformProjectGateway["submitChatTurn"]>[2] & { readonly sessionId: string },
+        input: Parameters<PlatformProjectGateway["submitChatTurn"]>[4] & { readonly sessionId: string },
     ) => {
         const { sessionId, ...request } = input;
         const bot = await this.#bot(scope);
@@ -308,9 +348,20 @@ export class ChatService {
             throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
         }
         const instructionUri = "morty://bot/instructions";
+        if (bot.configuration === null) {
+            throw new PlatformProjectError("AGENT_REQUIRED", "Connect your local agent to continue chatting.", 409);
+        }
+        const entry = (
+            await this.#platform.querySessions(scope.projectId, bot.configuration.runtimeId, [sessionId], scope.signal)
+        ).find((candidate) => candidate.sessionId === sessionId);
+        if (entry === undefined) {
+            throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
+        }
         return await this.#platform.submitChatTurn(
             scope.projectId,
+            bot.configuration.runtimeId,
             sessionId,
+            { agentId: entry.agentId, directoryId: entry.directoryId },
             {
                 ...request,
                 resources: [
@@ -419,11 +470,7 @@ export class ChatService {
             scope.projectId,
             scope.userId,
             scope.botId,
-            {
-                isExternal: action === "import",
-                id: result.ready.sessionId,
-                title: result.title || "Untitled session",
-            },
+            { isExternal: action === "import", id: result.ready.sessionId },
             scope.signal,
         );
         this.#logger.info(
@@ -512,11 +559,7 @@ export class ChatService {
             scope.projectId,
             scope.userId,
             scope.botId,
-            {
-                isExternal: action === "import",
-                id: result.ready.sessionId,
-                title: result.title || "Untitled session",
-            },
+            { isExternal: action === "import", id: result.ready.sessionId },
             scope.signal,
         );
         this.#logger.info(

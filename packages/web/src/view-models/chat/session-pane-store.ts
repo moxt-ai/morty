@@ -371,7 +371,7 @@ function includePendingUserMessage(
 export function createSessionPaneModel(options: {
     readonly session: OpenMobiusSession;
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "connectSession" | "steerTurn" | "submitTurn">;
+    readonly requests: Pick<BotChatApi, "connectSession" | "managedSession" | "steerTurn" | "submitTurn">;
 }) {
     const { session, botId, requests } = options;
     const sessionId = session.result.ready.sessionId;
@@ -432,10 +432,7 @@ export function createSessionPaneModel(options: {
                 return await client.turns.cancel(sessionId, turnId, { idempotencyKey }, signal);
             },
             submit: async (request, signal) => {
-                if (client === null) {
-                    throw new Error("The Session is not connected.");
-                }
-                return await client.turns.submit(sessionId, request, signal);
+                return await requests.submitTurn(botId, sessionId, request, signal);
             },
         },
     });
@@ -451,10 +448,7 @@ export function createSessionPaneModel(options: {
         },
         steer: async (turnId, signal) => await requests.steerTurn(botId, sessionId, turnId, signal),
         submit: async (request, signal) => {
-            if (client === null) {
-                throw new Error("The Session is not connected.");
-            }
-            return await client.turns.submit(sessionId, request, signal);
+            return await requests.submitTurn(botId, sessionId, request, signal);
         },
     });
     const request = {
@@ -583,38 +577,19 @@ export function createSessionPaneModel(options: {
                                     set({ connection: { kind: "loading" } });
                                     break;
                             }
-                            const [loadedHistory, pendingInteractions, restoredTurn] = await Promise.all([
-                                connected.sessions.queryNativeMessages(sessionId, signal),
-                                connected.interactions.listPending(sessionId, signal),
-                                reconciliation.turn.kind === "accepted"
-                                    ? connected.turns.read(sessionId, reconciliation.turn.turnId, signal)
-                                    : Promise.resolve(null),
-                            ]);
+                            const refreshed = await requests.managedSession(botId, sessionId, signal);
                             signal.throwIfAborted();
                             const authoritative = {
-                                history: loadedHistory,
-                                interactions: pendingInteractions,
+                                history: refreshed.result.history,
+                                interactions: get().interactions,
                                 kind: "authoritative-state-loaded" as const,
-                                turn: restoredTurn,
+                                turn: null,
                             };
                             nativeHistory = authoritative.history.status === "available" ? authoritative.history : null;
-                            historyCursor =
-                                authoritative.history.status === "available" ? authoritative.history.nextCursor : null;
+                            historyCursor = null;
                             set({
-                                interactions: authoritative.interactions.flatMap((interaction) => {
-                                    const presented = presentInteraction(interaction);
-                                    return presented === null ? [] : [presented];
-                                }),
+                                interactions: authoritative.interactions,
                             });
-                            if (
-                                authoritative.turn !== null &&
-                                authoritative.turn.state.kind !== "queued" &&
-                                authoritative.turn.state.kind !== "running"
-                            ) {
-                                tasks.getState().finish(command);
-                                activeTurn.turnCleared(command);
-                                command = "";
-                            }
                             const native = historySessionPresentation(
                                 authoritative.history,
                                 sessionId,
@@ -877,10 +852,13 @@ export function createSessionPaneModel(options: {
                                 const completedCommand = command;
                                 const completedHistory =
                                     payload instanceof MobiusTurnCompletedEvent
-                                        ? await connected.sessions.queryNativeMessages(
-                                              sessionId,
-                                              AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
-                                          )
+                                        ? (
+                                              await requests.managedSession(
+                                                  botId,
+                                                  sessionId,
+                                                  AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
+                                              )
+                                          ).result.history
                                         : null;
                                 signal.throwIfAborted();
                                 if (command !== completedCommand) {

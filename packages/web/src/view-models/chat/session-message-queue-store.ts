@@ -1,4 +1,4 @@
-import type { MobiusTurn, PromptImage, SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
+import type { PromptImage, SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
 import { SessionPromptDisposition } from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
 
@@ -18,9 +18,9 @@ type QueueOperation = { readonly kind: "idle" } | { readonly kind: "submitting";
 type QueueFeedback = { readonly kind: "none" } | { readonly kind: "failed"; readonly message: string };
 
 interface SessionMessageQueuePort {
-    readonly cancel: (turnId: string, idempotencyKey: string, signal: AbortSignal) => Promise<MobiusTurn>;
+    readonly cancel: (turnId: string, idempotencyKey: string, signal: AbortSignal) => Promise<unknown>;
     readonly steer: (turnId: string, signal: AbortSignal) => Promise<void>;
-    readonly submit: (request: SubmitMobiusTurnRequest, signal: AbortSignal) => Promise<MobiusTurn>;
+    readonly submit: (request: SubmitMobiusTurnRequest, signal: AbortSignal) => Promise<{ readonly turnId: string }>;
 }
 
 export interface SessionMessageQueueStore {

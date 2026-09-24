@@ -19,14 +19,19 @@ import * as v from "valibot";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 
 const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
+const sessionAccessCredential = v.pipe(
+    v.string(),
+    v.regex(/^msession_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]+_[A-Za-z0-9_-]{43}$/u),
+);
 const accessSchema = v.pipe(
     v.strictObject({
+        credential: sessionAccessCredential,
         endpoint: v.pipe(v.string(), v.url()),
+        expiresAt: v.pipe(v.string(), v.isoTimestamp()),
         projectId: identifier,
         conversationId: identifier,
         sessionId: identifier,
-        credential: v.pipe(v.string(), v.regex(/^msession_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}$/u)),
-        expiresAt: v.pipe(v.string(), v.isoTimestamp()),
+        runtimeId: identifier,
         ready: v.unknown(),
         agentRef: identifier,
         workspaceRef: v.pipe(v.string(), v.minLength(1), v.maxLength(2048)),
@@ -73,13 +78,14 @@ export type ConversationActiveTurn =
     | { readonly kind: "idle" }
     | { readonly kind: "running"; readonly commandId: string; readonly turnId: string };
 const sessionAccessSchema = v.object({
+    credential: sessionAccessCredential,
+    endpoint: v.pipe(v.string(), v.url()),
+    expiresAt: v.pipe(v.string(), v.isoTimestamp()),
     sessionId: identifier,
     projectId: identifier,
-    credential: v.pipe(v.string(), v.regex(/^msession_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}$/u)),
-    expiresAt: v.pipe(v.string(), v.isoTimestamp()),
-    endpoint: v.pipe(v.string(), v.url()),
+    runtimeId: identifier,
 });
-const localSessionEntrySchema = v.object({
+const sessionEntrySchema = v.object({
     entryId: identifier,
     mobiusSessionIds: v.optional(v.array(identifier), []),
     title: v.string(),
@@ -90,13 +96,14 @@ const localSessionEntrySchema = v.object({
 });
 const managedSdkSessionSchema = v.object({
     agentRef: identifier,
+    history: v.unknown(),
     ready: v.unknown(),
-    entry: localSessionEntrySchema,
+    entry: sessionEntrySchema,
 });
-const localSessionSchema = v.object({
+const continuedSessionSchema = v.object({
     agentRef: identifier,
     result: v.unknown(),
-    entry: localSessionEntrySchema,
+    entry: sessionEntrySchema,
 });
 
 function sessionEndpoint(value: string): string {
@@ -307,10 +314,7 @@ export class BotChatApi {
                 action: "managed" as const,
                 targetSessionId: sessionId,
                 ready,
-                history: {
-                    status: "unavailable" as const,
-                    cause: { code: "history_loading", message: "Session history will load after connecting." },
-                },
+                history: decodeNativeSessionHistory(stored.history),
             },
         };
     };
@@ -322,7 +326,7 @@ export class BotChatApi {
         signal: AbortSignal,
     ) => {
         const stored = v.parse(
-            localSessionSchema,
+            continuedSessionSchema,
             await this.#request(botId, "continue-native-session", { action, harness, sessionId }, signal),
         );
         const result = decodeNativeSessionResult(JSON.stringify(stored.result));

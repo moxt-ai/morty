@@ -14,7 +14,17 @@ async function createChatFixture() {
     const cloud = await createIdentityFixture();
     try {
         const identity = await cloud.createAnonymousUser();
-        const runtime = await cloud.connectAgent(identity.projectId);
+        const sessions: {
+            additionalDirectories: never[];
+            agentId: string;
+            directoryId: string;
+            directoryLabel: string;
+            prompted: boolean;
+            sessionId: string;
+            title: string;
+            updatedAt: string;
+        }[] = [];
+        const runtime = await cloud.connectAgent(identity.projectId, { sessions });
         const environment = cloud.environment();
         const request = (path: string, body?: object, method = body === undefined ? "GET" : "POST") =>
             worker.fetch(
@@ -35,6 +45,7 @@ async function createChatFixture() {
         const { bots } = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await listed.json());
         return {
             botId: v.parse(v.string(), bots[0]?.botId),
+            sessions,
             request,
             runtime,
             close: cloud.close,
@@ -45,7 +56,7 @@ async function createChatFixture() {
     }
 }
 
-test("given a configured Bot, when a user opens a conversation, then the unavailable feature is explicit", async () => {
+test("Given a configured Bot owns a Runtime Session, When conversations load, Then the Worker returns metadata and history for that Session", async () => {
     const fixture = await createChatFixture();
     try {
         const setup = { runtimeId: fixture.runtime.runtimeId, agentRef: "codex" };
@@ -89,11 +100,21 @@ test("given a configured Bot, when a user opens a conversation, then the unavail
             conversationKey: "first-draft",
             workspaceRef: "default",
         });
-        expect(opened.status).toBe(503);
-        expect(await opened.json()).toMatchObject({ error: { code: "BOT_CHAT_UNAVAILABLE" } });
+        expect(opened.status).toBe(200);
+        const access = v.parse(v.object({ sessionId: v.string() }), await opened.json());
+        fixture.sessions.push({
+            additionalDirectories: [],
+            agentId: "codex",
+            directoryId: "default",
+            directoryLabel: "Fake workspace",
+            prompted: true,
+            sessionId: access.sessionId,
+            title: "Stored on this machine",
+            updatedAt: AUTH_TIME.toISOString(),
+        });
 
         const turn = await fixture.request(`chat/bots/${fixture.botId}/turns`, {
-            sessionId: "first-draft",
+            sessionId: access.sessionId,
             additionalDirectoryIds: [],
             content: "Create an image",
             idempotencyKey: "command-1",
@@ -101,11 +122,39 @@ test("given a configured Bot, when a user opens a conversation, then the unavail
             resources: [],
             sessionConfigurations: [],
         });
-        expect(turn.status).toBe(503);
-        expect(await turn.json()).toMatchObject({ error: { code: "BOT_CHAT_UNAVAILABLE" } });
+        expect(turn.status).toBe(200);
+        await expect(turn.json()).resolves.toEqual({ turnId: "command-1" });
+
         const listed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
-        expect(listed.status).toBe(503);
-        expect(await listed.json()).toMatchObject({ error: { code: "BOT_CHAT_UNAVAILABLE" } });
+        expect(listed.status).toBe(200);
+        expect(await listed.json()).toMatchObject({
+            sessions: [
+                {
+                    directoryLabel: "Fake workspace",
+                    id: access.sessionId,
+                    isExternal: false,
+                    title: "Stored on this machine",
+                },
+            ],
+        });
+        const session = await fixture.request(`chat/bots/${fixture.botId}/managed-session`, {
+            sessionId: access.sessionId,
+        });
+        expect(session.status).toBe(200);
+        const managedSession = await session.json();
+        expect(managedSession).toMatchObject({
+            agentRef: "codex",
+            entry: { entryId: access.sessionId, title: "Stored on this machine" },
+            history: { messages: [], status: "available" },
+            ready: { sessionId: access.sessionId },
+        });
+        expect(v.parse(v.object({ history: v.unknown() }), managedSession).history).toEqual({
+            coveredCommandIds: [],
+            coveredMessageIds: [],
+            messages: [],
+            status: "available",
+            truncated: false,
+        });
     } finally {
         await fixture.close();
     }

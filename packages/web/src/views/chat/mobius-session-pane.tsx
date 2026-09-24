@@ -39,7 +39,7 @@ export function MobiusSessionPane({
     readonly session: OpenMobiusSession;
     readonly initialMessage?: QueuedDraftMessage | undefined;
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "connectSession" | "steerTurn" | "submitTurn">;
+    readonly requests: Pick<BotChatApi, "connectSession" | "managedSession" | "steerTurn" | "submitTurn">;
     readonly onConnectionStatusChange: (sessionId: string, connection: SessionConnectionKind) => void;
     readonly onStatusChange: (sessionId: string, status: SessionActivityState) => void;
 }) {

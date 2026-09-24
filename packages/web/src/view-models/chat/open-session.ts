@@ -6,6 +6,8 @@ import type {
 } from "@moxt-ai/mobius-sdk/channel";
 import type { ChatAccess, ConversationActiveTurn } from "../../services/chat/bot-chat-api.ts";
 
+type OpenSessionEntry = Omit<NativeSessionEntry, "nativeSessionId">;
+
 export interface OpenMobiusSession {
     readonly agentRef: string;
     readonly result:
@@ -22,7 +24,7 @@ export interface OpenMobiusSession {
               readonly action: "managed";
               readonly targetSessionId: string;
               readonly ready: SessionReadyEvent;
-              readonly history: Extract<NativeSessionHistory, { readonly status: "unavailable" }>;
+              readonly history: NativeSessionHistory;
           };
-    readonly entry: NativeSessionEntry;
+    readonly entry: OpenSessionEntry;
 }

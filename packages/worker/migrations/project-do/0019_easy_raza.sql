@@ -1,0 +1,1 @@
+ALTER TABLE `chat_managed_session` DROP COLUMN `title`;

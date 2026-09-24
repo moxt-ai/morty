@@ -4,16 +4,7 @@ import { createDatabase, type Database } from "../../../schema/project-do/databa
 import { chatManagedSession } from "../../../schema/project-do/index.ts";
 import { PlatformProjectError, platformIdentifier } from "../../management/entity/platform-project.ts";
 
-const summarySchema = v.pipe(
-    v.object({
-        projectId: platformIdentifier,
-        userId: platformIdentifier,
-        isExternal: v.boolean(),
-        id: platformIdentifier,
-        title: v.pipe(v.string(), v.maxLength(500)),
-    }),
-    v.readonly(),
-);
+const ownershipSchema = v.pipe(v.object({ isExternal: v.boolean(), id: platformIdentifier }), v.readonly());
 
 export class ManagedSessionStorage {
     readonly #database: unknown;
@@ -32,13 +23,7 @@ export class ManagedSessionStorage {
     readonly list = async (projectId: string, userId: string, botId: string, signal: AbortSignal) => {
         signal.throwIfAborted();
         const result = await this.#requireDatabase()
-            .select({
-                projectId: chatManagedSession.projectId,
-                userId: chatManagedSession.userId,
-                isExternal: chatManagedSession.isExternal,
-                id: chatManagedSession.resourceId,
-                title: chatManagedSession.title,
-            })
+            .select({ isExternal: chatManagedSession.isExternal, id: chatManagedSession.resourceId })
             .from(chatManagedSession)
             .where(
                 and(
@@ -50,7 +35,7 @@ export class ManagedSessionStorage {
             )
             .orderBy(desc(chatManagedSession.createdAt), chatManagedSession.resourceId);
         signal.throwIfAborted();
-        return v.parse(v.array(summarySchema), result);
+        return v.parse(v.array(ownershipSchema), result);
     };
 
     readonly archive = async (
@@ -85,20 +70,19 @@ export class ManagedSessionStorage {
         projectId: string,
         userId: string,
         botId: string,
-        record: { readonly isExternal: boolean; readonly id: string; readonly title: string },
+        record: { readonly isExternal: boolean; readonly id: string },
         signal: AbortSignal,
-    ) => {
-        const value = v.parse(summarySchema, { ...record, projectId, userId });
+    ): Promise<void> => {
+        const value = v.parse(ownershipSchema, record);
         signal.throwIfAborted();
         await this.#requireDatabase()
             .insert(chatManagedSession)
             .values({
-                projectId: value.projectId,
-                userId: value.userId,
-                botId,
+                projectId: v.parse(platformIdentifier, projectId),
+                userId: v.parse(platformIdentifier, userId),
+                botId: v.parse(platformIdentifier, botId),
                 isExternal: value.isExternal,
                 resourceId: value.id,
-                title: value.title,
                 createdAt: Date.now(),
             })
             .onConflictDoNothing()

@@ -8,7 +8,6 @@ export const chatManagedSession = sqliteTable(
         botId: text("bot_id").notNull(),
         isExternal: integer("is_external", { mode: "boolean" }).notNull(),
         resourceId: text("resource_id").notNull(),
-        title: text("title").notNull(),
         createdAt: integer("created_at").notNull(),
         archivedAt: integer("archived_at"),
     },
