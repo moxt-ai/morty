@@ -16,7 +16,6 @@ const setupInput = v.strictObject({
 });
 const nativeDirectoryId = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,2047}$/u));
 const nativeIdentity = {
-    runtimeId: platformIdentifier,
     agentId: platformIdentifier,
     directoryId: nativeDirectoryId,
     additionalDirectoryIds: v.pipe(v.array(nativeDirectoryId), v.maxLength(16)),
@@ -271,10 +270,8 @@ export function createBotChatRoutes() {
             authorizedChat(120000),
             bodyParser<AuthorizedChatEnvironment, typeof nativeListInput>(nativeListInput),
             async (context) => {
-                const { runtimeId, ...input } = context.req.valid("json");
-                return privateJson(
-                    await context.env.services.chat.nativeSessions(context.get("chatScope"), runtimeId, input),
-                );
+                const input = context.req.valid("json");
+                return privateJson(await context.env.services.chat.nativeSessions(context.get("chatScope"), input));
             },
         )
         .post(
@@ -301,14 +298,9 @@ export function createBotChatRoutes() {
             bodyParser<AuthorizedChatEnvironment, typeof nativeEntryInput>(nativeEntryInput),
             async (context) => {
                 const entryId = v.parse(platformIdentifier, context.req.param("id"));
-                const { runtimeId, ...input } = context.req.valid("json");
+                const input = context.req.valid("json");
                 return privateJson(
-                    await context.env.services.chat.previewNativeSession(
-                        context.get("chatScope"),
-                        runtimeId,
-                        entryId,
-                        input,
-                    ),
+                    await context.env.services.chat.previewNativeSession(context.get("chatScope"), entryId, input),
                 );
             },
         )
@@ -319,14 +311,9 @@ export function createBotChatRoutes() {
             bodyParser<AuthorizedChatEnvironment, typeof nativeEntryInput>(nativeEntryInput),
             async (context) => {
                 const entryId = v.parse(platformIdentifier, context.req.param("id"));
-                const { runtimeId, ...input } = context.req.valid("json");
+                const input = context.req.valid("json");
                 return privateJson(
-                    await context.env.services.chat.importNativeSession(
-                        context.get("chatScope"),
-                        runtimeId,
-                        entryId,
-                        input,
-                    ),
+                    await context.env.services.chat.importNativeSession(context.get("chatScope"), entryId, input),
                 );
             },
         )
@@ -337,14 +324,9 @@ export function createBotChatRoutes() {
             bodyParser<AuthorizedChatEnvironment, typeof nativeEntryInput>(nativeEntryInput),
             async (context) => {
                 const entryId = v.parse(platformIdentifier, context.req.param("id"));
-                const { runtimeId, ...input } = context.req.valid("json");
+                const input = context.req.valid("json");
                 return privateJson(
-                    await context.env.services.chat.forkNativeSession(
-                        context.get("chatScope"),
-                        runtimeId,
-                        entryId,
-                        input,
-                    ),
+                    await context.env.services.chat.forkNativeSession(context.get("chatScope"), entryId, input),
                 );
             },
         )

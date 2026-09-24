@@ -1,6 +1,7 @@
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import type { SessionPromptCommand } from "@moxt-ai/mobius-protocol";
 import * as v from "valibot";
 import { createIdentityFixture } from "../../../worker/tests/support/identity-fixture.ts";
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
@@ -59,7 +60,7 @@ export async function createChatWorkerEnvironment() {
         return {
             botId,
             connectAgent: async (behavior?: {
-                readonly afterSessionStarted?: (signal: AbortSignal) => Promise<void>;
+                readonly afterSessionStarted?: (command: SessionPromptCommand, signal: AbortSignal) => Promise<void>;
             }) => {
                 const runtime = await cloud.connectAgent(identity.projectId, behavior);
                 const setup = await request(`chat/projects/${identity.projectId}/bots/${botId}/setup`, {

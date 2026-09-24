@@ -81,7 +81,6 @@ export const createNativeSessionStore = (
                 }
                 const result = await requests.nativeSessions(
                     botId,
-                    agent.runtimeId,
                     {
                         action: "list",
                         agentId: agent.agentRef,
@@ -132,7 +131,6 @@ export const createNativeSessionStore = (
             try {
                 const content = await requests.nativeSession(
                     botId,
-                    directory.runtimeId,
                     {
                         discoveryId: directory.discoveryId,
                         agentId: directory.agentRef,
@@ -166,7 +164,6 @@ export const createNativeSessionStore = (
             try {
                 const result = await requests.nativeSessions(
                     botId,
-                    directory.runtimeId,
                     {
                         action,
                         discoveryId: directory.discoveryId,
@@ -201,7 +198,6 @@ export const createNativeSessionStore = (
             try {
                 const result = await requests.nativeSessions(
                     botId,
-                    directory.runtimeId,
                     {
                         action: "list",
                         agentId: directory.agentRef,

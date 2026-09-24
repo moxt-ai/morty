@@ -392,7 +392,16 @@ export class ChatService {
         return await this.#platform.steerChatTurn(scope.projectId, sessionId, turnId, scope.signal);
     };
 
-    readonly nativeSessions = async (scope: ChatScope, runtimeId: string, input: NativeListInput) => {
+    readonly #nativeRuntimeId = async (scope: ChatScope): Promise<string> => {
+        const bot = await this.#bot(scope);
+        if (bot.configuration === null) {
+            throw new PlatformProjectError("AGENT_REQUIRED", "Choose a connected harness.", 409);
+        }
+        return bot.configuration.runtimeId;
+    };
+
+    readonly nativeSessions = async (scope: ChatScope, input: NativeListInput) => {
+        const runtimeId = await this.#nativeRuntimeId(scope);
         const result = await this.#platform.nativeSessions(scope.projectId, runtimeId, input, scope.signal);
         if (result.action !== "list") {
             throw new PlatformProjectError(
@@ -488,12 +497,8 @@ export class ChatService {
         return stored;
     };
 
-    readonly previewNativeSession = async (
-        scope: ChatScope,
-        runtimeId: string,
-        entryId: string,
-        input: NativeEntryInput,
-    ) => {
+    readonly previewNativeSession = async (scope: ChatScope, entryId: string, input: NativeEntryInput) => {
+        const runtimeId = await this.#nativeRuntimeId(scope);
         const result = await this.#platform.nativeSessions(
             scope.projectId,
             runtimeId,
@@ -521,27 +526,19 @@ export class ChatService {
         return { title: result.title, history: result.history };
     };
 
-    readonly importNativeSession = async (
-        scope: ChatScope,
-        runtimeId: string,
-        entryId: string,
-        input: NativeEntryInput,
-    ) => await this.#openNativeSession(scope, runtimeId, entryId, input, "import");
+    readonly importNativeSession = async (scope: ChatScope, entryId: string, input: NativeEntryInput) =>
+        await this.#openNativeSession(scope, entryId, input, "import");
 
-    readonly forkNativeSession = async (
-        scope: ChatScope,
-        runtimeId: string,
-        entryId: string,
-        input: NativeEntryInput,
-    ) => await this.#openNativeSession(scope, runtimeId, entryId, input, "fork");
+    readonly forkNativeSession = async (scope: ChatScope, entryId: string, input: NativeEntryInput) =>
+        await this.#openNativeSession(scope, entryId, input, "fork");
 
     readonly #openNativeSession = async (
         scope: ChatScope,
-        runtimeId: string,
         entryId: string,
         input: NativeEntryInput,
         action: "fork" | "import",
     ) => {
+        const runtimeId = await this.#nativeRuntimeId(scope);
         const result = await this.#platform.nativeSessions(
             scope.projectId,
             runtimeId,

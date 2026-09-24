@@ -223,7 +223,7 @@ test.skip("Given a conversation is working, When a user starts a new conversatio
     const { failure } = await act(
         async () =>
             await created.connectAgent({
-                afterSessionStarted: async (signal) => {
+                afterSessionStarted: async (_command, signal) => {
                     turnStarted.resolve();
                     await new Promise<void>((resolve, reject) => {
                         let settled = false;

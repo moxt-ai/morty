@@ -94,6 +94,29 @@ test("Given a configured Bot owns a Runtime Session, When conversations load, Th
             ).status,
         ).toBe(200);
 
+        const nativeSessions = await fixture.request(`chat/bots/${fixture.botId}/native-sessions`, {
+            action: "list",
+            additionalDirectoryIds: [],
+            agentId: setup.agentRef,
+            cursor: null,
+            directoryId: "default",
+            discoveryId: null,
+        });
+        expect(nativeSessions.status).toBe(200);
+        expect(await nativeSessions.json()).toMatchObject({ action: "list" });
+
+        const browserSelectedRuntime = await fixture.request(`chat/bots/${fixture.botId}/native-sessions`, {
+            action: "list",
+            additionalDirectoryIds: [],
+            agentId: setup.agentRef,
+            cursor: null,
+            directoryId: "default",
+            discoveryId: null,
+            runtimeId: "untrusted-runtime",
+        });
+        expect(browserSelectedRuntime.status).toBe(400);
+        expect(await browserSelectedRuntime.json()).toMatchObject({ error: { code: "INVALID_REQUEST" } });
+
         const opened = await fixture.request(`chat/bots/${fixture.botId}/access`, {
             agentRef: setup.agentRef,
             configurations: [],

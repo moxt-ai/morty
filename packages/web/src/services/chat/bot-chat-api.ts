@@ -409,13 +409,12 @@ export class BotChatApi {
     };
     readonly nativeSessions = async (
         botId: string,
-        runtimeId: string,
         input: Parameters<MobiusClient["runtimes"]["nativeSessions"]>[1],
         signal: AbortSignal,
     ) => {
         if (input.action === "list") {
             return decodeNativeSessionResult(
-                JSON.stringify(await this.#request(botId, "native-sessions", { ...input, runtimeId }, signal)),
+                JSON.stringify(await this.#request(botId, "native-sessions", input, signal)),
             );
         }
         if (input.action !== "fork" && input.action !== "import") {
@@ -427,7 +426,7 @@ export class BotChatApi {
                 await this.#request(
                     botId,
                     `native-session/${encodeURIComponent(v.parse(identifier, entryId))}/${action}`,
-                    { ...identity, runtimeId },
+                    identity,
                     signal,
                 ),
             ),
@@ -435,7 +434,6 @@ export class BotChatApi {
     };
     readonly nativeSession = async (
         botId: string,
-        runtimeId: string,
         input: {
             readonly entryId: string;
             readonly discoveryId: string;
@@ -451,7 +449,7 @@ export class BotChatApi {
             await this.#request(
                 botId,
                 `native-session/${encodeURIComponent(v.parse(identifier, entryId))}`,
-                { ...identity, runtimeId },
+                identity,
                 signal,
             ),
         );
