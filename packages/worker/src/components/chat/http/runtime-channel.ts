@@ -8,6 +8,7 @@ import {
     decodeSessionCancelCommand,
     decodeSessionConfigureCommand,
     decodeSessionElicitationRespondCommand,
+    decodeSessionLiveHistoryPageLoad,
     decodeSessionPermissionRespondCommand,
     decodeSessionPrepareCommand,
     decodeSessionPromptCommand,
@@ -26,6 +27,8 @@ import {
     SESSION_CONFIGURE_KIND,
     SESSION_ELICITATION_RESPOND_KIND,
     SESSION_EVENT_COMMITTED_KIND,
+    SESSION_LIVE_HISTORY_PAGE_LOAD_KIND,
+    SESSION_LIVE_HISTORY_PAGE_LOADED_KIND,
     SESSION_OPERATION_FAILED_KIND,
     SESSION_PERMISSION_RESPOND_KIND,
     SESSION_PREPARE_KIND,
@@ -160,10 +163,7 @@ export async function openBotRuntimeChannel(input: {
                 throw new PlatformProjectError("ACCESS_DENIED", "The Agent does not belong to this Bot.", 403);
             }
             if (
-                (command.action === "import" ||
-                    command.action === "fork" ||
-                    command.action === "linked-history" ||
-                    command.action === "active-turn") &&
+                (command.action === "import" || command.action === "fork" || command.action === "active-turn") &&
                 !(await ownsSession(command.targetSessionId))
             ) {
                 throw new PlatformProjectError("ACCESS_DENIED", "The Session does not belong to this Bot.", 403);
@@ -191,7 +191,15 @@ export async function openBotRuntimeChannel(input: {
         }
         let sessionId: string;
         let forwarded = encoded;
-        if (kind === SESSION_PROMPT_KIND) {
+        if (kind === SESSION_LIVE_HISTORY_PAGE_LOAD_KIND) {
+            const command = decodeSessionLiveHistoryPageLoad(encoded);
+            if (command.agentId !== configuration.agentRef || command.bindingId !== botId) {
+                throw new PlatformProjectError("ACCESS_DENIED", "The Agent does not belong to this Bot.", 403);
+            }
+            rememberRequest(command.requestId);
+            sessionId = command.sessionId;
+            forwarded = JSON.stringify({ ...command, bindingId: RUNTIME_WORKSPACE_BINDING_ID });
+        } else if (kind === SESSION_PROMPT_KIND) {
             const command = decodeSessionPromptCommand(encoded);
             if (command.agentId !== configuration.agentRef || command.bindingId !== botId) {
                 throw new PlatformProjectError("ACCESS_DENIED", "The Agent does not belong to this Bot.", 403);
@@ -282,6 +290,7 @@ export async function openBotRuntimeChannel(input: {
                 const requestResult =
                     (envelope.kind === NATIVE_SESSION_RESULT_KIND ||
                         envelope.kind === WORKSPACE_ENTRIES_KIND ||
+                        envelope.kind === SESSION_LIVE_HISTORY_PAGE_LOADED_KIND ||
                         envelope.kind === SESSION_OPERATION_FAILED_KIND ||
                         envelope.kind === FILE_BEGIN_KIND ||
                         envelope.kind === FILE_CHUNK_KIND ||
@@ -307,6 +316,7 @@ export async function openBotRuntimeChannel(input: {
                         envelope.requestId !== undefined &&
                         (envelope.kind === NATIVE_SESSION_RESULT_KIND ||
                             envelope.kind === WORKSPACE_ENTRIES_KIND ||
+                            envelope.kind === SESSION_LIVE_HISTORY_PAGE_LOADED_KIND ||
                             envelope.kind === SESSION_OPERATION_FAILED_KIND ||
                             envelope.kind === FILE_END_KIND ||
                             envelope.kind === FILE_FAILED_KIND)

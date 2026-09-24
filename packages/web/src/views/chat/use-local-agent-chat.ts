@@ -55,23 +55,30 @@ async function localHistory(
     additionalDirectoryIds: readonly string[],
     signal: AbortSignal,
 ): Promise<{ readonly messages: readonly NativeHistoryMessage[]; readonly truncated: boolean }> {
-    const result = await client.manageNativeSession(
-        {
-            ...nativeRequest(botId, agentRef, crypto.randomUUID()),
-            directoryId,
-            additionalDirectoryIds,
-            action: "linked-history",
-            targetSessionId: sessionId,
-        },
-        signal,
-    );
-    if (result.action !== "linked-history") {
-        throw new Error("The Agent returned invalid history.");
-    }
-    if (result.history.status === "unavailable") {
-        throw new Error(result.history.cause.message);
-    }
-    return { messages: result.history.messages, truncated: result.history.truncated };
+    let cursor: string | null = null;
+    let messages: readonly NativeHistoryMessage[] = [];
+    let truncated = false;
+    do {
+        const page = await client.loadLiveHistoryPage(
+            {
+                agentId: agentRef,
+                bindingId: botId,
+                cursor,
+                limit: 100,
+                sessionId,
+                directoryId,
+                additionalDirectoryIds,
+            },
+            signal,
+        );
+        if (page.status === "unavailable") {
+            throw new Error(page.cause.message);
+        }
+        messages = [...page.messages, ...messages];
+        truncated ||= page.truncated;
+        cursor = page.nextCursor;
+    } while (cursor !== null);
+    return { messages, truncated };
 }
 
 async function localActiveTurn(
