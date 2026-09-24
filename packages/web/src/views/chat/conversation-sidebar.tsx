@@ -220,6 +220,23 @@ export function ConversationSidebar({
                         {directory.message}
                     </p>
                 )}
+                {directory.kind === "setup-required" && (
+                    <div
+                        className="mx-1 flex flex-col items-center rounded-xl border border-border/70 bg-white/55 px-4 py-5 text-center shadow-[0_1px_3px_rgba(17,24,20,0.04)]"
+                        data-testid={dataTestId.conversationSetupRequired}
+                    >
+                        <span className="mb-2 flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <MessageSquare aria-hidden="true" className="size-4" />
+                        </span>
+                        <p className="text-sm font-medium text-foreground">No conversations yet</p>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                            Connect this Bot to start chatting.
+                        </p>
+                        <Button className="mt-3" onClick={onPairAgain} size="sm" variant="outline">
+                            Connect Bot
+                        </Button>
+                    </div>
+                )}
                 {archive.kind === "failed" && (
                     <p role="alert" className="px-2 text-sm text-destructive">
                         {archive.message}

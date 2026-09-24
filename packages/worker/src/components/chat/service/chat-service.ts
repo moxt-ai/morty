@@ -158,7 +158,7 @@ export class ChatService {
     readonly localRuntime = async (scope: ChatScope) => {
         const bot = await this.#bot(scope);
         if (bot.configuration === null) {
-            throw new PlatformProjectError("AGENT_REQUIRED", "Connect Codex to this Bot first.", 409);
+            throw new PlatformProjectError("AGENT_REQUIRED", "Connect an Agent to this Bot first.", 409);
         }
         return bot.configuration;
     };
