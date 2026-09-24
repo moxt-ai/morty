@@ -155,7 +155,7 @@ export const createSessionMessageQueueStore = (port: SessionMessageQueuePort) =>
         },
         takeStarted: (commandId) => {
             const message = get().messages.find((candidate) => candidate.commandId === commandId);
-            if (message === undefined) {
+            if (message === undefined || message.kind !== "queued") {
                 return null;
             }
             set((state) => ({ messages: state.messages.filter((candidate) => candidate.commandId !== commandId) }));
