@@ -1,4 +1,4 @@
-import { getByLabelText, getByRole, queryByRole, queryByTestId } from "@testing-library/dom";
+import { getAllByRole, getByLabelText, getByRole, queryByRole, queryByTestId } from "@testing-library/dom";
 import { afterAll, afterEach, expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { closeTestApps, closeTestEnvironment, createTestApp, type TestApp } from "./infra/test-app.tsx";
@@ -274,6 +274,31 @@ test("Given a paired Bot with cached agent settings, When a user refreshes and f
         failure,
     ]);
     await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+});
+
+test("Given multiple Runtimes share a Project, When a user configures a paired Bot, Then only its Runtime harnesses are listed", {
+    timeout: 30_000,
+}, async () => {
+    const created = await createTestApp({
+        connectAgent: true,
+        prepare: async (application) => {
+            await application.connectRuntime();
+        },
+    });
+    const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
+    await Promise.race([
+        created.queryElementByTestId(
+            dataTestId.botConnectionStatus,
+            (element) => element.textContent?.includes("Connected") === true,
+        ),
+        failure,
+    ]);
+
+    await created.user.click(await created.queryElementByTestId(dataTestId.agentConfiguration));
+    const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
+
+    expect(getAllByRole(configuration, "tab", { name: "Codex" })).toHaveLength(1);
+    expect(getAllByRole(configuration, "tab")).toHaveLength(1);
 });
 
 test("Given an active reply, When a queued message steers it, Then subsequent agent output appears after the steering message", {
