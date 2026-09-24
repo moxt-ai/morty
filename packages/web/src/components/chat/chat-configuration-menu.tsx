@@ -108,6 +108,7 @@ export function ChatConfigurationMenu({
                             <div className="flex justify-end">
                                 <button
                                     aria-label="Refresh agent settings"
+                                    data-testid={dataTestId.refreshAgentSettings}
                                     className="flex size-8 items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
                                     disabled={settingsLoading}
                                     onClick={onRefresh}
