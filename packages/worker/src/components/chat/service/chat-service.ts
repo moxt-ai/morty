@@ -153,7 +153,7 @@ export class ChatService {
         const agents =
             runtimeId === null
                 ? await this.#platform.chatAgents(scope.projectId, scope.signal)
-                : await this.#platform.discoverChatAgents(scope.projectId, runtimeId, scope.signal);
+                : await this.#platform.getChatAgents(scope.projectId, runtimeId, scope.signal);
         return {
             status: bot.configuration === null ? "draft" : "active",
             runtimeId,

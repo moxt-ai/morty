@@ -144,20 +144,17 @@ export class PlatformProjectGateway {
             );
         });
 
-    readonly discoverChatAgents = async (projectId: string, runtimeId: string, parent: AbortSignal) => {
+    readonly getChatAgents = async (projectId: string, runtimeId: string, parent: AbortSignal) => {
         const parsedProjectId = v.parse(platformIdentifier, projectId);
         const parsedRuntimeId = v.parse(platformIdentifier, runtimeId);
-        const signal = AbortSignal.any([parent, AbortSignal.timeout(120000)]);
+        const signal = AbortSignal.any([parent, AbortSignal.timeout(15000)]);
         const endpoint = new URL(this.configuration().origin);
-        endpoint.pathname = `/mobius/api/v1/projects/${encodeURIComponent(parsedProjectId)}/runtimes/${encodeURIComponent(parsedRuntimeId)}/agents/discover`;
+        endpoint.pathname = `/mobius/api/v1/projects/${encodeURIComponent(parsedProjectId)}/runtimes/${encodeURIComponent(parsedRuntimeId)}/agents`;
         try {
             const response = await fetch(endpoint, {
-                body: "{}",
                 headers: {
                     authorization: `Bearer ${v.parse(platformCredentialBindingsSchema, this.#bindings).MOBIUS_APP_SECRET}`,
-                    "content-type": "application/json",
                 },
-                method: "POST",
                 signal,
             });
             this.#bindings.requestAccessMetrics?.recordMobiusServerTiming(response.headers.get("server-timing"));
@@ -166,7 +163,7 @@ export class PlatformProjectGateway {
                 await response.body?.cancel();
                 throw new PlatformProjectError(
                     response.status === 404 ? "NOT_FOUND" : "PLATFORM_UNAVAILABLE",
-                    "Platform could not discover the Runtime's Agents.",
+                    "Platform could not read the Runtime's Agents.",
                     response.status === 404 ? 404 : 502,
                 );
             }
@@ -188,12 +185,12 @@ export class PlatformProjectGateway {
         } catch (cause) {
             parent.throwIfAborted();
             if (signal.aborted) {
-                throw new PlatformProjectError("PLATFORM_TIMEOUT", "Agent discovery timed out.", 504, { cause });
+                throw new PlatformProjectError("PLATFORM_TIMEOUT", "Reading Runtime Agents timed out.", 504, { cause });
             }
             if (cause instanceof PlatformProjectError) {
                 throw cause;
             }
-            throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Platform could not discover Agents.", 502, {
+            throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Platform could not read Runtime Agents.", 502, {
                 cause,
             });
         }
