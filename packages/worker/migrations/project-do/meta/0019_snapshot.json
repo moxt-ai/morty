@@ -1,7 +1,7 @@
 {
     "version": "6",
     "dialect": "sqlite",
-    "id": "d1f83a2e-6935-497d-a6df-d241c6cc5723",
+    "id": "cf7cd7c1-61e3-4140-90cd-2babd2fb5050",
     "prevId": "fa1ec6b9-a637-4af6-a2f4-3aeb6567d059",
     "tables": {
         "agent_pairing_ticket": {
@@ -205,6 +205,13 @@
                     "notNull": true,
                     "autoincrement": false
                 },
+                "title": {
+                    "name": "title",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
                 "created_at": {
                     "name": "created_at",
                     "type": "integer",
@@ -397,6 +404,13 @@
                 },
                 "runtime_id": {
                     "name": "runtime_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "autoincrement": false
+                },
+                "agent_ref": {
+                    "name": "agent_ref",
                     "type": "text",
                     "primaryKey": false,
                     "notNull": false,

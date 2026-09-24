@@ -126,12 +126,10 @@ export class SlackConversationService {
                 await this.#storage.resumePendingMessages(tenant, input.tenantId, session.id, signal);
                 return "completed";
             }
-            const conversationId = await slackSessionId(binding.botId, key);
-            await this.#platform.openAutomatedChatSession(
+            const conversationId = await this.#platform.createAutomatedChatSession(
                 binding.projectId,
                 binding,
-                conversationId,
-                "Slack conversation",
+                session?.conversationId ?? null,
                 signal,
             );
             const clientMessageId = input.eventId;
@@ -211,6 +209,7 @@ export class SlackConversationService {
                 async (deadline) =>
                     await this.#platform.submitAutomatedChatTurn(
                         binding.projectId,
+                        binding,
                         conversationId,
                         {
                             commandId: clientMessageId,
@@ -251,11 +250,6 @@ export class SlackConversationService {
             };
         }
     };
-}
-
-async function slackSessionId(botId: string, conversationKey: string): Promise<string> {
-    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${botId}\u0000${conversationKey}`));
-    return `slack_${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
 async function withDeadline<T>(

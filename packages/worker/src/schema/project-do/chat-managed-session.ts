@@ -6,10 +6,8 @@ export const chatManagedSession = sqliteTable(
         projectId: text("project_id").notNull(),
         userId: text("user_id").notNull(),
         botId: text("bot_id").notNull(),
-        isExternal: integer("is_external", { mode: "boolean" }).notNull(),
         resourceId: text("resource_id").notNull(),
         createdAt: integer("created_at").notNull(),
-        archivedAt: integer("archived_at"),
     },
     (table) => [
         primaryKey({ columns: [table.projectId, table.userId, table.botId, table.resourceId] }),

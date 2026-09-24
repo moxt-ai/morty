@@ -4,7 +4,8 @@ This package has one local product stack and one browser product suite.
 
 ## Product E2E
 
-`conversation.e2e.test.ts` and `setup.e2e.test.ts` are the executable control
+`conversation.e2e.test.ts`, `claude-conversation.e2e.test.ts`,
+`pi-conversation.e2e.test.ts`, and `setup.e2e.test.ts` are the executable control
 surface for Morty. They run with Playwright and a deterministic stateful ACP
 Agent. Together their few long journeys cross the real Chat, Platform, Mobius,
 Runtime, protocol, and browser path.

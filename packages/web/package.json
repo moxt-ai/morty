@@ -21,18 +21,15 @@
         "class-variance-authority": "catalog:",
         "clsx": "catalog:",
         "lucide-react": "catalog:",
-        "qrcode": "catalog:",
         "radix-ui": "catalog:",
         "react": "catalog:",
         "react-dom": "catalog:",
-        "react-router": "catalog:",
         "streamdown": "catalog:",
         "tailwind-merge": "catalog:",
         "valibot": "catalog:",
         "zustand": "catalog:"
     },
     "devDependencies": {
-        "@types/qrcode": "catalog:",
         "@types/react": "catalog:",
         "@types/react-dom": "catalog:",
         "happy-dom": "catalog:",

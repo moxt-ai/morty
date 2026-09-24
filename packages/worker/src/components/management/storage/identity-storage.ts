@@ -1,7 +1,5 @@
-import { and, eq, exists, gt, isNull, lt, notExists, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, notExists, or, sql } from "drizzle-orm";
 import * as v from "valibot";
-import type { HttpError } from "../../../infra/http-error.ts";
-import { createDatabase, type Database } from "../../../schema/project-do/database.ts";
 import {
     agentPairingTicket,
     anonymousCredential,
@@ -12,31 +10,17 @@ import {
     platformProjectMapping,
 } from "../../../schema/project-do/index.ts";
 import { createProjectCredential, readProjectCredential } from "../entity/project-credential.ts";
+import {
+    type AnonymousIdentity,
+    digest,
+    IdentityStorageError,
+    randomSecret,
+    requireIdentityDatabase,
+} from "./identity-storage-common.ts";
 
 const anonymousToken = v.pipe(v.string(), v.regex(/^mobius_anon_v2_[A-Za-z0-9_-]{43}$/u));
 const userRow = v.pipe(v.object({ userId: v.string() }), v.readonly());
 const identityTransferLifetime = 24 * 60 * 60 * 1000;
-const agentPairingLifetime = 10 * 60 * 1000;
-
-function randomSecret(): string {
-    const bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
-    return btoa(String.fromCharCode(...bytes))
-        .replaceAll("+", "-")
-        .replaceAll("/", "_")
-        .replace(/=+$/u, "");
-}
-
-async function digest(value: string): Promise<string> {
-    const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-    return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-export interface AnonymousIdentity {
-    readonly token: string;
-    readonly userId: string;
-    readonly projectId: string;
-}
 
 export interface IdentityTransfer {
     readonly code: string;
@@ -62,14 +46,6 @@ export class IdentityStorage {
         this.#projectId = projectId;
     }
 
-    readonly #requireDatabase = (): Database => {
-        const database = createDatabase(this.#database);
-        if (database === null) {
-            throw new IdentityStorageError("IDENTITY_UNAVAILABLE", "Identity storage is unavailable.");
-        }
-        return database;
-    };
-
     readonly createAnonymous = async (
         userId: string,
         projectId: string,
@@ -79,7 +55,7 @@ export class IdentityStorage {
         signal.throwIfAborted();
         const credentialId = `cred_${crypto.randomUUID()}`;
         const token = `mobius_anon_v2_${randomSecret()}`;
-        const database = this.#requireDatabase();
+        const database = requireIdentityDatabase(this.#database);
         await database.batch([
             database.insert(appUser).values({ id: userId, createdAt: now }),
             database.insert(anonymousCredential).values({
@@ -100,7 +76,7 @@ export class IdentityStorage {
             return null;
         }
         signal.throwIfAborted();
-        const result = await this.#requireDatabase()
+        const result = await requireIdentityDatabase(this.#database)
             .select({ userId: anonymousCredential.userId })
             .from(anonymousCredential)
             .innerJoin(platformProjectMapping, eq(platformProjectMapping.userId, anonymousCredential.userId))
@@ -126,7 +102,7 @@ export class IdentityStorage {
         signal.throwIfAborted();
         const code = createProjectCredential("mobius_transfer_v2", v.parse(v.string(), this.#projectId));
         const expiresAt = now + identityTransferLifetime;
-        await this.#requireDatabase()
+        await requireIdentityDatabase(this.#database)
             .insert(identityTransfer)
             .values({
                 id: `transfer_${crypto.randomUUID()}`,
@@ -150,7 +126,7 @@ export class IdentityStorage {
             return null;
         }
         signal.throwIfAborted();
-        const database = this.#requireDatabase();
+        const database = requireIdentityDatabase(this.#database);
         const codeHash = await digest(code);
         const claimNonce = crypto.randomUUID();
         const credentialId = `cred_${crypto.randomUUID()}`;
@@ -209,7 +185,7 @@ export class IdentityStorage {
             return { kind: "unauthenticated" };
         }
         signal.throwIfAborted();
-        const database = this.#requireDatabase();
+        const database = requireIdentityDatabase(this.#database);
         const credential = await database
             .select({
                 transferId: anonymousCredential.remoteTransferId,
@@ -267,7 +243,7 @@ export class IdentityStorage {
 
     readonly clerkBinding = async (clerkUserId: string, signal: AbortSignal): Promise<string | null> => {
         signal.throwIfAborted();
-        const row = await this.#requireDatabase()
+        const row = await requireIdentityDatabase(this.#database)
             .select({ userId: clerkUserBinding.userId })
             .from(clerkUserBinding)
             .where(eq(clerkUserBinding.clerkUserId, clerkUserId))
@@ -279,7 +255,7 @@ export class IdentityStorage {
 
     readonly ownsProject = async (userId: string, projectId: string, signal: AbortSignal): Promise<boolean> => {
         signal.throwIfAborted();
-        const row = await this.#requireDatabase()
+        const row = await requireIdentityDatabase(this.#database)
             .select({ projectId: platformProjectMapping.projectId })
             .from(platformProjectMapping)
             .where(and(eq(platformProjectMapping.userId, userId), eq(platformProjectMapping.projectId, projectId)))
@@ -288,108 +264,12 @@ export class IdentityStorage {
         return row !== undefined;
     };
 
-    readonly createPairing = async (
-        userId: string,
-        botId: string,
-        expectedRuntimeId: string | null,
-        now: number,
-        signal: AbortSignal,
-    ): Promise<IdentityTransfer> => {
-        signal.throwIfAborted();
-        const code = createProjectCredential("mobius_pair_v2", v.parse(v.string(), this.#projectId));
-        const expiresAt = now + agentPairingLifetime;
-        await this.#requireDatabase()
-            .insert(agentPairingTicket)
-            .values({ codeHash: await digest(code), userId, botId, expectedRuntimeId, expiresAt })
-            .run();
-        signal.throwIfAborted();
-        return { code, expiresAt };
-    };
-
-    readonly redeemPairing = async (
-        code: string,
-        now: number,
-        signal: AbortSignal,
-    ): Promise<
-        | (AnonymousIdentity & {
-              readonly botId: string;
-              readonly expectedRuntimeId: string | null;
-          })
-        | null
-    > => {
-        const parsed = readProjectCredential(code);
-        if (parsed?.kind !== "mobius_pair_v2" || parsed.projectId !== this.#projectId) {
-            return null;
-        }
-        signal.throwIfAborted();
-        const database = this.#requireDatabase();
-        const hash = await digest(code);
-        const nonce = crypto.randomUUID();
-        const token = `mobius_anon_v2_${randomSecret()}`;
-        const credentialId = `cred_${crypto.randomUUID()}`;
-        const results = await database.batch([
-            database
-                .update(agentPairingTicket)
-                .set({ consumedAt: now, claimNonce: nonce })
-                .where(
-                    and(
-                        eq(agentPairingTicket.codeHash, hash),
-                        isNull(agentPairingTicket.consumedAt),
-                        gt(agentPairingTicket.expiresAt, now),
-                        exists(
-                            database
-                                .select({ botId: managedBot.botId })
-                                .from(managedBot)
-                                .where(
-                                    and(
-                                        eq(managedBot.botId, agentPairingTicket.botId),
-                                        eq(managedBot.userId, agentPairingTicket.userId),
-                                    ),
-                                ),
-                        ),
-                    ),
-                ),
-            database.insert(anonymousCredential).select(
-                database
-                    .select({
-                        id: sql<string>`${credentialId}`.as("id"),
-                        userId: agentPairingTicket.userId,
-                        tokenHash: sql<string>`${await digest(token)}`.as("token_hash"),
-                        status: sql<"active">`'active'`.as("status"),
-                        createdAt: sql<number>`${now}`.as("created_at"),
-                        revokedAt: sql<null>`null`.as("revoked_at"),
-                        remoteTransferId: sql<null>`null`.as("remote_transfer_id"),
-                    })
-                    .from(agentPairingTicket)
-                    .where(and(eq(agentPairingTicket.codeHash, hash), eq(agentPairingTicket.claimNonce, nonce))),
-            ),
-        ]);
-        signal.throwIfAborted();
-        if (results[0]?.meta.changes !== 1) {
-            return null;
-        }
-        const row = v.parse(
-            v.object({ userId: v.string(), botId: v.string(), expectedRuntimeId: v.nullable(v.string()) }),
-            await database
-                .select({
-                    userId: agentPairingTicket.userId,
-                    botId: agentPairingTicket.botId,
-                    expectedRuntimeId: agentPairingTicket.expectedRuntimeId,
-                })
-                .from(agentPairingTicket)
-                .where(and(eq(agentPairingTicket.codeHash, hash), eq(agentPairingTicket.claimNonce, nonce)))
-                .get(),
-        );
-        signal.throwIfAborted();
-        return { ...row, token, projectId: parsed.projectId };
-    };
-
     readonly resolveOrCreateClerk = async (clerkUserId: string, now: number, signal: AbortSignal): Promise<string> => {
         const existing = await this.clerkBinding(clerkUserId, signal);
         if (existing !== null) {
             return existing;
         }
-        const database = this.#requireDatabase();
+        const database = requireIdentityDatabase(this.#database);
         await database.batch([
             database.insert(appUser).values({ id: clerkUserId, createdAt: now }).onConflictDoNothing(),
             database
@@ -416,7 +296,7 @@ export class IdentityStorage {
         if (current === localUserId) {
             return { kind: "bound", userId: current };
         }
-        const database = this.#requireDatabase();
+        const database = requireIdentityDatabase(this.#database);
         if (action === "bind") {
             if (current !== null) {
                 return { kind: "conflict" };
@@ -470,18 +350,4 @@ export class IdentityStorage {
         signal.throwIfAborted();
         return { kind: "bound", userId: current };
     };
-}
-
-class IdentityStorageError extends Error implements HttpError {
-    readonly code: "IDENTITY_UNAVAILABLE";
-    constructor(code: "IDENTITY_UNAVAILABLE", message: string) {
-        super(message);
-        this.code = code;
-        this.name = "IdentityStorageError";
-    }
-
-    readonly toHttpJson: HttpError["toHttpJson"] = () => ({
-        body: { error: { code: this.code, message: this.message } },
-        status: 503,
-    });
 }

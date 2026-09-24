@@ -1,8 +1,8 @@
-import { and, eq, gt, isNull, or } from "drizzle-orm";
+import { and, eq, gt, isNull, notExists, or } from "drizzle-orm";
 import * as v from "valibot";
 import type { HttpError } from "../../../infra/http-error.ts";
 import { createDatabase, type Database } from "../../../schema/project-do/database.ts";
-import { managedBot } from "../../../schema/project-do/index.ts";
+import { chatManagedSession, managedBot } from "../../../schema/project-do/index.ts";
 import { type BotConfiguration, botConfigurationSchema } from "../entity/bot-configuration.ts";
 
 const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
@@ -13,7 +13,7 @@ const managedBotSchema = v.pipe(
 
 export type ManagedBot = v.InferOutput<typeof managedBotSchema>;
 export type DeleteManagedBotResult = "deleted" | "last-bot" | "not-found";
-export type ConfigureManagedBotResult = "configured" | "not-found" | "runtime-mismatch";
+export type ConfigureManagedBotResult = "configured" | "not-found" | "runtime-mismatch" | "agent-fixed";
 
 export class ManagedBotStorage {
     readonly #database: unknown;
@@ -68,6 +68,7 @@ export class ManagedBotStorage {
                 botId: managedBot.botId,
                 displayName: managedBot.displayName,
                 runtimeId: managedBot.runtimeId,
+                agentRef: managedBot.agentRef,
                 instructions: managedBot.instructions,
             })
             .from(managedBot)
@@ -95,14 +96,30 @@ export class ManagedBotStorage {
     ): Promise<ConfigureManagedBotResult> => {
         const value = v.parse(botConfigurationSchema, configuration);
         signal.throwIfAborted();
-        const result = await this.#requireDatabase()
+        const database = this.#requireDatabase();
+        const result = await database
             .update(managedBot)
-            .set({ runtimeId: value.runtimeId, updatedAt: now })
+            .set({ runtimeId: value.runtimeId, agentRef: value.agentRef, updatedAt: now })
             .where(
                 and(
                     eq(managedBot.userId, userId),
                     eq(managedBot.botId, v.parse(identifier, botId)),
                     or(isNull(managedBot.runtimeId), eq(managedBot.runtimeId, value.runtimeId)),
+                    or(
+                        isNull(managedBot.agentRef),
+                        eq(managedBot.agentRef, value.agentRef),
+                        notExists(
+                            database
+                                .select({ id: chatManagedSession.resourceId })
+                                .from(chatManagedSession)
+                                .where(
+                                    and(
+                                        eq(chatManagedSession.userId, managedBot.userId),
+                                        eq(chatManagedSession.botId, managedBot.botId),
+                                    ),
+                                ),
+                        ),
+                    ),
                 ),
             )
             .run();
@@ -110,7 +127,16 @@ export class ManagedBotStorage {
         if (result.meta.changes === 1) {
             return "configured";
         }
-        return (await this.ownsBot(userId, botId, signal)) ? "runtime-mismatch" : "not-found";
+        const current = await database
+            .select({ runtimeId: managedBot.runtimeId })
+            .from(managedBot)
+            .where(and(eq(managedBot.userId, userId), eq(managedBot.botId, v.parse(identifier, botId))))
+            .get();
+        signal.throwIfAborted();
+        if (current === undefined) {
+            return "not-found";
+        }
+        return current.runtimeId !== null && current.runtimeId !== value.runtimeId ? "runtime-mismatch" : "agent-fixed";
     };
 
     readonly updateBot = async (

@@ -1,9 +1,7 @@
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import { createSelectedBotPreference } from "../../services/bots/selected-bot-preference.ts";
 import { BotChatApi } from "../../services/chat/bot-chat-api.ts";
-import type { WorkspaceLocation } from "../../services/identity/anonymous-identity-api.ts";
-import { AnonymousIdentityApi } from "../../services/identity/anonymous-identity-api.ts";
 import { ManagementApi } from "../../services/management/management-api.ts";
 import { BrowserChannelConnection } from "../../view-models/channel-connection.ts";
 import { useActiveIdentity } from "../authentication/identity-context.tsx";
@@ -40,57 +38,5 @@ export function MobiusManagement() {
             }),
         [identity, transport],
     );
-    const createTransfer = useCallback(
-        async (signal: AbortSignal) => {
-            const api = new AnonymousIdentityApi({
-                fetchRequest: transport.fetch,
-                origin: window.location.origin,
-            });
-            const localIdentity = await api.loadExisting(signal);
-            if (localIdentity === null || localIdentity.projectId !== identity.projectId) {
-                throw new Error("This workspace cannot be shared from this device.");
-            }
-            return await api.createTransfer(localIdentity.token, signal);
-        },
-        [identity.projectId, transport.fetch],
-    );
-    const endRemoteAccess = useCallback(
-        async (signal: AbortSignal) => {
-            const api = new AnonymousIdentityApi({
-                fetchRequest: transport.fetch,
-                origin: window.location.origin,
-            });
-            const localIdentity = await api.loadExisting(signal);
-            if (localIdentity === null) {
-                throw new Error("Remote access is no longer available.");
-            }
-            await api.endRemoteAccess(localIdentity.token, signal);
-        },
-        [transport.fetch],
-    );
-    const replaceWorkspace = useCallback(
-        async (location: WorkspaceLocation, signal: AbortSignal) => {
-            if (identity.kind !== "anonymous") {
-                throw new Error("Only a fresh anonymous workspace can change region.");
-            }
-            const api = new AnonymousIdentityApi({
-                fetchRequest: transport.fetch,
-                origin: window.location.origin,
-            });
-            await api.replaceWorkspace(location, signal);
-            signal.throwIfAborted();
-            window.location.reload();
-        },
-        [identity.kind, transport.fetch],
-    );
-    return (
-        <BotChatHome
-            requests={requests}
-            createTransfer={createTransfer}
-            endRemoteAccess={endRemoteAccess}
-            projectId={identity.projectId}
-            selectedBotPreference={selectedBotPreference}
-            {...(identity.kind === "anonymous" ? { replaceWorkspace } : {})}
-        />
-    );
+    return <BotChatHome requests={requests} selectedBotPreference={selectedBotPreference} />;
 }

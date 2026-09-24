@@ -21,15 +21,15 @@ export interface SlackPlatformGateway {
         pairingId: string,
         signal: AbortSignal,
     ) => Promise<{ readonly status: string }>;
-    readonly openAutomatedChatSession: (
+    readonly createAutomatedChatSession: (
         projectId: string,
-        selection: Pick<ChatBotBinding, "bindingId" | "runtimeId" | "agentRef" | "workspaceRef">,
-        sessionId: string,
-        title: string,
+        selection: Pick<ChatBotBinding, "runtimeId" | "agentRef">,
+        existingSessionId: string | null,
         signal: AbortSignal,
     ) => Promise<string>;
     readonly submitAutomatedChatTurn: (
         projectId: string,
+        selection: Pick<ChatBotBinding, "runtimeId" | "agentRef">,
         sessionId: string,
         input: { readonly commandId: string; readonly prompt: string; readonly instructions: string },
         signal: AbortSignal,

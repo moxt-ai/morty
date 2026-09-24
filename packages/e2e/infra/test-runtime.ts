@@ -2,32 +2,56 @@ import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { mock } from "node:test";
 import { chromium } from "playwright-core";
-import { dataTestId } from "../../web/src/data-testid.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../web/src/services/identity/anonymous-identity-api.ts";
 import { ChatApi, jsonRequest, text } from "./chat-api.ts";
 import type { E2EHarness } from "./harness.ts";
 import { LocalStack, repository } from "./local-stack.ts";
 import { followSetupInstructions } from "./setup-instructions.ts";
 
-export async function createTestRuntime(harness: E2EHarness) {
+const agentProfiles = {
+    claude: {
+        adapterOverrideVariable: "MOBIUS_CLAUDE_ACP_PATH",
+        agentOverrideVariable: "MOBIUS_CLAUDE_PATH",
+        label: "Claude Code",
+        nativeIdArgument: "",
+        version: "2.1.278",
+    },
+    opencode: {
+        adapterOverrideVariable: "MOBIUS_OPENCODE_PATH",
+        agentOverrideVariable: null,
+        label: "OpenCode",
+        nativeIdArgument: "--opencode-native-id",
+        version: "1.18.29",
+    },
+    pi: {
+        adapterOverrideVariable: "MOBIUS_PI_ACP_PATH",
+        agentOverrideVariable: "MOBIUS_PI_PATH",
+        label: "Pi",
+        nativeIdArgument: "",
+        version: "0.85.0",
+    },
+} as const;
+
+export async function createTestRuntime(harness: E2EHarness, agentId: keyof typeof agentProfiles = "opencode") {
     // The stateful ACP agent implements sessions and replies without requiring
     // model-provider credentials. Chat, Platform and Runtime are real processes.
     const binary = join(harness.workDirectory, "agent.sh");
+    const profile = agentProfiles[agentId];
     await mkdir(join(harness.workDirectory, "agent-state"), { recursive: true });
     const agent = join(repository, "third-party/mobius/tests/agent-daemon/fixtures/fake-acp-agent/src/cli.ts");
     await writeFile(
         binary,
-        `#!/bin/sh\nif [ "$1" = "--version" ]; then echo '1.18.29'; exit 0; fi\nexport MOBIUS_FAKE_ACP_STATE_DIRECTORY=${JSON.stringify(join(harness.workDirectory, "agent-state"))}\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(agent)} --agent-name OpenCode "$@"\n`,
+        `#!/bin/sh\nif [ "$1" = "--version" ]; then echo '${profile.version}'; exit 0; fi\nexport MOBIUS_FAKE_ACP_STATE_DIRECTORY=${JSON.stringify(join(harness.workDirectory, "agent-state"))}\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(agent)} --agent-name ${JSON.stringify(profile.label)} ${profile.nativeIdArgument} "$@"\n`,
     );
     await chmod(binary, 0o700);
     const stack = await LocalStack.create(harness, {
         acpBinary: binary,
-        adapterOverrideVariable: "MOBIUS_OPENCODE_PATH",
-        description: "stateful fake OpenCode ACP agent",
-        id: "opencode",
-        label: "OpenCode",
+        adapterOverrideVariable: profile.adapterOverrideVariable,
+        description: `stateful fake ${agentId} ACP agent`,
+        id: agentId,
+        label: profile.label,
         publishableKey: "pk_test_c21hc2hpbmctc3BpZGVyLTg1NzQuY2xlcmsuYWNjb3VudHMuZGV2JA",
-        runtimeEnvironment: {},
+        runtimeEnvironment: profile.agentOverrideVariable === null ? {} : { [profile.agentOverrideVariable]: binary },
     });
     await stack.startChat(await stack.startPlatform());
     const browser = await chromium.launch({ channel: "chrome", headless: true });
@@ -49,39 +73,12 @@ export async function createTestRuntime(harness: E2EHarness) {
             return { botId: user.botId, projectId: user.projectId };
         };
 
-        const sendMessage = async (prompt: string) => {
-            await page.getByTestId(dataTestId.messageComposer).fill(prompt);
-            await page.getByTestId(dataTestId.sendMessage).click();
-            await page.getByTestId(dataTestId.userMessage).filter({ hasText: prompt }).last().waitFor();
-        };
-
         return {
             page,
             origin: stack.chatOrigin,
             workspace: stack.directories.workspace,
             openChat,
-            sendMessage,
             createPairInstruction: async () => text((await chat.createAgentPairing()).url, "pair instruction URL"),
-            seedNativeSession: async (sessionId: string, prompt: string) => {
-                await writeFile(
-                    join(harness.workDirectory, "agent-state", `${encodeURIComponent(sessionId)}.json`),
-                    JSON.stringify({
-                        additionalDirectories: [],
-                        cwd: stack.directories.workspace,
-                        fastMode: false,
-                        history: [
-                            { messageId: "saved-user", role: "user", text: prompt },
-                            { messageId: "saved-assistant", role: "assistant", text: `OpenCode turn 1: ${prompt}` },
-                        ],
-                        mode: "code",
-                        model: "test-small",
-                        reasoningEffort: "medium",
-                        title: prompt,
-                        turnCount: 1,
-                    }),
-                    { mode: 0o600 },
-                );
-            },
             openPairedChat: async () => {
                 await openChat();
                 const pairing = await chat.createPairing();

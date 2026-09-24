@@ -1,12 +1,9 @@
 import type { ClerkGateway } from "../../../gateway/clerk-gateway.ts";
 import type { Session } from "../entity/authentication/session.ts";
+import type { AgentPairingStorage } from "../storage/agent-pairing-storage.ts";
 import type { ConfigurationStorage } from "../storage/configuration-storage.ts";
-import type {
-    AnonymousIdentity,
-    BindingResult,
-    IdentityStorage,
-    IdentityTransfer,
-} from "../storage/identity-storage.ts";
+import type { BindingResult, IdentityStorage, IdentityTransfer } from "../storage/identity-storage.ts";
+import type { AnonymousIdentity } from "../storage/identity-storage-common.ts";
 
 type SessionResult =
     | { readonly kind: "authenticated"; readonly session: Session }
@@ -21,11 +18,16 @@ export class AuthenticationService {
     private readonly configuration: ConfigurationStorage;
     private readonly clerk: ClerkGateway;
     private readonly identities: IdentityStorage;
+    private readonly agentPairings: AgentPairingStorage;
     private readonly logger: AuditLogger;
     private readonly projectId: string | undefined;
 
     constructor(cx: {
-        readonly storages: { readonly configuration: ConfigurationStorage; readonly identities: IdentityStorage };
+        readonly storages: {
+            readonly configuration: ConfigurationStorage;
+            readonly identities: IdentityStorage;
+            readonly agentPairings: AgentPairingStorage;
+        };
         readonly gateways: { readonly clerk: ClerkGateway };
         readonly logger: AuditLogger;
         readonly config: { readonly bindings: { readonly CHAT_PROJECT_ID?: string } };
@@ -33,6 +35,7 @@ export class AuthenticationService {
         this.configuration = cx.storages.configuration;
         this.clerk = cx.gateways.clerk;
         this.identities = cx.storages.identities;
+        this.agentPairings = cx.storages.agentPairings;
         this.logger = cx.logger;
         this.projectId = cx.config.bindings.CHAT_PROJECT_ID;
     }
@@ -90,13 +93,13 @@ export class AuthenticationService {
         expectedRuntimeId: string | null,
         signal: AbortSignal,
     ) => {
-        const ticket = await this.identities.createPairing(userId, botId, expectedRuntimeId, Date.now(), signal);
+        const ticket = await this.agentPairings.createPairing(userId, botId, expectedRuntimeId, Date.now(), signal);
         this.logger.info({ event: "agent-pairing-issued", userId, botId, expectedRuntimeId }, "Identity audit event");
         return ticket;
     };
 
     readonly redeemPairing = async (token: string, signal: AbortSignal) => {
-        const identity = await this.identities.redeemPairing(token, Date.now(), signal);
+        const identity = await this.agentPairings.redeemPairing(token, Date.now(), signal);
         this.logger.info(
             {
                 event: "agent-pairing-redeemed",
