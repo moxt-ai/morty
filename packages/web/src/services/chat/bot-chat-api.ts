@@ -4,6 +4,8 @@ import {
     decodeNativeSessionResult,
     decodeSessionReadyEvent,
     decodeWorkspaceEntriesEvent,
+    type Identifier,
+    isIdentifier,
     type SessionConfigOption,
     type SessionConfigurationSelection,
 } from "@moxt-ai/mobius-protocol";
@@ -18,7 +20,7 @@ import {
 import * as v from "valibot";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 
-const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
+const identifier = v.custom<Identifier>(isIdentifier);
 const accessSchema = v.pipe(
     v.strictObject({
         endpoint: v.pipe(v.string(), v.url()),

@@ -1,3 +1,4 @@
+import { isIdentifier } from "@moxt-ai/mobius-protocol";
 import { and, eq, gt, isNull, notExists, or } from "drizzle-orm";
 import * as v from "valibot";
 import type { HttpError } from "../../../infra/http-error.ts";
@@ -5,7 +6,7 @@ import { createDatabase, type Database } from "../../../schema/project-do/databa
 import { chatManagedSession, managedBot } from "../../../schema/project-do/index.ts";
 import { type BotConfiguration, botConfigurationSchema } from "../entity/bot-configuration.ts";
 
-const identifier = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
+const identifier = v.custom<string>(isIdentifier);
 const managedBotSchema = v.pipe(
     v.object({ botId: identifier, displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(80)) }),
     v.readonly(),

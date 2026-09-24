@@ -1,3 +1,4 @@
+import { decodeIdentifier } from "@moxt-ai/mobius-protocol";
 import { FakeClerk } from "@moxt-ai/mobius-test/clerk";
 import { ManagedBotStorage } from "../../../src/components/management/storage/managed-bot-storage";
 import { createSlackDependencies } from "../../../src/components/slack/composition/create-dependencies";
@@ -123,8 +124,8 @@ export async function createTestApplication() {
             "tenant-1",
             "chat-bot-1",
             {
-                runtimeId: "runtime-1",
-                agentRef: "codex",
+                runtimeId: decodeIdentifier("runtime-1"),
+                agentRef: decodeIdentifier("codex"),
             },
             now,
             signal,

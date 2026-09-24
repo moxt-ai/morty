@@ -1,3 +1,4 @@
+import { decodeIdentifier } from "@moxt-ai/mobius-protocol";
 import {
     decodeMobiusAgentCapabilities,
     decodeRecordedAgentContentValue,
@@ -399,8 +400,8 @@ function saveBrowserChannelCredential(channelId: string, credential: BrowserChan
             ? { authority: credential.authority }
             : {}),
         hostToken: credential.hostToken,
-        projectId: credential.projectId,
-        tenantId: credential.tenantId,
+        projectId: decodeIdentifier(credential.projectId),
+        tenantId: decodeIdentifier(credential.tenantId),
     });
 }
 

@@ -1,3 +1,4 @@
+import { type Identifier, isIdentifier } from "@moxt-ai/mobius-protocol";
 import * as v from "valibot";
 
 /**
@@ -115,7 +116,7 @@ function scopedKey(prefix: string, ...parts: readonly string[]): string {
     return `${prefix}${parts.map((part) => encodeURIComponent(part)).join(":")}`;
 }
 
-const identifierSchema = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
+const identifierSchema = v.custom<Identifier>(isIdentifier);
 const settingIdentifierSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(128));
 
 // ---------------------------------------------------------------------------
