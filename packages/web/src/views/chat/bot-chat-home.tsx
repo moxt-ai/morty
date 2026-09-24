@@ -13,7 +13,6 @@ import type { IdentityTransfer, WorkspaceLocation } from "../../services/identit
 import {
     createBotChatHomeStore,
     disconnectedBotNotice,
-    type SessionConnectionKind,
     setupDescription,
 } from "../../view-models/chat/bot-chat-home-store.ts";
 import {
@@ -220,12 +219,6 @@ export function BotChatHome({
             return next;
         });
     }, []);
-    const onConnectionStatusChange = useCallback(
-        (sessionId: string, connection: SessionConnectionKind) => {
-            store.getState().setSessionConnectionStatus(sessionId, connection);
-        },
-        [store],
-    );
     const clearComposer = () => {
         setDraft("");
         setAttachments([]);
@@ -296,7 +289,6 @@ export function BotChatHome({
                     key={model.sessionView.session.result.ready.sessionId}
                     session={model.sessionView.session}
                     initialMessage={model.creation.kind === "draft-message-sent" ? model.creation.message : undefined}
-                    onConnectionStatusChange={onConnectionStatusChange}
                     onStatusChange={onStatusChange}
                 />
             ) : (

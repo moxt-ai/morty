@@ -452,13 +452,23 @@ test("Given a Bot connected to a multi-agent Runtime, When the user reloads an O
 }, async () => {
     const prompt = "Restore this OpenCode conversation";
     const answer = "This OpenCode conversation was restored.";
+    const releaseHistory = Promise.withResolvers<void>();
     let completed = false;
+    let holdHistory = false;
     const created = await createTestApp({
         agentBehavior: {
             agentId: "codex",
             additionalAgents: [{ id: "opencode", name: "OpenCode" }],
             loadNativeHistory: async (_sessionId, signal) => {
                 signal.throwIfAborted();
+                if (holdHistory) {
+                    await Promise.race([
+                        releaseHistory.promise,
+                        new Promise<never>((_resolve, reject) =>
+                            signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+                        ),
+                    ]);
+                }
                 return {
                     coveredCommandIds: [],
                     coveredMessageIds: [],
@@ -505,8 +515,16 @@ test("Given a Bot connected to a multi-agent Runtime, When the user reloads an O
         ),
         failure,
     ]);
+    await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
 
+    holdHistory = true;
     created.reload();
+
+    expect(await vi.waitFor(() => getByRole(document.body, "status", { name: "Loading messages" }))).toBeInstanceOf(
+        HTMLElement,
+    );
+    expect(created.elementByTestId(dataTestId.botConnectionStatus).textContent).toBe("Connected");
+    releaseHistory.resolve();
 
     expect(
         await created.queryElementByTestId(

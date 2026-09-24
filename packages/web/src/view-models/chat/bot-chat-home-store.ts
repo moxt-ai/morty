@@ -45,7 +45,6 @@ export type BotConnectionStatus =
     | { readonly kind: "connecting"; readonly label: "Connecting" }
     | { readonly kind: "connected"; readonly label: "Connected" }
     | { readonly kind: "disconnected"; readonly label: "Disconnected" };
-export type SessionConnectionKind = "loading" | "ready" | "failed";
 export type BotOperation =
     | { readonly kind: "idle" }
     | { readonly kind: "creating" }
@@ -104,17 +103,6 @@ function isRuntimeConnectionCode(code: string | null): boolean {
     return code !== null && ["connection_closed", "runtime_offline"].includes(code.toLowerCase());
 }
 
-function sessionConnectionStatus(connection: SessionConnectionKind): BotConnectionStatus {
-    switch (connection) {
-        case "loading":
-            return { kind: "connecting", label: "Connecting" };
-        case "ready":
-            return { kind: "connected", label: "Connected" };
-        case "failed":
-            return { kind: "disconnected", label: "Disconnected" };
-    }
-}
-
 type SessionView =
     | { readonly kind: "conversation-access" }
     | { readonly kind: "session-access"; readonly session: OpenMobiusSession };
@@ -146,7 +134,6 @@ export interface BotChatHomeStore {
     readonly newConversation: () => void;
     readonly openManaged: (isExternal: boolean, id: string) => void;
     readonly retry: () => void;
-    readonly setSessionConnectionStatus: (sessionId: string, connection: SessionConnectionKind) => void;
     readonly forkInstead: () => void;
     readonly setDraftSettings: (settings: ChatDraftConfiguration | null) => void;
     readonly createConversation: (
@@ -522,13 +509,6 @@ export const createBotChatHomeStore = (
             }));
         },
         retry: () => set((current) => ({ revision: current.revision + 1 })),
-        setSessionConnectionStatus: (sessionId, connection) =>
-            set((current) =>
-                current.sessionView.kind === "session-access" &&
-                current.sessionView.session.result.ready.sessionId === sessionId
-                    ? { connectionStatus: sessionConnectionStatus(connection) }
-                    : current,
-            ),
         forkInstead: () => {
             const current = get().target;
             if (current.kind === "continue") {
