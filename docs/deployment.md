@@ -18,7 +18,10 @@ Configure these **GitHub Environment variables** individually:
 
 - `APP_ORIGIN` — canonical Chat origin, without a trailing slash.
 - `AUTHENTICATION_BASE_URL` — application authentication base URL.
-- `CLERK_PUBLISHABLE_KEY` — environment-specific Clerk publishable key.
+- `CLERK_PUBLISHABLE_KEY` — environment-specific Clerk publishable key. A
+  production key's Frontend API domain must use the canonical Chat origin (for
+  example, `clerk.morty.build` for `https://morty.build`); otherwise Clerk
+  rejects browser initialization with `origin_invalid`.
 - `CLERK_JWT_KEY` — multiline PEM **public verification key**, not a private key.
 - `MOBIUS_BASE_URL` — Platform origin.
 - `MOBIUS_APP_ID` — environment-specific Platform App ID.
