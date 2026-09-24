@@ -134,7 +134,7 @@ describe("Slack management journeys", () => {
         const missingBot = await app.request("/mobius-slack/api/slack/status", { headers });
         expect(missingBot.status).toBe(400);
         expect(await missingBot.json()).toEqual({
-            error: { code: "INVALID_REQUEST", message: "Request validation failed" },
+            error: { code: "INVALID_REQUEST", message: "The request is invalid." },
         });
 
         const other = new FakeClerk({ issuer: "https://identity.clerk.accounts.dev" });

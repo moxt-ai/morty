@@ -318,18 +318,28 @@ describe("Slack message journeys", () => {
         await send(app);
         expect(app.slack.messages).toEqual([]);
 
+        const input = JSON.stringify({
+            channelId: "C123",
+            text: "Done",
+            threadTs: "100.0",
+        });
+        const unauthenticated = await app.request("/mobius-slack/api/bot/slack/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: input,
+        });
+        expect(unauthenticated.status).toBe(401);
+        expect(await unauthenticated.json()).toEqual({
+            error: { code: "AUTHENTICATION_FAILED", message: "Bearer credential is required" },
+        });
+
         const response = await app.request("/mobius-slack/api/bot/slack/messages", {
             method: "POST",
             headers: {
                 authorization: "Bearer test-bot",
                 "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-                channelId: "C123",
-                text: "Done",
-                threadTs: "100.0",
-                tenantId: "tenant-2",
-            }),
+            body: input,
         });
         expect(response.status).toBe(200);
         expect(app.slack.messages).toEqual([

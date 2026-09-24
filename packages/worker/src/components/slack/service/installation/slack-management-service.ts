@@ -1,3 +1,4 @@
+import type { HttpError } from "../../../../infra/http-error.ts";
 import type { HumanPrincipal } from "../identity/identity-service";
 import type { SlackTokenService } from "../identity/slack-token-service";
 import { type TenantContext, tenantContext } from "../identity/tenant-context";
@@ -57,12 +58,13 @@ export interface SlackManifest {
     };
 }
 
-import type { ErrorToResponse } from "../../infra/util/error-to-response";
 import type { SlackEventStorage } from "../../storage/slack-event-storage";
 
-class SlackManagementError extends Error implements ErrorToResponse {
-    readonly toResponse = (): Response =>
-        Response.json({ error: { code: this.code, message: this.message } }, { status: 400 });
+class SlackManagementError extends Error implements HttpError {
+    readonly toHttpJson: HttpError["toHttpJson"] = () => ({
+        body: { error: { code: this.code, message: this.message } },
+        status: 400,
+    });
     readonly code: "APP_NOT_CONFIGURED" | "CONFIG_TOKEN_NOT_CONFIGURED" | "INVALID_APP_NAME";
 
     constructor(code: "APP_NOT_CONFIGURED" | "CONFIG_TOKEN_NOT_CONFIGURED" | "INVALID_APP_NAME", message: string) {

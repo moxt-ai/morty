@@ -1,3 +1,4 @@
+import { json } from "../../../../infra/http.ts";
 import type { SlackFileService } from "../../service/bot-tools/slack-file-service.ts";
 import { tenantContext } from "../../service/identity/tenant-context.ts";
 import { TenantStorageError } from "../../storage/tenant-storage-error.ts";
@@ -20,7 +21,8 @@ export function createSlackFileHandler(files: SlackFileService) {
         } catch (cause) {
             request.signal.throwIfAborted();
             if (cause instanceof TenantStorageError) {
-                return cause.toResponse();
+                const response = cause.toHttpJson();
+                return json(response.body, response.status, response.headers);
             }
             throw cause;
         }
