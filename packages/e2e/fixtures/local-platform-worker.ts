@@ -1,4 +1,3 @@
-import { createLiveSessionEventRpcTarget } from "../../../third-party/mobius/packages/relay-cloudflare-platform/src/composition/live-session-event-rpc-target.ts";
 import {
     createPlatformApplication,
     createPlatformGateways,
@@ -35,8 +34,6 @@ const authenticator = {
 const worker = createPlatformApplication(
     new PlatformAuthenticationConfiguration(authenticator, new Set([E2E_DEVELOPER_SUBJECT]), new Set(["*"])),
     createPlatformGateways,
-    undefined,
-    { create: createLiveSessionEventRpcTarget },
 );
 
 export default worker;
