@@ -228,19 +228,6 @@ export class BotChatApi {
                 signal,
             ),
         );
-    readonly steerTurn = async (
-        botId: string,
-        sessionId: string,
-        turnId: string,
-        signal: AbortSignal,
-    ): Promise<void> => {
-        await this.#request(
-            botId,
-            "turns/steer",
-            { sessionId: v.parse(identifier, sessionId), turnId: v.parse(identifier, turnId) },
-            signal,
-        );
-    };
     readonly conversationSession = (
         access: ChatAccess,
         activeTurn: ConversationActiveTurn,

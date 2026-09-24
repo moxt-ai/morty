@@ -35,7 +35,6 @@ const nativeContinuationInput = v.strictObject({
     sessionId: platformIdentifier,
 });
 const nativeSessionInput = v.strictObject({ sessionId: platformIdentifier });
-const steerTurnInput = v.strictObject({ sessionId: platformIdentifier, turnId: platformIdentifier });
 const sessionConfiguration = v.strictObject({
     booleanValue: v.boolean(),
     configId: platformIdentifier,
@@ -159,18 +158,6 @@ export function createBotChatRoutes() {
                         context.req.valid("json"),
                         context.get("operationTiming"),
                     ),
-                );
-            },
-        )
-        .post(
-            "/bots/:botId/turns/steer",
-            authenticatedSession,
-            authorizedChat(),
-            bodyParser<AuthorizedChatEnvironment, typeof steerTurnInput>(steerTurnInput),
-            async (context) => {
-                const input = context.req.valid("json");
-                return privateJson(
-                    await context.env.services.chat.steerTurn(context.get("chatScope"), input.sessionId, input.turnId),
                 );
             },
         )

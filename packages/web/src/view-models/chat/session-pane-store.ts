@@ -281,7 +281,7 @@ function includePendingUserMessage(
 export function createSessionPaneModel(options: {
     readonly session: OpenMobiusSession;
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "connectSession" | "steerTurn">;
+    readonly requests: Pick<BotChatApi, "connectSession">;
     readonly initialMessage?: QueuedDraftMessage | undefined;
 }) {
     const { session, botId, requests } = options;
@@ -400,7 +400,12 @@ export function createSessionPaneModel(options: {
             }
             return await client.turns.cancel(sessionId, turnId, { idempotencyKey }, signal);
         },
-        steer: async (turnId, signal) => await requests.steerTurn(botId, sessionId, turnId, signal),
+        steer: async (turnId, signal) => {
+            if (client === null) {
+                throw new Error("The Session is not connected.");
+            }
+            await client.turns.steer(sessionId, turnId, signal);
+        },
         submit: async (request, signal) => {
             if (client === null) {
                 throw new Error("The Session is not connected.");

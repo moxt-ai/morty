@@ -53,7 +53,6 @@ export function BotChatHome({
         | "nativeSession"
         | "managedSessions"
         | "managedSession"
-        | "steerTurn"
         | "continueNativeSession"
         | "connectSession"
         | "createPairingInstruction"
