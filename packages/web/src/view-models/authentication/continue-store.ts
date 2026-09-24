@@ -5,23 +5,31 @@ import { BotChatApi } from "@/services/chat/bot-chat-api";
 import { AnonymousIdentityApi, hasStoredAnonymousCredential } from "@/services/identity/anonymous-identity-api";
 import { ManagementApi } from "@/services/management/management-api";
 
-type Handoff =
-    | { readonly kind: "workspace" }
-    | { readonly kind: "session"; readonly harness: string; readonly sessionId: string };
+type SessionHandoff = { readonly harness: string; readonly sessionId: string };
 type NativeSessionChoice = "fork" | "import" | "skip";
 type ContinueState =
     | {
-          readonly kind: "confirm";
+          readonly kind: "session-confirm";
           readonly code: string;
-          readonly handoff: Handoff;
+          readonly handoff: SessionHandoff;
           readonly replacesWorkspace: boolean;
       }
     | {
-          readonly kind: "redeeming";
+          readonly kind: "session-redeeming";
           readonly code: string;
-          readonly handoff: Handoff;
-          readonly choice: "workspace" | NativeSessionChoice;
+          readonly handoff: SessionHandoff;
+          readonly choice: NativeSessionChoice;
+          readonly replacesWorkspace: boolean;
       }
+    | {
+          readonly kind: "session-failed";
+          readonly code: string;
+          readonly handoff: SessionHandoff;
+          readonly message: string;
+          readonly replacesWorkspace: boolean;
+      }
+    | { readonly kind: "workspace-confirm"; readonly code: string }
+    | { readonly kind: "workspace-redeeming"; readonly code: string }
     | { readonly kind: "failed"; readonly message: string }
     | { readonly kind: "invalid" };
 
@@ -46,13 +54,11 @@ function initialState(): ContinueState {
     ) {
         return { kind: "invalid" };
     }
-    const handoff: Handoff =
-        harness === null || sessionId === null ? { kind: "workspace" } : { kind: "session", harness, sessionId };
     const replacesWorkspace = hasStoredAnonymousCredential();
-    if (handoff.kind === "session" || replacesWorkspace) {
-        return { code, handoff, kind: "confirm", replacesWorkspace };
+    if (harness !== null && sessionId !== null) {
+        return { code, handoff: { harness, sessionId }, kind: "session-confirm", replacesWorkspace };
     }
-    return { choice: "workspace", code, handoff, kind: "redeeming" };
+    return replacesWorkspace ? { code, kind: "workspace-confirm" } : { code, kind: "workspace-redeeming" };
 }
 
 export const createContinueStore = (fetchRequest: (request: Request) => Promise<Response>) =>
@@ -60,19 +66,27 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
         state: initialState(),
         continueSession: (choice) => {
             const state = get().state;
-            if (state.kind === "confirm" && state.handoff.kind === "session") {
-                set({ state: { choice, code: state.code, handoff: state.handoff, kind: "redeeming" } });
+            if (state.kind === "session-confirm" || state.kind === "session-failed") {
+                set({
+                    state: {
+                        choice,
+                        code: state.code,
+                        handoff: state.handoff,
+                        kind: "session-redeeming",
+                        replacesWorkspace: state.replacesWorkspace,
+                    },
+                });
             }
         },
         continueWorkspace: () => {
             const state = get().state;
-            if (state.kind === "confirm" && state.handoff.kind === "workspace") {
-                set({ state: { choice: "workspace", code: state.code, handoff: state.handoff, kind: "redeeming" } });
+            if (state.kind === "workspace-confirm") {
+                set({ state: { code: state.code, kind: "workspace-redeeming" } });
             }
         },
         redeem: async (signal) => {
             const state = get().state;
-            if (state.kind !== "redeeming") {
+            if (state.kind !== "session-redeeming" && state.kind !== "workspace-redeeming") {
                 return;
             }
             const api = new AnonymousIdentityApi({
@@ -82,12 +96,12 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
             try {
                 const identity = await api.redeemTransfer(state.code, signal);
                 signal.throwIfAborted();
-                if (state.handoff.kind === "workspace") {
+                if (state.kind === "workspace-redeeming") {
                     window.location.replace("/");
                     return;
                 }
                 const choice = state.choice;
-                if (choice === "skip" || choice === "workspace") {
+                if (choice === "skip") {
                     window.location.replace("/");
                     return;
                 }
@@ -120,16 +134,23 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     signal,
                 );
                 signal.throwIfAborted();
-                const destination = new URL("/", window.location.origin);
+                const destination = new URL("/chat", window.location.origin);
                 destination.searchParams.set("sessionId", session.result.ready.sessionId);
                 window.location.replace(destination);
             } catch (cause) {
                 if (!signal.aborted) {
+                    const message = cause instanceof Error ? cause.message : "This transfer link is unavailable.";
                     set({
-                        state: {
-                            kind: "failed",
-                            message: cause instanceof Error ? cause.message : "This transfer link is unavailable.",
-                        },
+                        state:
+                            state.kind === "session-redeeming"
+                                ? {
+                                      code: state.code,
+                                      handoff: state.handoff,
+                                      kind: "session-failed",
+                                      message,
+                                      replacesWorkspace: state.replacesWorkspace,
+                                  }
+                                : { kind: "failed", message },
                     });
                 }
             }

@@ -29,13 +29,14 @@ social posts. That flow requires the current harness session ID, creates or reus
 local identity, lists manager connections through a private temporary JSON file,
 reconnects a local connection for the matching App ID or creates a fresh one, and
 returns a browser handoff carrying the validated harness and native
-session ID. The ready result includes the exact URL, its expiry, an owner-only PNG QR
-code, and the path to a private temporary text file containing a terminal-safe QR
-rendering. The bundled setup CLI decodes the PNG before returning it so the QR payload
-cannot differ from the URL. The browser handoff shows the native session's harness and ID,
+session ID. The ready result includes the exact URL, its expiry, a browser-renderable PNG
+data URL, an owner-only PNG QR code, and the path to a private temporary text file containing
+a terminal-safe QR rendering. The bundled setup CLI decodes the PNG before returning it so
+the QR payload cannot differ from the URL. The browser handoff shows the native session's harness and ID,
 then requires the user to import the original, fork an independent continuation, or skip it.
-The selected import or fork crosses the Chat boundary explicitly; an import failure never
-falls back to a fork without another user choice. Native
+The selected import or fork crosses the Chat boundary explicitly; while it runs, the choice
+page disables its actions and marks the selected action. A failure remains on that page so the
+user can explicitly retry or choose the other action; import never falls back to a fork. Native
 session IDs are not returned by ordinary directory listings. The redeemed browser credential
 remains bound to that transfer's 24-hour lifetime. A user can choose **End remote access**
 from any browser Session. For a shared-link credential this revokes the transfer and every browser

@@ -141,6 +141,7 @@ export async function createTestRuntime(harness: E2EHarness, agentId: keyof type
                         events: result.events,
                         url: text(result.ready.url, "Chat URL"),
                         expiresAt: result.ready.expiresAt,
+                        qrDataUrl: result.ready.qrDataUrl,
                         qrPath: result.ready.qrPath,
                         qrTextPath: result.ready.qrTextPath,
                         workspace: text(result.ready.workspace, "Runtime workspace"),

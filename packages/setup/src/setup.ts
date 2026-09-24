@@ -732,6 +732,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
 
         return {
+            qrDataUrl: `data:image/png;base64,${image.toString("base64")}`,
             qrPath,
             qrTextPath,
         };

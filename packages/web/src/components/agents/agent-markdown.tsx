@@ -1,5 +1,5 @@
 import { code } from "@streamdown/code";
-import { Streamdown } from "streamdown";
+import { defaultRemarkPlugins, Streamdown } from "streamdown";
 import "streamdown/styles.css";
 import { type ComponentProps, useEffect, useMemo, useState } from "react";
 import { dataTestId } from "@/data-testid";
@@ -11,6 +11,7 @@ const STREAMDOWN_CONTROLS = Object.freeze({
 });
 const STREAMDOWN_PLUGINS = Object.freeze({ code });
 const STREAMDOWN_TRANSLATIONS = Object.freeze({ copyCode: "Copy code" });
+const LOCAL_FILE_URL_ORIGIN = "https://local-file.morty.invalid";
 
 function isSafeLink(href: string): boolean {
     return (
@@ -22,11 +23,15 @@ function withoutSourceLocation(path: string): string {
     return path.replace(/:\d+(?::\d+)?$/u, "");
 }
 
-function localFilePath(href: string): string | null {
+function fileSystemPath(href: string): string | null {
     if (href.startsWith("file:")) {
         try {
             const url = new URL(href);
-            return url.protocol === "file:" && url.host.length === 0 ? withoutSourceLocation(href) : null;
+            if (url.protocol !== "file:" || url.host.length > 0) {
+                return null;
+            }
+            const path = decodeURIComponent(url.pathname);
+            return withoutSourceLocation(/^\/[A-Za-z]:\//u.test(path) ? path.slice(1) : path);
         } catch {
             return null;
         }
@@ -38,6 +43,53 @@ function localFilePath(href: string): string | null {
         return null;
     }
 }
+
+function localFilePath(href: string): string | null {
+    if (!href.startsWith(LOCAL_FILE_URL_ORIGIN)) {
+        return fileSystemPath(href);
+    }
+    try {
+        const url = new URL(href);
+        const path = url.origin === LOCAL_FILE_URL_ORIGIN ? url.searchParams.get("path") : null;
+        return path === null ? null : fileSystemPath(path);
+    } catch {
+        return null;
+    }
+}
+
+function encodeLocalFileUrl(path: string): string {
+    const url = new URL(LOCAL_FILE_URL_ORIGIN);
+    url.searchParams.set("path", path);
+    return url.href;
+}
+
+function rewriteLocalMarkdownTargets(value: unknown): void {
+    if (typeof value !== "object" || value === null) {
+        return;
+    }
+    if (
+        "type" in value &&
+        (value.type === "image" || value.type === "link") &&
+        "url" in value &&
+        typeof value.url === "string"
+    ) {
+        const path = localFilePath(value.url);
+        if (path !== null) {
+            value.url = encodeLocalFileUrl(path);
+        }
+    }
+    if ("children" in value && Array.isArray(value.children)) {
+        for (const child of value.children) {
+            rewriteLocalMarkdownTargets(child);
+        }
+    }
+}
+
+function remarkLocalMarkdownTargets() {
+    return rewriteLocalMarkdownTargets;
+}
+
+const STREAMDOWN_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), remarkLocalMarkdownTargets];
 
 function AgentMarkdownLink({
     children,
@@ -91,6 +143,7 @@ function AgentMarkdownImage({
     readonly readImage?: MarkdownImageReader | undefined;
 }) {
     const directSource = typeof src === "string" ? directImageSource(src) : "";
+    const requestedSource = typeof src === "string" ? (localFilePath(src) ?? src) : "";
     const [source, setSource] = useState<string | null>(directSource || null);
 
     useEffect(() => {
@@ -98,14 +151,14 @@ function AgentMarkdownImage({
             setSource(directSource);
             return;
         }
-        if (typeof src !== "string" || src.length === 0 || readImage === undefined) {
+        if (requestedSource.length === 0 || readImage === undefined) {
             setSource("");
             return;
         }
         const controller = new AbortController();
         let objectUrl = "";
         setSource(null);
-        void readImage(src, controller.signal)
+        void readImage(requestedSource, controller.signal)
             .then((file) => {
                 if (controller.signal.aborted || !SAFE_IMAGE_MIME.test(file.mediaType)) {
                     return;
@@ -124,7 +177,7 @@ function AgentMarkdownImage({
                 URL.revokeObjectURL(objectUrl);
             }
         };
-    }, [directSource, readImage, src]);
+    }, [directSource, readImage, requestedSource]);
 
     if (source === null) {
         return <span className="text-xs text-muted-foreground">Loading image…</span>;
@@ -176,6 +229,7 @@ export function AgentMarkdown({ className, markdown, openLocalFile, readImage, s
             lineNumbers={false}
             mode={streaming ? "streaming" : "static"}
             plugins={STREAMDOWN_PLUGINS}
+            remarkPlugins={STREAMDOWN_REMARK_PLUGINS}
             translations={STREAMDOWN_TRANSLATIONS}
         >
             {markdown}
