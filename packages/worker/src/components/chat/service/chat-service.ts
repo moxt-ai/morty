@@ -170,9 +170,8 @@ export class ChatService {
     };
 
     readonly #requireRuntimeAgent = async (scope: ChatScope, runtimeId: string, agentRef: string) => {
-        const runtimes = await this.#platform.chatRuntimes(scope.projectId, scope.signal);
-        const runtime = runtimes.find((candidate) => candidate.runtimeId === runtimeId);
-        if (runtime === undefined || !runtime.agents.some((agent) => agent.agentRef === agentRef)) {
+        const runtime = await this.#platform.getChatRuntimeAgents(scope.projectId, runtimeId, scope.signal);
+        if (!runtime.agents.some((agent) => agent.agentRef === agentRef)) {
             throw new PlatformProjectError("AGENT_UNAVAILABLE", "Choose an agent provided by this Bot's Runtime.", 409);
         }
     };
@@ -385,9 +384,7 @@ export class ChatService {
         const runtime =
             bot.configuration === null
                 ? undefined
-                : (await this.#platform.chatRuntimes(scope.projectId, scope.signal)).find(
-                      (item) => item.runtimeId === bot.configuration?.runtimeId,
-                  );
+                : await this.#platform.getChatRuntimeAgents(scope.projectId, bot.configuration.runtimeId, scope.signal);
         const agent = runtime?.agents.find((item) => item.agentRef === harness);
         if (runtime === undefined || agent === undefined) {
             throw new PlatformProjectError("HARNESS_UNAVAILABLE", "The handoff harness is unavailable.", 409);
