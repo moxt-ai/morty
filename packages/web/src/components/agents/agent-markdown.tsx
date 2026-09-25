@@ -44,6 +44,17 @@ function fileSystemPath(href: string): string | null {
     }
 }
 
+function relativeFilePath(href: string): string | null {
+    try {
+        const path = decodeURIComponent(href);
+        return path.length > 0 && !/^(?:[a-z][a-z0-9+.-]*:|[\\/]|[?#])/iu.test(path) && !path.includes("\0")
+            ? path
+            : null;
+    } catch {
+        return null;
+    }
+}
+
 function localFilePath(href: string): string | null {
     if (!href.startsWith(LOCAL_FILE_URL_ORIGIN)) {
         return fileSystemPath(href);
@@ -51,7 +62,7 @@ function localFilePath(href: string): string | null {
     try {
         const url = new URL(href);
         const path = url.origin === LOCAL_FILE_URL_ORIGIN ? url.searchParams.get("path") : null;
-        return path === null ? null : fileSystemPath(path);
+        return path === null ? null : (fileSystemPath(path) ?? relativeFilePath(path));
     } catch {
         return null;
     }
@@ -73,7 +84,7 @@ function rewriteLocalMarkdownTargets(value: unknown): void {
         "url" in value &&
         typeof value.url === "string"
     ) {
-        const path = localFilePath(value.url);
+        const path = localFilePath(value.url) ?? (value.type === "image" ? relativeFilePath(value.url) : null);
         if (path !== null) {
             value.url = encodeLocalFileUrl(path);
         }
@@ -127,6 +138,9 @@ export type MarkdownImageReader = (
 const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/u;
 
 function directImageSource(value: string): string {
+    if (localFilePath(value) !== null) {
+        return "";
+    }
     if (value.startsWith("https://") || value.startsWith("http://") || value.startsWith("data:image/")) {
         return value;
     }

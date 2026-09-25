@@ -396,31 +396,33 @@ export function createSessionPaneModel(options: {
         tasks.getState().start(openedActiveTurn.commandId, openedActiveTurn.turnId);
     }
     const messageQueue = createSessionMessageQueueStore({
-        cancel: async (turnId, idempotencyKey, signal) => {
-            if (client === null) {
-                throw new Error("The Session is not connected.");
-            }
-            return await client.turns.cancel(sessionId, turnId, { idempotencyKey }, signal);
-        },
-        steer: async (turnId, signal) => {
-            if (client === null) {
-                throw new Error("The Session is not connected.");
-            }
-            await client.turns.steer(sessionId, turnId, signal);
-        },
-        submit: async (request, signal) => {
-            if (client === null) {
-                throw new Error("The Session is not connected.");
-            }
-            return await client.turns.submit(
-                sessionId,
-                withInstructions({
-                    ...request,
-                    agentId: session.agentRef,
-                    directoryId: session.result.ready.directoryId,
-                }),
-                signal,
-            );
+        port: {
+            cancel: async (turnId, idempotencyKey, signal) => {
+                if (client === null) {
+                    throw new Error("The Session is not connected.");
+                }
+                return await client.turns.cancel(sessionId, turnId, { idempotencyKey }, signal);
+            },
+            steer: async (turnId, signal) => {
+                if (client === null) {
+                    throw new Error("The Session is not connected.");
+                }
+                await client.turns.steer(sessionId, turnId, signal);
+            },
+            submit: async (request, signal) => {
+                if (client === null) {
+                    throw new Error("The Session is not connected.");
+                }
+                return await client.turns.submit(
+                    sessionId,
+                    withInstructions({
+                        ...request,
+                        agentId: session.agentRef,
+                        directoryId: session.result.ready.directoryId,
+                    }),
+                    signal,
+                );
+            },
         },
     });
     const request = {
@@ -512,7 +514,6 @@ export function createSessionPaneModel(options: {
                         session.result.action === "conversation" ? session.result.access : undefined,
                     );
                     const connected = client;
-                    signal.addEventListener("abort", () => connected.close(), { once: true });
                     const observer: MobiusLiveSessionEventObserver = {
                         reconcile: async (connection) => {
                             const reconcilingTurn = activeTurn.current();
@@ -541,16 +542,16 @@ export function createSessionPaneModel(options: {
                                 signal,
                             );
                             signal.throwIfAborted();
-                            const provisional = historySessionPresentation(loadedHistory, sessionId);
+                            const execution = await connected.sessions.readSessionExecution(
+                                sessionId,
+                                identity,
+                                signal,
+                            );
+                            signal.throwIfAborted();
+                            const running = execution.turn;
+                            messageQueue.getState().replace(execution.queued);
                             nativeHistory = loadedHistory.status === "available" ? loadedHistory : null;
                             historyCursor = loadedHistory.status === "available" ? loadedHistory.nextCursor : null;
-                            set({
-                                activities: provisional.activities,
-                                hasOlderHistory: historyCursor !== null,
-                                messages: provisional.messages,
-                            });
-                            const running = await connected.sessions.readActiveTurn(sessionId, identity, signal);
-                            signal.throwIfAborted();
                             const authoritative = {
                                 history: loadedHistory,
                                 kind: "authoritative-state-loaded" as const,
@@ -565,7 +566,11 @@ export function createSessionPaneModel(options: {
                                         : running.commandId;
                                 tasks.getState().start(running.commandId, turnId);
                                 activeTurn.submissionAccepted(running.commandId, turnId);
-                            } else if (reconciliation.turn.kind !== "idle") {
+                            } else if (
+                                reconciliation.turn.kind !== "idle" &&
+                                authoritative.history.status === "available" &&
+                                authoritative.history.coveredCommandIds.includes(reconciliation.turn.commandId)
+                            ) {
                                 tasks.getState().finish(reconciliation.turn.commandId);
                                 activeTurn.turnCleared(reconciliation.turn.commandId);
                                 command = "";
@@ -573,16 +578,9 @@ export function createSessionPaneModel(options: {
                             const native = historySessionPresentation(
                                 authoritative.history,
                                 sessionId,
-                                running?.commandId ?? null,
+                                command === "" ? null : command,
                             );
-                            const nativeMessages =
-                                running === null
-                                    ? native.messages
-                                    : native.messages.filter((message) =>
-                                          message.role === "user"
-                                              ? message.id !== running.commandId
-                                              : message.commandId !== running.commandId,
-                                      );
+                            const nativeMessages = native.messages;
                             delivery
                                 .getState()
                                 .reconcile([
@@ -594,29 +592,9 @@ export function createSessionPaneModel(options: {
                                         ? [command]
                                         : []),
                                 ]);
-                            const snapshotMessages: readonly SessionMessage[] =
-                                running === null
-                                    ? []
-                                    : [
-                                          {
-                                              contents: [],
-                                              id: running.commandId,
-                                              role: "user",
-                                              text: running.prompt,
-                                          },
-                                          {
-                                              activityIds: [],
-                                              attempt: null,
-                                              commandId: running.commandId,
-                                              contents: [],
-                                              id: `${running.commandId}-reply`,
-                                              role: "assistant",
-                                              text: running.text,
-                                          },
-                                      ];
                             const liveCommandMessages =
                                 running !== null
-                                    ? snapshotMessages
+                                    ? nativeMessages
                                     : command === "" ||
                                         (authoritative.history.status === "available" &&
                                             authoritative.history.coveredCommandIds.includes(command))
@@ -635,7 +613,8 @@ export function createSessionPaneModel(options: {
                                                           nativeMessage.commandId === command,
                                                   ),
                                         );
-                            const restoredFromDaemon = [...nativeMessages, ...liveCommandMessages];
+                            const restoredFromDaemon =
+                                running === null ? [...nativeMessages, ...liveCommandMessages] : nativeMessages;
                             const reconciledDelivery = delivery.getState().state;
                             const restoredMessages =
                                 reconciledDelivery.kind === "delivery-unknown"
@@ -696,6 +675,23 @@ export function createSessionPaneModel(options: {
                         },
                         receive: async (event) => {
                             const payload = event.payload;
+                            if (payload instanceof MobiusControlEvent && payload.kind === "session.queue.changed") {
+                                const execution = await connected.sessions.readSessionExecution(
+                                    sessionId,
+                                    {
+                                        additionalDirectoryIds: session.entry.additionalDirectories.map(
+                                            (directory) => directory.directoryId,
+                                        ),
+                                        agentId: session.agentRef,
+                                        directoryId: session.result.ready.directoryId,
+                                    },
+                                    signal,
+                                );
+                                signal.throwIfAborted();
+                                messageQueue.getState().replace(execution.queued);
+                                return true;
+                            }
+
                             if (payload instanceof MobiusAgentActivityEvent) {
                                 if (command !== "" && payload.commandId !== command) {
                                     return true;
@@ -785,8 +781,19 @@ export function createSessionPaneModel(options: {
                             ) {
                                 const queued = messageQueue.getState().takeStarted(payload.commandId);
                                 if (queued !== null) {
-                                    if (command !== "") {
-                                        tasks.getState().finish(command);
+                                    if (command !== "" && command !== queued.commandId) {
+                                        set((current) => ({
+                                            messages: [
+                                                ...current.messages,
+                                                {
+                                                    id: `${queued.commandId}-user`,
+                                                    role: "user",
+                                                    text: queued.summary,
+                                                    contents: promptImageContents(queued.images),
+                                                },
+                                            ],
+                                        }));
+                                        return true;
                                     }
                                     command = queued.commandId;
                                     tasks.getState().start(queued.commandId, queued.turnId);

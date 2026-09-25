@@ -19,7 +19,6 @@ import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scr
 import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
-import type { SessionConnectionKind } from "../../view-models/chat/bot-chat-home-store.ts";
 import type { QueuedDraftMessage } from "../../view-models/chat/conversation-creation-machine.ts";
 import { createBrowserFilePreviewStore } from "../../view-models/chat/file-preview-store.ts";
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
@@ -28,19 +27,38 @@ import { sessionDebugBlocks } from "../../view-models/chat/session-debug-blocks.
 import { createSessionPaneModel, sessionPanePresentation } from "../../view-models/chat/session-pane-store.ts";
 import { MobiusSessionMessage } from "./mobius-session-message.tsx";
 
+function MessageListSkeleton() {
+    return (
+        <div role="status" aria-label="Loading messages" className="mx-auto w-full min-w-0 max-w-[920px]">
+            <span className="sr-only">Loading messages</span>
+            <div aria-hidden="true" className="grid animate-pulse gap-8 motion-reduce:animate-none">
+                <div className="ml-auto grid w-full max-w-[68%] justify-items-end gap-2">
+                    <div className="h-4 w-2/3 rounded-full bg-muted" />
+                    <div className="h-4 w-full rounded-full bg-muted" />
+                    <div className="h-4 w-4/5 rounded-full bg-muted" />
+                </div>
+                <div className="grid w-full max-w-[78%] gap-2">
+                    <div className="h-4 w-1/3 rounded-full bg-muted" />
+                    <div className="h-4 w-full rounded-full bg-muted" />
+                    <div className="h-4 w-5/6 rounded-full bg-muted" />
+                    <div className="h-4 w-3/5 rounded-full bg-muted" />
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export function MobiusSessionPane({
     session,
     initialMessage,
     botId,
     requests,
-    onConnectionStatusChange,
     onStatusChange,
 }: {
     readonly session: OpenMobiusSession;
     readonly initialMessage?: QueuedDraftMessage | undefined;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession">;
-    readonly onConnectionStatusChange: (sessionId: string, connection: SessionConnectionKind) => void;
     readonly onStatusChange: (sessionId: string, status: SessionActivityState) => void;
 }) {
     const sessionId = session.result.ready.sessionId;
@@ -134,9 +152,6 @@ export function MobiusSessionPane({
     useEffect(() => {
         onStatusChange(sessionId, model.activity);
     }, [model.activity, onStatusChange, sessionId]);
-    useEffect(() => {
-        onConnectionStatusChange(sessionId, model.connection.kind);
-    }, [model.connection.kind, onConnectionStatusChange, sessionId]);
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
         run(async (signal) => await pane.store.getState().configure(option, value, booleanValue, signal));
     const openLocalFile = useCallback(
@@ -172,11 +187,7 @@ export function MobiusSessionPane({
                             />
                         </div>
                     )}
-                    {model.messages.length === 0 && model.connection.kind === "loading" && (
-                        <p role="status" className="text-center text-sm text-muted-foreground">
-                            Loading...
-                        </p>
-                    )}
+                    {model.messages.length === 0 && model.connection.kind === "loading" && <MessageListSkeleton />}
                     {model.messages.length === 0 && model.connection.kind === "failed" && (
                         <div className="flex min-h-full items-center justify-center">
                             <div className="grid max-w-lg justify-items-center gap-4 px-6 text-center">

@@ -5,7 +5,7 @@ import {
     type ChatAgentSelection,
     type ChatDraftConfiguration,
     type ChatWorkspace,
-    connectedChatWorkspaceAgents,
+    connectedChatRuntimeAgents,
 } from "@/services/chat/bot-chat-api";
 import { restoreLastAgentSettings, saveLastAgentSettings } from "@/services/chat/last-agent-settings";
 import {
@@ -309,10 +309,8 @@ export const createDraftControlsStore = (
             try {
                 while (!signal.aborted) {
                     const workspace = await requests.workspace(botId, signal);
-                    const selected = connectedChatWorkspaceAgents(workspace).find(
-                        (agent) =>
-                            (workspace.runtimeId === null || agent.runtimeId === workspace.runtimeId) &&
-                            (selectedHarness === "" || `${agent.runtimeId}:${agent.agentRef}` === selectedHarness),
+                    const selected = connectedChatRuntimeAgents(workspace.runtime).find(
+                        (agent) => selectedHarness === "" || `${agent.runtimeId}:${agent.agentRef}` === selectedHarness,
                     );
                     if (selected !== undefined) {
                         const [result, defaultCwd] = await Promise.all([
@@ -496,7 +494,7 @@ export const createDraftControlsStore = (
                 if (settings.kind !== "ready" || disabled) {
                     return;
                 }
-                const agent = connectedChatWorkspaceAgents(settings.workspace).find(
+                const agent = connectedChatRuntimeAgents(settings.workspace.runtime).find(
                     (item) => `${item.runtimeId}:${item.agentRef}` === value,
                 );
                 if (agent === undefined) {

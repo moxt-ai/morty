@@ -39,7 +39,12 @@ function resolveRequest(input: WebSocketBridgeRequest, operation: "request" | "w
     const url = bridgedUrl(input.path);
     const headers = bridgedHeaders(input.headers);
     const body = input.body === "" ? null : input.body;
-    if (operation === "watch" && (input.method !== "POST" || !url.pathname.endsWith("/workspace") || body !== null)) {
+    if (
+        operation === "watch" &&
+        (input.method !== "POST" ||
+            (!url.pathname.endsWith("/workspace") && !url.pathname.endsWith("/setup/runtimes")) ||
+            body !== null)
+    ) {
         return invalidBridgeRequest();
     }
     return new Request(url, {

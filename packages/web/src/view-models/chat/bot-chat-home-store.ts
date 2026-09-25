@@ -14,13 +14,7 @@ import { type ConversationCreationState, transitionConversationCreation } from "
 import { createConversationSessionStore } from "./conversation-session-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 
-export type SetupReason =
-    | "unconfigured"
-    | "inactive"
-    | "no-selection"
-    | "agent-missing"
-    | "runtime-offline"
-    | "agent-required";
+export type SetupReason = "unconfigured" | "agent-missing" | "runtime-offline" | "agent-required";
 
 type Target =
     | { readonly kind: "draft"; readonly key: string }
@@ -51,7 +45,6 @@ export type BotConnectionStatus =
     | { readonly kind: "connecting"; readonly label: "Connecting" }
     | { readonly kind: "connected"; readonly label: "Connected" }
     | { readonly kind: "disconnected"; readonly label: "Disconnected" };
-export type SessionConnectionKind = "loading" | "ready" | "failed";
 export type BotOperation =
     | { readonly kind: "idle" }
     | { readonly kind: "creating" }
@@ -97,10 +90,7 @@ export function disconnectedBotNotice(
 }
 
 function runtimeConnectionStatus(workspace: ChatWorkspace): BotConnectionStatus {
-    if (workspace.status !== "active") {
-        return { kind: "disconnected", label: "Disconnected" };
-    }
-    return workspace.runtimes.some((runtime) => runtime.runtimeId === workspace.runtimeId && runtime.online)
+    return workspace.runtime.online
         ? { kind: "connected", label: "Connected" }
         : { kind: "disconnected", label: "Disconnected" };
 }
@@ -111,17 +101,6 @@ function isRuntimeConnectionFailure(cause: unknown): boolean {
 
 function isRuntimeConnectionCode(code: string | null): boolean {
     return code !== null && ["connection_closed", "runtime_offline"].includes(code.toLowerCase());
-}
-
-function sessionConnectionStatus(connection: SessionConnectionKind): BotConnectionStatus {
-    switch (connection) {
-        case "loading":
-            return { kind: "connecting", label: "Connecting" };
-        case "ready":
-            return { kind: "connected", label: "Connected" };
-        case "failed":
-            return { kind: "disconnected", label: "Disconnected" };
-    }
 }
 
 type SessionView =
@@ -155,7 +134,6 @@ export interface BotChatHomeStore {
     readonly newConversation: () => void;
     readonly openManaged: (isExternal: boolean, id: string) => void;
     readonly retry: () => void;
-    readonly setSessionConnectionStatus: (sessionId: string, connection: SessionConnectionKind) => void;
     readonly forkInstead: () => void;
     readonly setDraftSettings: (settings: ChatDraftConfiguration | null) => void;
     readonly createConversation: (
@@ -185,27 +163,16 @@ function initialTarget(urlValue: string, createId: () => string): Target {
 }
 
 function setupReason(workspace: ChatWorkspace): SetupReason | null {
-    if (workspace.status !== "active") {
-        return workspace.status === "draft" ? "unconfigured" : "inactive";
-    }
-    if (workspace.runtimeId === null) {
-        return "no-selection";
-    }
-    const runtime = workspace.runtimes.find((candidate) => candidate.runtimeId === workspace.runtimeId);
-    if (runtime === undefined || runtime.agents.length === 0) {
+    if (workspace.runtime.agents.length === 0) {
         return "agent-missing";
     }
-    return runtime.online ? null : "runtime-offline";
+    return workspace.runtime.online ? null : "runtime-offline";
 }
 
 export function setupDescription(reason: SetupReason): string {
     switch (reason) {
         case "unconfigured":
             return "Your workspace is loaded. Paste this instruction into your local agent to connect it to this workspace.";
-        case "inactive":
-            return "Your workspace is loaded, but this Bot is not active, so Chat cannot reconnect. Use the instruction below to connect your local agent and activate Chat.";
-        case "no-selection":
-            return "Your workspace is loaded, but this Bot is not connected to a Runtime. Use the instruction below to connect one.";
         case "agent-missing":
             return "Your workspace is loaded, but its connected Runtime no longer reports any agents. Start the paired Runtime, or use the instruction below to pair it again.";
         case "runtime-offline":
@@ -226,6 +193,8 @@ export const createBotChatHomeStore = (
         | "deleteBot"
         | "listBots"
         | "managedSession"
+        | "readBot"
+        | "waitForSetupChange"
         | "waitForWorkspaceChange"
         | "workspace"
         | "workspaceDirectory"
@@ -276,6 +245,18 @@ export const createBotChatHomeStore = (
                 set({ bots });
                 if (get().view.kind === "loading") {
                     set({ view: { kind: "connecting", bot } });
+                }
+                const detail = await requests.readBot(bot.botId, signal);
+                signal.throwIfAborted();
+                if (!detail.configured) {
+                    set({
+                        connectionStatus: { kind: "disconnected", label: "Disconnected" },
+                        view: { kind: "setup", bot, reason: "unconfigured" },
+                    });
+                    await requests.waitForSetupChange(bot.botId, signal);
+                    signal.throwIfAborted();
+                    set((current) => ({ revision: current.revision + 1 }));
+                    return;
                 }
                 const workspace = await requests.workspace(bot.botId, signal);
                 signal.throwIfAborted();
@@ -528,13 +509,6 @@ export const createBotChatHomeStore = (
             }));
         },
         retry: () => set((current) => ({ revision: current.revision + 1 })),
-        setSessionConnectionStatus: (sessionId, connection) =>
-            set((current) =>
-                current.sessionView.kind === "session-access" &&
-                current.sessionView.session.result.ready.sessionId === sessionId
-                    ? { connectionStatus: sessionConnectionStatus(connection) }
-                    : current,
-            ),
         forkInstead: () => {
             const current = get().target;
             if (current.kind === "continue") {

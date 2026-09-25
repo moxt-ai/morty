@@ -1,3 +1,4 @@
+import type { NativeSessionResult } from "@moxt-ai/mobius-protocol";
 import type { MobiusTurn, PromptImage, SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
 import { SessionPromptDisposition } from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
@@ -36,6 +37,7 @@ export interface SessionMessageQueueStore {
         signal: AbortSignal,
     ) => Promise<ChatQueuedMessage | null>;
     readonly steerMessage: (commandId: string, signal: AbortSignal) => Promise<ChatQueuedMessage | null>;
+    readonly replace: (messages: Extract<NativeSessionResult, { readonly action: "active-turn" }>["queued"]) => void;
     readonly takeStarted: (commandId: string) => ChatQueuedMessage | null;
 }
 
@@ -51,8 +53,8 @@ function updateMessage(
     return messages.map((message) => (message.commandId === commandId ? { ...message, kind } : message));
 }
 
-export const createSessionMessageQueueStore = (port: SessionMessageQueuePort) =>
-    createStore<SessionMessageQueueStore>()((set, get) => ({
+export const createSessionMessageQueueStore = (options: { readonly port: SessionMessageQueuePort }) => {
+    return createStore<SessionMessageQueueStore>()((set, get) => ({
         feedback: { kind: "none" },
         messages: [],
         operation: { kind: "idle" },
@@ -67,9 +69,12 @@ export const createSessionMessageQueueStore = (port: SessionMessageQueuePort) =>
             }));
             const signal = AbortSignal.any([parent, AbortSignal.timeout(15_000)]);
             try {
-                await port.cancel(message.turnId, crypto.randomUUID(), signal);
+                await options.port.cancel(message.turnId, crypto.randomUUID(), signal);
                 signal.throwIfAborted();
-                set((state) => ({ messages: state.messages.filter((candidate) => candidate.commandId !== commandId) }));
+                set((state) => {
+                    const messages = state.messages.filter((candidate) => candidate.commandId !== commandId);
+                    return { messages };
+                });
                 return message;
             } catch (cause) {
                 if (parent.aborted) {
@@ -94,7 +99,7 @@ export const createSessionMessageQueueStore = (port: SessionMessageQueuePort) =>
             set({ feedback: { kind: "none" }, operation: { commandId, kind: "submitting" } });
             const signal = AbortSignal.any([parent, AbortSignal.timeout(45_000)]);
             try {
-                const accepted = await port.submit(
+                const accepted = await options.port.submit(
                     {
                         ...request,
                         disposition: SessionPromptDisposition.Queue,
@@ -111,7 +116,7 @@ export const createSessionMessageQueueStore = (port: SessionMessageQueuePort) =>
                     summary,
                     turnId: accepted.turnId,
                 };
-                set((state) => ({ messages: [...state.messages, message], operation: { kind: "idle" } }));
+                set({ operation: { kind: "idle" } });
                 return message;
             } catch (cause) {
                 if (parent.aborted) {
@@ -135,9 +140,12 @@ export const createSessionMessageQueueStore = (port: SessionMessageQueuePort) =>
             }));
             const signal = AbortSignal.any([parent, AbortSignal.timeout(15_000)]);
             try {
-                await port.steer(message.turnId, signal);
+                await options.port.steer(message.turnId, signal);
                 signal.throwIfAborted();
-                set((state) => ({ messages: state.messages.filter((candidate) => candidate.commandId !== commandId) }));
+                set((state) => {
+                    const messages = state.messages.filter((candidate) => candidate.commandId !== commandId);
+                    return { messages };
+                });
                 return message;
             } catch (cause) {
                 if (parent.aborted) {
@@ -153,12 +161,26 @@ export const createSessionMessageQueueStore = (port: SessionMessageQueuePort) =>
                 return null;
             }
         },
+        replace: (messages) =>
+            set((state) => ({
+                messages: messages.map((message) => ({
+                    commandId: message.commandId,
+                    turnId: message.commandId,
+                    summary: message.prompt,
+                    images: message.images,
+                    kind: state.messages.find((current) => current.commandId === message.commandId)?.kind ?? "queued",
+                })),
+            })),
         takeStarted: (commandId) => {
             const message = get().messages.find((candidate) => candidate.commandId === commandId);
             if (message === undefined || message.kind !== "queued") {
                 return null;
             }
-            set((state) => ({ messages: state.messages.filter((candidate) => candidate.commandId !== commandId) }));
+            set((state) => {
+                const messages = state.messages.filter((candidate) => candidate.commandId !== commandId);
+                return { messages };
+            });
             return message;
         },
     }));
+};

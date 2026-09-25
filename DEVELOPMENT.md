@@ -186,6 +186,9 @@ New Conversation opens a browser-local draft. Its Harness selector chooses a pai
 agent. For a bound Bot, Chat reads that Bot's Runtime-scoped Agent catalog instead of
 filtering the Project-wide Runtime directory. Chat discovers the selected Agent's
 settings directly without creating a temporary Session.
+Bot setup and active Chat use separate resource shapes: `setup/runtimes` lists the
+Runtime options for an unconfigured Bot, while `workspace` requires a configured Bot
+and returns exactly its one Runtime.
 The cwd selector beside the model controls browses the selected Runtime and accepts an
 absolute path. The Runtime resolves and authorizes that path, and Chat applies the selected
 canonical directory only to the new conversation.
@@ -220,7 +223,11 @@ reconciliation clears that warning when the command is already present in saved 
 
 Run `pnpm lint` and `pnpm typecheck` locally, plus only the tests related to the
 change when needed. Product behavior is covered at HTTP and browser boundaries;
-tests use deterministic time and stateful fakes rather than request mocks.
+Web / Chat tests keep the application, SDK, Chat, Platform, Runtime relay, and
+transports real and use a stateful fake daemon at the daemon protocol port.
+Separate Mobius agent-daemon tests exercise the real daemon with each real Agent
+and its production adapter. Use deterministic time, not request mocks.
+`TESTING.md` defines the shared boundary and the narrow external-provider exceptions.
 `pnpm ci:check` serially reproduces the combined CI validation when diagnosis
 requires it.
 
@@ -228,3 +235,13 @@ That command includes combined production TS/TSX coverage and executable depende
 boundaries. `pnpm check:architecture` follows type imports and re-exports. Biome's
 `useLiteralKeys` rule is disabled because TypeScript's index-signature access rules
 require bracket notation for untrusted records. See `TESTING.md` for report scope.
+
+### Pending prompt ownership
+
+Accepted queued prompts belong to the daemon's in-memory execution registry. The
+Web queue store is a projection of `sessions.readSessionExecution`, refreshed after
+subscription/reconnection and `session.queue.changed`. It owns only presentation
+and in-flight UI operations; it does not journal accepted work across page lifetimes.
+Started events consume queue entries, and steering adds the user's prompt without
+replacing the task already running. Drafts and uncertain delivery attempts have
+separate lifetimes and must not be interpreted as authoritative execution state.

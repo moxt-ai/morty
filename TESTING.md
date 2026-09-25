@@ -20,20 +20,26 @@ duplicate scenario.
 
 ### Browser product journeys
 
-`packages/e2e/conversation.e2e.test.ts` covers one paired conversation from an
-image prompt through an Agent tool response and persisted reload.
+`packages/e2e/conversation.e2e.test.ts`, `claude-conversation.e2e.test.ts`, and
+`pi-conversation.e2e.test.ts` contain the existing conversation journeys.
 `packages/e2e/setup.e2e.test.ts` covers setup handoff, native-session import,
-reload, and revocation. These two
-files contain the product E2E journeys:
+reload, and revocation. Agent names in these filenames describe controlled
+profiles, not real Agent compatibility. Run the product journeys with:
 
 ```bash
 pnpm test:e2e
 ```
 
-They start real local Chat, Platform, Mobius, Runtime, browser, HTTP, WebSocket,
-filesystem, and database boundaries. A deterministic stateful ACP Agent replaces
-only the third-party Agent. Extend an existing journey before adding another file.
-See `packages/e2e/README.md` for scenario ownership.
+The product-test target is real Chat, Platform, SDK, Runtime relay, HTTP,
+WebSocket, storage, and browser boundaries, with one stateful **fake daemon** at
+the daemon protocol port. The fake owns controllable session state, queued work,
+streaming, interactions, and files. It must not replace the SDK, Platform, or Chat.
+Agent-specific adaptation belongs to separate real agent-daemon tests, not browser
+journeys. Extend an existing journey before adding another file.
+
+Some existing browser journeys still start the real daemon with a controlled ACP
+Agent. This is existing test infrastructure awaiting conversion, not the intended
+boundary or proof of real Agent compatibility. See `packages/e2e/README.md`.
 
 ### Web application integration
 
@@ -93,13 +99,26 @@ reserved for a boundary behavior that a healthy Platform cannot produce, such as
 rejecting an HTTP redirect.
 ### Mobius
 
-`third-party/mobius` has its own product E2E, protocol contracts, boundary
-integration suites, and real Agent-daemon compatibility matrix. Its `TESTING.md`
-is authoritative for those tests. Real Agent discovery, provider access, tool
-execution, ACP translation, and daemon delivery belong there. Chat's browser E2E
-uses one deterministic ACP Agent and owns only the integration that can break in
-Chat: setup, messages, controls, media rendering, local-file pulling, persistence,
-and revocation.
+`third-party/mobius/TESTING.md` owns daemon and Agent compatibility testing.
+Run **the real daemon with each real supported Agent and its production adapter**:
+Codex, Claude Code, OpenCode, and Pi must each have independent coverage for the
+behavior they support. Their native APIs, ACP adapters, history, cancellation,
+interactions, and session identities can differ. A fake daemon presenting four
+Agent labels does not verify those adapters.
+
+Keep the two suites complementary:
+
+| Suite | Real components | Controlled boundary | Owns |
+| --- | --- | --- | --- |
+| Web / Chat integration and browser journeys | Complete application, router, stores, SDK, Chat, Platform, Runtime relay, transport, storage | Stateful fake daemon | Visible workflows, multiple viewers, reconnect, history, queued work, images |
+| Agent-daemon integration | Daemon, production adapter, real Agent executable, native history and filesystem | Model provider may be controlled for deterministic input | Per-Agent execution, streaming, tools, cancellation, queueing, interactions, history and files |
+
+The owned product stack is real except for the daemon in Web / Chat tests.
+External identity or model services may use a documented stateful provider when
+necessary; that does not authorize replacing a production product layer. Existing
+controlled ACP peers are reserved for explicit protocol fault cases that cannot be
+produced reliably by a real Agent. They are not the default Agent test boundary
+and cannot establish Agent compatibility.
 
 ## Scenario rules
 

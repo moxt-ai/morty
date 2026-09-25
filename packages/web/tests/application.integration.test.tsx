@@ -182,16 +182,199 @@ test("Given a conversation is working, When a user starts a new conversation, Th
     releaseTurn.resolve();
 });
 
+test("Given a conversation is working, When the user reopens it, Then its live status and messages are restored", {
+    timeout: 30_000,
+}, async () => {
+    const releaseTurn = Promise.withResolvers<void>();
+    const releaseSnapshot = Promise.withResolvers<void>();
+    let turnStarted = false;
+    const prompt = "Keep this session working while I leave";
+    const answer = "The active response remains visible.";
+    const progress = "Inspecting the active workspace once.";
+    const created = await createTestApp({
+        agentBehavior: {
+            afterSessionStarted: async (_command, signal) => {
+                signal.throwIfAborted();
+                turnStarted = true;
+            },
+            afterLastDelta: async (_command, signal) => {
+                await Promise.race([
+                    releaseTurn.promise,
+                    new Promise<never>((_resolve, reject) =>
+                        signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+                    ),
+                ]);
+            },
+            beforeActiveTurnSnapshot: async (_sessionId, signal) => {
+                if (!turnStarted) {
+                    return;
+                }
+                await Promise.race([
+                    releaseSnapshot.promise,
+                    new Promise<never>((_resolve, reject) =>
+                        signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+                    ),
+                ]);
+            },
+            loadNativeHistory: async (_sessionId, signal) => {
+                signal.throwIfAborted();
+                const inspectWorkspace = {
+                    activities: [
+                        {
+                            activityId: "inspect-workspace",
+                            activityType: "tool",
+                            content: [],
+                            input: "pwd",
+                            locations: [],
+                            name: "shell",
+                            output: "/workspace",
+                            sequence: 1,
+                            status: "completed",
+                            title: "Inspect workspace",
+                            toolKind: "shell",
+                        },
+                    ],
+                    content: [],
+                    role: "assistant" as const,
+                    text: "",
+                };
+                const createDirectory = {
+                    activities: [
+                        {
+                            activityId: "create-directory",
+                            activityType: "tool",
+                            content: [],
+                            input: "mkdir app",
+                            locations: [],
+                            name: "shell",
+                            output: "",
+                            sequence: 2,
+                            status: "completed",
+                            title: "Create app directory",
+                            toolKind: "shell",
+                        },
+                        {
+                            activityId: "fake-progress-1",
+                            activityType: "progress",
+                            content: [],
+                            input: "",
+                            locations: [],
+                            name: "",
+                            output: progress,
+                            sequence: 3,
+                            status: "completed",
+                            title: "Progress update",
+                            toolKind: "",
+                        },
+                    ],
+                    content: [],
+                    role: "assistant" as const,
+                    text: answer,
+                };
+                return {
+                    coveredCommandIds: [],
+                    coveredMessageIds: [],
+                    messages: turnStarted ? [{ role: "user", text: prompt }, inspectWorkspace, createDirectory] : [],
+                    status: "available",
+                    truncated: false,
+                };
+            },
+            progressText: () => progress,
+            responseParts: () => [answer],
+        },
+        connectAgent: true,
+    });
+    const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
+    await created.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+
+    await sendPrompt(
+        created,
+        (await created.queryElementByTestId(dataTestId.messageComposer)) as HTMLTextAreaElement,
+        prompt,
+    );
+    await Promise.race([
+        created.queryElementByTestId(
+            dataTestId.agentResponse,
+            (element) => element.textContent?.includes(answer) === true,
+        ),
+        failure,
+    ]);
+    await created.user.click(await created.queryElementByTestId(dataTestId.newConversation));
+    const workingConversation = await vi.waitFor(() => {
+        const conversation = created
+            .elementsByTestId(dataTestId.managedConversation)
+            .find((candidate) => candidate.textContent?.includes(prompt) === true);
+        if (conversation === undefined) {
+            throw new Error(`The working conversation is unavailable: ${document.body.textContent}`);
+        }
+        return conversation;
+    });
+    await created.user.click(workingConversation);
+
+    await vi.waitFor(() => {
+        expect(created.optionalElementByTestId(dataTestId.sessionStatus)).not.toBeNull();
+        expect(created.optionalElementByTestId(dataTestId.agentReplyStatus)).toBeNull();
+    });
+    releaseSnapshot.resolve();
+    await Promise.race([
+        Promise.all([
+            created.queryElementByTestId(
+                dataTestId.userMessage,
+                (element) => element.textContent?.includes(prompt) === true,
+            ),
+            vi.waitFor(() => {
+                expect(
+                    created
+                        .elementsByTestId(dataTestId.agentResponse)
+                        .some((element) => element.textContent?.includes(answer) === true),
+                ).toBe(true);
+            }),
+            created.queryElementByTestId(dataTestId.sessionStatus),
+        ]),
+        failure,
+    ]);
+    await vi.waitFor(() => {
+        expect(
+            created
+                .elementsByTestId(dataTestId.userMessage)
+                .filter((element) => element.textContent?.includes(prompt) === true),
+        ).toHaveLength(1);
+        const activities = created.elementsByTestId(dataTestId.agentToolCall);
+        expect(
+            activities.filter((element) => element.textContent?.includes("Inspect workspace") === true),
+        ).toHaveLength(1);
+        expect(
+            activities.filter((element) => element.textContent?.includes("Create app directory") === true),
+        ).toHaveLength(1);
+        expect(
+            created
+                .elementsByTestId(dataTestId.agentResponse)
+                .filter((element) => element.textContent?.includes(answer) === true),
+        ).toHaveLength(1);
+        expect((document.body.textContent?.split(progress).length ?? 1) - 1).toBe(1);
+    });
+    expect(created.optionalElementByTestId(dataTestId.agentReplyStatus)).toBeNull();
+    releaseTurn.resolve();
+});
+
 test("Given a completed conversation was locally recorded as working, When the user reopens it without an active Runtime turn, Then the conversation is idle", {
     timeout: 30_000,
 }, async () => {
     const releaseTurn = Promise.withResolvers<void>();
     const turnReleased = Promise.withResolvers<void>();
     let completed = false;
+    let completedCommandId: string | null = null;
     const prompt = "Finish while this conversation is closed";
     const answer = "The task completed while the conversation was closed.";
     const created = await createTestApp({
         agentBehavior: {
+            afterSessionStarted: async (command, signal) => {
+                signal.throwIfAborted();
+                completedCommandId = command.commandId;
+            },
             afterLastDelta: async (_command, signal) => {
                 await Promise.race([
                     releaseTurn.promise,
@@ -205,7 +388,7 @@ test("Given a completed conversation was locally recorded as working, When the u
             loadNativeHistory: async (_sessionId, signal) => {
                 signal.throwIfAborted();
                 return {
-                    coveredCommandIds: [],
+                    coveredCommandIds: completed && completedCommandId !== null ? [completedCommandId] : [],
                     coveredMessageIds: [],
                     messages: completed
                         ? [
@@ -269,13 +452,23 @@ test("Given a Bot connected to a multi-agent Runtime, When the user reloads an O
 }, async () => {
     const prompt = "Restore this OpenCode conversation";
     const answer = "This OpenCode conversation was restored.";
+    const releaseHistory = Promise.withResolvers<void>();
     let completed = false;
+    let holdHistory = false;
     const created = await createTestApp({
         agentBehavior: {
             agentId: "codex",
             additionalAgents: [{ id: "opencode", name: "OpenCode" }],
             loadNativeHistory: async (_sessionId, signal) => {
                 signal.throwIfAborted();
+                if (holdHistory) {
+                    await Promise.race([
+                        releaseHistory.promise,
+                        new Promise<never>((_resolve, reject) =>
+                            signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+                        ),
+                    ]);
+                }
                 return {
                     coveredCommandIds: [],
                     coveredMessageIds: [],
@@ -322,8 +515,16 @@ test("Given a Bot connected to a multi-agent Runtime, When the user reloads an O
         ),
         failure,
     ]);
+    await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
 
+    holdHistory = true;
     created.reload();
+
+    expect(await vi.waitFor(() => getByRole(document.body, "status", { name: "Loading messages" }))).toBeInstanceOf(
+        HTMLElement,
+    );
+    expect(created.elementByTestId(dataTestId.botConnectionStatus).textContent).toBe("Connected");
+    releaseHistory.resolve();
 
     expect(
         await created.queryElementByTestId(
@@ -385,7 +586,31 @@ test("Given an unpaired workspace, When a user manages Bots, Then pairing and th
 test("Given a paired Bot with cached agent settings, When a user refreshes and filters its models, Then the reloaded configuration and Agent reply are visible", {
     timeout: 30_000,
 }, async () => {
-    const created = await createTestApp({ connectAgent: true });
+    let completed: { readonly commandId: string; readonly prompt: string; readonly reply: string } | null = null;
+    const created = await createTestApp({
+        connectAgent: true,
+        agentBehavior: {
+            onPromptCompleted: (command, reply) => {
+                completed = { commandId: command.commandId, prompt: command.prompt, reply };
+            },
+            loadNativeHistory: async (_sessionId, signal) => {
+                signal.throwIfAborted();
+                return {
+                    status: "available",
+                    truncated: false,
+                    coveredCommandIds: completed === null ? [] : [completed.commandId],
+                    coveredMessageIds: [],
+                    messages:
+                        completed === null
+                            ? []
+                            : [
+                                  { role: "user", text: completed.prompt },
+                                  { role: "assistant", text: completed.reply, activities: [], content: [] },
+                              ],
+                };
+            },
+        },
+    });
     const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
     await created.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -415,7 +640,7 @@ test("Given a paired Bot with cached agent settings, When a user refreshes and f
     expect(created.optionalElementByTestId(dataTestId.sessionConfigValue("test-small"))).toBeNull();
     await created.user.keyboard("{Escape}{Escape}");
 
-    const prompt = "Create an image";
+    const prompt = "Confirm the refreshed model settings";
     await sendPrompt(created, composer as HTMLTextAreaElement, prompt);
     await Promise.race([
         Promise.all([
@@ -458,7 +683,7 @@ test("Given multiple Runtimes share a Project, When a user configures a paired B
     expect(getAllByRole(configuration, "tab")).toHaveLength(1);
 });
 
-test("Given an active reply, When a queued message steers it, Then subsequent agent output appears after the steering message", {
+test("Given an active reply, When another viewer reloads and deletes queued work, Then both viewers stay synchronized and the user can steer a later message", {
     timeout: 30_000,
 }, async () => {
     const continueReply = Promise.withResolvers<void>();
@@ -494,13 +719,15 @@ test("Given an active reply, When a queued message steers it, Then subsequent ag
     const composer = await created.queryElementByTestId(dataTestId.messageComposer);
 
     await sendPrompt(created, composer as HTMLTextAreaElement, "Start a long task");
-    const before = await Promise.race([
+    await Promise.race([
         created.queryElementByTestId(
             dataTestId.agentResponse,
             (element) => element.textContent?.includes("Before steering.") === true,
         ),
         failure,
     ]);
+    const viewer = await created.openViewer();
+    await viewer.queryElementByTestId(dataTestId.sessionStatus);
     const activeComposer = await created.queryElementByTestId(dataTestId.messageComposer);
     await created.user.click(activeComposer);
     await created.user.type(activeComposer, "Use the revised requirement");
@@ -510,8 +737,52 @@ test("Given an active reply, When a queued message steers it, Then subsequent ag
             (element) => element.getAttribute("aria-label") === "Send message",
         ),
     );
-    const queued = await created.queryElementByTestId(dataTestId.queuedMessage);
-    await created.user.click(getByLabelText(queued, "Steer queued message: Use the revised requirement"));
+    await created.queryElementByTestId(dataTestId.queuedMessage);
+    await viewer.queryElementByTestId(
+        dataTestId.queuedMessage,
+        (element) => element.textContent?.includes("Use the revised requirement") === true,
+    );
+    viewer.reload();
+    await viewer.queryElementByTestId(
+        dataTestId.queuedMessage,
+        (element) => element.textContent?.includes("Use the revised requirement") === true,
+    );
+    const remoteQueue = await viewer.queryElementByTestId(dataTestId.queuedMessage);
+    await viewer.user.click(getByLabelText(remoteQueue, "Delete queued message: Use the revised requirement"));
+    await vi.waitFor(() => {
+        expect(created.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull();
+        expect(viewer.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull();
+    });
+    await sendPrompt(
+        created,
+        (await created.queryElementByTestId(dataTestId.messageComposer)) as HTMLTextAreaElement,
+        "Use the revised requirement",
+    );
+    await viewer.queryElementByTestId(dataTestId.queuedMessage);
+    await viewer.close();
+    await created.user.click(await created.queryElementByTestId(dataTestId.newConversation));
+    const workingConversation = await vi.waitFor(() => {
+        const conversation = created
+            .elementsByTestId(dataTestId.managedConversation)
+            .find((candidate) => candidate.textContent?.includes("Start a long task") === true);
+        if (conversation === undefined) {
+            throw new Error(`The working conversation is unavailable: ${document.body.textContent}`);
+        }
+        return conversation;
+    });
+    await created.user.click(workingConversation);
+
+    await created.queryElementByTestId(dataTestId.sessionStatus);
+    const restoredQueue = await created.queryElementByTestId(
+        dataTestId.queuedMessage,
+        (element) => element.textContent?.includes("Use the revised requirement") === true,
+    );
+    await created.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => !(element as HTMLTextAreaElement).disabled,
+    );
+    expect(created.optionalElementByTestId(dataTestId.agentReplyStatus)).toBeNull();
+    await created.user.click(getByLabelText(restoredQueue, "Steer queued message: Use the revised requirement"));
     const steeringMessage = await vi.waitFor(
         () => {
             const message = created
@@ -541,9 +812,100 @@ test("Given an active reply, When a queued message steers it, Then subsequent ag
         failure,
     ]);
 
-    expect(before.compareDocumentPosition(steeringMessage) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     expect(steeringMessage.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     finishTurn.resolve();
+    await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+});
+
+test("Given a completed conversation, When the user reopens it and sends another message, Then the Agent continues the chat", {
+    timeout: 30_000,
+}, async () => {
+    const completedTurns: { readonly commandId: string; readonly prompt: string; readonly response: string }[] = [];
+    const created = await createTestApp({
+        agentBehavior: {
+            loadNativeHistory: async (_sessionId, signal) => {
+                signal.throwIfAborted();
+                return {
+                    coveredCommandIds: completedTurns.map((turn) => turn.commandId),
+                    coveredMessageIds: [],
+                    messages: completedTurns.flatMap((turn) => [
+                        { role: "user" as const, text: turn.prompt },
+                        { activities: [], content: [], role: "assistant" as const, text: turn.response },
+                    ]),
+                    status: "available",
+                    truncated: false,
+                };
+            },
+            onPromptCompleted: (command, response) => {
+                completedTurns.push({ commandId: command.commandId, prompt: command.prompt, response });
+            },
+            responseParts: (command) => [`Reply to: ${command.prompt}`],
+        },
+        connectAgent: true,
+    });
+    const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
+    await created.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+
+    await sendPrompt(
+        created,
+        (await created.queryElementByTestId(dataTestId.messageComposer)) as HTMLTextAreaElement,
+        "First message",
+    );
+    await Promise.race([
+        created.queryElementByTestId(
+            dataTestId.agentResponse,
+            (element) => element.textContent?.includes("Reply to: First message") === true,
+        ),
+        failure,
+    ]);
+    await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    await created.user.click(await created.queryElementByTestId(dataTestId.newConversation));
+    const conversation = await vi.waitFor(() => {
+        const candidate = created
+            .elementsByTestId(dataTestId.managedConversation)
+            .find((element) => element.textContent?.includes("First message") === true);
+        if (candidate === undefined) {
+            throw new Error(`The completed conversation is unavailable: ${document.body.textContent}`);
+        }
+        return candidate;
+    });
+    await created.user.click(conversation);
+    await created.queryElementByTestId(
+        dataTestId.agentResponse,
+        (element) => element.textContent?.includes("Reply to: First message") === true,
+    );
+    await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    const reopenedComposer = (await created.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => !(element as HTMLTextAreaElement).disabled,
+    )) as HTMLTextAreaElement;
+    await created.queryElementByTestId(
+        dataTestId.sendMessage,
+        (element) => element.getAttribute("aria-label") === "Send message",
+    );
+
+    await sendPrompt(created, reopenedComposer, "Continue after reopening");
+    await vi.waitFor(() => expect(reopenedComposer.value).toBe(""));
+    await vi.waitFor(() =>
+        expect(
+            created
+                .elementsByTestId(dataTestId.userMessage)
+                .some((element) => element.textContent?.includes("Continue after reopening") === true),
+        ).toBe(true),
+    );
+    await Promise.race([
+        vi.waitFor(() =>
+            expect(
+                created
+                    .elementsByTestId(dataTestId.agentResponse)
+                    .some((element) => element.textContent?.includes("Reply to: Continue after reopening") === true),
+            ).toBe(true),
+        ),
+        failure,
+    ]);
 });
 
 test("Given Codex narrates visible progress, When the activity arrives, Then it appears in the Thinking block", {
@@ -633,7 +995,7 @@ test("Given an Agent links a local file location, When a user opens it, Then the
                 ]);
             },
             responseParts: () => [
-                "Open [Generated source](</fake/generated-source.ts:104>)\n\n![QR code](file:///fake/generated-image.png)",
+                "Open [Generated source](</fake/generated-source.ts:104>)\n\n![QR code](file:///fake/generated-image.png)\n\n![Relative badge](badge.png)\n\n![Nested badge](./images/badge%20two.png)",
             ],
         },
         connectAgent: true,
@@ -648,8 +1010,12 @@ test("Given an Agent links a local file location, When a user opens it, Then the
     await sendPrompt(created, composer as HTMLTextAreaElement, "Show the generated local artifacts");
     await Promise.race([created.queryElementByTestId(dataTestId.localFileLink), failure]);
     await vi.waitFor(() =>
-        expect(getByRole(document.body, "img", { name: "QR code" })).toBeInstanceOf(HTMLImageElement),
+        expect(getByRole(document.body, "img", { name: "QR code" }).getAttribute("src")).toMatch(/^blob:/u),
     );
+    await vi.waitFor(() => {
+        expect(getByRole(document.body, "img", { name: "Relative badge" }).getAttribute("src")).toMatch(/^blob:/u);
+        expect(getByRole(document.body, "img", { name: "Nested badge" }).getAttribute("src")).toMatch(/^blob:/u);
+    });
     await created.user.click(await created.queryElementByTestId(dataTestId.localFileLink));
 
     const preview = await created.queryElementByTestId(dataTestId.filePreview);

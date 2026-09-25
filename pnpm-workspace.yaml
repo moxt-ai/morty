@@ -6,13 +6,16 @@ minimumReleaseAgeExclude:
   - '@moxt-ai/mobius-protocol@0.0.27'
   - '@moxt-ai/mobius-sdk@0.0.35'
   - '@moxt-ai/mobius-sdk@0.0.36'
+  - '@moxt-ai/mobius-sdk@0.0.38'
+  - '@moxt-ai/mobius-protocol@0.0.28'
+  - '@moxt-ai/mobius-sdk@0.0.39'
 
 catalog:
   '@biomejs/biome': 2.5.12
   '@clerk/backend': 3.17.1
   '@clerk/react': 6.15.1
-  '@moxt-ai/mobius-protocol': 0.0.27
-  '@moxt-ai/mobius-sdk': 0.0.36
+  '@moxt-ai/mobius-protocol': 0.0.28
+  '@moxt-ai/mobius-sdk': 0.0.39
   '@cloudflare/vite-plugin': 1.54.4
   '@playwright/test': 1.63.0
   '@radix-ui/react-select': 2.3.7

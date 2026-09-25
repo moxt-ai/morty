@@ -9,7 +9,7 @@ import { Spinner } from "../../components/ui/spinner.tsx";
 import {
     type BotChatApi,
     type ChatDraftConfiguration,
-    connectedChatWorkspaceAgents,
+    connectedChatRuntimeAgents,
 } from "../../services/chat/bot-chat-api.ts";
 import { createDraftControlsStore } from "../../view-models/chat/draft-controls-store.ts";
 
@@ -102,7 +102,7 @@ export function DraftChatControls({
                                 void viewModel.selectHarness(value, disabled, controller.signal);
                             }
                         },
-                        options: connectedChatWorkspaceAgents(settings.workspace).map((agent) => ({
+                        options: connectedChatRuntimeAgents(settings.workspace.runtime).map((agent) => ({
                             value: `${agent.runtimeId}:${agent.agentRef}`,
                             label: `${agent.label} · ${agent.machineName}`,
                             tabLabel: agent.label,

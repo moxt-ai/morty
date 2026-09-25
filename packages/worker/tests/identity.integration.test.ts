@@ -276,7 +276,7 @@ test("Given a user with multiple Bots, When they remove one Bot, Then the other 
     expect(await remainingResponse.json()).toEqual({ bots: initial });
 });
 
-test("Given a user with a Bot on a Project-scoped Platform, When setup checks the Bot workspace, Then the draft Bot and available agents are returned", async () => {
+test("Given a user with a draft Bot on a Project-scoped Platform, When setup lists Runtimes, Then the available Runtime options are returned", async () => {
     const environment = fixture.environment();
     const identity = await fixture.createAnonymousUser();
     const listed = await worker.fetch(
@@ -287,18 +287,21 @@ test("Given a user with a Bot on a Project-scoped Platform, When setup checks th
     );
     const { bots } = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await listed.json());
     const response = await fetchPublicApplication(
-        new Request(`${APP_ORIGIN}/morty/api/chat/projects/${identity.projectId}/bots/${bots[0]?.botId}/workspace`, {
-            method: "POST",
-            headers: {
-                authorization: `Bearer ${identity.token}`,
-                "content-type": "application/json",
+        new Request(
+            `${APP_ORIGIN}/morty/api/chat/projects/${identity.projectId}/bots/${bots[0]?.botId}/setup/runtimes`,
+            {
+                method: "POST",
+                headers: {
+                    authorization: `Bearer ${identity.token}`,
+                    "content-type": "application/json",
+                },
+                body: "{}",
             },
-            body: "{}",
-        }),
+        ),
         environment,
     );
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ status: "draft", runtimeId: null, runtimes: [] });
+    expect(await response.json()).toEqual({ runtimes: [] });
 });
 
 test("Given an anonymous user, When access is transferred, revoked, and exhausted, Then every credential follows the lifecycle", async () => {
