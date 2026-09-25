@@ -6,9 +6,14 @@ This package has one local product stack and one browser product suite.
 
 `conversation.e2e.test.ts`, `claude-conversation.e2e.test.ts`,
 `pi-conversation.e2e.test.ts`, and `setup.e2e.test.ts` are the executable control
-surface for Morty. They run with Playwright and a deterministic stateful ACP
-Agent. Together their few long journeys cross the real Chat, Platform, Mobius,
-Runtime, protocol, and browser path.
+surface for Morty. The intended boundary uses Playwright with the real Chat,
+Platform, SDK, Runtime relay, transports, and storage, replacing only the local
+daemon with a stateful fake at its production protocol port.
+
+Current infrastructure still uses a real daemon with a controlled ACP Agent.
+Convert that infrastructure to the fake-daemon boundary; do not extend this older
+composition or describe it as real Agent coverage. Agent-named journey files are
+not evidence that their real binaries or adapters were tested.
 
 The setup journey is the sole owner of CLI preparation, pairing, browser handoff,
 native-session import, and access revocation. Worker tests cover only the pairing-
@@ -26,9 +31,12 @@ visible outcomes in the scenario; `infra` owns only startup, credentials, waitin
 diagnostics, and cleanup.
 
 Real third-party Agent, provider, tool-call, ACP, and daemon compatibility belongs
-to `third-party/mobius/tests/agent-daemon`. The browser journeys keep a
-deterministic ACP Agent and prove one representative image prompt and persisted
-Agent response through the Chat-owned side of that boundary.
+to `third-party/mobius/tests/agent-daemon`. Use the real daemon, real Agent executable, and production adapter there, with
+independent coverage for Codex, Claude Code, OpenCode, and Pi. Browser journeys
+use the fake daemon to make visible product behavior deterministic; they do not
+prove adapter compatibility. A controlled model provider is allowed in daemon
+tests without replacing the real Agent. See the root `TESTING.md` for the shared
+boundary contract.
 
 Browser-side error branches and state transitions belong to the lightweight full-
 application suite in `packages/web/tests`. Keep only the critical successful proof

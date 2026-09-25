@@ -223,7 +223,11 @@ reconciliation clears that warning when the command is already present in saved 
 
 Run `pnpm lint` and `pnpm typecheck` locally, plus only the tests related to the
 change when needed. Product behavior is covered at HTTP and browser boundaries;
-tests use deterministic time and stateful fakes rather than request mocks.
+Web / Chat tests keep the application, SDK, Chat, Platform, Runtime relay, and
+transports real and use a stateful fake daemon at the daemon protocol port.
+Separate Mobius agent-daemon tests exercise the real daemon with each real Agent
+and its production adapter. Use deterministic time, not request mocks.
+`TESTING.md` defines the shared boundary and the narrow external-provider exceptions.
 `pnpm ci:check` serially reproduces the combined CI validation when diagnosis
 requires it.
 
