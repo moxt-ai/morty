@@ -568,7 +568,31 @@ test("Given an unpaired workspace, When a user manages Bots, Then pairing and th
 test("Given a paired Bot with cached agent settings, When a user refreshes and filters its models, Then the reloaded configuration and Agent reply are visible", {
     timeout: 30_000,
 }, async () => {
-    const created = await createTestApp({ connectAgent: true });
+    let completed: { readonly commandId: string; readonly prompt: string; readonly reply: string } | null = null;
+    const created = await createTestApp({
+        connectAgent: true,
+        agentBehavior: {
+            onPromptCompleted: (command, reply) => {
+                completed = { commandId: command.commandId, prompt: command.prompt, reply };
+            },
+            loadNativeHistory: async (_sessionId, signal) => {
+                signal.throwIfAborted();
+                return {
+                    status: "available",
+                    truncated: false,
+                    coveredCommandIds: completed === null ? [] : [completed.commandId],
+                    coveredMessageIds: [],
+                    messages:
+                        completed === null
+                            ? []
+                            : [
+                                  { role: "user", text: completed.prompt },
+                                  { role: "assistant", text: completed.reply, activities: [], content: [] },
+                              ],
+                };
+            },
+        },
+    });
     const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
     await created.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -598,7 +622,7 @@ test("Given a paired Bot with cached agent settings, When a user refreshes and f
     expect(created.optionalElementByTestId(dataTestId.sessionConfigValue("test-small"))).toBeNull();
     await created.user.keyboard("{Escape}{Escape}");
 
-    const prompt = "Create an image";
+    const prompt = "Confirm the refreshed model settings";
     await sendPrompt(created, composer as HTMLTextAreaElement, prompt);
     await Promise.race([
         Promise.all([
