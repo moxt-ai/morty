@@ -167,14 +167,25 @@ to the journey.
 
 ## Retain visual evidence
 
-Capture screenshots after reaching each state through normal browser actions:
+Screenshot the behavior the user actually asked to verify, at the product
+boundary where that behavior is visible. Do not automatically use screenshots
+of the generated to-do app as evidence for a Morty, Platform, Runtime, or
+streaming fix.
+
+For example, a streaming fix needs screenshots of the Morty conversation while
+the turn is still active: one showing partial reasoning and another showing a
+partial assistant message before completion. A queue-control fix needs the
+relevant queued, steered, or deleted state in Morty. Capture generated-app
+states only when the generated app journey itself is the requested behavior.
+
+Capture each required state through normal browser actions. Name files after
+the behavior they prove, for example:
 
 ```text
 test-results/agent-verify-user-journey/<run-name>/
-  01-empty.png
-  02-item-added.png
-  03-item-completed.png
-  04-item-deleted.png
+  01-partial-reasoning.png
+  02-partial-assistant-message.png
+  03-turn-completed.png
 ```
 
 Use the smallest set that proves the requested journey, but retain multiple
