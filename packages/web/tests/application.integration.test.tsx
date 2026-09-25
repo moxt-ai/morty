@@ -929,7 +929,7 @@ test("Given an Agent links a local file location, When a user opens it, Then the
                 ]);
             },
             responseParts: () => [
-                "Open [Generated source](</fake/generated-source.ts:104>)\n\n![QR code](file:///fake/generated-image.png)",
+                "Open [Generated source](</fake/generated-source.ts:104>)\n\n![QR code](file:///fake/generated-image.png)\n\n![Relative badge](badge.png)\n\n![Nested badge](./images/badge%20two.png)",
             ],
         },
         connectAgent: true,
@@ -946,6 +946,10 @@ test("Given an Agent links a local file location, When a user opens it, Then the
     await vi.waitFor(() =>
         expect(getByRole(document.body, "img", { name: "QR code" })).toBeInstanceOf(HTMLImageElement),
     );
+    await vi.waitFor(() => {
+        expect(getByRole(document.body, "img", { name: "Relative badge" })).toBeInstanceOf(HTMLImageElement);
+        expect(getByRole(document.body, "img", { name: "Nested badge" })).toBeInstanceOf(HTMLImageElement);
+    });
     await created.user.click(await created.queryElementByTestId(dataTestId.localFileLink));
 
     const preview = await created.queryElementByTestId(dataTestId.filePreview);

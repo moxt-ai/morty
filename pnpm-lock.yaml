@@ -22,8 +22,8 @@ catalogs:
       specifier: 0.0.27
       version: 0.0.27
     '@moxt-ai/mobius-sdk':
-      specifier: 0.0.36
-      version: 0.0.36
+      specifier: 0.0.38
+      version: 0.0.38
     '@playwright/test':
       specifier: 1.63.0
       version: 1.63.0
@@ -281,7 +281,7 @@ importers:
         version: 0.0.27
       '@moxt-ai/mobius-sdk':
         specifier: 'catalog:'
-        version: 0.0.36(react@19.2.8)
+        version: 0.0.38(react@19.2.8)
       '@radix-ui/react-select':
         specifier: 'catalog:'
         version: 2.3.7(@types/react-dom@19.2.7(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -369,7 +369,7 @@ importers:
         version: 0.0.27
       '@moxt-ai/mobius-sdk':
         specifier: 'catalog:'
-        version: 0.0.36(react@19.2.8)
+        version: 0.0.38(react@19.2.8)
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@cloudflare/workers-types@5.20260914.1)
@@ -1287,8 +1287,8 @@ packages:
     resolution: {integrity: sha512-u8xFX4+T33wLAI757LoiYqKcBJd8fl134DV7yrFvECoLRhim/iFG32yBVibCRFcXbMieAIMtVDSz5F714Rjq+A==}
     engines: {node: '>=20.19.0'}
 
-  '@moxt-ai/mobius-sdk@0.0.36':
-    resolution: {integrity: sha512-3PuiTvaacDEt0Im1JsWbBGcqbjAbGrjMSIpTVpyhj3dcDeOpyWrohZ4/7ua9GnJytjq6ksCCA+SOp1jhLUDH0Q==}
+  '@moxt-ai/mobius-sdk@0.0.38':
+    resolution: {integrity: sha512-+fLjyR0HgA0Z0SXore+KG4k5Cqdyf2u9/50hLkogJfbGe2kHlIV/fVv5TdpxFocA5rD/6QCBPZj1hPQJAVUWRw==}
     engines: {node: '>=20.19.0'}
 
   '@napi-rs/wasm-runtime@1.2.3':
@@ -5237,7 +5237,7 @@ snapshots:
     dependencies:
       zod: 4.6.5
 
-  '@moxt-ai/mobius-sdk@0.0.36(react@19.2.8)':
+  '@moxt-ai/mobius-sdk@0.0.38(react@19.2.8)':
     dependencies:
       '@moxt-ai/mobius-protocol': 0.0.27
       base64-js: 1.5.1
