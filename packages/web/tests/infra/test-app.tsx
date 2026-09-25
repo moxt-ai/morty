@@ -1,4 +1,4 @@
-import { getAllByTestId, getByTestId, queryByTestId } from "@testing-library/dom";
+import { getByTestId, queryAllByTestId } from "@testing-library/dom";
 import { render } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { vi } from "vitest";
@@ -63,6 +63,7 @@ export async function createTestApp(
     }
     let container = document.createElement("div");
     const mount = () => {
+        container.setAttribute("data-test-app-root", "");
         document.body.appendChild(container);
         return render(
             <ApiTransportProvider transport={current.transport}>
@@ -83,6 +84,25 @@ export async function createTestApp(
     };
     let rendered = mount();
     let closed = false;
+    const matchingElements = (testId: string | RegExp): HTMLElement[] =>
+        queryAllByTestId(document.body, testId).filter(
+            (element) => container.contains(element) || element.closest("[data-test-app-root]") === null,
+        );
+    const optionalElement = (testId: string | RegExp): HTMLElement | null => {
+        const matches = matchingElements(testId);
+        if (matches.length > 1) {
+            throw new Error(`Multiple elements match ${String(testId)}`);
+        }
+        return matches[0] ?? null;
+    };
+    const requiredElement = (testId: string | RegExp): HTMLElement => {
+        const element = optionalElement(testId);
+        if (element === null) {
+            throw new Error(`Missing ${String(testId)}; page: ${document.body.textContent}`);
+        }
+        return element;
+    };
+
     const app: TestApp = {
         ...current,
         agentFailure,
@@ -101,9 +121,10 @@ export async function createTestApp(
             container.remove();
             activeApps.delete(app);
         },
-        elementByTestId: (testId, scope = container) => getByTestId(scope, testId),
-        elementsByTestId: (testId) => getAllByTestId(container, testId),
-        optionalElementByTestId: (testId) => queryByTestId(container, testId),
+        elementByTestId: (testId, scope) =>
+            scope === undefined ? requiredElement(testId) : getByTestId(scope, testId),
+        elementsByTestId: matchingElements,
+        optionalElementByTestId: optionalElement,
         reload: () => {
             rendered.unmount();
             container.remove();
@@ -113,7 +134,7 @@ export async function createTestApp(
         queryElementByTestId: async (testId, accept = () => true) =>
             await vi.waitFor(
                 () => {
-                    const element = getByTestId(container, testId);
+                    const element = requiredElement(testId);
                     if (!accept(element)) {
                         throw new Error(`Element was not ready: ${String(testId)}; page: ${document.body.textContent}`);
                     }
