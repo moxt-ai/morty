@@ -4,6 +4,7 @@ import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { vi } from "vitest";
 import { ToastProvider } from "../../src/components/ui/toast.tsx";
 import { ApiTransportProvider } from "../../src/services/api/api-transport-context.tsx";
+import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
 import { App } from "../../src/views/application/app.tsx";
 import { router as authenticationRouter } from "../../src/views/authentication/router.tsx";
 import { WorkspaceApplication } from "../../src/views/authentication/session-application.tsx";
@@ -27,6 +28,7 @@ export interface TestApp extends Application {
     readonly elementsByTestId: (testId: string | RegExp) => HTMLElement[];
     readonly optionalElementByTestId: (testId: string | RegExp) => HTMLElement | null;
     readonly reload: () => void;
+    readonly openViewer: () => Promise<TestApp>;
     readonly queryElementByTestId: (
         testId: string | RegExp,
         accept?: (element: HTMLElement) => boolean,
@@ -36,6 +38,7 @@ export interface TestApp extends Application {
 
 export async function createTestApp(
     options: {
+        readonly application?: Application;
         readonly agentBehavior?: Parameters<Application["connectAgent"]>[0];
         readonly connectAgent?: boolean;
         readonly page?:
@@ -44,7 +47,7 @@ export async function createTestApp(
         readonly prepare?: (application: Application) => void | Promise<void>;
     } = {},
 ): Promise<TestApp> {
-    const current = await (await environment).createApplication();
+    const current = options.application ?? (await (await environment).createApplication());
     await options.prepare?.(current);
     const agentFailure =
         options.connectAgent === true ? (await current.connectAgent(options.agentBehavior)).failure : null;
@@ -55,7 +58,7 @@ export async function createTestApp(
         transfer.searchParams.set("sessionId", page.sessionId);
         window.location.href = transfer.href;
         authenticationRouter.history.replace(`${transfer.pathname}${transfer.search}${transfer.hash}`);
-    } else {
+    } else if (options.application === undefined) {
         window.location.href = `${current.origin}/chat`;
     }
     let container = document.createElement("div");
@@ -83,6 +86,11 @@ export async function createTestApp(
     const app: TestApp = {
         ...current,
         agentFailure,
+        openViewer: async () => {
+            const transport = new WebSocketApiTransport(current.origin);
+            transport.open();
+            return await createTestApp({ application: { ...current, transport, close: () => transport.close() } });
+        },
         close: async () => {
             if (closed) {
                 return;
@@ -93,9 +101,9 @@ export async function createTestApp(
             container.remove();
             activeApps.delete(app);
         },
-        elementByTestId: (testId, scope = document.body) => getByTestId(scope, testId),
-        elementsByTestId: (testId) => getAllByTestId(document.body, testId),
-        optionalElementByTestId: (testId) => queryByTestId(document.body, testId),
+        elementByTestId: (testId, scope = container) => getByTestId(scope, testId),
+        elementsByTestId: (testId) => getAllByTestId(container, testId),
+        optionalElementByTestId: (testId) => queryByTestId(container, testId),
         reload: () => {
             rendered.unmount();
             container.remove();
@@ -105,7 +113,7 @@ export async function createTestApp(
         queryElementByTestId: async (testId, accept = () => true) =>
             await vi.waitFor(
                 () => {
-                    const element = getByTestId(document.body, testId);
+                    const element = getByTestId(container, testId);
                     if (!accept(element)) {
                         throw new Error(`Element was not ready: ${String(testId)}; page: ${document.body.textContent}`);
                     }

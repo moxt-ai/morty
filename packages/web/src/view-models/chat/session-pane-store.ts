@@ -396,7 +396,6 @@ export function createSessionPaneModel(options: {
         tasks.getState().start(openedActiveTurn.commandId, openedActiveTurn.turnId);
     }
     const messageQueue = createSessionMessageQueueStore({
-        sessionId,
         port: {
             cancel: async (turnId, idempotencyKey, signal) => {
                 if (client === null) {
@@ -543,8 +542,14 @@ export function createSessionPaneModel(options: {
                                 signal,
                             );
                             signal.throwIfAborted();
-                            const running = await connected.sessions.readActiveTurn(sessionId, identity, signal);
+                            const execution = await connected.sessions.readSessionExecution(
+                                sessionId,
+                                identity,
+                                signal,
+                            );
                             signal.throwIfAborted();
+                            const running = execution.turn;
+                            messageQueue.getState().replace(execution.queued);
                             nativeHistory = loadedHistory.status === "available" ? loadedHistory : null;
                             historyCursor = loadedHistory.status === "available" ? loadedHistory.nextCursor : null;
                             const authoritative = {
@@ -576,14 +581,6 @@ export function createSessionPaneModel(options: {
                                 command === "" ? null : command,
                             );
                             const nativeMessages = native.messages;
-                            messageQueue
-                                .getState()
-                                .reconcile([
-                                    ...(authoritative.history.status === "available"
-                                        ? authoritative.history.coveredCommandIds
-                                        : []),
-                                    ...(running === null ? [] : [running.commandId]),
-                                ]);
                             delivery
                                 .getState()
                                 .reconcile([
@@ -678,6 +675,23 @@ export function createSessionPaneModel(options: {
                         },
                         receive: async (event) => {
                             const payload = event.payload;
+                            if (payload instanceof MobiusControlEvent && payload.kind === "session.queue.changed") {
+                                const execution = await connected.sessions.readSessionExecution(
+                                    sessionId,
+                                    {
+                                        additionalDirectoryIds: session.entry.additionalDirectories.map(
+                                            (directory) => directory.directoryId,
+                                        ),
+                                        agentId: session.agentRef,
+                                        directoryId: session.result.ready.directoryId,
+                                    },
+                                    signal,
+                                );
+                                signal.throwIfAborted();
+                                messageQueue.getState().replace(execution.queued);
+                                return true;
+                            }
+
                             if (payload instanceof MobiusAgentActivityEvent) {
                                 if (command !== "" && payload.commandId !== command) {
                                     return true;
@@ -767,8 +781,19 @@ export function createSessionPaneModel(options: {
                             ) {
                                 const queued = messageQueue.getState().takeStarted(payload.commandId);
                                 if (queued !== null) {
-                                    if (command !== "") {
-                                        tasks.getState().finish(command);
+                                    if (command !== "" && command !== queued.commandId) {
+                                        set((current) => ({
+                                            messages: [
+                                                ...current.messages,
+                                                {
+                                                    id: `${queued.commandId}-user`,
+                                                    role: "user",
+                                                    text: queued.summary,
+                                                    contents: promptImageContents(queued.images),
+                                                },
+                                            ],
+                                        }));
+                                        return true;
                                     }
                                     command = queued.commandId;
                                     tasks.getState().start(queued.commandId, queued.turnId);

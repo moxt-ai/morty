@@ -641,7 +641,7 @@ test("Given multiple Runtimes share a Project, When a user configures a paired B
     expect(getAllByRole(configuration, "tab")).toHaveLength(1);
 });
 
-test("Given an active reply with a queued message, When the user reopens it, Then they can see and steer the queued message", {
+test("Given an active reply, When another viewer reloads and deletes queued work, Then both viewers stay synchronized and the user can steer a later message", {
     timeout: 30_000,
 }, async () => {
     const continueReply = Promise.withResolvers<void>();
@@ -684,6 +684,8 @@ test("Given an active reply with a queued message, When the user reopens it, The
         ),
         failure,
     ]);
+    const viewer = await created.openViewer();
+    await viewer.queryElementByTestId(dataTestId.sessionStatus);
     const activeComposer = await created.queryElementByTestId(dataTestId.messageComposer);
     await created.user.click(activeComposer);
     await created.user.type(activeComposer, "Use the revised requirement");
@@ -694,6 +696,28 @@ test("Given an active reply with a queued message, When the user reopens it, The
         ),
     );
     await created.queryElementByTestId(dataTestId.queuedMessage);
+    await viewer.queryElementByTestId(
+        dataTestId.queuedMessage,
+        (element) => element.textContent?.includes("Use the revised requirement") === true,
+    );
+    viewer.reload();
+    await viewer.queryElementByTestId(
+        dataTestId.queuedMessage,
+        (element) => element.textContent?.includes("Use the revised requirement") === true,
+    );
+    const remoteQueue = await viewer.queryElementByTestId(dataTestId.queuedMessage);
+    await viewer.user.click(getByLabelText(remoteQueue, "Delete queued message: Use the revised requirement"));
+    await vi.waitFor(() => {
+        expect(created.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull();
+        expect(viewer.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull();
+    });
+    await sendPrompt(
+        created,
+        (await created.queryElementByTestId(dataTestId.messageComposer)) as HTMLTextAreaElement,
+        "Use the revised requirement",
+    );
+    await viewer.queryElementByTestId(dataTestId.queuedMessage);
+    await viewer.close();
     await created.user.click(await created.queryElementByTestId(dataTestId.newConversation));
     const workingConversation = await vi.waitFor(() => {
         const conversation = created

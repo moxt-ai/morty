@@ -1,3 +1,4 @@
+import type { NativeSessionResult } from "@moxt-ai/mobius-protocol";
 import type { MobiusTurn, PromptImage, SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
 import { SessionPromptDisposition } from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
@@ -8,25 +9,6 @@ interface QueuedMessageValue {
     readonly summary: string;
     readonly turnId: string;
 }
-
-interface SessionMessageQueueJournalStore {
-    readonly messagesBySession: ReadonlyMap<string, readonly QueuedMessageValue[]>;
-    readonly write: (sessionId: string, messages: readonly QueuedMessageValue[]) => void;
-}
-
-const sessionMessageQueueJournal = createStore<SessionMessageQueueJournalStore>()((set) => ({
-    messagesBySession: new Map(),
-    write: (sessionId, messages) =>
-        set((state) => {
-            const messagesBySession = new Map(state.messagesBySession);
-            if (messages.length === 0) {
-                messagesBySession.delete(sessionId);
-            } else {
-                messagesBySession.set(sessionId, messages);
-            }
-            return { messagesBySession };
-        }),
-}));
 
 export type ChatQueuedMessage =
     | ({ readonly kind: "queued" } & QueuedMessageValue)
@@ -55,7 +37,7 @@ export interface SessionMessageQueueStore {
         signal: AbortSignal,
     ) => Promise<ChatQueuedMessage | null>;
     readonly steerMessage: (commandId: string, signal: AbortSignal) => Promise<ChatQueuedMessage | null>;
-    readonly reconcile: (commandIds: readonly string[]) => void;
+    readonly replace: (messages: Extract<NativeSessionResult, { readonly action: "active-turn" }>["queued"]) => void;
     readonly takeStarted: (commandId: string) => ChatQueuedMessage | null;
 }
 
@@ -71,25 +53,10 @@ function updateMessage(
     return messages.map((message) => (message.commandId === commandId ? { ...message, kind } : message));
 }
 
-export const createSessionMessageQueueStore = (options: {
-    readonly port: SessionMessageQueuePort;
-    readonly sessionId: string;
-}) => {
-    const restored = sessionMessageQueueJournal.getState().messagesBySession.get(options.sessionId) ?? [];
-    const record = (messages: readonly ChatQueuedMessage[]): void => {
-        sessionMessageQueueJournal.getState().write(
-            options.sessionId,
-            messages.map((message) => ({
-                commandId: message.commandId,
-                images: message.images,
-                summary: message.summary,
-                turnId: message.turnId,
-            })),
-        );
-    };
+export const createSessionMessageQueueStore = (options: { readonly port: SessionMessageQueuePort }) => {
     return createStore<SessionMessageQueueStore>()((set, get) => ({
         feedback: { kind: "none" },
-        messages: restored.map((message) => ({ ...message, kind: "queued" })),
+        messages: [],
         operation: { kind: "idle" },
         deleteMessage: async (commandId, parent) => {
             const message = get().messages.find((candidate) => candidate.commandId === commandId);
@@ -106,7 +73,6 @@ export const createSessionMessageQueueStore = (options: {
                 signal.throwIfAborted();
                 set((state) => {
                     const messages = state.messages.filter((candidate) => candidate.commandId !== commandId);
-                    record(messages);
                     return { messages };
                 });
                 return message;
@@ -150,11 +116,7 @@ export const createSessionMessageQueueStore = (options: {
                     summary,
                     turnId: accepted.turnId,
                 };
-                set((state) => {
-                    const messages = [...state.messages, message];
-                    record(messages);
-                    return { messages, operation: { kind: "idle" } };
-                });
+                set({ operation: { kind: "idle" } });
                 return message;
             } catch (cause) {
                 if (parent.aborted) {
@@ -182,7 +144,6 @@ export const createSessionMessageQueueStore = (options: {
                 signal.throwIfAborted();
                 set((state) => {
                     const messages = state.messages.filter((candidate) => candidate.commandId !== commandId);
-                    record(messages);
                     return { messages };
                 });
                 return message;
@@ -200,11 +161,16 @@ export const createSessionMessageQueueStore = (options: {
                 return null;
             }
         },
-        reconcile: (commandIds) => {
-            const messages = get().messages.filter((message) => !commandIds.includes(message.commandId));
-            record(messages);
-            set({ messages });
-        },
+        replace: (messages) =>
+            set((state) => ({
+                messages: messages.map((message) => ({
+                    commandId: message.commandId,
+                    turnId: message.commandId,
+                    summary: message.prompt,
+                    images: message.images,
+                    kind: state.messages.find((current) => current.commandId === message.commandId)?.kind ?? "queued",
+                })),
+            })),
         takeStarted: (commandId) => {
             const message = get().messages.find((candidate) => candidate.commandId === commandId);
             if (message === undefined || message.kind !== "queued") {
@@ -212,7 +178,6 @@ export const createSessionMessageQueueStore = (options: {
             }
             set((state) => {
                 const messages = state.messages.filter((candidate) => candidate.commandId !== commandId);
-                record(messages);
                 return { messages };
             });
             return message;

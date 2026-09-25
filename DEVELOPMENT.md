@@ -231,3 +231,13 @@ That command includes combined production TS/TSX coverage and executable depende
 boundaries. `pnpm check:architecture` follows type imports and re-exports. Biome's
 `useLiteralKeys` rule is disabled because TypeScript's index-signature access rules
 require bracket notation for untrusted records. See `TESTING.md` for report scope.
+
+### Pending prompt ownership
+
+Accepted queued prompts belong to the daemon's in-memory execution registry. The
+Web queue store is a projection of `sessions.readSessionExecution`, refreshed after
+subscription/reconnection and `session.queue.changed`. It owns only presentation
+and in-flight UI operations; it does not journal accepted work across page lifetimes.
+Started events consume queue entries, and steering adds the user's prompt without
+replacing the task already running. Drafts and uncertain delivery attempts have
+separate lifetimes and must not be interpreted as authoritative execution state.
