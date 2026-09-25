@@ -944,11 +944,11 @@ test("Given an Agent links a local file location, When a user opens it, Then the
     await sendPrompt(created, composer as HTMLTextAreaElement, "Show the generated local artifacts");
     await Promise.race([created.queryElementByTestId(dataTestId.localFileLink), failure]);
     await vi.waitFor(() =>
-        expect(getByRole(document.body, "img", { name: "QR code" })).toBeInstanceOf(HTMLImageElement),
+        expect(getByRole(document.body, "img", { name: "QR code" }).getAttribute("src")).toMatch(/^blob:/u),
     );
     await vi.waitFor(() => {
-        expect(getByRole(document.body, "img", { name: "Relative badge" })).toBeInstanceOf(HTMLImageElement);
-        expect(getByRole(document.body, "img", { name: "Nested badge" })).toBeInstanceOf(HTMLImageElement);
+        expect(getByRole(document.body, "img", { name: "Relative badge" }).getAttribute("src")).toMatch(/^blob:/u);
+        expect(getByRole(document.body, "img", { name: "Nested badge" }).getAttribute("src")).toMatch(/^blob:/u);
     });
     await created.user.click(await created.queryElementByTestId(dataTestId.localFileLink));
 

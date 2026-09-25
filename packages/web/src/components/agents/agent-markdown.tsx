@@ -138,6 +138,9 @@ export type MarkdownImageReader = (
 const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/u;
 
 function directImageSource(value: string): string {
+    if (localFilePath(value) !== null) {
+        return "";
+    }
     if (value.startsWith("https://") || value.startsWith("http://") || value.startsWith("data:image/")) {
         return value;
     }
