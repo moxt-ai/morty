@@ -20,11 +20,11 @@ duplicate scenario.
 
 ### Browser product journeys
 
-`packages/e2e/conversation.e2e.test.ts` covers one paired conversation from an
-image prompt through an Agent tool response and persisted reload.
+`packages/e2e/conversation.e2e.test.ts`, `claude-conversation.e2e.test.ts`, and
+`pi-conversation.e2e.test.ts` contain the existing conversation journeys.
 `packages/e2e/setup.e2e.test.ts` covers setup handoff, native-session import,
-reload, and revocation. These two
-files contain the product E2E journeys:
+reload, and revocation. Agent names in these filenames describe controlled
+profiles, not real Agent compatibility. Run the product journeys with:
 
 ```bash
 pnpm test:e2e
