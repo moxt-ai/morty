@@ -1,21 +1,10 @@
 import { generateKeyPairSync } from "node:crypto";
-import { appendFile, mkdir } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { SetupRuntime } from "../../setup/src/setup.ts";
 import { jsonRequest, object, text } from "./chat-api.ts";
 import type { E2EHarness } from "./harness.ts";
-
-interface AgentConfiguration {
-    readonly acpBinary: string;
-    readonly adapterOverrideVariable: string;
-    readonly description: string;
-    readonly id: string;
-    readonly label: string;
-    readonly publishableKey: string;
-    readonly runtimeEnvironment: Readonly<Record<string, string>>;
-}
 
 export const repository = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const mobiusRepository = join(repository, "third-party", "mobius");
@@ -23,7 +12,6 @@ const fixtureDirectory = fileURLToPath(new URL("../fixtures", import.meta.url));
 const platformConfiguration = join(fixtureDirectory, "wrangler.platform.jsonc");
 const chatConfiguration = join(fixtureDirectory, "wrangler.chat.jsonc");
 const wranglerExecutable = join(repository, "node_modules", ".bin", "wrangler");
-const acpProxy = fileURLToPath(new URL("./acp-proxy.ts", import.meta.url));
 
 async function freePort() {
     const server = createServer();
@@ -57,34 +45,29 @@ async function migrate(
 
 export class LocalStack {
     readonly harness: E2EHarness;
-    readonly agent: AgentConfiguration;
     readonly directories: Readonly<Record<string, string>>;
     readonly platformOrigin: string;
     readonly chatOrigin: string;
     readonly platformPort: number;
     readonly chatPort: number;
 
-    static async create(harness: E2EHarness, agent: AgentConfiguration) {
+    static async create(harness: E2EHarness) {
         const platformPort = await freePort();
         const chatPort = await freePort();
         const directories = Object.fromEntries(
-            ["platform", "chat", "runtime", "workspace", "xdg-cache", "xdg-config", "xdg-data", "xdg-state"].map(
-                (name) => [name, join(harness.workDirectory, name)],
-            ),
+            ["platform", "chat", "workspace"].map((name) => [name, join(harness.workDirectory, name)]),
         );
         await Promise.all(Object.values(directories).map((path) => mkdir(path, { recursive: true })));
-        return new LocalStack(harness, agent, directories, platformPort, chatPort);
+        return new LocalStack(harness, directories, platformPort, chatPort);
     }
 
     constructor(
         harness: E2EHarness,
-        agent: AgentConfiguration,
         directories: Readonly<Record<string, string>>,
         platformPort: number,
         chatPort: number,
     ) {
         this.harness = harness;
-        this.agent = agent;
         this.directories = directories;
         this.platformOrigin = `http://127.0.0.1:${platformPort}`;
         this.chatOrigin = `http://127.0.0.1:${chatPort}`;
@@ -158,7 +141,7 @@ export class LocalStack {
             APP_ORIGIN: this.chatOrigin,
             AUTHENTICATION_BASE_URL: this.chatOrigin,
             CLERK_JWT_KEY: publicKey.export({ format: "pem", type: "spki" }).toString(),
-            CLERK_PUBLISHABLE_KEY: this.agent.publishableKey,
+            CLERK_PUBLISHABLE_KEY: "pk_test_c21hc2hpbmctc3BpZGVyLTg1NzQuY2xlcmsuYWNjb3VudHMuZGV2JA",
             MOBIUS_APP_ID: application.appId,
             MOBIUS_APP_SECRET: application.appSecret,
             MOBIUS_BASE_URL: this.platformOrigin,
@@ -194,71 +177,5 @@ export class LocalStack {
             ]);
             await this.harness.waitForHttp(this.chatOrigin, "morty", (response) => response.status === 200);
         });
-    }
-
-    async startMobius(pairing: Readonly<Record<string, unknown>>) {
-        return await this.startRuntime([
-            "pair",
-            "--url",
-            text(pairing.relayUrl, "relayUrl"),
-            "--pairing",
-            text(pairing.pairingId, "pairingId"),
-            "--code",
-            text(pairing.pairingCode, "pairingCode"),
-        ]);
-    }
-
-    setupRuntime(): SetupRuntime {
-        return {
-            run: async (_directory, args, cwd, signal) => {
-                signal.throwIfAborted();
-                const manager = await this.startRuntime(args, cwd);
-                if (manager.pid === undefined) {
-                    throw new Error("Runtime process did not start");
-                }
-                signal.throwIfAborted();
-                return { pid: manager.pid, logPath: join(this.harness.artifactDirectory, "mobius.log") };
-            },
-        };
-    }
-
-    async stopMobiusManager(): Promise<void> {
-        await this.harness.run(
-            process.execPath,
-            [join(mobiusRepository, "packages", "cli", "dist", "cli.js"), "quit"],
-            { env: this.runtimeEnvironment() },
-        );
-    }
-
-    private runtimeEnvironment(): Readonly<Record<string, string>> {
-        return {
-            MOBIUS_E2E_ACP_TRACE_DIRECTORY: join(this.harness.artifactDirectory, "acp"),
-            MOBIUS_E2E_ACP_REAL_BIN: this.agent.acpBinary,
-            MOBIUS_DEFAULT_WORKSPACE: this.directories.workspace,
-            PATH: dirname(process.execPath),
-            [this.agent.adapterOverrideVariable]: acpProxy,
-            MOBIUS_STATE_DIRECTORY: this.directories.runtime,
-            XDG_CACHE_HOME: this.directories["xdg-cache"] ?? "",
-            XDG_CONFIG_HOME: this.directories["xdg-config"] ?? "",
-            XDG_DATA_HOME: this.directories["xdg-data"] ?? "",
-            XDG_STATE_HOME: this.directories["xdg-state"] ?? "",
-            ...this.agent.runtimeEnvironment,
-        };
-    }
-
-    async startRuntime(args: readonly string[], workspace = this.directories.workspace) {
-        const executable = join(mobiusRepository, "packages", "cli", "dist", "cli.js");
-        const environment = { ...this.runtimeEnvironment(), MOBIUS_DEFAULT_WORKSPACE: workspace };
-        const manager =
-            this.harness.children.find((process) => process.name === "mobius")?.child ??
-            (await this.harness.start("mobius", process.execPath, [executable, "__manager"], {
-                env: environment,
-            }));
-        const result = await this.harness.run(process.execPath, [executable, ...args], {
-            env: environment,
-            label: `mobius ${args[0] ?? ""}`,
-        });
-        await appendFile(join(this.harness.artifactDirectory, "mobius.log"), result.stdout + result.stderr);
-        return manager;
     }
 }
