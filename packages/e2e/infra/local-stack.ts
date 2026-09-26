@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { jsonRequest, object, text } from "./chat-api.ts";
 import type { E2EHarness } from "./harness.ts";
 
-export const repository = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+const repository = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const mobiusRepository = join(repository, "third-party", "mobius");
 const fixtureDirectory = fileURLToPath(new URL("../fixtures", import.meta.url));
 const platformConfiguration = join(fixtureDirectory, "wrangler.platform.jsonc");
