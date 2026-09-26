@@ -118,7 +118,7 @@ export function historySessionPresentation(
             id,
             role: "assistant",
             text: message.text,
-            attempt: null,
+            attempt: message.outcome === undefined ? null : { kind: message.outcome },
             commandId: coveredCommandId ?? null,
             contents: [
                 ...promptImageContents(message.images),

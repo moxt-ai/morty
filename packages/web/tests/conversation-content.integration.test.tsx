@@ -164,10 +164,34 @@ test("Given an Agent links a local file location, When a user opens it, Then the
     releaseTurn.resolve();
 });
 
-test("Given a running tool, When the user cancels its turn without a terminal tool event, Then the tool is interrupted and later turns remain usable", {
+test("Given a running tool, When the user cancels its turn without a terminal tool event, Then reopening preserves cancellation and later turns remain usable", {
     timeout: 30_000,
 }, async () => {
-    const app = await createTestApp({ connectAgent: true, agentBehavior: { toolExecution: "wait-for-cancel" } });
+    let cancelled = false;
+    const app = await createTestApp({
+        connectAgent: true,
+        agentBehavior: {
+            toolExecution: "wait-for-cancel",
+            onPromptCancelled: () => {
+                cancelled = true;
+            },
+            loadNativeHistory: async (_sessionId, signal) => {
+                signal.throwIfAborted();
+                return {
+                    status: "available",
+                    coveredCommandIds: [],
+                    coveredMessageIds: [],
+                    truncated: false,
+                    messages: cancelled
+                        ? [
+                              { role: "user", text: "Create an image" },
+                              { role: "assistant", text: "", activities: [], content: [], outcome: "cancelled" },
+                          ]
+                        : [],
+                };
+            },
+        },
+    });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
         (element) => element.textContent?.includes("Connected") === true,
@@ -189,6 +213,10 @@ test("Given a running tool, When the user cancels its turn without a terminal to
     await app.user.click(stop);
     await vi.waitFor(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
     await vi.waitFor(() => expect(getByLabelText(tool, "Tool interrupted")).toBeInstanceOf(SVGElement));
+    app.reload();
+    const status = await app.queryElementByTestId(dataTestId.agentReplyStatus);
+    expect(status.textContent).toBe("Response cancelled.");
+    expect(document.body.textContent).not.toContain("Agent finished without a text response.");
     const continuedComposer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(continuedComposer instanceof HTMLTextAreaElement)) {
         throw new Error("Expected active session composer");
