@@ -179,7 +179,14 @@ test("Given a running tool, When the user cancels its turn without a terminal to
     await sendPrompt(app, composer, "Create an image");
     const tool = await app.queryElementByTestId(dataTestId.agentToolCall);
     await vi.waitFor(() => expect(getByLabelText(tool, "Tool running")).toBeInstanceOf(SVGElement));
-    await app.user.click(getByRole(document.body, "button", { name: "Stop agent output" }));
+    const stop = await app.queryElementByTestId(
+        dataTestId.sendMessage,
+        (element) =>
+            element instanceof HTMLButtonElement &&
+            !element.disabled &&
+            element.getAttribute("aria-label") === "Stop agent output",
+    );
+    await app.user.click(stop);
     await vi.waitFor(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
     await vi.waitFor(() => expect(getByLabelText(tool, "Tool interrupted")).toBeInstanceOf(SVGElement));
     const continuedComposer = await app.queryElementByTestId(dataTestId.messageComposer);
