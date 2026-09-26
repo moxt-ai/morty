@@ -892,32 +892,9 @@ export function createSessionPaneModel(options: {
                                 payload instanceof MobiusTurnFailedEvent
                             ) {
                                 const completedCommand = command;
-                                const completedHistory =
-                                    payload instanceof MobiusTurnCompletedEvent
-                                        ? await connected.sessions.querySessionNativeMessages(
-                                              sessionId,
-                                              {
-                                                  additionalDirectoryIds: session.entry.additionalDirectories.map(
-                                                      (directory) => directory.directoryId,
-                                                  ),
-                                                  agentId: session.agentRef,
-                                                  directoryId: session.result.ready.directoryId,
-                                              },
-                                              new MobiusPageRequest(50, ""),
-                                              AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
-                                          )
-                                        : null;
-                                signal.throwIfAborted();
-                                if (command !== completedCommand) {
-                                    return true;
-                                }
-                                const completed =
-                                    completedHistory?.status === "available"
-                                        ? historySessionPresentation(completedHistory, sessionId)
-                                        : null;
-                                if (completedHistory?.status === "available") {
-                                    delivery.getState().reconcile(completedHistory.coveredCommandIds);
-                                }
+                                // The native history may already contain the next queued prompt.
+                                // Finish this streamed turn without replacing it with a later snapshot.
+                                delivery.getState().reconcile([completedCommand]);
                                 set((current) => ({
                                     activity:
                                         payload instanceof MobiusTurnFailedEvent
@@ -930,8 +907,6 @@ export function createSessionPaneModel(options: {
                                                   commandId: completedCommand,
                                                   kind: "work-completed",
                                               }),
-                                    activities: completed?.activities ?? current.activities,
-                                    messages: completed?.messages ?? current.messages,
                                     operation: { kind: "idle" },
                                 }));
                                 tasks.getState().finish(completedCommand);

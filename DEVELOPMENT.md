@@ -245,3 +245,9 @@ and in-flight UI operations; it does not journal accepted work across page lifet
 Started events consume queue entries, and steering adds the user's prompt without
 replacing the task already running. Drafts and uncertain delivery attempts have
 separate lifetimes and must not be interpreted as authoritative execution state.
+
+During a live conversation, completion ends the streamed turn without fetching a
+new native-history snapshot. The daemon may already be executing the next queued
+prompt, so such a snapshot can overlap events still waiting in the browser.
+Opening, reconnecting, and manual history loading remain the native-history read
+boundaries. Keep the live prompt and reply when handling completion.

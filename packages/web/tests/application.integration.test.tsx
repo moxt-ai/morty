@@ -360,6 +360,124 @@ test("Given a conversation is working, When the user reopens it, Then its live s
     releaseTurn.resolve();
 });
 
+test("Given native history has advanced into the next queued turn, When that turn streams, Then its prompt and reply appear once", {
+    timeout: 30_000,
+}, async () => {
+    const finishFirst = Promise.withResolvers<void>();
+    const secondStarted = Promise.withResolvers<void>();
+    const finishSecond = Promise.withResolvers<void>();
+    const firstPrompt = "First queued-history task";
+    const secondPrompt = "Second queued-history task";
+    let firstStarted = false;
+    let completed: { readonly commandId: string; readonly prompt: string; readonly reply: string } | null = null;
+    const wait = async (promise: Promise<void>, signal: AbortSignal): Promise<void> => {
+        signal.throwIfAborted();
+        const cancelled = Promise.withResolvers<never>();
+        const abort = () => cancelled.reject(signal.reason);
+        signal.addEventListener("abort", abort, { once: true });
+        try {
+            await Promise.race([promise, cancelled.promise]);
+        } finally {
+            signal.removeEventListener("abort", abort);
+        }
+    };
+    const app = await createTestApp({
+        connectAgent: true,
+        agentBehavior: {
+            responseParts: (command) => [`Reply: ${command.prompt}`],
+            afterSessionStarted: async (command) => {
+                firstStarted = true;
+                if (command.prompt === secondPrompt) {
+                    secondStarted.resolve();
+                }
+            },
+            afterLastDelta: (command, signal) =>
+                wait(command.prompt === firstPrompt ? finishFirst.promise : finishSecond.promise, signal),
+            onPromptCompleted: (command, reply) => {
+                completed = { commandId: command.commandId, prompt: command.prompt, reply };
+            },
+            loadNativeHistory: async (_sessionId, signal) => {
+                const first = completed;
+                if (first !== null) {
+                    await wait(secondStarted.promise, signal);
+                }
+                return {
+                    status: "available",
+                    truncated: false,
+                    coveredMessageIds: [],
+                    coveredCommandIds: first === null ? [] : [first.commandId],
+                    messages:
+                        first === null
+                            ? firstStarted
+                                ? [
+                                      { role: "user", text: firstPrompt },
+                                      { role: "assistant", text: `Reply: ${firstPrompt}`, activities: [], content: [] },
+                                  ]
+                                : []
+                            : [
+                                  { role: "user", text: first.prompt },
+                                  { role: "assistant", text: first.reply, activities: [], content: [] },
+                                  { role: "user", text: secondPrompt },
+                              ],
+                };
+            },
+        },
+    });
+    try {
+        await app.queryElementByTestId(
+            dataTestId.botConnectionStatus,
+            (element) => element.textContent?.includes("Connected") === true,
+        );
+        const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+        if (!(composer instanceof HTMLTextAreaElement)) {
+            throw new Error("Missing composer");
+        }
+        await sendPrompt(app, composer, firstPrompt);
+        await app.queryElementByTestId(
+            dataTestId.agentResponse,
+            (element) => element.textContent?.includes(`Reply: ${firstPrompt}`) === true,
+        );
+        const viewer = await app.openViewer();
+        await viewer.queryElementByTestId(
+            dataTestId.agentResponse,
+            (element) => element.textContent?.includes(`Reply: ${firstPrompt}`) === true,
+        );
+        const activeComposer = await viewer.queryElementByTestId(dataTestId.messageComposer);
+        await viewer.user.click(activeComposer);
+        await viewer.user.type(activeComposer, secondPrompt);
+        await viewer.user.click(
+            await viewer.queryElementByTestId(
+                dataTestId.sendMessage,
+                (element) => element.getAttribute("aria-label") === "Send message",
+            ),
+        );
+        await app.queryElementByTestId(dataTestId.queuedMessage);
+        finishFirst.resolve();
+        for (const current of [app, viewer]) {
+            await vi.waitFor(() =>
+                expect(
+                    current
+                        .elementsByTestId(dataTestId.agentResponse)
+                        .some((element) => element.textContent?.includes(`Reply: ${secondPrompt}`)),
+                ).toBe(true),
+            );
+            expect(
+                current
+                    .elementsByTestId(dataTestId.userMessage)
+                    .filter((element) => element.textContent?.includes(secondPrompt)),
+            ).toHaveLength(1);
+            expect(
+                current
+                    .elementsByTestId(dataTestId.userMessage)
+                    .filter((element) => element.textContent?.includes(firstPrompt)),
+            ).toHaveLength(1);
+        }
+    } finally {
+        finishFirst.resolve();
+        finishSecond.resolve();
+    }
+});
+
 test("Given a completed conversation was locally recorded as working, When the user reopens it without an active Runtime turn, Then the conversation is idle", {
     timeout: 30_000,
 }, async () => {
