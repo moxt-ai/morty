@@ -66,7 +66,7 @@ test("Given a conversation is working, When a user starts a new conversation, Th
     releaseTurn.resolve();
 });
 
-test("Given a conversation is working, When the user reopens it, Then its live status and messages are restored", {
+test("Given a conversation is working, When the user reopens it, Then its daemon snapshot restores live status and replaces stale native output", {
     timeout: 30_000,
 }, async () => {
     const releaseTurn = Promise.withResolvers<void>();
@@ -229,10 +229,10 @@ test("Given a conversation is working, When the user reopens it, Then its live s
         const activities = created.elementsByTestId(dataTestId.agentToolCall);
         expect(
             activities.filter((element) => element.textContent?.includes("Inspect workspace") === true),
-        ).toHaveLength(1);
+        ).toHaveLength(0);
         expect(
             activities.filter((element) => element.textContent?.includes("Create app directory") === true),
-        ).toHaveLength(1);
+        ).toHaveLength(0);
         expect(
             created
                 .elementsByTestId(dataTestId.agentResponse)
@@ -242,4 +242,114 @@ test("Given a conversation is working, When the user reopens it, Then its live s
     });
     expect(created.optionalElementByTestId(dataTestId.agentReplyStatus)).toBeNull();
     releaseTurn.resolve();
+});
+
+test("Given narration is streaming, When another viewer loads history overlapping a live increment, Then both viewers show each increment once", {
+    timeout: 30_000,
+}, async () => {
+    const releaseIncrement = Promise.withResolvers<void>();
+    const incrementSent = Promise.withResolvers<void>();
+    const releaseCompletion = Promise.withResolvers<void>();
+    const first = "Inspecting the workspace. ";
+    const second = "Checking the requested files.";
+    const prompt = "Inspect without repeating progress";
+    let openingViewer = false;
+    const wait = async (promise: Promise<void>, signal: AbortSignal): Promise<void> => {
+        signal.throwIfAborted();
+        const aborted = Promise.withResolvers<never>();
+        const abort = (): void => aborted.reject(signal.reason);
+        signal.addEventListener("abort", abort, { once: true });
+        try {
+            await Promise.race([promise, aborted.promise]);
+        } finally {
+            signal.removeEventListener("abort", abort);
+        }
+    };
+    const created = await createTestApp({
+        connectAgent: true,
+        agentBehavior: {
+            reasoningParts: () => [first, second],
+            responseParts: () => ["Completed without repeating progress."],
+            afterFirstNarration: async (_command, signal) => wait(releaseIncrement.promise, signal),
+            afterLastNarration: async (_command, signal) => {
+                incrementSent.resolve();
+                await wait(releaseCompletion.promise, signal);
+            },
+            loadNativeHistory: async (_sessionId, signal) => {
+                if (openingViewer) {
+                    releaseIncrement.resolve();
+                    await wait(incrementSent.promise, signal);
+                }
+                return {
+                    status: "available",
+                    truncated: false,
+                    coveredCommandIds: [],
+                    coveredMessageIds: [],
+                    messages: openingViewer
+                        ? [
+                              { role: "user", text: prompt },
+                              {
+                                  role: "assistant",
+                                  text: "",
+                                  content: [],
+                                  activities: [
+                                      {
+                                          activityId: "fake-reasoning-1",
+                                          activityType: "reasoning",
+                                          content: [],
+                                          input: "",
+                                          locations: [],
+                                          name: "",
+                                          output: first + second,
+                                          sequence: 0,
+                                          status: "running",
+                                          title: "Reasoning",
+                                          toolKind: "",
+                                      },
+                                  ],
+                              },
+                          ]
+                        : [],
+                };
+            },
+        },
+    });
+    try {
+        await created.queryElementByTestId(
+            dataTestId.botConnectionStatus,
+            (element) => element.textContent?.includes("Connected") === true,
+        );
+        const composer = await created.queryElementByTestId(dataTestId.messageComposer);
+        if (!(composer instanceof HTMLTextAreaElement)) {
+            throw new Error("Expected the message composer");
+        }
+        await sendPrompt(created, composer, prompt);
+        await created.queryElementByTestId(
+            dataTestId.agentReasoning,
+            (element) => element.textContent?.includes(first.trim()) === true,
+        );
+        openingViewer = true;
+        const viewer = await created.openViewer();
+        const thinking = await viewer.queryElementByTestId(
+            dataTestId.agentReasoning,
+            (element) => element.textContent?.includes(second) === true,
+        );
+        const original = await created.queryElementByTestId(
+            dataTestId.agentReasoning,
+            (element) => element.textContent?.includes(second) === true,
+        );
+        expect(thinking.textContent).toBe(original.textContent);
+        expect(thinking.textContent?.split(second)).toHaveLength(2);
+        releaseCompletion.resolve();
+        for (const app of [created, viewer]) {
+            await app.queryElementByTestId(
+                dataTestId.agentResponse,
+                (element) => element.textContent?.includes("Completed without repeating progress.") === true,
+            );
+            expect(app.elementByTestId(dataTestId.agentReasoning).textContent?.split(second)).toHaveLength(2);
+        }
+    } finally {
+        releaseIncrement.resolve();
+        releaseCompletion.resolve();
+    }
 });

@@ -1,10 +1,7 @@
 import {
     type AgentDisplayContent,
-    decodeAgentContentEvent,
     MobiusAgentActivityEvent,
-    MobiusControlEvent,
     type MobiusMessagePage,
-    type MobiusSessionEvent,
     type PromptImage,
 } from "@moxt-ai/mobius-sdk";
 import { agentActivityKey, type RecordedAgentActivity } from "../../services/chat/agent-activities.ts";
@@ -112,7 +109,6 @@ export function historySessionPresentation(
             });
             const key = agentActivityKey(presented);
             activities.set(key, {
-                sequence: BigInt(activity.sequence),
                 activity: presented,
             });
             return key;
@@ -134,85 +130,4 @@ export function historySessionPresentation(
         };
     });
     return { activities, messages: presentedMessages };
-}
-
-export function placeAgentActivity(
-    messages: readonly SessionMessage[],
-    commandId: string,
-    activityId: string,
-): readonly SessionMessage[] {
-    if (
-        messages.some((message) => message.role === "assistant" && message.activityIds.some((id) => id === activityId))
-    ) {
-        return messages;
-    }
-    const lastIndex = messages.findLastIndex(
-        (message) => message.role === "assistant" && message.commandId === commandId,
-    );
-    const last = messages[lastIndex];
-    if (last === undefined || last.role !== "assistant") {
-        return messages;
-    }
-    if (last.text.length === 0 && last.contents.length === 0) {
-        return messages.map((message, index) =>
-            index === lastIndex && message.role === "assistant"
-                ? { ...message, activityIds: [...message.activityIds, activityId] }
-                : message,
-        );
-    }
-    return [
-        ...messages.slice(0, lastIndex + 1),
-        {
-            activityIds: [activityId],
-            attempt: last.attempt,
-            commandId,
-            contents: [],
-            id: `${commandId}-reply-${activityId}`,
-            role: "assistant",
-            text: "",
-        },
-        ...messages.slice(lastIndex + 1),
-    ];
-}
-
-function replaceMessageContent(
-    messages: readonly SessionMessage[],
-    commandId: string,
-    contentId: string,
-    content: AgentDisplayContent,
-): readonly SessionMessage[] {
-    const existing = messages.findIndex(
-        (message) =>
-            message.role === "assistant" &&
-            message.commandId === commandId &&
-            message.contents.some((candidate) => candidate.contentId === contentId),
-    );
-    const target =
-        existing >= 0
-            ? existing
-            : messages.findLastIndex((message) => message.role === "assistant" && message.commandId === commandId);
-    return messages.map((message, index) =>
-        index === target && message.role === "assistant"
-            ? {
-                  ...message,
-                  contents: [
-                      ...message.contents.filter((candidate) => candidate.contentId !== contentId),
-                      { contentId, content },
-                  ],
-              }
-            : message,
-    );
-}
-
-export function applyRecordedContents(
-    messages: readonly SessionMessage[],
-    events: readonly MobiusSessionEvent[],
-): readonly SessionMessage[] {
-    return events.reduce((current, event) => {
-        if (!(event.payload instanceof MobiusControlEvent) || event.payload.kind !== "agent.content") {
-            return current;
-        }
-        const decoded = decodeAgentContentEvent(event.payload.encodedPayload);
-        return replaceMessageContent(current, decoded.commandId, decoded.contentId, decoded.content);
-    }, messages);
 }
