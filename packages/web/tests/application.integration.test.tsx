@@ -472,6 +472,16 @@ test("Given native history has advanced into the next queued turn, When that tur
                     .filter((element) => element.textContent?.includes(firstPrompt)),
             ).toHaveLength(1);
         }
+        finishSecond.resolve();
+        for (const current of [app, viewer]) {
+            await current.queryElementByTestId(
+                dataTestId.sendMessage,
+                (element) => element.getAttribute("aria-label") === "Send message",
+            );
+            expect(
+                current.elementsByTestId(dataTestId.agentReplyStatus).map((element) => element.textContent),
+            ).not.toContain("Agent updates stopped. Check your local agent or reconnect.");
+        }
     } finally {
         finishFirst.resolve();
         finishSecond.resolve();

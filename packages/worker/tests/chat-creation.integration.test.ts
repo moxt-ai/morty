@@ -10,14 +10,14 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-async function createChatFixture(includeOpenCode = false) {
+async function createChatFixture(includeOpenCode = false, nativeSessionIds: ReadonlySet<string> = new Set()) {
     const cloud = await createIdentityFixture();
     try {
         const identity = await cloud.createAnonymousUser();
-        const runtime = await cloud.connectAgent(
-            identity.projectId,
-            includeOpenCode ? { additionalAgents: [{ id: "opencode", name: "OpenCode" }] } : undefined,
-        );
+        const runtime = await cloud.connectAgent(identity.projectId, {
+            nativeSessionIds,
+            ...(includeOpenCode ? { additionalAgents: [{ id: "opencode", name: "OpenCode" }] } : {}),
+        });
         const environment = cloud.environment();
         const request = (path: string, body?: object, method = body === undefined ? "GET" : "POST") =>
             worker.fetch(
@@ -167,6 +167,49 @@ test("Given a Bot connected through one Agent, When a Session uses another Agent
         });
         expect(restored.status).toBe(200);
         expect(await restored.json()).toMatchObject({ agentRef: "opencode" });
+    } finally {
+        await fixture.close();
+    }
+});
+
+test("Given an imported native session, When its owner imports it again, Then Chat reopens the canonical session without creating a duplicate", async () => {
+    const nativeId = crypto.randomUUID();
+    const fixture = await createChatFixture(false, new Set([nativeId]));
+    try {
+        const runtimeId = fixture.runtime.runtimeId;
+        expect(
+            (await fixture.request(`chat/bots/${fixture.botId}/setup`, { runtimeId, agentRef: "codex" })).status,
+        ).toBe(202);
+        const identity = { runtimeId, agentId: "codex", directoryId: "default", additionalDirectoryIds: [] };
+        const listed = await fixture.request(`chat/bots/${fixture.botId}/native-sessions`, {
+            ...identity,
+            action: "list",
+            cursor: null,
+            discoveryId: null,
+        });
+        expect(listed.status).toBe(200);
+        const discovery = v.parse(
+            v.object({ sessionId: v.string(), entries: v.array(v.object({ entryId: v.string() })) }),
+            await listed.json(),
+        );
+        const entryId = v.parse(v.string(), discovery.entries[0]?.entryId);
+        const path = `chat/bots/${fixture.botId}/native-session/${entryId}/import`;
+        const input = { ...identity, discoveryId: discovery.sessionId };
+        const first = await fixture.request(path, input);
+        expect(first.status).toBe(200);
+        const opened = v.parse(v.object({ ready: v.object({ sessionId: v.string() }) }), await first.json());
+        const second = await fixture.request(path, input);
+        expect(second.status).toBe(200);
+        expect(await second.json()).toMatchObject({ ready: { sessionId: opened.ready.sessionId } });
+        const handoff = await fixture.request(`chat/bots/${fixture.botId}/continue-native-session`, {
+            action: "import",
+            harness: "codex",
+            sessionId: nativeId,
+        });
+        expect(handoff.status).toBe(200);
+        expect(await handoff.json()).toMatchObject({ result: { ready: { sessionId: opened.ready.sessionId } } });
+        const managed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
+        expect(await managed.json()).toMatchObject({ sessions: [{ id: opened.ready.sessionId }] });
     } finally {
         await fixture.close();
     }

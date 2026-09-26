@@ -1,3 +1,10 @@
+import {
+    MobiusCancelledAttemptSummary,
+    MobiusFailedAttemptSummary,
+    MobiusSucceededAttemptSummary,
+    MobiusTurnCompletedEvent,
+    type MobiusTurnFailedEvent,
+} from "@moxt-ai/mobius-sdk";
 import type { SessionMessage } from "./session-presentation.ts";
 
 export type SessionActivityState =
@@ -103,4 +110,32 @@ export function workingCommandId(state: SessionActivityState): string | null {
         case "working":
             return state.commandId;
     }
+}
+
+export function finishSessionWork(
+    messages: readonly SessionMessage[],
+    event: MobiusTurnCompletedEvent | MobiusTurnFailedEvent,
+    recordedAt: string,
+): readonly SessionMessage[] {
+    return messages.map((message) => {
+        if (message.role !== "assistant" || message.commandId !== event.commandId) {
+            return message;
+        }
+        const prior = message.attempt;
+        const attemptId =
+            prior !== null && "attemptId" in prior && typeof prior.attemptId === "string"
+                ? prior.attemptId
+                : event.commandId;
+        const startedAt =
+            prior !== null && "startedAt" in prior && typeof prior.startedAt === "string"
+                ? prior.startedAt
+                : recordedAt;
+        const attempt =
+            event instanceof MobiusTurnCompletedEvent
+                ? event.stopReason === "cancelled"
+                    ? new MobiusCancelledAttemptSummary(attemptId, startedAt, recordedAt)
+                    : new MobiusSucceededAttemptSummary(attemptId, startedAt, recordedAt, event.stopReason)
+                : new MobiusFailedAttemptSummary(attemptId, startedAt, event.code, event.message, recordedAt);
+        return { ...message, attempt };
+    });
 }

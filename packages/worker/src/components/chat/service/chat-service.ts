@@ -413,7 +413,7 @@ export class ChatService {
             },
             scope.signal,
         );
-        if (result.action !== action || result.ready.sessionId !== result.targetSessionId) {
+        if (result.action !== action || (action === "fork" && result.ready.sessionId !== result.targetSessionId)) {
             throw new PlatformProjectError(
                 action === "import" ? "IMPORT_UNAVAILABLE" : "CONTINUATION_UNAVAILABLE",
                 action === "import"
@@ -505,7 +505,7 @@ export class ChatService {
             { ...input, entryId, action },
             scope.signal,
         );
-        if (result.action !== action || result.ready.sessionId !== result.targetSessionId) {
+        if (result.action !== action || (action === "fork" && result.ready.sessionId !== result.targetSessionId)) {
             throw new PlatformProjectError(
                 action === "fork" ? "FORK_UNAVAILABLE" : "IMPORT_UNAVAILABLE",
                 `This agent cannot ${action} the selected local session.`,
