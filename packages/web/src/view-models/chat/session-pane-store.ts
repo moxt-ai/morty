@@ -6,6 +6,7 @@ import {
     decodeSessionPermissionRequestedEvent,
     decodeSessionPermissionResolvedEvent,
     MobiusAgentActivityEvent,
+    MobiusAgentActivityNarrationEvent,
     MobiusAgentMessageEvent,
     type MobiusClient,
     MobiusControlEvent,
@@ -25,8 +26,10 @@ import {
 import { createStore } from "zustand/vanilla";
 import {
     agentActivityKey,
+    agentNarrationKey,
     type RecordedAgentActivity,
     recordAgentActivity,
+    recordAgentNarration,
 } from "../../services/chat/agent-activities.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
@@ -703,6 +706,20 @@ export function createSessionPaneModel(options: {
                                         current.messages,
                                         payload.commandId,
                                         agentActivityKey(payload),
+                                    ),
+                                }));
+                                return true;
+                            }
+                            if (payload instanceof MobiusAgentActivityNarrationEvent) {
+                                if (command !== "" && payload.commandId !== command) {
+                                    return true;
+                                }
+                                set((current) => ({
+                                    activities: recordAgentNarration(current.activities, event),
+                                    messages: placeAgentActivity(
+                                        current.messages,
+                                        payload.commandId,
+                                        agentNarrationKey(payload),
                                     ),
                                 }));
                                 return true;

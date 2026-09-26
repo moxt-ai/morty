@@ -1076,6 +1076,49 @@ test("Given Codex narrates visible progress, When the activity arrives, Then it 
     releaseTurn.resolve();
 });
 
+test("Given an Agent streams reasoning, When narration increments arrive, Then the Thinking block updates before reasoning completes", {
+    timeout: 30_000,
+}, async () => {
+    const releaseReasoning = Promise.withResolvers<void>();
+    const created = await createTestApp({
+        agentBehavior: {
+            afterFirstNarration: async (_command, signal) => {
+                await Promise.race([
+                    releaseReasoning.promise,
+                    new Promise<never>((_resolve, reject) =>
+                        signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+                    ),
+                ]);
+            },
+            reasoningParts: () => ["Checking the event stream. ", "Rendering each increment immediately."],
+            responseParts: () => ["Streaming complete."],
+        },
+        connectAgent: true,
+    });
+    const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
+    await created.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+
+    await sendPrompt(
+        created,
+        (await created.queryElementByTestId(dataTestId.messageComposer)) as HTMLTextAreaElement,
+        "Analyze the live event stream",
+    );
+    const thinking = await Promise.race([
+        created.queryElementByTestId(
+            dataTestId.agentReasoning,
+            (element) => element.textContent?.includes("Checking the event stream.") === true,
+        ),
+        failure,
+    ]);
+    expect(thinking.textContent).not.toContain("Rendering each increment immediately.");
+
+    releaseReasoning.resolve();
+    await vi.waitFor(() => expect(thinking.textContent).toContain("Rendering each increment immediately."));
+});
+
 test("Given a tool finishes during an active conversation, When its terminal activity arrives, Then the tool shows as succeeded", {
     timeout: 30_000,
 }, async () => {

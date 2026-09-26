@@ -1,4 +1,8 @@
-import { MobiusAgentActivityEvent, type MobiusSessionEvent } from "@moxt-ai/mobius-sdk";
+import {
+    MobiusAgentActivityEvent,
+    MobiusAgentActivityNarrationEvent,
+    type MobiusSessionEvent,
+} from "@moxt-ai/mobius-sdk";
 
 export interface RecordedAgentActivity {
     readonly sequence: bigint;
@@ -6,6 +10,10 @@ export interface RecordedAgentActivity {
 }
 
 export function agentActivityKey(activity: MobiusAgentActivityEvent): string {
+    return JSON.stringify([activity.sessionId, activity.commandId, activity.activityId]);
+}
+
+export function agentNarrationKey(activity: MobiusAgentActivityNarrationEvent): string {
     return JSON.stringify([activity.sessionId, activity.commandId, activity.activityId]);
 }
 
@@ -45,5 +53,40 @@ export function recordAgentActivity(
         return current;
     }
     // Activity output is a cumulative snapshot, not a text delta.
+    return new Map(current).set(key, { sequence, activity });
+}
+
+export function recordAgentNarration(
+    current: ReadonlyMap<string, RecordedAgentActivity>,
+    event: MobiusSessionEvent,
+): ReadonlyMap<string, RecordedAgentActivity> {
+    const narration = event.payload;
+    if (!(narration instanceof MobiusAgentActivityNarrationEvent)) {
+        return current;
+    }
+    const key = agentNarrationKey(narration);
+    const previous = current.get(key);
+    const sequence =
+        event.sequence === "" ? (previous?.sequence ?? BigInt(narration.sequence)) : BigInt(event.sequence);
+    if (event.sequence !== "" && previous !== undefined && previous.sequence >= sequence) {
+        return current;
+    }
+    const activity = new MobiusAgentActivityEvent({
+        activityId: narration.activityId,
+        activityType: narration.activityType,
+        commandId: narration.commandId,
+        content: previous?.activity.content ?? [],
+        detail: { kind: "unrecorded" },
+        input: previous?.activity.input ?? "",
+        kind: "agent.activity",
+        locations: previous?.activity.locations ?? [],
+        name: previous?.activity.name ?? "",
+        output: `${previous?.activity.output ?? ""}${narration.text}`,
+        sequence: narration.sequence,
+        sessionId: narration.sessionId,
+        status: "running",
+        title: previous?.activity.title ?? (narration.activityType === "reasoning" ? "Reasoning" : "Progress update"),
+        toolKind: previous?.activity.toolKind ?? "",
+    });
     return new Map(current).set(key, { sequence, activity });
 }
