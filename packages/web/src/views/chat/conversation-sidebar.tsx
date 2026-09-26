@@ -1,8 +1,8 @@
 import {
     Check,
-    ChevronDown,
     Copy,
     Laptop,
+    List,
     LoaderCircle,
     LogOut,
     MessageSquare,
@@ -182,13 +182,13 @@ export function ConversationSidebar({
     return (
         <aside
             aria-label="Workspace navigation"
-            className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-b border-border/80 bg-sidebar px-3 py-3 sm:w-[280px] sm:border-r sm:border-b-0 sm:px-3.5 sm:py-4"
+            className="grid min-h-0 w-full shrink-0 grid-cols-[minmax(0,1fr)_auto] gap-y-2 overflow-hidden border-b border-border/80 bg-sidebar px-3 py-3 sm:flex sm:w-[280px] sm:flex-col sm:gap-0 sm:border-r sm:border-b-0 sm:px-3.5 sm:py-4"
         >
-            <div className="mb-3 flex items-center gap-3 px-1.5">
+            <div className="col-start-1 row-start-1 flex items-center gap-3 px-1.5 sm:col-auto sm:row-auto sm:mb-3">
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_4px_12px_rgba(34,123,78,0.18)]">
                     <MessageSquare className="size-[18px]" aria-hidden="true" />
                 </span>
-                <span className="min-w-0">
+                <span className="hidden min-w-0 sm:block">
                     <h1 className="truncate text-[15px] leading-5 font-semibold tracking-[-0.015em]">Morty</h1>
                     <span className="block text-[11px] leading-4 text-muted-foreground">Local workspace</span>
                 </span>
@@ -204,19 +204,19 @@ export function ConversationSidebar({
                 onResetOperation={onResetBotOperation}
                 onSelect={onSelectBot}
             />
-            <div className="mb-2 flex items-center justify-between px-1">
+            <div className="col-start-1 row-start-2 flex min-w-0 items-center justify-between px-1 sm:col-auto sm:row-auto sm:mb-2">
                 <h2 className="hidden text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground sm:block">
                     Conversations
                 </h2>
                 <Button
                     variant="ghost"
-                    className="justify-start sm:hidden"
+                    className="size-10 shrink-0 justify-center rounded-lg px-0 sm:hidden"
+                    aria-label="Conversations"
                     aria-expanded={expanded}
                     aria-controls="chat-conversations"
                     onClick={() => setExpanded((value) => !value)}
                 >
-                    Conversations
-                    <ChevronDown className="size-4" />
+                    <List aria-hidden="true" className="size-5" />
                 </Button>
                 <Tooltip.Provider delayDuration={150}>
                     <div className="flex items-center gap-0.5">
@@ -263,7 +263,7 @@ export function ConversationSidebar({
             </div>
             <div
                 id="chat-conversations"
-                className={`${expanded ? "block" : "hidden"} max-h-48 min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5 sm:block sm:max-h-none`}
+                className={`${expanded ? "block" : "hidden"} col-span-2 row-start-3 max-h-48 min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5 sm:col-auto sm:row-auto sm:block sm:max-h-none`}
             >
                 {directory.kind === "loading" && (
                     <div
@@ -382,7 +382,7 @@ export function ConversationSidebar({
                     </ContextMenu.Root>
                 ))}
             </div>
-            <div className="mt-3 flex items-center gap-1 border-t border-black/[0.06] pt-3">
+            <div className="col-start-2 row-start-2 flex items-center gap-1 sm:col-auto sm:row-auto sm:mt-3 sm:border-t sm:border-black/[0.06] sm:pt-3">
                 {access.state.kind !== "ended" && (
                     <DropdownMenu.Root>
                         <DropdownMenu.Trigger asChild>
@@ -439,13 +439,14 @@ export function ConversationSidebar({
                     </DropdownMenu.Root>
                 )}
                 <Button
+                    aria-label="Share My Machine"
                     variant="ghost"
-                    className="min-h-10 flex-1 justify-start rounded-xl px-3 text-copy-secondary hover:bg-white/70"
+                    className="size-10 shrink-0 justify-center rounded-full px-0 text-copy-secondary hover:bg-white/70 sm:min-h-10 sm:flex-1 sm:justify-start sm:rounded-xl sm:px-3"
                     data-testid={dataTestId.shareMachine}
                     onClick={() => setSharing(true)}
                 >
                     <Share2 className="size-4" aria-hidden="true" />
-                    Share My Machine
+                    <span className="hidden sm:inline">Share My Machine</span>
                 </Button>
             </div>
             {dialog && (
