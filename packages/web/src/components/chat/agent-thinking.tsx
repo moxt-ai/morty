@@ -1,7 +1,12 @@
-import { Brain, ChevronDown, Wrench } from "lucide-react";
+import { Brain, ChevronDown, CircleAlert, Wrench } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { dataTestId } from "../../data-testid.ts";
-import type { ThinkingEntry, ThinkingPresentation, ToolThinkingEntry } from "../../services/chat/agent-reply.ts";
+import type {
+    NoticeThinkingEntry,
+    ThinkingEntry,
+    ThinkingPresentation,
+    ToolThinkingEntry,
+} from "../../services/chat/agent-reply.ts";
 import { AgentMarkdown } from "../agents/agent-markdown.tsx";
 import { FollowLatestScrollArea } from "../utils/follow-latest-scroll-area.tsx";
 import { ToolCallStatus } from "./tools/tool-call-status.tsx";
@@ -11,7 +16,26 @@ type ReasoningEntry = Extract<ThinkingEntry, { readonly kind: "reasoning" }>;
 type ToolEntry = ToolThinkingEntry;
 type TimelineEntry =
     | { readonly kind: "reasoning"; readonly id: string; readonly entries: readonly ReasoningEntry[] }
+    | { readonly kind: "notice"; readonly entry: NoticeThinkingEntry }
     | { readonly kind: "tool"; readonly entry: ToolEntry };
+
+function AgentNotice({ entry }: { readonly entry: NoticeThinkingEntry }) {
+    const error = entry.severity === "error";
+    return (
+        <div
+            className={
+                error
+                    ? "flex min-w-0 gap-3 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-destructive"
+                    : "flex min-w-0 gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 px-4 py-3 text-amber-900"
+            }
+            data-testid={dataTestId.agentNotice}
+            role={error ? "alert" : "status"}
+        >
+            <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+            <p className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]">{entry.text}</p>
+        </div>
+    );
+}
 
 function ReasoningContent({ entry }: { readonly entry: ReasoningEntry }) {
     const content = useRef<HTMLDivElement>(null);
@@ -133,7 +157,7 @@ export function AgentThinking({ autoOpen, entries }: ThinkingPresentation) {
             reasoning.push(entry);
         } else {
             flushReasoning();
-            timeline.push({ kind: "tool", entry });
+            timeline.push(entry.kind === "notice" ? { kind: "notice", entry } : { kind: "tool", entry });
         }
     }
     flushReasoning();
@@ -149,6 +173,8 @@ export function AgentThinking({ autoOpen, entries }: ThinkingPresentation) {
                         entries={item.entries}
                         key={`reasoning:${item.id}`}
                     />
+                ) : item.kind === "notice" ? (
+                    <AgentNotice entry={item.entry} key={`notice:${item.entry.id}`} />
                 ) : (
                     <ToolCall
                         autoOpen={item.entry.id === activeToolId}

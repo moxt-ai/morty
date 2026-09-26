@@ -182,6 +182,43 @@ test("Given a conversation is working, When a user starts a new conversation, Th
     releaseTurn.resolve();
 });
 
+test("Given an Agent retries after a mid-flight error, When the turn remains active, Then the user sees the recoverable error", {
+    timeout: 30_000,
+}, async () => {
+    const releaseTurn = Promise.withResolvers<void>();
+    const created = await createTestApp({
+        agentBehavior: {
+            noticeText: () => "API error: overloaded. Retrying (attempt 2/5).",
+            responseParts: () => ["Recovery succeeded."],
+            afterLastDelta: async (_command, signal) => {
+                await Promise.race([
+                    releaseTurn.promise,
+                    new Promise<never>((_resolve, reject) =>
+                        signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+                    ),
+                ]);
+            },
+        },
+        connectAgent: true,
+    });
+    const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
+    await created.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+
+    await sendPrompt(
+        created,
+        (await created.queryElementByTestId(dataTestId.messageComposer)) as HTMLTextAreaElement,
+        "Keep working after a provider error",
+    );
+
+    const notice = await Promise.race([created.queryElementByTestId(dataTestId.agentNotice), failure]);
+    expect(notice.textContent).toContain("API error: overloaded. Retrying (attempt 2/5).");
+    expect(created.elementByTestId(dataTestId.sessionStatus)).toBeInstanceOf(HTMLElement);
+    releaseTurn.resolve();
+});
+
 test("Given a conversation is working, When the user reopens it, Then its live status and messages are restored", {
     timeout: 30_000,
 }, async () => {

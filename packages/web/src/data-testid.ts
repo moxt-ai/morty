@@ -29,6 +29,7 @@ export const dataTestId = Object.freeze({
     userMessageImage: "chat-user-message-image",
     agentResponse: "chat-agent-response",
     agentReplyStatus: "chat-agent-reply-status",
+    agentNotice: "chat-agent-notice",
     agentReasoning: "chat-agent-reasoning",
     agentToolCall: "chat-agent-tool-call",
     recognizedReadToolCall: "chat-recognized-read-tool-call",
