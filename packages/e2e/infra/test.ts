@@ -4,14 +4,19 @@ import { createTestRuntime } from "./test-runtime.ts";
 
 export { expect } from "@playwright/test";
 
-function agentTest(agentId: "claude" | "opencode" | "pi") {
+function runtimeTest() {
     return base.extend<{ readonly runtime: Awaited<ReturnType<typeof createTestRuntime>> }>({
         // biome-ignore lint/correctness/noEmptyPattern: Playwright requires a destructured fixture dependency list.
         runtime: async ({}, use, testInfo) => {
             const harness = await E2EHarness.create("chat-e2e");
             let failure: unknown;
             try {
-                await use(await createTestRuntime(harness, agentId));
+                const runtime = await createTestRuntime(harness);
+                try {
+                    await Promise.race([use(runtime), runtime.failure]);
+                } finally {
+                    await runtime.close();
+                }
             } catch (error) {
                 failure = error;
                 throw error;
@@ -26,6 +31,4 @@ function agentTest(agentId: "claude" | "opencode" | "pi") {
     });
 }
 
-export const test = agentTest("opencode");
-export const claudeTest = agentTest("claude");
-export const piTest = agentTest("pi");
+export const test = runtimeTest();

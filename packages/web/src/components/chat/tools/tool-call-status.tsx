@@ -1,4 +1,4 @@
-import { CircleCheck, CircleX, LoaderCircle } from "lucide-react";
+import { CircleCheck, CircleMinus, CircleX, LoaderCircle } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { ToolCallState } from "../../../services/chat/agent-reply.ts";
 
@@ -25,6 +25,8 @@ export function ToolCallStatus({ state }: { readonly state: ToolCallState }) {
             return <CircleCheck aria-label="Tool succeeded" className="size-4 shrink-0 text-emerald-600" />;
         case "failed":
             return <CircleX aria-label="Tool failed" className="size-4 shrink-0 text-destructive" />;
+        case "interrupted":
+            return <CircleMinus aria-label="Tool interrupted" className="size-4 shrink-0 text-muted-foreground" />;
         case "unknown":
             return null;
     }

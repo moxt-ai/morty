@@ -1,13 +1,10 @@
-import { decodeIdentifier } from "@moxt-ai/mobius-protocol";
+import { decodeIdentifier, decodeSessionTurnUpdatedEvent } from "@moxt-ai/mobius-protocol";
 import {
     decodeSessionCommandsUpdatedEvent,
     decodeSessionElicitationRequestedEvent,
     decodeSessionElicitationResolvedEvent,
     decodeSessionPermissionRequestedEvent,
     decodeSessionPermissionResolvedEvent,
-    MobiusAgentActivityEvent,
-    MobiusAgentActivityNarrationEvent,
-    MobiusAgentMessageEvent,
     type MobiusClient,
     MobiusControlEvent,
     MobiusElicitationResponseRequest,
@@ -24,13 +21,7 @@ import {
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
-import {
-    agentActivityKey,
-    agentNarrationKey,
-    type RecordedAgentActivity,
-    recordAgentActivity,
-    recordAgentNarration,
-} from "../../services/chat/agent-activities.ts";
+import type { RecordedAgentActivity } from "../../services/chat/agent-activities.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
@@ -53,18 +44,13 @@ import type {
     PermissionInteraction,
     PermissionInteractionResponse,
 } from "./session-pane-types.ts";
-import {
-    applyRecordedContents,
-    historySessionPresentation,
-    placeAgentActivity,
-    promptImageContents,
-    type SessionMessage,
-} from "./session-presentation.ts";
+import { historySessionPresentation, promptImageContents, type SessionMessage } from "./session-presentation.ts";
 import {
     createSessionTaskControlsStore,
     findCompactCommand,
     type SessionTaskControlsStore,
 } from "./session-task-controls.ts";
+import { replaceTurnSnapshot } from "./turn-snapshot.ts";
 
 type Operation =
     | { readonly kind: "idle" }
@@ -509,7 +495,11 @@ export function createSessionPaneModel(options: {
                 }
             },
             connect: async (signal) => {
-                let lastSequence = 0n;
+                let snapshotVersion: {
+                    readonly commandId: string;
+                    readonly epoch: string;
+                    readonly sequence: number;
+                } | null = null;
                 try {
                     client = await requests.connectSession(
                         botId,
@@ -562,7 +552,11 @@ export function createSessionPaneModel(options: {
                             };
                             if (running !== null) {
                                 command = running.commandId;
-                                lastSequence = BigInt(running.sequence);
+                                snapshotVersion = {
+                                    commandId: running.commandId,
+                                    epoch: running.epoch,
+                                    sequence: running.sequence,
+                                };
                                 const turnId =
                                     reconciliation.turn.kind === "accepted" &&
                                     reconciliation.turn.commandId === running.commandId
@@ -579,11 +573,15 @@ export function createSessionPaneModel(options: {
                                 activeTurn.turnCleared(reconciliation.turn.commandId);
                                 command = "";
                             }
-                            const native = historySessionPresentation(
+                            const historyPresentation = historySessionPresentation(
                                 authoritative.history,
                                 sessionId,
                                 command === "" ? null : command,
                             );
+                            const native =
+                                running === null
+                                    ? historyPresentation
+                                    : replaceTurnSnapshot(historyPresentation, sessionId, running);
                             const nativeMessages = native.messages;
                             delivery
                                 .getState()
@@ -696,40 +694,29 @@ export function createSessionPaneModel(options: {
                                 return true;
                             }
 
-                            if (payload instanceof MobiusAgentActivityEvent) {
-                                if (command !== "" && payload.commandId !== command) {
+                            if (payload instanceof MobiusControlEvent && payload.kind === "session.turn.updated") {
+                                const { turn } = decodeSessionTurnUpdatedEvent(payload.encodedPayload);
+                                if (command !== "" && command !== turn.commandId) {
                                     return true;
                                 }
-                                set((current) => ({
-                                    activities: recordAgentActivity(current.activities, event),
-                                    messages: placeAgentActivity(
-                                        current.messages,
-                                        payload.commandId,
-                                        agentActivityKey(payload),
-                                    ),
-                                }));
-                                return true;
-                            }
-                            if (payload instanceof MobiusAgentActivityNarrationEvent) {
-                                if (command !== "" && payload.commandId !== command) {
+                                if (
+                                    snapshotVersion?.commandId === turn.commandId &&
+                                    snapshotVersion.epoch === turn.epoch &&
+                                    snapshotVersion.sequence >= turn.sequence
+                                ) {
                                     return true;
                                 }
-                                set((current) => ({
-                                    activities: recordAgentNarration(current.activities, event),
-                                    messages: placeAgentActivity(
-                                        current.messages,
-                                        payload.commandId,
-                                        agentNarrationKey(payload),
-                                    ),
-                                }));
+                                snapshotVersion = {
+                                    commandId: turn.commandId,
+                                    epoch: turn.epoch,
+                                    sequence: turn.sequence,
+                                };
+                                command = turn.commandId;
+                                set((current) => replaceTurnSnapshot(current, sessionId, turn));
                                 return true;
                             }
                             if (payload instanceof MobiusControlEvent) {
-                                if (payload.kind === "agent.content") {
-                                    set((current) => ({
-                                        messages: applyRecordedContents(current.messages, [event]),
-                                    }));
-                                } else if (payload.kind === "session.commands.updated") {
+                                if (payload.kind === "session.commands.updated") {
                                     tasks
                                         .getState()
                                         .updateCommands(
@@ -846,9 +833,6 @@ export function createSessionPaneModel(options: {
                                 command = payload.commandId;
                                 tasks.getState().start(payload.commandId, payload.commandId);
                                 activeTurn.submissionAccepted(payload.commandId, payload.commandId);
-                                if (event.sequence !== "") {
-                                    lastSequence = BigInt(event.sequence);
-                                }
                                 set((current) =>
                                     startSessionWork(
                                         {
@@ -874,31 +858,10 @@ export function createSessionPaneModel(options: {
                                 );
                                 return true;
                             }
-                            if (
-                                command === "" ||
-                                !("commandId" in payload) ||
-                                payload.commandId !== command ||
-                                (event.sequence !== "" && BigInt(event.sequence) <= lastSequence)
-                            ) {
+                            if (command === "" || !("commandId" in payload) || payload.commandId !== command) {
                                 return true;
                             }
-                            if (event.sequence !== "") {
-                                lastSequence = BigInt(event.sequence);
-                            }
-                            if (payload instanceof MobiusAgentMessageEvent) {
-                                set((current) => {
-                                    const target = current.messages.findLastIndex(
-                                        (item) => item.role === "assistant" && item.commandId === command,
-                                    );
-                                    return {
-                                        messages: current.messages.map((item, index) =>
-                                            index === target && item.role === "assistant"
-                                                ? { ...item, text: item.text + payload.text }
-                                                : item,
-                                        ),
-                                    };
-                                });
-                            } else if (payload instanceof MobiusTurnStartedEvent) {
+                            if (payload instanceof MobiusTurnStartedEvent) {
                                 set((current) =>
                                     startSessionWork(current, {
                                         commandId: command,

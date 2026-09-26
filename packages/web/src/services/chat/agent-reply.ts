@@ -31,6 +31,7 @@ export type ToolCallState =
     | { readonly kind: "running" }
     | { readonly kind: "succeeded" }
     | { readonly kind: "failed" }
+    | { readonly kind: "interrupted" }
     | { readonly kind: "unknown" };
 
 export type ThinkingEntry = NoticeThinkingEntry | ReasoningThinkingEntry | ToolThinkingEntry;
@@ -40,11 +41,11 @@ export interface ThinkingPresentation {
     readonly entries: readonly ThinkingEntry[];
 }
 
-function toolCallState(status: string): ToolCallState {
+function toolCallState(status: string, phase: ReplyPhase): ToolCallState {
     switch (status) {
         case "pending":
         case "running":
-            return { kind: "running" };
+            return phase === "working" || phase === "waiting" ? { kind: "running" } : { kind: "interrupted" };
         case "completed":
             return { kind: "succeeded" };
         case "failed":
@@ -116,7 +117,7 @@ export function describeAgentReply(
                 kind: "tool",
                 name: activity.name,
                 output: activity.output,
-                state: toolCallState(activity.status),
+                state: toolCallState(activity.status, phase),
                 title: activity.title || activity.name || activity.toolKind || "Tool call",
             },
         ];

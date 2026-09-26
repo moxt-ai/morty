@@ -24,8 +24,8 @@
     },
     "dependencies": {
         "@clerk/backend": "catalog:",
-        "@moxt-ai/mobius-sdk": "catalog:",
-        "@moxt-ai/mobius-protocol": "catalog:",
+        "@moxt-ai/mobius-sdk": "workspace:*",
+        "@moxt-ai/mobius-protocol": "workspace:*",
         "drizzle-orm": "catalog:",
         "hono": "catalog:",
         "pino": "catalog:",

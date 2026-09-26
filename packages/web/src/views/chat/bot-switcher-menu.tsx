@@ -64,12 +64,20 @@ export function BotSwitcherMenu({
                 <Popover.Trigger asChild>
                     <button
                         aria-label={`Select Bot. ${activeBot.displayName}, ${connectionStatus.label}`}
-                        className="mb-4 flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left outline-none hover:bg-white/70 focus-visible:ring-2 focus-visible:ring-ring/60 data-[state=open]:bg-white/70 sm:mb-6"
+                        className="relative flex size-10 justify-self-end items-center justify-center gap-2 rounded-lg text-left outline-none hover:bg-white/70 focus-visible:ring-2 focus-visible:ring-ring/60 data-[state=open]:bg-white/70 sm:mb-6 sm:h-auto sm:w-full sm:justify-self-auto sm:justify-start sm:px-1.5 sm:py-1.5"
                         data-testid={dataTestId.botMenuTrigger}
                         type="button"
                     >
-                        <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${statusDot}`} />
-                        <span className="min-w-0 flex-1">
+                        <Bot aria-hidden="true" className="size-5 text-muted-foreground sm:hidden" />
+                        <span
+                            aria-hidden="true"
+                            className={`absolute top-1 right-1 size-2 rounded-full ring-2 ring-sidebar sm:hidden ${statusDot}`}
+                        />
+                        <span
+                            aria-hidden="true"
+                            className={`hidden size-1.5 shrink-0 rounded-full sm:block ${statusDot}`}
+                        />
+                        <span className="hidden min-w-0 flex-1 sm:block">
                             <span className="block truncate text-xs font-medium text-foreground">
                                 {activeBot.displayName}
                             </span>
@@ -81,7 +89,10 @@ export function BotSwitcherMenu({
                                 {connectionStatus.label}
                             </span>
                         </span>
-                        <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+                        <ChevronDown
+                            aria-hidden="true"
+                            className="hidden size-3.5 shrink-0 text-muted-foreground sm:block"
+                        />
                     </button>
                 </Popover.Trigger>
                 <Popover.Portal>

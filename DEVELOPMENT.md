@@ -251,3 +251,20 @@ new native-history snapshot. The daemon may already be executing the next queued
 prompt, so such a snapshot can overlap events still waiting in the browser.
 Opening, reconnecting, and manual history loading remain the native-history read
 boundaries. Keep the live prompt and reply when handling completion.
+
+### Current turn presentation
+
+The daemon owns the running turn's cumulative text, activities, and content.
+`session.turn.updated` carries a complete snapshot with an epoch and monotonically
+increasing sequence. Opening and reconnecting read the same shape through
+`readSessionExecution`. The browser replaces current-turn content only with a newer
+snapshot; it never appends buffered narration or body deltas to native history.
+Activity sequence numbers describe display order, not update versions.
+
+The presentation keeps steering prompts as layout boundaries. They do not own
+execution state or incremental text recovery. Terminal notifications finish the
+last displayed snapshot; completed history remains owned by the native Agent.
+
+Chat's Protocol and SDK workspace dependencies come from its Mobius submodule.
+This keeps the browser, Worker, test Platform, and daemon on the same checked-out
+protocol while developing or deploying changes across those boundaries.
