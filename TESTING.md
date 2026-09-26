@@ -20,11 +20,11 @@ duplicate scenario.
 
 ### Browser product journeys
 
-`packages/e2e/conversation.e2e.test.ts`, `claude-conversation.e2e.test.ts`, and
-`pi-conversation.e2e.test.ts` contain the existing conversation journeys.
-`packages/e2e/setup.e2e.test.ts` covers setup handoff, native-session import,
-reload, and revocation. Agent names in these filenames describe controlled
-profiles, not real Agent compatibility. Run the product journeys with:
+`packages/e2e/conversation.e2e.test.ts` covers send, reply, and browser reload.
+`packages/e2e/setup.e2e.test.ts` covers Project pairing and saved Runtime reconnect
+with a QR handoff. Both use the shared stateful fake daemon; Setup additionally
+injects its local CLI port while running the real downloaded setup bundle.
+Run the product journeys with:
 
 ```bash
 pnpm test:e2e
@@ -36,10 +36,6 @@ the daemon protocol port. The fake owns controllable session state, queued work,
 streaming, interactions, and files. It must not replace the SDK, Platform, or Chat.
 Agent-specific adaptation belongs to separate real agent-daemon tests, not browser
 journeys. Extend an existing journey before adding another file.
-
-Some existing browser journeys still start the real daemon with a controlled ACP
-Agent. This is existing test infrastructure awaiting conversion, not the intended
-boundary or proof of real Agent compatibility. See `packages/e2e/README.md`.
 
 ### Web application integration
 
@@ -200,3 +196,18 @@ supported product state; do not use private application state or ad hoc selector
 Architecture rules are executable in `dependency-cruiser.config.cjs`. Storage and infrastructure cannot
 depend on services, HTTP, composition, or gateways; browser and Worker
 implementations cannot import each other.
+
+## Scenario ownership map
+
+Web application cases are grouped by user workflow: `identity-handoff`,
+`bot-configuration`, `conversation-active`, `conversation-lifecycle`,
+`conversation-queue`, and `conversation-content`. Each still renders the complete
+application. Shared setup owns teardown; shared actions only operate visible controls.
+
+Mobius controlled cases group native identity, history, authorization, preparation,
+and Codex-native commands separately. ACP command/environment, content limits,
+usage normalization, and interaction cases each have their own file. Ordinary
+first-prompt, continuation, cancellation recovery, and FIFO queue success paths
+belong to the real Agent suite. Keep controlled edge cases when their actual
+protocol shapes, identities, capabilities, races, or bounds differ; Agent names
+alone are not distinct coverage.

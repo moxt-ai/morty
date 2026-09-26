@@ -4,21 +4,19 @@ This package has one local product stack and one browser product suite.
 
 ## Product E2E
 
-`conversation.e2e.test.ts`, `claude-conversation.e2e.test.ts`,
-`pi-conversation.e2e.test.ts`, and `setup.e2e.test.ts` are the executable control
-surface for Morty. The intended boundary uses Playwright with the real Chat,
-Platform, SDK, Runtime relay, transports, and storage, replacing only the local
-daemon with a stateful fake at its production protocol port.
+`conversation.e2e.test.ts` exercises sending a prompt and restoring its history
+in a real browser. Chat, Platform, SDK, Runtime relay, transports, and storage are
+real. Its only product replacement is the shared stateful fake daemon, connected
+through the production Platform daemon protocol. One Agent profile is sufficient;
+this journey does not establish Agent compatibility.
 
-Current infrastructure still uses a real daemon with a controlled ACP Agent.
-Convert that infrastructure to the fake-daemon boundary; do not extend this older
-composition or describe it as real Agent coverage. Agent-named journey files are
-not evidence that their real binaries or adapters were tested.
-
-The setup journey is the sole owner of CLI preparation, pairing, browser handoff,
-native-session import, and access revocation. Worker tests cover only the pairing-
-ticket HTTP contract; they do not spawn the setup CLI or repeat its local filesystem
-matrix.
+`setup.e2e.test.ts` covers pairing into a different Project and reconnecting a
+saved setup identity with a QR handoff. It runs the downloaded production setup
+bundle with the fake daemon's stateful `SetupRuntime` port. The fake redeems real
+Platform tickets, holds pairing credentials, reconnects real WebSockets, and
+reports its saved connections through the same local output-file contract.
+No real daemon, fake ACP executable, or ACP proxy is started by this package.
+Native-session import and access revocation are covered by Web application tests.
 
 Run them with:
 

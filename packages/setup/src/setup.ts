@@ -284,13 +284,20 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             }
             return { directory, base, config };
         }
-        // Preserve identity and Bot selection, never old credentials or connection state.
+        // Preserve identity and Bot configuration; resolve Runtime connections through the manager.
         const identity =
             config.base_url !== undefined && config.base_url !== base
                 ? {}
                 : Object.fromEntries(
                       Object.entries(config).filter(([key]) =>
-                          ["user_token", "user_id", "project_id", "bot_id"].includes(key),
+                          [
+                              "user_token",
+                              "user_id",
+                              "project_id",
+                              "bot_id",
+                              "agent_ref",
+                              "agent_config_revision",
+                          ].includes(key),
                       ),
                   );
         return { directory, base, config: identity };
@@ -629,12 +636,17 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         attempts = 0;
         while (true) {
             signal.throwIfAborted();
-            const setup = await request(
+            const botPath = `/chat/projects/${context.config.project_id}/bots/${context.config.bot_id}`;
+            const alreadyConfigured = runtime.kind === "existing" && typeof context.config.agent_ref === "string";
+            const state = await request(
                 context,
-                `/chat/projects/${context.config.project_id}/bots/${context.config.bot_id}/setup/runtimes`,
+                `${botPath}/${alreadyConfigured ? "workspace" : "setup/runtimes"}`,
                 {},
             );
-            if (setupHasOnlineRuntimeAgent(setup, runtimeId, harness)) {
+            const online = alreadyConfigured
+                ? hasOnlineRuntimeAgent(object(state.runtime), runtimeId, harness)
+                : setupHasOnlineRuntimeAgent(state, runtimeId, harness);
+            if (online) {
                 if (runtime.kind === "existing") {
                     emit({ status: "runtime_paired", runtimeId, harness });
                 }

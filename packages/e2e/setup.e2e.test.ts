@@ -18,11 +18,13 @@ test("Given another Project has a managed Runtime, When pair redeems a Bot ticke
 test("Given a saved setup handoff, When its Runtime reconnects, Then setup waits and returns a browser-renderable QR code", async ({
     runtime,
 }) => {
-    await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
     await runtime.disconnectRuntime();
     const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
     const statuses = connected.events.map((event) => event.status);
 
+    expect(connected.botId).toBe(original.botId);
+    expect(statuses).not.toContain("prepared");
     expect(statuses).toEqual(
         expect.arrayContaining(["runtime_reused", "runtime_paired", "runtime_online", "binding_activated"]),
     );

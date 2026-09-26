@@ -25,6 +25,7 @@ import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
 import { sessionDebugBlocks } from "../../view-models/chat/session-debug-blocks.ts";
 import { createSessionPaneModel, sessionPanePresentation } from "../../view-models/chat/session-pane-store.ts";
+import { reportApplicationError } from "../../view-models/report-error.ts";
 import { MobiusSessionMessage } from "./mobius-session-message.tsx";
 
 function MessageListSkeleton() {
@@ -122,7 +123,11 @@ export function MobiusSessionPane({
     const run = (action: (signal: AbortSignal) => Promise<void>) => {
         const controller = lifetime.current;
         if (controller !== null) {
-            void action(controller.signal);
+            void action(controller.signal).catch((cause: unknown) => {
+                if (!controller.signal.aborted) {
+                    reportApplicationError(cause, "session-pane-action");
+                }
+            });
         }
     };
     const runAndFollow = (action: (signal: AbortSignal) => Promise<void>) => {
