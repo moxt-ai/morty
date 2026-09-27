@@ -180,9 +180,12 @@ test("Given a conversation is working, When the user reopens it, Then its daemon
         prompt,
     );
     await Promise.race([
-        created.queryElementByTestId(
-            dataTestId.agentResponse,
-            (element) => element.textContent?.includes(answer) === true,
+        vi.waitFor(() =>
+            expect(
+                created
+                    .elementsByTestId(dataTestId.agentResponse)
+                    .some((element) => element.textContent?.includes(answer) === true),
+            ).toBe(true),
         ),
         failure,
     ]);
@@ -342,9 +345,12 @@ test("Given narration is streaming, When another viewer loads history overlappin
         expect(thinking.textContent?.split(second)).toHaveLength(2);
         releaseCompletion.resolve();
         for (const app of [created, viewer]) {
-            await app.queryElementByTestId(
-                dataTestId.agentResponse,
-                (element) => element.textContent?.includes("Completed without repeating progress.") === true,
+            await vi.waitFor(() =>
+                expect(
+                    app
+                        .elementsByTestId(dataTestId.agentResponse)
+                        .some((element) => element.textContent?.includes("Completed without repeating progress.")),
+                ).toBe(true),
             );
             expect(app.elementByTestId(dataTestId.agentReasoning).textContent?.split(second)).toHaveLength(2);
         }

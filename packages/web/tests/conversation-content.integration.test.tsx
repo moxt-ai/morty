@@ -156,6 +156,106 @@ test("Given a tool finishes during an active conversation, When its terminal act
     await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
 });
 
+test("Given an Agent emits text, a tool, then text, When the timeline streams and is reopened, Then that order remains visible", {
+    timeout: 30_000,
+}, async () => {
+    const prompt = "Inspect the timeline order";
+    const before = "I’ll inspect the workspace before reading the file.";
+    const after = "The repository overview is ready.";
+    const tool = {
+        activityId: "read-between-messages",
+        activityType: "tool",
+        content: [],
+        input: "README.md",
+        locations: [],
+        name: "read",
+        output: "Repository overview",
+        sequence: 0,
+        status: "completed",
+        title: "Read repository overview",
+        toolKind: "read",
+    };
+    let completed = false;
+    const created = await createTestApp({
+        agentBehavior: {
+            activityAfterFirstDelta: () => tool,
+            loadNativeHistory: async (_sessionId, signal) => {
+                signal.throwIfAborted();
+                return {
+                    coveredCommandIds: [],
+                    coveredMessageIds: [],
+                    messages: completed
+                        ? [
+                              { role: "user", text: prompt },
+                              {
+                                  activities: [],
+                                  content: [],
+                                  role: "assistant",
+                                  text: before,
+                              },
+                              {
+                                  activities: [tool],
+                                  content: [],
+                                  role: "assistant",
+                                  text: "",
+                              },
+                              {
+                                  activities: [],
+                                  content: [],
+                                  role: "assistant",
+                                  text: after,
+                              },
+                          ]
+                        : [],
+                    status: "available",
+                    truncated: false,
+                };
+            },
+            onPromptCompleted: () => {
+                completed = true;
+            },
+            responseParts: () => [before, after],
+        },
+        connectAgent: true,
+    });
+    const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
+    await created.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    await sendPrompt(
+        created,
+        (await created.queryElementByTestId(dataTestId.messageComposer)) as HTMLTextAreaElement,
+        prompt,
+    );
+    const assertTimelineOrder = async (phase: "reopened" | "streaming"): Promise<void> => {
+        await vi.waitFor(() => {
+            const responses = created.elementsByTestId(dataTestId.agentResponse);
+            const beforeIndex = responses.findIndex((element) => element.textContent?.includes(before) === true);
+            const toolCall = created.optionalElementByTestId(dataTestId.agentToolCall);
+            const toolIndex = responses.findIndex((element) => toolCall !== null && element.contains(toolCall));
+            const afterIndex = responses.findIndex((element) => element.textContent?.includes(after) === true);
+            expect(beforeIndex, `${phase} leading text`).toBeGreaterThanOrEqual(0);
+            expect(toolIndex, `${phase} tool`).toBeGreaterThan(beforeIndex);
+            expect(afterIndex, `${phase} trailing text`).toBeGreaterThan(toolIndex);
+        });
+    };
+    await Promise.race([assertTimelineOrder("streaming"), failure]);
+    await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    await created.user.click(await created.queryElementByTestId(dataTestId.newConversation));
+    const conversation = await vi.waitFor(() => {
+        const candidate = created
+            .elementsByTestId(dataTestId.managedConversation)
+            .find((element) => element.textContent?.includes(prompt) === true);
+        if (candidate === undefined) {
+            throw new Error(`The completed conversation is unavailable: ${document.body.textContent}`);
+        }
+        return candidate;
+    });
+    await created.user.click(conversation);
+    await assertTimelineOrder("reopened");
+});
+
 test("Given an Agent links a local file location, When a user opens it, Then the file path omits the source location", {
     timeout: 30_000,
 }, async () => {
