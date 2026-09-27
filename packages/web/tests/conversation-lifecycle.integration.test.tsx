@@ -4,21 +4,18 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given a completed conversation was locally recorded as working, When the user reopens it without an active Runtime turn, Then the conversation is idle", {
+test("Given OpenCode completed without mapping native history to the command, When the user reopens it without an active Runtime turn, Then the conversation is idle", {
     timeout: 30_000,
 }, async () => {
     const releaseTurn = Promise.withResolvers<void>();
     const turnReleased = Promise.withResolvers<void>();
     let completed = false;
-    let completedCommandId: string | null = null;
     const prompt = "Finish while this conversation is closed";
     const answer = "The task completed while the conversation was closed.";
     const created = await createTestApp({
         agentBehavior: {
-            afterSessionStarted: async (command, signal) => {
-                signal.throwIfAborted();
-                completedCommandId = command.commandId;
-            },
+            agentId: "codex",
+            additionalAgents: [{ id: "opencode", name: "OpenCode" }],
             afterLastDelta: async (_command, signal) => {
                 await Promise.race([
                     releaseTurn.promise,
@@ -32,7 +29,7 @@ test("Given a completed conversation was locally recorded as working, When the u
             loadNativeHistory: async (_sessionId, signal) => {
                 signal.throwIfAborted();
                 return {
-                    coveredCommandIds: completed && completedCommandId !== null ? [completedCommandId] : [],
+                    coveredCommandIds: [],
                     coveredMessageIds: [],
                     messages: completed
                         ? [
@@ -52,6 +49,13 @@ test("Given a completed conversation was locally recorded as working, When the u
     await created.queryElementByTestId(
         dataTestId.botConnectionStatus,
         (element) => element.textContent?.includes("Connected") === true,
+    );
+    await created.user.click(await created.queryElementByTestId(dataTestId.agentConfiguration));
+    await created.user.click(getByRole(document.body, "tab", { name: "OpenCode" }));
+    await created.user.keyboard("{Escape}");
+    await created.queryElementByTestId(
+        dataTestId.agentConfiguration,
+        (element) => element.textContent?.includes("OpenCode") === true,
     );
     const composer = await created.queryElementByTestId(dataTestId.messageComposer);
 

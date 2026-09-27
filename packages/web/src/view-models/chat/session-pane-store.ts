@@ -564,11 +564,7 @@ export function createSessionPaneModel(options: {
                                         : running.commandId;
                                 tasks.getState().start(running.commandId, turnId);
                                 activeTurn.submissionAccepted(running.commandId, turnId);
-                            } else if (
-                                reconciliation.turn.kind !== "idle" &&
-                                authoritative.history.status === "available" &&
-                                authoritative.history.coveredCommandIds.includes(reconciliation.turn.commandId)
-                            ) {
+                            } else if (reconciliation.turn.kind !== "idle") {
                                 tasks.getState().finish(reconciliation.turn.commandId);
                                 activeTurn.turnCleared(reconciliation.turn.commandId);
                                 command = "";
