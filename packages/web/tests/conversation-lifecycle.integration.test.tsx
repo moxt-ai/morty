@@ -351,3 +351,83 @@ test("Given a completed conversation, When the user reopens it and sends another
     ]);
     await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
 });
+
+test("Given an open conversation, When another Agent response arrives, Then the visible timeline remains without a loading skeleton", {
+    timeout: 30_000,
+}, async () => {
+    const completedTurns: { readonly commandId: string; readonly prompt: string; readonly response: string }[] = [];
+    const created = await createTestApp({
+        agentBehavior: {
+            loadNativeHistory: async (_sessionId, signal) => {
+                signal.throwIfAborted();
+                return {
+                    coveredCommandIds: completedTurns.map((turn) => turn.commandId),
+                    coveredMessageIds: [],
+                    messages: completedTurns.flatMap((turn) => [
+                        { role: "user" as const, text: turn.prompt },
+                        { activities: [], content: [], role: "assistant" as const, text: turn.response },
+                    ]),
+                    status: "available",
+                    truncated: false,
+                };
+            },
+            onPromptCompleted: (command, response) => {
+                completedTurns.push({ commandId: command.commandId, prompt: command.prompt, response });
+            },
+            responseParts: (command) => [`Reply to: ${command.prompt}`],
+        },
+        connectAgent: true,
+    });
+    const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
+    await created.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = (await created.queryElementByTestId(dataTestId.messageComposer)) as HTMLTextAreaElement;
+
+    await sendPrompt(created, composer, "Keep this timeline visible");
+    await Promise.race([
+        created.queryElementByTestId(
+            dataTestId.agentResponse,
+            (element) => element.textContent?.includes("Reply to: Keep this timeline visible") === true,
+        ),
+        failure,
+    ]);
+    await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+
+    let switchingVisible = false;
+    const observer = new MutationObserver((records) => {
+        switchingVisible ||= records.some((record) =>
+            [...record.addedNodes].some(
+                (node) =>
+                    node instanceof Element &&
+                    (node.matches('[role="status"][aria-label="Switching session"]') ||
+                        node.querySelector('[role="status"][aria-label="Switching session"]') !== null),
+            ),
+        );
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    const continuedComposer = (await created.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => !(element as HTMLTextAreaElement).disabled,
+    )) as HTMLTextAreaElement;
+    await sendPrompt(created, continuedComposer, "Trigger a workspace refresh");
+    await Promise.race([
+        vi.waitFor(() =>
+            expect(
+                created
+                    .elementsByTestId(dataTestId.agentResponse)
+                    .some((element) => element.textContent?.includes("Reply to: Trigger a workspace refresh") === true),
+            ).toBe(true),
+        ),
+        failure,
+    ]);
+    observer.disconnect();
+
+    expect(
+        created
+            .elementsByTestId(dataTestId.agentResponse)
+            .some((element) => element.textContent?.includes("Reply to: Keep this timeline visible") === true),
+    ).toBe(true);
+    expect(switchingVisible).toBe(false);
+});

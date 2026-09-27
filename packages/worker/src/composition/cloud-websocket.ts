@@ -82,6 +82,11 @@ export function createCloudWebSocketHandlers(dependencies: CloudWebSocketDepende
                 const requestSignal = AbortSignal.any([signal, deadline]);
                 try {
                     const response = await dependencies.dispatch(new Request(request, { signal: requestSignal }));
+                    if (response.status === 429 || response.status >= 500) {
+                        await response.body?.cancel();
+                        await waitForNextWatch(signal);
+                        continue;
+                    }
                     const body = await response.text();
                     requestSignal.throwIfAborted();
                     const next = `${response.status}\u0000${body}`;

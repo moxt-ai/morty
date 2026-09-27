@@ -271,15 +271,32 @@ export const createBotChatHomeStore = (
                 signal.throwIfAborted();
                 set({ connectionStatus: runtimeConnectionStatus(workspace) });
                 const currentTarget = get().target;
-                const reloadAfterWorkspaceChange = async (): Promise<void> => {
-                    await requests.waitForWorkspaceChange(bot.botId, signal);
-                    signal.throwIfAborted();
-                    const changedWorkspace = await requests.workspace(bot.botId, signal);
-                    signal.throwIfAborted();
-                    set((current) => ({
-                        connectionStatus: runtimeConnectionStatus(changedWorkspace),
-                        revision: current.revision + 1,
-                    }));
+                const watchWorkspaceChanges = async (): Promise<void> => {
+                    while (true) {
+                        try {
+                            await requests.waitForWorkspaceChange(bot.botId, signal);
+                        } catch (cause) {
+                            if (cause instanceof DOMException && cause.name === "TimeoutError") {
+                                continue;
+                            }
+                            throw cause;
+                        }
+                        signal.throwIfAborted();
+                        const changedWorkspace = await requests.workspace(bot.botId, signal);
+                        signal.throwIfAborted();
+                        const changedReason = setupReason(changedWorkspace);
+                        set((current) =>
+                            current.target.kind === "draft"
+                                ? {
+                                      connectionStatus: runtimeConnectionStatus(changedWorkspace),
+                                      view:
+                                          changedReason === null
+                                              ? { kind: "draft", bot }
+                                              : { kind: "setup", bot, reason: changedReason },
+                                  }
+                                : { connectionStatus: runtimeConnectionStatus(changedWorkspace) },
+                        );
+                    }
                 };
                 if (currentTarget.kind === "continue") {
                     const session = await requests.continueNativeSession(
@@ -296,25 +313,25 @@ export const createBotChatHomeStore = (
                         view: { kind: "draft", bot },
                         sessionView: { kind: "session-access", session },
                     });
-                    await reloadAfterWorkspaceChange();
+                    await watchWorkspaceChanges();
                     return;
                 }
                 if (currentTarget.kind === "session-access") {
                     const session = await requests.managedSession(bot.botId, currentTarget.sessionId, signal);
                     signal.throwIfAborted();
                     set({ view: { kind: "draft", bot }, sessionView: { kind: "session-access", session } });
-                    await reloadAfterWorkspaceChange();
+                    await watchWorkspaceChanges();
                     return;
                 }
                 const reason = currentTarget.kind === "draft" ? setupReason(workspace) : null;
                 if (reason !== null) {
                     set({ view: { kind: "setup", bot, reason } });
-                    await reloadAfterWorkspaceChange();
+                    await watchWorkspaceChanges();
                     return;
                 }
                 if (currentTarget.kind === "draft") {
                     set({ view: { kind: "draft", bot } });
-                    await reloadAfterWorkspaceChange();
+                    await watchWorkspaceChanges();
                     return;
                 }
                 set({ view: { kind: "session-loading", bot } });
@@ -327,7 +344,7 @@ export const createBotChatHomeStore = (
                     throw new Error(opened.kind === "failed" ? opened.message : "The Session could not be opened.");
                 }
                 set({ view: { kind: "draft", bot }, sessionView: { kind: "session-access", session: opened.session } });
-                await reloadAfterWorkspaceChange();
+                await watchWorkspaceChanges();
             } catch (cause) {
                 if (signal.aborted) {
                     return;
