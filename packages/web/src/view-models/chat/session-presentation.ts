@@ -25,7 +25,7 @@ export type SessionMessage =
           readonly contents: readonly SessionMessageContent[];
       };
 
-export interface SessionMessageContent {
+interface SessionMessageContent {
     readonly contentId: string;
     readonly content: AgentDisplayContent;
 }
@@ -35,7 +35,7 @@ export interface SessionTimelineSegment {
     readonly messages: readonly SessionMessage[];
 }
 
-export function promptImageContents(images: readonly PromptImage[] | undefined): readonly SessionMessageContent[] {
+function promptImageContents(images: readonly PromptImage[] | undefined): readonly SessionMessageContent[] {
     return (images ?? []).map((image, index) => ({
         contentId: `history-image-${index.toString()}`,
         content: {
