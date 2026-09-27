@@ -260,21 +260,6 @@ export const sessionDraftEntry = (sessionId: string): LocalStorageEntry<string> 
         schema: messageDraftSchema,
     });
 
-/** Removes operational Session state written by older web clients. */
-export function clearLegacySessionStorage(): void {
-    try {
-        for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
-            const key = window.localStorage.key(index);
-            if (
-                key?.startsWith("mobius.session-active-turn.v1:") === true ||
-                key?.startsWith("mobius.session-delivery.v1:") === true
-            ) {
-                window.localStorage.removeItem(key);
-            }
-        }
-    } catch {}
-}
-
 // ---------------------------------------------------------------------------
 // Conversation sidebar layout
 // ---------------------------------------------------------------------------

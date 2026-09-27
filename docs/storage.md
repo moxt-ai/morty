@@ -40,5 +40,5 @@ execution and native history are authoritative.
 
 1. Persist bounded unsent draft text in the browser; never persist attachment bytes.
 2. Remove local active-turn and delivery-journal state and rely on Runtime reconciliation.
-3. Remove obsolete legacy Session keys during browser startup.
+3. Leave values written by older clients untouched; current code neither reads nor rewrites them.
 4. Keep credentials and bounded preferences isolated from Session execution state.

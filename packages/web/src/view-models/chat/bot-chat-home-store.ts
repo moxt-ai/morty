@@ -7,11 +7,7 @@ import type {
     ChatDraftConfiguration,
     ChatWorkspace,
 } from "../../services/chat/bot-chat-api.ts";
-import {
-    centralLocalStorage,
-    clearLegacySessionStorage,
-    newConversationDraftEntry,
-} from "../../services/local-storage/central-local-storage.ts";
+import { centralLocalStorage, newConversationDraftEntry } from "../../services/local-storage/central-local-storage.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
@@ -215,7 +211,6 @@ export const createBotChatHomeStore = (
 ) => {
     const conversations = createConversationSessionStore(requests);
     const target = initialTarget(options.url, options.createId);
-    clearLegacySessionStorage();
     return createStore<BotChatHomeStore>()((set, get) => ({
         bots: [],
         botOperation: { kind: "idle" },
