@@ -688,6 +688,81 @@ export function createSessionPaneModel(options: {
                                 );
                                 signal.throwIfAborted();
                                 messageQueue.getState().replace(execution.queued);
+                                const running = execution.turn;
+                                if (running === null) {
+                                    return true;
+                                }
+                                if (
+                                    snapshotVersion?.commandId === running.commandId &&
+                                    snapshotVersion.epoch === running.epoch &&
+                                    snapshotVersion.sequence >= running.sequence
+                                ) {
+                                    return true;
+                                }
+                                const priorCommand = command;
+                                const transitioned = priorCommand !== "" && priorCommand !== running.commandId;
+                                const loadedHistory = transitioned
+                                    ? await connected.sessions.querySessionNativeMessages(
+                                          sessionId,
+                                          {
+                                              additionalDirectoryIds: session.entry.additionalDirectories.map(
+                                                  (directory) => directory.directoryId,
+                                              ),
+                                              agentId: session.agentRef,
+                                              directoryId: session.result.ready.directoryId,
+                                          },
+                                          new MobiusPageRequest(50, ""),
+                                          signal,
+                                      )
+                                    : null;
+                                signal.throwIfAborted();
+                                if (priorCommand !== "" && priorCommand !== running.commandId) {
+                                    tasks.getState().finish(priorCommand);
+                                    activeTurn.turnCleared(priorCommand);
+                                }
+                                command = running.commandId;
+                                snapshotVersion = {
+                                    commandId: running.commandId,
+                                    epoch: running.epoch,
+                                    sequence: running.sequence,
+                                };
+                                const accepted = activeTurn.current();
+                                const turnId =
+                                    accepted.kind === "accepted" && accepted.commandId === running.commandId
+                                        ? accepted.turnId
+                                        : running.commandId;
+                                tasks.getState().start(running.commandId, turnId);
+                                activeTurn.submissionAccepted(running.commandId, turnId);
+                                if (loadedHistory?.status === "available") {
+                                    nativeHistory = loadedHistory;
+                                    historyCursor = loadedHistory.nextCursor;
+                                    delivery.getState().reconcile(loadedHistory.coveredCommandIds);
+                                }
+                                set((current) => {
+                                    const priorActivity =
+                                        priorCommand === "" || priorCommand === running.commandId
+                                            ? current.activity
+                                            : transitionSessionActivity(current.activity, {
+                                                  commandId: priorCommand,
+                                                  kind: "work-completed",
+                                              });
+                                    const base =
+                                        loadedHistory?.status === "available"
+                                            ? historySessionPresentation(loadedHistory, sessionId, running.commandId)
+                                            : {
+                                                  activities: current.activities,
+                                                  messages: current.messages,
+                                              };
+                                    const snapshot = replaceTurnSnapshot(base, sessionId, running);
+                                    return {
+                                        activities: snapshot.activities,
+                                        hasOlderHistory: historyCursor !== null,
+                                        ...startSessionWork(
+                                            { activity: priorActivity, messages: snapshot.messages },
+                                            { commandId: running.commandId, attempt: null },
+                                        ),
+                                    };
+                                });
                                 return true;
                             }
 

@@ -4,11 +4,10 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given native history has advanced into the next queued turn, When that turn streams, Then its prompt and reply appear once", {
+test("Given OpenCode promotes queued work without completing the prior command, When that turn streams, Then its prompt and reply appear once", {
     timeout: 30_000,
 }, async () => {
     const finishFirst = Promise.withResolvers<void>();
-    const secondStarted = Promise.withResolvers<void>();
     const finishSecond = Promise.withResolvers<void>();
     const firstPrompt = "First queued-history task";
     const secondPrompt = "Second queued-history task";
@@ -28,12 +27,11 @@ test("Given native history has advanced into the next queued turn, When that tur
     const app = await createTestApp({
         connectAgent: true,
         agentBehavior: {
+            queuedTurnStartsWithoutPriorCompletion: true,
             responseParts: (command) => [`Reply: ${command.prompt}`],
-            afterSessionStarted: async (command) => {
+            afterSessionStarted: () => {
                 firstStarted = true;
-                if (command.prompt === secondPrompt) {
-                    secondStarted.resolve();
-                }
+                return Promise.resolve();
             },
             afterLastDelta: (command, signal) =>
                 wait(command.prompt === firstPrompt ? finishFirst.promise : finishSecond.promise, signal),
@@ -42,9 +40,7 @@ test("Given native history has advanced into the next queued turn, When that tur
             },
             loadNativeHistory: async (_sessionId, signal) => {
                 const first = completed;
-                if (first !== null) {
-                    await wait(secondStarted.promise, signal);
-                }
+                signal.throwIfAborted();
                 return {
                     status: "available",
                     truncated: false,
@@ -60,7 +56,13 @@ test("Given native history has advanced into the next queued turn, When that tur
                                 : []
                             : [
                                   { role: "user", text: first.prompt },
-                                  { role: "assistant", text: first.reply, activities: [], content: [] },
+                                  {
+                                      role: "assistant",
+                                      text: first.reply,
+                                      activities: [],
+                                      content: [],
+                                      outcome: "succeeded",
+                                  },
                                   { role: "user", text: secondPrompt },
                               ],
                 };
