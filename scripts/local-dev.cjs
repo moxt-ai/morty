@@ -302,19 +302,13 @@ function writeStack(stack) {
 
 function clerkPublishableKey() {
     const configured = process.env.CHAT_LOCAL_CLERK_PUBLISHABLE_KEY;
-    if (configured !== undefined && /^pk_(test|live)_[A-Za-z0-9_-]+$/u.test(configured)) {
-        return configured;
+    if (configured === undefined || configured.length === 0) {
+        throw new Error("CHAT_LOCAL_CLERK_PUBLISHABLE_KEY is required");
     }
-    const fixture = path.join(REPO_ROOT, "packages/e2e/infra/test-runtime.ts");
-    if (fs.existsSync(fixture)) {
-        const match = fs.readFileSync(fixture, "utf8").match(/publishableKey:\s*"([^"]+)"/u);
-        if (match !== null && /^pk_(test|live)_[A-Za-z0-9_-]+$/u.test(match[1])) {
-            return match[1];
-        }
+    if (!/^pk_(test|live)_[A-Za-z0-9_-]+$/u.test(configured)) {
+        throw new Error("CHAT_LOCAL_CLERK_PUBLISHABLE_KEY must be a valid Clerk publishable key");
     }
-    // A syntactically valid local-only key. The browser cannot load Clerk JS
-    // from it, which only matters when a sign-in flow is under test.
-    return "pk_test_local_dev_placeholder";
+    return configured;
 }
 
 async function prepareWeb(options) {
@@ -366,6 +360,7 @@ async function prepare(options) {
             `Unknown mode ${options.mode}; use web, web-server, web-server-mobius, or web-server-mobius-cli`,
         );
     }
+    const clerkKey = clerkPublishableKey();
     if (options.mode === "web") {
         return prepareWeb(options);
     }
@@ -506,7 +501,7 @@ async function prepare(options) {
             APP_ORIGIN: chatOrigin,
             AUTHENTICATION_BASE_URL: chatOrigin,
             CLERK_JWT_KEY: publicKey.export({ format: "pem", type: "spki" }).toString(),
-            CLERK_PUBLISHABLE_KEY: clerkPublishableKey(),
+            CLERK_PUBLISHABLE_KEY: clerkKey,
             MOBIUS_APP_ID: appId,
             MOBIUS_APP_SECRET: appSecret,
             MOBIUS_BASE_URL: platformOrigin,

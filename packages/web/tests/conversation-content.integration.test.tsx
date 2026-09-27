@@ -176,13 +176,14 @@ test("Given an Agent emits text, a tool, then text, When the timeline streams an
         toolKind: "read",
     };
     let completed = false;
+    let completedCommandId: string | null = null;
     const created = await createTestApp({
         agentBehavior: {
             activityAfterFirstDelta: () => tool,
             loadNativeHistory: async (_sessionId, signal) => {
                 signal.throwIfAborted();
                 return {
-                    coveredCommandIds: [],
+                    coveredCommandIds: completedCommandId === null ? [] : [completedCommandId],
                     coveredMessageIds: [],
                     messages: completed
                         ? [
@@ -211,8 +212,9 @@ test("Given an Agent emits text, a tool, then text, When the timeline streams an
                     truncated: false,
                 };
             },
-            onPromptCompleted: () => {
+            onPromptCompleted: (command) => {
                 completed = true;
+                completedCommandId = command.commandId;
             },
             responseParts: () => [before, after],
         },
@@ -232,8 +234,9 @@ test("Given an Agent emits text, a tool, then text, When the timeline streams an
         await vi.waitFor(() => {
             const responses = created.elementsByTestId(dataTestId.agentResponse);
             const beforeIndex = responses.findIndex((element) => element.textContent?.includes(before) === true);
-            const toolCall = created.optionalElementByTestId(dataTestId.agentToolCall);
-            const toolIndex = responses.findIndex((element) => toolCall !== null && element.contains(toolCall));
+            const toolCalls = created.elementsByTestId(dataTestId.agentToolCall);
+            expect(toolCalls, `${phase} tools`).toHaveLength(1);
+            const toolIndex = responses.findIndex((element) => element.contains(toolCalls[0] ?? null));
             const afterIndex = responses.findIndex((element) => element.textContent?.includes(after) === true);
             expect(beforeIndex, `${phase} leading text`).toBeGreaterThanOrEqual(0);
             expect(toolIndex, `${phase} tool`).toBeGreaterThan(beforeIndex);
@@ -305,24 +308,65 @@ test("Given a running tool, When the user cancels its turn without a terminal to
     timeout: 30_000,
 }, async () => {
     let cancelled = false;
+    let cancelledCommandId: string | null = null;
+    let continuedTurn: { readonly commandId: string; readonly prompt: string; readonly response: string } | null = null;
     const app = await createTestApp({
         connectAgent: true,
         agentBehavior: {
             toolExecution: "wait-for-cancel",
-            onPromptCancelled: () => {
+            onPromptCancelled: (command) => {
                 cancelled = true;
+                cancelledCommandId = command.commandId;
+            },
+            onPromptCompleted: (command, response) => {
+                continuedTurn = { commandId: command.commandId, prompt: command.prompt, response };
             },
             loadNativeHistory: async (_sessionId, signal) => {
                 signal.throwIfAborted();
                 return {
                     status: "available",
-                    coveredCommandIds: [],
+                    coveredCommandIds: [
+                        ...(continuedTurn === null ? [] : [continuedTurn.commandId]),
+                        ...(cancelledCommandId === null ? [] : [cancelledCommandId]),
+                    ],
                     coveredMessageIds: [],
                     truncated: false,
                     messages: cancelled
                         ? [
                               { role: "user", text: "Create an image" },
-                              { role: "assistant", text: "", activities: [], content: [], outcome: "cancelled" },
+                              {
+                                  role: "assistant",
+                                  text: "",
+                                  activities: [
+                                      {
+                                          activityId: "fake-image-1",
+                                          activityType: "tool",
+                                          content: [],
+                                          input: "Create an image",
+                                          locations: [],
+                                          name: "generate_image",
+                                          output: "",
+                                          sequence: 0,
+                                          status: "running",
+                                          title: "Generate image",
+                                          toolKind: "other",
+                                      },
+                                  ],
+                                  content: [],
+                                  outcome: "cancelled",
+                              },
+                              ...(continuedTurn === null
+                                  ? []
+                                  : [
+                                        { role: "user" as const, text: continuedTurn.prompt },
+                                        {
+                                            role: "assistant" as const,
+                                            text: continuedTurn.response,
+                                            activities: [],
+                                            content: [],
+                                            outcome: "succeeded" as const,
+                                        },
+                                    ]),
                           ]
                         : [],
                 };
@@ -349,7 +393,8 @@ test("Given a running tool, When the user cancels its turn without a terminal to
     );
     await app.user.click(stop);
     await vi.waitFor(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
-    await vi.waitFor(() => expect(getByLabelText(tool, "Tool interrupted")).toBeInstanceOf(SVGElement));
+    const interruptedTool = await app.queryElementByTestId(dataTestId.agentToolCall);
+    await vi.waitFor(() => expect(getByLabelText(interruptedTool, "Tool interrupted")).toBeInstanceOf(SVGElement));
     app.reload();
     const status = await app.queryElementByTestId(dataTestId.agentReplyStatus);
     expect(status.textContent).toBe("Response cancelled.");

@@ -42,6 +42,8 @@ test("Given a conversation is working, When a user starts a new conversation, Th
     await sendPrompt(created, composer as HTMLTextAreaElement, "Keep working in the background");
     await Promise.race([turnStarted.promise, failure]);
     await created.queryElementByTestId(dataTestId.sessionStatus);
+    expect(document.body.textContent).not.toContain("No message history is available for this conversation.");
+    expect(created.elementsByTestId(dataTestId.userMessage)).toHaveLength(0);
     await created.user.click(await created.queryElementByTestId(dataTestId.newConversation));
 
     const backgroundConversation = await vi.waitFor(
@@ -72,14 +74,16 @@ test("Given a conversation is working, When the user reopens it, Then its daemon
     const releaseTurn = Promise.withResolvers<void>();
     const releaseSnapshot = Promise.withResolvers<void>();
     let turnStarted = false;
+    let activeCommandId: string | null = null;
     const prompt = "Keep this session working while I leave";
     const answer = "The active response remains visible.";
     const progress = "Inspecting the active workspace once.";
     const created = await createTestApp({
         agentBehavior: {
-            afterSessionStarted: async (_command, signal) => {
+            afterSessionStarted: async (command, signal) => {
                 signal.throwIfAborted();
                 turnStarted = true;
+                activeCommandId = command.commandId;
             },
             afterLastDelta: async (_command, signal) => {
                 await Promise.race([
@@ -156,7 +160,7 @@ test("Given a conversation is working, When the user reopens it, Then its daemon
                     text: answer,
                 };
                 return {
-                    coveredCommandIds: [],
+                    coveredCommandIds: activeCommandId === null ? [] : [activeCommandId],
                     coveredMessageIds: [],
                     messages: turnStarted ? [{ role: "user", text: prompt }, inspectWorkspace, createDirectory] : [],
                     status: "available",
@@ -257,6 +261,8 @@ test("Given narration is streaming, When another viewer loads history overlappin
     const second = "Checking the requested files.";
     const prompt = "Inspect without repeating progress";
     let openingViewer = false;
+    let activeCommandId: string | null = null;
+    let completed = false;
     const wait = async (promise: Promise<void>, signal: AbortSignal): Promise<void> => {
         signal.throwIfAborted();
         const aborted = Promise.withResolvers<never>();
@@ -271,6 +277,13 @@ test("Given narration is streaming, When another viewer loads history overlappin
     const created = await createTestApp({
         connectAgent: true,
         agentBehavior: {
+            afterSessionStarted: async (command, signal) => {
+                signal.throwIfAborted();
+                activeCommandId = command.commandId;
+            },
+            onPromptCompleted: () => {
+                completed = true;
+            },
             reasoningParts: () => [first, second],
             responseParts: () => ["Completed without repeating progress."],
             afterFirstNarration: async (_command, signal) => wait(releaseIncrement.promise, signal),
@@ -286,9 +299,9 @@ test("Given narration is streaming, When another viewer loads history overlappin
                 return {
                     status: "available",
                     truncated: false,
-                    coveredCommandIds: [],
+                    coveredCommandIds: activeCommandId === null ? [] : [activeCommandId],
                     coveredMessageIds: [],
-                    messages: openingViewer
+                    messages: completed
                         ? [
                               { role: "user", text: prompt },
                               {
@@ -305,14 +318,45 @@ test("Given narration is streaming, When another viewer loads history overlappin
                                           name: "",
                                           output: first + second,
                                           sequence: 0,
-                                          status: "running",
+                                          status: "completed",
                                           title: "Reasoning",
                                           toolKind: "",
                                       },
                                   ],
                               },
+                              {
+                                  role: "assistant",
+                                  text: "Completed without repeating progress.",
+                                  content: [],
+                                  activities: [],
+                                  outcome: "succeeded",
+                              },
                           ]
-                        : [],
+                        : openingViewer
+                          ? [
+                                { role: "user", text: prompt },
+                                {
+                                    role: "assistant",
+                                    text: "",
+                                    content: [],
+                                    activities: [
+                                        {
+                                            activityId: "fake-reasoning-1",
+                                            activityType: "reasoning",
+                                            content: [],
+                                            input: "",
+                                            locations: [],
+                                            name: "",
+                                            output: first + second,
+                                            sequence: 0,
+                                            status: "running",
+                                            title: "Reasoning",
+                                            toolKind: "",
+                                        },
+                                    ],
+                                },
+                            ]
+                          : [],
                 };
             },
         },

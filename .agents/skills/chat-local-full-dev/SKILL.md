@@ -16,10 +16,12 @@ For deployed logs and incidents use `worker-debug`.
 ## Quick start
 
 ```sh
-scripts/local-dev web-server
+CHAT_LOCAL_CLERK_PUBLISHABLE_KEY=<pk_test_...> scripts/local-dev web-server
 ```
 
 The repository provides one local-development entrypoint, `scripts/local-dev`.
+Every prepare mode requires `CHAT_LOCAL_CLERK_PUBLISHABLE_KEY` to contain a
+valid Clerk publishable key so the browser can load Clerk JS.
 The `web-server` mode provisions an isolated local Platform App automatically.
 The `web` mode reads owner-provided `MORTY_LOCAL_APP_ID` and
 `MORTY_LOCAL_APP_SECRET` values for the configured remote Platform.

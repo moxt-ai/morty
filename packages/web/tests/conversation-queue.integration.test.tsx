@@ -12,7 +12,8 @@ test("Given OpenCode promotes queued work without completing the prior command, 
     const firstPrompt = "First queued-history task";
     const secondPrompt = "Second queued-history task";
     let firstStarted = false;
-    let completed: { readonly commandId: string; readonly prompt: string; readonly reply: string } | null = null;
+    let firstCommandId: string | null = null;
+    const completed: { readonly commandId: string; readonly prompt: string; readonly reply: string }[] = [];
     const wait = async (promise: Promise<void>, signal: AbortSignal): Promise<void> => {
         signal.throwIfAborted();
         const cancelled = Promise.withResolvers<never>();
@@ -29,42 +30,46 @@ test("Given OpenCode promotes queued work without completing the prior command, 
         agentBehavior: {
             queuedTurnStartsWithoutPriorCompletion: true,
             responseParts: (command) => [`Reply: ${command.prompt}`],
-            afterSessionStarted: () => {
+            afterSessionStarted: (command) => {
                 firstStarted = true;
+                firstCommandId ??= command.commandId;
                 return Promise.resolve();
             },
             afterLastDelta: (command, signal) =>
                 wait(command.prompt === firstPrompt ? finishFirst.promise : finishSecond.promise, signal),
             onPromptCompleted: (command, reply) => {
-                completed = { commandId: command.commandId, prompt: command.prompt, reply };
+                completed.push({ commandId: command.commandId, prompt: command.prompt, reply });
             },
             loadNativeHistory: async (_sessionId, signal) => {
-                const first = completed;
                 signal.throwIfAborted();
                 return {
                     status: "available",
                     truncated: false,
                     coveredMessageIds: [],
-                    coveredCommandIds: first === null ? [] : [first.commandId],
+                    coveredCommandIds:
+                        completed.length === 0
+                            ? firstCommandId === null
+                                ? []
+                                : [firstCommandId]
+                            : completed.map((turn) => turn.commandId).reverse(),
                     messages:
-                        first === null
+                        completed.length === 0
                             ? firstStarted
                                 ? [
                                       { role: "user", text: firstPrompt },
                                       { role: "assistant", text: `Reply: ${firstPrompt}`, activities: [], content: [] },
                                   ]
                                 : []
-                            : [
-                                  { role: "user", text: first.prompt },
+                            : completed.flatMap((turn) => [
+                                  { role: "user" as const, text: turn.prompt },
                                   {
-                                      role: "assistant",
-                                      text: first.reply,
+                                      role: "assistant" as const,
+                                      text: turn.reply,
                                       activities: [],
                                       content: [],
-                                      outcome: "succeeded",
+                                      outcome: "succeeded" as const,
                                   },
-                                  { role: "user", text: secondPrompt },
-                              ],
+                              ]),
                 };
             },
         },

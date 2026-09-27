@@ -13,7 +13,6 @@ import {
     type PermissionInteractionResponse,
     SessionInteractionCards,
 } from "../../components/chat/session-interactions.tsx";
-import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
@@ -151,9 +150,6 @@ export function MobiusSessionPane({
         await pane.store.getState().respondToElicitation(response, controller.signal);
     };
     const presentation = sessionPanePresentation(model, delivery, taskControls, messageQueue);
-    const initialMessageVisible =
-        initialMessage !== undefined &&
-        !model.messages.some((message) => message.role === "user" && message.text === initialMessage.content);
     useEffect(() => {
         onStatusChange(sessionId, model.activity);
     }, [model.activity, onStatusChange, sessionId]);
@@ -179,19 +175,6 @@ export function MobiusSessionPane({
                     aria-label="Messages"
                     className="min-h-0 flex-1 space-y-8 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10 lg:px-12"
                 >
-                    {initialMessageVisible && (
-                        <div className="mx-auto w-full min-w-0 max-w-[920px]">
-                            <UserPromptMessage
-                                images={initialMessage.attachments.flatMap((attachment) =>
-                                    attachment.kind === "image" ? [attachment.image] : [],
-                                )}
-                                resources={initialMessage.attachments.flatMap((attachment) =>
-                                    attachment.kind === "resource" ? [attachment.resource] : [],
-                                )}
-                                text={initialMessage.content}
-                            />
-                        </div>
-                    )}
                     {model.messages.length === 0 && model.connection.kind === "loading" && <MessageListSkeleton />}
                     {model.messages.length === 0 && model.connection.kind === "failed" && (
                         <div className="flex min-h-full items-center justify-center">
@@ -208,11 +191,14 @@ export function MobiusSessionPane({
                             </div>
                         </div>
                     )}
-                    {model.messages.length === 0 && model.connection.kind === "ready" && !model.historyLoading && (
-                        <p className="text-center text-sm text-muted-foreground" role="status">
-                            No message history is available for this conversation.
-                        </p>
-                    )}
+                    {model.messages.length === 0 &&
+                        model.connection.kind === "ready" &&
+                        model.activity.kind === "idle" &&
+                        !model.historyLoading && (
+                            <p className="text-center text-sm text-muted-foreground" role="status">
+                                No message history is available for this conversation.
+                            </p>
+                        )}
                     {model.historyLoading && (
                         <p role="status" className="text-center text-sm text-muted-foreground">
                             Loading...

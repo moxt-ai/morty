@@ -1,4 +1,4 @@
-import { decodeIdentifier, decodeSessionTurnUpdatedEvent } from "@moxt-ai/mobius-protocol";
+import { type ActiveTurnSnapshot, decodeIdentifier, decodeSessionTurnUpdatedEvent } from "@moxt-ai/mobius-protocol";
 import {
     decodeSessionCommandsUpdatedEvent,
     decodeSessionElicitationRequestedEvent,
@@ -16,7 +16,6 @@ import {
     MobiusTurnFailedEvent,
     MobiusTurnStartedEvent,
     type NativeSessionHistory,
-    type PromptImage,
     type PromptResource,
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
@@ -30,8 +29,6 @@ import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { createSessionActiveTurn, type SessionActiveTurn } from "./session-active-turn.ts";
 import {
-    continueSessionWorkAfterUserMessage,
-    finishSessionWork,
     type SessionActivityState,
     startSessionWork,
     transitionSessionActivity,
@@ -45,13 +42,17 @@ import type {
     PermissionInteraction,
     PermissionInteractionResponse,
 } from "./session-pane-types.ts";
-import { historySessionPresentation, promptImageContents, type SessionMessage } from "./session-presentation.ts";
+import {
+    activeTurnSessionPresentation,
+    deriveSessionTimeline,
+    historySessionPresentation,
+    type SessionMessage,
+} from "./session-presentation.ts";
 import {
     createSessionTaskControlsStore,
     findCompactCommand,
     type SessionTaskControlsStore,
 } from "./session-task-controls.ts";
-import { replaceTurnSnapshot } from "./turn-snapshot.ts";
 
 type Operation =
     | { readonly kind: "idle" }
@@ -201,8 +202,10 @@ export function sessionPanePresentation(
     const busy = activeCommandId !== null || composerDisabled;
     const compactAvailable = findCompactCommand(tasks.commands) !== null;
     const activeMessageId =
-        model.activity.kind === "working"
-            ? model.activity.messageId
+        workingActivityCommandId !== null
+            ? (model.messages.findLast(
+                  (message) => message.role === "assistant" && message.commandId === workingActivityCommandId,
+              )?.id ?? null)
             : submittingCommandId !== null
               ? (model.messages.findLast(
                     (message) => message.role === "assistant" && message.commandId === submittingCommandId,
@@ -259,16 +262,18 @@ export function sessionPanePresentation(
     } as const;
 }
 
-function includePendingUserMessage(
-    messages: readonly SessionMessage[],
-    commandId: string,
-    displayPrompt: string,
-    images: readonly PromptImage[],
-): readonly SessionMessage[] {
-    if (messages.some((message) => message.role === "user" && message.id === commandId)) {
-        return messages;
+function historyBeforeActiveTurn(history: NativeSessionHistory, turn: ActiveTurnSnapshot): NativeSessionHistory {
+    if (history.status !== "available") {
+        return history;
     }
-    return [...messages, { contents: promptImageContents(images), id: commandId, role: "user", text: displayPrompt }];
+    if (history.messages.length < turn.messages.length) {
+        throw new Error("The live Session history does not contain the active Turn timeline.");
+    }
+    return {
+        ...history,
+        coveredCommandIds: history.coveredCommandIds.filter((commandId) => commandId !== turn.commandId),
+        messages: history.messages.slice(0, history.messages.length - turn.messages.length),
+    };
 }
 
 export function createSessionPaneModel(options: {
@@ -337,25 +342,17 @@ export function createSessionPaneModel(options: {
             );
         },
     });
-    const initialDelivery = delivery.getState().state;
-    const saved = historySessionPresentation(session.result.history, sessionId, command === "" ? null : command);
-    const savedMessages = saved.messages;
-    const persistedMessages =
-        initialDelivery.kind === "delivery-unknown"
-            ? includePendingUserMessage(
-                  savedMessages,
-                  initialDelivery.journal.commandId,
-                  initialDelivery.journal.displayPrompt,
-                  initialDelivery.journal.request.images,
-              )
-            : savedMessages;
-    const initialWork =
-        command === ""
-            ? { activity: { kind: "idle" } as const, messages: persistedMessages }
-            : startSessionWork(
-                  { activity: { kind: "idle" }, messages: persistedMessages },
-                  { commandId: command, attempt: null },
-              );
+    const initialActivity: SessionActivityState =
+        command === "" ? { kind: "idle" } : startSessionWork({ commandId: command, attempt: null });
+    let activeSnapshot: ActiveTurnSnapshot | null = null;
+    const deriveTimeline = (activity: SessionActivityState) => {
+        const history = historySessionPresentation(nativeHistory ?? session.result.history, sessionId);
+        return deriveSessionTimeline(
+            history,
+            activeSnapshot === null ? null : activeTurnSessionPresentation(activeSnapshot, sessionId),
+            activity.kind === "working" ? { attempt: activity.attempt, commandId: activity.commandId } : null,
+        );
+    };
     const tasks = createSessionTaskControlsStore({
         commands: session.result.ready.commands,
         steeringSupported: session.result.ready.capabilities.steering,
@@ -419,20 +416,21 @@ export function createSessionPaneModel(options: {
         additionalDirectoryIds: session.result.ready.additionalDirectories.map((directory) => directory.directoryId),
     };
     const draftEntry = sessionDraftEntry(sessionId);
+    const initialTimeline = deriveTimeline(initialActivity);
 
     const store = createStore<SessionPaneStore>()((set, get) => {
         return {
             connection: { kind: "loading" },
-            messages: initialWork.messages,
+            messages: initialTimeline.messages,
             historyLoading: false,
             hasOlderHistory: historyCursor !== null,
             options: session.result.ready.configOptions,
             draft: options.initialMessage?.content ?? centralLocalStorage.read(draftEntry) ?? "",
             attachments: options.initialMessage?.attachments ?? [],
-            activities: saved.activities,
+            activities: initialTimeline.activities,
             interactions: [],
             operation: { kind: "idle" },
-            activity: initialWork.activity,
+            activity: initialActivity,
             loadOlderMessages: async (signal) => {
                 if (loadingOlderHistory || historyCursor === null || client === null) {
                     return;
@@ -472,12 +470,12 @@ export function createSessionPaneModel(options: {
                         truncated: page.truncated || nativeHistory.truncated,
                     };
                     historyCursor = page.nextCursor;
-                    const rendered = historySessionPresentation(nativeHistory, sessionId, command || null);
+                    const timeline = deriveTimeline(get().activity);
                     signal.throwIfAborted();
                     set({
-                        activities: rendered.activities,
+                        activities: timeline.activities,
                         hasOlderHistory: historyCursor !== null,
-                        messages: rendered.messages,
+                        messages: timeline.messages,
                     });
                 } catch (cause) {
                     signal.throwIfAborted();
@@ -545,7 +543,12 @@ export function createSessionPaneModel(options: {
                             signal.throwIfAborted();
                             const running = execution.turn;
                             messageQueue.getState().replace(execution.queued);
-                            nativeHistory = loadedHistory.status === "available" ? loadedHistory : null;
+                            nativeHistory =
+                                loadedHistory.status === "available"
+                                    ? running === null
+                                        ? loadedHistory
+                                        : historyBeforeActiveTurn(loadedHistory, running)
+                                    : null;
                             historyCursor = loadedHistory.status === "available" ? loadedHistory.nextCursor : null;
                             const authoritative = {
                                 history: loadedHistory,
@@ -570,15 +573,12 @@ export function createSessionPaneModel(options: {
                                 activeTurn.turnCleared(reconciliation.turn.commandId);
                                 command = "";
                             }
-                            const historyPresentation = historySessionPresentation(
-                                authoritative.history,
-                                sessionId,
-                                command === "" ? null : command,
-                            );
-                            const native =
-                                running === null
-                                    ? historyPresentation
-                                    : replaceTurnSnapshot(historyPresentation, sessionId, running);
+                            activeSnapshot = running;
+                            const restoredActivity =
+                                command === ""
+                                    ? ({ kind: "idle" } as const)
+                                    : startSessionWork({ commandId: command, attempt: null });
+                            const native = deriveTimeline(restoredActivity);
                             const nativeMessages = native.messages;
                             delivery
                                 .getState()
@@ -591,47 +591,7 @@ export function createSessionPaneModel(options: {
                                         ? [command]
                                         : []),
                                 ]);
-                            const liveCommandMessages =
-                                running !== null
-                                    ? nativeMessages
-                                    : command === "" ||
-                                        (authoritative.history.status === "available" &&
-                                            authoritative.history.coveredCommandIds.includes(command))
-                                      ? []
-                                      : get().messages.filter((message) =>
-                                            message.role === "user"
-                                                ? message.id === command &&
-                                                  !nativeMessages.some(
-                                                      (nativeMessage) =>
-                                                          nativeMessage.role === "user" && nativeMessage.id === command,
-                                                  )
-                                                : message.commandId === command &&
-                                                  !nativeMessages.some(
-                                                      (nativeMessage) =>
-                                                          nativeMessage.role === "assistant" &&
-                                                          nativeMessage.commandId === command,
-                                                  ),
-                                        );
-                            const restoredFromDaemon =
-                                running === null ? [...nativeMessages, ...liveCommandMessages] : nativeMessages;
-                            const reconciledDelivery = delivery.getState().state;
-                            const restoredMessages =
-                                reconciledDelivery.kind === "delivery-unknown"
-                                    ? includePendingUserMessage(
-                                          restoredFromDaemon,
-                                          reconciledDelivery.journal.commandId,
-                                          reconciledDelivery.journal.displayPrompt,
-                                          reconciledDelivery.journal.request.images,
-                                      )
-                                    : restoredFromDaemon;
                             signal.throwIfAborted();
-                            const restoredWork =
-                                command === ""
-                                    ? { activity: { kind: "idle" } as const, messages: restoredMessages }
-                                    : startSessionWork(
-                                          { activity: { kind: "idle" }, messages: restoredMessages },
-                                          { commandId: command, attempt: null },
-                                      );
                             const interactions: readonly LocalInteraction[] = (() => {
                                 const interaction = running?.interaction;
                                 if (interaction === undefined || interaction === null) {
@@ -662,7 +622,8 @@ export function createSessionPaneModel(options: {
                                 activities: native.activities,
                                 hasOlderHistory: historyCursor !== null,
                                 interactions,
-                                ...restoredWork,
+                                activity: restoredActivity,
+                                messages: nativeMessages,
                             });
                             switch (reconciliation.kind) {
                                 case "initial-subscription":
@@ -734,34 +695,18 @@ export function createSessionPaneModel(options: {
                                 tasks.getState().start(running.commandId, turnId);
                                 activeTurn.submissionAccepted(running.commandId, turnId);
                                 if (loadedHistory?.status === "available") {
-                                    nativeHistory = loadedHistory;
+                                    nativeHistory = historyBeforeActiveTurn(loadedHistory, running);
                                     historyCursor = loadedHistory.nextCursor;
                                     delivery.getState().reconcile(loadedHistory.coveredCommandIds);
                                 }
-                                set((current) => {
-                                    const priorActivity =
-                                        priorCommand === "" || priorCommand === running.commandId
-                                            ? current.activity
-                                            : transitionSessionActivity(current.activity, {
-                                                  commandId: priorCommand,
-                                                  kind: "work-completed",
-                                              });
-                                    const base =
-                                        loadedHistory?.status === "available"
-                                            ? historySessionPresentation(loadedHistory, sessionId, running.commandId)
-                                            : {
-                                                  activities: current.activities,
-                                                  messages: current.messages,
-                                              };
-                                    const snapshot = replaceTurnSnapshot(base, sessionId, running);
-                                    return {
-                                        activities: snapshot.activities,
-                                        hasOlderHistory: historyCursor !== null,
-                                        ...startSessionWork(
-                                            { activity: priorActivity, messages: snapshot.messages },
-                                            { commandId: running.commandId, attempt: null },
-                                        ),
-                                    };
+                                activeSnapshot = running;
+                                const activity = startSessionWork({ commandId: running.commandId, attempt: null });
+                                const snapshot = deriveTimeline(activity);
+                                set({
+                                    activities: snapshot.activities,
+                                    activity,
+                                    hasOlderHistory: historyCursor !== null,
+                                    messages: snapshot.messages,
                                 });
                                 return true;
                             }
@@ -784,7 +729,9 @@ export function createSessionPaneModel(options: {
                                     sequence: turn.sequence,
                                 };
                                 command = turn.commandId;
-                                set((current) => replaceTurnSnapshot(current, sessionId, turn));
+                                activeSnapshot = turn;
+                                const snapshot = deriveTimeline(get().activity);
+                                set({ activities: snapshot.activities, messages: snapshot.messages });
                                 return true;
                             }
                             if (payload instanceof MobiusControlEvent) {
@@ -859,45 +806,19 @@ export function createSessionPaneModel(options: {
                                 const queued = messageQueue.getState().takeStarted(payload.commandId);
                                 if (queued !== null) {
                                     if (command !== "" && command !== queued.commandId) {
-                                        set((current) => ({
-                                            messages: [
-                                                ...current.messages,
-                                                {
-                                                    id: `${queued.commandId}-user`,
-                                                    role: "user",
-                                                    text: queued.summary,
-                                                    contents: promptImageContents(queued.images),
-                                                },
-                                            ],
-                                        }));
+                                        const timeline = deriveTimeline(get().activity);
+                                        set({ activities: timeline.activities, messages: timeline.messages });
                                         return true;
                                     }
                                     command = queued.commandId;
                                     tasks.getState().start(queued.commandId, queued.turnId);
                                     activeTurn.submissionAccepted(queued.commandId, queued.turnId);
-                                    set((current) =>
-                                        startSessionWork(
-                                            {
-                                                activity: current.activity,
-                                                messages: [
-                                                    ...current.messages,
-                                                    {
-                                                        id: `${queued.commandId}-user`,
-                                                        role: "user",
-                                                        text: queued.summary,
-                                                        contents: promptImageContents(queued.images),
-                                                    },
-                                                ],
-                                            },
-                                            {
-                                                commandId: queued.commandId,
-                                                attempt: new MobiusRunningAttemptSummary(
-                                                    payload.attemptId,
-                                                    event.recordedAt,
-                                                ),
-                                            },
-                                        ),
-                                    );
+                                    const activity = startSessionWork({
+                                        commandId: queued.commandId,
+                                        attempt: new MobiusRunningAttemptSummary(payload.attemptId, event.recordedAt),
+                                    });
+                                    const timeline = deriveTimeline(activity);
+                                    set({ activities: timeline.activities, activity, messages: timeline.messages });
                                     return true;
                                 }
                             }
@@ -905,41 +826,24 @@ export function createSessionPaneModel(options: {
                                 command = payload.commandId;
                                 tasks.getState().start(payload.commandId, payload.commandId);
                                 activeTurn.submissionAccepted(payload.commandId, payload.commandId);
-                                set((current) =>
-                                    startSessionWork(
-                                        {
-                                            activity: current.activity,
-                                            messages: [
-                                                ...current.messages,
-                                                {
-                                                    contents: [],
-                                                    id: payload.commandId,
-                                                    role: "user",
-                                                    text: payload.prompt,
-                                                },
-                                            ],
-                                        },
-                                        {
-                                            commandId: payload.commandId,
-                                            attempt: new MobiusRunningAttemptSummary(
-                                                payload.attemptId,
-                                                event.recordedAt,
-                                            ),
-                                        },
-                                    ),
-                                );
+                                const activity = startSessionWork({
+                                    commandId: payload.commandId,
+                                    attempt: new MobiusRunningAttemptSummary(payload.attemptId, event.recordedAt),
+                                });
+                                const timeline = deriveTimeline(activity);
+                                set({ activities: timeline.activities, activity, messages: timeline.messages });
                                 return true;
                             }
                             if (command === "" || !("commandId" in payload) || payload.commandId !== command) {
                                 return true;
                             }
                             if (payload instanceof MobiusTurnStartedEvent) {
-                                set((current) =>
-                                    startSessionWork(current, {
-                                        commandId: command,
-                                        attempt: new MobiusRunningAttemptSummary(payload.attemptId, event.recordedAt),
-                                    }),
-                                );
+                                const activity = startSessionWork({
+                                    commandId: command,
+                                    attempt: new MobiusRunningAttemptSummary(payload.attemptId, event.recordedAt),
+                                });
+                                const timeline = deriveTimeline(activity);
+                                set({ activities: timeline.activities, activity, messages: timeline.messages });
                             } else if (
                                 payload instanceof MobiusTurnCompletedEvent ||
                                 payload instanceof MobiusTurnFailedEvent
@@ -948,21 +852,42 @@ export function createSessionPaneModel(options: {
                                 // The native history may already contain the next queued prompt.
                                 // Finish this streamed turn without replacing it with a later snapshot.
                                 delivery.getState().reconcile([completedCommand]);
-                                set((current) => ({
-                                    messages: finishSessionWork(current.messages, payload, event.recordedAt),
-                                    activity:
-                                        payload instanceof MobiusTurnFailedEvent
-                                            ? transitionSessionActivity(current.activity, {
-                                                  commandId: completedCommand,
-                                                  kind: "work-failed",
-                                                  message: payload.message,
-                                              })
-                                            : transitionSessionActivity(current.activity, {
-                                                  commandId: completedCommand,
-                                                  kind: "work-completed",
-                                              }),
+                                const activity =
+                                    payload instanceof MobiusTurnFailedEvent
+                                        ? transitionSessionActivity(get().activity, {
+                                              commandId: completedCommand,
+                                              kind: "work-failed",
+                                              message: payload.message,
+                                          })
+                                        : transitionSessionActivity(get().activity, {
+                                              commandId: completedCommand,
+                                              kind: "work-completed",
+                                          });
+                                const completedHistory = await connected.sessions.querySessionNativeMessages(
+                                    sessionId,
+                                    {
+                                        additionalDirectoryIds: session.entry.additionalDirectories.map(
+                                            (directory) => directory.directoryId,
+                                        ),
+                                        agentId: session.agentRef,
+                                        directoryId: session.result.ready.directoryId,
+                                    },
+                                    new MobiusPageRequest(50, ""),
+                                    signal,
+                                );
+                                signal.throwIfAborted();
+                                if (completedHistory.status === "available") {
+                                    nativeHistory = completedHistory;
+                                    historyCursor = completedHistory.nextCursor;
+                                    activeSnapshot = null;
+                                }
+                                const completed = deriveTimeline(activity);
+                                set({
+                                    activities: completed.activities,
+                                    activity,
+                                    messages: completed.messages,
                                     operation: { kind: "idle" },
-                                }));
+                                });
                                 tasks.getState().finish(completedCommand);
                                 activeTurn.turnCleared(completedCommand);
                                 command = "";
@@ -1036,24 +961,16 @@ export function createSessionPaneModel(options: {
                     attachment.kind === "image" ? [attachment.image] : [],
                 );
                 centralLocalStorage.remove(draftEntry);
-                set((state) => ({
+                const activity = startSessionWork({ commandId, attempt: null });
+                const pending = deriveTimeline(activity);
+                set({
+                    activities: pending.activities,
+                    activity,
                     draft: "",
                     attachments: [],
                     operation: { kind: "sending", commandId },
-                    messages: [
-                        ...state.messages,
-                        { id: commandId, role: "user", text: displayPrompt, contents: promptImageContents(images) },
-                        {
-                            activityIds: [],
-                            id: `${commandId}-reply`,
-                            role: "assistant",
-                            text: "",
-                            attempt: null,
-                            commandId,
-                            contents: [],
-                        },
-                    ],
-                }));
+                    messages: pending.messages,
+                });
                 try {
                     activeTurn.submissionStarted(commandId);
                     const accepted = await delivery.getState().submit(
@@ -1073,14 +990,18 @@ export function createSessionPaneModel(options: {
                     if (accepted !== null && command === commandId) {
                         tasks.getState().start(commandId, accepted.turnId);
                         activeTurn.submissionAccepted(commandId, accepted.turnId);
-                        set((current) => ({
-                            ...startSessionWork(current, { commandId, attempt: null }),
-                            operation: { kind: "idle" },
-                        }));
+                        set({ operation: { kind: "idle" } });
                     } else {
                         activeTurn.turnCleared(commandId);
                         command = "";
-                        set({ operation: { kind: "idle" } });
+                        const idle = { kind: "idle" } as const;
+                        const restored = deriveTimeline(idle);
+                        set({
+                            activities: restored.activities,
+                            activity: idle,
+                            messages: restored.messages,
+                            operation: { kind: "idle" },
+                        });
                     }
                 } catch (cause) {
                     signal.throwIfAborted();
@@ -1108,12 +1029,9 @@ export function createSessionPaneModel(options: {
                     activeTurn.turnCleared(commandId);
                     command = "";
                 }
-                set((current) => ({
-                    activity: transitionSessionActivity(current.activity, { commandId, kind: "work-completed" }),
-                    messages: current.messages.filter((message) =>
-                        message.role === "user" ? message.id !== commandId : message.commandId !== commandId,
-                    ),
-                }));
+                const activity = transitionSessionActivity(get().activity, { commandId, kind: "work-completed" });
+                const restored = deriveTimeline(activity);
+                set({ activities: restored.activities, activity, messages: restored.messages });
             },
             retryUnknownDelivery: async (signal) => {
                 const state = delivery.getState().state;
@@ -1122,24 +1040,9 @@ export function createSessionPaneModel(options: {
                 }
                 const pending = state.journal;
                 command = pending.commandId;
-                set((current) => {
-                    let messages: readonly SessionMessage[] = current.messages;
-                    if (!messages.some((message) => message.role === "user" && message.id === pending.commandId)) {
-                        messages = [
-                            ...messages,
-                            {
-                                id: pending.commandId,
-                                role: "user",
-                                text: pending.displayPrompt,
-                                contents: promptImageContents(pending.request.images),
-                            },
-                        ];
-                    }
-                    return startSessionWork(
-                        { activity: current.activity, messages },
-                        { commandId: pending.commandId, attempt: null },
-                    );
-                });
+                const retrying = startSessionWork({ commandId: pending.commandId, attempt: null });
+                const retried = deriveTimeline(retrying);
+                set({ activities: retried.activities, activity: retrying, messages: retried.messages });
                 const accepted = await delivery.getState().retry(signal);
                 signal.throwIfAborted();
                 if (accepted !== null) {
@@ -1189,14 +1092,8 @@ export function createSessionPaneModel(options: {
                 const steered = await messageQueue.getState().steerMessage(commandId, signal);
                 signal.throwIfAborted();
                 if (steered !== null) {
-                    set((current) =>
-                        continueSessionWorkAfterUserMessage(current, {
-                            id: `${steered.commandId}-user`,
-                            role: "user",
-                            text: steered.summary,
-                            contents: promptImageContents(steered.images),
-                        }),
-                    );
+                    const timeline = deriveTimeline(get().activity);
+                    set({ activities: timeline.activities, messages: timeline.messages });
                 }
             },
             deleteQueued: async (commandId, signal) => {
@@ -1208,20 +1105,11 @@ export function createSessionPaneModel(options: {
                 }
                 await tasks.getState().compact(
                     { ...request, images: [], resources: [] },
-                    (commandId, prompt) => {
+                    (commandId, _prompt) => {
                         command = commandId;
-                        set((state) =>
-                            startSessionWork(
-                                {
-                                    activity: state.activity,
-                                    messages: [
-                                        ...state.messages,
-                                        { id: `${commandId}-user`, role: "user", text: prompt, contents: [] },
-                                    ],
-                                },
-                                { commandId, attempt: null },
-                            ),
-                        );
+                        const activity = startSessionWork({ commandId, attempt: null });
+                        const timeline = deriveTimeline(activity);
+                        set({ activities: timeline.activities, activity, messages: timeline.messages });
                     },
                     signal,
                 );

@@ -1,3 +1,4 @@
+import type { ActiveTurnSnapshot } from "@moxt-ai/mobius-protocol";
 import {
     type AgentDisplayContent,
     MobiusAgentActivityEvent,
@@ -29,6 +30,11 @@ export interface SessionMessageContent {
     readonly content: AgentDisplayContent;
 }
 
+export interface SessionTimelineSegment {
+    readonly activities: ReadonlyMap<string, RecordedAgentActivity>;
+    readonly messages: readonly SessionMessage[];
+}
+
 export function promptImageContents(images: readonly PromptImage[] | undefined): readonly SessionMessageContent[] {
     return (images ?? []).map((image, index) => ({
         contentId: `history-image-${index.toString()}`,
@@ -51,26 +57,13 @@ export function promptImageContents(images: readonly PromptImage[] | undefined):
 export function historySessionPresentation(
     history: OpenMobiusSession["result"]["history"],
     sessionId: string,
-    activeCommandId: string | null = null,
-): {
-    readonly activities: ReadonlyMap<string, RecordedAgentActivity>;
-    readonly messages: readonly SessionMessage[];
-} {
+): SessionTimelineSegment {
     if (history.status !== "available") {
         return { activities: new Map(), messages: [] };
     }
     const messages = history.messages;
     const commandIdsByMessageIndex = new Map<number, string>();
     let historyIndex = messages.length;
-    if (activeCommandId !== null) {
-        const activeUserIndex = messages.findLastIndex((message) => message.role === "user");
-        if (activeUserIndex >= 0) {
-            for (let index = activeUserIndex; index < historyIndex; index += 1) {
-                commandIdsByMessageIndex.set(index, activeCommandId);
-            }
-            historyIndex = activeUserIndex;
-        }
-    }
     for (const commandId of history.coveredCommandIds) {
         let assistantStartIndex = historyIndex;
         while (assistantStartIndex > 0 && messages[assistantStartIndex - 1]?.role === "assistant") {
@@ -130,4 +123,67 @@ export function historySessionPresentation(
         };
     });
     return { activities, messages: presentedMessages };
+}
+
+export function activeTurnSessionPresentation(turn: ActiveTurnSnapshot, sessionId: string): SessionTimelineSegment {
+    const activities = new Map<string, RecordedAgentActivity>();
+    const messages = turn.messages.map((message): SessionMessage => {
+        if (message.role === "user") {
+            return {
+                contents: promptImageContents(message.images),
+                id: message.id,
+                role: "user",
+                text: message.text,
+            };
+        }
+        const activityIds = message.activities.map((activity) => {
+            const presented = new MobiusAgentActivityEvent({
+                ...activity,
+                commandId: turn.commandId,
+                detail: { kind: "unrecorded" },
+                kind: "agent.activity",
+                sessionId,
+            });
+            const key = agentActivityKey(presented);
+            activities.set(key, { activity: presented });
+            return key;
+        });
+        return {
+            activityIds,
+            attempt: null,
+            commandId: turn.commandId,
+            contents: message.content.map((content, index) => ({
+                content,
+                contentId: `${message.id}-content-${index.toString()}`,
+            })),
+            id: message.id,
+            role: "assistant",
+            text: message.text,
+        };
+    });
+    return { activities, messages };
+}
+
+export function deriveSessionTimeline(
+    history: SessionTimelineSegment,
+    active: SessionTimelineSegment | null,
+    working: {
+        readonly attempt: Extract<SessionMessage, { readonly role: "assistant" }>["attempt"];
+        readonly commandId: string;
+    } | null,
+): SessionTimelineSegment {
+    const messages = [...history.messages, ...(active?.messages ?? [])];
+    if (working !== null) {
+        const assistantIndex = messages.findLastIndex(
+            (message) => message.role === "assistant" && message.commandId === working.commandId,
+        );
+        const assistant = messages[assistantIndex];
+        if (assistant?.role === "assistant") {
+            messages[assistantIndex] = { ...assistant, attempt: working.attempt };
+        }
+    }
+    return {
+        activities: new Map([...history.activities, ...(active?.activities ?? [])]),
+        messages,
+    };
 }
