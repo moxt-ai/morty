@@ -50,31 +50,7 @@ test("Given an unpaired workspace, When a user manages Bots, Then pairing and th
 test("Given a paired Bot with cached agent settings, When a user refreshes and filters its models, Then the reloaded configuration and Agent reply are visible", {
     timeout: 30_000,
 }, async () => {
-    let completed: { readonly commandId: string; readonly prompt: string; readonly reply: string } | null = null;
-    const created = await createTestApp({
-        connectAgent: true,
-        agentBehavior: {
-            onPromptCompleted: (command, reply) => {
-                completed = { commandId: command.commandId, prompt: command.prompt, reply };
-            },
-            loadNativeHistory: async (_sessionId, signal) => {
-                signal.throwIfAborted();
-                return {
-                    status: "available",
-                    truncated: false,
-                    coveredCommandIds: completed === null ? [] : [completed.commandId],
-                    coveredMessageIds: [],
-                    messages:
-                        completed === null
-                            ? []
-                            : [
-                                  { role: "user", text: completed.prompt },
-                                  { role: "assistant", text: completed.reply, activities: [], content: [] },
-                              ],
-                };
-            },
-        },
-    });
+    const created = await createTestApp({ connectAgent: true });
     const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
     await created.queryElementByTestId(
         dataTestId.botConnectionStatus,

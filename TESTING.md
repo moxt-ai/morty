@@ -22,7 +22,7 @@ duplicate scenario.
 
 `packages/e2e/conversation.e2e.test.ts` covers send, reply, and browser reload.
 `packages/e2e/setup.e2e.test.ts` covers Project pairing and saved Runtime reconnect
-with a QR handoff. Both use the shared stateful fake daemon; Setup additionally
+with a QR handoff. Both run the production daemon with a shared controlled Agent harness; Setup additionally
 injects its local CLI port while running the real downloaded setup bundle.
 Run the product journeys with:
 
@@ -30,10 +30,9 @@ Run the product journeys with:
 pnpm test:e2e
 ```
 
-The product-test target is real Chat, Platform, SDK, Runtime relay, HTTP,
-WebSocket, storage, and browser boundaries, with one stateful **fake daemon** at
-the daemon protocol port. The fake owns controllable session state, queued work,
-streaming, interactions, and files. It must not replace the SDK, Platform, or Chat.
+The product-test target is real Chat, Platform, SDK, Runtime relay, daemon, HTTP,
+WebSocket, storage, and browser boundaries, with one controlled **Agent harness**
+behind the production adapter. It must not replace daemon, SDK, Platform, or Chat logic.
 Agent-specific adaptation belongs to separate real agent-daemon tests, not browser
 journeys. Extend an existing journey before adding another file.
 
@@ -49,9 +48,9 @@ pnpm test:web
 The production router, API clients, view-models, Zustand stores, React views, Chat
 Worker, Project Durable Objects, Platform Worker, Platform Durable Objects, and
 WebSocket transports all participate. They run in local in-memory Cloudflare
-runtimes. A single stateful fake Agent-daemon replaces the external local process and
-answers the real Runtime protocol with a representative Agent and model directory,
-sessions, messages, events, and file reads. Do not inject stores, render an isolated
+runtimes. A production daemon drives one stateful controlled Agent harness through
+the production adapter. The harness provides a representative Agent and model
+directory, native sessions, messages, and files. Do not inject stores, render an isolated
 component, or replace Chat or Platform with response tables.
 
 This is the default owner for browser-side branching that needs the real Chat and
@@ -89,8 +88,8 @@ Related state transitions should advance through one journey instead of rebuildi
 the same user, database, and Platform stack in separate cases. The small shared
 `support/identity-fixture.ts` starts real
 Chat Durable Objects and composes them with the real local Platform. Chat creation
-uses production Chat and Platform business operations end to end; only the external
-Agent-daemon process is replaced by the shared protocol fake. Narrow peers are
+uses production Chat, Platform, and daemon business operations end to end; only the external
+Agent harness is replaced by the shared controlled executable. Narrow peers are
 reserved for a boundary behavior that a healthy Platform cannot produce, such as
 rejecting an HTTP redirect.
 ### Mobius
@@ -106,10 +105,10 @@ Keep the two suites complementary:
 
 | Suite | Real components | Controlled boundary | Owns |
 | --- | --- | --- | --- |
-| Web / Chat integration and browser journeys | Complete application, router, stores, SDK, Chat, Platform, Runtime relay, transport, storage | Stateful fake daemon | Visible workflows, multiple viewers, reconnect, history, queued work, images |
+| Web / Chat integration and browser journeys | Complete application, router, stores, SDK, Chat, Platform, Runtime relay, daemon, transport, storage | Controlled Agent harness | Visible workflows, multiple viewers, reconnect, history, queued work, images |
 | Agent-daemon integration | Daemon, production adapter, real Agent executable, native history and filesystem | Model provider may be controlled for deterministic input | Per-Agent execution, streaming, tools, cancellation, queueing, interactions, history and files |
 
-The owned product stack is real except for the daemon in Web / Chat tests.
+The owned product stack, including the daemon, is real in Web / Chat tests.
 External identity or model services may use a documented stateful provider when
 necessary; that does not authorize replacing a production product layer. Existing
 controlled ACP peers are reserved for explicit protocol fault cases that cannot be

@@ -58,11 +58,13 @@ export async function createChatWorkerEnvironment() {
         transport.open();
         return {
             botId,
-            connectAgent: async (behavior?: Parameters<typeof cloud.connectAgent>[1]) => {
-                const runtime = await cloud.connectAgent(identity.projectId, behavior);
+            connectAgent: async () => {
+                const runtime = await cloud.connectAgent(identity.projectId, [
+                    { arguments: ["--load-only"], id: "claude", label: "Codex" },
+                ]);
                 const setup = await request(`chat/projects/${identity.projectId}/bots/${botId}/setup`, {
                     runtimeId: runtime.runtimeId,
-                    agentRef: "codex",
+                    agentRef: "claude",
                 });
                 if (setup.status !== 202) {
                     throw new Error(`Could not prepare the test Bot: ${setup.status} ${await setup.text()}`);

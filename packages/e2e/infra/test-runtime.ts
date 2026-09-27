@@ -7,8 +7,8 @@ import { LocalStack } from "./local-stack.ts";
 import { followSetupInstructions } from "./setup-instructions.ts";
 
 export async function createTestRuntime(harness: E2EHarness) {
-    const agentId = "opencode";
-    const agentName = "OpenCode";
+    const agentId = "claude";
+    const agentName = "Codex";
     const stack = await LocalStack.create(harness);
     const runtime = new FakeRuntime();
     const application = await stack.startPlatform();

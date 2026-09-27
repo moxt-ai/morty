@@ -39,7 +39,6 @@ export interface TestApp extends Application {
 export async function createTestApp(
     options: {
         readonly application?: Application;
-        readonly agentBehavior?: Parameters<Application["connectAgent"]>[0];
         readonly connectAgent?: boolean;
         readonly page?:
             | { readonly kind: "continue"; readonly harness: string; readonly sessionId: string }
@@ -49,8 +48,7 @@ export async function createTestApp(
 ): Promise<TestApp> {
     const current = options.application ?? (await (await environment).createApplication());
     await options.prepare?.(current);
-    const agentFailure =
-        options.connectAgent === true ? (await current.connectAgent(options.agentBehavior)).failure : null;
+    const agentFailure = options.connectAgent === true ? (await current.connectAgent()).failure : null;
     const page = options.page ?? { kind: "workspace" };
     if (page.kind === "continue") {
         const transfer = new URL(await current.createTransferUrl());

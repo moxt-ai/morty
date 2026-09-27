@@ -14,10 +14,11 @@ async function createChatFixture(includeOpenCode = false, nativeSessionIds: Read
     const cloud = await createIdentityFixture();
     try {
         const identity = await cloud.createAnonymousUser();
-        const runtime = await cloud.connectAgent(identity.projectId, {
+        const runtime = await cloud.connectAgent(
+            identity.projectId,
+            [{ id: "codex", label: "Codex" }, ...(includeOpenCode ? [{ id: "opencode", label: "OpenCode" }] : [])],
             nativeSessionIds,
-            ...(includeOpenCode ? { additionalAgents: [{ id: "opencode", name: "OpenCode" }] } : {}),
-        });
+        );
         const environment = cloud.environment();
         const request = (path: string, body?: object, method = body === undefined ? "GET" : "POST") =>
             worker.fetch(
@@ -189,12 +190,16 @@ test("Given an imported native session, When its owner imports it again, Then Ch
         });
         expect(listed.status).toBe(200);
         const discovery = v.parse(
-            v.object({ sessionId: v.string(), entries: v.array(v.object({ entryId: v.string() })) }),
+            v.object({
+                sessionId: v.string(),
+                entries: v.array(v.object({ directoryId: v.string(), entryId: v.string() })),
+            }),
             await listed.json(),
         );
-        const entryId = v.parse(v.string(), discovery.entries[0]?.entryId);
+        const entry = v.parse(v.object({ directoryId: v.string(), entryId: v.string() }), discovery.entries[0]);
+        const entryId = entry.entryId;
         const path = `chat/bots/${fixture.botId}/native-session/${entryId}/import`;
-        const input = { ...identity, discoveryId: discovery.sessionId };
+        const input = { ...identity, directoryId: entry.directoryId, discoveryId: discovery.sessionId };
         const first = await fixture.request(path, input);
         expect(first.status).toBe(200);
         const opened = v.parse(v.object({ ready: v.object({ sessionId: v.string() }) }), await first.json());
