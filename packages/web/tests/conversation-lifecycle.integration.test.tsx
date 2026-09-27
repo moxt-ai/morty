@@ -1,4 +1,4 @@
-import { getByRole } from "@testing-library/dom";
+import { getByRole, queryByRole } from "@testing-library/dom";
 import { expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -164,6 +164,7 @@ test("Given a Bot connected to a multi-agent Runtime, When the user reloads an O
         failure,
     ]);
     await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    expect(queryByRole(document.body, "button", { name: "More options" })).toBeNull();
 
     holdHistory = true;
     created.reload();
@@ -186,6 +187,60 @@ test("Given a Bot connected to a multi-agent Runtime, When the user reloads an O
             (element) => element.textContent?.includes(answer) === true,
         ),
     ).toBeInstanceOf(HTMLElement);
+});
+
+test("Given an Agent advertises compact, When the user chooses Compact context, Then the compact turn is visible", {
+    timeout: 30_000,
+}, async () => {
+    const prompt = "Prepare the workspace context";
+    const answer = "The workspace context is ready.";
+    const compactAnswer = "Context compacted.";
+    const created = await createTestApp({
+        agentBehavior: {
+            commands: [{ description: "Compact the current conversation", inputHint: "", name: "compact" }],
+            responseParts: (command) => (command.prompt === "/compact" ? [compactAnswer] : [answer]),
+        },
+        connectAgent: true,
+    });
+    const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
+    await created.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+
+    await sendPrompt(
+        created,
+        (await created.queryElementByTestId(dataTestId.messageComposer)) as HTMLTextAreaElement,
+        prompt,
+    );
+    await Promise.race([
+        created.queryElementByTestId(
+            dataTestId.agentResponse,
+            (element) => element.textContent?.includes(answer) === true,
+        ),
+        failure,
+    ]);
+    await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+
+    await created.user.click(getByRole(document.body, "button", { name: "More options" }));
+    await created.user.click(getByRole(document.body, "menuitem", { name: "Compact context" }));
+
+    await Promise.race([
+        vi.waitFor(() => {
+            expect(
+                created
+                    .elementsByTestId(dataTestId.userMessage)
+                    .some((element) => element.textContent?.includes("/compact") === true),
+            ).toBe(true);
+            expect(
+                created
+                    .elementsByTestId(dataTestId.agentResponse)
+                    .some((element) => element.textContent?.includes(compactAnswer) === true),
+            ).toBe(true);
+            expect(document.body.textContent).not.toContain("Agent finished without a text response.");
+        }),
+        failure,
+    ]);
 });
 
 test("Given a completed conversation, When the user reopens it and sends another message, Then the Agent continues the chat", {

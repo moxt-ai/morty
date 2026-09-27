@@ -284,11 +284,12 @@ export function MobiusSessionPane({
                 )}
                 <BotChatComposer
                     actions={
-                        <ChatComposerMoreMenu
-                            compactAvailable={presentation.compactAvailable}
-                            compactDisabled={presentation.compactDisabled}
-                            onCompact={() => runAndFollow(pane.store.getState().compact)}
-                        />
+                        presentation.compactAvailable ? (
+                            <ChatComposerMoreMenu
+                                compactDisabled={presentation.compactDisabled}
+                                onCompact={() => runAndFollow(pane.store.getState().compact)}
+                            />
+                        ) : undefined
                     }
                     attachments={model.attachments}
                     disabled={presentation.composerDisabled}
