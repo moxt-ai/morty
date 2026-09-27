@@ -1,17 +1,14 @@
 import { MobiusApiError, MobiusCancellationError, type MobiusClient } from "@moxt-ai/mobius-sdk";
-import * as v from "valibot";
 import { createStore } from "zustand/vanilla";
-import {
-    centralLocalStorage,
-    type SessionDeliveryJournal,
-    sessionDeliveryJournalEntry,
-    sessionDeliveryJournalSchema,
-} from "@/services/local-storage/central-local-storage";
 import { CloudApiError } from "../../services/management/management-api.ts";
 
 type SubmitRequest = Parameters<MobiusClient["turns"]["submit"]>[1];
 type AcceptedTurn = { readonly turnId: string };
-type Journal = SessionDeliveryJournal;
+type Journal = {
+    readonly commandId: string;
+    readonly displayPrompt: string;
+    readonly request: Omit<SubmitRequest, "idempotencyKey">;
+};
 
 type DeliveryState =
     | { readonly kind: "idle" }
@@ -40,17 +37,13 @@ function isAuthoritativeFailure(cause: unknown): boolean {
 }
 
 export const createSessionDeliveryStore = (options: {
-    readonly sessionId: string;
     readonly submit: (request: SubmitRequest, signal: AbortSignal) => Promise<AcceptedTurn>;
 }) => {
-    const storageKey = sessionDeliveryJournalEntry(options.sessionId);
-    const restored = centralLocalStorage.read(storageKey);
     const send = async (
         journal: Journal,
         signal: AbortSignal,
         set: (state: Pick<SessionDeliveryStore, "state">) => void,
     ): Promise<AcceptedTurn | null> => {
-        centralLocalStorage.write(storageKey, journal);
         set({ state: { kind: "submitting", journal } });
         try {
             const accepted = await options.submit(
@@ -68,7 +61,6 @@ export const createSessionDeliveryStore = (options: {
                 signal,
             );
             signal.throwIfAborted();
-            centralLocalStorage.remove(storageKey);
             set({ state: { kind: "idle" } });
             return accepted;
         } catch (cause) {
@@ -76,7 +68,6 @@ export const createSessionDeliveryStore = (options: {
                 throw cause;
             }
             if (isAuthoritativeFailure(cause)) {
-                centralLocalStorage.remove(storageKey);
                 set({
                     state: {
                         kind: "failed",
@@ -90,13 +81,12 @@ export const createSessionDeliveryStore = (options: {
         }
     };
     return createStore<SessionDeliveryStore>()((set, get) => ({
-        state: restored === null ? { kind: "idle" } : { kind: "delivery-unknown", journal: restored },
+        state: { kind: "idle" },
         discardUnknown: () => {
             const state = get().state;
             if (state.kind !== "delivery-unknown") {
                 return null;
             }
-            centralLocalStorage.remove(storageKey);
             set({ state: { kind: "idle" } });
             return state.journal.commandId;
         },
@@ -106,12 +96,11 @@ export const createSessionDeliveryStore = (options: {
                 (state.kind === "delivery-unknown" || state.kind === "submitting") &&
                 commandIds.includes(state.journal.commandId)
             ) {
-                centralLocalStorage.remove(storageKey);
                 set({ state: { kind: "idle" } });
             }
         },
         submit: async (commandId, displayPrompt, request, signal) =>
-            await send(v.parse(sessionDeliveryJournalSchema, { commandId, displayPrompt, request }), signal, set),
+            await send({ commandId, displayPrompt, request }, signal, set),
         retry: async (signal) => {
             const state = get().state;
             return state.kind === "delivery-unknown" ? await send(state.journal, signal, set) : null;

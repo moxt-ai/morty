@@ -7,6 +7,11 @@ import type {
     ChatDraftConfiguration,
     ChatWorkspace,
 } from "../../services/chat/bot-chat-api.ts";
+import {
+    centralLocalStorage,
+    clearLegacySessionStorage,
+    newConversationDraftEntry,
+} from "../../services/local-storage/central-local-storage.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
@@ -124,6 +129,7 @@ export interface BotChatHomeStore {
     readonly creation: ConversationCreationState;
     readonly revision: number;
     readonly directoryRevision: number;
+    readonly draft: string;
     readonly draftSettings: ChatDraftConfiguration | null;
     readonly optimisticTitles: ReadonlyMap<string, string>;
     readonly load: (signal: AbortSignal) => Promise<void>;
@@ -135,6 +141,7 @@ export interface BotChatHomeStore {
     readonly openManaged: (isExternal: boolean, id: string) => void;
     readonly retry: () => void;
     readonly forkInstead: () => void;
+    readonly setDraft: (draft: string) => void;
     readonly setDraftSettings: (settings: ChatDraftConfiguration | null) => void;
     readonly createConversation: (
         draft: string,
@@ -208,6 +215,7 @@ export const createBotChatHomeStore = (
 ) => {
     const conversations = createConversationSessionStore(requests);
     const target = initialTarget(options.url, options.createId);
+    clearLegacySessionStorage();
     return createStore<BotChatHomeStore>()((set, get) => ({
         bots: [],
         botOperation: { kind: "idle" },
@@ -218,6 +226,7 @@ export const createBotChatHomeStore = (
         creation: { kind: "draft" },
         revision: 0,
         directoryRevision: 0,
+        draft: "",
         draftSettings: null,
         optimisticTitles: new Map(),
         load: async (signal) => {
@@ -242,7 +251,12 @@ export const createBotChatHomeStore = (
                 }
                 options.selectedBotPreference.write(bot.botId);
                 openedBot = bot;
-                set({ bots });
+                set({
+                    bots,
+                    ...(get().target.kind === "draft"
+                        ? { draft: centralLocalStorage.read(newConversationDraftEntry(bot.botId)) ?? "" }
+                        : {}),
+                });
                 if (get().view.kind === "loading") {
                     set({ view: { kind: "connecting", bot } });
                 }
@@ -395,6 +409,7 @@ export const createBotChatHomeStore = (
                 botOperation: { kind: "idle" },
                 connectionStatus: { kind: "connecting", label: "Connecting" },
                 creation: transitionConversationCreation(state.creation, { kind: "reset" }),
+                draft: centralLocalStorage.read(newConversationDraftEntry(selected.botId)) ?? "",
                 draftSettings: null,
                 optimisticTitles: new Map(),
                 revision: state.revision + 1,
@@ -420,6 +435,7 @@ export const createBotChatHomeStore = (
                     botOperation: { kind: "idle" },
                     connectionStatus: { kind: "disconnected", label: "Disconnected" },
                     creation: transitionConversationCreation(state.creation, { kind: "reset" }),
+                    draft: "",
                     draftSettings: null,
                     optimisticTitles: new Map(),
                     revision: state.revision + 1,
@@ -467,6 +483,7 @@ export const createBotChatHomeStore = (
                     botOperation: { kind: "idle" },
                     connectionStatus: { kind: "connecting", label: "Connecting" },
                     creation: transitionConversationCreation(state.creation, { kind: "reset" }),
+                    draft: centralLocalStorage.read(newConversationDraftEntry(selected.botId)) ?? "",
                     draftSettings: null,
                     optimisticTitles: new Map(),
                     revision: state.revision + 1,
@@ -489,13 +506,19 @@ export const createBotChatHomeStore = (
         },
         resetBotOperation: () => set({ botOperation: { kind: "idle" } }),
         newConversation: () => {
+            const current = get();
+            const activeBot = "bot" in current.view ? current.view.bot : null;
+            if (activeBot !== null) {
+                centralLocalStorage.remove(newConversationDraftEntry(activeBot.botId));
+            }
             options.navigation.showDraft();
-            set((current) => ({
+            set((state) => ({
                 target: { kind: "draft", key: options.createId() },
                 sessionView: { kind: "conversation-access" },
-                creation: transitionConversationCreation(current.creation, { kind: "reset" }),
+                creation: transitionConversationCreation(state.creation, { kind: "reset" }),
+                draft: "",
                 draftSettings: null,
-                revision: current.revision + 1,
+                revision: state.revision + 1,
             }));
         },
         openManaged: (isExternal, id) => {
@@ -515,6 +538,19 @@ export const createBotChatHomeStore = (
                 options.navigation.showForkInstead();
                 set((state) => ({ target: { ...current, action: "fork" }, revision: state.revision + 1 }));
             }
+        },
+        setDraft: (draft) => {
+            const current = get();
+            const activeBot = "bot" in current.view ? current.view.bot : null;
+            if (activeBot !== null) {
+                const entry = newConversationDraftEntry(activeBot.botId);
+                if (draft === "") {
+                    centralLocalStorage.remove(entry);
+                } else {
+                    centralLocalStorage.write(entry, draft);
+                }
+            }
+            set({ draft });
         },
         setDraftSettings: (draftSettings) => set({ draftSettings }),
         createConversation: async (draft, attachments, signal) => {
@@ -602,11 +638,13 @@ export const createBotChatHomeStore = (
                 }
                 options.navigation.showManaged(false, sent.conversationId);
                 set({
+                    draft: "",
                     target: { kind: "conversation-access", conversationId: sent.conversationId },
                     sessionView: { kind: "session-access", session: sent.session },
                     directoryRevision: get().directoryRevision + 1,
                     optimisticTitles: new Map(get().optimisticTitles).set(sent.conversationId, sent.message.summary),
                 });
+                centralLocalStorage.remove(newConversationDraftEntry(botId));
                 return true;
             } catch (cause) {
                 signal.throwIfAborted();

@@ -4,6 +4,23 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
+test("Given an unsent message draft, When the user reloads Chat, Then the draft remains in the composer", {
+    timeout: 30_000,
+}, async () => {
+    const created = await createTestApp({ connectAgent: true });
+    await created.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = (await created.queryElementByTestId(dataTestId.messageComposer)) as HTMLTextAreaElement;
+
+    await created.user.type(composer, "Keep this unsent draft");
+    created.reload();
+
+    const restored = (await created.queryElementByTestId(dataTestId.messageComposer)) as HTMLTextAreaElement;
+    await vi.waitFor(() => expect(restored.value).toBe("Keep this unsent draft"));
+});
+
 test("Given OpenCode completed without mapping native history to the command, When the user reopens it without an active Runtime turn, Then the conversation is idle", {
     timeout: 30_000,
 }, async () => {

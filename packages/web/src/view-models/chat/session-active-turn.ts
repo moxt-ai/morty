@@ -1,11 +1,9 @@
 import { decodeIdentifier } from "@moxt-ai/mobius-protocol";
-import {
-    centralLocalStorage,
-    type StoredSessionActiveTurn,
-    sessionActiveTurnEntry,
-} from "@/services/local-storage/central-local-storage";
 
-export type SessionActiveTurn = { readonly kind: "idle" } | StoredSessionActiveTurn;
+export type SessionActiveTurn =
+    | { readonly kind: "idle" }
+    | { readonly commandId: string; readonly kind: "submitting" }
+    | { readonly commandId: string; readonly kind: "accepted"; readonly turnId: string };
 
 type SessionActiveTurnEvent =
     | { readonly kind: "submission-started"; readonly commandId: string }
@@ -27,23 +25,11 @@ function transitionSessionActiveTurn(state: SessionActiveTurn, event: SessionAct
     }
 }
 
-export function createSessionActiveTurn(options: { readonly sessionId: string; readonly initial: SessionActiveTurn }) {
-    const entry = sessionActiveTurnEntry(options.sessionId);
-    let state =
-        options.initial.kind === "idle" ? (centralLocalStorage.read(entry) ?? { kind: "idle" }) : options.initial;
-
-    const persist = (): void => {
-        if (state.kind === "idle") {
-            centralLocalStorage.remove(entry);
-        } else {
-            centralLocalStorage.write(entry, state);
-        }
-    };
-    persist();
+export function createSessionActiveTurn(options: { readonly initial: SessionActiveTurn }) {
+    let state = options.initial;
 
     const transition = (event: SessionActiveTurnEvent): void => {
         state = transitionSessionActiveTurn(state, event);
-        persist();
     };
 
     return {

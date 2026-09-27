@@ -24,6 +24,7 @@ import { createStore } from "zustand/vanilla";
 import type { RecordedAgentActivity } from "../../services/chat/agent-activities.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
+import { centralLocalStorage, sessionDraftEntry } from "../../services/local-storage/central-local-storage.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
@@ -286,7 +287,7 @@ export function createSessionPaneModel(options: {
                   turnId: decodeIdentifier(session.result.activeTurn.turnId),
               }
             : { kind: "idle" };
-    const activeTurn = createSessionActiveTurn({ initial: initialActiveTurn, sessionId });
+    const activeTurn = createSessionActiveTurn({ initial: initialActiveTurn });
     const openedActiveTurn = activeTurn.current();
     let client: MobiusClient | null = null;
     let nativeHistory: NativeSessionHistory | null =
@@ -320,7 +321,6 @@ export function createSessionPaneModel(options: {
         ],
     });
     const delivery = createSessionDeliveryStore({
-        sessionId,
         submit: async (request, signal) => {
             if (client === null) {
                 throw new Error("The Session is not connected.");
@@ -418,6 +418,7 @@ export function createSessionPaneModel(options: {
     const request = {
         additionalDirectoryIds: session.result.ready.additionalDirectories.map((directory) => directory.directoryId),
     };
+    const draftEntry = sessionDraftEntry(sessionId);
 
     const store = createStore<SessionPaneStore>()((set, get) => {
         return {
@@ -426,7 +427,7 @@ export function createSessionPaneModel(options: {
             historyLoading: false,
             hasOlderHistory: historyCursor !== null,
             options: session.result.ready.configOptions,
-            draft: options.initialMessage?.content ?? "",
+            draft: options.initialMessage?.content ?? centralLocalStorage.read(draftEntry) ?? "",
             attachments: options.initialMessage?.attachments ?? [],
             activities: saved.activities,
             interactions: [],
@@ -926,6 +927,11 @@ export function createSessionPaneModel(options: {
             setDraft: (draft) => {
                 tasks.getState().dismissFailure();
                 messageQueue.getState().dismissFailure();
+                if (draft === "") {
+                    centralLocalStorage.remove(draftEntry);
+                } else {
+                    centralLocalStorage.write(draftEntry, draft);
+                }
                 set({ draft });
             },
             setAttachments: (attachments) => set({ attachments }),
@@ -954,6 +960,7 @@ export function createSessionPaneModel(options: {
                 const images = current.attachments.flatMap((attachment) =>
                     attachment.kind === "image" ? [attachment.image] : [],
                 );
+                centralLocalStorage.remove(draftEntry);
                 set((state) => ({
                     draft: "",
                     attachments: [],
@@ -1099,6 +1106,7 @@ export function createSessionPaneModel(options: {
                 );
                 signal.throwIfAborted();
                 if (queued !== null) {
+                    centralLocalStorage.remove(draftEntry);
                     set({ draft: "", attachments: [] });
                 }
             },

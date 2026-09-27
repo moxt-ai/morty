@@ -109,7 +109,6 @@ export function BotChatHome({
         }),
     );
     const model = useStore(store);
-    const [draft, setDraft] = useState("");
     const [pairingDialogOpen, setPairingDialogOpen] = useState(false);
     const [failureDialogOpen, setFailureDialogOpen] = useState(false);
     const [disconnectedNotificationDismissed, setDisconnectedNotificationDismissed] = useState(false);
@@ -127,6 +126,7 @@ export function BotChatHome({
     const creationError = conversationCreationError(model.creation);
     const creationStatus = conversationCreationStatus(model.creation);
     const queuedInitialMessage = queuedDraftMessage(model.creation);
+    const draft = model.draft;
     const setupView = model.view.kind === "setup" ? model.view : null;
     const disconnectedBot =
         setupView !== null && (setupView.reason === "runtime-offline" || setupView.reason === "agent-required");
@@ -220,7 +220,7 @@ export function BotChatHome({
         });
     }, []);
     const clearComposer = () => {
-        setDraft("");
+        store.getState().setDraft("");
         setAttachments([]);
         followLatest.current = true;
     };
@@ -229,7 +229,8 @@ export function BotChatHome({
         store.getState().newConversation();
     };
     const openManaged = (isExternal: boolean, id: string) => {
-        clearComposer();
+        setAttachments([]);
+        followLatest.current = true;
         store.getState().openManaged(isExternal, id);
     };
     const send = async () => {
@@ -394,7 +395,7 @@ export function BotChatHome({
                             draft={draft}
                             error={creationError}
                             onAttachmentsChange={setAttachments}
-                            onDraftChange={setDraft}
+                            onDraftChange={store.getState().setDraft}
                             onStop={() => {}}
                             onSubmit={() => void send()}
                             outputState="idle"
