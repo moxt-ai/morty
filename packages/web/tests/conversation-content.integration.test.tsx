@@ -159,6 +159,7 @@ test("Given a tool finishes during an active conversation, When its terminal act
 test("Given an Agent emits text, a tool, then text, When the timeline streams and is reopened, Then that order remains visible", {
     timeout: 30_000,
 }, async () => {
+    const releaseCompletion = Promise.withResolvers<void>();
     const prompt = "Inspect the timeline order";
     const before = "I’ll inspect the workspace before reading the file.";
     const after = "The repository overview is ready.";
@@ -180,6 +181,14 @@ test("Given an Agent emits text, a tool, then text, When the timeline streams an
     const created = await createTestApp({
         agentBehavior: {
             activityAfterFirstDelta: () => tool,
+            afterLastDelta: async (_command, signal) => {
+                await Promise.race([
+                    releaseCompletion.promise,
+                    new Promise<never>((_resolve, reject) => {
+                        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+                    }),
+                ]);
+            },
             loadNativeHistory: async (_sessionId, signal) => {
                 signal.throwIfAborted();
                 return {
@@ -243,20 +252,25 @@ test("Given an Agent emits text, a tool, then text, When the timeline streams an
             expect(afterIndex, `${phase} trailing text`).toBeGreaterThan(toolIndex);
         });
     };
-    await Promise.race([assertTimelineOrder("streaming"), failure]);
-    await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
-    await created.user.click(await created.queryElementByTestId(dataTestId.newConversation));
-    const conversation = await vi.waitFor(() => {
-        const candidate = created
-            .elementsByTestId(dataTestId.managedConversation)
-            .find((element) => element.textContent?.includes(prompt) === true);
-        if (candidate === undefined) {
-            throw new Error(`The completed conversation is unavailable: ${document.body.textContent}`);
-        }
-        return candidate;
-    });
-    await created.user.click(conversation);
-    await assertTimelineOrder("reopened");
+    try {
+        await Promise.race([assertTimelineOrder("streaming"), failure]);
+        releaseCompletion.resolve();
+        await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+        await created.user.click(await created.queryElementByTestId(dataTestId.newConversation));
+        const conversation = await vi.waitFor(() => {
+            const candidate = created
+                .elementsByTestId(dataTestId.managedConversation)
+                .find((element) => element.textContent?.includes(prompt) === true);
+            if (candidate === undefined) {
+                throw new Error(`The completed conversation is unavailable: ${document.body.textContent}`);
+            }
+            return candidate;
+        });
+        await created.user.click(conversation);
+        await assertTimelineOrder("reopened");
+    } finally {
+        releaseCompletion.resolve();
+    }
 });
 
 test("Given an Agent links a local file location, When a user opens it, Then the file path omits the source location", {
