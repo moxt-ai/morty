@@ -37,7 +37,7 @@ function jsonLocalStorageEntry<T>(options: {
     return {
         key: options.key,
         schema: options.schema,
-        encode: (value) => JSON.stringify(value),
+        encode: (value) => JSON.stringify(v.parse(options.schema, value)),
         decode: (raw) => decodeJsonWith(options.schema, raw),
     };
 }
@@ -50,7 +50,7 @@ function stringLocalStorageEntry(options: {
     return {
         key: options.key,
         schema: options.schema,
-        encode: (value) => value,
+        encode: (value) => v.parse(options.schema, value),
         decode: (raw) => {
             const parsed = v.safeParse(options.schema, raw);
             return parsed.success ? parsed.output : null;
@@ -243,70 +243,21 @@ export const legacySessionModelPreferencesEntry = (channelId: string, agentId: s
     });
 
 // ---------------------------------------------------------------------------
-// Session active turn and delivery journal per session
+// Unsent message drafts
 // ---------------------------------------------------------------------------
 
-export type StoredSessionActiveTurn = v.InferOutput<typeof storedSessionActiveTurnSchema>;
+const messageDraftSchema = v.pipe(v.string(), v.maxLength(100_000));
 
-const storedSessionActiveTurnSchema = v.pipe(
-    v.variant("kind", [
-        v.object({ commandId: identifierSchema, kind: v.literal("submitting") }),
-        v.object({ commandId: identifierSchema, kind: v.literal("accepted"), turnId: identifierSchema }),
-    ]),
-    v.readonly(),
-);
-
-export const sessionActiveTurnEntry = (sessionId: string): LocalStorageEntry<StoredSessionActiveTurn> =>
-    jsonLocalStorageEntry({
-        key: `mobius.session-active-turn.v1:${sessionId}`,
-        schema: storedSessionActiveTurnSchema,
+export const newConversationDraftEntry = (botId: string): LocalStorageEntry<string> =>
+    stringLocalStorageEntry({
+        key: scopedKey("morty:message-draft:new:v1:", botId),
+        schema: messageDraftSchema,
     });
 
-const journalSubmitRequestSchema = v.pipe(
-    v.object({
-        additionalDirectoryIds: v.pipe(v.array(v.string()), v.readonly()),
-        content: v.string(),
-        disposition: v.optional(v.string()),
-        images: v.pipe(
-            v.array(v.pipe(v.object({ data: v.string(), mimeType: v.string(), name: v.string() }), v.readonly())),
-            v.readonly(),
-        ),
-        resources: v.pipe(
-            v.array(
-                v.pipe(
-                    v.object({
-                        mimeType: v.string(),
-                        name: v.string(),
-                        text: v.string(),
-                        type: v.picklist(["embedded", "link"]),
-                        uri: v.string(),
-                    }),
-                    v.readonly(),
-                ),
-            ),
-            v.readonly(),
-        ),
-        targetCommandId: v.optional(v.string()),
-    }),
-    v.readonly(),
-);
-
-const sessionDeliveryJournalValueSchema = v.pipe(
-    v.object({
-        commandId: v.string(),
-        displayPrompt: v.string(),
-        request: journalSubmitRequestSchema,
-    }),
-    v.readonly(),
-);
-export type SessionDeliveryJournal = v.InferOutput<typeof sessionDeliveryJournalValueSchema>;
-/** Parsing schema for submit paths that construct a journal from a request. */
-export const sessionDeliveryJournalSchema = sessionDeliveryJournalValueSchema;
-
-export const sessionDeliveryJournalEntry = (sessionId: string): LocalStorageEntry<SessionDeliveryJournal> =>
-    jsonLocalStorageEntry({
-        key: `mobius.session-delivery.v1:${sessionId}`,
-        schema: sessionDeliveryJournalSchema,
+export const sessionDraftEntry = (sessionId: string): LocalStorageEntry<string> =>
+    stringLocalStorageEntry({
+        key: scopedKey("morty:message-draft:session:v1:", sessionId),
+        schema: messageDraftSchema,
     });
 
 // ---------------------------------------------------------------------------
