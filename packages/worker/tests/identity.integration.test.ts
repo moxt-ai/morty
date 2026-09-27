@@ -304,7 +304,7 @@ test("Given a user with a draft Bot on a Project-scoped Platform, When setup lis
     expect(await response.json()).toEqual({ runtimes: [] });
 });
 
-test("Given an anonymous user, When access is transferred, revoked, and exhausted, Then every credential follows the lifecycle", async () => {
+test("Given an anonymous user, When machine access is shared, Then it has no expiry and remains available until revoked or exhausted", async () => {
     const environment = fixture.environment();
     const owner = await fixture.createAnonymousUser();
     const createTransfer = async () => {
@@ -316,7 +316,9 @@ test("Given an anonymous user, When access is transferred, revoked, and exhauste
             environment,
         );
         expect(response.status).toBe(201);
-        const transfer = v.parse(v.object({ url: v.string(), expiresAt: v.string() }), await response.json());
+        const transferValue: unknown = await response.json();
+        expect(transferValue).not.toHaveProperty("expiresAt");
+        const transfer = v.parse(v.object({ url: v.string() }), transferValue);
         return { ...transfer, code: new URL(transfer.url).hash.slice("#code=".length) };
     };
     const redeem = (code: string) =>
@@ -364,7 +366,6 @@ test("Given an anonymous user, When access is transferred, revoked, and exhauste
     expect((await worker.fetch(accountRequest(owner.token, owner.projectId), environment)).status).toBe(200);
 
     const limitedTransfer = await createTransfer();
-    expect(Date.parse(limitedTransfer.expiresAt)).toBeGreaterThan(Date.now());
     const issuedTokens = [];
     for (let redemption = 0; redemption < 5; redemption++) {
         const response = await redeem(limitedTransfer.code);

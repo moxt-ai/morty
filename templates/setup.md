@@ -70,7 +70,7 @@ five minutes. Only `status: "ready"`
 means the binding is active and the selected Runtime/agent is online; it does not
 claim a successful test message.
 
-Return the exact clickable browser `url`, resolved `workspace`, QR code, and `expiresAt` from the ready result.
+Return the exact clickable browser `url`, resolved `workspace`, and QR code from the ready result.
 The QR payload is the exact same URL, and the ready result provides a browser-safe PNG
 data URL at `qrDataUrl`, a terminal-safe QR code in the private text file at `qrTextPath`,
 and an owner-only PNG at `qrPath`. In a browser chat that supports Markdown images, embed
@@ -78,11 +78,11 @@ and an owner-only PNG at `qrPath`. In a browser chat that supports Markdown imag
 query Runtime files by path. In a TUI, read `qrTextPath` and show its contents in a plain-text block without
 changing the spacing. Tell the user that the text QR is also available and can be shown
 in the TUI if needed. The link identifies this harness session
-so Chat can import it and open it after the handoff. The link is valid for **24 hours**, can be successfully
-opened at most **five times**, and opens the same user and Bot each time. Never open,
+so Chat can import it and open it after the handoff. The link can be successfully
+opened at most **five times**, does not expire, and opens the same user and Bot each time. Never open,
 preview, scan, or redeem it yourself because doing so consumes one use. Tell the user:
-**Open this link or scan the QR code to chat. It can be used up to five times before it
-expires. Keep the Runtime online. You can bind an account later if you want.**
+**Open this link or scan the QR code to chat. It can be used up to five times. Keep the
+Runtime online. You can bind an account later if you want.**
 
 On failure, use `error.code`, its sanitized `error.cause` chain, and the private
 Runtime log. Fix the problem and rerun

@@ -124,10 +124,7 @@ export class AuthenticationService {
             return null;
         }
         const transfer = await this.identities.createTransfer(userId, Date.now(), signal);
-        this.logger.info(
-            { event: "identity-transfer-created", expiresAt: transfer.expiresAt, userId },
-            "Identity audit event",
-        );
+        this.logger.info({ event: "identity-transfer-created", userId }, "Identity audit event");
         return transfer;
     };
 

@@ -208,6 +208,6 @@ Runtime pairing, Runtime discovery through `mobius pair list --output-json`, Run
 registration with the singleton local manager, binding, and
 readiness, with timestamped JSON progress. Dependencies and agent authentication are
 handled by the calling agent. The pair flow returns the existing Chat page; only
-standalone setup issues a browser transfer, also valid for 24 hours. Never expose durable credentials or
+standalone setup issues a non-expiring browser transfer with five redemptions. Never expose durable credentials or
 consume the user's final browser link. Configure edge access-log exports to redact
 the `token` query parameter on `/pair.md`; application audit events contain IDs only.

@@ -23,6 +23,7 @@ import migration0022 from "../../migrations/project-do/0022_eminent_wiccan.sql?r
 import removeLocalSessionMetadata from "../../migrations/project-do/0024_fair_blizzard.sql?raw";
 import removeIntegrationTables from "../../migrations/project-do/0025_misty_scarlet_witch.sql?raw";
 import removeManagedBotAgentRef from "../../migrations/project-do/0026_slimy_ink.sql?raw";
+import removeIdentityTransferExpiry from "../../migrations/project-do/0027_dazzling_grim_reaper.sql?raw";
 
 const migrations = [
     management,
@@ -50,6 +51,7 @@ const migrations = [
     removeLocalSessionMetadata,
     removeIntegrationTables,
     removeManagedBotAgentRef,
+    removeIdentityTransferExpiry,
 ];
 
 type BoundValue = ArrayBuffer | string | number | null;

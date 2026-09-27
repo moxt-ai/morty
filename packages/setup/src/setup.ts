@@ -780,7 +780,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             status: "ready",
             botId,
             url: handoffUrl,
-            expiresAt: text(transfer.expiresAt),
             workspace,
             ...qr,
             message: "Open the link or scan the QR code to chat. Keep the Runtime online.",

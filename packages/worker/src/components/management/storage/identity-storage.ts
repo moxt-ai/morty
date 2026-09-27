@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, lt, notExists, or, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, notExists, or, sql } from "drizzle-orm";
 import * as v from "valibot";
 import {
     agentPairingTicket,
@@ -25,11 +25,8 @@ const anonymousToken = v.pipe(
     ),
 );
 const userRow = v.pipe(v.object({ userId: v.string() }), v.readonly());
-const identityTransferLifetime = 24 * 60 * 60 * 1000;
-
 export interface IdentityTransfer {
     readonly code: string;
-    readonly expiresAt: number;
 }
 
 export type BindingResult =
@@ -91,10 +88,7 @@ export class IdentityStorage {
                     eq(anonymousCredential.tokenHash, await digest(parsed.output)),
                     eq(anonymousCredential.status, "active"),
                     eq(platformProjectMapping.projectId, this.#projectId),
-                    or(
-                        isNull(anonymousCredential.remoteTransferId),
-                        and(isNull(identityTransfer.revokedAt), gt(identityTransfer.expiresAt, Date.now())),
-                    ),
+                    or(isNull(anonymousCredential.remoteTransferId), isNull(identityTransfer.revokedAt)),
                 ),
             )
             .get();
@@ -106,19 +100,17 @@ export class IdentityStorage {
     readonly createTransfer = async (userId: string, now: number, signal: AbortSignal): Promise<IdentityTransfer> => {
         signal.throwIfAborted();
         const code = createProjectCredential("mobius_transfer_v2", v.parse(v.string(), this.#projectId));
-        const expiresAt = now + identityTransferLifetime;
         await requireIdentityDatabase(this.#database)
             .insert(identityTransfer)
             .values({
                 id: `transfer_${crypto.randomUUID()}`,
                 codeHash: await digest(code),
                 userId,
-                expiresAt,
                 createdAt: now,
             })
             .run();
         signal.throwIfAborted();
-        return { code, expiresAt };
+        return { code };
     };
 
     readonly createRecoveryToken = async (userId: string, now: number, signal: AbortSignal): Promise<string> => {
@@ -166,7 +158,6 @@ export class IdentityStorage {
                         eq(identityTransfer.codeHash, codeHash),
                         isNull(identityTransfer.consumedAt),
                         lt(identityTransfer.redemptionCount, 5),
-                        gt(identityTransfer.expiresAt, now),
                     ),
                 ),
             database.insert(anonymousCredential).select(
@@ -222,10 +213,7 @@ export class IdentityStorage {
                     eq(anonymousCredential.tokenHash, await digest(parsed.output)),
                     eq(anonymousCredential.status, "active"),
                     eq(platformProjectMapping.projectId, this.#projectId),
-                    or(
-                        isNull(anonymousCredential.remoteTransferId),
-                        and(isNull(identityTransfer.revokedAt), gt(identityTransfer.expiresAt, now)),
-                    ),
+                    or(isNull(anonymousCredential.remoteTransferId), isNull(identityTransfer.revokedAt)),
                 ),
             )
             .get();

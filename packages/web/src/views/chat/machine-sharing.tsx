@@ -36,8 +36,7 @@ export function MachineSharing({
                 {state.transfer.url}
             </a>
             <p className="text-xs leading-5 text-muted-foreground">
-                This link expires at {new Date(state.transfer.expiresAt).toLocaleTimeString()} and can be used up to
-                five times.
+                This link can be used up to five times. Remote access remains active until you end it.
             </p>
         </div>
     );
