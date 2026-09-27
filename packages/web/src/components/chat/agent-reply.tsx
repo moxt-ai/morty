@@ -8,14 +8,22 @@ import { AgentThinking } from "./agent-thinking.tsx";
 import { AttemptFailure } from "./attempt-failure.tsx";
 import { MessageBubble } from "./message-bubble.tsx";
 
-function ReplyStatus({ phase, hasText }: { readonly phase: ReplyPhase; readonly hasText: boolean }) {
+function ReplyStatus({
+    phase,
+    hasThinking,
+    hasText,
+}: {
+    readonly phase: ReplyPhase;
+    readonly hasThinking: boolean;
+    readonly hasText: boolean;
+}) {
     let message: string;
     switch (phase) {
         case "working":
         case "failed":
             return null;
         case "completed":
-            if (hasText) {
+            if (hasText || hasThinking) {
                 return null;
             }
             message = "Agent finished without a text response.";
@@ -76,7 +84,7 @@ export function AgentReply({
                 </MessageBubble>
             )}
             {children}
-            <ReplyStatus phase={phase} hasText={hasText} />
+            <ReplyStatus phase={phase} hasThinking={thinking.entries.length > 0} hasText={hasText} />
             {attempt !== null && <AttemptFailure attempt={attempt} botId={botId} />}
         </div>
     );
