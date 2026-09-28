@@ -158,6 +158,7 @@ class BrowserSessionTransport implements MobiusHttpTransport, MobiusLiveEventTra
 class BrowserSessionClient implements MobiusClient {
     readonly attempts: MobiusClient["attempts"];
     readonly capabilities: MobiusClient["capabilities"];
+    readonly channels: MobiusClient["channels"];
     readonly credentials: MobiusClient["credentials"];
     readonly events: MobiusClient["events"];
     readonly interactions: MobiusClient["interactions"];
@@ -175,6 +176,7 @@ class BrowserSessionClient implements MobiusClient {
         this.#sessionTransport = transport;
         this.attempts = client.attempts;
         this.capabilities = client.capabilities;
+        this.channels = client.channels;
         this.credentials = client.credentials;
         this.events = client.events;
         this.interactions = client.interactions;
