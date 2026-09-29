@@ -1,10 +1,14 @@
-import { type ActiveTurnSnapshot, decodeIdentifier, decodeSessionTurnUpdatedEvent } from "@moxt-ai/mobius-protocol";
+import { decodeIdentifier } from "@moxt-ai/mobius-protocol";
 import {
+    decodeAgentContentEvent,
     decodeSessionCommandsUpdatedEvent,
     decodeSessionElicitationRequestedEvent,
     decodeSessionElicitationResolvedEvent,
     decodeSessionPermissionRequestedEvent,
     decodeSessionPermissionResolvedEvent,
+    MobiusAgentActivityEvent,
+    MobiusAgentActivityNarrationEvent,
+    MobiusAgentMessageEvent,
     type MobiusClient,
     MobiusControlEvent,
     MobiusElicitationResponseRequest,
@@ -44,9 +48,16 @@ import type {
 } from "./session-pane-types.ts";
 import {
     activeTurnSessionPresentation,
+    appendLiveTurnNarration,
+    appendLiveTurnText,
+    appendSessionTimelineSegment,
     deriveSessionTimeline,
     historySessionPresentation,
+    recordLiveTurnActivity,
+    recordLiveTurnContent,
     type SessionMessage,
+    type SessionTimelineSegment,
+    startLiveTurnSessionPresentation,
 } from "./session-presentation.ts";
 import {
     createSessionTaskControlsStore,
@@ -262,18 +273,96 @@ export function sessionPanePresentation(
     } as const;
 }
 
-function historyBeforeActiveTurn(history: NativeSessionHistory, turn: ActiveTurnSnapshot): NativeSessionHistory {
+interface SessionIdentity {
+    readonly additionalDirectoryIds: readonly string[];
+    readonly agentId: string;
+    readonly directoryId: string;
+}
+
+type SessionExecution = Awaited<ReturnType<MobiusClient["sessions"]["readSessionExecution"]>>;
+
+function executionEpoch(execution: SessionExecution): string {
+    return execution.turn === null ? "idle" : `${execution.turn.commandId}:${execution.turn.epoch}`;
+}
+
+function historyCommandIds(history: NativeSessionHistory): readonly string[] {
     if (history.status !== "available") {
-        return history;
+        return [];
     }
-    if (history.messages.length < turn.messages.length) {
-        throw new Error("The live Session history does not contain the active Turn timeline.");
+    const ids = [...history.coveredCommandIds];
+    for (const messageId of history.coveredMessageIds) {
+        const suffix = messageId.endsWith(":user") ? ":user" : messageId.endsWith(":agent") ? ":agent" : null;
+        if (suffix === null) {
+            continue;
+        }
+        const commandId = messageId.slice(0, -suffix.length);
+        if (!ids.includes(commandId)) {
+            ids.push(commandId);
+        }
     }
-    return {
-        ...history,
-        coveredCommandIds: history.coveredCommandIds.filter((commandId) => commandId !== turn.commandId),
-        messages: history.messages.slice(0, history.messages.length - turn.messages.length),
-    };
+    return ids;
+}
+
+async function readCompleteNativeHistory(
+    client: MobiusClient,
+    sessionId: string,
+    identity: SessionIdentity,
+    signal: AbortSignal,
+): Promise<NativeSessionHistory> {
+    const messages: Extract<NativeSessionHistory, { readonly status: "available" }>["messages"][number][] = [];
+    const coveredCommandIds: string[] = [];
+    const coveredMessageIds: string[] = [];
+    const visitedCursors = new Set<string>();
+    let cursor = "";
+    let truncated = false;
+    for (;;) {
+        const page = await client.sessions.querySessionNativeMessages(
+            sessionId,
+            identity,
+            new MobiusPageRequest(50, cursor),
+            signal,
+        );
+        signal.throwIfAborted();
+        if (page.status === "unavailable") {
+            return { cause: page.cause, status: "unavailable" };
+        }
+        messages.unshift(...page.messages);
+        coveredCommandIds.push(...page.coveredCommandIds);
+        coveredMessageIds.push(...page.coveredMessageIds);
+        truncated ||= page.truncated;
+        if (page.nextCursor === null) {
+            return {
+                coveredCommandIds: coveredCommandIds.filter((id, index, ids) => ids.indexOf(id) === index),
+                coveredMessageIds: coveredMessageIds.filter((id, index, ids) => ids.indexOf(id) === index),
+                messages,
+                status: "available",
+                truncated,
+            };
+        }
+        if (visitedCursors.has(page.nextCursor)) {
+            throw new Error("The Runtime returned a repeating Session history cursor.");
+        }
+        visitedCursors.add(page.nextCursor);
+        cursor = page.nextCursor;
+    }
+}
+
+async function readConsistentSessionRecovery(
+    client: MobiusClient,
+    sessionId: string,
+    identity: SessionIdentity,
+    signal: AbortSignal,
+): Promise<{ readonly execution: SessionExecution; readonly history: NativeSessionHistory }> {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        const before = await client.sessions.readSessionExecution(sessionId, identity, signal);
+        const history = await readCompleteNativeHistory(client, sessionId, identity, signal);
+        const after = await client.sessions.readSessionExecution(sessionId, identity, signal);
+        signal.throwIfAborted();
+        if (executionEpoch(before) === executionEpoch(after)) {
+            return { execution: after, history };
+        }
+    }
+    throw new Error("The Session changed while its running Turn and history were being recovered.");
 }
 
 export function createSessionPaneModel(options: {
@@ -344,12 +433,12 @@ export function createSessionPaneModel(options: {
     });
     const initialActivity: SessionActivityState =
         command === "" ? { kind: "idle" } : startSessionWork({ commandId: command, attempt: null });
-    let activeSnapshot: ActiveTurnSnapshot | null = null;
+    let liveTurn: SessionTimelineSegment | null = null;
     const deriveTimeline = (activity: SessionActivityState) => {
         const history = historySessionPresentation(nativeHistory ?? session.result.history, sessionId);
         return deriveSessionTimeline(
             history,
-            activeSnapshot === null ? null : activeTurnSessionPresentation(activeSnapshot, sessionId),
+            liveTurn,
             activity.kind === "working" ? { attempt: activity.attempt, commandId: activity.commandId } : null,
         );
     };
@@ -494,11 +583,6 @@ export function createSessionPaneModel(options: {
                 }
             },
             connect: async (signal) => {
-                let snapshotVersion: {
-                    readonly commandId: string;
-                    readonly epoch: string;
-                    readonly sequence: number;
-                } | null = null;
                 try {
                     client = await requests.connectSession(
                         botId,
@@ -528,39 +612,22 @@ export function createSessionPaneModel(options: {
                                 agentId: session.agentRef,
                                 directoryId: session.result.ready.directoryId,
                             };
-                            const loadedHistory = await connected.sessions.querySessionNativeMessages(
-                                sessionId,
-                                identity,
-                                new MobiusPageRequest(50, ""),
-                                signal,
-                            );
-                            signal.throwIfAborted();
-                            const execution = await connected.sessions.readSessionExecution(
+                            const { execution, history: loadedHistory } = await readConsistentSessionRecovery(
+                                connected,
                                 sessionId,
                                 identity,
                                 signal,
                             );
-                            signal.throwIfAborted();
                             const running = execution.turn;
                             messageQueue.getState().replace(execution.queued);
-                            nativeHistory =
-                                loadedHistory.status === "available"
-                                    ? running === null
-                                        ? loadedHistory
-                                        : historyBeforeActiveTurn(loadedHistory, running)
+                            nativeHistory = loadedHistory.status === "available" ? loadedHistory : null;
+                            historyCursor = null;
+                            liveTurn =
+                                loadedHistory.status === "unavailable" && running !== null
+                                    ? activeTurnSessionPresentation(running, sessionId)
                                     : null;
-                            historyCursor = loadedHistory.status === "available" ? loadedHistory.nextCursor : null;
-                            const authoritative = {
-                                history: loadedHistory,
-                                kind: "authoritative-state-loaded" as const,
-                            };
                             if (running !== null) {
                                 command = running.commandId;
-                                snapshotVersion = {
-                                    commandId: running.commandId,
-                                    epoch: running.epoch,
-                                    sequence: running.sequence,
-                                };
                                 const turnId =
                                     reconciliation.turn.kind === "accepted" &&
                                     reconciliation.turn.commandId === running.commandId
@@ -573,24 +640,13 @@ export function createSessionPaneModel(options: {
                                 activeTurn.turnCleared(reconciliation.turn.commandId);
                                 command = "";
                             }
-                            activeSnapshot = running;
                             const restoredActivity =
                                 command === ""
                                     ? ({ kind: "idle" } as const)
                                     : startSessionWork({ commandId: command, attempt: null });
                             const native = deriveTimeline(restoredActivity);
                             const nativeMessages = native.messages;
-                            delivery
-                                .getState()
-                                .reconcile([
-                                    ...(authoritative.history.status === "available"
-                                        ? authoritative.history.coveredCommandIds
-                                        : []),
-                                    ...(command !== "" &&
-                                    nativeMessages.some((message) => message.role === "user" && message.id === command)
-                                        ? [command]
-                                        : []),
-                                ]);
+                            delivery.getState().reconcile(historyCommandIds(loadedHistory));
                             signal.throwIfAborted();
                             const interactions: readonly LocalInteraction[] = (() => {
                                 const interaction = running?.interaction;
@@ -653,54 +709,49 @@ export function createSessionPaneModel(options: {
                                 if (running === null) {
                                     return true;
                                 }
-                                if (
-                                    snapshotVersion?.commandId === running.commandId &&
-                                    snapshotVersion.epoch === running.epoch &&
-                                    snapshotVersion.sequence >= running.sequence
-                                ) {
+                                if (command === running.commandId) {
                                     return true;
                                 }
                                 const priorCommand = command;
-                                const transitioned = priorCommand !== "" && priorCommand !== running.commandId;
-                                const loadedHistory = transitioned
-                                    ? await connected.sessions.querySessionNativeMessages(
-                                          sessionId,
-                                          {
-                                              additionalDirectoryIds: session.entry.additionalDirectories.map(
-                                                  (directory) => directory.directoryId,
-                                              ),
-                                              agentId: session.agentRef,
-                                              directoryId: session.result.ready.directoryId,
-                                          },
-                                          new MobiusPageRequest(50, ""),
-                                          signal,
-                                      )
-                                    : null;
-                                signal.throwIfAborted();
-                                if (priorCommand !== "" && priorCommand !== running.commandId) {
+                                const recovery = await readConsistentSessionRecovery(
+                                    connected,
+                                    sessionId,
+                                    {
+                                        additionalDirectoryIds: session.entry.additionalDirectories.map(
+                                            (directory) => directory.directoryId,
+                                        ),
+                                        agentId: session.agentRef,
+                                        directoryId: session.result.ready.directoryId,
+                                    },
+                                    signal,
+                                );
+                                const recoveredRunning = recovery.execution.turn;
+                                if (recoveredRunning === null) {
+                                    return true;
+                                }
+                                if (priorCommand !== "" && priorCommand !== recoveredRunning.commandId) {
                                     tasks.getState().finish(priorCommand);
                                     activeTurn.turnCleared(priorCommand);
                                 }
-                                command = running.commandId;
-                                snapshotVersion = {
-                                    commandId: running.commandId,
-                                    epoch: running.epoch,
-                                    sequence: running.sequence,
-                                };
+                                command = recoveredRunning.commandId;
                                 const accepted = activeTurn.current();
                                 const turnId =
-                                    accepted.kind === "accepted" && accepted.commandId === running.commandId
+                                    accepted.kind === "accepted" && accepted.commandId === recoveredRunning.commandId
                                         ? accepted.turnId
-                                        : running.commandId;
-                                tasks.getState().start(running.commandId, turnId);
-                                activeTurn.submissionAccepted(running.commandId, turnId);
-                                if (loadedHistory?.status === "available") {
-                                    nativeHistory = historyBeforeActiveTurn(loadedHistory, running);
-                                    historyCursor = loadedHistory.nextCursor;
-                                    delivery.getState().reconcile(loadedHistory.coveredCommandIds);
-                                }
-                                activeSnapshot = running;
-                                const activity = startSessionWork({ commandId: running.commandId, attempt: null });
+                                        : recoveredRunning.commandId;
+                                tasks.getState().start(recoveredRunning.commandId, turnId);
+                                activeTurn.submissionAccepted(recoveredRunning.commandId, turnId);
+                                nativeHistory = recovery.history.status === "available" ? recovery.history : null;
+                                historyCursor = null;
+                                liveTurn =
+                                    recovery.history.status === "unavailable"
+                                        ? activeTurnSessionPresentation(recoveredRunning, sessionId)
+                                        : null;
+                                delivery.getState().reconcile(historyCommandIds(recovery.history));
+                                const activity = startSessionWork({
+                                    commandId: recoveredRunning.commandId,
+                                    attempt: null,
+                                });
                                 const snapshot = deriveTimeline(activity);
                                 set({
                                     activities: snapshot.activities,
@@ -711,30 +762,16 @@ export function createSessionPaneModel(options: {
                                 return true;
                             }
 
-                            if (payload instanceof MobiusControlEvent && payload.kind === "session.turn.updated") {
-                                const { turn } = decodeSessionTurnUpdatedEvent(payload.encodedPayload);
-                                if (command !== "" && command !== turn.commandId) {
-                                    return true;
-                                }
-                                if (
-                                    snapshotVersion?.commandId === turn.commandId &&
-                                    snapshotVersion.epoch === turn.epoch &&
-                                    snapshotVersion.sequence >= turn.sequence
-                                ) {
-                                    return true;
-                                }
-                                snapshotVersion = {
-                                    commandId: turn.commandId,
-                                    epoch: turn.epoch,
-                                    sequence: turn.sequence,
-                                };
-                                command = turn.commandId;
-                                activeSnapshot = turn;
-                                const snapshot = deriveTimeline(get().activity);
-                                set({ activities: snapshot.activities, messages: snapshot.messages });
-                                return true;
-                            }
                             if (payload instanceof MobiusControlEvent) {
+                                if (payload.kind === "agent.content") {
+                                    const content = decodeAgentContentEvent(payload.encodedPayload);
+                                    if (command === content.commandId) {
+                                        liveTurn = recordLiveTurnContent(liveTurn, content);
+                                        const timeline = deriveTimeline(get().activity);
+                                        set({ activities: timeline.activities, messages: timeline.messages });
+                                    }
+                                    return true;
+                                }
                                 if (payload.kind === "session.commands.updated") {
                                     tasks
                                         .getState()
@@ -811,6 +848,10 @@ export function createSessionPaneModel(options: {
                                         return true;
                                     }
                                     command = queued.commandId;
+                                    liveTurn = appendSessionTimelineSegment(
+                                        liveTurn,
+                                        startLiveTurnSessionPresentation(queued.commandId, payload.prompt),
+                                    );
                                     tasks.getState().start(queued.commandId, queued.turnId);
                                     activeTurn.submissionAccepted(queued.commandId, queued.turnId);
                                     const activity = startSessionWork({
@@ -824,6 +865,10 @@ export function createSessionPaneModel(options: {
                             }
                             if (command === "" && payload instanceof MobiusTurnStartedEvent) {
                                 command = payload.commandId;
+                                liveTurn = appendSessionTimelineSegment(
+                                    liveTurn,
+                                    startLiveTurnSessionPresentation(payload.commandId, payload.prompt),
+                                );
                                 tasks.getState().start(payload.commandId, payload.commandId);
                                 activeTurn.submissionAccepted(payload.commandId, payload.commandId);
                                 const activity = startSessionWork({
@@ -837,7 +882,22 @@ export function createSessionPaneModel(options: {
                             if (command === "" || !("commandId" in payload) || payload.commandId !== command) {
                                 return true;
                             }
-                            if (payload instanceof MobiusTurnStartedEvent) {
+                            if (payload instanceof MobiusAgentMessageEvent) {
+                                liveTurn = appendLiveTurnText(liveTurn, payload.commandId, payload.text);
+                                const timeline = deriveTimeline(get().activity);
+                                set({ activities: timeline.activities, messages: timeline.messages });
+                            } else if (payload instanceof MobiusAgentActivityEvent) {
+                                liveTurn = recordLiveTurnActivity(liveTurn, payload);
+                                const timeline = deriveTimeline(get().activity);
+                                set({ activities: timeline.activities, messages: timeline.messages });
+                            } else if (payload instanceof MobiusAgentActivityNarrationEvent) {
+                                liveTurn = appendLiveTurnNarration(liveTurn, payload);
+                                const timeline = deriveTimeline(get().activity);
+                                set({ activities: timeline.activities, messages: timeline.messages });
+                            } else if (payload instanceof MobiusTurnStartedEvent) {
+                                if (liveTurn === null) {
+                                    liveTurn = startLiveTurnSessionPresentation(payload.commandId, payload.prompt);
+                                }
                                 const activity = startSessionWork({
                                     commandId: command,
                                     attempt: new MobiusRunningAttemptSummary(payload.attemptId, event.recordedAt),
@@ -863,24 +923,6 @@ export function createSessionPaneModel(options: {
                                               commandId: completedCommand,
                                               kind: "work-completed",
                                           });
-                                const completedHistory = await connected.sessions.querySessionNativeMessages(
-                                    sessionId,
-                                    {
-                                        additionalDirectoryIds: session.entry.additionalDirectories.map(
-                                            (directory) => directory.directoryId,
-                                        ),
-                                        agentId: session.agentRef,
-                                        directoryId: session.result.ready.directoryId,
-                                    },
-                                    new MobiusPageRequest(50, ""),
-                                    signal,
-                                );
-                                signal.throwIfAborted();
-                                if (completedHistory.status === "available") {
-                                    nativeHistory = completedHistory;
-                                    historyCursor = completedHistory.nextCursor;
-                                    activeSnapshot = null;
-                                }
                                 const completed = deriveTimeline(activity);
                                 set({
                                     activities: completed.activities,

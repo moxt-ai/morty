@@ -3,11 +3,17 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given a controlled Agent turn is active, When the user leaves and reopens the conversation, Then the real daemon restores its live state", {
+test("Given a controlled Agent turn exceeds one recovery page, When the user leaves and reopens the conversation, Then the real daemon restores every character and rich content", {
     timeout: 30_000,
 }, async () => {
-    const prompt = "wait until cancelled";
+    const prompt = "hold after large output";
+    const expectedCharacters = 300_000;
     const app = await createTestApp({ connectAgent: true });
+    const responseCharacters = () =>
+        app
+            .elementsByTestId(dataTestId.agentResponse)
+            .flatMap((element) => element.textContent?.match(/x{100,}/gu) ?? [])
+            .reduce((total, text) => total + text.length, 0);
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
         (element) => element.textContent?.includes("Connected") === true,
@@ -18,6 +24,8 @@ test("Given a controlled Agent turn is active, When the user leaves and reopens 
     }
     await sendPrompt(app, composer, prompt);
     await app.queryElementByTestId(dataTestId.sessionStatus);
+    await vi.waitFor(() => expect(responseCharacters()).toBe(expectedCharacters));
+    await vi.waitFor(() => expect(document.body.textContent).toContain("long-output.bin"));
     await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
     const activeConversation = await vi.waitFor(() => {
         const conversation = app
@@ -30,6 +38,8 @@ test("Given a controlled Agent turn is active, When the user leaves and reopens 
     });
     await app.user.click(activeConversation);
     await app.queryElementByTestId(dataTestId.sessionStatus);
+    await vi.waitFor(() => expect(responseCharacters()).toBe(expectedCharacters));
+    await vi.waitFor(() => expect(document.body.textContent).toContain("long-output.bin"));
     const stop = await app.queryElementByTestId(
         dataTestId.sendMessage,
         (element) => element.getAttribute("aria-label") === "Stop agent output",

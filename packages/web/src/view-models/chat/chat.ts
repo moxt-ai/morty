@@ -22,6 +22,7 @@ import {
     FailedRecordedTurn,
     PendingRecordedTurn,
     type RecordedActivity,
+    type RecordedActivityNarration,
     type RecordedContent,
     type RecordedSession,
     type RecordedTurn,
@@ -782,6 +783,22 @@ export class AgentChatMessage extends ChatMessage {
         const activities = this.activities.filter((candidate) => candidate.activityId !== activity.activityId);
         activities.push(activity);
         activities.sort((left, right) => left.sequence - right.sequence);
+        return new AgentChatMessage(
+            this.id,
+            this.commandId,
+            this.createdAt,
+            this.text,
+            this.state,
+            activities,
+            this.contents,
+            this.lastCommittedSeq,
+        );
+    };
+
+    readonly appendAgentActivityNarration = (narration: RecordedActivityNarration): AgentChatMessage => {
+        const activities = this.activities.map((candidate) =>
+            candidate.activityId === narration.activityId ? candidate.appendingOutput(narration.text) : candidate,
+        );
         return new AgentChatMessage(
             this.id,
             this.commandId,

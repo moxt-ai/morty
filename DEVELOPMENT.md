@@ -254,16 +254,23 @@ boundaries. Keep the live prompt and reply when handling completion.
 
 ### Current turn presentation
 
-The daemon owns the running turn's cumulative text, activities, and content.
-`session.turn.updated` carries a complete snapshot with an epoch and monotonically
-increasing sequence. Opening and reconnecting read the same shape through
-`readSessionExecution`. The browser replaces current-turn content only with a newer
-snapshot; it never appends buffered narration or body deltas to native history.
-Activity sequence numbers describe display order, not update versions.
+The daemon publishes bounded text, activity, narration, and content increments for
+the running Turn. The browser folds those events into one live presentation and
+keeps that presentation through the terminal notification. It does not fetch native
+history on completion because the daemon may already be starting the next queued
+prompt.
+
+Opening and reconnecting use a consistent recovery sandwich: read Session execution,
+follow every opaque native-message cursor, then read execution again. If the active
+command and epoch changed during that window, retry the whole read a bounded number
+of times. Native-message pages own recovered content and `coveredMessageIds` owns
+live/history overlap; `readSessionExecution` owns running state, queue state, and the
+pending interaction. Its active snapshot is a bounded fallback only when native
+history is unavailable, not a live streaming format.
 
 The presentation keeps steering prompts as layout boundaries. They do not own
 execution state or incremental text recovery. Terminal notifications finish the
-last displayed snapshot; completed history remains owned by the native Agent.
+last displayed live projection; completed history remains owned by the native Agent.
 
 Chat's Protocol and SDK workspace dependencies come from its Mobius submodule.
 This keeps the browser, Worker, test Platform, and daemon on the same checked-out

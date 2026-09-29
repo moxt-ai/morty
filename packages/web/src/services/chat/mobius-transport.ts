@@ -26,7 +26,7 @@ import {
 } from "@moxt-ai/mobius-sdk/channel";
 import { readSessionConfigPreferences, saveSessionConfigPreferences } from "@/services/chat/session-config-preferences";
 import { readChannelConnection } from "@/services/pairing/pairing-api";
-import { type ChannelConnection, RecordedActivity } from "@/view-models/chat/channel";
+import { type ChannelConnection, RecordedActivity, RecordedActivityNarration } from "@/view-models/chat/channel";
 import {
     DeletedSessionState,
     OfflineRuntimeState,
@@ -638,6 +638,14 @@ async function _sendPrompt(prompt: string): Promise<void> {
                 },
                 onDelta: (text, committedSequence) => {
                     useChatStore.getState().appendAgentText(turn, text, committedSequence);
+                },
+                onNarration: (narration) => {
+                    useChatStore
+                        .getState()
+                        .recordAgentActivityNarration(
+                            turn,
+                            new RecordedActivityNarration(narration.activityId, narration.text),
+                        );
                 },
                 onStarted: (startedAttemptId) => {
                     attemptId = startedAttemptId;
