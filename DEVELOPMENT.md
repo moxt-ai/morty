@@ -50,21 +50,16 @@ their content hashes make overwriting unnecessary.
 
 ### Setup download
 
-`packages/setup/src/setup.ts` owns the TypeScript setup implementation. Its CLI
-entrypoint is bundled by Vite into the self-contained `packages/setup/dist/setup.mjs`;
-generated JavaScript is not checked in. `pnpm build` builds it before the application.
-QR encoding, PNG reading, and QR decoding are included in that bundle and do not require
-packages to be installed separately on the user's machine.
-The bundle also exports `runSetup(args, host)` for integrations, with cancellable
-Runtime and clock ports. The CLI supplies the local manager implementation. Setup
-persists identity and Bot configuration but not App, Runtime, Connection, Channel, or
-pairing identifiers.
+Users must be able to download and run the setup artifact without installing its
+library dependencies separately. The download must serve a deployment-owned artifact;
+request parameters must not select arbitrary storage objects. Missing artifacts must
+produce a clear, retryable failure rather than an incomplete setup script.
 
-The Worker serves `/setup.mjs` from the fixed `artifacts/setup.mjs` object in the
-existing `CHAT_ATTACHMENTS_APAC` bucket.
-The download uses JavaScript content type and requires cache revalidation.
-Missing artifacts return `SETUP_ARTIFACT_UNAVAILABLE`
-with HTTP 503. Request query parameters never select R2 keys.
+Keep setup intent (identity and Bot configuration) separate from daemon-owned pairing
+and connection state. Implementation details belong in the [setup entrypoint](packages/setup/src/cli.ts)
+and [artifact gateway](packages/worker/src/gateway/setup-artifact.ts); executable
+contracts belong in the [setup journey](packages/e2e/setup.e2e.test.ts) and
+[Worker tests](packages/worker/tests/).
 
 The CD token needs R2 object write permission on the existing attachments bucket. CD
 uploads the generated bundle before deploying Workers. To seed or refresh local
