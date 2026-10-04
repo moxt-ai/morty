@@ -22,9 +22,9 @@ Coverage generation is implemented in [coverage.mjs](scripts/coverage.mjs).
 | Web / happy-dom | [test app](packages/web/tests/infra/test-app.tsx), [Chat stack](packages/web/tests/support/chat-worker.ts) | [Web workflows](packages/web/tests/) |
 | Worker / local Cloudflare | [identity fixture](packages/worker/tests/support/identity-fixture.ts) | [HTTP and WebSocket boundaries](packages/worker/tests/) |
 | Browser / Playwright | [runtime](packages/e2e/infra/test-runtime.ts), [local stack](packages/e2e/infra/local-stack.ts) | [conversation](packages/e2e/conversation.e2e.test.ts), [setup](packages/e2e/setup.e2e.test.ts) |
-| Real Agent compatibility | [Mobius test guide](third-party/mobius/TESTING.md) | [real Agent scenarios](third-party/mobius/tests/agent-daemon/real/) |
+| Real Agent compatibility | [Mobius test guide](third-party/mobius/TESTING.md) | [real Agent scenarios](third-party/mobius/packages/cli/tests/agents/) |
 
-Morty Web, Worker, and browser suites connect the [stateful fake daemon](tests/support/fake-daemon/peer.ts)
+Morty Web, Worker, and browser suites connect the [stateful fake daemon](third-party/mobius/packages/test-support/src/fake-daemon/peer.ts)
 through the real Platform WebSocket endpoint. Chat, Platform, SDKs, and transports
 remain real. Morty does not start the production daemon or a controlled ACP Agent.
 The [Platform fixture](packages/worker/tests/support/test-platform.ts) owns pairing

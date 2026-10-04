@@ -67,7 +67,8 @@
         "ws": "8.21.3",
         "@types/ws": "8.18.1",
         "@moxt-ai/mobius-sdk": "workspace:*",
-        "@moxt-ai/mobius-protocol": "workspace:*"
+        "@moxt-ai/mobius-protocol": "workspace:*",
+        "@moxt-ai/mobius-test": "link:third-party/mobius/packages/test-support"
     },
     "dependencies": {
         "base64-js": "catalog:",

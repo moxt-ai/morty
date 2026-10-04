@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { connectFakeAgentDaemon, fakeAgentCatalog } from "../../../tests/support/fake-daemon/connection.ts";
-import type { FakeDaemonOptions } from "../../../tests/support/fake-daemon/model.ts";
+import { connectFakeAgentDaemon, fakeAgentCatalog } from "@moxt-ai/mobius-test/fake-daemon/connection";
+import type { FakeDaemonOptions } from "@moxt-ai/mobius-test/fake-daemon/model";
 import type { SetupRuntime } from "../../setup/src/setup.ts";
 import { jsonRequest, text } from "./chat-api.ts";
 

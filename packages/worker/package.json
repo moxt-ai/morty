@@ -17,7 +17,7 @@
         "test:watch": "vitest --config vitest.config.ts"
     },
     "devDependencies": {
-        "@moxt-ai/mobius-test": "link:../../third-party/mobius/tests",
+        "@moxt-ai/mobius-test": "link:../../third-party/mobius/packages/test-support",
         "drizzle-kit": "catalog:",
         "esbuild": "catalog:",
         "miniflare": "catalog:"

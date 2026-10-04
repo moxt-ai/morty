@@ -1,6 +1,6 @@
 import * as p from "@moxt-ai/mobius-protocol";
+import { FakeAgentDaemon } from "@moxt-ai/mobius-test/fake-daemon/peer";
 import { expect, test } from "vitest";
-import { FakeAgentDaemon } from "../../../tests/support/fake-daemon/peer.ts";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 
 function peer() {

@@ -8,4 +8,4 @@ Run `pnpm test:e2e` from the repository root.
 
 See [Testing](../../TESTING.md) for suite ownership. Keep business actions visible
 in scenarios; `infra` owns startup and cleanup. Agent compatibility belongs to
-[Mobius real Agent tests](../../third-party/mobius/tests/agent-daemon/real/).
+[Mobius real Agent tests](../../third-party/mobius/packages/cli/tests/agents/).

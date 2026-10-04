@@ -3,5 +3,12 @@
     "compilerOptions": {
         "types": ["vitest/globals"]
     },
-    "include": ["../src/**/*.ts", "../src/**/*.tsx", "../../worker/src/**/*.d.ts", "./**/*.ts", "./**/*.tsx"]
+    "include": [
+        "../src/**/*.ts",
+        "../src/**/*.tsx",
+        "../../worker/src/**/*.d.ts",
+        "./**/*.ts",
+        "./**/*.tsx",
+        "../../../worker-configuration.d.ts"
+    ]
 }

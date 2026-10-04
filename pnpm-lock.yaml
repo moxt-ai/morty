@@ -188,6 +188,9 @@ importers:
       '@moxt-ai/mobius-sdk':
         specifier: workspace:*
         version: link:third-party/mobius/packages/mobius-sdk
+      '@moxt-ai/mobius-test':
+        specifier: link:third-party/mobius/packages/test-support
+        version: link:third-party/mobius/packages/test-support
       '@sentry/vite-plugin':
         specifier: 'catalog:'
         version: 5.4.0(supports-color@10.2.2)
@@ -390,8 +393,8 @@ importers:
         version: 1.4.2(typescript@7.0.2)
     devDependencies:
       '@moxt-ai/mobius-test':
-        specifier: link:../../third-party/mobius/tests
-        version: link:../../third-party/mobius/tests
+        specifier: link:../../third-party/mobius/packages/test-support
+        version: link:../../third-party/mobius/packages/test-support
       drizzle-kit:
         specifier: 'catalog:'
         version: 0.31.8(supports-color@10.2.2)

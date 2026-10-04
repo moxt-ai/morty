@@ -1,7 +1,7 @@
 import { MobiusOidcCredentialProvider, MobiusPlatformDeveloperClient } from "@moxt-ai/mobius-sdk/platform";
 import { FakeClerk } from "@moxt-ai/mobius-test/clerk";
 import { createTestMobiusPlatformBindings } from "@moxt-ai/mobius-test/cloudflare";
-import { createFakeAgentDaemonRuntime } from "../../../../tests/support/fake-daemon/connection.ts";
+import { createFakeAgentDaemonRuntime } from "@moxt-ai/mobius-test/fake-daemon/connection";
 import { mortyReply } from "../../../../tests/support/fake-daemon/scenarios.ts";
 
 /** Starts the production Platform boundary with isolated local Cloudflare storage. */
