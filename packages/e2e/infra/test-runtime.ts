@@ -1,16 +1,22 @@
 import { chromium } from "playwright-core";
+import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../web/src/services/identity/anonymous-identity-api.ts";
 import { ChatApi, jsonRequest, text } from "./chat-api.ts";
-import { FakeRuntime } from "./fake-runtime.ts";
 import type { E2EHarness } from "./harness.ts";
 import { LocalStack } from "./local-stack.ts";
+import { FakeSetupDaemon } from "./setup-daemon.ts";
 import { followSetupInstructions } from "./setup-instructions.ts";
 
 export async function createTestRuntime(harness: E2EHarness) {
     const agentId = "claude";
     const agentName = "Codex";
     const stack = await LocalStack.create(harness);
-    const runtime = new FakeRuntime();
+    const runtime = new FakeSetupDaemon({
+        agentId,
+        agentName,
+        reply: mortyReply,
+        nativeSessionIds: new Set(["setup-reconnect-session"]),
+    });
     const application = await stack.startPlatform();
     await stack.startChat(application);
     const browser = await chromium.launch({ channel: "chrome", headless: true });

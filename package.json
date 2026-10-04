@@ -63,7 +63,11 @@
         "typescript": "catalog:",
         "vite": "catalog:",
         "vitest": "catalog:",
-        "wrangler": "catalog:"
+        "wrangler": "catalog:",
+        "ws": "8.21.3",
+        "@types/ws": "8.18.1",
+        "@moxt-ai/mobius-sdk": "workspace:*",
+        "@moxt-ai/mobius-protocol": "workspace:*"
     },
     "dependencies": {
         "base64-js": "catalog:",

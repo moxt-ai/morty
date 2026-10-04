@@ -24,10 +24,11 @@ Coverage generation is implemented in [coverage.mjs](scripts/coverage.mjs).
 | Browser / Playwright | [runtime](packages/e2e/infra/test-runtime.ts), [local stack](packages/e2e/infra/local-stack.ts) | [conversation](packages/e2e/conversation.e2e.test.ts), [setup](packages/e2e/setup.e2e.test.ts) |
 | Real Agent compatibility | [Mobius test guide](third-party/mobius/TESTING.md) | [real Agent scenarios](third-party/mobius/tests/agent-daemon/real/) |
 
-Read the assembly code to determine the replacement boundary. The current shared
-Morty fixture uses Mobius's controlled Agent harness with a production daemon;
-this records the implementation, not proof of compatibility with real Agents.
-Changing that boundary is a test-architecture change, not a documentation edit.
+Morty Web, Worker, and browser suites connect the [stateful fake daemon](tests/support/fake-daemon/peer.ts)
+through the real Platform WebSocket endpoint. Chat, Platform, SDKs, and transports
+remain real. Morty does not start the production daemon or a controlled ACP Agent.
+The [Platform fixture](packages/worker/tests/support/test-platform.ts) owns pairing
+and fake daemon cleanup; browser setup uses the same fake daemon transport.
 
 Follow [AGENTS.md](AGENTS.md) for scenario and fake-provider rules. Exercise visible
 controls in Web tests and production HTTP/WebSocket boundaries in Worker tests.

@@ -4,7 +4,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given a real daemon has queued work, When the user steers it into the active harness turn, Then every viewer sees the steered reply", {
+test("Given the daemon has queued work, When the user steers it into the active turn, Then every viewer sees the steered reply", {
     timeout: 30_000,
 }, async () => {
     const instruction = "Use the revised requirement";

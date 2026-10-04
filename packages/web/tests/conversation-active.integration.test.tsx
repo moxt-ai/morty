@@ -3,7 +3,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given a controlled Agent turn exceeds one recovery page, When the user leaves and reopens the conversation, Then the real daemon restores every character and rich content", {
+test("Given an active turn exceeds one recovery page, When the user leaves and reopens the conversation, Then Chat restores every character and rich content", {
     timeout: 30_000,
 }, async () => {
     const prompt = "hold after large output";

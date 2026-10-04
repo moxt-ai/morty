@@ -24,7 +24,7 @@ test("Given an unsent message draft, When the user reloads Chat, Then the draft 
     await vi.waitFor(() => expect(restored.value).toBe("Keep this unsent draft"));
 });
 
-test("Given the real daemon completed a turn, When the user leaves and reopens it, Then persisted harness history restores one conversation", {
+test("Given a completed turn, When the user leaves and reopens it, Then daemon history restores one conversation", {
     timeout: 30_000,
 }, async () => {
     const prompt = "Persist this completed conversation";

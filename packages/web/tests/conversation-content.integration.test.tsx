@@ -3,7 +3,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given the controlled harness emits reasoning, a tool, and text, When the real daemon streams and restores the turn, Then the complete content remains visible", {
+test("Given the daemon emits reasoning, a tool, and text, When Chat streams and restores the turn, Then the complete content remains visible", {
     timeout: 30_000,
 }, async () => {
     const prompt = "Inspect the repository";

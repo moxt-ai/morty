@@ -1,12 +1,12 @@
 import { fileURLToPath } from "node:url";
 import { miniflareDurableObjects } from "@moxt-ai/mobius-test/cloudflare";
-import { startTestPlatform } from "@moxt-ai/mobius-test/platform";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import * as v from "valibot";
 import { expect } from "vitest";
 import worker from "../../src/application.ts";
 import { APP_ORIGIN, clerk as issuer } from "./clerk.ts";
+import { startTestPlatform } from "./test-platform.ts";
 
 export function accountRequest(token?: string, projectId?: string): Request {
     return new Request(`${APP_ORIGIN}/morty/api${projectId === undefined ? "" : `/projects/${projectId}`}/session`, {

@@ -59,9 +59,7 @@ export async function createChatWorkerEnvironment() {
         return {
             botId,
             connectAgent: async () => {
-                const runtime = await cloud.connectAgent(identity.projectId, [
-                    { arguments: ["--load-only"], id: "claude", label: "Codex" },
-                ]);
+                const runtime = await cloud.connectAgent(identity.projectId, [{ id: "claude", label: "Codex" }]);
                 const setup = await request(`chat/projects/${identity.projectId}/bots/${botId}/setup`, {
                     runtimeId: runtime.runtimeId,
                     agentRef: "claude",
