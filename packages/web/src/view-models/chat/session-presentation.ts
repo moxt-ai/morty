@@ -334,7 +334,7 @@ export function recoverLiveTurnSessionPresentation(
         : { activities: presented.activities, messages: presented.messages.slice(start) };
 }
 
-export function activeTurnSessionPresentation(turn: ActiveTurnSnapshot, sessionId: string): SessionTimelineSegment {
+function activeTurnSessionPresentation(turn: ActiveTurnSnapshot, sessionId: string): SessionTimelineSegment {
     const activities = new Map<string, RecordedAgentActivity>();
     const messages = turn.messages.map((message): SessionMessage => {
         if (message.role === "user") {
