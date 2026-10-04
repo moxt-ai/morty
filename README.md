@@ -25,14 +25,16 @@ These goals guide the product; the selected Agent and configuration determine wh
 operations are available. Missing capabilities and unavailable history must be clear
 rather than appearing to succeed or silently disappearing.
 
-## Non-functional value: speed
+## Non-functional requirement: responsive streaming
 
-- **Open and continue quickly:** useful recent messages should appear promptly even
-  in a long conversation; older messages can be requested when needed.
-- **See progress immediately:** display incoming output promptly while keeping typing,
-  sending and stopping responsive.
-- **Get back in quickly:** after reopening the page or reconnecting, users should
-  quickly understand the latest progress and whether they can continue.
+As an Agent's answer grows, new output should remain quick to display and the chat
+should remain responsive. Receiving each update must not require copying or rebuilding
+the entire current turn. Normal updates should apply new or changed content; restoring
+a full view when opening or reconnecting is a separate operation.
+
+See Mobius's [streaming performance requirement](third-party/mobius/README.md#non-functional-requirement-efficient-current-turn-streaming)
+for the end-to-end constraint. Model generation time is separate from the overhead
+introduced by delivering and displaying its output.
 
 ## Relationship to Mobius
 
