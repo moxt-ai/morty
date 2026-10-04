@@ -26,7 +26,7 @@ export interface Turn {
     readonly epoch: string;
     readonly sequence: number;
 }
-export type Execution =
+type Execution =
     | { readonly kind: "idle" }
     | { readonly kind: "running"; readonly turn: Turn; readonly queued: readonly p.SessionPromptCommand[] };
 export interface Session {
