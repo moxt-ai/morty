@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
@@ -24,10 +24,10 @@ test("Given a controlled Agent turn exceeds one recovery page, When the user lea
     }
     await sendPrompt(app, composer, prompt);
     await app.queryElementByTestId(dataTestId.sessionStatus);
-    await vi.waitFor(() => expect(responseCharacters()).toBe(expectedCharacters));
-    await vi.waitFor(() => expect(document.body.textContent).toContain("long-output.bin"));
+    await app.waitForView(() => expect(responseCharacters()).toBe(expectedCharacters));
+    await app.waitForView(() => expect(document.body.textContent).toContain("long-output.bin"));
     await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
-    const activeConversation = await vi.waitFor(() => {
+    const activeConversation = await app.waitForView(() => {
         const conversation = app
             .elementsByTestId(dataTestId.managedConversation)
             .find((candidate) => candidate.textContent?.includes(prompt) === true);
@@ -38,13 +38,13 @@ test("Given a controlled Agent turn exceeds one recovery page, When the user lea
     });
     await app.user.click(activeConversation);
     await app.queryElementByTestId(dataTestId.sessionStatus);
-    await vi.waitFor(() => expect(responseCharacters()).toBe(expectedCharacters));
-    await vi.waitFor(() => expect(document.body.textContent).toContain("long-output.bin"));
+    await app.waitForView(() => expect(responseCharacters()).toBe(expectedCharacters));
+    await app.waitForView(() => expect(document.body.textContent).toContain("long-output.bin"));
     const stop = await app.queryElementByTestId(
         dataTestId.sendMessage,
         (element) => element.getAttribute("aria-label") === "Stop agent output",
     );
     await app.user.click(stop);
-    await vi.waitFor(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
     expect(document.body.textContent).toContain(prompt);
 });

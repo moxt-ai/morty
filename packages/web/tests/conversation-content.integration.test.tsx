@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
@@ -17,7 +17,7 @@ test("Given the controlled harness emits reasoning, a tool, and text, When the r
         throw new Error("Expected the message composer");
     }
     await sendPrompt(app, composer, prompt);
-    const thinking = await vi.waitFor(() => {
+    const thinking = await app.waitForView(() => {
         const match = app
             .elementsByTestId(dataTestId.agentReasoning)
             .find((element) => element.textContent?.includes("Inspecting the workspace") === true);
@@ -27,8 +27,8 @@ test("Given the controlled harness emits reasoning, a tool, and text, When the r
         return match;
     });
     expect(thinking.textContent).toContain("Thinking");
-    await vi.waitFor(() => expect(document.body.textContent).toContain("Read package metadata"));
-    await vi.waitFor(() => {
+    await app.waitForView(() => expect(document.body.textContent).toContain("Read package metadata"));
+    await app.waitForView(() => {
         const restored = app
             .elementsByTestId(dataTestId.agentResponse)
             .some((element) => element.textContent?.includes(`Codex turn 1: ${prompt}`) === true);
@@ -36,9 +36,9 @@ test("Given the controlled harness emits reasoning, a tool, and text, When the r
             throw new Error(`The restored response is unavailable: ${document.body.textContent}`);
         }
     });
-    await vi.waitFor(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
     app.reload();
-    await vi.waitFor(() => {
+    await app.waitForView(() => {
         const restored = app
             .elementsByTestId(dataTestId.agentResponse)
             .some((element) => element.textContent?.includes(`Codex turn 1: ${prompt}`) === true);
@@ -46,5 +46,5 @@ test("Given the controlled harness emits reasoning, a tool, and text, When the r
             throw new Error(`The restored response is unavailable: ${document.body.textContent}`);
         }
     });
-    await vi.waitFor(() => expect(document.body.textContent).toContain("Read package metadata"));
+    await app.waitForView(() => expect(document.body.textContent).toContain("Read package metadata"));
 });

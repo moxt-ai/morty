@@ -1,7 +1,6 @@
 import { getByTestId, queryAllByTestId } from "@testing-library/dom";
 import { render } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
-import { vi } from "vitest";
 import { ToastProvider } from "../../src/components/ui/toast.tsx";
 import { ApiTransportProvider } from "../../src/services/api/api-transport-context.tsx";
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
@@ -33,6 +32,7 @@ export interface TestApp extends Application {
         testId: string | RegExp,
         accept?: (element: HTMLElement) => boolean,
     ) => Promise<HTMLElement>;
+    readonly waitForView: <T>(read: () => T) => Promise<T>;
     readonly user: UserEvent;
 }
 
@@ -82,6 +82,46 @@ export async function createTestApp(
     };
     let rendered = mount();
     let closed = false;
+    const lifetime = new AbortController();
+    const waitForView = <T,>(read: () => T): Promise<T> =>
+        new Promise<T>((resolve, reject) => {
+            let lastFailure: unknown;
+            const cleanup = () => {
+                observer.disconnect();
+                clearTimeout(deadline);
+                lifetime.signal.removeEventListener("abort", abort);
+            };
+            const abort = () => {
+                cleanup();
+                reject(lifetime.signal.reason);
+            };
+            const check = () => {
+                try {
+                    const result = read();
+                    cleanup();
+                    resolve(result);
+                } catch (cause) {
+                    lastFailure = cause;
+                }
+            };
+            const observer = new MutationObserver(check);
+            const deadline = setTimeout(() => {
+                cleanup();
+                reject(lastFailure ?? new Error("The expected view did not appear."));
+            }, 12_000);
+            if (lifetime.signal.aborted) {
+                abort();
+                return;
+            }
+            lifetime.signal.addEventListener("abort", abort, { once: true });
+            observer.observe(document.body, {
+                attributes: true,
+                characterData: true,
+                childList: true,
+                subtree: true,
+            });
+            check();
+        });
     const matchingElements = (testId: string | RegExp): HTMLElement[] =>
         queryAllByTestId(document.body, testId).filter(
             (element) => container.contains(element) || element.closest("[data-test-app-root]") === null,
@@ -114,6 +154,7 @@ export async function createTestApp(
                 return;
             }
             closed = true;
+            lifetime.abort(new DOMException("The test application closed", "AbortError"));
             rendered.unmount();
             await current.close();
             container.remove();
@@ -130,16 +171,14 @@ export async function createTestApp(
             rendered = mount();
         },
         queryElementByTestId: async (testId, accept = () => true) =>
-            await vi.waitFor(
-                () => {
-                    const element = requiredElement(testId);
-                    if (!accept(element)) {
-                        throw new Error(`Element was not ready: ${String(testId)}; page: ${document.body.textContent}`);
-                    }
-                    return element;
-                },
-                { timeout: 12_000 },
-            ),
+            await waitForView(() => {
+                const element = requiredElement(testId);
+                if (!accept(element)) {
+                    throw new Error(`Element was not ready: ${String(testId)}; page: ${document.body.textContent}`);
+                }
+                return element;
+            }),
+        waitForView,
         user: userEvent.setup(),
     };
     activeApps.add(app);
