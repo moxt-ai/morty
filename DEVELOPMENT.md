@@ -1,64 +1,28 @@
 # Development
 
-## Product boundary
+Behavior is defined by production code and executable scenarios. This guide links
+those owners instead of maintaining a second description of their state machines.
+See [AGENTS.md](AGENTS.md) for engineering rules and [TESTING.md](TESTING.md) for verification.
 
-Anonymous credentials and Clerk sessions resolve to a canonical internal user ID.
-Clerk verifies a user session only. The application does not read Clerk Organization
-claims. Platform Project setup uses the server-held AppCredential; the Worker
-supplies a logical location hint and Platform resolves its storage placement. Bots and
-Chat support anonymous users.
-Chat derives new Project placement from Cloudflare's server-provided `request.cf.continent`:
-Asia/Oceania use `apac`; other recognized continents use `wnam`, the other supported region.
-Missing or unrecognized metadata falls back to `apac`, defined in code.
-Client headers and request bodies do not control this selection. Existing Projects retain
-their recorded placement when the user changes location.
+## Implementation map
 
-First-time visitors to `/` receive a browser-held anonymous identity and personal
-Bot; returning visitors restore their saved identity and last selected Bot
-automatically. The Bot menu can create another Bot for another machine and can
-remove a Bot while at least one other Bot remains. Every web workspace copies
-`/pair.md?token=...`, a one-time ticket that connects the local Runtime to its
-current user and Bot and directs the user back to Chat. A Bot's Runtime ID is fixed
-after its first binding. Pairing reconnects saved Runtime state only after the
-ticket proves the same Chat origin, user, Project, and Bot, names that Runtime as
-its expected target, and Platform confirms the Runtime pairing is still active.
-An unbound Bot can create a fresh Runtime identity; pairing another machine
-requires another Bot.
-`/setup.md` is reserved for standalone testing and external sharing, including
-social posts. That flow requires the current harness session ID, creates or reuses a
-local identity, lists manager connections through a private temporary JSON file,
-reconnects a local connection for the matching App ID or creates a fresh one, and
-returns a browser handoff carrying the validated harness and native
-session ID. The ready result includes the exact URL, a browser-renderable PNG
-data URL, an owner-only PNG QR code, and the path to a private temporary text file containing
-a terminal-safe QR rendering. The bundled setup CLI decodes the PNG before returning it so
-the QR payload cannot differ from the URL. The browser handoff shows the native session's harness and ID,
-then requires the user to import the original, fork an independent continuation, or skip it.
-The selected import or fork crosses the Chat boundary explicitly; while it runs, the choice
-page disables its actions and marks the selected action. A failure remains on that page so the
-user can explicitly retry or choose the other action; import never falls back to a fork. Native
-session IDs are not returned by ordinary directory listings. A transfer and its redeemed browser
-credentials remain active until a user chooses **End remote access** from any browser Session.
-For a shared-link credential this revokes the transfer and every browser credential redeemed from
-it; otherwise it revokes that browser credential. Neither path stops the
-local Runtime or task. Before revocation, Chat can issue a separate
-project-routed recovery token on the user's explicit request. Recovery tokens are not bound to
-the remote transfer, remain valid after it ends, and must be stored as securely as a password.
-Both instruction documents are Markdown templates in `templates/`, outside the
-static public assets. The Worker renders them at `/setup.md` and `/pair.md` at
-request time. `{{BASE_URL}}` uses `APP_ORIGIN` when set, otherwise the
-request URL's origin (including the port for local development). Set `APP_ORIGIN`
-to a canonical HTTP(S) origin without a trailing slash, path, credentials, query,
-or fragment. Invalid configuration returns `INVALID_INSTRUCTION_ORIGIN` rather
-than instructions. The Worker stores rendered documents in Cloudflare's edge cache
-for five minutes (`Cache-Control: public, max-age=0, s-maxage=300`). Cache keys include
-the request origin, document path, and resolved Chat origin, but exclude ticket tokens
-and other request query parameters. `X-Instruction-Cache` reports `HIT` or `MISS`.
-The active web flow has no Project setup navigation. The web application
-sends its anonymous credential or Clerk bearer token to Chat for ownership checks
-and conversation access. Platform independently authorizes SDK operations.
+| Concern | Implementation | Executable scenarios |
+| --- | --- | --- |
+| Worker entry and routing | [Worker](packages/worker/src/index.ts), [composition](packages/worker/src/composition/) | [Worker tests](packages/worker/tests/) |
+| Identity, Bot ownership and pairing | [management](packages/worker/src/components/management/) | [identity](packages/worker/tests/identity.integration.test.ts), [chat creation](packages/worker/tests/chat-creation.integration.test.ts) |
+| Project persistence | [Project DO](packages/worker/src/components/project/project-durable-object.ts), [schema](packages/worker/src/schema/project-do/), [migrations](packages/worker/migrations/project-do/) | [Worker tests](packages/worker/tests/) |
+| Browser persistence | [registered storage](packages/web/src/services/local-storage/central-local-storage.ts) | [Web tests](packages/web/tests/) |
+| Live messages, history and delivery | [session pane](packages/web/src/view-models/chat/session-pane-store.ts), [presentation](packages/web/src/view-models/chat/session-presentation.ts), [delivery](packages/web/src/view-models/chat/session-delivery-store.ts) | [active conversation](packages/web/tests/conversation-active.integration.test.tsx), [queue](packages/web/tests/conversation-queue.integration.test.tsx), [browser journey](packages/e2e/conversation.e2e.test.ts) |
+| Setup instructions and executable | [templates](templates/), [setup](packages/setup/src/setup.ts) | [instruction documents](packages/worker/tests/instruction-documents.integration.test.ts), [setup journey](packages/e2e/setup.e2e.test.ts) |
+| Layer dependencies | [architecture rules](dependency-cruiser.config.cjs) | `pnpm check:architecture` |
 
-## Worker structure
+## Local development
+
+Use [the local-stack skill](.agents/skills/chat-local-full-dev/SKILL.md) for isolated
+Chat and Platform startup and cleanup. Protocol and SDK workspace dependencies come
+from the Mobius submodule; sync it before repository work.
+
+## Build and artifact operations
 
 ### Web asset CDN
 
@@ -110,168 +74,3 @@ development R2:
 pnpm build:setup
 pnpm exec wrangler r2 object put morty-local-apac-attachments/artifacts/setup.mjs --file packages/setup/dist/setup.mjs --local
 ```
-
-### Project Durable Objects
-
-After this, a user can reload a Project workspace through the same Chat origin
-and have its request authenticated inside that Project's Durable Object. The
-public Worker validates the Project ID and resolves one SQLite-backed object by
-name. Pairing and transfer redemption use the Project encoded in their tickets.
-
-Anonymous creation first creates the Platform Project using Cloudflare request
-metadata as the location hint, then initializes the corresponding Chat object.
-The Project ID supplies the Durable Object placement hint and selects the APAC or
-WNAM attachment bucket. Client-provided region headers have no authority.
-
-Each object owns all relational Chat and identity state for one Project.
-Schema migrations run transactionally when the object starts. Chat has no D1
-binding and no regional backend Workers. The public Worker and object class deploy
-together. Runtime variables and secrets come from the corresponding GitHub
-Environment and are validated before deployment.
-
-CI validates staging configuration for pull requests, merge groups, and ordinary
-main pushes. A manual deployment validates its selected environment. Production
-configuration is also validated inside the production deployment job after its
-environment approval; it must not gate a staging deployment.
-
-To inspect the deployment after `pnpm build:staging`:
-
-```bash
-pnpm exec wrangler deploy --env staging --dry-run
-```
-
-Feature logic stays below `packages/worker/src/components`:
-
-- `chat`: safe forwarding for `/mobius/api/*`.
-- `instruction-documents`: `/setup.md` and `/pair.md` routes and rendering service.
-- `management`: identity, Bot, Project, and Runtime management.
-
-Each component exports its Hono subtree from `http/index.ts`; the Worker application only mounts those subtrees.
-Cross-component HTTP assembly stays under `packages/worker/src/composition`.
-External system adapters stay directly under `packages/worker/src/gateway`; components do not contain gateway directories.
-Database table definitions stay under `packages/worker/src/schema`, with one table per file.
-
-Shared runtime helpers remain directly under `packages/worker/src/infra`.
-
-## Storage
-
-Every Project has a SQLite-backed `ProjectDurableObject`. The validated Project ID
-selects the object, which verifies user ownership independently.
-The browser persists `{ userId, projectId }`. Chat requests use
-`/morty/api/chat/projects/:projectId/...`; project-scoped identity and
-management requests use `/morty/api/projects/:projectId/...`.
-The path selects the Project object before authentication; ownership is checked
-inside the selected Project. Project headers are not used.
-Only one-time pairing and transfer tickets embed Project context; anonymous
-credentials are opaque. The object applies the SQL files in
-`packages/worker/migrations` automatically and records their versions locally.
-Staging and production R2 resources are named in `wrangler.jsonc`.
-
-Clerk binding returns only the Chat user ID. Discarding a conflicting local
-workspace opens transfer-link recovery; it cannot discover the other Project.
-
-## External Mobius
-
-`MOBIUS_BASE_URL` must be an HTTP loopback origin for local development or an HTTPS
-origin elsewhere. It cannot contain credentials, a path, query, fragment, or Cloud's
-own origin. `MOBIUS_APP_ID` and `MOBIUS_APP_SECRET` authenticate Worker operations.
-The active Chat API issues short-lived conversation credentials after checking Bot
-ownership. The browser uses `createMobiusConversationSession` to communicate directly
-with Mobius, including history, messages, events, and credential refresh.
-Project-scoped Mobius APIs share `/mobius/api/v1/projects/:projectId/...`, including
-Conversation credential operations and `client/session` browser requests. The SDK
-places the Project ID in the path for Durable Object routing. Deploy Chat's updated SDK
-together with the corresponding Platform endpoint cutover.
-New Conversation opens a browser-local draft. Its Harness selector chooses a paired
-agent. For a bound Bot, Chat reads that Bot's Runtime-scoped Agent catalog instead of
-filtering the Project-wide Runtime directory. Chat discovers the selected Agent's
-settings directly without creating a temporary Session.
-Bot setup and active Chat use separate resource shapes: `setup/runtimes` lists the
-Runtime options for an unconfigured Bot, while `workspace` requires a configured Bot
-and returns exactly its one Runtime.
-The cwd selector beside the model controls browses the selected Runtime and accepts an
-absolute path. The Runtime resolves and authorizes that path, and Chat applies the selected
-canonical directory only to the new conversation.
-First Send materializes the draft as a Mobius Session with the selected
-model and approved Bot binding. The Conversation API is the creation and access path for
-these Sessions; it is not a separate user-facing chat type. Existing Sessions created by
-that path reopen by Conversation ID, including credential refresh, and keep their harness fixed.
-First Send keeps the created connection and transitions the draft in place; it
-updates the saved URL without removing the sidebar or composer to reconnect.
-Chat records materialized Sessions in `chat_managed_session`, keyed and indexed by Project ID,
-user ID, Bot ID, access-path provenance and resource ID. The sidebar lists all of them as
-Sessions. New Conversation records the first prompt as its title. Native Sessions opens a
-two-column discovery and preview dialog;
-the directory returns metadata only, selecting an entry fetches its history from
-`native-session/:id`; Import resumes it in Chat, while Fork creates a separate native
-Session. Cancelling the dialog creates no Chat-managed record. After import or fork, the
-result uses the normal Session message surface and can be stopped from the composer.
-Imported and forked Sessions reopen by `sessionId` in the saved page URL.
-The Worker discovers, imports, and forks native sessions through the Project SDK. Its
-`session-access` endpoint issues credentials scoped to the selected Session inside
-the user's Project. The browser uses those credentials with the Session SDK to
-communicate directly with Mobius; it receives no Runtime-wide host credential.
-That Session credential also permits reading and answering interactions for only
-the selected Session. Continued Sessions show pending permission and elicitation
-requests, restore them after a reload, and reconcile a decision with Mobius before
-offering it again. Closing or reloading the pane does not implicitly cancel the
-active Turn. Continued Sessions persist the command ID before submission. If a transport
-failure leaves acceptance uncertain, Chat displays **Delivery unknown**, never resubmits
-automatically, and offers an explicit retry that reuses the original idempotency key. Reload
-reconciliation clears that warning when the command is already present in saved messages.
-## Verification
-
-Run `pnpm lint` and `pnpm typecheck` locally, plus only the tests related to the
-change when needed. Product behavior is covered at HTTP and browser boundaries;
-Web / Chat tests keep the application, SDK, Chat, Platform, Runtime relay, and
-transports and production daemon real, with a stateful controlled Agent harness behind the production adapter.
-Separate Mobius agent-daemon tests exercise the real daemon with each real Agent
-and its production adapter. Use deterministic time, not request mocks.
-`TESTING.md` defines the shared boundary and the narrow external-provider exceptions.
-`pnpm ci:check` serially reproduces the combined CI validation when diagnosis
-requires it.
-
-That command includes combined production TS/TSX coverage and executable dependency
-boundaries. `pnpm check:architecture` follows type imports and re-exports. Biome's
-`useLiteralKeys` rule is disabled because TypeScript's index-signature access rules
-require bracket notation for untrusted records. See `TESTING.md` for report scope.
-
-### Pending prompt ownership
-
-Accepted queued prompts belong to the daemon's in-memory execution registry. The
-Web queue store is a projection of `sessions.readSessionExecution`, refreshed after
-subscription/reconnection and `session.queue.changed`. It owns only presentation
-and in-flight UI operations; it does not journal accepted work across page lifetimes.
-Started events consume queue entries, and steering adds the user's prompt without
-replacing the task already running. Drafts and uncertain delivery attempts have
-separate lifetimes and must not be interpreted as authoritative execution state.
-
-During a live conversation, completion ends the streamed turn without fetching a
-new native-history snapshot. The daemon may already be executing the next queued
-prompt, so such a snapshot can overlap events still waiting in the browser.
-Opening, reconnecting, and manual history loading remain the native-history read
-boundaries. Keep the live prompt and reply when handling completion.
-
-### Current turn presentation
-
-The daemon publishes bounded text, activity, narration, and content increments for
-the running Turn. The browser folds those events into one live presentation and
-keeps that presentation through the terminal notification. It does not fetch native
-history on completion because the daemon may already be starting the next queued
-prompt.
-
-Opening and reconnecting use a consistent recovery sandwich: read Session execution,
-follow every opaque native-message cursor, then read execution again. If the active
-command and epoch changed during that window, retry the whole read a bounded number
-of times. Native-message pages own recovered content and `coveredMessageIds` owns
-live/history overlap; `readSessionExecution` owns running state, queue state, and the
-pending interaction. Its active snapshot is a bounded fallback only when native
-history is unavailable, not a live streaming format.
-
-The presentation keeps steering prompts as layout boundaries. They do not own
-execution state or incremental text recovery. Terminal notifications finish the
-last displayed live projection; completed history remains owned by the native Agent.
-
-Chat's Protocol and SDK workspace dependencies come from its Mobius submodule.
-This keeps the browser, Worker, test Platform, and daemon on the same checked-out
-protocol while developing or deploying changes across those boundaries.

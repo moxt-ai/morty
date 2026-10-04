@@ -1,54 +1,21 @@
 # Morty
 
-[![CI](https://github.com/moxt-ai/morty/actions/workflows/ci.yml/badge.svg)](https://github.com/moxt-ai/morty/actions/workflows/ci.yml)
-[![Coverage](https://codecov.io/gh/moxt-ai/morty/branch/main/graph/badge.svg)](https://codecov.io/gh/moxt-ai/morty)
+Morty connects a browser chat workspace to local Agents through Mobius.
 
-CI runs static verification and test coverage as parallel jobs. `pnpm ci:check`
-reproduces them serially; routine local work should use `pnpm lint`, `pnpm
-typecheck`, and related test cases instead. Coverage reports a 95% advisory target
-across lines, statements, functions, and branches; falling short of the target is
-visible but does not fail the build. See
-[Testing](TESTING.md) for scope and commands.
-
-Morty is one web application and one Cloudflare Worker. Clerk authenticates
-individual users; Clerk Organizations and Cloud workspaces are not used. A signed-in
-user can create or select a Mobius bot and chat with it.
-
-Mobius runs as a separate HTTP service. Management records Clerk user-to-bot ownership
-in D1. Chat issues revocable, bot-scoped access tokens so the browser can communicate
-directly with Mobius, while Cloud records each user's chat-session index.
-
-## Repository layout
-
-```text
-packages/
-  web/                         # React application and package-owned tests
-  worker/
-    migrations/0001_initial.sql # Single Cloud D1 schema
-    src/components/chat/       # Access-token and chat-session APIs
-    src/components/management/ # Clerk authentication and owned-bot management
-    src/gateway/               # Request dispatch and all external gateways
-```
-
-Published Mobius protocol and SDK packages supply the application dependencies. The
-pinned source under `third-party/mobius` supplies unpublished test infrastructure for
-the local end-to-end stack. Each deployment environment uses an artifact bucket and
-Project Durable Objects.
-
-## Development
-
-Requires Node.js 24.20.0 and pnpm 11.25.0.
+## Start here
 
 ```sh
 pnpm install
-pnpm exec wrangler d1 migrations apply DATABASE --local
-pnpm dev
-pnpm lint
-pnpm typecheck
+pnpm sync:submodules
+pnpm local-dev --help
 ```
 
-Copy `.dev.vars.example` to `.dev.vars` and configure Clerk. Configure
-`MOBIUS_BASE_URL`, `MOBIUS_APP_ID`, and `MOBIUS_APP_SECRET` for the external Mobius
-service. HTTPS is required except for loopback development. Mobius must allow the web
-origin because browser chat traffic goes directly to it. Configure the same public
-values as `VITE_MOBIUS_APP_ID` and `VITE_MOBIUS_BASE_URL` in the web build.
+Use the isolated local-stack instructions in
+[chat-local-full-dev](.agents/skills/chat-local-full-dev/SKILL.md).
+Runtime configuration is described in [deployment](docs/deployment.md).
+Node and pnpm versions are pinned in [package.json](package.json).
+
+- [Development](DEVELOPMENT.md): implementation entrypoints and build operations.
+- [Testing](TESTING.md): test commands and composition entrypoints.
+- [Engineering rules](AGENTS.md): contribution requirements.
+- [Mobius](third-party/mobius/README.md): CLI, SDK and hosting usage.
