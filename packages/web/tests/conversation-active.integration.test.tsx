@@ -24,7 +24,9 @@ test("Given an active turn exceeds one recovery page, When the user leaves and r
     }
     await sendPrompt(app, composer, prompt);
     await app.queryElementByTestId(dataTestId.sessionStatus);
-    await app.waitForView(() => expect(responseCharacters()).toBe(expectedCharacters));
+    await app.waitForView(() =>
+        expect(responseCharacters(), document.body.textContent?.slice(0, 2000)).toBe(expectedCharacters),
+    );
     await app.waitForView(() => expect(document.body.textContent).toContain("long-output.bin"));
     await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
     const activeConversation = await app.waitForView(() => {
@@ -38,7 +40,9 @@ test("Given an active turn exceeds one recovery page, When the user leaves and r
     });
     await app.user.click(activeConversation);
     await app.queryElementByTestId(dataTestId.sessionStatus);
-    await app.waitForView(() => expect(responseCharacters()).toBe(expectedCharacters));
+    await app.waitForView(() =>
+        expect(responseCharacters(), document.body.textContent?.slice(0, 2000)).toBe(expectedCharacters),
+    );
     await app.waitForView(() => expect(document.body.textContent).toContain("long-output.bin"));
     const stop = await app.queryElementByTestId(
         dataTestId.sendMessage,
