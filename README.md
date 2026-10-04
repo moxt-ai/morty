@@ -1,4 +1,4 @@
-# Morty (Mobius Chat)
+# Morty
 
 ## Why Morty exists
 
@@ -6,45 +6,29 @@ An Agent may be working on your computer while you are somewhere else. You need 
 convenient place to check its progress, answer a question, give the next instruction
 and see the result without returning to the terminal where the work started.
 
-Morty makes that a browser chat experience. Bots give users a recognizable way to
-return to their work, and conversations keep instructions, progress and results
-together. Users should be able to focus on the task rather than arrange their own
-remote Agent client.
+Morty makes that a browser chat experience. A Bot connects you to the machine and
+Agent intended for the task. In its conversations, you can send instructions, queue
+follow-ups, stop work, respond to permission requests and view available history,
+files and generated images. Access to Bots and conversations belongs to the users
+authorized to use them.
 
-## Functional value
+You should be able to open the same conversation in another browser, catch up on
+instructions sent elsewhere and continue participating. New output should appear
+promptly even during a long answer. Displaying each update should process the new or
+changed content without repeatedly rebuilding the entire turn; opening or reconnecting
+may require a separate catch-up step.
 
-| User need | What Morty should make possible |
-| --- | --- |
-| Know where to send work | Set up and select a Bot connected to the machine and Agent intended for the task. |
-| Direct the work through chat | Send instructions, queue follow-ups, stop work and respond when the Agent needs input. |
-| Understand what happened | See progress, replies, available history and generated images or files in the conversation. |
-| Continue from another browser | Return to the same conversation, see instructions sent elsewhere and continue participating. |
-| Keep conversations accessible to the right users | Access Bots and conversations only with the appropriate permission. |
+[Mobius](third-party/mobius/README.md#why-mobius-exists) provides remote access to local
+Agents. Morty supplies Bots, conversation access and the browser experience, so users
+can focus on their work without building a client themselves. Available operations
+depend on the Agent and configuration, and unavailable capabilities or history must
+be clear to the user.
 
-These goals guide the product; the selected Agent and configuration determine which
-operations are available. Missing capabilities and unavailable history must be clear
-rather than appearing to succeed or silently disappearing.
-
-## Non-functional requirement: responsive streaming
-
-As an Agent's answer grows, new output should remain quick to display and the chat
-should remain responsive. Receiving each update must not require copying or rebuilding
-the entire current turn. Normal updates should apply new or changed content; restoring
-a full view when opening or reconnecting is a separate operation.
-
-See Mobius's [streaming performance requirement](third-party/mobius/README.md#non-functional-requirement-efficient-current-turn-streaming)
-for the end-to-end constraint. Model generation time is separate from the overhead
-introduced by delivering and displaying its output.
-
-## Relationship to Mobius
-
-Morty is the chat product people use. [Mobius](third-party/mobius/README.md) makes
-their local Agents accessible remotely and provides the operations Morty presents.
-Morty supplies Bots, conversation access and the browser experience, so users do not
-have to build an application on the Mobius SDK themselves.
-
-History availability and restart limitations follow the selected Mobius setup; see
-[data ownership and recovery](third-party/mobius/README.md#data-ownership-and-recovery).
+Live output favors responsiveness over guaranteed delivery. Disconnects and restarts
+can leave gaps; catch-up depends on the current turn, native Agent history or available
+cloud recordings. Optional Recording must not slow the conversation and is not a
+lossless archive. See Mobius's [data ownership and recovery](third-party/mobius/README.md#data-ownership-and-recovery)
+for where retained data lives.
 
 ## Start here
 
