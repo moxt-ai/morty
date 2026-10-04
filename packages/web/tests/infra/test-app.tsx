@@ -21,12 +21,13 @@ const environment = createChatWorkerEnvironment();
 const activeApps = new Set<TestApp>();
 
 export interface TestApp extends Application {
+    readonly daemon: Awaited<ReturnType<Application["connectAgent"]>> | null;
     readonly agentFailure: Promise<never> | null;
     readonly close: () => Promise<void>;
     readonly elementByTestId: (testId: string | RegExp, container?: HTMLElement) => HTMLElement;
     readonly elementsByTestId: (testId: string | RegExp) => HTMLElement[];
     readonly optionalElementByTestId: (testId: string | RegExp) => HTMLElement | null;
-    readonly reload: () => void;
+    readonly remount: () => void;
     readonly openViewer: () => Promise<TestApp>;
     readonly queryElementByTestId: (
         testId: string | RegExp,
@@ -48,7 +49,8 @@ export async function createTestApp(
 ): Promise<TestApp> {
     const current = options.application ?? (await (await environment).createApplication());
     await options.prepare?.(current);
-    const agentFailure = options.connectAgent === true ? (await current.connectAgent()).failure : null;
+    const daemon = options.connectAgent === true ? await current.connectAgent() : null;
+    const agentFailure = daemon?.failure ?? null;
     const page = options.page ?? { kind: "workspace" };
     if (page.kind === "continue") {
         const transfer = new URL(await current.createTransferUrl());
@@ -144,6 +146,7 @@ export async function createTestApp(
     const app: TestApp = {
         ...current,
         agentFailure,
+        daemon,
         openViewer: async () => {
             const transport = new WebSocketApiTransport(current.origin);
             transport.open();
@@ -164,7 +167,7 @@ export async function createTestApp(
             scope === undefined ? requiredElement(testId) : getByTestId(scope, testId),
         elementsByTestId: matchingElements,
         optionalElementByTestId: optionalElement,
-        reload: () => {
+        remount: () => {
             rendered.unmount();
             container.remove();
             container = document.createElement("div");

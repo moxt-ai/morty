@@ -1,5 +1,5 @@
 import { getByLabelText } from "@testing-library/dom";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
@@ -32,14 +32,21 @@ test("Given the daemon has queued work, When the user steers it into the active 
     );
     await viewer.user.click(getByLabelText(queued, `Steer queued message: ${instruction}`));
     for (const current of [app, viewer]) {
-        await vi.waitFor(() =>
+        await current.waitForView(() =>
+            expect(
+                current
+                    .elementsByTestId(dataTestId.agentResponse)
+                    .some((element) => element.textContent?.includes("Waiting for steering") === true),
+            ).toBe(true),
+        );
+        await current.waitForView(() =>
             expect(
                 current
                     .elementsByTestId(dataTestId.agentResponse)
                     .some((element) => element.textContent?.includes(`Steered: ${instruction}`) === true),
             ).toBe(true),
         );
-        await vi.waitFor(() => expect(current.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull());
+        await current.waitForView(() => expect(current.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull());
     }
     await viewer.close();
 });

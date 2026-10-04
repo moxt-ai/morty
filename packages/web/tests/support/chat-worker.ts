@@ -67,7 +67,11 @@ export async function createChatWorkerEnvironment() {
                 if (setup.status !== 202) {
                     throw new Error(`Could not prepare the test Bot: ${setup.status} ${await setup.text()}`);
                 }
-                return { failure: runtime.failure };
+                return {
+                    failure: runtime.failure,
+                    continueReply: runtime.continueReply,
+                    replayLastText: runtime.replayLastText,
+                };
             },
             connectRuntime: async () => {
                 const runtime = await cloud.connectAgent(identity.projectId);

@@ -47,7 +47,6 @@ import type {
     PermissionInteractionResponse,
 } from "./session-pane-types.ts";
 import {
-    activeTurnSessionPresentation,
     appendLiveTurnNarration,
     appendLiveTurnText,
     appendSessionTimelineSegment,
@@ -55,6 +54,7 @@ import {
     historySessionPresentation,
     recordLiveTurnActivity,
     recordLiveTurnContent,
+    recoverLiveTurnSessionPresentation,
     type SessionMessage,
     type SessionTimelineSegment,
     startLiveTurnSessionPresentation,
@@ -315,6 +315,7 @@ async function readCompleteNativeHistory(
     const visitedCursors = new Set<string>();
     let cursor = "";
     let truncated = false;
+    let streamPosition: Extract<NativeSessionHistory, { readonly status: "available" }>["streamPosition"];
     for (;;) {
         const page = await client.sessions.querySessionNativeMessages(
             sessionId,
@@ -326,12 +327,16 @@ async function readCompleteNativeHistory(
         if (page.status === "unavailable") {
             return { cause: page.cause, status: "unavailable" };
         }
+        if (cursor === "") {
+            streamPosition = page.streamPosition;
+        }
         messages.unshift(...page.messages);
         coveredCommandIds.push(...page.coveredCommandIds);
         coveredMessageIds.push(...page.coveredMessageIds);
         truncated ||= page.truncated;
         if (page.nextCursor === null) {
             return {
+                ...(streamPosition === undefined ? {} : { streamPosition }),
                 coveredCommandIds: coveredCommandIds.filter((id, index, ids) => ids.indexOf(id) === index),
                 coveredMessageIds: coveredMessageIds.filter((id, index, ids) => ids.indexOf(id) === index),
                 messages,
@@ -434,6 +439,7 @@ export function createSessionPaneModel(options: {
     const initialActivity: SessionActivityState =
         command === "" ? { kind: "idle" } : startSessionWork({ commandId: command, attempt: null });
     let liveTurn: SessionTimelineSegment | null = null;
+    let streamPosition: Extract<NativeSessionHistory, { readonly status: "available" }>["streamPosition"];
     const deriveTimeline = (activity: SessionActivityState) => {
         const history = historySessionPresentation(nativeHistory ?? session.result.history, sessionId);
         return deriveSessionTimeline(
@@ -619,13 +625,17 @@ export function createSessionPaneModel(options: {
                                 signal,
                             );
                             const running = execution.turn;
+                            streamPosition =
+                                loadedHistory.status === "available"
+                                    ? loadedHistory.streamPosition
+                                    : (running ?? undefined);
                             messageQueue.getState().replace(execution.queued);
                             nativeHistory = loadedHistory.status === "available" ? loadedHistory : null;
                             historyCursor = null;
                             liveTurn =
-                                loadedHistory.status === "unavailable" && running !== null
-                                    ? activeTurnSessionPresentation(running, sessionId)
-                                    : null;
+                                running === null
+                                    ? null
+                                    : recoverLiveTurnSessionPresentation(loadedHistory, running, sessionId);
                             if (running !== null) {
                                 command = running.commandId;
                                 const turnId =
@@ -741,12 +751,17 @@ export function createSessionPaneModel(options: {
                                         : recoveredRunning.commandId;
                                 tasks.getState().start(recoveredRunning.commandId, turnId);
                                 activeTurn.submissionAccepted(recoveredRunning.commandId, turnId);
+                                streamPosition =
+                                    recovery.history.status === "available"
+                                        ? recovery.history.streamPosition
+                                        : recoveredRunning;
                                 nativeHistory = recovery.history.status === "available" ? recovery.history : null;
                                 historyCursor = null;
-                                liveTurn =
-                                    recovery.history.status === "unavailable"
-                                        ? activeTurnSessionPresentation(recoveredRunning, sessionId)
-                                        : null;
+                                liveTurn = recoverLiveTurnSessionPresentation(
+                                    recovery.history,
+                                    recoveredRunning,
+                                    sessionId,
+                                );
                                 delivery.getState().reconcile(historyCommandIds(recovery.history));
                                 const activity = startSessionWork({
                                     commandId: recoveredRunning.commandId,
@@ -883,6 +898,18 @@ export function createSessionPaneModel(options: {
                                 return true;
                             }
                             if (payload instanceof MobiusAgentMessageEvent) {
+                                if (
+                                    streamPosition?.commandId === payload.commandId &&
+                                    streamPosition.epoch === payload.epoch &&
+                                    payload.sequence <= streamPosition.sequence
+                                ) {
+                                    return true;
+                                }
+                                streamPosition = {
+                                    commandId: payload.commandId,
+                                    epoch: payload.epoch,
+                                    sequence: payload.sequence,
+                                };
                                 liveTurn = appendLiveTurnText(liveTurn, payload.commandId, payload.text);
                                 const timeline = deriveTimeline(get().activity);
                                 set({ activities: timeline.activities, messages: timeline.messages });
@@ -895,8 +922,11 @@ export function createSessionPaneModel(options: {
                                 const timeline = deriveTimeline(get().activity);
                                 set({ activities: timeline.activities, messages: timeline.messages });
                             } else if (payload instanceof MobiusTurnStartedEvent) {
-                                if (liveTurn === null) {
-                                    liveTurn = startLiveTurnSessionPresentation(payload.commandId, payload.prompt);
+                                if (!liveTurn?.messages.some((message) => message.id === `${payload.commandId}:user`)) {
+                                    liveTurn = appendSessionTimelineSegment(
+                                        liveTurn,
+                                        startLiveTurnSessionPresentation(payload.commandId, payload.prompt),
+                                    );
                                 }
                                 const activity = startSessionWork({
                                     commandId: command,
