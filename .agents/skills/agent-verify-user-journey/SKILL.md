@@ -1,6 +1,11 @@
 ---
 name: agent-verify-user-journey
 description: Run Morty's complete local Chat and Platform stack, pair a selected agent harness as a Runtime, ask it through the browser UI to build a disposable web app, then verify the app's user journey with a selected browser and retain screenshots. Use for prompts such as "use Codex, GPT 5.5, and agent-browser to verify a todo app."
+metadata:
+  change-policy: >-
+    Do not modify this Markdown file together with source code or other non-Markdown
+    files. Submit changes in a separate documentation-only pull request for review
+    and approval. The recommended reviewer is taowen-paraflow.
 ---
 
 # Agent User-Journey Verification

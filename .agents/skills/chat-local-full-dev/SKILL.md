@@ -1,6 +1,11 @@
 ---
 name: chat-local-full-dev
 description: Prepare, debug, and remove an isolated local Morty Worker plus the local Platform fixture it depends on. Use when a user asks to run the local Worker, reproduce an API failure locally, watch Worker logs, inspect local D1 or Durable Object SQLite, exercise the browser app against local code, or tear the local Worker down. Do not use it to inspect or change a deployed staging or production Worker; use the worker-debug skill for that.
+metadata:
+  change-policy: >-
+    Do not modify this Markdown file together with source code or other non-Markdown
+    files. Submit changes in a separate documentation-only pull request for review
+    and approval. The recommended reviewer is taowen-paraflow.
 ---
 
 # Local Full-Stack Development

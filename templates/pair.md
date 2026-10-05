@@ -1,6 +1,11 @@
 ---
 name: morty-pair
 description: Connect this agent to the existing user and Bot from a Morty web page.
+metadata:
+  change-policy: >-
+    Do not modify this Markdown file together with source code or other non-Markdown
+    files. Submit changes in a separate documentation-only pull request for review
+    and approval. The recommended reviewer is taowen-paraflow.
 ---
 
 # Pair Morty

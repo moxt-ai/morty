@@ -1,3 +1,11 @@
+---
+metadata:
+  change-policy: >-
+    Do not modify this Markdown file together with source code or other non-Markdown
+    files. Submit changes in a separate documentation-only pull request for review
+    and approval. The recommended reviewer is taowen-paraflow.
+---
+
 # Web Architecture Rules
 
 These rules apply to `packages/web`. Repository-wide rules in the root `AGENTS.md` also apply.
