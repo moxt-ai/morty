@@ -32,7 +32,7 @@ export async function createIdentityFixture(
         bundle: true,
         external: ["cloudflare:*", "node:*"],
         format: "esm",
-        loader: { ".md": "text", ".sql": "text" },
+        loader: { ".txt": "text", ".sql": "text" },
         platform: "browser",
         target: "es2022",
         write: false,

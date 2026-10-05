@@ -12,7 +12,7 @@ const bundle = await build({
     platform: "browser",
     target: "es2022",
     external: ["node:*", "cloudflare:*"],
-    loader: { ".md": "text", ".sql": "text" },
+    loader: { ".txt": "text", ".sql": "text" },
 });
 const output = bundle.outputFiles[0];
 if (output === undefined) {
@@ -63,6 +63,8 @@ test("Given setup and pairing documents, When users fetch them from configured a
         expect(response.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
         const document = await response.text();
         documents.set(name, document);
+        expect(document).toMatch(/^# (?:Set up|Pair) Morty\n/);
+        expect(document).not.toContain("change-policy");
         expect(document).toContain('BASE_URL="https://chat.example"');
         expect(document).toContain('BASE_URL="https://chat.example"\n');
         expect(document).not.toMatch(/^BASE_URL=.*\bnode\b/mu);

@@ -27,7 +27,11 @@ module.exports = {
             name: "worker-does-not-import-browser-implementation",
             severity: "error",
             from: { path: "^packages/worker/src/" },
-            to: { path: "^packages/web/" },
+            to: {
+                path: "^packages/web/",
+                // Public instruction text is served by the Worker, without browser code.
+                pathNot: "^packages/web/content/instructions/[^/]+\\.txt$",
+            },
         },
     ],
     options: {

@@ -1,6 +1,6 @@
 import * as v from "valibot";
-import pairTemplate from "../../../../../../templates/pair.md?raw";
-import setupTemplate from "../../../../../../templates/setup.md?raw";
+import pairTemplate from "../../../../../web/content/instructions/pair.txt?raw";
+import setupTemplate from "../../../../../web/content/instructions/setup.txt?raw";
 
 const instructionOriginSchema = v.pipe(
     v.string(),
