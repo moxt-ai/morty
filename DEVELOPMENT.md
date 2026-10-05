@@ -1,20 +1,7 @@
 # Development
 
-Behavior is defined by production code and executable scenarios. This guide links
-those owners instead of maintaining a second description of their state machines.
-See [AGENTS.md](AGENTS.md) for engineering rules and [TESTING.md](TESTING.md) for verification.
-
-## Implementation map
-
-| Concern | Implementation | Executable scenarios |
-| --- | --- | --- |
-| Worker entry and routing | [Worker](packages/worker/src/index.ts), [composition](packages/worker/src/composition/) | [Worker tests](packages/worker/tests/) |
-| Identity, Bot ownership and pairing | [management](packages/worker/src/components/management/) | [identity](packages/worker/tests/identity.integration.test.ts), [chat creation](packages/worker/tests/chat-creation.integration.test.ts) |
-| Project persistence | [Project DO](packages/worker/src/components/project/project-durable-object.ts), [schema](packages/worker/src/schema/project-do/), [migrations](packages/worker/migrations/project-do/) | [Worker tests](packages/worker/tests/) |
-| Browser persistence | [registered storage](packages/web/src/services/local-storage/central-local-storage.ts) | [Web tests](packages/web/tests/) |
-| Live messages, history and delivery | [session pane](packages/web/src/view-models/chat/session-pane-store.ts), [presentation](packages/web/src/view-models/chat/session-presentation.ts), [delivery](packages/web/src/view-models/chat/session-delivery-store.ts) | [active conversation](packages/web/tests/conversation-active.integration.test.tsx), [queue](packages/web/tests/conversation-queue.integration.test.tsx), [browser journey](packages/e2e/conversation.e2e.test.ts) |
-| Setup instructions and executable | [templates](templates/), [setup](packages/setup/src/setup.ts) | [instruction documents](packages/worker/tests/instruction-documents.integration.test.ts), [setup journey](packages/e2e/setup.e2e.test.ts) |
-| Layer dependencies | [architecture rules](dependency-cruiser.config.cjs) | `pnpm check:architecture` |
+This guide records development and operational constraints. See
+[AGENTS.md](AGENTS.md) for engineering rules and [TESTING.md](TESTING.md) for verification.
 
 ## Local development
 
@@ -56,10 +43,7 @@ request parameters must not select arbitrary storage objects. Missing artifacts 
 produce a clear, retryable failure rather than an incomplete setup script.
 
 Keep setup intent (identity and Bot configuration) separate from daemon-owned pairing
-and connection state. Implementation details belong in the [setup entrypoint](packages/setup/src/cli.ts)
-and [artifact gateway](packages/worker/src/gateway/setup-artifact.ts); executable
-contracts belong in the [setup journey](packages/e2e/setup.e2e.test.ts) and
-[Worker tests](packages/worker/tests/).
+and connection state.
 
 The CD token needs R2 object write permission on the existing attachments bucket. CD
 uploads the generated bundle before deploying Workers. To seed or refresh local

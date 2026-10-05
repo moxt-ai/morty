@@ -11,24 +11,18 @@ pnpm test:e2e
 ```
 
 Run only related suites during development. `pnpm ci:check` reproduces combined
-static and coverage validation when diagnosing CI. Commands and CI membership are
-owned by [package.json](package.json) and [CI](.github/workflows/ci.yml).
-Coverage generation is implemented in [coverage.mjs](scripts/coverage.mjs).
+static and coverage validation when diagnosing CI.
 
-## Composition and scenario owners
+## Test boundaries
 
-| Suite | Assembly | Scenarios |
-| --- | --- | --- |
-| Web / happy-dom | [test app](packages/web/tests/infra/test-app.tsx), [Chat stack](packages/web/tests/support/chat-worker.ts) | [Web workflows](packages/web/tests/) |
-| Worker / local Cloudflare | [identity fixture](packages/worker/tests/support/identity-fixture.ts) | [HTTP and WebSocket boundaries](packages/worker/tests/) |
-| Browser / Playwright | [runtime](packages/e2e/infra/test-runtime.ts), [local stack](packages/e2e/infra/local-stack.ts) | [conversation](packages/e2e/conversation.e2e.test.ts), [setup](packages/e2e/setup.e2e.test.ts) |
-| Real Agent compatibility | [Mobius test guide](third-party/mobius/TESTING.md) | [real Agent scenarios](third-party/mobius/packages/cli/tests/agents/) |
+Web tests exercise visible user workflows in happy-dom. Worker tests enter through
+production HTTP, WebSocket, and storage boundaries. Browser E2E covers happy-path
+conversation and setup journeys.
 
-Morty Web, Worker, and browser suites connect the [stateful fake daemon](third-party/mobius/packages/test-support/src/fake-daemon/peer.ts)
-through the real Platform WebSocket endpoint. Chat, Platform, SDKs, and transports
-remain real. Morty does not start the production daemon or a controlled ACP Agent.
-The [Platform fixture](packages/worker/tests/support/test-platform.ts) owns pairing
-and fake daemon cleanup; browser setup uses the same fake daemon transport.
+Morty Web, Worker, and browser suites connect a stateful fake daemon through the
+real Platform WebSocket endpoint. Chat, Platform, SDKs, and transports remain real.
+Morty does not start the production daemon or a controlled ACP Agent. Each fixture
+owns pairing and cleanup of the resources it creates.
 
 Follow [AGENTS.md](AGENTS.md) for scenario and fake-provider rules. Exercise visible
 controls in Web tests and production HTTP/WebSocket boundaries in Worker tests.
