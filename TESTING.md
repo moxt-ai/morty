@@ -38,5 +38,7 @@ Real Agent compatibility requires the real executable and production adapter;
 a controlled provider can supply deterministic model responses without coding-plan
 credentials. Do not infer compatibility from an Agent label on a controlled peer.
 
-Hosted sign-in and visual layout checks remain manual. Dated reports under
-`artifacts/` are evidence of a particular run, not current design specifications.
+Hosted sign-in and visual layout checks remain manual. Record manual verification
+results in the relevant pull request and attach screenshots there. Do not commit
+one-off reports or screenshots to the repository. Keep durable behavioral
+guarantees in executable tests.
