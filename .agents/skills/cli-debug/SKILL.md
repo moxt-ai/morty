@@ -1,11 +1,6 @@
 ---
 name: cli-debug
 description: Debug Mobius CLI daemon failures on a user's local machine using the bounded local diagnostic log. Use when a user asks why a local Agent operation failed (for example a native session import, fork, or preview returning "The local agent operation could not be completed."), where the daemon writes diagnostics, how to read logs/daemon.log, or how to correlate a Platform relay failure code with the local cause.
-metadata:
-  change-policy: >-
-    Do not modify this Markdown file together with source code or other non-Markdown
-    files. Submit changes in a separate documentation-only pull request for review
-    and approval. The recommended reviewer is taowen-paraflow.
 ---
 
 # CLI Debugging
