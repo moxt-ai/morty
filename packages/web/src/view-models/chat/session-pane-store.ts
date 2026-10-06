@@ -12,6 +12,8 @@ import {
     type MobiusClient,
     MobiusControlEvent,
     MobiusElicitationResponseRequest,
+    MobiusFailedAttemptSummary,
+    MobiusFailedBeforeStartAttemptSummary,
     type MobiusLiveSessionEventObserver,
     MobiusPageRequest,
     MobiusPermissionResponseRequest,
@@ -53,6 +55,7 @@ import {
     deriveSessionTimeline,
     historySessionPresentation,
     recordLiveTurnActivity,
+    recordLiveTurnAttempt,
     recordLiveTurnContent,
     recoverLiveTurnSessionPresentation,
     type SessionMessage,
@@ -942,17 +945,29 @@ export function createSessionPaneModel(options: {
                                 // The native history may already contain the next queued prompt.
                                 // Finish this streamed turn without replacing it with a later snapshot.
                                 delivery.getState().reconcile([completedCommand]);
-                                const activity =
-                                    payload instanceof MobiusTurnFailedEvent
-                                        ? transitionSessionActivity(get().activity, {
-                                              commandId: completedCommand,
-                                              kind: "work-failed",
-                                              message: payload.message,
-                                          })
-                                        : transitionSessionActivity(get().activity, {
-                                              commandId: completedCommand,
-                                              kind: "work-completed",
-                                          });
+                                const currentActivity = get().activity;
+                                if (payload instanceof MobiusTurnFailedEvent) {
+                                    const attempt =
+                                        currentActivity.kind === "working" &&
+                                        currentActivity.attempt instanceof MobiusRunningAttemptSummary
+                                            ? new MobiusFailedAttemptSummary(
+                                                  currentActivity.attempt.attemptId,
+                                                  currentActivity.attempt.startedAt,
+                                                  payload.code,
+                                                  payload.message,
+                                                  event.recordedAt,
+                                              )
+                                            : new MobiusFailedBeforeStartAttemptSummary(
+                                                  payload.code,
+                                                  payload.message,
+                                                  event.recordedAt,
+                                              );
+                                    liveTurn = recordLiveTurnAttempt(liveTurn, completedCommand, attempt);
+                                }
+                                const activity = transitionSessionActivity(currentActivity, {
+                                    commandId: completedCommand,
+                                    kind: "work-completed",
+                                });
                                 const completed = deriveTimeline(activity);
                                 set({
                                     activities: completed.activities,

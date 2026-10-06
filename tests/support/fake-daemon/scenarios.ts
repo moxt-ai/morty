@@ -43,6 +43,20 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     ...Array.from({ length: 3 }, () => ({ kind: "text" as const, text: "x".repeat(100_000) })),
                 ],
             };
+        case "show live output in order":
+            return {
+                outcome: "complete",
+                output: [
+                    { kind: "text", text: "First live message" },
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        title: "Later live tool",
+                        output: "Later live tool output",
+                    },
+                    { kind: "text", text: "Final live message" },
+                ],
+            };
         default:
             return {
                 outcome: "complete",

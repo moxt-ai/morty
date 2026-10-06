@@ -4,6 +4,7 @@ import {
     type AgentDisplayContent,
     MobiusAgentActivityEvent,
     type MobiusAgentActivityNarrationEvent,
+    type MobiusAttemptSummary,
     type MobiusMessagePage,
     type PromptImage,
 } from "@moxt-ai/mobius-sdk";
@@ -212,36 +213,30 @@ export function historySessionPresentation(
     return { activities, messages: presentedMessages };
 }
 
-function emptyAssistantMessage(commandId: string): Extract<SessionMessage, { readonly role: "assistant" }> {
+function emptyAssistantMessage(
+    commandId: string,
+    id = `${commandId}:agent`,
+): Extract<SessionMessage, { readonly role: "assistant" }> {
     return {
         activityIds: [],
         attempt: null,
         commandId,
         contents: [],
-        id: `${commandId}:agent`,
+        id,
         role: "assistant",
         text: "",
     };
 }
 
-function withAssistantMessage(
-    segment: SessionTimelineSegment,
-    commandId: string,
-    update: (
-        message: Extract<SessionMessage, { readonly role: "assistant" }>,
-    ) => Extract<SessionMessage, { readonly role: "assistant" }>,
-): SessionTimelineSegment {
-    const messages = [...segment.messages];
-    const index = messages.findLastIndex((message) => message.role === "assistant" && message.commandId === commandId);
-    if (index < 0) {
-        messages.push(update(emptyAssistantMessage(commandId)));
-    } else {
-        const message = messages[index];
-        if (message?.role === "assistant") {
-            messages[index] = update(message);
-        }
-    }
-    return { activities: segment.activities, messages };
+function nextAssistantMessage(segment: SessionTimelineSegment, commandId: string) {
+    const count = segment.messages.filter(
+        (message) => message.role === "assistant" && message.commandId === commandId,
+    ).length;
+    return emptyAssistantMessage(commandId, `${commandId}:agent-${count.toString()}`);
+}
+
+function latestAssistantMessageIndex(segment: SessionTimelineSegment, commandId: string): number {
+    return segment.messages.findLastIndex((message) => message.role === "assistant" && message.commandId === commandId);
 }
 
 export function startLiveTurnSessionPresentation(commandId: string, prompt: string): SessionTimelineSegment {
@@ -259,10 +254,16 @@ export function appendLiveTurnText(
     commandId: string,
     text: string,
 ): SessionTimelineSegment {
-    return withAssistantMessage(segment ?? { activities: new Map(), messages: [] }, commandId, (message) => ({
-        ...message,
-        text: `${message.text}${text}`,
-    }));
+    const current = segment ?? { activities: new Map(), messages: [] };
+    const messages = [...current.messages];
+    const index = latestAssistantMessageIndex(current, commandId);
+    const latest = messages[index];
+    if (latest?.role !== "assistant" || latest.activityIds.length > 0 || latest.contents.length > 0) {
+        messages.push({ ...nextAssistantMessage(current, commandId), text });
+    } else {
+        messages[index] = { ...latest, text: `${latest.text}${text}` };
+    }
+    return { activities: current.activities, messages };
 }
 
 export function recordLiveTurnActivity(
@@ -273,11 +274,18 @@ export function recordLiveTurnActivity(
     const key = agentActivityKey(activity);
     const activities = new Map(current.activities);
     activities.set(key, { activity });
-    const updated = withAssistantMessage(current, activity.commandId, (message) => ({
-        ...message,
-        activityIds: message.activityIds.includes(key) ? message.activityIds : [...message.activityIds, key],
-    }));
-    return { activities, messages: updated.messages };
+    if (current.messages.some((message) => message.role === "assistant" && message.activityIds.includes(key))) {
+        return { activities, messages: current.messages };
+    }
+    const messages = [...current.messages];
+    const index = latestAssistantMessageIndex(current, activity.commandId);
+    const latest = messages[index];
+    if (latest?.role !== "assistant" || latest.text.length > 0 || latest.contents.length > 0) {
+        messages.push({ ...nextAssistantMessage(current, activity.commandId), activityIds: [key] });
+    } else {
+        messages[index] = { ...latest, activityIds: [...latest.activityIds, key] };
+    }
+    return { activities, messages };
 }
 
 export function appendLiveTurnNarration(
@@ -311,13 +319,49 @@ export function recordLiveTurnContent(
     segment: SessionTimelineSegment | null,
     event: AgentContentEvent,
 ): SessionTimelineSegment {
-    return withAssistantMessage(segment ?? { activities: new Map(), messages: [] }, event.commandId, (message) => ({
-        ...message,
-        contents: [
-            ...message.contents.filter((content) => content.contentId !== event.contentId),
-            { content: event.content, contentId: event.contentId },
-        ],
-    }));
+    const current = segment ?? { activities: new Map(), messages: [] };
+    const messages = [...current.messages];
+    const existingIndex = messages.findIndex(
+        (message) =>
+            message.role === "assistant" && message.contents.some((content) => content.contentId === event.contentId),
+    );
+    const existing = messages[existingIndex];
+    if (existing?.role === "assistant") {
+        messages[existingIndex] = {
+            ...existing,
+            contents: [
+                ...existing.contents.filter((content) => content.contentId !== event.contentId),
+                { content: event.content, contentId: event.contentId },
+            ],
+        };
+        return { activities: current.activities, messages };
+    }
+    const latestIndex = latestAssistantMessageIndex(current, event.commandId);
+    const latest = messages[latestIndex];
+    const content = { content: event.content, contentId: event.contentId };
+    if (latest?.role !== "assistant" || latest.text.length > 0 || latest.activityIds.length > 0) {
+        messages.push({ ...nextAssistantMessage(current, event.commandId), contents: [content] });
+    } else {
+        messages[latestIndex] = { ...latest, contents: [...latest.contents, content] };
+    }
+    return { activities: current.activities, messages };
+}
+
+export function recordLiveTurnAttempt(
+    segment: SessionTimelineSegment | null,
+    commandId: string,
+    attempt: MobiusAttemptSummary,
+): SessionTimelineSegment {
+    const current = segment ?? { activities: new Map(), messages: [] };
+    const messages = [...current.messages];
+    const index = latestAssistantMessageIndex(current, commandId);
+    const latest = messages[index];
+    if (latest?.role === "assistant") {
+        messages[index] = { ...latest, attempt };
+    } else {
+        messages.push({ ...nextAssistantMessage(current, commandId), attempt });
+    }
+    return { activities: current.activities, messages };
 }
 
 export function recoverLiveTurnSessionPresentation(

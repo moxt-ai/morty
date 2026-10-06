@@ -38,9 +38,12 @@ test("Given a completed turn, When the user leaves and reopens it, Then daemon h
         throw new Error("Expected the message composer");
     }
     await sendPrompt(app, composer, prompt);
-    await app.queryElementByTestId(
-        dataTestId.agentResponse,
-        (element) => element.textContent?.includes(`Codex turn 1: ${prompt}`) === true,
+    await app.waitForView(() =>
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes(`Codex turn 1: ${prompt}`) === true),
+        ).toBe(true),
     );
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
     await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
@@ -78,9 +81,12 @@ test("Given a completed turn, When I send another prompt, Then my prompt is visi
         throw new Error("Expected composer");
     }
     await sendPrompt(app, composer, "First completed turn");
-    await app.queryElementByTestId(
-        dataTestId.agentResponse,
-        (element) => element.textContent?.includes("Codex turn 1: First completed turn") === true,
+    await app.waitForView(() =>
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes("Codex turn 1: First completed turn") === true),
+        ).toBe(true),
     );
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
     const continuedComposer = await app.queryElementByTestId(dataTestId.messageComposer);
