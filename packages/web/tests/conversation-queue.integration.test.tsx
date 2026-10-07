@@ -56,6 +56,12 @@ test("Given the daemon has queued work, When the user steers it into the active 
         );
         await current.waitForView(() => expect(current.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull());
         await current.queryElementByTestId(dataTestId.sessionStatus);
+        await current.waitForView(() =>
+            expect(current.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
+                "wait for steering",
+                instruction,
+            ]),
+        );
         expect(
             current
                 .elementsByTestId(dataTestId.agentReplyStatus)

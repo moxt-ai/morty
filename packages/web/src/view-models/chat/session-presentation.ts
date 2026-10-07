@@ -2,6 +2,7 @@ import type { AcpSessionUpdateV2, ContentBlockV2, SessionEventV2 } from "@moxt-a
 import type { AgentDisplayContent } from "@moxt-ai/mobius-sdk";
 
 type ToolCallUpdateV2 = Extract<AcpSessionUpdateV2, { readonly sessionUpdate: "tool_call" | "tool_call_update" }>;
+const BOT_INSTRUCTIONS_URI = "morty://bot/instructions";
 
 type SessionToolCallState =
     | { readonly kind: "running" }
@@ -202,6 +203,9 @@ function mergeToolPresentation(
 function projectAcpUpdate(event: SessionEventV2, update: AcpSessionUpdateV2): readonly SessionMessage[] {
     switch (update.sessionUpdate) {
         case "user_message_chunk":
+            if (update.content.type === "resource" && update.content.resource.uri === BOT_INSTRUCTIONS_URI) {
+                return [];
+            }
             return [
                 {
                     commandId: null,
@@ -251,14 +255,60 @@ function projectEvent(event: SessionEventV2): readonly SessionMessage[] {
     return event.type === "acp" ? projectAcpUpdate(event, event.payload) : [];
 }
 
+function visiblePromptContent(contents: readonly ContentBlockV2[]): readonly ContentBlockV2[] {
+    return contents.filter((content) => content.type !== "resource" || content.resource.uri !== BOT_INSTRUCTIONS_URI);
+}
+
 export function sessionEventLogPresentation(events: readonly SessionEventV2[]): SessionTimeline {
     const messages: SessionMessage[] = [];
     const toolIndexes = new Map<string, number>();
+    const requests = new Map(
+        events.flatMap((event) =>
+            event.type === "lifecycle-metadata" && event.payload.kind === "prompt.requested"
+                ? [[event.payload.commandId, event] as const]
+                : [],
+        ),
+    );
+    const admittedPromptCommands = new Set(
+        events.flatMap((event) =>
+            event.type === "lifecycle-metadata" && event.payload.kind === "prompt.started"
+                ? [event.payload.commandId]
+                : [],
+        ),
+    );
+    const renderedPromptCommands = new Set<string>();
     for (const event of events) {
         if (event.type === "lifecycle-metadata") {
+            const payload = event.payload;
+            if (
+                payload.kind === "prompt.started" &&
+                admittedPromptCommands.has(payload.commandId) &&
+                !renderedPromptCommands.has(payload.commandId)
+            ) {
+                renderedPromptCommands.add(payload.commandId);
+                const request = requests.get(payload.commandId);
+                const contents =
+                    request?.payload.kind === "prompt.requested" ? visiblePromptContent(request.payload.content) : [];
+                if (request !== undefined && contents.length > 0) {
+                    messages.push({
+                        commandId: payload.commandId,
+                        contents,
+                        id: request.eventId,
+                        role: "user",
+                    });
+                }
+            }
             continue;
         }
         const update = event.payload;
+        if (
+            update.sessionUpdate === "user_message_chunk" &&
+            update.messageId !== null &&
+            update.messageId !== undefined &&
+            admittedPromptCommands.has(update.messageId)
+        ) {
+            continue;
+        }
         if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update") {
             messages.push(...projectEvent(event));
             continue;
