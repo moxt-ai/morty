@@ -254,36 +254,11 @@ function projectEvent(event: SessionEventV2): readonly SessionMessage[] {
 export function sessionEventLogPresentation(events: readonly SessionEventV2[]): SessionTimeline {
     const messages: SessionMessage[] = [];
     const toolIndexes = new Map<string, number>();
-    const startedCommands = new Set(
-        events.flatMap((event) =>
-            event.type === "lifecycle-metadata" && event.payload.kind === "prompt.started"
-                ? [event.payload.commandId]
-                : [],
-        ),
-    );
-    const deletedQueuedCommands = new Set(
-        events.flatMap((event) => {
-            return event.type === "lifecycle-metadata" &&
-                event.payload.kind === "prompt.completed" &&
-                event.payload.stopReason === "cancelled" &&
-                !startedCommands.has(event.payload.commandId)
-                ? [event.payload.commandId]
-                : [];
-        }),
-    );
     for (const event of events) {
         if (event.type === "lifecycle-metadata") {
             continue;
         }
         const update = event.payload;
-        if (
-            update.sessionUpdate === "user_message_chunk" &&
-            update.messageId !== null &&
-            update.messageId !== undefined &&
-            deletedQueuedCommands.has(update.messageId)
-        ) {
-            continue;
-        }
         if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update") {
             messages.push(...projectEvent(event));
             continue;

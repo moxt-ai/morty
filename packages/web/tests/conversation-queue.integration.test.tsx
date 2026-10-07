@@ -31,6 +31,13 @@ test("Given the daemon has queued work, When the user steers it into the active 
         dataTestId.queuedMessage,
         (element) => element.textContent?.includes(instruction) === true,
     );
+    for (const current of [app, viewer]) {
+        expect(
+            current
+                .elementsByTestId(dataTestId.userMessage)
+                .some((element) => element.textContent?.includes(instruction) === true),
+        ).toBe(false);
+    }
     await viewer.user.click(getByLabelText(queued, `Steer queued message: ${instruction}`));
     for (const current of [app, viewer]) {
         await current.waitForView(() =>
