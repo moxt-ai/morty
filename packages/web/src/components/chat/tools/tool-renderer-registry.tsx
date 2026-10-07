@@ -1,5 +1,4 @@
 import type { ComponentType, ReactNode } from "react";
-import type { ToolThinkingEntry } from "../../../services/chat/agent-reply.ts";
 import { CwdShellCommandToolCall, matchesCwdShellCommandToolCall } from "./cwd-shell-command-tool-call.tsx";
 import { FilePathReadToolCall, matchesFilePathReadToolCall } from "./file-path-read-tool-call.tsx";
 import { GlobToolCall, matchesGlobToolCall } from "./glob-tool-call.tsx";
@@ -9,7 +8,7 @@ import { matchesOutputDiffEditToolCall, OutputDiffEditToolCall } from "./output-
 import { matchesPatchEditToolCall, PatchEditToolCall } from "./patch-edit-tool-call.tsx";
 import { matchesPathReadToolCall, PathReadToolCall } from "./path-read-tool-call.tsx";
 import { matchesQuestionToolCall, QuestionToolCall } from "./question-tool-call.tsx";
-import type { ToolRendererProps } from "./tool-renderer.ts";
+import type { ToolRendererProps, ToolThinkingEntry } from "./tool-renderer.ts";
 import { matchesWorkdirShellCommandToolCall, WorkdirShellCommandToolCall } from "./workdir-shell-command-tool-call.tsx";
 
 interface ToolRenderer {

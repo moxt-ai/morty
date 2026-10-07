@@ -2,10 +2,10 @@ import type { AgentDisplayContent } from "@moxt-ai/mobius-sdk";
 import { FileText } from "lucide-react";
 import type { ReactNode } from "react";
 import { dataTestId } from "../../../data-testid.ts";
-import type { ToolCallState } from "../../../services/chat/agent-reply.ts";
 import { AgentRichContent } from "../../agents/agent-rich-content.tsx";
 import { ToolCallStatus, useToolCallDisclosure } from "./tool-call-status.tsx";
 import { toolRichContent } from "./tool-display-content.ts";
+import type { ToolCallState } from "./tool-renderer.ts";
 
 export interface NumberedCodeLine {
     readonly code: string;

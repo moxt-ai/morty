@@ -1,6 +1,6 @@
 import {
     decodeAgentSettingsDiscoveredEvent,
-    decodeNativeSessionHistory,
+    decodeNativeSessionEventsV2,
     decodeNativeSessionResult,
     decodeSessionReadyEvent,
     decodeWorkspaceEntriesEvent,
@@ -262,13 +262,6 @@ export class BotChatApi {
             activeTurn,
             targetSessionId: access.sessionId,
             ready: decodeSessionReadyEvent(JSON.stringify(access.ready)),
-            history: {
-                status: "unavailable" as const,
-                cause: {
-                    code: "native_history_not_requested",
-                    message: "Native message history has not been requested yet.",
-                },
-            },
         },
         entry: {
             entryId: access.sessionId,
@@ -314,10 +307,6 @@ export class BotChatApi {
                 action: "managed" as const,
                 targetSessionId: sessionId,
                 ready,
-                history: {
-                    status: "unavailable" as const,
-                    cause: { code: "history_loading", message: "Session history will load after connecting." },
-                },
             },
         };
     };
@@ -338,13 +327,7 @@ export class BotChatApi {
         }
         return {
             ...stored,
-            result: {
-                ...result,
-                history: {
-                    status: "unavailable" as const,
-                    cause: { code: "history_loading", message: "Session history will load after connecting." },
-                },
-            },
+            result,
         };
     };
     readonly agentSettings = async (
@@ -458,16 +441,15 @@ export class BotChatApi {
         runtimeId: string,
         input: {
             readonly entryId: string;
-            readonly discoveryId: string;
             readonly agentId: string;
             readonly directoryId: string;
             readonly additionalDirectoryIds: readonly string[];
+            readonly nativeSessionId: string;
         },
         signal: AbortSignal,
     ) => {
         const { entryId, ...identity } = input;
-        const result = v.parse(
-            v.object({ title: v.string(), history: v.unknown() }),
+        return decodeNativeSessionEventsV2(
             await this.#request(
                 botId,
                 `native-session/${encodeURIComponent(v.parse(identifier, entryId))}`,
@@ -475,7 +457,6 @@ export class BotChatApi {
                 signal,
             ),
         );
-        return { title: result.title, history: decodeNativeSessionHistory(result.history) };
     };
 
     readonly connectSession = async (

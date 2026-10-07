@@ -31,6 +31,7 @@ type NativeEntryInput = {
     readonly additionalDirectoryIds: readonly string[];
     readonly discoveryId: string;
 };
+type NativePreviewInput = Omit<NativeEntryInput, "discoveryId"> & { readonly nativeSessionId: string };
 type OpenChatInput =
     | { readonly conversationId: string; readonly title?: string }
     | {
@@ -449,21 +450,20 @@ export class ChatService {
         scope: ChatScope,
         runtimeId: string,
         entryId: string,
-        input: NativeEntryInput,
+        input: NativePreviewInput,
     ) => {
-        const result = await this.#platform.nativeSessions(
+        const events = await this.#platform.queryRuntimeNativeEventsV2(
             scope.projectId,
             runtimeId,
-            { ...input, entryId, action: "preview" },
+            input.nativeSessionId,
+            {
+                additionalDirectoryIds: input.additionalDirectoryIds,
+                agentId: input.agentId,
+                directoryId: input.directoryId,
+            },
+            { cursor: null, eventLimit: 200 },
             scope.signal,
         );
-        if (result.action !== "preview") {
-            throw new PlatformProjectError(
-                "PLATFORM_INVALID_RESPONSE",
-                "The agent returned an invalid session preview.",
-                502,
-            );
-        }
         this.#logger.info(
             {
                 event: "native-session-previewed",
@@ -475,7 +475,7 @@ export class ChatService {
             },
             "Chat audit event",
         );
-        return { title: result.title, history: result.history };
+        return events;
     };
 
     readonly importNativeSession = async (

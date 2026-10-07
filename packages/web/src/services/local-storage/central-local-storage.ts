@@ -199,50 +199,6 @@ export const recentCwdEntry = (botId: string) =>
     });
 
 // ---------------------------------------------------------------------------
-// Session configuration preferences per channel and agent (with legacy key)
-// ---------------------------------------------------------------------------
-
-const storedSessionConfigPreferenceSchema = v.pipe(
-    v.variant("valueType", [
-        v.object({
-            booleanValue: v.boolean(),
-            configId: settingIdentifierSchema,
-            valueType: v.literal("boolean"),
-        }),
-        v.object({
-            configId: settingIdentifierSchema,
-            value: v.pipe(v.string(), v.maxLength(500)),
-            valueType: v.literal("select"),
-        }),
-    ]),
-    v.readonly(),
-);
-
-export type StoredSessionConfigPreference = v.InferOutput<typeof storedSessionConfigPreferenceSchema>;
-
-const sessionConfigPreferencesSchema = v.pipe(
-    v.array(storedSessionConfigPreferenceSchema),
-    v.maxLength(100),
-    v.check(
-        (preferences) => new Set(preferences.map((preference) => preference.configId)).size === preferences.length,
-        "Duplicate configuration identifiers",
-    ),
-    v.readonly(),
-);
-
-export const sessionConfigPreferencesEntry = (channelId: string, agentId: string) =>
-    jsonLocalStorageEntry({
-        key: scopedKey("mobius:session-config-preferences:", channelId, agentId),
-        schema: sessionConfigPreferencesSchema,
-    });
-
-export const legacySessionModelPreferencesEntry = (channelId: string, agentId: string) =>
-    jsonLocalStorageEntry({
-        key: scopedKey("mobius:session-model-preferences:", channelId, agentId),
-        schema: sessionConfigPreferencesSchema,
-    });
-
-// ---------------------------------------------------------------------------
 // Unsent message drafts
 // ---------------------------------------------------------------------------
 
@@ -342,26 +298,3 @@ export const workspaceEntry = jsonLocalStorageEntry({
     key: "mobius.workspace.v2",
     schema: storedWorkspaceSchema,
 });
-
-// ---------------------------------------------------------------------------
-// Channel credentials per channel
-// ---------------------------------------------------------------------------
-
-const channelTokenSchema = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9_-]{32,256}$/u));
-
-const storedChannelCredentialSchema = v.pipe(
-    v.object({
-        authority: v.optional(v.picklist(["owner", "linked"])),
-        hostToken: channelTokenSchema,
-        projectId: identifierSchema,
-        tenantId: identifierSchema,
-    }),
-    v.readonly(),
-);
-export type StoredChannelCredential = v.InferOutput<typeof storedChannelCredentialSchema>;
-
-export const channelCredentialEntry = (channelId: string): LocalStorageEntry<StoredChannelCredential> =>
-    jsonLocalStorageEntry({
-        key: `mobius:channel-credential:${channelId}`,
-        schema: storedChannelCredentialSchema,
-    });

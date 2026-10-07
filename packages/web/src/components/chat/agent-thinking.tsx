@@ -1,43 +1,26 @@
-import { Brain, ChevronDown, CircleAlert, Wrench } from "lucide-react";
+import { Brain, ChevronDown, Wrench } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { dataTestId } from "../../data-testid.ts";
-import type {
-    NoticeThinkingEntry,
-    ThinkingEntry,
-    ThinkingPresentation,
-    ToolThinkingEntry,
-} from "../../services/chat/agent-reply.ts";
+import type { SessionToolPresentation } from "../../view-models/chat/session-presentation.ts";
 import { AgentMarkdown } from "../agents/agent-markdown.tsx";
 import { FollowLatestScrollArea } from "../utils/follow-latest-scroll-area.tsx";
-import { ToolCallStatus } from "./tools/tool-call-status.tsx";
+import { ToolCallStatus, useToolCallDisclosure } from "./tools/tool-call-status.tsx";
 import { renderRegisteredTool } from "./tools/tool-renderer-registry.tsx";
 
-type ReasoningEntry = Extract<ThinkingEntry, { readonly kind: "reasoning" }>;
-type ToolEntry = ToolThinkingEntry;
+export type AgentThinkingEntry =
+    | {
+          readonly id: string;
+          readonly kind: "reasoning";
+          readonly text: string;
+      }
+    | SessionToolPresentation;
+
+type ReasoningEntry = Extract<AgentThinkingEntry, { readonly kind: "reasoning" }>;
 type TimelineEntry =
-    | { readonly kind: "reasoning"; readonly id: string; readonly entries: readonly ReasoningEntry[] }
-    | { readonly kind: "notice"; readonly entry: NoticeThinkingEntry }
-    | { readonly kind: "tool"; readonly entry: ToolEntry };
+    | { readonly entries: readonly ReasoningEntry[]; readonly id: string; readonly kind: "reasoning" }
+    | { readonly entry: SessionToolPresentation; readonly kind: "tool" };
 
-function AgentNotice({ entry }: { readonly entry: NoticeThinkingEntry }) {
-    const error = entry.severity === "error";
-    return (
-        <div
-            className={
-                error
-                    ? "flex min-w-0 gap-3 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-destructive"
-                    : "flex min-w-0 gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 px-4 py-3 text-amber-900"
-            }
-            data-testid={dataTestId.agentNotice}
-            role={error ? "alert" : "status"}
-        >
-            <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-            <p className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]">{entry.text}</p>
-        </div>
-    );
-}
-
-function ReasoningContent({ entry }: { readonly entry: ReasoningEntry }) {
+function ReasoningContent({ active, entry }: { readonly active: boolean; readonly entry: ReasoningEntry }) {
     const content = useRef<HTMLDivElement>(null);
     return (
         <FollowLatestScrollArea
@@ -46,24 +29,24 @@ function ReasoningContent({ entry }: { readonly entry: ReasoningEntry }) {
             followThreshold={24}
             style={{ maxHeight: "10.5rem", overflowY: "auto" }}
         >
-            <AgentMarkdown markdown={entry.text} streaming={entry.status === "streaming"} />
+            <AgentMarkdown markdown={entry.text} streaming={active} />
         </FollowLatestScrollArea>
     );
 }
 
 function ReasoningDisclosure({
-    autoOpen,
+    active,
     entries,
 }: {
-    readonly autoOpen: boolean;
+    readonly active: boolean;
     readonly entries: readonly ReasoningEntry[];
 }) {
     const disclosure = useRef<HTMLDetailsElement>(null);
     useEffect(() => {
         if (disclosure.current !== null) {
-            disclosure.current.open = autoOpen;
+            disclosure.current.open = active;
         }
-    }, [autoOpen]);
+    }, [active]);
     return (
         <details
             aria-label="Agent thinking"
@@ -85,7 +68,7 @@ function ReasoningDisclosure({
                             <Brain aria-hidden="true" className="size-4" />
                             <span>Thinking</span>
                         </div>
-                        <ReasoningContent entry={entry} />
+                        <ReasoningContent active={active} entry={entry} />
                     </section>
                 ))}
             </div>
@@ -93,8 +76,9 @@ function ReasoningDisclosure({
     );
 }
 
-function ToolCall({ autoOpen, entry }: { readonly autoOpen: boolean; readonly entry: ToolEntry }) {
-    const registered = renderRegisteredTool(entry, autoOpen);
+function ToolCall({ active, entry }: { readonly active: boolean; readonly entry: SessionToolPresentation }) {
+    const disclosure = useToolCallDisclosure(active);
+    const registered = renderRegisteredTool(entry, active);
     if (registered !== null) {
         return registered;
     }
@@ -103,6 +87,7 @@ function ToolCall({ autoOpen, entry }: { readonly autoOpen: boolean; readonly en
             aria-label={`Tool: ${entry.title}`}
             className="group/tool min-w-0"
             data-testid={dataTestId.agentToolCall}
+            ref={disclosure}
         >
             <summary
                 className="flex min-h-8 w-full min-w-0 cursor-pointer list-none items-center gap-2 rounded-lg px-1 text-sm text-copy-secondary outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
@@ -138,7 +123,13 @@ function ToolCall({ autoOpen, entry }: { readonly autoOpen: boolean; readonly en
     );
 }
 
-export function AgentThinking({ autoOpen, entries }: ThinkingPresentation) {
+export function AgentThinking({
+    active,
+    entries,
+}: {
+    readonly active: boolean;
+    readonly entries: readonly AgentThinkingEntry[];
+}) {
     if (entries.length === 0) {
         return null;
     }
@@ -149,7 +140,7 @@ export function AgentThinking({ autoOpen, entries }: ThinkingPresentation) {
         if (first === undefined) {
             return;
         }
-        timeline.push({ kind: "reasoning", id: first.id, entries: reasoning });
+        timeline.push({ entries: reasoning, id: first.id, kind: "reasoning" });
         reasoning = [];
     };
     for (const entry of entries) {
@@ -157,27 +148,23 @@ export function AgentThinking({ autoOpen, entries }: ThinkingPresentation) {
             reasoning.push(entry);
         } else {
             flushReasoning();
-            timeline.push(entry.kind === "notice" ? { kind: "notice", entry } : { kind: "tool", entry });
+            timeline.push({ entry, kind: "tool" });
         }
     }
     flushReasoning();
     const currentEntry = timeline.at(-1);
-    const activeReasoningId = autoOpen && currentEntry?.kind === "reasoning" ? currentEntry.id : undefined;
-    const activeToolId = autoOpen && currentEntry?.kind === "tool" ? currentEntry.entry.id : undefined;
     return (
         <div className="grid min-w-0 gap-3 text-sm text-muted-foreground">
             {timeline.map((item) =>
                 item.kind === "reasoning" ? (
                     <ReasoningDisclosure
-                        autoOpen={item.id === activeReasoningId}
+                        active={active && item === currentEntry}
                         entries={item.entries}
                         key={`reasoning:${item.id}`}
                     />
-                ) : item.kind === "notice" ? (
-                    <AgentNotice entry={item.entry} key={`notice:${item.entry.id}`} />
                 ) : (
                     <ToolCall
-                        autoOpen={item.entry.id === activeToolId}
+                        active={active && item === currentEntry}
                         entry={item.entry}
                         key={`tool:${item.entry.id}`}
                     />

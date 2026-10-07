@@ -28,6 +28,7 @@ const nativeListInput = v.strictObject({
     discoveryId: v.nullable(platformIdentifier),
 });
 const nativeEntryInput = v.strictObject({ ...nativeIdentity, discoveryId: platformIdentifier });
+const nativePreviewInput = v.strictObject({ ...nativeIdentity, nativeSessionId: platformIdentifier });
 const workspaceInput = v.strictObject({ directoryId: nativeDirectoryId });
 const nativeContinuationInput = v.strictObject({
     action: v.picklist(["fork", "import"]),
@@ -233,7 +234,7 @@ export function createBotChatRoutes() {
             "/bots/:botId/native-session/:id",
             authenticatedSession,
             authorizedChat(120000),
-            bodyParser<AuthorizedChatEnvironment, typeof nativeEntryInput>(nativeEntryInput),
+            bodyParser<AuthorizedChatEnvironment, typeof nativePreviewInput>(nativePreviewInput),
             async (context) => {
                 const entryId = v.parse(platformIdentifier, context.req.param("id"));
                 const { runtimeId, ...input } = context.req.valid("json");

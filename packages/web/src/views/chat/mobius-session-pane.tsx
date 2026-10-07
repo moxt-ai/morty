@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
 import type { MarkdownImageReader } from "../../components/agents/agent-markdown.tsx";
+import { AgentThinking, type AgentThinkingEntry } from "../../components/chat/agent-thinking.tsx";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import { ChatComposerMoreMenu } from "../../components/chat/chat-composer-more-menu.tsx";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
@@ -24,8 +25,70 @@ import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
 import { sessionDebugBlocks } from "../../view-models/chat/session-debug-blocks.ts";
 import { createSessionPaneModel, sessionPanePresentation } from "../../view-models/chat/session-pane-store.ts";
+import type { SessionMessage } from "../../view-models/chat/session-presentation.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
-import { MobiusSessionMessage } from "./mobius-session-message.tsx";
+import { MobiusAssistantText, MobiusSessionMessage } from "./mobius-session-message.tsx";
+
+type SessionRenderItem =
+    | {
+          readonly kind: "assistant-text";
+          readonly id: string;
+          readonly text: string;
+      }
+    | {
+          readonly kind: "event";
+          readonly message: SessionMessage;
+      }
+    | {
+          readonly entries: readonly AgentThinkingEntry[];
+          readonly id: string;
+          readonly kind: "thinking";
+      };
+
+function assistantText(message: SessionMessage): string | null {
+    if (
+        message.role === "assistant" &&
+        message.presentation.kind === "message" &&
+        message.presentation.content.type === "text"
+    ) {
+        return message.presentation.content.text;
+    }
+    return null;
+}
+
+function thinkingEntry(message: SessionMessage): AgentThinkingEntry | null {
+    if (message.role !== "assistant") {
+        return null;
+    }
+    if (message.presentation.kind === "tool") {
+        return message.presentation.entry;
+    }
+    if (message.presentation.kind === "thought" && message.presentation.content.type === "text") {
+        return { id: message.id, kind: "reasoning", text: message.presentation.content.text };
+    }
+    return null;
+}
+
+function sessionRenderItems(messages: readonly SessionMessage[]): readonly SessionRenderItem[] {
+    const items: SessionRenderItem[] = [];
+    for (const message of messages) {
+        const text = assistantText(message);
+        const thinking = thinkingEntry(message);
+        const previous = items.at(-1);
+        if (text !== null && previous?.kind === "assistant-text") {
+            items[items.length - 1] = { ...previous, text: previous.text + text };
+        } else if (text !== null) {
+            items.push({ kind: "assistant-text", id: message.id, text });
+        } else if (thinking !== null && previous?.kind === "thinking") {
+            items[items.length - 1] = { ...previous, entries: [...previous.entries, thinking] };
+        } else if (thinking !== null) {
+            items.push({ entries: [thinking], id: message.id, kind: "thinking" });
+        } else {
+            items.push({ kind: "event", message });
+        }
+    }
+    return items;
+}
 
 function MessageListSkeleton() {
     return (
@@ -150,6 +213,7 @@ export function MobiusSessionPane({
         await pane.store.getState().respondToElicitation(response, controller.signal);
     };
     const presentation = sessionPanePresentation(model, delivery, taskControls, messageQueue);
+    const renderItems = sessionRenderItems(model.messages);
     useEffect(() => {
         onStatusChange(sessionId, model.activity);
     }, [model.activity, onStatusChange, sessionId]);
@@ -173,7 +237,7 @@ export function MobiusSessionPane({
                     container={messageList}
                     followThreshold={80}
                     aria-label="Messages"
-                    className="min-h-0 flex-1 space-y-8 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10 lg:px-12"
+                    className="min-h-0 flex-1 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10 lg:px-12"
                 >
                     {model.messages.length === 0 && model.connection.kind === "loading" && <MessageListSkeleton />}
                     {model.messages.length === 0 && model.connection.kind === "failed" && (
@@ -204,34 +268,42 @@ export function MobiusSessionPane({
                             Loading...
                         </p>
                     )}
-                    {model.messages.map((message) => {
-                        const workingOnly =
-                            message.role === "assistant" &&
-                            message.id === presentation.activeMessageId &&
-                            message.text.length === 0 &&
-                            message.activityIds.length === 0 &&
-                            message.contents.length === 0;
-                        return (
+                    <div className="mx-auto w-full min-w-0 max-w-[920px]">
+                        {renderItems.map((item, index) => (
                             <div
-                                key={message.id}
-                                className={`mx-auto w-full min-w-0 max-w-[920px] ${workingOnly ? "hidden" : ""}`}
+                                key={item.kind === "event" ? item.message.id : item.id}
+                                className="my-8 first:mt-0 last:mb-0"
                             >
-                                <MobiusSessionMessage
-                                    message={message}
-                                    activities={model.activities}
-                                    activeCommandId={presentation.activeCommandId}
-                                    activeMessageId={presentation.activeMessageId}
-                                    deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
-                                    onRemoveUnknownDelivery={pane.store.getState().removeUnknownDelivery}
-                                    onRetryUnknownDelivery={() => run(pane.store.getState().retryUnknownDelivery)}
-                                    sessionId={sessionId}
-                                    botId={botId}
-                                    readImage={readImage}
-                                    openLocalFile={openLocalFile}
-                                />
+                                {item.kind === "assistant-text" ? (
+                                    <MobiusAssistantText
+                                        openLocalFile={openLocalFile}
+                                        readImage={readImage}
+                                        text={item.text}
+                                    />
+                                ) : item.kind === "thinking" ? (
+                                    <div data-testid={dataTestId.agentResponse}>
+                                        <AgentThinking
+                                            active={
+                                                model.activity.kind === "working" && index === renderItems.length - 1
+                                            }
+                                            entries={item.entries}
+                                        />
+                                    </div>
+                                ) : (
+                                    <MobiusSessionMessage
+                                        active={model.activity.kind === "working" && index === renderItems.length - 1}
+                                        failureApproval={{ botId, kind: "bot-approval" }}
+                                        message={item.message}
+                                        deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
+                                        onRemoveUnknownDelivery={pane.store.getState().removeUnknownDelivery}
+                                        onRetryUnknownDelivery={() => run(pane.store.getState().retryUnknownDelivery)}
+                                        readImage={readImage}
+                                        openLocalFile={openLocalFile}
+                                    />
+                                )}
                             </div>
-                        );
-                    })}
+                        ))}
+                    </div>
                 </FollowLatestScrollArea>
                 <LoadMoreTrigger
                     container={messageList}

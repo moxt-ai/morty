@@ -3,7 +3,10 @@ import type { ReplyPlan } from "@moxt-ai/mobius-test/fake-daemon/model";
 /** Shared Morty scenario data; the protocol peer has no prompt-specific branches. */
 export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | "steer"): ReplyPlan {
     if (mode === "steer") {
-        return { outcome: "complete", output: [{ kind: "text", text: `Steered: ${prompt}` }] };
+        return {
+            outcome: prompt === "Use the revised requirement" ? "hold" : "complete",
+            output: [{ kind: "text", text: `Steered: ${prompt}` }],
+        };
     }
     switch (prompt) {
         case "hold with rich content":
@@ -42,6 +45,16 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     { kind: "file", name: "long-output.bin" },
                     ...Array.from({ length: 3 }, () => ({ kind: "text" as const, text: "x".repeat(100_000) })),
                 ],
+            };
+        case "stream split text":
+            return {
+                outcome: "complete",
+                output: ["Build", " a", " dependency", "-free", " local app.\n\n`", "``sh\nnpm", " test\n``", "`"].map(
+                    (text) => ({
+                        kind: "text" as const,
+                        text,
+                    }),
+                ),
             };
         case "show live output in order":
             return {

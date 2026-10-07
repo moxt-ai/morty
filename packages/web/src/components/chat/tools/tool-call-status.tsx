@@ -1,6 +1,6 @@
 import { CircleCheck, CircleMinus, CircleX, LoaderCircle } from "lucide-react";
 import { useEffect, useRef } from "react";
-import type { ToolCallState } from "../../../services/chat/agent-reply.ts";
+import type { ToolCallState } from "./tool-renderer.ts";
 
 export function useToolCallDisclosure(autoOpen: boolean) {
     const disclosure = useRef<HTMLDetailsElement>(null);
