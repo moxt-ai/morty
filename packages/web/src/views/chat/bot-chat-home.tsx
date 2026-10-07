@@ -22,6 +22,7 @@ import {
     conversationCreationStatus,
     queuedDraftMessage,
 } from "../../view-models/chat/conversation-creation-machine.ts";
+import { selectedConversationId } from "../../view-models/chat/conversation-selection-machine.ts";
 import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
@@ -152,7 +153,7 @@ export function BotChatHome({
     }, [model.revision, store]);
 
     useEffect(() => {
-        if (model.view.kind === "draft") {
+        if (model.view.kind === "active") {
             setPairingDialogOpen(false);
             setFailureDialogOpen(false);
         }
@@ -160,7 +161,7 @@ export function BotChatHome({
             entryConnectionResolved.current ||
             model.view.kind === "loading" ||
             model.view.kind === "connecting" ||
-            model.view.kind === "switching"
+            model.selection.kind === "loading"
         ) {
             return;
         }
@@ -170,17 +171,17 @@ export function BotChatHome({
         } else if (setupView !== null) {
             setPairingDialogOpen(true);
         }
-    }, [model.view.kind, setupView]);
+    }, [model.selection.kind, model.view.kind, setupView]);
 
     useLayoutEffect(() => {
-        if (model.view.kind === "draft" && followLatest.current && messageList.current !== null) {
+        if (model.view.kind === "active" && followLatest.current && messageList.current !== null) {
             messageList.current.scrollTop = messageList.current.scrollHeight;
         }
     }, [model.view]);
     useLayoutEffect(() => {
         const list = messageList.current;
         const content = messageContent.current;
-        if (model.sessionView.kind !== "conversation-access" || list === null || content === null) {
+        if (model.selection.kind !== "draft" || list === null || content === null) {
             return;
         }
         const keepLatestVisible = () => {
@@ -193,21 +194,16 @@ export function BotChatHome({
         observer.observe(content);
         keepLatestVisible();
         return () => observer.disconnect();
-    }, [model.sessionView]);
+    }, [model.selection]);
 
     const active =
-        model.view.kind === "switching"
-            ? model.view.view
-            : model.view.kind === "connecting" ||
-                model.view.kind === "session-loading" ||
-                model.view.kind === "draft" ||
-                model.view.kind === "setup" ||
-                model.view.kind === "runtime-disconnected" ||
-                model.view.kind === "connection-failed" ||
-                model.view.kind === "session-failed"
-              ? model.view
-              : null;
-    const switching = model.view.kind === "switching";
+        model.view.kind === "connecting" ||
+        model.view.kind === "active" ||
+        model.view.kind === "setup" ||
+        model.view.kind === "runtime-disconnected" ||
+        model.view.kind === "connection-failed"
+            ? model.view
+            : null;
     const onStatusChange = useCallback((sessionId: string, status: SessionActivityState): void => {
         setSessionStatuses((current) => {
             const next = new Map(current);
@@ -246,20 +242,14 @@ export function BotChatHome({
     return (
         <main
             aria-label="Chat"
-            data-chat-state={model.sessionView.kind === "session-access" ? "connected" : "disconnected"}
+            data-chat-state={model.selection.kind === "ready" ? "connected" : "disconnected"}
             className="fixed inset-0 flex min-h-0 overflow-hidden bg-background text-foreground max-sm:flex-col sm:flex-row"
         >
             {active !== null && (
                 <ConversationSidebar
                     activeBot={active.bot}
                     sessionStatuses={sessionStatuses}
-                    activeId={
-                        model.target.kind === "conversation-access"
-                            ? model.target.conversationId
-                            : model.target.kind === "session-access"
-                              ? model.target.sessionId
-                              : ""
-                    }
+                    activeId={selectedConversationId(model.selection)}
                     directoryRevision={model.directoryRevision}
                     optimisticTitles={model.optimisticTitles}
                     bots={model.bots}
@@ -283,12 +273,12 @@ export function BotChatHome({
                     key={active.bot.botId}
                 />
             )}
-            {model.sessionView.kind === "session-access" && active !== null ? (
+            {model.selection.kind === "ready" && active !== null ? (
                 <MobiusSessionPane
                     botId={active.bot.botId}
                     requests={requests}
-                    key={model.sessionView.session.result.ready.sessionId}
-                    session={model.sessionView.session}
+                    key={model.selection.session.result.ready.sessionId}
+                    session={model.selection.session}
                     initialMessage={model.creation.kind === "draft-message-sent" ? model.creation.message : undefined}
                     onStatusChange={onStatusChange}
                 />
@@ -305,26 +295,28 @@ export function BotChatHome({
                         aria-label="Messages"
                     >
                         <div ref={messageContent} className="flex min-h-full flex-col gap-8">
-                            {model.view.kind === "loading" ||
-                            model.view.kind === "session-loading" ||
-                            model.view.kind === "switching" ? (
+                            {model.selection.kind === "loading" || model.view.kind === "loading" ? (
                                 <div className="m-auto">
                                     <Spinner
                                         label={
-                                            model.view.kind === "switching"
-                                                ? "Switching session"
-                                                : model.view.kind === "session-loading"
-                                                  ? "Loading session"
-                                                  : "Connecting to your agent"
+                                            model.selection.kind === "loading"
+                                                ? "Loading session"
+                                                : "Connecting to your agent"
                                         }
                                     />
                                 </div>
-                            ) : model.view.kind === "failed" || model.view.kind === "session-failed" ? (
+                            ) : model.view.kind === "failed" || model.selection.kind === "failed" ? (
                                 <div className="m-auto grid justify-items-center gap-4 text-center">
                                     <p data-testid={dataTestId.sessionLoadFailure} role="alert">
-                                        {model.view.message}
+                                        {model.selection.kind === "failed"
+                                            ? model.selection.message
+                                            : model.view.kind === "failed"
+                                              ? model.view.message
+                                              : "Chat is unavailable."}
                                     </p>
-                                    {model.target.kind === "continue" && model.target.action === "import" ? (
+                                    {model.selection.kind === "failed" &&
+                                    model.selection.target.kind === "continue" &&
+                                    model.selection.target.action === "import" ? (
                                         <Button onClick={store.getState().forkInstead}>Fork session instead</Button>
                                     ) : (
                                         <div className="flex flex-wrap justify-center gap-2">
@@ -388,7 +380,7 @@ export function BotChatHome({
                             )}
                         </div>
                     </div>
-                    {model.view.kind === "draft" && !switching && (
+                    {model.view.kind === "active" && model.selection.kind === "draft" && (
                         <BotChatComposer
                             attachments={attachments}
                             disabled={composerLocked}
@@ -406,7 +398,7 @@ export function BotChatHome({
                             }
                         >
                             <DraftChatControls
-                                key={model.target.kind === "draft" ? model.target.key : "existing"}
+                                key={model.selection.key}
                                 botId={model.view.bot.botId}
                                 requests={requests}
                                 disabled={composerLocked}

@@ -43,6 +43,7 @@ export async function createTestApp(
         readonly connectAgent?: boolean;
         readonly page?:
             | { readonly kind: "continue"; readonly harness: string; readonly sessionId: string }
+            | { readonly kind: "managed-session"; readonly sessionId: string }
             | { readonly kind: "workspace" };
         readonly prepare?: (application: Application) => void | Promise<void>;
     } = {},
@@ -59,7 +60,11 @@ export async function createTestApp(
         window.location.href = transfer.href;
         authenticationRouter.history.replace(`${transfer.pathname}${transfer.search}${transfer.hash}`);
     } else if (options.application === undefined) {
-        window.location.href = `${current.origin}/chat`;
+        const destination = new URL("/chat", current.origin);
+        if (page.kind === "managed-session") {
+            destination.searchParams.set("sessionId", page.sessionId);
+        }
+        window.location.href = destination.href;
     }
     let container = document.createElement("div");
     const mount = () => {

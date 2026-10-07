@@ -68,6 +68,20 @@ test("Given a completed turn, When the user leaves and reopens it, Then daemon h
     expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull();
 });
 
+test("Given a stale Session link, When the user opens it, Then the Session failure replaces the empty landing", {
+    timeout: 30_000,
+}, async () => {
+    const sessionId = `chat_${"0".repeat(64)}`;
+    const app = await createTestApp({
+        connectAgent: true,
+        page: { kind: "managed-session", sessionId },
+    });
+
+    const failure = await app.queryElementByTestId(dataTestId.sessionLoadFailure);
+    expect(failure.getAttribute("role")).toBe("alert");
+    expect(app.optionalElementByTestId(dataTestId.chatLanding)).toBeNull();
+});
+
 test("Given a completed turn, When I send another prompt, Then my prompt is visible once while the next reply is still streaming", {
     timeout: 30_000,
 }, async () => {
