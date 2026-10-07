@@ -102,7 +102,7 @@ function UserMessage({
     readonly openLocalFile: (path: string) => void;
     readonly readImage?: MarkdownImageReader | undefined;
 }) {
-    const deliveryUnknown = message.commandId === deliveryUnknownUserMessageId;
+    const deliveryUnknown = deliveryUnknownUserMessageId !== null && message.commandId === deliveryUnknownUserMessageId;
     return (
         <div className="min-w-0 space-y-2">
             <div className="ml-auto grid max-w-[82%] gap-2">

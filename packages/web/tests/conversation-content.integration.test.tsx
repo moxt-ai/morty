@@ -22,6 +22,7 @@ test("Given the daemon streams split text events, When the user reads the respon
         expect(messages).toContain("Build a dependency-free local app.");
         expect(messages).toContain("npm test");
         expect(messages).not.toContain("```");
+        expect(messages).not.toContain("Delivery wasn’t confirmed");
     });
 });
 
