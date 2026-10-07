@@ -3,7 +3,7 @@ import type { AgentDisplayContent } from "@moxt-ai/mobius-sdk";
 
 type ToolCallUpdateV2 = Extract<AcpSessionUpdateV2, { readonly sessionUpdate: "tool_call" | "tool_call_update" }>;
 
-export type SessionToolCallState =
+type SessionToolCallState =
     | { readonly kind: "running" }
     | { readonly kind: "succeeded" }
     | { readonly kind: "failed" }
