@@ -30,7 +30,7 @@ export function FilePreview({ onClose, state }: { readonly onClose: () => void; 
     return (
         <aside
             aria-label="Local file preview"
-            className="fixed inset-0 z-50 flex w-full flex-col border-l border-border bg-surface-elevated shadow-2xl sm:static sm:z-auto sm:min-h-0 sm:w-[min(50vw,56rem)] sm:shrink-0"
+            className="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-border bg-surface-elevated shadow-2xl sm:w-[min(50vw,56rem)]"
             data-testid={dataTestId.filePreview}
         >
             <header className="flex min-h-14 items-center gap-3 border-b border-border px-4">
