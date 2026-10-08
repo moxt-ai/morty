@@ -79,11 +79,11 @@ const TOOL_RENDERERS: readonly ToolRenderer[] = [
     },
 ];
 
-export function renderRegisteredTool(entry: ToolThinkingEntry, autoOpen: boolean): ReactNode | null {
+export function renderRegisteredTool(entry: ToolThinkingEntry): ReactNode | null {
     const renderer = TOOL_RENDERERS.find((candidate) => candidate.matches(entry));
     if (renderer === undefined) {
         return null;
     }
     const Component = renderer.Component;
-    return <Component autoOpen={autoOpen} entry={entry} />;
+    return <Component autoOpen={false} entry={entry} />;
 }

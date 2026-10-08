@@ -105,7 +105,7 @@ test("Given a browser tool reports its tool-result schema, When the user opens i
     expect(successfulTool.textContent).not.toContain("null");
 });
 
-test("Given a shell tool reports an empty camel-case result, When the user opens it, Then Chat presents a successful command without raw JSON", {
+test("Given a shell tool completes, When the user views the conversation, Then the tool stays collapsed", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -123,6 +123,10 @@ test("Given a shell tool reports an empty camel-case result, When the user opens
     const shellTool = await app.waitForView(() =>
         getByRole(document.body, "group", { name: 'Shell command: /bin/zsh -lc "true"' }),
     );
+    if (!(shellTool instanceof HTMLDetailsElement)) {
+        throw new Error("Expected the shell tool to use a disclosure");
+    }
+    expect(shellTool.open).toBe(false);
     expect(shellTool.textContent).not.toContain('{"exitCode":0,"output":""}');
     expect(queryByText(shellTool, "Response")).toBeNull();
 });
