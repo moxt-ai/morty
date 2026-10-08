@@ -35,8 +35,8 @@ export type SessionMessage =
           readonly id: string;
           readonly commandId: string | null;
           readonly presentation:
-              | { readonly kind: "message"; readonly content: ContentBlockV2 }
-              | { readonly kind: "thought"; readonly content: ContentBlockV2 }
+              | { readonly kind: "message"; readonly content: ContentBlockV2; readonly messageId: string | null }
+              | { readonly kind: "thought"; readonly content: ContentBlockV2; readonly messageId: string | null }
               | { readonly kind: "tool"; readonly entry: SessionToolPresentation }
               | { readonly kind: "completed"; readonly stopReason: string }
               | { readonly kind: "failure"; readonly code: string; readonly message: string };
@@ -262,7 +262,7 @@ function projectAcpUpdate(event: SessionEventV2, update: AcpSessionUpdateV2): re
                 {
                     commandId: null,
                     id: event.eventId,
-                    presentation: { content: update.content, kind: "message" },
+                    presentation: { content: update.content, kind: "message", messageId: update.messageId ?? null },
                     role: "assistant",
                 },
             ];
@@ -271,7 +271,7 @@ function projectAcpUpdate(event: SessionEventV2, update: AcpSessionUpdateV2): re
                 {
                     commandId: null,
                     id: event.eventId,
-                    presentation: { content: update.content, kind: "thought" },
+                    presentation: { content: update.content, kind: "thought", messageId: update.messageId ?? null },
                     role: "assistant",
                 },
             ];

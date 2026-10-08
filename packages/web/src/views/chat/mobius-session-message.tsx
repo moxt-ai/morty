@@ -315,7 +315,14 @@ export function MobiusSessionMessage({
             return (
                 <AgentThinking
                     active={active}
-                    entries={[{ id: message.id, kind: "reasoning", text: presentation.content.text }]}
+                    entries={[
+                        {
+                            id: message.id,
+                            kind: "reasoning",
+                            messageId: presentation.messageId,
+                            text: presentation.content.text,
+                        },
+                    ]}
                 />
             );
         }

@@ -1,8 +1,19 @@
-import { getByRole, queryByRole } from "@testing-library/dom";
+import { queryAllByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
+
+async function loadAllResponseText(app: Awaited<ReturnType<typeof createTestApp>>) {
+    while (true) {
+        const buttons = queryAllByRole(document.body, "button", { name: "Load more text" });
+        const button = buttons[0];
+        if (button === undefined) {
+            return;
+        }
+        await app.user.click(button);
+    }
+}
 
 test("Given interleaved live text and tool events, When the agent responds, Then Chat shows each item in arrival order", {
     timeout: 30_000,
@@ -49,10 +60,10 @@ test("Given an active turn exceeds one recovery page, When the user leaves and r
     }
     await sendPrompt(app, composer, prompt);
     await app.queryElementByTestId(dataTestId.sessionStatus);
-    await app.waitForView(() => getByRole(document.body, "button", { name: "Load more text" }));
-    while (queryByRole(document.body, "button", { name: "Load more text" }) !== null) {
-        await app.user.click(getByRole(document.body, "button", { name: "Load more text" }));
-    }
+    await app.waitForView(() =>
+        expect(queryAllByRole(document.body, "button", { name: "Load more text" })).not.toHaveLength(0),
+    );
+    await loadAllResponseText(app);
     await app.waitForView(() =>
         expect(responseCharacters(), document.body.textContent?.slice(0, 2000)).toBe(expectedCharacters),
     );
@@ -69,10 +80,10 @@ test("Given an active turn exceeds one recovery page, When the user leaves and r
     });
     await app.user.click(activeConversation);
     await app.queryElementByTestId(dataTestId.sessionStatus);
-    await app.waitForView(() => getByRole(document.body, "button", { name: "Load more text" }));
-    while (queryByRole(document.body, "button", { name: "Load more text" }) !== null) {
-        await app.user.click(getByRole(document.body, "button", { name: "Load more text" }));
-    }
+    await app.waitForView(() =>
+        expect(queryAllByRole(document.body, "button", { name: "Load more text" })).not.toHaveLength(0),
+    );
+    await loadAllResponseText(app);
     await app.waitForView(() =>
         expect(responseCharacters(), document.body.textContent?.slice(0, 2000)).toBe(expectedCharacters),
     );

@@ -56,20 +56,19 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     ...Array.from({ length: 3 }, () => ({ kind: "text" as const, text: "x".repeat(100_000) })),
                 ],
             };
-        case "stream split text":
+        case "separate response paragraphs":
             return {
                 outcome: "complete",
-                output: ["Build", " a", " dependency", "-free", " local app.\n\n`", "``sh\nnpm", " test\n``", "`"].map(
-                    (text) => ({
-                        kind: "text" as const,
-                        text,
-                    }),
-                ),
+                output: [
+                    { kind: "text", text: "Auto-merge is armed on the rebased head." },
+                    { kind: "text", text: "Policy, title, and Worker-config checks are green." },
+                    { kind: "text", text: "Static checks are green now; only the test job remains." },
+                ],
             };
-        case "stream split thinking":
+        case "separate reasoning paragraphs":
             return {
                 outcome: "complete",
-                output: ["The ", "user ", "is ", "showing ", "me ", "an ", "image"].map(
+                output: ["Inspecting the reported behavior.", "Checking the message boundaries."].map(
                     (output): Output => ({
                         activityType: "reasoning",
                         kind: "activity",

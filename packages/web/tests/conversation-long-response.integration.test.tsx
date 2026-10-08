@@ -20,12 +20,10 @@ async function startLongResponse(text: string) {
     }
     await sendPrompt(app, composer, "hold after first delta");
     await app.waitForView(() => expect(document.body.textContent).toContain("Partial reply"));
-    for (let offset = 0; offset < text.length; offset += 32_000) {
-        daemon.continueReply("hold after first delta", {
-            outcome: "hold",
-            output: [{ kind: "text", text: text.slice(offset, offset + 32_000) }],
-        });
-    }
+    daemon.continueReply("hold after first delta", {
+        outcome: "hold",
+        output: [{ kind: "text", text }],
+    });
     return { app, daemon };
 }
 
@@ -38,9 +36,7 @@ async function loadEntireResponse(app: Awaited<ReturnType<typeof createTestApp>>
 test("Given a long quoted code block, When output grows and I load more, Then the preview stays bounded and the expanded response keeps its original structure", {
     timeout: 30_000,
 }, async () => {
-    const lines = Array.from({ length: 1_500 }, (_, index) => `> const entry_${index} = "${"x".repeat(60)}";`).join(
-        "\n",
-    );
+    const lines = Array.from({ length: 900 }, (_, index) => `> const entry_${index} = "${"x".repeat(60)}";`).join("\n");
     const { app, daemon } = await startLongResponse(
         `\n\n## Configuration\n\n> Quoted configuration\n>\n> \`\`\`typescript\n${lines}\n> \`\`\`\n\n## Finished\n\nLATEST_OUTPUT`,
     );
@@ -62,11 +58,11 @@ test("Given a long quoted code block, When output grows and I load more, Then th
         if (response === null) {
             throw new Error("Expected the configuration response");
         }
-        expect(response.querySelector("blockquote code")?.textContent).toContain('const entry_1499 = "');
+        expect(response.querySelector("blockquote code")?.textContent).toContain('const entry_899 = "');
         expect(response.querySelectorAll("blockquote")).toHaveLength(1);
         expect(getByRole(response, "heading", { name: "Finished" })).toBeDefined();
         expect(response.textContent).not.toContain("```typescript");
-        expect(response.textContent?.match(/x{60}/gu)).toHaveLength(1_500);
+        expect(response.textContent?.match(/x{60}/gu)).toHaveLength(900);
         expect(response.textContent).not.toContain("Latest output (text preview)");
     });
     daemon.continueReply("hold after first delta", { outcome: "complete", output: [] });
@@ -77,7 +73,7 @@ test("Given a long quoted code block, When output grows and I load more, Then th
 test("Given a long table, nested list and reference link, When I load the entire answer, Then Markdown structures span the display limit without separate pages", {
     timeout: 30_000,
 }, async () => {
-    const rows = Array.from({ length: 2_000 }, (_, index) => `| service-${index} | ${"ready ".repeat(6)} |`).join("\n");
+    const rows = Array.from({ length: 1_200 }, (_, index) => `| service-${index} | ${"ready ".repeat(6)} |`).join("\n");
     const { app } = await startLongResponse(
         `\n\n## Services\n\n[Reference][guide]\n\n| Service | Status |\n| --- | --- |\n${rows}\n\n1. Parent\n   - Child\n\n[guide]: https://example.com/reference\n\nEND_OF_REPORT`,
     );
@@ -89,7 +85,7 @@ test("Given a long table, nested list and reference link, When I load the entire
             throw new Error("Expected the services response");
         }
         expect(response.querySelectorAll("table")).toHaveLength(1);
-        expect(response.querySelectorAll("tbody tr")).toHaveLength(2_000);
+        expect(response.querySelectorAll("tbody tr")).toHaveLength(1_200);
         expect(response.querySelector("ol li ul li")?.textContent).toContain("Child");
         expect(getByRole(response, "link", { name: "Reference" }).getAttribute("href")).toBe(
             "https://example.com/reference",

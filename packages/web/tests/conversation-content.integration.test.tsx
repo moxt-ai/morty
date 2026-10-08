@@ -4,7 +4,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given the daemon streams split text events, When the user reads the response, Then the chunks form continuous text", {
+test("Given the agent sends separate adjacent messages, When the user reads the response, Then each message starts a new paragraph", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -16,17 +16,18 @@ test("Given the daemon streams split text events, When the user reads the respon
     if (!(composer instanceof HTMLTextAreaElement)) {
         throw new Error("Expected the message composer");
     }
-    await sendPrompt(app, composer, "stream split text");
+    await sendPrompt(app, composer, "separate response paragraphs");
     await app.waitForView(() => {
-        const messages = getByRole(document.body, "log", { name: "Messages" }).innerText;
-        expect(messages).toContain("Build a dependency-free local app.");
-        expect(messages).toContain("npm test");
-        expect(messages).not.toContain("```");
-        expect(messages).not.toContain("Delivery wasn’t confirmed");
+        const responses = app.elementsByTestId(dataTestId.agentResponse);
+        expect(responses.map((response) => response.textContent)).toEqual([
+            "Auto-merge is armed on the rebased head.",
+            "Policy, title, and Worker-config checks are green.",
+            "Static checks are green now; only the test job remains.",
+        ]);
     });
 });
 
-test("Given the daemon streams continuous thinking chunks, When the user reads the intermediate steps, Then the chunks form one thinking block", {
+test("Given the agent sends separate reasoning messages, When the user reads the intermediate steps, Then they form paragraphs in one thinking block", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -38,11 +39,13 @@ test("Given the daemon streams continuous thinking chunks, When the user reads t
     if (!(composer instanceof HTMLTextAreaElement)) {
         throw new Error("Expected the message composer");
     }
-    await sendPrompt(app, composer, "stream split thinking");
+    await sendPrompt(app, composer, "separate reasoning paragraphs");
     const thinking = await app.queryElementByTestId(dataTestId.agentReasoning);
     await app.waitForView(() => {
         expect(getAllByText(thinking, "Thinking")).toHaveLength(1);
-        expect(thinking.textContent).toContain("The user is showing me an image");
+        expect(thinking.querySelectorAll("p")).toHaveLength(2);
+        expect(thinking.textContent).toContain("Inspecting the reported behavior.");
+        expect(thinking.textContent).toContain("Checking the message boundaries.");
     });
 });
 
