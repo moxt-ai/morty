@@ -37,8 +37,8 @@ function parseRequest(value: string): v.InferOutput<typeof requestSchema> | null
     }
 }
 
-export function matchesQuestionToolCall({ input, name }: ToolRendererProps["entry"]): boolean {
-    return name === "question" && parseRequest(input) !== null;
+export function matchesQuestionToolCall({ input }: ToolRendererProps["entry"]): boolean {
+    return parseRequest(input) !== null;
 }
 
 export function QuestionToolCall({ autoOpen, entry }: ToolRendererProps) {
