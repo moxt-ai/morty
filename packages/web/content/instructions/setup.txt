@@ -1,13 +1,13 @@
 # Set up Morty
 
 This is the standalone entry for testing and external sharing, such as Twitter.
-Reuse the user's saved identity or create an anonymous identity and personal Bot.
+Reuse the user's saved identity or create an anonymous identity and personal Machine.
 No Clerk registration is required. Web-generated instructions use `/pair.md?token=...`.
 Only setup loads local configuration before connecting. It reuses the saved user
-token and Bot selection for this origin, including an identity saved by pair, or
+token and Machine selection for this origin, including an identity saved by pair, or
 creates an identity if none is available. It first reconnects a Mobius-managed
 connection for the App when Platform confirms its pairing is active; otherwise it
-creates a fresh Runtime pairing. Only Chat identity, Bot, handoff, and workspace
+creates a fresh Runtime pairing. Only Chat identity, Machine, handoff, and workspace
 configuration is backed up or saved in `config.json`. Do not retain or back up App,
 Runtime, Connection, Channel, or pairing identifiers, and do not ask for an additional
 replacement confirmation.
@@ -47,7 +47,7 @@ SESSION_ID="<current harness session ID>"
 node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --cwd "$PWD" --harness "$HARNESS" --session-id "$SESSION_ID"
 ```
 
-The command handles identity, Runtime pairing, Runtime launch, Bot binding, and
+The command handles identity, Runtime pairing, Runtime launch, Machine binding, and
 readiness. The selected Runtime uses the command's current working directory and joins
 the same singleton manager as every existing pairing. No separate prepare, bind, or
 finish commands are needed.
@@ -74,7 +74,7 @@ query Runtime files by path. In a TUI, read `qrTextPath` and show its contents i
 changing the spacing. Tell the user that the text QR is also available and can be shown
 in the TUI if needed. The link identifies this harness session
 so Chat can import it and open it after the handoff. The link can be successfully
-opened at most **five times**, does not expire, and opens the same user and Bot each time. Never open,
+opened at most **five times**, does not expire, and opens the same user and Machine each time. Never open,
 preview, scan, or redeem it yourself because doing so consumes one use. Tell the user:
 **Open this link or scan the QR code to chat. It can be used up to five times. Keep the
 Runtime online. You can bind an account later if you want.**

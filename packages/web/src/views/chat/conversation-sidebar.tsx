@@ -298,10 +298,10 @@ export function ConversationSidebar({
                         </span>
                         <p className="text-sm font-medium text-foreground">No conversations yet</p>
                         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                            Connect this Bot to start chatting.
+                            Connect this Machine to start chatting.
                         </p>
                         <Button className="mt-3" onClick={onPairAgain} size="sm" variant="outline">
-                            Connect Bot
+                            Connect Machine
                         </Button>
                     </div>
                 )}

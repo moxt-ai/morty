@@ -110,7 +110,7 @@ export class ManagementApi {
             const parsed = v.safeParse(v.object({ error: v.object({ code: v.string(), message: v.string() }) }), value);
             throw new CloudApiError(
                 parsed.success ? parsed.output.error.code : "MANAGEMENT_UNAVAILABLE",
-                parsed.success ? parsed.output.error.message : "Bot management is unavailable.",
+                parsed.success ? parsed.output.error.message : "Machine management is unavailable.",
                 response.status,
             );
         }

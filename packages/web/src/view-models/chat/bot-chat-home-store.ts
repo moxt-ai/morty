@@ -58,16 +58,16 @@ export function disconnectedBotNotice(
         case "connection-failed":
             return {
                 kind: "visible",
-                title: "Your Bot is disconnected",
-                description: "Start your local Runtime to reconnect this Bot and use its Sessions.",
+                title: "Your Machine is disconnected",
+                description: "Start your local Runtime to reconnect this Machine and use its Sessions.",
             };
         case "setup":
             return view.reason === "unconfigured"
                 ? { kind: "hidden" }
                 : {
                       kind: "visible",
-                      title: "Your Bot is disconnected",
-                      description: "Start your local Runtime to reconnect this Bot and use its Sessions.",
+                      title: "Your Machine is disconnected",
+                      description: "Start your local Runtime to reconnect this Machine and use its Sessions.",
                   };
         case "loading":
         case "connecting":
@@ -215,7 +215,7 @@ export const createBotChatHomeStore = (
                 const preferredBotId = options.selectedBotPreference.read();
                 const bot = bots.find((candidate) => candidate.botId === preferredBotId) ?? bots[0];
                 if (bot === undefined) {
-                    throw new Error("Your Bot is unavailable.");
+                    throw new Error("Your Machine is unavailable.");
                 }
                 options.selectedBotPreference.write(bot.botId);
                 openedBot = bot;
@@ -367,7 +367,7 @@ export const createBotChatHomeStore = (
                     if (openedBot === null) {
                         set({
                             selection: failedSelection,
-                            view: { kind: "failed", message: "Your Bot is unavailable." },
+                            view: { kind: "failed", message: "Your Machine is unavailable." },
                         });
                         return;
                     }
@@ -465,7 +465,7 @@ export const createBotChatHomeStore = (
         createBot: async (displayName, signal) => {
             const name = displayName.trim();
             if (name.length === 0 || name.length > 80) {
-                set({ botOperation: { kind: "failed", message: "Enter a Bot name between 1 and 80 characters." } });
+                set({ botOperation: { kind: "failed", message: "Enter a Machine name between 1 and 80 characters." } });
                 return false;
             }
             set({ botOperation: { kind: "creating" } });
@@ -495,7 +495,7 @@ export const createBotChatHomeStore = (
                     set({
                         botOperation: {
                             kind: "failed",
-                            message: cause instanceof Error ? cause.message : "The Bot could not be created.",
+                            message: cause instanceof Error ? cause.message : "The Machine could not be created.",
                         },
                     });
                 }
@@ -515,7 +515,7 @@ export const createBotChatHomeStore = (
                 const bots = get().bots.filter((bot) => bot.botId !== activeBot.botId);
                 const selected = bots[0];
                 if (selected === undefined) {
-                    throw new Error("Keep at least one Bot in your workspace.");
+                    throw new Error("Keep at least one Machine in your workspace.");
                 }
                 options.selectedBotPreference.write(selected.botId);
                 options.navigation.showDraft();
@@ -540,7 +540,7 @@ export const createBotChatHomeStore = (
                     set({
                         botOperation: {
                             kind: "failed",
-                            message: cause instanceof Error ? cause.message : "The Bot could not be removed.",
+                            message: cause instanceof Error ? cause.message : "The Machine could not be removed.",
                         },
                     });
                 }

@@ -1,11 +1,11 @@
 # Pair Morty
 
 The user supplied `follow <origin>/pair.md?token=...`. That token is a one-use
-ticket, valid for **10 minutes**, for their existing user, Bot, and workspace.
-Fetching this document does not consume it. Do not create another user or Bot.
-Pairing takes its identity and Bot only from the supplied ticket. After redemption,
-it fully validates the returned identity, Bot, workspace, and expected Runtime before
-continuing. The verified Chat identity, Bot, and workspace are saved to `config.json`;
+ticket, valid for **10 minutes**, for their existing user, Machine, and workspace.
+Fetching this document does not consume it. Do not create another user or Machine.
+Pairing takes its identity and Machine only from the supplied ticket. After redemption,
+it fully validates the returned identity, Machine, workspace, and expected Runtime before
+continuing. The verified Chat identity, Machine, and workspace are saved to `config.json`;
 Mobius owns Runtime connection state and identifiers. Do not retain or back up App,
 Runtime, Connection, Channel, or pairing identifiers, and do not ask for an additional
 replacement confirmation.
@@ -46,11 +46,11 @@ node "$SCRIPT_DIR/setup.mjs" pair --base-url "$BASE_URL" --cwd "$PWD" --token="$
 ```
 
 This single command exchanges the ticket, creates a fresh Runtime pairing for the
-Project and Bot returned by that ticket and the current working directory, saves only
-the private Chat identity and Bot configuration, and launches the Runtime through the
+Project and Machine returned by that ticket and the current working directory, saves only
+the private Chat identity and Machine configuration, and launches the Runtime through the
 singleton local manager. After Runtime pairing reports
 the requested harness, the script immediately requests
-its Bot binding and checks readiness. It does not list or reuse managed Runtime
+its Machine binding and checks readiness. It does not list or reuse managed Runtime
 connections; those remain online. The setup configuration does not persist App, Runtime, Connection,
 Channel, or pairing identifiers.
 
@@ -61,13 +61,13 @@ log path. It waits at most five minutes. `runtime_started` or `binding_activated
 progress; only `status: "ready"` confirms
 an active binding and online Runtime. A successful chat reply is a separate check.
 
-When ready, tell the user: **Your Bot is connected. Return to your Morty page
-to start chatting. Keep the Runtime online.** Include the returned URL, Bot ID, and workspace.
+When ready, tell the user: **Your Machine is connected. Return to your Morty page
+to start chatting. Keep the Runtime online.** Include the returned URL, Machine ID, and workspace.
 
 On failure, use `error.code` and the private Runtime log to resolve the problem.
 If `identity_ready` was emitted, set `SESSION_ID` to this current harness session's
 exact ID and reconnect using `node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --cwd "$PWD" --harness "$HARNESS" --session-id "$SESSION_ID"`.
-Setup loads the saved user and Bot and starts Runtime
+Setup loads the saved user and Machine and starts Runtime
 pairing fresh; its ready result includes a browser handoff as described in `/setup.md`.
 `HARNESS_UNAVAILABLE` reports the advertised alternatives; repair authentication or
 ask the user before selecting a different harness. Pair always redeems its ticket;

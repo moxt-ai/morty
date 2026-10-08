@@ -64,7 +64,7 @@ export class ManagementService {
             (await this.#platform.create(userId, "Personal workspace", signal, location));
         await this.#platformProjects.save(userId, origin, appId, project, signal);
         signal.throwIfAborted();
-        const bot = { botId: `bot_${crypto.randomUUID()}`, displayName: "My Bot" };
+        const bot = { botId: `bot_${crypto.randomUUID()}`, displayName: "My Machine" };
         await this.#managedBots.saveClaim(userId, bot, Date.now(), signal);
         this.#logger.info({ event: "user-bot-created", userId, botId: bot.botId }, "Bot audit event");
         return bot;
@@ -85,7 +85,7 @@ export class ManagementService {
     readonly readBot = async (userId: string, botId: string, signal: AbortSignal) => {
         const bot = await this.#managedBots.readBot(userId, botId, signal);
         if (bot === null) {
-            throw new ManagementError("BOT_NOT_FOUND", "Bot is unavailable.", 404);
+            throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
         }
         return {
             botId: bot.botId,
@@ -103,7 +103,7 @@ export class ManagementService {
     ) => {
         await this.readBot(userId, botId, signal);
         if (!(await this.#managedBots.updateBot(userId, botId, input, Date.now(), signal))) {
-            throw new ManagementError("BOT_NOT_FOUND", "Bot is unavailable.", 404);
+            throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
         }
         this.#logger.info({ event: "user-bot-updated", userId, botId }, "Bot audit event");
         return await this.readBot(userId, botId, signal);
@@ -116,9 +116,9 @@ export class ManagementService {
                 this.#logger.info({ event: "user-bot-deleted", userId, botId }, "Bot audit event");
                 return;
             case "last-bot":
-                throw new ManagementError("LAST_BOT_REQUIRED", "Keep at least one Bot in your workspace.", 409);
+                throw new ManagementError("LAST_BOT_REQUIRED", "Keep at least one Machine in your workspace.", 409);
             case "not-found":
-                throw new ManagementError("BOT_NOT_FOUND", "Bot is unavailable.", 404);
+                throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
         }
     };
 
@@ -173,7 +173,7 @@ export class ManagementService {
         }
         const bot = await this.#managedBots.readBot(session.session.userId, botId, signal);
         if (bot === null) {
-            throw new ManagementError("BOT_NOT_FOUND", "Bot is unavailable.", 404);
+            throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
         }
         return await this.#authentication.createPairing(
             session.session.userId,
@@ -194,7 +194,7 @@ export class ManagementService {
         }
         const project = await this.readProject(identity.userId, signal);
         if (project === null) {
-            throw new ManagementError("PROJECT_REQUIRED", "The Bot's workspace is unavailable.", 409);
+            throw new ManagementError("PROJECT_REQUIRED", "The Machine's workspace is unavailable.", 409);
         }
         return { ...identity, projectId: project.projectId };
     };

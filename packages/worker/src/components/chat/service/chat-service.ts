@@ -100,17 +100,20 @@ export class ChatService {
         signal: AbortSignal,
         timing: OperationTiming,
     ): Promise<ChatScope> => {
-        const [ownsProject, ownsBot] = await timing.measure("ownership", "Verify Project and Bot ownership", async () =>
-            Promise.all([
-                this.#identities.ownsProject(userId, projectId, signal),
-                this.#managedBots.ownsBot(userId, botId, signal),
-            ]),
+        const [ownsProject, ownsBot] = await timing.measure(
+            "ownership",
+            "Verify Project and Machine ownership",
+            async () =>
+                Promise.all([
+                    this.#identities.ownsProject(userId, projectId, signal),
+                    this.#managedBots.ownsBot(userId, botId, signal),
+                ]),
         );
         if (!ownsProject) {
             throw new PlatformProjectError("NOT_FOUND", "Your workspace was not found.", 404);
         }
         if (!ownsBot) {
-            throw new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);
+            throw new PlatformProjectError("NOT_FOUND", "Your Machine was not found.", 404);
         }
         return { userId, projectId, botId, signal };
     };
@@ -125,7 +128,7 @@ export class ChatService {
     readonly setupRuntimes = async (scope: ChatScope) => {
         const bot = await this.#bot(scope);
         if (bot.configuration !== null) {
-            throw new PlatformProjectError("BOT_RUNTIME_FIXED", "This Bot already has a configured Runtime.", 409);
+            throw new PlatformProjectError("BOT_RUNTIME_FIXED", "This Machine already has a configured Runtime.", 409);
         }
         return { runtimes: await this.#platform.chatRuntimes(scope.projectId, scope.signal) };
     };
@@ -156,7 +159,7 @@ export class ChatService {
     readonly #bot = async (scope: ChatScope) => {
         const bot = await this.#managedBots.readBot(scope.userId, scope.botId, scope.signal);
         if (bot === null) {
-            throw new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);
+            throw new PlatformProjectError("NOT_FOUND", "Your Machine was not found.", 404);
         }
         return bot;
     };
@@ -164,7 +167,7 @@ export class ChatService {
     readonly localRuntime = async (scope: ChatScope) => {
         const bot = await this.#bot(scope);
         if (bot.configuration === null) {
-            throw new PlatformProjectError("AGENT_REQUIRED", "Connect an Agent to this Bot first.", 409);
+            throw new PlatformProjectError("AGENT_REQUIRED", "Connect an Agent to this Machine first.", 409);
         }
         return bot.configuration;
     };
@@ -172,7 +175,11 @@ export class ChatService {
     readonly #requireRuntimeAgent = async (scope: ChatScope, runtimeId: string, agentRef: string) => {
         const runtime = await this.#platform.getChatRuntimeAgents(scope.projectId, runtimeId, scope.signal);
         if (!runtime.agents.some((agent) => agent.agentRef === agentRef)) {
-            throw new PlatformProjectError("AGENT_UNAVAILABLE", "Choose an agent provided by this Bot's Runtime.", 409);
+            throw new PlatformProjectError(
+                "AGENT_UNAVAILABLE",
+                "Choose an agent provided by this Machine's Runtime.",
+                409,
+            );
         }
     };
 
@@ -536,7 +543,11 @@ export class ChatService {
     readonly configureBot = async (scope: ChatScope, input: ConfigureBotInput) => {
         const current = await this.#bot(scope);
         if (current.configuration !== null && current.configuration.runtimeId !== input.runtimeId) {
-            throw new PlatformProjectError("BOT_RUNTIME_FIXED", "Create a new Bot to pair a different Runtime.", 409);
+            throw new PlatformProjectError(
+                "BOT_RUNTIME_FIXED",
+                "Create a new Machine to pair a different Runtime.",
+                409,
+            );
         }
         await this.#requireRuntimeAgent(scope, input.runtimeId, input.agentRef);
         await this.#platform.discoverChatAgentSettings(
@@ -555,11 +566,11 @@ export class ChatService {
             if (result === "runtime-mismatch") {
                 throw new PlatformProjectError(
                     "BOT_RUNTIME_FIXED",
-                    "Create a new Bot to pair a different Runtime.",
+                    "Create a new Machine to pair a different Runtime.",
                     409,
                 );
             }
-            throw new PlatformProjectError("NOT_FOUND", "Your Bot was not found.", 404);
+            throw new PlatformProjectError("NOT_FOUND", "Your Machine was not found.", 404);
         }
         this.#logger.info(
             { event: "bot-setup-requested", userId: scope.userId, projectId: scope.projectId, botId: scope.botId },

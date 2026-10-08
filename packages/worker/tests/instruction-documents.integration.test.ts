@@ -71,7 +71,7 @@ test("Given setup and pairing documents, When users fetch them from configured a
         expect(document).toContain("https://chat.example/setup.mjs");
         expect(document).not.toMatch(/\{\{.*\}\}|preview\.example|paradev\.biz|paraflow\.biz|token=ticket/);
     }
-    expect(documents.get("pair")).toContain("existing user, Bot, and workspace");
+    expect(documents.get("pair")).toContain("existing user, Machine, and workspace");
     expect(documents.get("pair")).toContain('TOKEN="<one-use token from the supplied URL>"');
     expect(documents.get("pair")).toContain('node "$SCRIPT_DIR/setup.mjs" pair --base-url "$BASE_URL"');
     expect(documents.get("pair")).toContain("Mobius owns Runtime connection state and identifiers");

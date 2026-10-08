@@ -411,7 +411,11 @@ export function BotChatHome({
             {pairingDialogOpen && active !== null && (
                 <Dialog
                     title={
-                        disconnectedBot ? "Bot disconnected" : setupView === null ? "Pair agent again" : "Connect agent"
+                        disconnectedBot
+                            ? "Machine disconnected"
+                            : setupView === null
+                              ? "Pair agent again"
+                              : "Connect agent"
                     }
                     description={
                         setupView === null
@@ -469,7 +473,7 @@ export function BotChatHome({
                         </p>
                     </div>
                     <button
-                        aria-label="Dismiss disconnected Bot notification"
+                        aria-label="Dismiss disconnected Machine notification"
                         className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/70"
                         onClick={() => setDisconnectedNotificationDismissed(true)}
                         type="button"

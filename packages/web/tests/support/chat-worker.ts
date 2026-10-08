@@ -65,7 +65,7 @@ export async function createChatWorkerEnvironment() {
                     agentRef: "claude",
                 });
                 if (setup.status !== 202) {
-                    throw new Error(`Could not prepare the test Bot: ${setup.status} ${await setup.text()}`);
+                    throw new Error(`Could not prepare the test Machine: ${setup.status} ${await setup.text()}`);
                 }
                 return {
                     failure: runtime.failure,

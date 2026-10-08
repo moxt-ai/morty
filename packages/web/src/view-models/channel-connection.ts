@@ -18,7 +18,7 @@ export interface ApplicationConnectionProps<TConnection> {
 class ChannelConnectionError extends Error {
     readonly code = "CONNECTION_UNAVAILABLE";
     constructor(options?: ErrorOptions) {
-        super("The saved bot connection could not be restored.", options);
+        super("The saved machine connection could not be restored.", options);
         this.name = "ChannelConnectionError";
     }
 }

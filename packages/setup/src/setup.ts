@@ -394,7 +394,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function preparePairIdentity(context: Context, ticket: string): Promise<PairIdentity> {
-        progress("identity", "Exchanging the one-time ticket for the existing user, Bot, and workspace.");
+        progress("identity", "Exchanging the one-time ticket for the existing user, Machine, and workspace.");
         const identity = await request(context, "/identity/pairings/redeem", { token: ticket }, false);
         const expectedRuntimeId = identity.expectedRuntimeId === null ? null : identifier(identity.expectedRuntimeId);
         const saved = await saveConfiguration(context, {
@@ -415,7 +415,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             progress("identity", "Reusing the saved identity.");
             return { kind: "setup", context };
         }
-        progress("identity", "Creating the standalone identity and Bot.");
+        progress("identity", "Creating the standalone identity and Machine.");
         const identity = await request(context, "/identity/anonymous-users", {}, false);
         const saved = await saveConfiguration(context, {
             user_token: credential(identity.token),
@@ -661,7 +661,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function bindAgent(context: Context, runtime: RuntimeSelection, harness: string) {
-        progress("binding", `Connecting the Bot to ${harness} in the default workspace.`);
+        progress("binding", `Connecting the Machine to ${harness} in the default workspace.`);
         const runtimeId = runtime.runtimeId;
         const agentRef = identifier(harness);
         const revision = context.config.agent_ref === agentRef ? (context.config.agent_config_revision ?? 1) : 1;
@@ -701,7 +701,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 return;
             }
             if (attempts++ % 10 === 0) {
-                progress("activation", "Waiting for the Bot binding to become active.");
+                progress("activation", "Waiting for the Machine binding to become active.");
             }
             await clock.wait(1000, signal);
         }

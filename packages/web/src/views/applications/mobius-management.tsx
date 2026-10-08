@@ -19,7 +19,7 @@ export function userBotConnection(
     return new BrowserChannelConnection(userId, async (botId, signal) => {
         const bots = await requests.listBots(signal);
         if (!bots.some((bot) => bot.botId === botId)) {
-            throw new Error("Your Bot is unavailable.");
+            throw new Error("Your Machine is unavailable.");
         }
         return { channelId: botId };
     });

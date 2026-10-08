@@ -63,7 +63,7 @@ export function BotSwitcherMenu({
             <Popover.Root onOpenChange={setOpen} open={open}>
                 <Popover.Trigger asChild>
                     <button
-                        aria-label={`Select Bot. ${activeBot.displayName}, ${connectionStatus.label}`}
+                        aria-label={`Select Machine. ${activeBot.displayName}, ${connectionStatus.label}`}
                         className="relative flex size-10 justify-self-end items-center justify-center gap-2 rounded-lg text-left outline-none hover:bg-white/70 focus-visible:ring-2 focus-visible:ring-ring/60 data-[state=open]:bg-white/70 sm:mb-6 sm:h-auto sm:w-full sm:justify-self-auto sm:justify-start sm:px-1.5 sm:py-1.5"
                         data-testid={dataTestId.botMenuTrigger}
                         type="button"
@@ -98,13 +98,13 @@ export function BotSwitcherMenu({
                 <Popover.Portal>
                     <Popover.Content
                         align="start"
-                        aria-label="Bots"
+                        aria-label="Machines"
                         className="z-[100] w-[min(calc(100vw-1.5rem),260px)] rounded-xl border border-border bg-background p-1.5 text-sm shadow-xl"
                         side="bottom"
                         sideOffset={6}
                     >
                         <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                            Bots
+                            Machines
                         </p>
                         {bots.map((bot) => (
                             <button
@@ -150,7 +150,7 @@ export function BotSwitcherMenu({
                             type="button"
                         >
                             <Plus aria-hidden="true" className="size-4" />
-                            Create a new Bot
+                            Create a new Machine
                         </button>
                         {bots.length >= 2 && (
                             <button
@@ -164,7 +164,7 @@ export function BotSwitcherMenu({
                                 type="button"
                             >
                                 <Trash2 aria-hidden="true" className="size-4" />
-                                Remove Bot
+                                Remove Machine
                             </button>
                         )}
                     </Popover.Content>
@@ -172,9 +172,9 @@ export function BotSwitcherMenu({
             </Popover.Root>
             {dialog.kind === "create" && (
                 <Dialog
-                    description="Create a separate Bot before pairing another machine. Each Bot keeps its own Runtime binding."
+                    description="Create a separate Machine before pairing another Runtime. Each Machine keeps its own Runtime binding."
                     onClose={closeDialog}
-                    title="Create a new Bot"
+                    title="Create a new Machine"
                 >
                     <form
                         className="mt-5 grid gap-4"
@@ -189,7 +189,7 @@ export function BotSwitcherMenu({
                         }}
                     >
                         <label className="grid gap-1.5 text-sm font-medium">
-                            Bot name
+                            Machine name
                             <input
                                 autoFocus
                                 className="h-10 rounded-lg border border-border bg-background px-3 font-normal outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
@@ -215,7 +215,7 @@ export function BotSwitcherMenu({
                                 disabled={operation.kind === "creating" || name.trim().length === 0}
                                 type="submit"
                             >
-                                {operation.kind === "creating" ? "Creating…" : "Create Bot"}
+                                {operation.kind === "creating" ? "Creating…" : "Create Machine"}
                             </Button>
                         </div>
                     </form>
@@ -225,7 +225,7 @@ export function BotSwitcherMenu({
                 <Dialog
                     description={`Remove ${activeBot.displayName} from this workspace? Its conversations will no longer be available in Chat.`}
                     onClose={closeDialog}
-                    title="Remove Bot"
+                    title="Remove Machine"
                 >
                     {operation.kind === "failed" && (
                         <p className="mt-4 text-sm text-destructive">{operation.message}</p>
@@ -247,7 +247,7 @@ export function BotSwitcherMenu({
                             }}
                             variant="destructive"
                         >
-                            {operation.kind === "removing" ? "Removing…" : "Remove Bot"}
+                            {operation.kind === "removing" ? "Removing…" : "Remove Machine"}
                         </Button>
                     </div>
                 </Dialog>

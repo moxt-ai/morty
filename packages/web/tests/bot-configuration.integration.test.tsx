@@ -12,10 +12,10 @@ test("Given an unpaired workspace, When a user manages Bots, Then pairing and th
         app.queryElementByTestId(dataTestId.chatLanding),
         app.queryElementByTestId(dataTestId.pairingInstruction),
     ]);
-    expect(landing.textContent).toContain("My Bot");
+    expect(landing.textContent).toContain("My Machine");
     const conversationSetup = await app.queryElementByTestId(dataTestId.conversationSetupRequired);
     expect(conversationSetup.textContent).toContain("No conversations yet");
-    expect(conversationSetup.textContent).toContain("Connect Bot");
+    expect(conversationSetup.textContent).toContain("Connect Machine");
     expect(conversationSetup.getAttribute("role")).not.toBe("alert");
 
     expect(pairing).toBeInstanceOf(HTMLInputElement);
@@ -41,7 +41,7 @@ test("Given an unpaired workspace, When a user manages Bots, Then pairing and th
     await app.user.click(await app.queryElementByTestId(dataTestId.confirmRemoveBot));
     await app.queryElementByTestId(
         dataTestId.botMenuTrigger,
-        (element) => element.textContent?.includes("My Bot") === true,
+        (element) => element.textContent?.includes("My Machine") === true,
     );
     await app.user.click(app.elementByTestId(dataTestId.botMenuTrigger));
     expect(app.optionalElementByTestId(dataTestId.removeBot)).toBeNull();

@@ -38,7 +38,7 @@ export function MobiusApplications<TConnection>({
                     ) : (
                         <div className="flex flex-col items-start gap-4 self-start rounded-xl border border-border bg-card p-6">
                             <p role="status" className="text-sm text-muted-foreground">
-                                Select one of your bots to open Chat.
+                                Select one of your machines to open Chat.
                             </p>
                             <Button asChild>
                                 <Link to="/" search={{}}>
@@ -50,7 +50,7 @@ export function MobiusApplications<TConnection>({
                 </section>
             ) : (
                 <div className="grid min-w-0 items-start gap-6 motion-safe:animate-cloud-enter lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
-                    <section aria-label="Workspace and bot management" className="min-w-0">
+                    <section aria-label="Workspace and machine management" className="min-w-0">
                         <WorkspaceApplication userId={userId} onChannelSelected={selectChannel} />
                     </section>
                     <nav aria-label="Applications" className="grid gap-5">

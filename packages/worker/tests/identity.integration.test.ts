@@ -190,7 +190,7 @@ test("Given a first-time visitor, When their workspace and Bot are managed, Then
         await bots.json(),
     );
     expect(availableBots).toHaveLength(1);
-    const bot = v.parse(v.object({ botId: v.string(), displayName: v.literal("My Bot") }), availableBots[0]);
+    const bot = v.parse(v.object({ botId: v.string(), displayName: v.literal("My Machine") }), availableBots[0]);
     const updated = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bots/${bot.botId}`, {
             method: "PATCH",

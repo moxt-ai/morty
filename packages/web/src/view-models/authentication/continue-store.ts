@@ -115,7 +115,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 const preferredBot = createSelectedBotPreference(identity.projectId).read();
                 const bot = bots.find((candidate) => candidate.botId === preferredBot) ?? bots[0];
                 if (bot === undefined) {
-                    throw new Error("Your Bot is unavailable.");
+                    throw new Error("Your Machine is unavailable.");
                 }
                 const chat = new BotChatApi({
                     fetchRequest,
