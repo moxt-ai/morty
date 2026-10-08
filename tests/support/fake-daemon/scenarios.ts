@@ -1,7 +1,16 @@
 import type { HarnessOutput, HarnessReplyPlan } from "@moxt-ai/mobius-test-support/fake-daemon";
 
-export const mortyFiles = new Map([
-    ["/workspace/generated-picture.png", { content: "test image bytes", mediaType: "image/png" }],
+export const mortyFiles = new Map<string, { readonly content: string | Uint8Array; readonly mediaType: string }>([
+    [
+        "/workspace/generated-picture.png",
+        {
+            content: Buffer.from(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV4kAAAAASUVORK5CYII=",
+                "base64",
+            ),
+            mediaType: "image/png",
+        },
+    ],
     [
         "/workspace/edit-tool-presentation.tsx",
         {

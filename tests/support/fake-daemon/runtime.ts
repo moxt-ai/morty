@@ -34,7 +34,7 @@ export interface ControlledRuntimeConnection {
 }
 
 export interface ControlledAgentBehavior extends FakeAgentHarnessOptions {
-    readonly files?: ReadonlyMap<string, { readonly content: string; readonly mediaType: string }>;
+    readonly files?: ReadonlyMap<string, { readonly content: string | Uint8Array; readonly mediaType: string }>;
 }
 
 function workspaceReply(behavior: ControlledAgentBehavior, workspace: string): FakeAgentHarnessOptions["reply"] {
@@ -68,7 +68,7 @@ async function writeWorkspaceFiles(
             throw new Error("Controlled Agent file path escaped /workspace");
         }
         await mkdir(resolve(target, ".."), { recursive: true });
-        await writeFile(target, file.content, { encoding: "utf8", signal });
+        await writeFile(target, file.content, { signal });
     }
 }
 

@@ -262,7 +262,7 @@ test("Given an Agent response references a local image, When the user reads it a
     await sendPrompt(app, composer, "show generated picture");
     const image = await app.waitForView(() => getByRole(document.body, "img", { name: "Generated picture" }));
     expect(image.getAttribute("src")).toMatch(/^blob:/u);
-    expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain("test image bytes");
+    expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain("iVBORw0KGgo");
     app.remount();
     const restored = await app.waitForView(() => getByRole(document.body, "img", { name: "Generated picture" }));
     expect(restored.getAttribute("src")).toMatch(/^blob:/u);
