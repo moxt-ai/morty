@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 import { CwdShellCommandToolCall, matchesCwdShellCommandToolCall } from "./cwd-shell-command-tool-call.tsx";
+import { FilePathEditToolCall, matchesFilePathEditToolCall } from "./file-path-edit-tool-call.tsx";
 import { FilePathReadToolCall, matchesFilePathReadToolCall } from "./file-path-read-tool-call.tsx";
 import { GlobToolCall, matchesGlobToolCall } from "./glob-tool-call.tsx";
 import { GrepToolCall, matchesGrepToolCall } from "./grep-tool-call.tsx";
@@ -20,6 +21,10 @@ const TOOL_RENDERERS: readonly ToolRenderer[] = [
     {
         Component: QuestionToolCall,
         matches: matchesQuestionToolCall,
+    },
+    {
+        Component: FilePathEditToolCall,
+        matches: matchesFilePathEditToolCall,
     },
     {
         Component: InputDiffEditToolCall,
