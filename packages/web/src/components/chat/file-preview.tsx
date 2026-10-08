@@ -2,6 +2,7 @@ import { FileText, LoaderCircle, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import type { FilePreviewState } from "../../view-models/chat/file-preview-store.ts";
+import { HighlightedCode, languageForPath } from "./tools/highlighted-code.tsx";
 
 function PreviewImage({ state }: { readonly state: Extract<FilePreviewState, { readonly kind: "image" }> }) {
     const [source, setSource] = useState("");
@@ -28,7 +29,7 @@ export function FilePreview({ onClose, state }: { readonly onClose: () => void; 
     return (
         <aside
             aria-label="Local file preview"
-            className="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-border bg-surface-elevated shadow-2xl md:w-[50vw]"
+            className="fixed inset-0 z-50 flex w-full flex-col border-l border-border bg-surface-elevated shadow-2xl sm:static sm:z-auto sm:min-h-0 sm:w-[min(50vw,56rem)] sm:shrink-0"
             data-testid={dataTestId.filePreview}
         >
             <header className="flex min-h-14 items-center gap-3 border-b border-border px-4">
@@ -54,12 +55,12 @@ export function FilePreview({ onClose, state }: { readonly onClose: () => void; 
                 ) : state.kind === "failed" ? (
                     <p className="text-sm text-destructive">{state.message}</p>
                 ) : state.kind === "text" ? (
-                    <pre
-                        className="min-h-full w-full overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-white p-4 font-mono text-sm leading-6"
+                    <div
+                        className="min-h-full w-full overflow-hidden rounded-lg border border-border bg-white [&_pre]:!max-h-none"
                         data-testid={dataTestId.filePreviewContent}
                     >
-                        {state.text}
-                    </pre>
+                        <HighlightedCode code={state.text} language={languageForPath(state.name)} />
+                    </div>
                 ) : (
                     <PreviewImage state={state} />
                 )}

@@ -1,5 +1,30 @@
 import { expect, test } from "./infra/test.ts";
 
+test("Given a linked TypeScript file, When the user opens it, Then a highlighted preview sits beside the conversation", async ({
+    runtime,
+}, testInfo) => {
+    const { page } = runtime;
+    await runtime.openPairedChat();
+
+    await page.getByRole("textbox", { name: "Message" }).fill("show source file");
+    await page.getByRole("button", { name: "Send message" }).click();
+    await page.getByRole("button", { name: "Open source" }).click();
+
+    const messages = page.getByRole("log", { name: "Messages" });
+    const preview = page.getByRole("complementary", { name: "Local file preview" });
+    await expect(preview).toContainText("export function FileExplorer");
+    await expect(preview.locator("span[style]").first()).toBeVisible();
+    const messagesBox = await messages.boundingBox();
+    const previewBox = await preview.boundingBox();
+    expect(messagesBox).not.toBeNull();
+    expect(previewBox).not.toBeNull();
+    if (messagesBox === null || previewBox === null) {
+        throw new Error("Expected the conversation and preview to have browser layout boxes");
+    }
+    expect(previewBox.x).toBeGreaterThanOrEqual(messagesBox.x + messagesBox.width - 1);
+    await page.screenshot({ fullPage: true, path: testInfo.outputPath("file-preview.png") });
+});
+
 test("Given a paired Bot, When a user sends and observes prompts across pages, Then live and completed replies remain consistent", async ({
     runtime,
 }, testInfo) => {
