@@ -153,3 +153,28 @@ test("Given a Bot has a recent directory from another harness, When its workspac
 
     expect(menu.textContent).toContain("/saved-by-another-harness");
 });
+
+test("Given a Bot paired with Pi, When the user opens its settings and sends a prompt, Then Pi and its streamed reply are visible", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true, agent: { id: "pi", label: "Pi" } });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
+    const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
+    expect(getByRole(configuration, "tab", { name: "Pi", selected: true })).toBeDefined();
+    await app.user.keyboard("{Escape}");
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    expect(composer).toBeInstanceOf(HTMLTextAreaElement);
+    const prompt = "Reply through the Pi integration";
+    await sendPrompt(app, composer as HTMLTextAreaElement, prompt);
+    await app.waitForView(() => {
+        const reply = app
+            .elementsByTestId(dataTestId.agentResponse)
+            .find((element) => element.textContent?.includes(prompt));
+        expect(reply).toBeDefined();
+        return reply;
+    });
+});
