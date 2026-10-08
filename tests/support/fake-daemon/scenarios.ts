@@ -1,7 +1,7 @@
-import type { Output, ReplyPlan } from "@moxt-ai/mobius-test/fake-daemon/model";
+import type { HarnessOutput, HarnessReplyPlan } from "@moxt-ai/mobius-test-support/fake-daemon";
 
 /** Shared Morty scenario data; the protocol peer has no prompt-specific branches. */
-export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | "steer"): ReplyPlan {
+export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | "steer"): HarnessReplyPlan {
     if (mode === "steer") {
         return {
             outcome: prompt === "Use the revised requirement" ? "hold" : "complete",
@@ -60,7 +60,7 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
             return {
                 outcome: "complete",
                 output: ["The ", "user ", "is ", "showing ", "me ", "an ", "image"].map(
-                    (output): Output => ({
+                    (output): HarnessOutput => ({
                         activityType: "reasoning",
                         kind: "activity",
                         output,

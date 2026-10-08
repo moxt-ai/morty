@@ -1,7 +1,7 @@
 import { MobiusOidcCredentialProvider, MobiusPlatformDeveloperClient } from "@moxt-ai/mobius-sdk/platform";
 import { FakeClerk } from "@moxt-ai/mobius-test/clerk";
 import { createTestMobiusPlatformBindings } from "@moxt-ai/mobius-test/cloudflare";
-import { createFakeAgentDaemonRuntime } from "@moxt-ai/mobius-test/fake-daemon/connection";
+import { createControlledAgentRuntime } from "../../../../tests/support/fake-daemon/runtime.ts";
 import { mortyReply } from "../../../../tests/support/fake-daemon/scenarios.ts";
 
 /** Starts the production Platform boundary with isolated local Cloudflare storage. */
@@ -49,7 +49,7 @@ export async function startTestPlatform(options: { readonly allowedOrigins?: Rea
                 agents: readonly { readonly id: string; readonly label: string }[] = [{ id: "codex", label: "Codex" }],
                 nativeSessionIds?: ReadonlySet<string>,
             ) => {
-                const runtime = await createFakeAgentDaemonRuntime({
+                const runtime = await createControlledAgentRuntime({
                     credential,
                     behavior: {
                         reply: mortyReply,

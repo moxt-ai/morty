@@ -10,6 +10,9 @@ minimumReleaseAgeExclude:
   - '@moxt-ai/mobius-protocol@0.0.28'
   - '@moxt-ai/mobius-sdk@0.0.39'
 
+overrides:
+  '@agentclientprotocol/sdk': 1.4.0
+
 catalog:
   '@biomejs/biome': 2.5.12
   '@clerk/backend': 3.17.1
@@ -77,10 +80,16 @@ packages:
   - packages/worker
   - third-party/mobius/packages/protocol
   - third-party/mobius/packages/mobius-sdk
+  - third-party/mobius/packages/cli
+  - third-party/mobius/packages/mobius-test-support
+  - third-party/mobius/packages/test-support
+  - third-party/mobius/packages/relay-core
+  - third-party/mobius/packages/relay-cloudflare-platform
 
 allowBuilds:
   '@sentry/cli': true
   bufferutil: false
+  better-sqlite3: true
   esbuild: true
   simple-git-hooks: true
   utf-8-validate: false

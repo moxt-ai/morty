@@ -92,7 +92,7 @@ test("Given a partially streamed reply, When Chat remounts and the daemon contin
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected fake daemon");
+        throw new Error("Expected a connected controlled Agent Runtime");
     }
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -113,8 +113,7 @@ test("Given a partially streamed reply, When Chat remounts and the daemon contin
     app.remount();
     await app.queryElementByTestId(dataTestId.sessionStatus);
     await app.waitForView(() => expect(document.body.textContent).toContain("partial.bin"));
-    daemon.replayLastText("hold after first delta");
-    daemon.continueReply("hold after first delta", {
+    await daemon.continueReply("hold after first delta", {
         outcome: "hold",
         output: [{ kind: "text", text: " and the next streamed chunk" }],
     });
@@ -128,7 +127,7 @@ test("Given a partially streamed reply, When Chat remounts and the daemon contin
         expect(document.body.textContent).toContain("partial.bin");
         expect(app.optionalElementByTestId(dataTestId.sessionStatus)).not.toBeNull();
     });
-    daemon.continueReply("hold after first delta", {
+    await daemon.continueReply("hold after first delta", {
         outcome: "complete",
         output: [{ kind: "text", text: " and the final chunk" }],
     });
@@ -161,9 +160,9 @@ test("Given a conversation is running in the background, When it completes after
     await app.queryElementByTestId(dataTestId.sessionStatus);
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected fake daemon");
+        throw new Error("Expected a connected controlled Agent Runtime");
     }
-    daemon.continueReply("hold after first delta", { outcome: "complete", output: [] });
+    await daemon.continueReply("hold after first delta", { outcome: "complete", output: [] });
     await app.queryElementByTestId(
         dataTestId.sessionStatus,
         (element) => element.getAttribute("aria-label") === "Unread response",
