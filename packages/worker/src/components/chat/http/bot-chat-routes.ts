@@ -1,3 +1,4 @@
+import { encodeSessionStatusChangedEvent } from "@moxt-ai/mobius-protocol";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { createMiddleware } from "hono/factory";
@@ -104,6 +105,38 @@ function privateJson(value: unknown) {
     return response;
 }
 
+function sessionStatusStream(context: Context<AuthorizedChatEnvironment>): Response {
+    const lifetime = new AbortController();
+    const abort = (): void => lifetime.abort(context.req.raw.signal.reason);
+    context.req.raw.signal.addEventListener("abort", abort, { once: true });
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+        start: (controller) => {
+            void context.env.services.chat
+                .subscribeManagedSessionStatuses(
+                    context.get("chatScope"),
+                    (event) => controller.enqueue(encoder.encode(`${encodeSessionStatusChangedEvent(event)}\n`)),
+                    lifetime.signal,
+                )
+                .then(
+                    () => controller.close(),
+                    (cause: unknown) => {
+                        if (lifetime.signal.aborted) {
+                            controller.close();
+                        } else {
+                            controller.error(cause);
+                        }
+                    },
+                )
+                .finally(() => context.req.raw.signal.removeEventListener("abort", abort));
+        },
+        cancel: (reason) => lifetime.abort(reason),
+    });
+    return new Response(body, {
+        headers: { "Cache-Control": "no-store", "Content-Type": "application/x-ndjson" },
+    });
+}
+
 export function createBotChatRoutes() {
     return new Hono<AuthorizedChatEnvironment>()
         .use(
@@ -137,6 +170,7 @@ export function createBotChatRoutes() {
         .post("/bots/:botId/managed-sessions", authenticatedSession, authorizedChat(), async (context) => {
             return privateJson(await context.env.services.chat.managedSessions(context.get("chatScope")));
         })
+        .post("/bots/:botId/managed-session/status-events", authenticatedSession, authorizedChat(), sessionStatusStream)
         .post(
             "/bots/:botId/agent-settings",
             authenticatedSession,

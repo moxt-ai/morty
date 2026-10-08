@@ -36,6 +36,7 @@ export function MobiusManagement() {
                 projectId: identity.projectId,
                 getToken: identity.getToken,
                 fetchRequest: transport.fetch,
+                subscribe: transport.subscribe,
                 waitForChange: transport.waitForChange,
             }),
         [identity, transport],

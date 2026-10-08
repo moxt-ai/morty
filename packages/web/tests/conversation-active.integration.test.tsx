@@ -168,4 +168,18 @@ test("Given a conversation is running in the background, When it completes after
         dataTestId.sessionStatus,
         (element) => element.getAttribute("aria-label") === "Unread response",
     );
+    const completedConversation = app
+        .elementsByTestId(dataTestId.managedConversation)
+        .find((element) => element.textContent?.includes("hold after first delta") === true);
+    if (completedConversation === undefined) {
+        throw new Error("Expected the completed conversation");
+    }
+    await app.user.click(completedConversation);
+    await app.waitForView(() =>
+        expect(
+            app
+                .elementsByTestId(dataTestId.sessionStatus)
+                .some((element) => element.getAttribute("aria-label") === "Unread response"),
+        ).toBe(false),
+    );
 });

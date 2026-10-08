@@ -1,4 +1,10 @@
-import { decodeIdentifier } from "@moxt-ai/mobius-protocol";
+import {
+    decodeIdentifier,
+    decodeMessageKind,
+    decodeRuntimeStatusEvent,
+    decodeSessionStatusChangedEvent,
+    type SessionStatusChangedEvent,
+} from "@moxt-ai/mobius-protocol";
 import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
 import type { OperationTiming } from "../../../infra/operation-timing.ts";
 import { PlatformProjectError } from "../../management/entity/platform-project.ts";
@@ -9,6 +15,8 @@ import type { ManagedSessionStorage } from "../storage/managed-session-storage.t
 interface AuditLogger {
     readonly info: (value: Readonly<Record<string, unknown>>, message: string) => void;
 }
+
+const STATUS_LIVENESS_MILLISECONDS = 120_000;
 
 export type ChatScope = {
     readonly userId: string;
@@ -211,6 +219,92 @@ export class ChatService {
                 };
             }),
         };
+    };
+
+    readonly subscribeManagedSessionStatuses = async (
+        scope: ChatScope,
+        publish: (event: SessionStatusChangedEvent) => void,
+        signal: AbortSignal,
+    ): Promise<void> => {
+        const runtime = await this.localRuntime(scope);
+        const ownedSessions = await this.#chatSessions.list(scope.projectId, scope.userId, scope.botId, scope.signal);
+        scope.signal.throwIfAborted();
+        const owned = new Set<string>(ownedSessions.map((session) => session.id));
+        const socket = await this.#platform.openChatRuntimeHost(scope.projectId, runtime.runtimeId, signal);
+        await new Promise<void>((_resolve, reject) => {
+            let settled = false;
+            let liveness: ReturnType<typeof setTimeout>;
+            const finish = (cause: unknown): void => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                clearTimeout(liveness);
+                signal.removeEventListener("abort", aborted);
+                socket.removeEventListener("close", closed);
+                socket.removeEventListener("error", closed);
+                socket.removeEventListener("message", message);
+                socket.close(1000, "Session status subscription closed");
+                reject(cause);
+            };
+            const refreshLiveness = (): void => {
+                clearTimeout(liveness);
+                liveness = setTimeout(
+                    () =>
+                        finish(new PlatformProjectError("PLATFORM_TIMEOUT", "Session status updates timed out.", 504)),
+                    STATUS_LIVENESS_MILLISECONDS,
+                );
+            };
+            const aborted = (): void => finish(signal.reason);
+            const closed = (): void =>
+                finish(new PlatformProjectError("RUNTIME_UNAVAILABLE", "The local Runtime disconnected.", 503));
+            const message = (event: MessageEvent): void => {
+                try {
+                    if (typeof event.data !== "string") {
+                        throw new PlatformProjectError(
+                            "PLATFORM_INVALID_RESPONSE",
+                            "Platform returned an invalid Session status event.",
+                            502,
+                        );
+                    }
+                    refreshLiveness();
+                    const kind = decodeMessageKind(event.data);
+                    if (kind === "runtime.status") {
+                        if (!decodeRuntimeStatusEvent(event.data).online) {
+                            closed();
+                        }
+                        return;
+                    }
+                    if (kind !== "session.status.changed") {
+                        return;
+                    }
+                    const status = decodeSessionStatusChangedEvent(event.data);
+                    if (owned.has(status.sessionId)) {
+                        publish(status);
+                    }
+                } catch (cause) {
+                    finish(
+                        cause instanceof PlatformProjectError
+                            ? cause
+                            : new PlatformProjectError(
+                                  "PLATFORM_INVALID_RESPONSE",
+                                  "Platform returned an invalid Session status event.",
+                                  502,
+                                  { cause },
+                              ),
+                    );
+                }
+            };
+            refreshLiveness();
+            signal.addEventListener("abort", aborted, { once: true });
+            socket.addEventListener("close", closed, { once: true });
+            socket.addEventListener("error", closed, { once: true });
+            socket.addEventListener("message", message);
+            socket.accept();
+            if (signal.aborted) {
+                aborted();
+            }
+        });
     };
 
     readonly agentSettings = async (scope: ChatScope, agentRef: string) => {

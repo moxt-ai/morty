@@ -15,7 +15,17 @@ const errorFrame = v.strictObject({
 });
 const pongFrame = v.strictObject({ kind: v.literal("pong") });
 const notificationFrame = v.strictObject({ kind: v.literal("notification"), subscriptionId: v.string() });
-const serverFrame = v.variant("kind", [responseBeginFrame, responseEndFrame, errorFrame, pongFrame, notificationFrame]);
+const eventFrame = v.strictObject({ kind: v.literal("event"), subscriptionId: v.string(), data: v.string() });
+const subscriptionEndFrame = v.strictObject({ kind: v.literal("subscription.end"), subscriptionId: v.string() });
+const serverFrame = v.variant("kind", [
+    responseBeginFrame,
+    responseEndFrame,
+    errorFrame,
+    pongFrame,
+    notificationFrame,
+    eventFrame,
+    subscriptionEndFrame,
+]);
 const permittedHeaders = new Set(["authorization", "content-type"]);
 const KEEPALIVE_MILLISECONDS = 25_000;
 
@@ -36,6 +46,10 @@ interface PendingWatch {
     readonly reject: (cause: unknown) => void;
     readonly resolve: () => void;
     readonly release: () => void;
+}
+
+interface PendingEventStream extends PendingWatch {
+    readonly receive: (data: string) => void;
 }
 
 function decodeResponseChunk(value: unknown): { readonly requestId: string; readonly bytes: Uint8Array } | null {
@@ -60,6 +74,7 @@ function decodeResponseChunk(value: unknown): { readonly requestId: string; read
 export class WebSocketApiTransport {
     readonly #origin: string;
     readonly #pending = new Map<string, PendingRequest>();
+    readonly #eventStreams = new Map<string, PendingEventStream>();
     readonly #watches = new Map<string, PendingWatch>();
     #state: BridgeState = { kind: "disconnected" };
 
@@ -169,6 +184,53 @@ export class WebSocketApiTransport {
         });
     };
 
+    readonly subscribe = async (request: Request, receive: (data: string) => void): Promise<void> => {
+        request.signal.throwIfAborted();
+        const url = new URL(request.url);
+        if (
+            url.origin !== this.#origin ||
+            !url.pathname.endsWith("/managed-session/status-events") ||
+            request.method !== "POST"
+        ) {
+            throw new Error("The API request cannot subscribe through the Chat WebSocket bridge.");
+        }
+        const headers: [string, string][] = [];
+        for (const [name, value] of request.headers) {
+            if (permittedHeaders.has(name.toLowerCase())) {
+                headers.push([name, value]);
+            }
+        }
+        const socket = await this.#connect(request.signal);
+        const subscriptionId = crypto.randomUUID();
+        return await new Promise<void>((resolve, reject) => {
+            const abort = () => {
+                socket.send(JSON.stringify({ kind: "unwatch", subscriptionId }));
+                this.#settleEventStream(subscriptionId)?.reject(request.signal.reason);
+            };
+            request.signal.addEventListener("abort", abort, { once: true });
+            this.#eventStreams.set(subscriptionId, {
+                receive,
+                reject,
+                resolve,
+                release: () => request.signal.removeEventListener("abort", abort),
+            });
+            try {
+                socket.send(
+                    JSON.stringify({
+                        kind: "subscribe",
+                        subscriptionId,
+                        method: request.method,
+                        path: `${url.pathname}${url.search}`,
+                        headers,
+                        body: null,
+                    }),
+                );
+            } catch (cause) {
+                this.#settleEventStream(subscriptionId)?.reject(cause);
+            }
+        });
+    };
+
     readonly close = (): void => {
         const state = this.#state;
         this.#state = { kind: "closed" };
@@ -185,6 +247,9 @@ export class WebSocketApiTransport {
         }
         for (const subscriptionId of [...this.#watches.keys()]) {
             this.#settleWatch(subscriptionId)?.reject(new Error("The Chat API transport closed."));
+        }
+        for (const subscriptionId of [...this.#eventStreams.keys()]) {
+            this.#settleEventStream(subscriptionId)?.reject(new Error("The Chat API transport closed."));
         }
     };
 
@@ -252,6 +317,11 @@ export class WebSocketApiTransport {
                     for (const subscriptionId of [...this.#watches.keys()]) {
                         this.#settleWatch(subscriptionId)?.reject(new Error("The Chat WebSocket bridge disconnected."));
                     }
+                    for (const subscriptionId of [...this.#eventStreams.keys()]) {
+                        this.#settleEventStream(subscriptionId)?.reject(
+                            new Error("The Chat WebSocket bridge disconnected."),
+                        );
+                    }
                 },
                 { once: true },
             );
@@ -305,11 +375,29 @@ export class WebSocketApiTransport {
             this.#settleWatch(frame.subscriptionId)?.resolve();
             return;
         }
+        if (frame.kind === "event") {
+            const subscription = this.#eventStreams.get(frame.subscriptionId);
+            if (subscription !== undefined) {
+                try {
+                    subscription.receive(frame.data);
+                } catch (cause) {
+                    this.#settleEventStream(frame.subscriptionId)?.reject(cause);
+                }
+            }
+            return;
+        }
+        if (frame.kind === "subscription.end") {
+            this.#settleEventStream(frame.subscriptionId)?.resolve();
+            return;
+        }
         if (frame.requestId === null) {
             return;
         }
         const pending = this.#pending.get(frame.requestId);
         if (pending === undefined) {
+            if (frame.kind === "error") {
+                this.#settleEventStream(frame.requestId)?.reject(new Error(`${frame.code}: ${frame.message}`));
+            }
             return;
         }
         if (frame.kind === "error") {
@@ -359,6 +447,16 @@ export class WebSocketApiTransport {
             this.#watches.delete(subscriptionId);
             pending.release();
         }
+        return pending;
+    };
+
+    readonly #settleEventStream = (subscriptionId: string): PendingEventStream | undefined => {
+        const pending = this.#eventStreams.get(subscriptionId);
+        if (pending === undefined) {
+            return undefined;
+        }
+        this.#eventStreams.delete(subscriptionId);
+        pending.release();
         return pending;
     };
 }

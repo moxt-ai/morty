@@ -2,6 +2,7 @@ import { createContext, type ReactNode, useContext } from "react";
 export interface ApiTransport {
     readonly open: () => void;
     readonly fetch: (request: Request) => Promise<Response>;
+    readonly subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
     readonly waitForChange: (request: Request) => Promise<void>;
     readonly close: () => void;
 }

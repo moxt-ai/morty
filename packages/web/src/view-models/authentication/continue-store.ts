@@ -122,6 +122,9 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     origin: window.location.origin,
                     projectId: identity.projectId,
                     getToken: async () => identity.token,
+                    subscribe: async () => {
+                        throw new Error("Session status updates are unavailable while continuing this session.");
+                    },
                     waitForChange: async () => {
                         throw new Error("Workspace updates are unavailable while continuing this session.");
                     },

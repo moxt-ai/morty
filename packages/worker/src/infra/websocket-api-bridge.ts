@@ -19,10 +19,18 @@ const watchFrame = v.strictObject({
     headers: v.pipe(v.array(v.tuple([v.string(), v.string()])), v.maxLength(16)),
     body: v.nullable(v.pipe(v.string(), v.maxLength(7_000_000))),
 });
+const subscribeFrame = v.strictObject({
+    kind: v.literal("subscribe"),
+    subscriptionId: requestId,
+    method: v.literal("POST"),
+    path: v.pipe(v.string(), v.minLength(1), v.maxLength(4096)),
+    headers: v.pipe(v.array(v.tuple([v.string(), v.string()])), v.maxLength(16)),
+    body: v.null(),
+});
 const unwatchFrame = v.strictObject({ kind: v.literal("unwatch"), subscriptionId: requestId });
 const cancelFrame = v.strictObject({ kind: v.literal("cancel"), requestId });
 const pingFrame = v.strictObject({ kind: v.literal("ping") });
-const clientFrame = v.variant("kind", [requestFrame, watchFrame, unwatchFrame, cancelFrame, pingFrame]);
+const clientFrame = v.variant("kind", [requestFrame, watchFrame, subscribeFrame, unwatchFrame, cancelFrame, pingFrame]);
 const CONNECTION_IDLE_MILLISECONDS = 60_000;
 const REQUEST_TIMEOUT_MILLISECONDS = 120_000;
 
@@ -42,11 +50,15 @@ export interface WebSocketBridgeRequest {
 }
 
 export interface WebSocketBridgeHandlers {
-    readonly resolve: (request: WebSocketBridgeRequest, operation: "request" | "watch", signal: AbortSignal) => Request;
+    readonly resolve: (
+        request: WebSocketBridgeRequest,
+        operation: "request" | "subscribe" | "watch",
+        signal: AbortSignal,
+    ) => Request;
     readonly dispatch: (request: Request) => Promise<Response>;
     readonly subscribe: (
         request: Request,
-        observer: { readonly notify: () => void },
+        observer: { readonly notify: () => void; readonly publish: (data: string) => void },
         signal: AbortSignal,
     ) => Promise<void>;
 }
@@ -178,7 +190,7 @@ export function createWebSocketApiBridge(
             refreshIdleDeadline();
             return;
         }
-        if (frame.kind === "watch") {
+        if (frame.kind === "watch" || frame.kind === "subscribe") {
             if (watches.has(frame.subscriptionId)) {
                 protocolError(server, frame.subscriptionId);
                 return;
@@ -186,7 +198,7 @@ export function createWebSocketApiBridge(
             const lifetime = new AbortController();
             let request: Request;
             try {
-                request = handlers.resolve(frame, "watch", lifetime.signal);
+                request = handlers.resolve(frame, frame.kind, lifetime.signal);
             } catch {
                 protocolError(server, frame.subscriptionId);
                 return;
@@ -198,6 +210,7 @@ export function createWebSocketApiBridge(
                     request,
                     {
                         notify: () => send(server, { kind: "notification", subscriptionId: frame.subscriptionId }),
+                        publish: (data) => send(server, { data, kind: "event", subscriptionId: frame.subscriptionId }),
                     },
                     lifetime.signal,
                 )
@@ -212,6 +225,9 @@ export function createWebSocketApiBridge(
                 .finally(() => {
                     if (watches.get(frame.subscriptionId) === lifetime) {
                         watches.delete(frame.subscriptionId);
+                        if (!lifetime.signal.aborted) {
+                            send(server, { kind: "subscription.end", subscriptionId: frame.subscriptionId });
+                        }
                         refreshIdleDeadline();
                     }
                 });

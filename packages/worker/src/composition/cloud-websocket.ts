@@ -1,3 +1,4 @@
+import * as v from "valibot";
 import { RequestError } from "../infra/request-error.ts";
 import type { WebSocketBridgeHandlers, WebSocketBridgeRequest } from "../infra/websocket-api-bridge.ts";
 
@@ -5,6 +6,9 @@ const BRIDGE_ORIGIN = "https://bridge.internal";
 const WATCH_INTERVAL_MILLISECONDS = 5_000;
 const WATCH_REQUEST_TIMEOUT_MILLISECONDS = 120_000;
 const permittedHeaders = new Set(["authorization", "content-type"]);
+const STATUS_SUBSCRIPTION_PATH =
+    /^\/morty\/api\/chat\/projects\/([^/]+)\/bots\/([^/]+)\/managed-session\/status-events$/u;
+const statusSubscriptionPath = v.pipe(v.string(), v.regex(STATUS_SUBSCRIPTION_PATH));
 
 interface CloudWebSocketDependencies {
     readonly dispatch: (request: Request) => Promise<Response>;
@@ -35,7 +39,11 @@ function bridgedHeaders(values: readonly (readonly [string, string])[]): Headers
     return headers;
 }
 
-function resolveRequest(input: WebSocketBridgeRequest, operation: "request" | "watch", signal: AbortSignal): Request {
+function resolveRequest(
+    input: WebSocketBridgeRequest,
+    operation: "request" | "subscribe" | "watch",
+    signal: AbortSignal,
+): Request {
     const url = bridgedUrl(input.path);
     const headers = bridgedHeaders(input.headers);
     const body = input.body === "" ? null : input.body;
@@ -47,12 +55,57 @@ function resolveRequest(input: WebSocketBridgeRequest, operation: "request" | "w
     ) {
         return invalidBridgeRequest();
     }
+    if (
+        operation === "subscribe" &&
+        (input.method !== "POST" || !v.safeParse(statusSubscriptionPath, url.pathname).success)
+    ) {
+        return invalidBridgeRequest();
+    }
     return new Request(url, {
         method: input.method,
         headers,
         signal,
         ...(body === null ? {} : { body }),
     });
+}
+
+async function subscribeSessionStatuses(
+    request: Request,
+    observer: { readonly publish: (data: string) => void },
+    dependencies: CloudWebSocketDependencies,
+    signal: AbortSignal,
+): Promise<void> {
+    const response = await dependencies.dispatch(request);
+    if (!response.ok || response.body === null) {
+        await response.body?.cancel();
+        throw new RequestError(
+            "STATUS_SUBSCRIPTION_UNAVAILABLE",
+            "Session status updates are unavailable.",
+            response.status,
+        );
+    }
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buffered = "";
+    try {
+        while (true) {
+            signal.throwIfAborted();
+            const result = await reader.read();
+            if (result.done) {
+                break;
+            }
+            buffered += result.value;
+            const lines = buffered.split("\n");
+            buffered = lines.pop() ?? "";
+            for (const line of lines) {
+                if (line !== "") {
+                    observer.publish(line);
+                }
+            }
+        }
+    } finally {
+        await reader.cancel(signal.aborted ? signal.reason : undefined);
+        reader.releaseLock();
+    }
 }
 
 async function waitForNextWatch(signal: AbortSignal): Promise<void> {
@@ -76,6 +129,10 @@ export function createCloudWebSocketHandlers(dependencies: CloudWebSocketDepende
         dispatch: dependencies.dispatch,
         resolve: resolveRequest,
         subscribe: async (request, observer, signal) => {
+            if (request.url.endsWith("/managed-session/status-events")) {
+                await subscribeSessionStatuses(request, observer, dependencies, signal);
+                return;
+            }
             let fingerprint: string | null = null;
             while (!signal.aborted) {
                 const deadline = AbortSignal.timeout(WATCH_REQUEST_TIMEOUT_MILLISECONDS);

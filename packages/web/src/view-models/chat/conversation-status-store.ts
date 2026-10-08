@@ -7,6 +7,7 @@ export type ConversationListStatus = SessionActivityState | { readonly kind: "un
 interface ConversationStatusState {
     readonly statuses: ReadonlyMap<string, ConversationListStatus>;
     readonly directoryLoaded: (botId: string, sessions: readonly ManagedChatSession[], signal: AbortSignal) => void;
+    readonly selectionChanged: (sessionId: string | null) => void;
     readonly statusChanged: (
         botId: string,
         sessionId: string,
@@ -16,13 +17,18 @@ interface ConversationStatusState {
     readonly close: () => void;
 }
 
-type ConversationStatusRequests = Pick<BotChatApi, "connectSession" | "managedSessions">;
+type ConversationStatusRequests = Pick<BotChatApi, "managedSessions" | "subscribeManagedSessionStatuses">;
 
 export function createConversationStatusStore(requests: ConversationStatusRequests) {
-    const watchers = new Map<string, AbortController>();
+    let watcher: {
+        readonly botId: string;
+        readonly directoryKey: string;
+        readonly controller: AbortController;
+    } | null = null;
     let activeBotId = "";
+    let selectedSessionId: string | null = null;
 
-    const store = createStore<ConversationStatusState>((set) => {
+    const store = createStore<ConversationStatusState>((set, get) => {
         const replaceStatus = (sessionId: string, status: ConversationListStatus): void => {
             set((state) => ({ statuses: new Map(state.statuses).set(sessionId, status) }));
         };
@@ -32,7 +38,7 @@ export function createConversationStatusStore(requests: ConversationStatusReques
                 return {
                     statuses: new Map(state.statuses).set(
                         sessionId,
-                        current?.kind === "working" || current?.kind === "unread"
+                        sessionId !== selectedSessionId && (current?.kind === "working" || current?.kind === "unread")
                             ? { kind: "unread" }
                             : { kind: "idle" },
                     ),
@@ -40,79 +46,72 @@ export function createConversationStatusStore(requests: ConversationStatusReques
             });
         };
 
-        const closeWatchers = (): void => {
-            for (const controller of watchers.values()) {
-                controller.abort(new Error("Conversation status watcher closed"));
-            }
-            watchers.clear();
+        const replaceDirectory = (sessions: readonly ManagedChatSession[]): void => {
+            set((state) => {
+                const entries = sessions.map((session): readonly [string, ConversationListStatus] => {
+                    const current = state.statuses.get(session.id);
+                    if (
+                        session.status.kind === "idle" &&
+                        session.id !== selectedSessionId &&
+                        (current?.kind === "working" || current?.kind === "unread")
+                    ) {
+                        return [session.id, { kind: "unread" }];
+                    }
+                    return [session.id, session.status];
+                });
+                return { statuses: new Map(entries) };
+            });
         };
 
-        const watch = (botId: string, sessionId: string, parent: AbortSignal): void => {
-            const key = `${botId}:${sessionId}`;
-            if (watchers.has(key) || parent.aborted) {
+        const closeWatcher = (): void => {
+            watcher?.controller.abort(new Error("Conversation status watcher closed"));
+            watcher = null;
+        };
+
+        const watch = (botId: string, sessionIds: readonly string[], parent: AbortSignal): void => {
+            const directoryKey = JSON.stringify([...sessionIds].sort());
+            if ((watcher?.botId === botId && watcher.directoryKey === directoryKey) || parent.aborted) {
                 return;
             }
+            closeWatcher();
             const controller = new AbortController();
-            watchers.set(key, controller);
+            watcher = { botId, directoryKey, controller };
             const signal = AbortSignal.any([parent, controller.signal]);
             void (async () => {
-                let client: Awaited<ReturnType<ConversationStatusRequests["connectSession"]>> | null = null;
-                const reconcile = async (): Promise<boolean> => {
-                    const sessions = await requests.managedSessions(botId, signal);
-                    signal.throwIfAborted();
-                    const session = sessions.find((candidate) => candidate.id === sessionId);
-                    if (session === undefined || session.status.kind === "idle") {
-                        if (session !== undefined) {
-                            markCompleted(sessionId);
-                        }
-                        return false;
-                    }
-                    replaceStatus(sessionId, session.status);
-                    return true;
-                };
+                let recoveries = 0;
                 try {
-                    client = await requests.connectSession(botId, sessionId, signal);
-                    const subscription = await client.events.subscribeLiveV2(
-                        sessionId,
-                        {
-                            reconcile: async () => {
-                                if (!(await reconcile())) {
-                                    controller.abort(new Error("Conversation is idle"));
-                                }
-                            },
-                            receive: (event) => {
-                                if (event.type === "acp") {
-                                    return Promise.resolve(true);
-                                }
-                                const payload = event.payload;
-                                if (payload.kind === "prompt.started") {
-                                    replaceStatus(sessionId, {
-                                        commandId: payload.commandId,
-                                        kind: "working",
-                                    });
-                                    return Promise.resolve(true);
-                                }
-                                if (
-                                    payload.kind === "prompt.completed" ||
-                                    payload.kind === "prompt.failed" ||
-                                    payload.kind === "prompt.failed-before-start"
-                                ) {
-                                    return reconcile();
-                                }
-                                return Promise.resolve(true);
-                            },
-                        },
-                        signal,
-                    );
-                    await subscription.completed;
+                    while (!signal.aborted) {
+                        try {
+                            await requests.subscribeManagedSessionStatuses(
+                                botId,
+                                (event) => {
+                                    recoveries = 0;
+                                    if (event.status.kind === "idle") {
+                                        markCompleted(event.sessionId);
+                                    } else {
+                                        replaceStatus(event.sessionId, event.status);
+                                    }
+                                },
+                                signal,
+                            );
+                            signal.throwIfAborted();
+                            throw new Error("Conversation status stream ended");
+                        } catch (cause) {
+                            signal.throwIfAborted();
+                            if (recoveries >= 2) {
+                                throw cause;
+                            }
+                            recoveries += 1;
+                            replaceDirectory(await requests.managedSessions(botId, signal));
+                        }
+                    }
                 } catch (cause) {
                     if (!signal.aborted) {
                         console.error("Conversation status updates disconnected", cause);
                     }
                 } finally {
-                    client?.close();
-                    if (watchers.get(key) === controller) {
-                        watchers.delete(key);
+                    if (watcher?.controller === controller) {
+                        watcher = null;
                     }
                 }
             })();
@@ -122,37 +121,39 @@ export function createConversationStatusStore(requests: ConversationStatusReques
             statuses: new Map(),
             directoryLoaded: (botId, sessions, signal) => {
                 if (activeBotId !== botId) {
-                    closeWatchers();
+                    closeWatcher();
                     activeBotId = botId;
                 }
-                set((state) => ({
-                    statuses: new Map(
-                        sessions.map((session) => [
-                            session.id,
-                            state.statuses.get(session.id)?.kind === "unread" && session.status.kind === "idle"
-                                ? { kind: "unread" as const }
-                                : session.status,
-                        ]),
-                    ),
-                }));
-                for (const session of sessions) {
-                    if (session.status.kind === "working") {
-                        watch(botId, session.id, signal);
-                    }
+                replaceDirectory(sessions);
+                if (sessions.length > 0) {
+                    watch(
+                        botId,
+                        sessions.map((session) => session.id),
+                        signal,
+                    );
+                }
+            },
+            selectionChanged: (sessionId) => {
+                selectedSessionId = sessionId;
+                if (sessionId !== null) {
+                    set((state) => {
+                        if (state.statuses.get(sessionId)?.kind !== "unread") {
+                            return state;
+                        }
+                        return { statuses: new Map(state.statuses).set(sessionId, { kind: "idle" }) };
+                    });
                 }
             },
             statusChanged: (botId, sessionId, status, signal) => {
                 if (activeBotId !== botId) {
-                    closeWatchers();
+                    closeWatcher();
                     activeBotId = botId;
                     set({ statuses: new Map() });
                 }
                 replaceStatus(sessionId, status);
-                if (status.kind === "working") {
-                    watch(botId, sessionId, signal);
-                }
+                watch(botId, [...get().statuses.keys()], signal);
             },
-            close: closeWatchers,
+            close: closeWatcher,
         };
     });
 

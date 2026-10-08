@@ -3,6 +3,7 @@ import {
     decodeNativeSessionEventsV2,
     decodeNativeSessionResult,
     decodeSessionReadyEvent,
+    decodeSessionStatusChangedEvent,
     decodeWorkspaceEntriesEvent,
     type Identifier,
     isIdentifier,
@@ -203,6 +204,7 @@ export class BotChatApi {
     readonly #origin: string;
     readonly #projectId: string;
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
+    readonly #subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
     readonly #waitForChange: (request: Request) => Promise<void>;
     readonly listBots: ManagementApi["listBots"];
     readonly readBot: ManagementApi["readBot"];
@@ -213,12 +215,14 @@ export class BotChatApi {
         readonly origin: string;
         readonly projectId: string;
         readonly getToken: (signal: AbortSignal) => Promise<string | null>;
+        readonly subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
         readonly waitForChange: (request: Request) => Promise<void>;
     }) {
         this.#origin = v.parse(v.pipe(v.string(), v.url()), options.origin);
         this.#projectId = v.parse(identifier, options.projectId);
         this.#fetchRequest = options.fetchRequest;
         this.#getToken = options.getToken;
+        this.#subscribe = options.subscribe;
         this.#waitForChange = options.waitForChange;
         const management = new ManagementApi(options);
         this.listBots = management.listBots;
@@ -283,6 +287,26 @@ export class BotChatApi {
             v.object({ sessions: v.array(managedSessionSchema) }),
             await this.#request(botId, "managed-sessions", {}, signal),
         ).sessions;
+    readonly subscribeManagedSessionStatuses = async (
+        botId: string,
+        receive: (event: ReturnType<typeof decodeSessionStatusChangedEvent>) => void,
+        signal: AbortSignal,
+    ): Promise<void> => {
+        const token = await this.#getToken(signal);
+        if (token === null) {
+            throw new CloudApiError("UNAUTHENTICATED", "Your session is unavailable.");
+        }
+        await this.#subscribe(
+            new Request(
+                new URL(
+                    `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/managed-session/status-events`,
+                    this.#origin,
+                ),
+                { method: "POST", headers: { authorization: `Bearer ${token}` }, signal },
+            ),
+            (data) => receive(decodeSessionStatusChangedEvent(data)),
+        );
+    };
     readonly archiveManagedSession = async (botId: string, sessionId: string, signal: AbortSignal): Promise<void> => {
         v.parse(
             v.object({}),

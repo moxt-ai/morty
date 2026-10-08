@@ -58,6 +58,7 @@ export function BotChatHome({
         | "nativeSession"
         | "managedSessions"
         | "managedSession"
+        | "subscribeManagedSessionStatuses"
         | "continueNativeSession"
         | "connectSession"
         | "createPairingInstruction"
@@ -215,6 +216,10 @@ export function BotChatHome({
             ? model.view
             : null;
     const activeBotId = active?.bot.botId;
+    const activeConversationId = selectedConversationId(model.selection);
+    useEffect(() => {
+        statusStore.getState().selectionChanged(activeConversationId);
+    }, [activeConversationId, statusStore]);
     const onStatusChange = useCallback(
         (sessionId: string, status: SessionActivityState): void => {
             if (activeBotId !== undefined) {
@@ -263,7 +268,7 @@ export function BotChatHome({
                 <ConversationSidebar
                     activeBot={active.bot}
                     sessionStatuses={sessionStatuses}
-                    activeId={selectedConversationId(model.selection)}
+                    activeId={activeConversationId}
                     directoryRevision={model.directoryRevision}
                     optimisticTitles={model.optimisticTitles}
                     bots={model.bots}
