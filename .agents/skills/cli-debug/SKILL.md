@@ -11,8 +11,7 @@ file over asking the user to reproduce or enabling verbose output.
 
 ## Establish the target
 
-Resolve the state directory before anything else. It is the root of all local
-daemon state and diagnostics:
+Resolve the CLI state root before anything else:
 
 | Precedence | Source | Path |
 | --- | --- | --- |
@@ -23,10 +22,16 @@ Read the variable from the environment the daemon actually runs in (for example
 the shell or service definition that started it); do not assume your current
 shell matches. When it is unset, use `~/.mobius`.
 
-The diagnostic log is one file:
+The running daemon's diagnostic directory may be nested beneath that root, under
+`installations/<applicationId>/<installationId>`. Locate the actual log rather than
+assuming that the root itself contains it. For a managed local stack, use
+`node scripts/local-dev.cjs logs --state-dir <stack-state> --worker runtime` first.
+If that does not find the log, search the resolved CLI state root for `daemon.log`.
+
+The diagnostic log is one file per daemon installation:
 
 ```text
-<state directory>/logs/daemon.log
+<daemon installation directory>/logs/daemon.log
 ```
 
 Created lazily on the first recorded diagnostic, reused across daemon restarts,
@@ -51,8 +56,9 @@ Mobius daemon diagnostic {"channelId":"...","event":"native_session_operation_fa
 Extract evidence with line-oriented tools; the file is small by design:
 
 ```sh
-tail -n 200 ~/.mobius/logs/daemon.log
-grep '"event":"native_session_operation_failed"' ~/.mobius/logs/daemon.log | tail -n 5
+MOBIUS_DIAGNOSTIC_LOG='/absolute/path/to/logs/daemon.log'
+tail -n 200 "$MOBIUS_DIAGNOSTIC_LOG"
+grep '"event":"native_session_operation_failed"' "$MOBIUS_DIAGNOSTIC_LOG" | tail -n 5
 ```
 
 Event families written to the log:

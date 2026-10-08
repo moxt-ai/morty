@@ -102,8 +102,9 @@ specific tool.
 2. Require the pinned Node.js and pnpm from `package.json` `engines` (Node 24).
    Install locked root dependencies only when missing or stale; never upgrade them.
    The local-development entrypoint checks the Mobius submodule's independent
-   `pnpm-lock.yaml`, installs its dependencies when they are missing or stale,
-   and generates its migration modules.
+   `pnpm-lock.yaml` and installs its dependencies when they are missing or stale. After syncing the submodule, explicitly run
+   `pnpm --dir third-party/mobius db:codegen` before starting the local stack: an
+   unchanged lockfile can skip installation even when migrations have changed.
    If diagnosing startup manually, use
    `pnpm --dir third-party/mobius install --frozen-lockfile`; a root `pnpm install`
    does not install the submodule workspace.

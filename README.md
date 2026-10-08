@@ -51,7 +51,7 @@ Use the isolated local-stack instructions in
 Runtime configuration is described in [deployment](docs/deployment.md).
 Node and pnpm versions are pinned in [package.json](package.json).
 
-- [Development](DEVELOPMENT.md): implementation entrypoints and build operations.
-- [Testing](TESTING.md): test commands and composition entrypoints.
+- [Development](DEVELOPMENT.md): development constraints and build operations.
+- [Testing](TESTING.md): test commands and dependency boundaries.
 - [Engineering rules](AGENTS.md): contribution requirements.
 - [Mobius](third-party/mobius/README.md): CLI, SDK and hosting usage.
