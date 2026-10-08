@@ -17,7 +17,7 @@ export type AgentThinkingEntry =
 
 type ReasoningEntry = Extract<AgentThinkingEntry, { readonly kind: "reasoning" }>;
 type TimelineEntry =
-    | { readonly entries: readonly ReasoningEntry[]; readonly id: string; readonly kind: "reasoning" }
+    | { readonly entry: ReasoningEntry; readonly kind: "reasoning" }
     | { readonly entry: SessionToolPresentation; readonly kind: "tool" };
 
 function ReasoningContent({ active, entry }: { readonly active: boolean; readonly entry: ReasoningEntry }) {
@@ -34,13 +34,7 @@ function ReasoningContent({ active, entry }: { readonly active: boolean; readonl
     );
 }
 
-function ReasoningDisclosure({
-    active,
-    entries,
-}: {
-    readonly active: boolean;
-    readonly entries: readonly ReasoningEntry[];
-}) {
+function ReasoningDisclosure({ active, entry }: { readonly active: boolean; readonly entry: ReasoningEntry }) {
     const disclosure = useRef<HTMLDetailsElement>(null);
     useEffect(() => {
         if (disclosure.current !== null) {
@@ -62,15 +56,13 @@ function ReasoningDisclosure({
                 <span>Show intermediate steps</span>
             </summary>
             <div className="mt-1 ml-1 grid min-w-0 gap-4 border-l border-[#d9dde1] py-2 pl-5 [overflow-wrap:anywhere]">
-                {entries.map((entry) => (
-                    <section className="grid min-w-0 gap-2" key={entry.id}>
-                        <div className="flex items-center gap-2 text-sm text-copy-secondary">
-                            <Brain aria-hidden="true" className="size-4" />
-                            <span>Thinking</span>
-                        </div>
-                        <ReasoningContent active={active} entry={entry} />
-                    </section>
-                ))}
+                <section className="grid min-w-0 gap-2">
+                    <div className="flex items-center gap-2 text-sm text-copy-secondary">
+                        <Brain aria-hidden="true" className="size-4" />
+                        <span>Thinking</span>
+                    </div>
+                    <ReasoningContent active={active} entry={entry} />
+                </section>
             </div>
         </details>
     );
@@ -140,7 +132,7 @@ export function AgentThinking({
         if (first === undefined) {
             return;
         }
-        timeline.push({ entries: reasoning, id: first.id, kind: "reasoning" });
+        timeline.push({ entry: { ...first, text: reasoning.map(({ text }) => text).join("") }, kind: "reasoning" });
         reasoning = [];
     };
     for (const entry of entries) {
@@ -159,8 +151,8 @@ export function AgentThinking({
                 item.kind === "reasoning" ? (
                     <ReasoningDisclosure
                         active={active && item === currentEntry}
-                        entries={item.entries}
-                        key={`reasoning:${item.id}`}
+                        entry={item.entry}
+                        key={`reasoning:${item.entry.id}`}
                     />
                 ) : (
                     <ToolCall

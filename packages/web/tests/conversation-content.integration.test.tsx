@@ -1,4 +1,4 @@
-import { getByRole } from "@testing-library/dom";
+import { getAllByText, getByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -23,6 +23,26 @@ test("Given the daemon streams split text events, When the user reads the respon
         expect(messages).toContain("npm test");
         expect(messages).not.toContain("```");
         expect(messages).not.toContain("Delivery wasn’t confirmed");
+    });
+});
+
+test("Given the daemon streams continuous thinking chunks, When the user reads the intermediate steps, Then the chunks form one thinking block", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, "stream split thinking");
+    const thinking = await app.queryElementByTestId(dataTestId.agentReasoning);
+    await app.waitForView(() => {
+        expect(getAllByText(thinking, "Thinking")).toHaveLength(1);
+        expect(thinking.textContent).toContain("The user is showing me an image");
     });
 });
 

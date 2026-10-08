@@ -1,4 +1,4 @@
-import type { ReplyPlan } from "@moxt-ai/mobius-test/fake-daemon/model";
+import type { Output, ReplyPlan } from "@moxt-ai/mobius-test/fake-daemon/model";
 
 /** Shared Morty scenario data; the protocol peer has no prompt-specific branches. */
 export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | "steer"): ReplyPlan {
@@ -53,6 +53,18 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     (text) => ({
                         kind: "text" as const,
                         text,
+                    }),
+                ),
+            };
+        case "stream split thinking":
+            return {
+                outcome: "complete",
+                output: ["The ", "user ", "is ", "showing ", "me ", "an ", "image"].map(
+                    (output): Output => ({
+                        activityType: "reasoning",
+                        kind: "activity",
+                        output,
+                        title: "Thinking",
                     }),
                 ),
             };
