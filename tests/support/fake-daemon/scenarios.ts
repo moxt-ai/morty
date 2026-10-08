@@ -1,5 +1,15 @@
 import type { HarnessOutput, HarnessReplyPlan } from "@moxt-ai/mobius-test-support/fake-daemon";
 
+export const mortyFiles = new Map([
+    [
+        "/workspace/edit-tool-presentation.tsx",
+        {
+            content: "export function FileExplorer() {\n    return <aside>Files</aside>;\n}\n",
+            mediaType: "text/typescript",
+        },
+    ],
+]);
+
 /** Shared Morty scenario data; the protocol peer has no prompt-specific branches. */
 export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | "steer"): HarnessReplyPlan {
     if (mode === "steer") {
@@ -68,6 +78,16 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     }),
                 ),
             };
+        case "show source file":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "text",
+                        text: "[Open source](file:///workspace/edit-tool-presentation.tsx)",
+                    },
+                ],
+            };
         case "show live output in order":
             return {
                 outcome: "complete",
@@ -93,6 +113,54 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                         output: JSON.stringify({
                             changes: ["/workspace/app.js", "/workspace/index.html", "/workspace/styles.css"],
                         }),
+                    },
+                ],
+            };
+        case "inspect browser surfaces":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        title: "cua_repl/js",
+                        output: JSON.stringify({
+                            content: [
+                                {
+                                    type: "text",
+                                    text: "js execution timed out; kernel reset, rerun your request",
+                                },
+                            ],
+                            structuredContent: null,
+                            _meta: {
+                                browser_use: {},
+                                "codex/browserUse": true,
+                                "codex/toolSurface": {
+                                    backend: "chrome",
+                                    browserFamily: "chrome",
+                                    browserId: "1",
+                                    kind: "browserUse",
+                                },
+                            },
+                        }),
+                    },
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        title: "cua_repl/js",
+                        output: "null",
+                    },
+                ],
+            };
+        case "run a quiet shell command":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        title: '/bin/zsh -lc "true"',
+                        output: JSON.stringify({ exitCode: 0, output: "" }),
                     },
                 ],
             };

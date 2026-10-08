@@ -1,9 +1,14 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { createDaemonConfig, DaemonLocalContext, MobiusRuntimeEngine } from "@moxt-ai/mobius/runtime";
 import { MobiusClient, StaticMobiusCredentialProvider } from "@moxt-ai/mobius-sdk/server";
-import { createFakeDaemon, type FakeAgentHarnessOptions } from "@moxt-ai/mobius-test-support/fake-daemon";
+import {
+    createFakeDaemon,
+    type FakeAgentHarnessOptions,
+    type HarnessReplyPlan,
+} from "@moxt-ai/mobius-test-support/fake-daemon";
 import * as v from "valibot";
 
 type TestServerApp = { readonly request: (request: Request) => Response | Promise<Response> };
@@ -28,12 +33,53 @@ export interface ControlledRuntimeConnection {
     readonly runtimeCredential: string;
 }
 
-export function createMortyFakeDaemon(behavior: FakeAgentHarnessOptions) {
-    return createFakeDaemon(behavior);
+export interface ControlledAgentBehavior extends FakeAgentHarnessOptions {
+    readonly files?: ReadonlyMap<string, { readonly content: string; readonly mediaType: string }>;
+}
+
+function workspaceReply(behavior: ControlledAgentBehavior, workspace: string): FakeAgentHarnessOptions["reply"] {
+    const workspaceUrl = pathToFileURL(`${workspace}/`).href;
+    return (prompt, turnNumber, mode): HarnessReplyPlan => {
+        const plan = behavior.reply(prompt, turnNumber, mode);
+        return {
+            outcome: plan.outcome,
+            output: plan.output.map((output) =>
+                output.kind === "text"
+                    ? { ...output, text: output.text.replaceAll("file:///workspace/", workspaceUrl) }
+                    : output,
+            ),
+        };
+    };
+}
+
+async function writeWorkspaceFiles(
+    files: ControlledAgentBehavior["files"],
+    workspace: string,
+    signal: AbortSignal,
+): Promise<void> {
+    for (const [requestedPath, file] of files ?? []) {
+        signal.throwIfAborted();
+        if (!requestedPath.startsWith("/workspace/")) {
+            throw new Error("Controlled Agent file paths must be inside /workspace");
+        }
+        const target = resolve(workspace, requestedPath.slice("/workspace/".length));
+        const child = relative(workspace, target);
+        if (child.length === 0 || child.startsWith("..") || isAbsolute(child)) {
+            throw new Error("Controlled Agent file path escaped /workspace");
+        }
+        await mkdir(resolve(target, ".."), { recursive: true });
+        await writeFile(target, file.content, { encoding: "utf8", signal });
+    }
+}
+
+export function createMortyFakeDaemon(behavior: ControlledAgentBehavior, workspace?: string) {
+    return createFakeDaemon(
+        workspace === undefined ? behavior : { ...behavior, reply: workspaceReply(behavior, workspace) },
+    );
 }
 
 export async function connectControlledAgentRuntime(options: {
-    readonly behavior: FakeAgentHarnessOptions;
+    readonly behavior: ControlledAgentBehavior;
     readonly connection: ControlledRuntimeConnection;
     readonly signal: AbortSignal;
 }) {
@@ -43,7 +89,8 @@ export async function connectControlledAgentRuntime(options: {
     const directory = await mkdtemp(join(tmpdir(), "morty-controlled-agent-"));
     const workspace = join(directory, "workspace");
     await mkdir(workspace);
-    const harness = createMortyFakeDaemon(options.behavior);
+    await writeWorkspaceFiles(options.behavior.files, workspace, signal);
+    const harness = createMortyFakeDaemon(options.behavior, workspace);
     const relayUrl = new URL("/mobius/api/v1/runtimes/connect", options.connection.origin);
     relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
     relayUrl.searchParams.set("token", options.connection.runtimeCredential);
@@ -100,7 +147,7 @@ export async function connectControlledAgentRuntime(options: {
 }
 
 export async function createControlledAgentRuntime(options: {
-    readonly behavior: FakeAgentHarnessOptions;
+    readonly behavior: ControlledAgentBehavior;
     readonly credential: string;
     readonly origin: string;
     readonly projectId: string;

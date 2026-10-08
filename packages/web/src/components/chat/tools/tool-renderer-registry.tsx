@@ -1,4 +1,5 @@
 import type { ComponentType, ReactNode } from "react";
+import { BrowserJavascriptToolCall, matchesBrowserJavascriptToolCall } from "./browser-javascript-tool-call.tsx";
 import { ChangedFilesEditToolCall, matchesChangedFilesEditToolCall } from "./changed-files-edit-tool-call.tsx";
 import { CwdShellCommandToolCall, matchesCwdShellCommandToolCall } from "./cwd-shell-command-tool-call.tsx";
 import { FilePathEditToolCall, matchesFilePathEditToolCall } from "./file-path-edit-tool-call.tsx";
@@ -31,6 +32,10 @@ const TOOL_RENDERERS: readonly ToolRenderer[] = [
     {
         Component: ChangedFilesEditToolCall,
         matches: matchesChangedFilesEditToolCall,
+    },
+    {
+        Component: BrowserJavascriptToolCall,
+        matches: matchesBrowserJavascriptToolCall,
     },
     {
         Component: FilePathEditToolCall,
@@ -74,11 +79,11 @@ const TOOL_RENDERERS: readonly ToolRenderer[] = [
     },
 ];
 
-export function renderRegisteredTool(entry: ToolThinkingEntry, autoOpen: boolean): ReactNode | null {
+export function renderRegisteredTool(entry: ToolThinkingEntry): ReactNode | null {
     const renderer = TOOL_RENDERERS.find((candidate) => candidate.matches(entry));
     if (renderer === undefined) {
         return null;
     }
     const Component = renderer.Component;
-    return <Component autoOpen={autoOpen} entry={entry} />;
+    return <Component autoOpen={false} entry={entry} />;
 }

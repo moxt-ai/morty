@@ -4,7 +4,7 @@ import { dataTestId } from "../../data-testid.ts";
 import type { SessionToolPresentation } from "../../view-models/chat/session-presentation.ts";
 import { AgentMarkdown } from "../agents/agent-markdown.tsx";
 import { FollowLatestScrollArea } from "../utils/follow-latest-scroll-area.tsx";
-import { ToolCallStatus, useToolCallDisclosure } from "./tools/tool-call-status.tsx";
+import { ToolCallStatus } from "./tools/tool-call-status.tsx";
 import { renderRegisteredTool } from "./tools/tool-renderer-registry.tsx";
 
 export type AgentThinkingEntry =
@@ -68,9 +68,9 @@ function ReasoningDisclosure({ active, entry }: { readonly active: boolean; read
     );
 }
 
-function ToolCall({ active, entry }: { readonly active: boolean; readonly entry: SessionToolPresentation }) {
-    const disclosure = useToolCallDisclosure(active);
-    const registered = renderRegisteredTool(entry, active);
+function ToolCall({ entry }: { readonly entry: SessionToolPresentation }) {
+    const disclosure = useRef<HTMLDetailsElement>(null);
+    const registered = renderRegisteredTool(entry);
     if (registered !== null) {
         return registered;
     }
@@ -155,11 +155,7 @@ export function AgentThinking({
                         key={`reasoning:${item.entry.id}`}
                     />
                 ) : (
-                    <ToolCall
-                        active={active && item === currentEntry}
-                        entry={item.entry}
-                        key={`tool:${item.entry.id}`}
-                    />
+                    <ToolCall entry={item.entry} key={`tool:${item.entry.id}`} />
                 ),
             )}
         </div>

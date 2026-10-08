@@ -2,7 +2,7 @@ import { MobiusOidcCredentialProvider, MobiusPlatformDeveloperClient } from "@mo
 import { FakeClerk } from "@moxt-ai/mobius-test/clerk";
 import { createTestMobiusPlatformBindings } from "@moxt-ai/mobius-test/cloudflare";
 import { createControlledAgentRuntime } from "../../../../tests/support/fake-daemon/runtime.ts";
-import { mortyReply } from "../../../../tests/support/fake-daemon/scenarios.ts";
+import { mortyFiles, mortyReply } from "../../../../tests/support/fake-daemon/scenarios.ts";
 
 /** Starts the production Platform boundary with isolated local Cloudflare storage. */
 export async function startTestPlatform(options: { readonly allowedOrigins?: ReadonlySet<string> } = {}) {
@@ -53,6 +53,7 @@ export async function startTestPlatform(options: { readonly allowedOrigins?: Rea
                     credential,
                     behavior: {
                         reply: mortyReply,
+                        files: mortyFiles,
                         agentId: agents[0]?.id ?? "codex",
                         agentName: agents[0]?.label ?? "Codex",
                         additionalAgents: agents.slice(1).map((agent) => ({ id: agent.id, name: agent.label })),

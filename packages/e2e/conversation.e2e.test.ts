@@ -1,5 +1,48 @@
 import { expect, test } from "./infra/test.ts";
 
+test("Given a linked TypeScript file, When the user opens it, Then a highlighted half overlay covers the conversation", async ({
+    runtime,
+}, testInfo) => {
+    const { page } = runtime;
+    await runtime.openPairedChat();
+
+    await page.getByRole("textbox", { name: "Message" }).fill("show source file");
+    await page.getByRole("button", { name: "Send message" }).click();
+    const messages = page.getByRole("log", { name: "Messages" });
+    const openSource = page.getByRole("button", { name: "Open source" });
+    await expect(openSource).toBeVisible();
+    const messagesBoxBefore = await messages.boundingBox();
+    await openSource.click();
+
+    const preview = page.getByRole("complementary", { name: "Local file preview" });
+    await expect(preview).toContainText("export function FileExplorer");
+    const highlightedTokens = preview.locator('code span[style*="--sdm-c"]');
+    await expect(highlightedTokens.first()).toBeVisible();
+    await expect
+        .poll(async () => {
+            const colors = await highlightedTokens.evaluateAll((tokens) =>
+                Array.from(new Set(tokens.map((token) => getComputedStyle(token).color))),
+            );
+            return colors.length;
+        })
+        .toBeGreaterThan(1);
+    await expect(preview.getByText("tsx", { exact: true })).toBeHidden();
+    await expect(preview.getByRole("button", { name: "Copy code" })).toBeHidden();
+    await expect(preview.locator('[data-streamdown="code-block"]')).toHaveCSS("border-top-width", "0px");
+    const messagesBox = await messages.boundingBox();
+    const previewBox = await preview.boundingBox();
+    expect(messagesBoxBefore).not.toBeNull();
+    expect(messagesBox).not.toBeNull();
+    expect(previewBox).not.toBeNull();
+    if (messagesBoxBefore === null || messagesBox === null || previewBox === null) {
+        throw new Error("Expected the conversation and preview to have browser layout boxes");
+    }
+    expect(messagesBox.width).toBeCloseTo(messagesBoxBefore.width, 0);
+    expect(previewBox.x).toBeLessThan(messagesBox.x + messagesBox.width);
+    expect(previewBox.x + previewBox.width).toBeCloseTo(page.viewportSize()?.width ?? 0, 0);
+    await page.screenshot({ fullPage: true, path: testInfo.outputPath("file-preview.png") });
+});
+
 test("Given a paired Bot, When a user sends and observes prompts across pages, Then live and completed replies remain consistent", async ({
     runtime,
 }, testInfo) => {

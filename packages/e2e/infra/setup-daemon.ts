@@ -1,7 +1,10 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { FakeAgentHarnessOptions } from "@moxt-ai/mobius-test-support/fake-daemon";
-import { connectControlledAgentRuntime, createMortyFakeDaemon } from "../../../tests/support/fake-daemon/runtime.ts";
+import {
+    type ControlledAgentBehavior,
+    connectControlledAgentRuntime,
+    createMortyFakeDaemon,
+} from "../../../tests/support/fake-daemon/runtime.ts";
 import type { SetupRuntime } from "../../setup/src/setup.ts";
 import { jsonRequest, text } from "./chat-api.ts";
 
@@ -21,8 +24,8 @@ export class ControlledSetupRuntime implements SetupRuntime {
     readonly #failed = Promise.withResolvers<never>();
     readonly failure = this.#failed.promise;
 
-    readonly #options: FakeAgentHarnessOptions;
-    constructor(options: FakeAgentHarnessOptions) {
+    readonly #options: ControlledAgentBehavior;
+    constructor(options: ControlledAgentBehavior) {
         this.#options = options;
         // The fixture races failures against the browser scenario; retain early failures too.
         void this.failure.catch(() => undefined);
