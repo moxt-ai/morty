@@ -400,10 +400,14 @@ export function MobiusSessionPane({
                                 label: "Harness",
                                 locked: true,
                                 onValueChange: () => {},
-                                options: harnesses.some((harness) => harness.value === session.agentRef)
+                                options: harnesses.some(
+                                    (harness) => harness.value.split(":").at(-1) === session.agentRef,
+                                )
                                     ? harnesses
                                     : [...harnesses, { label: session.agentRef, value: session.agentRef }],
-                                value: session.agentRef,
+                                value:
+                                    harnesses.find((harness) => harness.value.split(":").at(-1) === session.agentRef)
+                                        ?.value ?? session.agentRef,
                             },
                             ...model.options.map((option) =>
                                 option.type === "boolean"

@@ -104,19 +104,21 @@ export function ChatConfigurationMenu({
                             );
                             if (harness.locked === true) {
                                 return (
-                                    <Tooltip.Root key={option.value}>
-                                        <Tooltip.Trigger asChild>{tab}</Tooltip.Trigger>
-                                        <Tooltip.Portal>
-                                            <Tooltip.Content
-                                                className="z-[70] max-w-60 rounded-lg bg-foreground px-2.5 py-1.5 text-xs leading-5 text-background shadow-lg"
-                                                side="right"
-                                                sideOffset={6}
-                                            >
-                                                {harness.harnessLockedLabel ?? option.label}
-                                                <Tooltip.Arrow className="fill-foreground" />
-                                            </Tooltip.Content>
-                                        </Tooltip.Portal>
-                                    </Tooltip.Root>
+                                    <Tooltip.Provider key={option.value} delayDuration={150}>
+                                        <Tooltip.Root>
+                                            <Tooltip.Trigger asChild>{tab}</Tooltip.Trigger>
+                                            <Tooltip.Portal>
+                                                <Tooltip.Content
+                                                    className="z-[70] max-w-60 rounded-lg bg-foreground px-2.5 py-1.5 text-xs leading-5 text-background shadow-lg"
+                                                    side="right"
+                                                    sideOffset={6}
+                                                >
+                                                    {harness.harnessLockedLabel ?? option.label}
+                                                    <Tooltip.Arrow className="fill-foreground" />
+                                                </Tooltip.Content>
+                                            </Tooltip.Portal>
+                                        </Tooltip.Root>
+                                    </Tooltip.Provider>
                                 );
                             }
                             return tab;
