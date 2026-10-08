@@ -220,7 +220,7 @@ export function AgentMarkdown({ className, markdown, openLocalFile, readImage, s
     );
     return (
         <Streamdown
-            animated={STREAM_ANIMATION}
+            animated={streaming ? STREAM_ANIMATION : false}
             className={cn(
                 "agent-markdown min-w-0 text-[15px] leading-6 text-foreground [overflow-wrap:anywhere]",
                 "[&_p]:my-2 [&_p]:whitespace-pre-line",
