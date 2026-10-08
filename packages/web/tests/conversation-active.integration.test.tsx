@@ -156,7 +156,13 @@ test("Given a conversation is running in the background, When it completes after
         throw new Error("Expected composer");
     }
     await sendPrompt(app, composer, "hold after first delta");
-    await app.queryElementByTestId(dataTestId.sessionStatus);
+    await app.waitForView(() =>
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes("Partial reply") === true),
+        ).toBe(true),
+    );
     await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
     await app.queryElementByTestId(dataTestId.sessionStatus);
     const daemon = app.daemon;
