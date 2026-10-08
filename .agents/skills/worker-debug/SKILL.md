@@ -6,8 +6,8 @@ description: Debug retained or live Cloudflare Worker failures for Morty staging
 # Worker Debugging
 
 Investigate a deployed Morty Worker from evidence to root cause. Prefer
-retained Workers Observability events for failures that already happened;
-`wrangler tail` only observes new events.
+retained Workers Observability events through Cloudflare's `cf` CLI for failures
+that already happened; `wrangler tail` only observes new events.
 
 ## Establish the target
 
@@ -32,16 +32,22 @@ do not silently assume UTC for a timestamp shown in local browser tools.
 
 ## Validate access and observability
 
-Use the repository-pinned Wrangler. Run `pnpm exec wrangler whoami` and confirm
-that its account matches `account_id` in `wrangler.jsonc`. Never print, paste,
-commit, or return API/OAuth tokens.
+Use the installed Cloudflare CLI for account APIs and retained telemetry. Run
+`cf --version` first. If it is missing, install it globally only when the user
+has explicitly authorized a machine-wide installation. Use `cf auth whoami` for
+an ordinary login or API token, and confirm that the selected account matches
+`account_id` in `wrangler.jsonc`. A narrowly scoped Workers Observability token
+may fail the general identity probe while still authorizing telemetry, so prove
+that token with one bounded telemetry query instead of rejecting it based only on
+`cf auth whoami`. Never print, paste, commit, or return API/OAuth tokens.
 
 Confirm the selected environment has Workers Observability and invocation logs
 enabled. The root `observability` configuration is inherited unless the selected
 environment overrides it. Distinguish these cases:
 
-- Retained historical events: query Workers Observability.
-- New reproduction: use a bounded `wrangler tail` session.
+- Retained historical events: query Workers Observability with `cf`.
+- New reproduction: use the repository-pinned Wrangler for one bounded
+  `wrangler tail` session.
 - Local `wrangler dev` output: not evidence of the deployed Worker.
 
 If authentication lacks Workers Observability access, report the missing
@@ -50,26 +56,31 @@ capability. Do not claim that historical logs are unavailable merely because
 
 ## Query retained events
 
-Use Cloudflare's official Workers Observability Telemetry API:
+Use Cloudflare's official CLI command for the Workers Observability Telemetry
+API:
 
-```text
-POST /accounts/{account_id}/workers/observability/telemetry/query
+```sh
+cf o11y telemetry query --body "$QUERY_BODY"
 ```
 
-Use an authenticated Cloudflare client or a private temporary script. Prefer the
-dedicated `MOBIUS_CF_LOG_API_TOKEN`, then `CLOUDFLARE_API_TOKEN`. The token needs
-**Account → Workers Observability → Edit** for the account in `wrangler.jsonc`;
-the telemetry query API currently calls this permission Workers Observability
-Write. Wrangler OAuth credentials do not include this permission by default, so
-do not use one until a bounded API probe proves it is authorized.
+Use `cf cli search "query Workers observability telemetry logs"` to discover the
+command and `cf schema o11y telemetry query` before relying on its request shape.
+Prefer the dedicated `MOBIUS_CF_LOG_API_TOKEN`, then `CLOUDFLARE_API_TOKEN`. The
+token needs **Account → Workers Observability → Edit** for the account in
+`wrangler.jsonc`; the telemetry query API currently calls this permission Workers
+Observability Write. Wrangler OAuth credentials do not include this permission
+by default, so do not use one until a bounded API probe proves it is authorized.
 
 Check only whether the selected environment variable is nonempty; never print its
 value. If the user configured it in `.zshrc`, run the diagnostic process through
 an interactive Zsh invocation so the process inherits it without copying the
-secret into a command argument or repository file. Load the token inside the
-process, send it only to `api.cloudflare.com` over HTTPS, and never place it in
-source files, shell history, command output, or generated diagnostics. Delete
-temporary scripts and raw responses after extracting sanitized evidence.
+secret into a command argument or repository file. Map the dedicated token to
+`CLOUDFLARE_API_TOKEN` only in the `cf` process environment and set
+`CLOUDFLARE_ACCOUNT_ID` from `wrangler.jsonc`. Never place a token in the query
+body, source files, shell history, command output, or generated diagnostics.
+Pipe `cf` JSON output directly into a sanitizer because telemetry can contain
+headers and user content; do not print or retain the raw response. Delete
+temporary query bodies after extracting sanitized evidence.
 
 Start with an `events` query over a narrow window and filter by
 `$metadata.service` equal to the exact Worker name. Add the strongest known
@@ -101,10 +112,13 @@ larger than 100, and `dry: true`. Example body shape:
 ```
 
 Replace both timestamps and the Worker name; the zero values are deliberately not
-runnable defaults. If field names or types are uncertain, discover them through
-`POST /accounts/{account_id}/workers/observability/telemetry/keys` and unique
-values through `/values` before querying. Do not broaden beyond 24 hours without
-explaining why. Paginate using the last event's `$metadata.id` only when needed.
+runnable defaults. Pass the resulting JSON through `--body`. Preview the exact
+request with the CLI's `--dry-run`, which does not authenticate or execute the
+query, before running the authenticated command without that flag. If field names
+or types are uncertain, use `cf o11y telemetry keys`; discover unique values
+with `cf o11y telemetry values`. Inspect either command with `cf schema` or
+`--help` before use. Do not broaden beyond 24 hours without explaining why.
+Paginate using the last event's `$metadata.id` only when needed.
 
 Once one event is identified, query the same request ID with the `invocations`
 view to collect all logs from that invocation. Follow trace IDs across services
@@ -116,7 +130,7 @@ headers, pairing tickets, transfer codes, or user content.
 ## Reproduce with live tail
 
 When retained evidence has no match and reproduction is safe, start a bounded
-tail against the explicit environment:
+tail against the explicit environment with the repository-pinned Wrangler:
 
 ```sh
 pnpm exec wrangler tail --env staging --format json
@@ -126,6 +140,8 @@ Use `--env production` only after the target is confirmed. Apply supported
 status, method, header, or search filters to reduce unrelated traffic. Start the
 tail before one reproduction, stop it immediately afterward, and never ask a user
 to repeat a destructive or privacy-sensitive action merely to create logs.
+`cf o11y telemetry live-tail` currently prepares the WebSocket server but does
+not replace Wrangler's complete streaming tail workflow.
 
 ## Diagnose across boundaries
 
