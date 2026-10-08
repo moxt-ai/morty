@@ -82,6 +82,20 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     { kind: "text", text: "Final live message" },
                 ],
             };
+        case "change several files":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        title: "/workspace/app.js, /workspace/index.html, /workspace/styles.css",
+                        output: JSON.stringify({
+                            changes: ["/workspace/app.js", "/workspace/index.html", "/workspace/styles.css"],
+                        }),
+                    },
+                ],
+            };
         default:
             return {
                 outcome: "complete",

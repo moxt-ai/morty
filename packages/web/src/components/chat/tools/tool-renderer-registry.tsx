@@ -1,4 +1,5 @@
 import type { ComponentType, ReactNode } from "react";
+import { ChangedFilesEditToolCall, matchesChangedFilesEditToolCall } from "./changed-files-edit-tool-call.tsx";
 import { CwdShellCommandToolCall, matchesCwdShellCommandToolCall } from "./cwd-shell-command-tool-call.tsx";
 import { FilePathEditToolCall, matchesFilePathEditToolCall } from "./file-path-edit-tool-call.tsx";
 import { FilePathReadToolCall, matchesFilePathReadToolCall } from "./file-path-read-tool-call.tsx";
@@ -26,6 +27,10 @@ const TOOL_RENDERERS: readonly ToolRenderer[] = [
     {
         Component: SkillToolCall,
         matches: matchesSkillToolCall,
+    },
+    {
+        Component: ChangedFilesEditToolCall,
+        matches: matchesChangedFilesEditToolCall,
     },
     {
         Component: FilePathEditToolCall,

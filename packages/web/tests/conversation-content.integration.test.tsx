@@ -1,4 +1,4 @@
-import { getAllByText, getByRole } from "@testing-library/dom";
+import { getAllByText, getByRole, queryByText } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -44,6 +44,33 @@ test("Given the daemon streams continuous thinking chunks, When the user reads t
         expect(getAllByText(thinking, "Thinking")).toHaveLength(1);
         expect(thinking.textContent).toContain("The user is showing me an image");
     });
+});
+
+test("Given a file-change tool reports its changed-file schema, When the user opens it, Then Chat presents the changed files as an edit", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, "change several files");
+
+    const edit = await app.waitForView(() =>
+        getByRole(document.body, "group", {
+            name: "Edit: /workspace/app.js, /workspace/index.html, /workspace/styles.css",
+        }),
+    );
+    expect(getByRole(edit, "list", { name: "Changed files" }).textContent).toBe(
+        "/workspace/app.js/workspace/index.html/workspace/styles.css",
+    );
+    expect(queryByText(edit, "Request")).toBeNull();
+    expect(queryByText(edit, "Response")).toBeNull();
 });
 
 test("Given the daemon emits reasoning, a tool, and text, When the user observes and stops an unfinished turn, Then partial content is visible before completion and survives remount", {
