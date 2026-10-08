@@ -131,6 +131,27 @@ test("Given a shell tool completes, When the user views the conversation, Then t
     expect(queryByText(shellTool, "Response")).toBeNull();
 });
 
+test("Given a response links to a TypeScript file, When the user opens it, Then the source is syntax highlighted beside the conversation", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, "show source file");
+    await app.user.click(await app.queryElementByTestId(dataTestId.localFileLink));
+    const preview = await app.queryElementByTestId(dataTestId.filePreview);
+    const content = await app.queryElementByTestId(dataTestId.filePreviewContent);
+    expect(preview.parentElement?.querySelector('[role="log"][aria-label="Messages"]')).not.toBeNull();
+    expect(content.textContent).toContain("export function FileExplorer");
+    await app.waitForView(() => expect(content.querySelector('code span[style*="--sdm-c"]')).not.toBeNull());
+});
+
 test("Given the daemon emits reasoning, a tool, and text, When the user observes and stops an unfinished turn, Then partial content is visible before completion and survives remount", {
     timeout: 30_000,
 }, async () => {

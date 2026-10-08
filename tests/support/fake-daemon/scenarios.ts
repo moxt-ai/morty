@@ -1,5 +1,15 @@
 import type { Output, ReplyPlan } from "@moxt-ai/mobius-test/fake-daemon/model";
 
+export const mortyFiles = new Map([
+    [
+        "/workspace/edit-tool-presentation.tsx",
+        {
+            content: "export function FileExplorer() {\n    return <aside>Files</aside>;\n}\n",
+            mediaType: "text/typescript",
+        },
+    ],
+]);
+
 /** Shared Morty scenario data; the protocol peer has no prompt-specific branches. */
 export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | "steer"): ReplyPlan {
     if (mode === "steer") {
@@ -67,6 +77,16 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                         title: "Thinking",
                     }),
                 ),
+            };
+        case "show source file":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "text",
+                        text: "[Open source](file:///workspace/edit-tool-presentation.tsx)",
+                    },
+                ],
             };
         case "show live output in order":
             return {

@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { AgentMarkdown } from "../../agents/agent-markdown.tsx";
 
 const LANGUAGE_BY_EXTENSION: Readonly<Record<string, string>> = {
@@ -42,10 +43,22 @@ function fencedCode(code: string, language: string): string {
     return `${fence}${language}\n${code}\n${fence}`;
 }
 
-export function HighlightedCode({ code, language }: { readonly code: string; readonly language: string }) {
+export function HighlightedCode({
+    bare = false,
+    code,
+    language,
+}: {
+    readonly bare?: boolean;
+    readonly code: string;
+    readonly language: string;
+}) {
     return (
         <AgentMarkdown
-            className="text-xs [&_pre]:m-0 [&_pre]:max-h-96 [&_pre]:overflow-auto [&_pre]:text-xs"
+            className={cn(
+                "text-xs [&_pre]:m-0 [&_pre]:max-h-96 [&_pre]:overflow-auto [&_pre]:text-xs",
+                bare &&
+                    "[&_[data-streamdown=code-block]]:m-0 [&_[data-streamdown=code-block]]:gap-0 [&_[data-streamdown=code-block]]:rounded-none [&_[data-streamdown=code-block]]:border-0 [&_[data-streamdown=code-block]]:bg-transparent [&_[data-streamdown=code-block]]:p-0 [&_[data-streamdown=code-block-header]]:hidden [&_[data-streamdown=code-block-actions]]:hidden [&_[data-streamdown=code-block-body]]:rounded-none [&_[data-streamdown=code-block-body]]:border-0 [&_[data-streamdown=code-block-body]]:bg-transparent [&_[data-streamdown=code-block-body]]:p-4",
+            )}
             markdown={fencedCode(code, language)}
             streaming={false}
         />

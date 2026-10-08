@@ -1,5 +1,5 @@
 import { chromium } from "playwright-core";
-import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
+import { mortyFiles, mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../web/src/services/identity/anonymous-identity-api.ts";
 import { ChatApi, jsonRequest, text } from "./chat-api.ts";
 import type { E2EHarness } from "./harness.ts";
@@ -14,6 +14,7 @@ export async function createTestRuntime(harness: E2EHarness) {
     const runtime = new FakeSetupDaemon({
         agentId,
         agentName,
+        files: mortyFiles,
         reply: mortyReply,
         nativeSessionIds: new Set(["setup-reconnect-session"]),
     });
