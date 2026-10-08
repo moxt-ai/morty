@@ -32,7 +32,7 @@
         "knip": "knip",
         "check:static": "pnpm typecheck && pnpm build && pnpm lint && pnpm knip",
         "ci:check": "pnpm check:static && pnpm test:coverage",
-        "postinstall": "simple-git-hooks",
+        "postinstall": "pnpm --filter @moxt-ai/mobius build && simple-git-hooks",
         "typegen": "wrangler types worker-configuration.d.ts",
         "preview": "vite preview",
         "build:staging": "pnpm build:setup && CLOUDFLARE_ENV=staging vite build",
