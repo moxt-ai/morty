@@ -131,11 +131,15 @@ test("Given a partially streamed reply, When Chat remounts and the daemon contin
         outcome: "complete",
         output: [{ kind: "text", text: " and the final chunk" }],
     });
-    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
-    const text = app
-        .elementsByTestId(dataTestId.agentResponse)
-        .map((element) => element.textContent)
-        .join("");
+    const text = await app.waitForView(() => {
+        expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull();
+        const response = app
+            .elementsByTestId(dataTestId.agentResponse)
+            .map((element) => element.textContent)
+            .join("");
+        expect(response).toContain("and the final chunk");
+        return response;
+    });
     expect(text.match(/Partial reply/gu)).toHaveLength(1);
     expect(text.match(/and the next streamed chunk/gu)).toHaveLength(1);
     expect(text.match(/and the final chunk/gu)).toHaveLength(1);

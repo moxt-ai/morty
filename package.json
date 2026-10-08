@@ -64,15 +64,12 @@
         "vite": "catalog:",
         "vitest": "catalog:",
         "wrangler": "catalog:",
-        "ws": "8.21.3",
-        "@types/ws": "8.18.1",
         "@moxt-ai/mobius": "workspace:*",
         "@moxt-ai/mobius-sdk": "workspace:*",
         "@moxt-ai/mobius-protocol": "workspace:*",
         "@moxt-ai/mobius-test-support": "workspace:*"
     },
     "dependencies": {
-        "base64-js": "catalog:",
         "react": "catalog:",
         "valibot": "catalog:"
     }
