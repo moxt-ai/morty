@@ -1,4 +1,4 @@
-import { getAllByRole, getAllByText, getByRole, queryByText } from "@testing-library/dom";
+import { getAllByRole, getAllByText, getByRole, getByText, queryByText } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -150,6 +150,35 @@ test("Given a response links to a TypeScript file, When the user opens it, Then 
     expect(preview.parentElement?.querySelector('[role="log"][aria-label="Messages"]')).not.toBeNull();
     expect(content.textContent).toContain("export function FileExplorer");
     await app.waitForView(() => expect(content.querySelector('code span[style*="--sdm-c"]')).not.toBeNull());
+});
+
+test("Given shell output contains ANSI styles, When the user opens it, Then Chat presents terminal colors and emphasis without escape sequences", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, "run a colorful shell command");
+
+    const shellTool = await app.waitForView(() =>
+        getByRole(document.body, "group", { name: 'Shell command: /bin/zsh -lc "pnpm test"' }),
+    );
+    await app.user.click(getByText(shellTool, '/bin/zsh -lc "pnpm test"'));
+    const output = app.elementByTestId(dataTestId.ansiShellOutput, shellTool);
+    expect(output.textContent).toBe("failed\npassed");
+    expect(output.textContent).not.toContain("\u001B");
+    const failed = Array.from(output.querySelectorAll("span")).find((element) => element.textContent === "failed");
+    const passed = Array.from(output.querySelectorAll("span")).find((element) => element.textContent === "passed");
+    expect(failed?.style.color).not.toBe("");
+    expect(passed?.style.color).not.toBe("");
+    expect(passed?.style.fontWeight).toBe("bold");
 });
 
 test("Given the daemon emits reasoning, a tool, and text, When the user observes and stops an unfinished turn, Then partial content is visible before completion and survives remount", {
