@@ -55,7 +55,7 @@ export function ToolCallDisclosure({
     );
 }
 
-export function ToolCallStatus({ state }: { readonly state: ToolCallState }) {
+function ToolCallStatus({ state }: { readonly state: ToolCallState }) {
     switch (state.kind) {
         case "running":
             return (
