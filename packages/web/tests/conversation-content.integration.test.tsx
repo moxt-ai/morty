@@ -145,7 +145,7 @@ test("Given a response links to a TypeScript file, When the user opens it, Then 
     const content = await app.queryElementByTestId(dataTestId.filePreviewContent);
     expect(preview.parentElement?.querySelector('[role="log"][aria-label="Messages"]')).not.toBeNull();
     expect(content.textContent).toContain("export function FileExplorer");
-    await app.waitForView(() => expect(content.querySelector("span[style]")).not.toBeNull());
+    await app.waitForView(() => expect(content.querySelector('code span[style*="--sdm-c"]')).not.toBeNull());
 });
 
 test("Given the daemon emits reasoning, a tool, and text, When the user observes and stops an unfinished turn, Then partial content is visible before completion and survives remount", {

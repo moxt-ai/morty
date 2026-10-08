@@ -13,7 +13,16 @@ test("Given a linked TypeScript file, When the user opens it, Then a highlighted
     const messages = page.getByRole("log", { name: "Messages" });
     const preview = page.getByRole("complementary", { name: "Local file preview" });
     await expect(preview).toContainText("export function FileExplorer");
-    await expect(preview.locator("span[style]").first()).toBeVisible();
+    const highlightedTokens = preview.locator('code span[style*="--sdm-c"]');
+    await expect(highlightedTokens.first()).toBeVisible();
+    await expect
+        .poll(async () => {
+            const colors = await highlightedTokens.evaluateAll((tokens) =>
+                Array.from(new Set(tokens.map((token) => getComputedStyle(token).color))),
+            );
+            return colors.length;
+        })
+        .toBeGreaterThan(1);
     await expect(preview.getByText("tsx", { exact: true })).toBeHidden();
     await expect(preview.getByRole("button", { name: "Copy code" })).toBeHidden();
     await expect(preview.locator('[data-streamdown="code-block"]')).toHaveCSS("border-top-width", "0px");
