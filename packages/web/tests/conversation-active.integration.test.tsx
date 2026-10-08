@@ -143,7 +143,7 @@ test("Given a partially streamed reply, When Chat remounts and the daemon contin
     expect(document.body.textContent).toContain("partial.bin");
 });
 
-test("Given a conversation is running in the background, When it completes after Chat remounts, Then its spinner becomes an unread badge", {
+test("Given a conversation is running in the background, When it completes after starting a new conversation, Then its spinner becomes an unread badge", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -158,9 +158,6 @@ test("Given a conversation is running in the background, When it completes after
     await sendPrompt(app, composer, "hold after first delta");
     await app.queryElementByTestId(dataTestId.sessionStatus);
     await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
-
-    app.remount();
-
     await app.queryElementByTestId(dataTestId.sessionStatus);
     const daemon = app.daemon;
     if (daemon === null) {

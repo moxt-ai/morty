@@ -112,6 +112,7 @@ export function BotChatHome({
     );
     const model = useStore(store);
     const [statusStore] = useState(() => createConversationStatusStore(requests));
+    const [statusLifetime] = useState(() => new AbortController());
     const sessionStatuses = useStore(statusStore, (state) => state.statuses);
     const [pairingDialogOpen, setPairingDialogOpen] = useState(false);
     const [failureDialogOpen, setFailureDialogOpen] = useState(false);
@@ -153,7 +154,13 @@ export function BotChatHome({
             }
         };
     }, [model.revision, store]);
-    useEffect(() => () => statusStore.getState().close(), [statusStore]);
+    useEffect(
+        () => () => {
+            statusLifetime.abort(new Error("Conversation status lifetime ended"));
+            statusStore.getState().close();
+        },
+        [statusLifetime, statusStore],
+    );
 
     useEffect(() => {
         if (model.view.kind === "active") {
@@ -210,21 +217,17 @@ export function BotChatHome({
     const activeBotId = active?.bot.botId;
     const onStatusChange = useCallback(
         (sessionId: string, status: SessionActivityState): void => {
-            const controller = lifetime.current;
-            if (activeBotId !== undefined && controller !== null) {
-                statusStore.getState().statusChanged(activeBotId, sessionId, status, controller.signal);
+            if (activeBotId !== undefined) {
+                statusStore.getState().statusChanged(activeBotId, sessionId, status, statusLifetime.signal);
             }
         },
-        [activeBotId, statusStore],
+        [activeBotId, statusLifetime, statusStore],
     );
     const onDirectorySessions = useCallback(
         (botId: string, sessions: readonly ManagedChatSession[]): void => {
-            const controller = lifetime.current;
-            if (controller !== null) {
-                statusStore.getState().directoryLoaded(botId, sessions, controller.signal);
-            }
+            statusStore.getState().directoryLoaded(botId, sessions, statusLifetime.signal);
         },
-        [statusStore],
+        [statusLifetime, statusStore],
     );
     const clearComposer = () => {
         store.getState().setDraft("");
