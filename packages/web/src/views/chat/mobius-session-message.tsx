@@ -1,6 +1,7 @@
 import type { ContentBlockV2 } from "@moxt-ai/mobius-protocol";
 import { CircleAlert, X } from "lucide-react";
 import { AgentMarkdown, type MarkdownImageReader } from "../../components/agents/agent-markdown.tsx";
+import { AgentResponseText } from "../../components/agents/agent-response-text.tsx";
 import { AgentThinking } from "../../components/chat/agent-thinking.tsx";
 import { AttemptFailure } from "../../components/chat/attempt-failure.tsx";
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
@@ -152,12 +153,9 @@ export function MobiusAssistantText({
 }) {
     return (
         <div className="min-w-0" data-testid={dataTestId.agentResponse}>
-            <ContentBlock
-                content={{ type: "text", text }}
-                openLocalFile={openLocalFile}
-                readImage={readImage}
-                speaker="assistant"
-            />
+            <MessageBubble speaker="assistant">
+                <AgentResponseText text={text} openLocalFile={openLocalFile} readImage={readImage} />
+            </MessageBubble>
         </div>
     );
 }

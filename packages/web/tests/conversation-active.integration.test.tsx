@@ -1,3 +1,4 @@
+import { getByRole, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -48,6 +49,11 @@ test("Given an active turn exceeds one recovery page, When the user leaves and r
     }
     await sendPrompt(app, composer, prompt);
     await app.queryElementByTestId(dataTestId.sessionStatus);
+    await app.waitForView(() => expect(document.body.textContent).toContain("long-output.bin"));
+    await app.waitForView(() => getByRole(document.body, "button", { name: "Load more text" }));
+    while (queryByRole(document.body, "button", { name: "Load more text" }) !== null) {
+        await app.user.click(getByRole(document.body, "button", { name: "Load more text" }));
+    }
     await app.waitForView(() =>
         expect(responseCharacters(), document.body.textContent?.slice(0, 2000)).toBe(expectedCharacters),
     );
@@ -64,6 +70,11 @@ test("Given an active turn exceeds one recovery page, When the user leaves and r
     });
     await app.user.click(activeConversation);
     await app.queryElementByTestId(dataTestId.sessionStatus);
+    await app.waitForView(() => expect(document.body.textContent).toContain("long-output.bin"));
+    await app.waitForView(() => getByRole(document.body, "button", { name: "Load more text" }));
+    while (queryByRole(document.body, "button", { name: "Load more text" }) !== null) {
+        await app.user.click(getByRole(document.body, "button", { name: "Load more text" }));
+    }
     await app.waitForView(() =>
         expect(responseCharacters(), document.body.textContent?.slice(0, 2000)).toBe(expectedCharacters),
     );
@@ -132,4 +143,114 @@ test("Given a partially streamed reply, When Chat remounts and the daemon contin
     expect(text.match(/and the next streamed chunk/gu)).toHaveLength(1);
     expect(text.match(/and the final chunk/gu)).toHaveLength(1);
     expect(document.body.textContent).toContain("partial.bin");
+});
+
+test("Given a large live answer, When more text arrives, Then the latest text stays visible and earlier text loads on demand", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected fake daemon");
+    }
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected composer");
+    }
+    await sendPrompt(app, composer, "hold after large output");
+    await app.waitForView(() => expect(document.body.textContent).toContain("long-output.bin"));
+    await app.waitForView(() => {
+        expect(getByRole(document.body, "button", { name: "Load more text" })).toBeDefined();
+        const text = app
+            .elementsByTestId(dataTestId.agentResponse)
+            .map((element) => element.textContent)
+            .join("");
+        expect(text.match(/x/gu)?.length ?? 0).toBeLessThanOrEqual(64_000);
+    });
+    daemon.continueReply("hold after large output", {
+        outcome: "hold",
+        output: [{ kind: "text", text: "LATEST_LIVE_TEXT" }],
+    });
+    await app.waitForView(() => expect(document.body.textContent).toContain("LATEST_LIVE_TEXT"));
+    await app.waitForView(() => getByRole(document.body, "button", { name: "Load more text" }));
+    while (queryByRole(document.body, "button", { name: "Load more text" }) !== null) {
+        await app.user.click(getByRole(document.body, "button", { name: "Load more text" }));
+    }
+    await app.waitForView(() => {
+        const text = app
+            .elementsByTestId(dataTestId.agentResponse)
+            .map((element) => element.textContent)
+            .join("");
+        expect(text.match(/x{100,}/gu)?.reduce((total, part) => total + part.length, 0)).toBe(300_000);
+        expect(text).toContain("LATEST_LIVE_TEXT");
+    });
+});
+
+test("Given a long formatted live answer, When I read and load its pages, Then headings, links and a cross-page code block retain Markdown formatting", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected fake daemon");
+    }
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected composer");
+    }
+    await sendPrompt(app, composer, "hold after first delta");
+    await app.waitForView(() => expect(document.body.textContent).toContain("Partial reply"));
+    daemon.continueReply("hold after first delta", {
+        outcome: "hold",
+        output: [
+            {
+                kind: "text",
+                text: `
+
+## Long formatted answer
+
+\`\`\`text
+${"x".repeat(50_000)}`,
+            },
+            {
+                kind: "text",
+                text: `${"x".repeat(50_000)}
+\`\`\`
+
+[Read guide](https://example.com/guide)
+
+## Latest progress`,
+            },
+        ],
+    });
+    await app.waitForView(() => {
+        expect(getByRole(document.body, "heading", { name: "Long formatted answer" })).toBeDefined();
+        expect(getByRole(document.body, "heading", { name: "Latest progress" })).toBeDefined();
+        expect(getByRole(document.body, "link", { name: "Read guide" }).getAttribute("href")).toBe(
+            "https://example.com/guide",
+        );
+        expect(document.body.textContent).not.toContain("```text");
+    });
+    daemon.continueReply("hold after first delta", { outcome: "complete", output: [] });
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    while (queryByRole(document.body, "button", { name: "Load more text" }) !== null) {
+        await app.user.click(getByRole(document.body, "button", { name: "Load more text" }));
+    }
+    await app.waitForView(() => {
+        const text = app
+            .elementsByTestId(dataTestId.agentResponse)
+            .map((element) => element.textContent)
+            .join("");
+        expect(text.match(/x{100,}/gu)?.reduce((total, part) => total + part.length, 0)).toBe(100_000);
+        expect(getByRole(document.body, "heading", { name: "Long formatted answer" })).toBeDefined();
+        expect(document.body.textContent).not.toContain("```text");
+    });
 });
