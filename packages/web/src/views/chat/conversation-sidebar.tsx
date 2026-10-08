@@ -24,8 +24,8 @@ import type { IdentityTransfer } from "../../services/identity/anonymous-identit
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import type { BotConnectionStatus, BotOperation } from "../../view-models/chat/bot-chat-home-store.ts";
 import { createConversationDirectoryStore } from "../../view-models/chat/conversation-directory-store.ts";
+import type { ConversationListStatus } from "../../view-models/chat/conversation-status-store.ts";
 import { createRemoteAccessStore } from "../../view-models/chat/remote-access-store.ts";
-import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
 import { BotSwitcherMenu } from "./bot-switcher-menu.tsx";
 import { MachineSharing } from "./machine-sharing.tsx";
 import { NativeSessionDialog, type OpenMobiusSession } from "./native-session-dialog.tsx";
@@ -109,6 +109,7 @@ export function ConversationSidebar({
     onOpen,
     onOpenSession,
     onNewConversation,
+    onSessionsLoaded,
     currentUserToken,
     endRemoteAccess,
     replaceCurrentUser,
@@ -136,13 +137,14 @@ export function ConversationSidebar({
     readonly onOpen: (session: ManagedChatSession) => void;
     readonly onOpenSession: (session: OpenMobiusSession) => void;
     readonly onNewConversation: () => void;
+    readonly onSessionsLoaded: (botId: string, sessions: readonly ManagedChatSession[]) => void;
     readonly currentUserToken: (
         signal: AbortSignal,
     ) => Promise<{ readonly accessToken: string; readonly token: string }>;
     readonly endRemoteAccess: (token: string, signal: AbortSignal) => Promise<void>;
     readonly replaceCurrentUser: (currentToken: string, replacementToken: string, signal: AbortSignal) => Promise<void>;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
-    readonly sessionStatuses: ReadonlyMap<string, SessionActivityState>;
+    readonly sessionStatuses: ReadonlyMap<string, ConversationListStatus>;
 }) {
     const botId = activeBot.botId;
     const [store] = useState(() => createConversationDirectoryStore(botId, requests));
@@ -179,6 +181,11 @@ export function ConversationSidebar({
             }
         };
     }, [directoryRevision, load, revision]);
+    useEffect(() => {
+        if (directory.kind === "ready") {
+            onSessionsLoaded(activeBot.botId, directory.sessions);
+        }
+    }, [activeBot.botId, directory, onSessionsLoaded]);
     return (
         <aside
             aria-label="Workspace navigation"
@@ -338,7 +345,7 @@ export function ConversationSidebar({
                                         </span>
                                     )}
                                 </span>
-                                {sessionStatuses.get(session.id)?.kind === "working" ? (
+                                {(sessionStatuses.get(session.id) ?? session.status).kind === "working" ? (
                                     <span
                                         aria-label="Session working"
                                         className="inline-flex text-primary"
@@ -358,6 +365,15 @@ export function ConversationSidebar({
                                         role="status"
                                     >
                                         Failed
+                                    </span>
+                                ) : sessionStatuses.get(session.id)?.kind === "unread" ? (
+                                    <span
+                                        aria-label="Unread response"
+                                        className="inline-flex size-4 items-center justify-center"
+                                        data-testid={dataTestId.sessionStatus}
+                                        role="status"
+                                    >
+                                        <span className="size-2 rounded-full bg-primary" />
                                     </span>
                                 ) : null}
                             </button>

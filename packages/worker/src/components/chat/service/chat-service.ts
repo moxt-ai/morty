@@ -206,6 +206,7 @@ export class ChatService {
                     directoryId: details?.directoryId ?? "default",
                     directoryLabel: details?.directoryLabel ?? "",
                     isExternal: false,
+                    status: details?.status ?? { kind: "idle" },
                     title: details?.title ?? "New chat",
                 };
             }),

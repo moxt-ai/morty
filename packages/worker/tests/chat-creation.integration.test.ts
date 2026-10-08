@@ -132,7 +132,7 @@ test("Given a draft Bot, When its owner configures and opens it, Then setup list
 
         const listed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
         expect(listed.status).toBe(200);
-        expect(await listed.json()).toMatchObject({ sessions: [{ id: access.sessionId }] });
+        expect(await listed.json()).toMatchObject({ sessions: [{ id: access.sessionId, status: { kind: "idle" } }] });
     } finally {
         await fixture.close();
     }

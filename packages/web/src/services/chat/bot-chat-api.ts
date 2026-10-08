@@ -46,6 +46,10 @@ const managedSessionSchema = v.pipe(
         directoryId: v.string(),
         additionalDirectoryIds: v.array(v.string()),
         projectId: identifier,
+        status: v.variant("kind", [
+            v.pipe(v.object({ kind: v.literal("idle") }), v.readonly()),
+            v.pipe(v.object({ commandId: identifier, kind: v.literal("working") }), v.readonly()),
+        ]),
         userId: identifier,
     }),
     v.readonly(),

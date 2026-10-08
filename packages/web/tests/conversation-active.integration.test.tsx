@@ -142,3 +142,33 @@ test("Given a partially streamed reply, When Chat remounts and the daemon contin
     expect(text.match(/and the final chunk/gu)).toHaveLength(1);
     expect(document.body.textContent).toContain("partial.bin");
 });
+
+test("Given a conversation is running in the background, When it completes after Chat remounts, Then its spinner becomes an unread badge", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected composer");
+    }
+    await sendPrompt(app, composer, "hold after first delta");
+    await app.queryElementByTestId(dataTestId.sessionStatus);
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+
+    app.remount();
+
+    await app.queryElementByTestId(dataTestId.sessionStatus);
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected a connected fake daemon");
+    }
+    daemon.continueReply("hold after first delta", { outcome: "complete", output: [] });
+    await app.queryElementByTestId(
+        dataTestId.sessionStatus,
+        (element) => element.getAttribute("aria-label") === "Unread response",
+    );
+});
