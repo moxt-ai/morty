@@ -49,7 +49,7 @@ test("Given the agent sends separate reasoning messages, When the user reads the
     });
 });
 
-test("Given a file-change tool reports its changed-file schema, When the user opens it, Then Chat presents the changed files as an edit", {
+test("Given a file-change tool includes a rich diff, When the user views it, Then the complete edit stays collapsed until opened", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -69,6 +69,14 @@ test("Given a file-change tool reports its changed-file schema, When the user op
             name: "Edit: /workspace/app.js, /workspace/index.html, /workspace/styles.css",
         }),
     );
+    const editDisclosure = getByRole(edit, "button", {
+        name: "/workspace/app.js, /workspace/index.html, /workspace/styles.css Tool succeeded",
+    });
+    expect(editDisclosure.getAttribute("aria-expanded")).toBe("false");
+    expect(queryByText(document.body, "/workspace/app.js", { exact: true })).toBeNull();
+    await app.user.click(editDisclosure);
+    expect(editDisclosure.getAttribute("aria-expanded")).toBe("true");
+    expect(getAllByText(document.body, "/workspace/app.js", { exact: true }).length).toBeGreaterThan(0);
     expect(getByRole(edit, "list", { name: "Changed files" }).textContent).toBe(
         "/workspace/app.js/workspace/index.html/workspace/styles.css",
     );
@@ -100,6 +108,10 @@ test("Given a browser tool reports its tool-result schema, When the user opens i
     if (timedOutTool === undefined || successfulTool === undefined) {
         throw new Error("Expected two browser tools");
     }
+    expect(timedOutTool.textContent).not.toContain("js execution timed out; kernel reset, rerun your request");
+    expect(successfulTool.textContent).not.toContain("null");
+    await app.user.click(getByRole(timedOutTool, "button"));
+    await app.user.click(getByRole(successfulTool, "button"));
     expect(timedOutTool.textContent).toContain("js execution timed out; kernel reset, rerun your request");
     expect(timedOutTool.textContent).not.toContain("structuredContent");
     expect(timedOutTool.textContent).not.toContain("codex/toolSurface");
@@ -126,10 +138,7 @@ test("Given a shell tool completes, When the user views the conversation, Then t
     const shellTool = await app.waitForView(() =>
         getByRole(document.body, "group", { name: 'Shell command: /bin/zsh -lc "true"' }),
     );
-    if (!(shellTool instanceof HTMLDetailsElement)) {
-        throw new Error("Expected the shell tool to use a disclosure");
-    }
-    expect(shellTool.open).toBe(false);
+    expect(getByRole(shellTool, "button").getAttribute("aria-expanded")).toBe("false");
     expect(shellTool.textContent).not.toContain('{"exitCode":0,"output":""}');
     expect(queryByText(shellTool, "Response")).toBeNull();
 });
@@ -214,6 +223,9 @@ test("Given the daemon emits reasoning, a tool, and text, When the user observes
     expect(thinking.textContent).toContain("Show intermediate steps");
     expect(thinking.textContent).toContain("Thinking");
     await app.waitForView(() => expect(document.body.textContent).toContain("Read package metadata"));
+    const genericTool = await app.queryElementByTestId(dataTestId.agentToolCall);
+    expect(getByRole(genericTool, "button").getAttribute("aria-expanded")).toBe("false");
+    expect(genericTool.textContent).not.toContain("Package metadata response");
     await app.waitForView(() => {
         const restored = app
             .elementsByTestId(dataTestId.agentResponse)

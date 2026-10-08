@@ -42,8 +42,9 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     {
                         kind: "activity",
                         activityType: "tool",
+                        content: [],
                         title: "Read package metadata",
-                        output: "Read package metadata",
+                        output: "Package metadata response",
                     },
                     { kind: "text", text: "Partial rich reply" },
                 ],
@@ -110,6 +111,7 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     {
                         kind: "activity",
                         activityType: "tool",
+                        content: [],
                         title: "Later live tool",
                         output: "Later live tool output",
                     },
@@ -123,6 +125,14 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     {
                         kind: "activity",
                         activityType: "tool",
+                        content: [
+                            {
+                                newText: "export const status = 'after';\n",
+                                oldText: "export const status = 'before';\n",
+                                path: "/workspace/app.js",
+                                type: "diff",
+                            },
+                        ],
                         title: "/workspace/app.js, /workspace/index.html, /workspace/styles.css",
                         output: JSON.stringify({
                             changes: ["/workspace/app.js", "/workspace/index.html", "/workspace/styles.css"],
@@ -137,6 +147,7 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     {
                         kind: "activity",
                         activityType: "tool",
+                        content: [],
                         title: "cua_repl/js",
                         output: JSON.stringify({
                             content: [
@@ -161,6 +172,7 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     {
                         kind: "activity",
                         activityType: "tool",
+                        content: [],
                         title: "cua_repl/js",
                         output: "null",
                     },
@@ -173,6 +185,7 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     {
                         kind: "activity",
                         activityType: "tool",
+                        content: [],
                         title: '/bin/zsh -lc "true"',
                         output: JSON.stringify({ exitCode: 0, output: "" }),
                     },
@@ -185,6 +198,7 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     {
                         kind: "activity",
                         activityType: "tool",
+                        content: [],
                         title: '/bin/zsh -lc "pnpm test"',
                         output: JSON.stringify({
                             exitCode: 0,
@@ -206,6 +220,7 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     {
                         kind: "activity",
                         activityType: "tool",
+                        content: [],
                         title: "Read package metadata",
                         output: "Read package metadata",
                     },

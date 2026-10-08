@@ -5,7 +5,7 @@ import type { SessionToolPresentation } from "../../view-models/chat/session-pre
 import { AgentMarkdown, type MarkdownImageReader } from "../agents/agent-markdown.tsx";
 import { AgentRichContent } from "../agents/agent-rich-content.tsx";
 import { FollowLatestScrollArea } from "../utils/follow-latest-scroll-area.tsx";
-import { ToolCallStatus } from "./tools/tool-call-status.tsx";
+import { ToolCallDisclosure, ToolCallSupplementalContent } from "./tools/tool-call-status.tsx";
 import { toolRichContent } from "./tools/tool-display-content.ts";
 import { renderRegisteredTool } from "./tools/tool-renderer-registry.tsx";
 
@@ -78,36 +78,21 @@ function ToolCall({
     readonly entry: SessionToolPresentation;
     readonly readImage?: MarkdownImageReader | undefined;
 }) {
-    const disclosure = useRef<HTMLDetailsElement>(null);
     const registered = renderRegisteredTool(entry);
+    const supplementalContent = <AgentRichContent contents={toolRichContent(entry.content)} readImage={readImage} />;
     if (registered !== null) {
-        return (
-            <div className="grid min-w-0 gap-2">
-                {registered}
-                <AgentRichContent contents={toolRichContent(entry.content)} readImage={readImage} />
-            </div>
-        );
+        return <ToolCallSupplementalContent value={supplementalContent}>{registered}</ToolCallSupplementalContent>;
     }
     return (
-        <div className="grid min-w-0 gap-2">
-            <details
-                aria-label={`Tool: ${entry.title}`}
-                className="group/tool min-w-0"
-                data-testid={dataTestId.agentToolCall}
-                ref={disclosure}
+        <ToolCallSupplementalContent value={supplementalContent}>
+            <ToolCallDisclosure
+                ariaLabel={`Tool: ${entry.title}`}
+                autoOpen={false}
+                icon={<Wrench aria-hidden="true" className="size-4 shrink-0" />}
+                state={entry.state}
+                testId={dataTestId.agentToolCall}
+                title={entry.title}
             >
-                <summary
-                    className="flex min-h-8 w-full min-w-0 cursor-pointer list-none items-center gap-2 rounded-lg px-1 text-sm text-copy-secondary outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                    title={entry.title}
-                >
-                    <ChevronDown
-                        aria-hidden="true"
-                        className="size-4 shrink-0 -rotate-90 transition-transform group-open/tool:rotate-0 motion-reduce:transition-none"
-                    />
-                    <Wrench aria-hidden="true" className="size-4 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate whitespace-nowrap">{entry.title}</span>
-                    <ToolCallStatus state={entry.state} />
-                </summary>
                 <div className="mt-1 ml-5 grid min-w-0 gap-2 text-xs">
                     {entry.input.length > 0 && (
                         <div className="grid gap-1">
@@ -126,9 +111,8 @@ function ToolCall({
                         </div>
                     )}
                 </div>
-            </details>
-            <AgentRichContent contents={toolRichContent(entry.content)} readImage={readImage} />
-        </div>
+            </ToolCallDisclosure>
+        </ToolCallSupplementalContent>
     );
 }
 

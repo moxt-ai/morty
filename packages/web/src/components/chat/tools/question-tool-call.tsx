@@ -1,6 +1,6 @@
 import { CircleHelp } from "lucide-react";
 import * as v from "valibot";
-import { ToolCallStatus, useToolCallDisclosure } from "./tool-call-status.tsx";
+import { ToolCallDisclosure } from "./tool-call-status.tsx";
 import type { ToolRendererProps } from "./tool-renderer.ts";
 
 const textSchema = v.pipe(v.string(), v.maxLength(16_384));
@@ -43,20 +43,17 @@ export function matchesQuestionToolCall({ input }: ToolRendererProps["entry"]): 
 
 export function QuestionToolCall({ autoOpen, entry }: ToolRendererProps) {
     const request = parseRequest(entry.input);
-    const disclosure = useToolCallDisclosure(autoOpen);
     if (request === null) {
         return null;
     }
     return (
-        <details aria-label={`Questions: ${entry.title}`} className="group/tool min-w-0" ref={disclosure}>
-            <summary
-                className="flex min-h-8 w-full min-w-0 cursor-pointer list-none items-center gap-2 rounded-lg px-1 text-sm text-copy-secondary outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                title={entry.title}
-            >
-                <CircleHelp aria-hidden="true" className="size-4 shrink-0" />
-                <span className="min-w-0 flex-1 truncate whitespace-nowrap">{entry.title}</span>
-                <ToolCallStatus state={entry.state} />
-            </summary>
+        <ToolCallDisclosure
+            ariaLabel={`Questions: ${entry.title}`}
+            autoOpen={autoOpen}
+            icon={<CircleHelp aria-hidden="true" className="size-4 shrink-0" />}
+            state={entry.state}
+            title={entry.title}
+        >
             <div className="mt-2 ml-5 grid min-w-0 gap-4 text-sm">
                 {request.questions.map((question, questionIndex) => (
                     <section
@@ -88,6 +85,6 @@ export function QuestionToolCall({ autoOpen, entry }: ToolRendererProps) {
                     </section>
                 ))}
             </div>
-        </details>
+        </ToolCallDisclosure>
     );
 }

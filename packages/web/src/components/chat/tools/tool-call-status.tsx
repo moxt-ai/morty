@@ -1,15 +1,58 @@
-import { CircleCheck, CircleMinus, CircleX, LoaderCircle } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { ChevronDown, CircleCheck, CircleMinus, CircleX, LoaderCircle } from "lucide-react";
+import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import type { ToolCallState } from "./tool-renderer.ts";
 
-export function useToolCallDisclosure(autoOpen: boolean) {
-    const disclosure = useRef<HTMLDetailsElement>(null);
+export const ToolCallSupplementalContent = createContext<ReactNode>(null);
+
+export function ToolCallDisclosure({
+    ariaLabel,
+    autoOpen,
+    children,
+    icon,
+    state,
+    testId,
+    title,
+}: {
+    readonly ariaLabel: string;
+    readonly autoOpen: boolean;
+    readonly children?: ReactNode;
+    readonly icon: ReactNode;
+    readonly state: ToolCallState;
+    readonly testId?: string | undefined;
+    readonly title: string;
+}) {
+    const [open, setOpen] = useState(autoOpen);
+    const supplementalContent = useContext(ToolCallSupplementalContent);
     useEffect(() => {
-        if (autoOpen && disclosure.current !== null) {
-            disclosure.current.open = true;
+        if (autoOpen) {
+            setOpen(true);
         }
     }, [autoOpen]);
-    return disclosure;
+    return (
+        <fieldset aria-label={ariaLabel} className="group/tool m-0 min-w-0 border-0 p-0" data-testid={testId}>
+            <button
+                aria-expanded={open}
+                className="flex min-h-8 w-full min-w-0 cursor-pointer items-center gap-2 rounded-lg px-1 text-sm text-copy-secondary outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => setOpen((current) => !current)}
+                title={title}
+                type="button"
+            >
+                <ChevronDown
+                    aria-hidden="true"
+                    className={`size-4 shrink-0 transition-transform motion-reduce:transition-none ${open ? "rotate-0" : "-rotate-90"}`}
+                />
+                {icon}
+                <span className="min-w-0 flex-1 truncate text-left whitespace-nowrap">{title}</span>
+                <ToolCallStatus state={state} />
+            </button>
+            {open && (
+                <div className="grid min-w-0 gap-2">
+                    {children}
+                    {supplementalContent}
+                </div>
+            )}
+        </fieldset>
+    );
 }
 
 export function ToolCallStatus({ state }: { readonly state: ToolCallState }) {

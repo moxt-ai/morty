@@ -1,7 +1,7 @@
 import { Monitor } from "lucide-react";
 import * as v from "valibot";
 import { HighlightedCode } from "./highlighted-code.tsx";
-import { ToolCallStatus, useToolCallDisclosure } from "./tool-call-status.tsx";
+import { ToolCallDisclosure } from "./tool-call-status.tsx";
 import { toolTextContent } from "./tool-display-content.ts";
 import type { ToolRendererProps } from "./tool-renderer.ts";
 
@@ -58,20 +58,17 @@ export function matchesBrowserJavascriptToolCall(entry: ToolRendererProps["entry
 
 export function BrowserJavascriptToolCall({ autoOpen, entry }: ToolRendererProps) {
     const request = parseRequest(entry.input);
-    const disclosure = useToolCallDisclosure(autoOpen);
     const title = request?.title ?? entry.title;
     const protocolResponse = responseText(entry.output);
     const output = toolTextContent(entry.content) ?? protocolResponse ?? entry.output;
     return (
-        <details aria-label={`Browser: ${title}`} className="group/tool min-w-0" ref={disclosure}>
-            <summary
-                className="flex min-h-8 w-full min-w-0 cursor-pointer list-none items-center gap-2 rounded-lg px-1 text-sm text-copy-secondary outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                title={title}
-            >
-                <Monitor aria-hidden="true" className="size-4 shrink-0" />
-                <span className="min-w-0 flex-1 truncate whitespace-nowrap">{title}</span>
-                <ToolCallStatus state={entry.state} />
-            </summary>
+        <ToolCallDisclosure
+            ariaLabel={`Browser: ${title}`}
+            autoOpen={autoOpen}
+            icon={<Monitor aria-hidden="true" className="size-4 shrink-0" />}
+            state={entry.state}
+            title={title}
+        >
             <div className="mt-1 ml-5 grid min-w-0 gap-2 text-xs">
                 {request !== null && (
                     <div className="overflow-hidden rounded-lg bg-black/[0.035]">
@@ -84,6 +81,6 @@ export function BrowserJavascriptToolCall({ autoOpen, entry }: ToolRendererProps
                     </pre>
                 )}
             </div>
-        </details>
+        </ToolCallDisclosure>
     );
 }
