@@ -84,13 +84,7 @@ export function PathReadToolCall({ autoOpen, entry }: ToolRendererProps) {
     }
     const parsed = parseOutput(toolTextContent(entry.content) ?? responseText(entry.output));
     return (
-        <ReadToolPresentation
-            autoOpen={autoOpen}
-            content={entry.content}
-            path={request.output.path}
-            state={entry.state}
-            title={entry.title}
-        >
+        <ReadToolPresentation autoOpen={autoOpen} path={request.output.path} state={entry.state} title={entry.title}>
             {parsed.rangeLabel.length > 0 && <ReadToolLabel>{parsed.rangeLabel}</ReadToolLabel>}
             {parsed.body.length > 0 &&
                 (parsed.lines === null ? (

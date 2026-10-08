@@ -1,10 +1,7 @@
-import type { AgentDisplayContent } from "@moxt-ai/mobius-sdk";
 import { FileText } from "lucide-react";
 import type { ReactNode } from "react";
 import { dataTestId } from "../../../data-testid.ts";
-import { AgentRichContent } from "../../agents/agent-rich-content.tsx";
 import { ToolCallStatus, useToolCallDisclosure } from "./tool-call-status.tsx";
-import { toolRichContent } from "./tool-display-content.ts";
 import type { ToolCallState } from "./tool-renderer.ts";
 
 export interface NumberedCodeLine {
@@ -36,14 +33,12 @@ export function ReadToolLabel({ children }: { readonly children: string }) {
 export function ReadToolPresentation({
     autoOpen,
     children,
-    content,
     path,
     state,
     title,
 }: {
     readonly autoOpen: boolean;
     readonly children: ReactNode;
-    readonly content: readonly AgentDisplayContent[];
     readonly path: string;
     readonly state: ToolCallState;
     readonly title: string;
@@ -69,7 +64,6 @@ export function ReadToolPresentation({
                     {path}
                 </div>
                 {children}
-                <AgentRichContent contents={toolRichContent(content)} />
             </div>
         </details>
     );

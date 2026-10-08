@@ -246,3 +246,24 @@ test("Given the daemon emits reasoning, a tool, and text, When the user observes
     });
     await app.waitForView(() => expect(document.body.textContent).toContain("Read package metadata"));
 });
+
+test("Given an Agent response references a local image, When the user reads it and reopens the conversation, Then the image is fetched through Runtime and remains visible without base64 text", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, "show generated picture");
+    const image = await app.waitForView(() => getByRole(document.body, "img", { name: "Generated picture" }));
+    expect(image.getAttribute("src")).toMatch(/^blob:/u);
+    expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain("test image bytes");
+    app.remount();
+    const restored = await app.waitForView(() => getByRole(document.body, "img", { name: "Generated picture" }));
+    expect(restored.getAttribute("src")).toMatch(/^blob:/u);
+});

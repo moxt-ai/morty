@@ -1,6 +1,7 @@
 import type { Output, ReplyPlan } from "@moxt-ai/mobius-test/fake-daemon/model";
 
 export const mortyFiles = new Map([
+    ["/workspace/generated-picture.png", { content: "test image bytes", mediaType: "image/png" }],
     [
         "/workspace/edit-tool-presentation.tsx",
         {
@@ -76,6 +77,11 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                         title: "Thinking",
                     }),
                 ),
+            };
+        case "show generated picture":
+            return {
+                outcome: "complete",
+                output: [{ kind: "text", text: "![Generated picture](file:///workspace/generated-picture.png)" }],
             };
         case "show source file":
             return {

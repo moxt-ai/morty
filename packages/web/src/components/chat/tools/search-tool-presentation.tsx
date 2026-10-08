@@ -1,7 +1,6 @@
 import { Search } from "lucide-react";
-import { AgentRichContent } from "../../agents/agent-rich-content.tsx";
 import { ToolCallStatus, useToolCallDisclosure } from "./tool-call-status.tsx";
-import { toolRichContent, toolTextContent } from "./tool-display-content.ts";
+import { toolTextContent } from "./tool-display-content.ts";
 import type { ToolRendererProps } from "./tool-renderer.ts";
 
 export function SearchToolPresentation({ autoOpen, entry, path }: ToolRendererProps & { readonly path: string }) {
@@ -29,7 +28,6 @@ export function SearchToolPresentation({ autoOpen, entry, path }: ToolRendererPr
                         </pre>
                     </div>
                 )}
-                <AgentRichContent contents={toolRichContent(entry.content)} />
             </div>
         </details>
     );

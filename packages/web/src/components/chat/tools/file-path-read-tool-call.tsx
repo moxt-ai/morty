@@ -51,7 +51,6 @@ export function FilePathReadToolCall({ autoOpen, entry }: ToolRendererProps) {
     return (
         <ReadToolPresentation
             autoOpen={autoOpen}
-            content={entry.content}
             path={request.output.file_path}
             state={entry.state}
             title={entry.title}

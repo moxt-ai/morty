@@ -1,8 +1,6 @@
 import { Terminal } from "lucide-react";
-import { AgentRichContent } from "../../agents/agent-rich-content.tsx";
 import { AnsiShellOutput } from "./ansi-shell-output.tsx";
 import { ToolCallStatus, useToolCallDisclosure } from "./tool-call-status.tsx";
-import { toolRichContent } from "./tool-display-content.ts";
 import type { ToolRendererProps } from "./tool-renderer.ts";
 
 export function ShellCommandPresentation({
@@ -11,7 +9,6 @@ export function ShellCommandPresentation({
     response,
 }: ToolRendererProps & { readonly response: string }) {
     const disclosure = useToolCallDisclosure(autoOpen);
-    const richContent = toolRichContent(entry.content);
     return (
         <details aria-label={`Shell command: ${entry.title}`} className="group/tool min-w-0" ref={disclosure}>
             <summary
@@ -25,11 +22,6 @@ export function ShellCommandPresentation({
             {response.length > 0 && (
                 <div className="mt-1 ml-5 overflow-hidden rounded-lg bg-black/[0.035]">
                     <AnsiShellOutput output={response} />
-                </div>
-            )}
-            {richContent.length > 0 && (
-                <div className="ml-5">
-                    <AgentRichContent contents={richContent} />
                 </div>
             )}
         </details>

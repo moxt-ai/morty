@@ -1,9 +1,8 @@
 import { Monitor } from "lucide-react";
 import * as v from "valibot";
-import { AgentRichContent } from "../../agents/agent-rich-content.tsx";
 import { HighlightedCode } from "./highlighted-code.tsx";
 import { ToolCallStatus, useToolCallDisclosure } from "./tool-call-status.tsx";
-import { toolRichContent, toolTextContent } from "./tool-display-content.ts";
+import { toolTextContent } from "./tool-display-content.ts";
 import type { ToolRendererProps } from "./tool-renderer.ts";
 
 const requestSchema = v.pipe(
@@ -63,7 +62,6 @@ export function BrowserJavascriptToolCall({ autoOpen, entry }: ToolRendererProps
     const title = request?.title ?? entry.title;
     const protocolResponse = responseText(entry.output);
     const output = toolTextContent(entry.content) ?? protocolResponse ?? entry.output;
-    const richContent = toolRichContent(entry.content);
     return (
         <details aria-label={`Browser: ${title}`} className="group/tool min-w-0" ref={disclosure}>
             <summary
@@ -85,7 +83,6 @@ export function BrowserJavascriptToolCall({ autoOpen, entry }: ToolRendererProps
                         {output}
                     </pre>
                 )}
-                {richContent.length > 0 && <AgentRichContent contents={richContent} />}
             </div>
         </details>
     );
