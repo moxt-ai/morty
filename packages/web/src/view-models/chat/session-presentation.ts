@@ -1,5 +1,6 @@
 import type { AcpSessionUpdateV2, ContentBlockV2, SessionEventV2 } from "@moxt-ai/mobius-protocol";
 import type { AgentDisplayContent } from "@moxt-ai/mobius-sdk";
+import { externalContentPath } from "@moxt-ai/mobius-sdk";
 
 type ToolCallUpdateV2 = Extract<AcpSessionUpdateV2, { readonly sessionUpdate: "tool_call" | "tool_call_update" }>;
 const BOT_INSTRUCTIONS_URI = "morty://bot/instructions";
@@ -159,6 +160,48 @@ function displayContent(update: ToolCallUpdateV2): readonly AgentDisplayContent[
                     text: "text" in content.resource ? content.resource.text : "",
                     type: "resource",
                     uri: content.resource.uri,
+                };
+            case "external_image":
+                return {
+                    artifactId: "",
+                    data: "",
+                    mimeType: content.mimeType,
+                    name: "Image",
+                    newText: "",
+                    oldText: "",
+                    path: "",
+                    terminalId: "",
+                    text: "",
+                    type: "image",
+                    uri: externalContentPath(content),
+                };
+            case "external_audio":
+                return {
+                    artifactId: "",
+                    data: "",
+                    mimeType: content.mimeType,
+                    name: "Audio",
+                    newText: "",
+                    oldText: "",
+                    path: "",
+                    terminalId: "",
+                    text: "",
+                    type: "resource",
+                    uri: externalContentPath(content),
+                };
+            case "external_resource":
+                return {
+                    artifactId: "",
+                    data: "",
+                    mimeType: content.mimeType ?? "",
+                    name: content.uri,
+                    newText: "",
+                    oldText: "",
+                    path: "",
+                    terminalId: "",
+                    text: "",
+                    type: "resource",
+                    uri: externalContentPath(content),
                 };
             default:
                 return exhaustive(content);

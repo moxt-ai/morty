@@ -1,5 +1,7 @@
 import type { ContentBlockV2 } from "@moxt-ai/mobius-protocol";
+import { externalContentPath, type MobiusExternalContentBlock } from "@moxt-ai/mobius-sdk";
 import { CircleAlert, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { AgentMarkdown, type MarkdownImageReader } from "../../components/agents/agent-markdown.tsx";
 import { AgentResponseText } from "../../components/agents/agent-response-text.tsx";
 import { AgentThinking } from "../../components/chat/agent-thinking.tsx";
@@ -17,6 +19,95 @@ function safeRemoteUrl(value: string): string | null {
         return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
     } catch {
         return null;
+    }
+}
+
+type ExternalContentState =
+    | { readonly kind: "loading" }
+    | { readonly kind: "failed" }
+    | { readonly kind: "ready"; readonly source: string; readonly text: string };
+
+function ExternalContent({
+    content,
+    readContent,
+    speaker,
+}: {
+    readonly content: MobiusExternalContentBlock;
+    readonly readContent?: MarkdownImageReader | undefined;
+    readonly speaker: "assistant" | "user";
+}) {
+    const [state, setState] = useState<ExternalContentState>({ kind: "loading" });
+    useEffect(() => {
+        const controller = new AbortController();
+        let source = "";
+        const load = async () => {
+            if (readContent === undefined) {
+                setState({ kind: "failed" });
+                return;
+            }
+            try {
+                const file = await readContent(externalContentPath(content), controller.signal);
+                if (controller.signal.aborted) {
+                    return;
+                }
+                if (content.type === "external_resource" && content.encoding === "text") {
+                    setState({ kind: "ready", source: "", text: new TextDecoder().decode(file.bytes) });
+                    return;
+                }
+                source = URL.createObjectURL(new Blob([Uint8Array.from(file.bytes)], { type: file.mediaType }));
+                setState({ kind: "ready", source, text: "" });
+            } catch (error: unknown) {
+                if (!controller.signal.aborted) {
+                    console.error("External Session content could not be loaded", error);
+                    setState({ kind: "failed" });
+                }
+            }
+        };
+        void load();
+        return () => {
+            controller.abort();
+            if (source.length > 0) {
+                URL.revokeObjectURL(source);
+            }
+        };
+    }, [content, readContent]);
+
+    if (state.kind === "loading") {
+        return <p className="text-sm text-muted-foreground">Loading content…</p>;
+    }
+    if (state.kind === "failed") {
+        return <p className="text-sm text-muted-foreground">Content could not be loaded.</p>;
+    }
+    switch (content.type) {
+        case "external_image":
+            return SAFE_IMAGE_MIME.test(content.mimeType) && state.source.length > 0 ? (
+                <img
+                    alt="Agent-provided content"
+                    className="max-h-[480px] w-auto max-w-full rounded-xl border border-border object-contain"
+                    data-testid={speaker === "user" ? dataTestId.userMessageImage : undefined}
+                    src={state.source}
+                />
+            ) : (
+                <p className="text-sm text-muted-foreground">Image content could not be displayed safely.</p>
+            );
+        case "external_audio":
+            return SAFE_AUDIO_MIME.test(content.mimeType) && state.source.length > 0 ? (
+                <audio controls src={state.source}>
+                    <track kind="captions" />
+                </audio>
+            ) : (
+                <p className="text-sm text-muted-foreground">Audio content could not be displayed safely.</p>
+            );
+        case "external_resource":
+            return content.encoding === "text" ? (
+                <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-muted p-3 text-xs">
+                    {state.text}
+                </pre>
+            ) : (
+                <a className="break-all text-sm underline" download href={state.source}>
+                    Download resource
+                </a>
+            );
     }
 }
 
@@ -85,6 +176,10 @@ function ContentBlock({
             ) : (
                 <p className="break-all text-sm text-muted-foreground">Binary resource: {content.resource.uri}</p>
             );
+        case "external_image":
+        case "external_audio":
+        case "external_resource":
+            return <ExternalContent content={content} readContent={readImage} speaker={speaker} />;
     }
 }
 
