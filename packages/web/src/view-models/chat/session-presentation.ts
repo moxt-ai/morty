@@ -312,6 +312,26 @@ export function sessionEventLogPresentation(events: readonly SessionEventV2[]): 
                 : [],
         ),
     );
+    const recoveredRequests = new Map<
+        string,
+        { readonly contents: readonly ContentBlockV2[]; readonly eventId: string }
+    >();
+    for (const event of events) {
+        if (
+            event.type !== "acp" ||
+            event.payload.sessionUpdate !== "user_message_chunk" ||
+            event.payload.messageId === null ||
+            event.payload.messageId === undefined ||
+            requests.has(event.payload.messageId)
+        ) {
+            continue;
+        }
+        const current = recoveredRequests.get(event.payload.messageId);
+        recoveredRequests.set(event.payload.messageId, {
+            contents: [...(current?.contents ?? []), event.payload.content],
+            eventId: current?.eventId ?? event.eventId,
+        });
+    }
     const admittedPromptCommands = new Set(
         events.flatMap((event) =>
             event.type === "lifecycle-metadata" && event.payload.kind === "prompt.started"
@@ -330,13 +350,17 @@ export function sessionEventLogPresentation(events: readonly SessionEventV2[]): 
             ) {
                 renderedPromptCommands.add(payload.commandId);
                 const request = requests.get(payload.commandId);
+                const recovered = recoveredRequests.get(payload.commandId);
                 const contents =
-                    request?.payload.kind === "prompt.requested" ? visiblePromptContent(request.payload.content) : [];
-                if (request !== undefined && contents.length > 0) {
+                    request?.payload.kind === "prompt.requested"
+                        ? visiblePromptContent(request.payload.content)
+                        : (recovered?.contents ?? []);
+                const eventId = request?.eventId ?? recovered?.eventId;
+                if (eventId !== undefined && contents.length > 0) {
                     messages.push({
                         commandId: payload.commandId,
                         contents,
-                        id: request.eventId,
+                        id: eventId,
                         role: "user",
                     });
                 }
