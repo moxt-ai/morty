@@ -295,13 +295,16 @@ function projectAcpUpdate(event: SessionEventV2, update: AcpSessionUpdateV2): re
 }
 
 function projectEvent(event: SessionEventV2): readonly SessionMessage[] {
-    return projectAcpUpdate(event, event.payload);
+    return event.type === "acp" ? projectAcpUpdate(event, event.payload) : [];
 }
 
 export function sessionEventLogPresentation(events: readonly SessionEventV2[]): SessionTimeline {
     const messages: SessionMessage[] = [];
     const toolIndexes = new Map<string, number>();
     for (const event of events) {
+        if (event.type !== "acp") {
+            continue;
+        }
         const update = event.payload;
         if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update") {
             messages.push(...projectEvent(event));
@@ -332,6 +335,12 @@ export function sessionEventLogPresentation(events: readonly SessionEventV2[]): 
 export function sessionEventCommandIds(events: readonly SessionEventV2[]): readonly string[] {
     const commandIds: string[] = [];
     for (const event of events) {
+        if (event.type === "lifecycle-metadata") {
+            if ("commandId" in event.payload && !commandIds.includes(event.payload.commandId)) {
+                commandIds.push(event.payload.commandId);
+            }
+            continue;
+        }
         const update = event.payload;
         if (
             update.sessionUpdate !== "user_message_chunk" ||

@@ -617,6 +617,11 @@ export function createSessionPaneModel(options: {
                         },
                         receive: async (event) => {
                             sessionEvents = mergeSessionEvents(sessionEvents, [event]);
+                            if (event.type !== "acp") {
+                                const timeline = deriveTimeline();
+                                set({ messages: timeline.messages });
+                                return true;
+                            }
                             const update = event.payload;
                             if (update.sessionUpdate === "available_commands_update") {
                                 tasks.getState().updateCommands(
