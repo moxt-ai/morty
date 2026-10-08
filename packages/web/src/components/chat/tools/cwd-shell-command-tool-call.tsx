@@ -11,13 +11,21 @@ const requestSchema = v.pipe(
     }),
     v.readonly(),
 );
-const responseSchema = v.pipe(
+const formattedResponseSchema = v.pipe(
     v.strictObject({
         exit_code: v.optional(v.number()),
         formatted_output: v.string(),
     }),
     v.readonly(),
 );
+const outputResponseSchema = v.pipe(
+    v.strictObject({
+        exitCode: v.optional(v.number()),
+        output: v.string(),
+    }),
+    v.readonly(),
+);
+const responseSchema = v.union([formattedResponseSchema, outputResponseSchema]);
 
 function parseJson(value: string): unknown {
     try {
@@ -27,14 +35,19 @@ function parseJson(value: string): unknown {
     }
 }
 
-export function matchesCwdShellCommandToolCall({ input }: ToolRendererProps["entry"]): boolean {
-    return v.safeParse(requestSchema, parseJson(input)).success;
+export function matchesCwdShellCommandToolCall({ input, output }: ToolRendererProps["entry"]): boolean {
+    return (
+        v.safeParse(requestSchema, parseJson(input)).success ||
+        v.safeParse(outputResponseSchema, parseJson(output)).success
+    );
 }
 
 export function CwdShellCommandToolCall({ autoOpen, entry }: ToolRendererProps) {
     const response = v.safeParse(responseSchema, parseJson(entry.output));
     const output =
         toolTextContent(entry.content) ??
-        (response.success ? response.output.formatted_output.trimEnd() : entry.output);
+        (response.success
+            ? ("output" in response.output ? response.output.output : response.output.formatted_output).trimEnd()
+            : entry.output);
     return <ShellCommandPresentation autoOpen={autoOpen} entry={entry} response={output} />;
 }

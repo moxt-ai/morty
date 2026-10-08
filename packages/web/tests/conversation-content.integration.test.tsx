@@ -105,6 +105,28 @@ test("Given a browser tool reports its tool-result schema, When the user opens i
     expect(successfulTool.textContent).not.toContain("null");
 });
 
+test("Given a shell tool reports an empty camel-case result, When the user opens it, Then Chat presents a successful command without raw JSON", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, "run a quiet shell command");
+
+    const shellTool = await app.waitForView(() =>
+        getByRole(document.body, "group", { name: 'Shell command: /bin/zsh -lc "true"' }),
+    );
+    expect(shellTool.textContent).not.toContain('{"exitCode":0,"output":""}');
+    expect(queryByText(shellTool, "Response")).toBeNull();
+});
+
 test("Given the daemon emits reasoning, a tool, and text, When the user observes and stops an unfinished turn, Then partial content is visible before completion and survives remount", {
     timeout: 30_000,
 }, async () => {

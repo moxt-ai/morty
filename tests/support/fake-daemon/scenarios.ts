@@ -132,6 +132,18 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     },
                 ],
             };
+        case "run a quiet shell command":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        title: '/bin/zsh -lc "true"',
+                        output: JSON.stringify({ exitCode: 0, output: "" }),
+                    },
+                ],
+            };
         default:
             return {
                 outcome: "complete",
