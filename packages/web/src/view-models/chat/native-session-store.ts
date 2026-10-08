@@ -142,17 +142,14 @@ export const createNativeSessionStore = (
                     signal,
                 );
                 signal.throwIfAborted();
-                const events = [
-                    ...content.history.events,
-                    ...(content.executingPromptRequest === null ? [] : content.executingPromptRequest.events),
-                ];
+                const events = content.events.events;
                 set({
                     preview: {
                         kind: "ready",
                         entry,
                         content: {
                             messages: sessionEventLogPresentation(events).messages,
-                            truncated: content.history.truncated || content.executingPromptRequest?.truncated === true,
+                            truncated: content.events.truncated,
                         },
                     },
                 });
