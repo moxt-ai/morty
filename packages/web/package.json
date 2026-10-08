@@ -18,6 +18,7 @@
         "@sentry/react": "catalog:",
         "@streamdown/code": "catalog:",
         "@tanstack/react-router": "catalog:",
+        "anser": "2.3.5",
         "class-variance-authority": "catalog:",
         "clsx": "catalog:",
         "lucide-react": "catalog:",

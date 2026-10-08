@@ -1,6 +1,6 @@
 import { Terminal } from "lucide-react";
 import { AgentRichContent } from "../../agents/agent-rich-content.tsx";
-import { HighlightedCode } from "./highlighted-code.tsx";
+import { AnsiShellOutput } from "./ansi-shell-output.tsx";
 import { ToolCallStatus, useToolCallDisclosure } from "./tool-call-status.tsx";
 import { toolRichContent } from "./tool-display-content.ts";
 import type { ToolRendererProps } from "./tool-renderer.ts";
@@ -24,7 +24,7 @@ export function ShellCommandPresentation({
             </summary>
             {response.length > 0 && (
                 <div className="mt-1 ml-5 overflow-hidden rounded-lg bg-black/[0.035]">
-                    <HighlightedCode code={response} language="bash" />
+                    <AnsiShellOutput output={response} />
                 </div>
             )}
             {richContent.length > 0 && (

@@ -164,6 +164,21 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     },
                 ],
             };
+        case "run a colorful shell command":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        title: '/bin/zsh -lc "pnpm test"',
+                        output: JSON.stringify({
+                            exitCode: 0,
+                            output: "\u001B[31mfailed\u001B[0m\n\u001B[1;32mpassed\u001B[0m",
+                        }),
+                    },
+                ],
+            };
         default:
             return {
                 outcome: "complete",

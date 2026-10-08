@@ -297,6 +297,9 @@ importers:
       '@tanstack/react-router':
         specifier: 'catalog:'
         version: 1.170.32(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      anser:
+        specifier: 2.3.5
+        version: 2.3.5
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1
@@ -3458,6 +3461,9 @@ packages:
   agent-base@6.0.2:
     resolution: {integrity: sha512-RZNwNclF7+MS/8bDg70amg32dyeZGZxiDuQmZxKLAlQjr3jGyLx+4Kkk58UO7D2QdgFIQCovuSuZESne6RG6XQ==}
     engines: {node: '>= 6.0.0'}
+
+  anser@2.3.5:
+    resolution: {integrity: sha512-vcZjxvvVoxTeR5XBNJB38oTu/7eDCZlwdz32N1eNgpyPF7j/Z7Idf+CUwQOkKKpJ7RJyjxgLHCM7vdIK0iCNMQ==}
 
   ansi-regex@5.0.1:
     resolution: {integrity: sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==}
@@ -7719,6 +7725,8 @@ snapshots:
       debug: 4.4.3(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
+
+  anser@2.3.5: {}
 
   ansi-regex@5.0.1: {}
 
