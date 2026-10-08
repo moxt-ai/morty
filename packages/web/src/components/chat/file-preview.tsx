@@ -1,5 +1,6 @@
 import { FileText, LoaderCircle, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 import { dataTestId } from "../../data-testid.ts";
 import type { FilePreviewState } from "../../view-models/chat/file-preview-store.ts";
 import { HighlightedCode, languageForPath } from "./tools/highlighted-code.tsx";
@@ -47,7 +48,14 @@ export function FilePreview({ onClose, state }: { readonly onClose: () => void; 
                     <X aria-hidden="true" className="size-4" />
                 </button>
             </header>
-            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-surface-subtle p-5">
+            <div
+                className={cn(
+                    "flex min-h-0 flex-1 overflow-auto",
+                    state.kind === "text"
+                        ? "items-stretch justify-stretch bg-white"
+                        : "items-center justify-center bg-surface-subtle p-5",
+                )}
+            >
                 {state.kind === "loading" ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> Loading file…
@@ -56,10 +64,10 @@ export function FilePreview({ onClose, state }: { readonly onClose: () => void; 
                     <p className="text-sm text-destructive">{state.message}</p>
                 ) : state.kind === "text" ? (
                     <div
-                        className="min-h-full w-full overflow-hidden rounded-lg border border-border bg-white [&_pre]:!max-h-none"
+                        className="min-h-full w-full overflow-hidden bg-white [&_pre]:!max-h-none"
                         data-testid={dataTestId.filePreviewContent}
                     >
-                        <HighlightedCode code={state.text} language={languageForPath(state.name)} />
+                        <HighlightedCode bare code={state.text} language={languageForPath(state.name)} />
                     </div>
                 ) : (
                     <PreviewImage state={state} />

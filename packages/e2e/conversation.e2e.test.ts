@@ -14,6 +14,9 @@ test("Given a linked TypeScript file, When the user opens it, Then a highlighted
     const preview = page.getByRole("complementary", { name: "Local file preview" });
     await expect(preview).toContainText("export function FileExplorer");
     await expect(preview.locator("span[style]").first()).toBeVisible();
+    await expect(preview.getByText("tsx", { exact: true })).toBeHidden();
+    await expect(preview.getByRole("button", { name: "Copy code" })).toBeHidden();
+    await expect(preview.locator('[data-streamdown="code-block"]')).toHaveCSS("border-top-width", "0px");
     const messagesBox = await messages.boundingBox();
     const previewBox = await preview.boundingBox();
     expect(messagesBox).not.toBeNull();
