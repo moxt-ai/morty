@@ -33,6 +33,7 @@ type SessionRenderItem =
     | {
           readonly kind: "assistant-text";
           readonly id: string;
+          readonly messageId: string | null;
           readonly text: string;
       }
     | {
@@ -45,13 +46,13 @@ type SessionRenderItem =
           readonly kind: "thinking";
       };
 
-function assistantText(message: SessionMessage): string | null {
+function assistantText(message: SessionMessage): { readonly messageId: string | null; readonly text: string } | null {
     if (
         message.role === "assistant" &&
         message.presentation.kind === "message" &&
         message.presentation.content.type === "text"
     ) {
-        return message.presentation.content.text;
+        return { messageId: message.presentation.messageId, text: message.presentation.content.text };
     }
     return null;
 }
@@ -64,7 +65,12 @@ function thinkingEntry(message: SessionMessage): AgentThinkingEntry | null {
         return message.presentation.entry;
     }
     if (message.presentation.kind === "thought" && message.presentation.content.type === "text") {
-        return { id: message.id, kind: "reasoning", text: message.presentation.content.text };
+        return {
+            id: message.id,
+            kind: "reasoning",
+            messageId: message.presentation.messageId,
+            text: message.presentation.content.text,
+        };
     }
     return null;
 }
@@ -75,10 +81,10 @@ function sessionRenderItems(messages: readonly SessionMessage[]): readonly Sessi
         const text = assistantText(message);
         const thinking = thinkingEntry(message);
         const previous = items.at(-1);
-        if (text !== null && previous?.kind === "assistant-text") {
-            items[items.length - 1] = { ...previous, text: previous.text + text };
+        if (text !== null && previous?.kind === "assistant-text" && previous.messageId === text.messageId) {
+            items[items.length - 1] = { ...previous, text: previous.text + text.text };
         } else if (text !== null) {
-            items.push({ kind: "assistant-text", id: message.id, text });
+            items.push({ kind: "assistant-text", id: message.id, messageId: text.messageId, text: text.text });
         } else if (thinking !== null && previous?.kind === "thinking") {
             items[items.length - 1] = { ...previous, entries: [...previous.entries, thinking] };
         } else if (thinking !== null) {

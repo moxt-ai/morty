@@ -11,6 +11,7 @@ export type AgentThinkingEntry =
     | {
           readonly id: string;
           readonly kind: "reasoning";
+          readonly messageId: string | null;
           readonly text: string;
       }
     | SessionToolPresentation;
@@ -132,7 +133,13 @@ export function AgentThinking({
         if (first === undefined) {
             return;
         }
-        timeline.push({ entry: { ...first, text: reasoning.map(({ text }) => text).join("") }, kind: "reasoning" });
+        let messageId = first.messageId;
+        let text = first.text;
+        for (const entry of reasoning.slice(1)) {
+            text += entry.messageId === messageId ? entry.text : `\n\n${entry.text}`;
+            messageId = entry.messageId;
+        }
+        timeline.push({ entry: { ...first, text }, kind: "reasoning" });
         reasoning = [];
     };
     for (const entry of entries) {
