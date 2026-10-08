@@ -88,10 +88,13 @@ test("Given a paired Bot with cached agent settings, When a user refreshes and f
                 dataTestId.userMessage,
                 (element) => element.textContent?.includes(prompt) === true,
             ),
-            created.queryElementByTestId(
-                dataTestId.agentResponse,
-                (element) => element.textContent?.includes(`Codex turn 1: ${prompt}`) === true,
-            ),
+            created.waitForView(() => {
+                const response = created
+                    .elementsByTestId(dataTestId.agentResponse)
+                    .find((element) => element.textContent?.includes(`Codex turn 1: ${prompt}`) === true);
+                expect(response).toBeDefined();
+                return response;
+            }),
         ]),
         failure,
     ]);

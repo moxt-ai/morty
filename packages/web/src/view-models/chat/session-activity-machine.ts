@@ -1,8 +1,6 @@
-import type { SessionMessage } from "./session-presentation.ts";
-
 export type SessionActivityState =
     | { readonly kind: "idle" }
-    | { readonly kind: "working"; readonly attempt: AssistantAttempt; readonly commandId: string }
+    | { readonly kind: "working"; readonly commandId: string }
     | { readonly kind: "failed"; readonly commandId: string | null; readonly message: string };
 
 export type SessionActivityEvent =
@@ -30,13 +28,8 @@ export function transitionSessionActivity(
     }
 }
 
-type AssistantAttempt = Extract<SessionMessage, { readonly role: "assistant" }>["attempt"];
-
-export function startSessionWork(event: {
-    readonly commandId: string;
-    readonly attempt: AssistantAttempt;
-}): SessionActivityState {
-    return { attempt: event.attempt, commandId: event.commandId, kind: "working" };
+export function startSessionWork(event: { readonly commandId: string }): SessionActivityState {
+    return { commandId: event.commandId, kind: "working" };
 }
 
 export function workingCommandId(state: SessionActivityState): string | null {

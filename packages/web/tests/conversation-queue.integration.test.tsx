@@ -8,6 +8,7 @@ test("Given the daemon has queued work, When the user steers it into the active 
     timeout: 30_000,
 }, async () => {
     const instruction = "Use the revised requirement";
+    const deletedInstruction = "Add a footer that should be deleted";
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -30,6 +31,13 @@ test("Given the daemon has queued work, When the user steers it into the active 
         dataTestId.queuedMessage,
         (element) => element.textContent?.includes(instruction) === true,
     );
+    for (const current of [app, viewer]) {
+        expect(
+            current
+                .elementsByTestId(dataTestId.userMessage)
+                .some((element) => element.textContent?.includes(instruction) === true),
+        ).toBe(false);
+    }
     await viewer.user.click(getByLabelText(queued, `Steer queued message: ${instruction}`));
     for (const current of [app, viewer]) {
         await current.waitForView(() =>
@@ -47,6 +55,50 @@ test("Given the daemon has queued work, When the user steers it into the active 
             ).toBe(true),
         );
         await current.waitForView(() => expect(current.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull());
+        await current.queryElementByTestId(dataTestId.sessionStatus);
+        await current.waitForView(() =>
+            expect(current.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
+                "wait for steering",
+                instruction,
+            ]),
+        );
+        expect(
+            current
+                .elementsByTestId(dataTestId.agentReplyStatus)
+                .some((element) => element.textContent?.includes("steered") === true),
+        ).toBe(false);
     }
+    await sendPrompt(
+        app,
+        (await app.queryElementByTestId(dataTestId.messageComposer)) as HTMLTextAreaElement,
+        deletedInstruction,
+    );
+    const queuedForDeletion = await viewer.queryElementByTestId(
+        dataTestId.queuedMessage,
+        (element) => element.textContent?.includes(deletedInstruction) === true,
+    );
+    await viewer.user.click(getByLabelText(queuedForDeletion, `Delete queued message: ${deletedInstruction}`));
+    for (const current of [app, viewer]) {
+        await current.waitForView(() => expect(current.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull());
+        await current.queryElementByTestId(dataTestId.sessionStatus);
+        await current.waitForView(() => {
+            expect(
+                current
+                    .elementsByTestId(dataTestId.userMessage)
+                    .some((element) => element.textContent?.includes(deletedInstruction) === true),
+            ).toBe(false);
+            expect(
+                current
+                    .elementsByTestId(dataTestId.agentReplyStatus)
+                    .some((element) => element.textContent?.includes("cancelled") === true),
+            ).toBe(false);
+        });
+    }
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected a connected fake daemon");
+    }
+    daemon.continueReply("wait for steering", { outcome: "complete", output: [] });
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
     await viewer.close();
 });

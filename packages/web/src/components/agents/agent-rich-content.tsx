@@ -3,7 +3,6 @@ import { ExternalLink, FileText, Image as ImageIcon, Terminal, Video } from "luc
 import { useEffect, useState } from "react";
 import type { MarkdownImageReader } from "@/components/agents/agent-markdown";
 import { AgentMarkdown } from "@/components/agents/agent-markdown";
-import { readFile } from "@/services/chat/mobius-transport";
 
 const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/;
 const SAFE_VIDEO_MIME = /^video\/(?:mp4|webm)$/;
@@ -42,12 +41,10 @@ function LocalImage({
     content,
     mediaTestId,
     readImage,
-    sessionId,
 }: {
     readonly content: AgentDisplayContent;
     readonly mediaTestId?: string | undefined;
     readonly readImage?: MarkdownImageReader | undefined;
-    readonly sessionId: string;
 }) {
     const [source, setSource] = useState<string | null>(null);
     useEffect(() => {
@@ -55,10 +52,11 @@ function LocalImage({
         let objectUrl = "";
         const load = async () => {
             try {
-                const file =
-                    readImage === undefined
-                        ? await readFile(sessionId, content.uri, controller.signal)
-                        : await readImage(content.uri, controller.signal);
+                if (readImage === undefined) {
+                    setSource("");
+                    return;
+                }
+                const file = await readImage(content.uri, controller.signal);
 
                 if (controller.signal.aborted || !SAFE_IMAGE_MIME.test(file.mediaType)) {
                     return;
@@ -79,7 +77,7 @@ function LocalImage({
                 URL.revokeObjectURL(objectUrl);
             }
         };
-    }, [content.uri, readImage, sessionId]);
+    }, [content.uri, readImage]);
     if (source === null) {
         return (
             <div className="min-h-24 rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
@@ -109,25 +107,19 @@ function LocalImage({
 }
 
 function AgentRichContentItem({
-    channelId,
     content,
     mediaTestId,
     openLocalFile,
     readImage,
-    sessionId,
 }: {
-    readonly channelId?: string | undefined;
     readonly content: AgentDisplayContent;
     readonly mediaTestId?: string | undefined;
     readonly readImage?: MarkdownImageReader | undefined;
     readonly openLocalFile?: ((path: string) => void) | undefined;
-    readonly sessionId?: string | undefined;
 }) {
     if (content.type === "image" && content.uri.length > 0) {
-        if (sessionId !== undefined && (readImage !== undefined || channelId !== undefined)) {
-            return (
-                <LocalImage content={content} mediaTestId={mediaTestId} readImage={readImage} sessionId={sessionId} />
-            );
+        if (readImage !== undefined) {
+            return <LocalImage content={content} mediaTestId={mediaTestId} readImage={readImage} />;
         }
         return (
             <div className="rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
@@ -243,19 +235,15 @@ function AgentRichContentItem({
 }
 
 export function AgentRichContent({
-    channelId,
     contents,
     mediaTestId,
     readImage,
     openLocalFile,
-    sessionId,
 }: {
-    readonly channelId?: string | undefined;
     readonly contents: readonly AgentDisplayContent[];
     readonly mediaTestId?: string | undefined;
     readonly readImage?: MarkdownImageReader | undefined;
     readonly openLocalFile?: ((path: string) => void) | undefined;
-    readonly sessionId?: string | undefined;
 }) {
     if (contents.length === 0) {
         return null;
@@ -264,13 +252,11 @@ export function AgentRichContent({
         <div className="mt-2 grid gap-2">
             {contents.map((content, index) => (
                 <AgentRichContentItem
-                    channelId={channelId}
                     content={content}
                     key={`${content.type}:${content.name}:${content.uri}:${index.toString()}`}
                     mediaTestId={mediaTestId}
                     readImage={readImage}
                     openLocalFile={openLocalFile}
-                    sessionId={sessionId}
                 />
             ))}
         </div>

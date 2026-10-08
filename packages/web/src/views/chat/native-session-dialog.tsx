@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "zustand";
-import { AgentMarkdown } from "../../components/agents/agent-markdown.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
@@ -9,6 +8,7 @@ import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { createNativeSessionStore } from "../../view-models/chat/native-session-store.ts";
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
+import { MobiusSessionMessage } from "./mobius-session-message.tsx";
 
 export type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 
@@ -129,33 +129,21 @@ export function NativeSessionDialog({
                     )}
                     {model.preview.kind === "ready" && (
                         <>
-                            <h2 className="font-semibold">
-                                {model.preview.content.title || model.preview.entry.title || "Untitled session"}
-                            </h2>
-                            {model.preview.content.history.status === "unavailable" ? (
-                                <p>{model.preview.content.history.cause.message}</p>
-                            ) : (
-                                <>
-                                    {model.preview.content.history.messages.length === 0 && (
-                                        <p>No messages in this session.</p>
-                                    )}
-                                    {model.preview.content.history.messages.map((message, index) => (
-                                        <div
-                                            // biome-ignore lint/suspicious/noArrayIndexKey: Native history has no message IDs; this read-only snapshot never reorders messages.
-                                            key={`${index}-${message.role}`}
-                                            className={`break-words rounded-xl p-3 ${message.role === "user" ? "ml-6 bg-primary/10" : "mr-6 bg-muted"}`}
-                                        >
-                                            <AgentMarkdown
-                                                className="[&_p]:my-0"
-                                                markdown={message.text}
-                                                streaming={false}
-                                            />
-                                        </div>
-                                    ))}
-                                    {model.preview.content.history.truncated && (
-                                        <p className="text-muted-foreground">Showing a partial history preview.</p>
-                                    )}
-                                </>
+                            <h2 className="font-semibold">{model.preview.entry.title || "Untitled session"}</h2>
+                            {model.preview.content.messages.length === 0 && <p>No events in this session.</p>}
+                            {model.preview.content.messages.map((message) => (
+                                <MobiusSessionMessage
+                                    deliveryUnknownUserMessageId={null}
+                                    failureApproval={{ kind: "unavailable" }}
+                                    key={message.id}
+                                    message={message}
+                                    onRemoveUnknownDelivery={() => undefined}
+                                    onRetryUnknownDelivery={() => undefined}
+                                    openLocalFile={() => undefined}
+                                />
+                            ))}
+                            {model.preview.content.truncated && (
+                                <p className="text-muted-foreground">Showing a partial event preview.</p>
                             )}
                         </>
                     )}

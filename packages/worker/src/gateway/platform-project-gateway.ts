@@ -501,6 +501,22 @@ export class PlatformProjectGateway {
             120000,
         );
 
+    readonly queryRuntimeNativeEventsV2 = async (
+        projectId: string,
+        runtimeId: string,
+        sessionId: string,
+        identity: Parameters<MobiusClient["sessions"]["queryRuntimeNativeEventsV2"]>[2],
+        page: Parameters<MobiusClient["sessions"]["queryRuntimeNativeEventsV2"]>[3],
+        signal: AbortSignal,
+    ) =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) =>
+                await client.sessions.queryRuntimeNativeEventsV2(runtimeId, sessionId, identity, page, signal),
+            120000,
+        );
+
     readonly findNativeSessionByNativeSessionId = async (
         projectId: string,
         runtimeId: string,

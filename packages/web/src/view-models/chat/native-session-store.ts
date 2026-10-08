@@ -6,6 +6,7 @@ import {
     connectedChatRuntimeAgents,
 } from "../../services/chat/bot-chat-api.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
+import { type SessionMessage, sessionEventLogPresentation } from "./session-presentation.ts";
 
 type NativeSessionDirectory =
     | { readonly kind: "loading" }
@@ -27,7 +28,10 @@ type NativeSessionPreview =
     | {
           readonly kind: "ready";
           readonly entry: NativeSessionEntry;
-          readonly content: Awaited<ReturnType<BotChatApi["nativeSession"]>>;
+          readonly content: {
+              readonly messages: readonly SessionMessage[];
+              readonly truncated: boolean;
+          };
       }
     | { readonly kind: "failed"; readonly entry: NativeSessionEntry; readonly message: string };
 
@@ -129,16 +133,29 @@ export const createNativeSessionStore = (
                     botId,
                     directory.runtimeId,
                     {
-                        discoveryId: directory.discoveryId,
                         agentId: directory.agentRef,
                         directoryId: entry.directoryId,
                         additionalDirectoryIds: entry.additionalDirectories.map((item) => item.directoryId),
                         entryId: entry.entryId,
+                        nativeSessionId: entry.nativeSessionId,
                     },
                     signal,
                 );
                 signal.throwIfAborted();
-                set({ preview: { kind: "ready", entry, content } });
+                const events = [
+                    ...content.history.events,
+                    ...(content.executingPromptRequest === null ? [] : content.executingPromptRequest.events),
+                ];
+                set({
+                    preview: {
+                        kind: "ready",
+                        entry,
+                        content: {
+                            messages: sessionEventLogPresentation(events).messages,
+                            truncated: content.history.truncated || content.executingPromptRequest?.truncated === true,
+                        },
+                    },
+                });
             } catch (cause) {
                 if (!signal.aborted) {
                     set({
@@ -178,7 +195,7 @@ export const createNativeSessionStore = (
                 }
                 onOpen({
                     agentRef: directory.agentRef,
-                    result: { ...result, history: preview.content.history },
+                    result,
                     entry: preview.entry,
                 });
             } catch (cause) {

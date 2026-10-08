@@ -38,9 +38,12 @@ test("Given a completed turn, When the user leaves and reopens it, Then daemon h
         throw new Error("Expected the message composer");
     }
     await sendPrompt(app, composer, prompt);
-    await app.queryElementByTestId(
-        dataTestId.agentResponse,
-        (element) => element.textContent?.includes(`Codex turn 1: ${prompt}`) === true,
+    await app.waitForView(() =>
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes(`Codex turn 1: ${prompt}`) === true),
+        ).toBe(true),
     );
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
     await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
@@ -65,6 +68,20 @@ test("Given a completed turn, When the user leaves and reopens it, Then daemon h
     expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull();
 });
 
+test("Given a stale Session link, When the user opens it, Then the Session failure replaces the empty landing", {
+    timeout: 30_000,
+}, async () => {
+    const sessionId = `chat_${"0".repeat(64)}`;
+    const app = await createTestApp({
+        connectAgent: true,
+        page: { kind: "managed-session", sessionId },
+    });
+
+    const failure = await app.queryElementByTestId(dataTestId.sessionLoadFailure);
+    expect(failure.getAttribute("role")).toBe("alert");
+    expect(app.optionalElementByTestId(dataTestId.chatLanding)).toBeNull();
+});
+
 test("Given a completed turn, When I send another prompt, Then my prompt is visible once while the next reply is still streaming", {
     timeout: 30_000,
 }, async () => {
@@ -78,9 +95,12 @@ test("Given a completed turn, When I send another prompt, Then my prompt is visi
         throw new Error("Expected composer");
     }
     await sendPrompt(app, composer, "First completed turn");
-    await app.queryElementByTestId(
-        dataTestId.agentResponse,
-        (element) => element.textContent?.includes("Codex turn 1: First completed turn") === true,
+    await app.waitForView(() =>
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes("Codex turn 1: First completed turn") === true),
+        ).toBe(true),
     );
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
     const continuedComposer = await app.queryElementByTestId(dataTestId.messageComposer);

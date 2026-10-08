@@ -12,34 +12,23 @@ import type { ManagedBot } from "../../services/management/management-api.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 import { type ConversationCreationState, transitionConversationCreation } from "./conversation-creation-machine.ts";
+import {
+    type ConversationSelectionState,
+    type ConversationTarget,
+    transitionConversationSelection,
+} from "./conversation-selection-machine.ts";
 import { createConversationSessionStore } from "./conversation-session-store.ts";
-import type { OpenMobiusSession } from "./open-session.ts";
 
 export type SetupReason = "unconfigured" | "agent-missing" | "runtime-offline" | "agent-required";
 
-type Target =
-    | { readonly kind: "draft"; readonly key: string }
-    | { readonly kind: "conversation-access"; readonly conversationId: string }
-    | { readonly kind: "session-access"; readonly sessionId: string }
-    | {
-          readonly kind: "continue";
-          readonly action: "fork" | "import";
-          readonly harness: string;
-          readonly sessionId: string;
-      };
-
-type ActiveView = { readonly kind: "draft"; readonly bot: ManagedBot };
-type SessionLoading = { readonly kind: "session-loading"; readonly bot: ManagedBot };
+type ActiveView = { readonly kind: "active"; readonly bot: ManagedBot };
 export type BotChatHomeView =
     | { readonly kind: "loading" }
     | { readonly kind: "connecting"; readonly bot: ManagedBot }
-    | SessionLoading
-    | { readonly kind: "switching"; readonly view: ActiveView }
     | ActiveView
     | { readonly kind: "setup"; readonly bot: ManagedBot; readonly reason: SetupReason }
     | { readonly kind: "runtime-disconnected"; readonly bot: ManagedBot; readonly message: string }
     | { readonly kind: "connection-failed"; readonly bot: ManagedBot; readonly message: string }
-    | { readonly kind: "session-failed"; readonly bot: ManagedBot; readonly message: string }
     | { readonly kind: "failed"; readonly message: string };
 
 export type BotConnectionStatus =
@@ -64,10 +53,9 @@ export function disconnectedBotNotice(
         return { kind: "hidden" };
     }
     switch (view.kind) {
-        case "draft":
+        case "active":
         case "runtime-disconnected":
         case "connection-failed":
-        case "session-failed":
             return {
                 kind: "visible",
                 title: "Your Bot is disconnected",
@@ -83,8 +71,6 @@ export function disconnectedBotNotice(
                   };
         case "loading":
         case "connecting":
-        case "session-loading":
-        case "switching":
         case "failed":
             return { kind: "hidden" };
     }
@@ -104,10 +90,6 @@ function isRuntimeConnectionCode(code: string | null): boolean {
     return code !== null && ["connection_closed", "runtime_offline"].includes(code.toLowerCase());
 }
 
-type SessionView =
-    | { readonly kind: "conversation-access" }
-    | { readonly kind: "session-access"; readonly session: OpenMobiusSession };
-
 export interface BotChatNavigation {
     readonly showDraft: () => void;
     readonly showManaged: (isExternal: boolean, id: string) => void;
@@ -120,8 +102,7 @@ export interface BotChatHomeStore {
     readonly botOperation: BotOperation;
     readonly view: BotChatHomeView;
     readonly connectionStatus: BotConnectionStatus;
-    readonly target: Target;
-    readonly sessionView: SessionView;
+    readonly selection: ConversationSelectionState;
     readonly creation: ConversationCreationState;
     readonly revision: number;
     readonly directoryRevision: number;
@@ -146,7 +127,7 @@ export interface BotChatHomeStore {
     ) => Promise<boolean>;
 }
 
-function initialTarget(urlValue: string, createId: () => string): Target {
+function initialSelection(urlValue: string, createId: () => string): ConversationSelectionState {
     const url = new URL(urlValue);
     const sessionId = url.searchParams.get("sessionId");
     const harness = url.searchParams.get("harness");
@@ -154,14 +135,17 @@ function initialTarget(urlValue: string, createId: () => string): Target {
     if (sessionId !== null && isIdentifier(sessionId)) {
         if (harness !== null && isIdentifier(harness)) {
             return requestedAction === null || requestedAction === "fork" || requestedAction === "import"
-                ? { kind: "continue", action: requestedAction ?? "fork", harness, sessionId }
+                ? {
+                      kind: "loading",
+                      target: { kind: "continue", action: requestedAction ?? "fork", harness, sessionId },
+                  }
                 : { kind: "draft", key: createId() };
         }
-        return { kind: "session-access", sessionId };
+        return { kind: "loading", target: { kind: "session", sessionId } };
     }
     const conversationId = url.searchParams.get("conversationId");
     return conversationId !== null && isIdentifier(conversationId)
-        ? { kind: "conversation-access", conversationId }
+        ? { kind: "loading", target: { kind: "conversation", conversationId } }
         : { kind: "draft", key: createId() };
 }
 
@@ -210,14 +194,13 @@ export const createBotChatHomeStore = (
     },
 ) => {
     const conversations = createConversationSessionStore(requests);
-    const target = initialTarget(options.url, options.createId);
+    const selection = initialSelection(options.url, options.createId);
     return createStore<BotChatHomeStore>()((set, get) => ({
         bots: [],
         botOperation: { kind: "idle" },
         view: { kind: "loading" },
         connectionStatus: { kind: "connecting", label: "Connecting" },
-        target,
-        sessionView: { kind: "conversation-access" },
+        selection,
         creation: { kind: "draft" },
         revision: 0,
         directoryRevision: 0,
@@ -225,17 +208,7 @@ export const createBotChatHomeStore = (
         draftSettings: null,
         optimisticTitles: new Map(),
         load: async (signal) => {
-            set((current) => ({
-                sessionView: { kind: "conversation-access" },
-                view:
-                    current.view.kind === "draft"
-                        ? current.target.kind === "draft"
-                            ? current.view
-                            : { kind: "switching", view: current.view }
-                        : current.view.kind === "switching"
-                          ? current.view
-                          : { kind: "loading" },
-            }));
+            set((current) => ({ view: "bot" in current.view ? current.view : { kind: "loading" } }));
             let openedBot: ManagedBot | null = null;
             try {
                 const bots = await requests.listBots(signal);
@@ -248,7 +221,7 @@ export const createBotChatHomeStore = (
                 openedBot = bot;
                 set({
                     bots,
-                    ...(get().target.kind === "draft"
+                    ...(get().selection.kind === "draft"
                         ? { draft: centralLocalStorage.read(newConversationDraftEntry(bot.botId)) ?? "" }
                         : {}),
                 });
@@ -258,19 +231,31 @@ export const createBotChatHomeStore = (
                 const detail = await requests.readBot(bot.botId, signal);
                 signal.throwIfAborted();
                 if (!detail.configured) {
-                    set({
+                    set((current) => ({
                         connectionStatus: { kind: "disconnected", label: "Disconnected" },
+                        selection:
+                            current.selection.kind === "loading"
+                                ? transitionConversationSelection(current.selection, {
+                                      kind: "session-load-failed",
+                                      message: "Connect your local agent to load this Session.",
+                                      target: current.selection.target,
+                                  })
+                                : current.selection,
                         view: { kind: "setup", bot, reason: "unconfigured" },
-                    });
+                    }));
                     await requests.waitForSetupChange(bot.botId, signal);
                     signal.throwIfAborted();
-                    set((current) => ({ revision: current.revision + 1 }));
+                    set((current) => ({
+                        selection: transitionConversationSelection(current.selection, { kind: "retry-requested" }),
+                        revision: current.revision + 1,
+                    }));
                     return;
                 }
                 const workspace = await requests.workspace(bot.botId, signal);
                 signal.throwIfAborted();
                 set({ connectionStatus: runtimeConnectionStatus(workspace) });
-                const currentTarget = get().target;
+                const currentSelection = get().selection;
+                const currentTarget = currentSelection.kind === "draft" ? null : currentSelection.target;
                 const watchWorkspaceChanges = async (): Promise<void> => {
                     while (true) {
                         try {
@@ -286,19 +271,19 @@ export const createBotChatHomeStore = (
                         signal.throwIfAborted();
                         const changedReason = setupReason(changedWorkspace);
                         set((current) =>
-                            current.target.kind === "draft"
+                            current.selection.kind === "draft"
                                 ? {
                                       connectionStatus: runtimeConnectionStatus(changedWorkspace),
                                       view:
                                           changedReason === null
-                                              ? { kind: "draft", bot }
+                                              ? { kind: "active", bot }
                                               : { kind: "setup", bot, reason: changedReason },
                                   }
                                 : { connectionStatus: runtimeConnectionStatus(changedWorkspace) },
                         );
                     }
                 };
-                if (currentTarget.kind === "continue") {
+                if (currentTarget?.kind === "continue") {
                     const session = await requests.continueNativeSession(
                         bot.botId,
                         currentTarget.harness,
@@ -309,32 +294,41 @@ export const createBotChatHomeStore = (
                     signal.throwIfAborted();
                     options.navigation.showContinuedSession(session.result.ready.sessionId);
                     set({
-                        target: { kind: "session-access", sessionId: session.result.ready.sessionId },
-                        view: { kind: "draft", bot },
-                        sessionView: { kind: "session-access", session },
+                        view: { kind: "active", bot },
+                        selection: transitionConversationSelection(get().selection, {
+                            kind: "continued-session-loaded",
+                            session,
+                            target: currentTarget,
+                        }),
                     });
                     await watchWorkspaceChanges();
                     return;
                 }
-                if (currentTarget.kind === "session-access") {
+                if (currentTarget?.kind === "session") {
                     const session = await requests.managedSession(bot.botId, currentTarget.sessionId, signal);
                     signal.throwIfAborted();
-                    set({ view: { kind: "draft", bot }, sessionView: { kind: "session-access", session } });
+                    set((current) => ({
+                        view: { kind: "active", bot },
+                        selection: transitionConversationSelection(current.selection, {
+                            kind: "session-loaded",
+                            session,
+                            target: currentTarget,
+                        }),
+                    }));
                     await watchWorkspaceChanges();
                     return;
                 }
-                const reason = currentTarget.kind === "draft" ? setupReason(workspace) : null;
+                const reason = currentTarget === null ? setupReason(workspace) : null;
                 if (reason !== null) {
                     set({ view: { kind: "setup", bot, reason } });
                     await watchWorkspaceChanges();
                     return;
                 }
-                if (currentTarget.kind === "draft") {
-                    set({ view: { kind: "draft", bot } });
+                if (currentTarget === null) {
+                    set({ view: { kind: "active", bot } });
                     await watchWorkspaceChanges();
                     return;
                 }
-                set({ view: { kind: "session-loading", bot } });
                 await conversations.getState().open(bot.botId, currentTarget.conversationId, signal);
                 const opened = conversations.getState().state;
                 if (opened.kind !== "ready") {
@@ -343,7 +337,14 @@ export const createBotChatHomeStore = (
                     }
                     throw new Error(opened.kind === "failed" ? opened.message : "The Session could not be opened.");
                 }
-                set({ view: { kind: "draft", bot }, sessionView: { kind: "session-access", session: opened.session } });
+                set((current) => ({
+                    view: { kind: "active", bot },
+                    selection: transitionConversationSelection(current.selection, {
+                        kind: "session-loaded",
+                        session: opened.session,
+                        target: currentTarget,
+                    }),
+                }));
                 await watchWorkspaceChanges();
             } catch (cause) {
                 if (signal.aborted) {
@@ -354,20 +355,54 @@ export const createBotChatHomeStore = (
                     return;
                 }
                 if (cause instanceof CloudApiError && cause.code === "AGENT_REQUIRED") {
+                    const currentSelection = get().selection;
+                    const failedSelection =
+                        currentSelection.kind === "loading"
+                            ? transitionConversationSelection(currentSelection, {
+                                  kind: "session-load-failed",
+                                  message: cause.message,
+                                  target: currentSelection.target,
+                              })
+                            : currentSelection;
                     if (openedBot === null) {
-                        set({ view: { kind: "failed", message: "Your Bot is unavailable." } });
+                        set({
+                            selection: failedSelection,
+                            view: { kind: "failed", message: "Your Bot is unavailable." },
+                        });
                         return;
                     }
-                    set({ view: { kind: "setup", bot: openedBot, reason: "agent-required" } });
+                    set({
+                        selection: failedSelection,
+                        view: { kind: "setup", bot: openedBot, reason: "agent-required" },
+                    });
                     await requests.waitForWorkspaceChange(openedBot.botId, signal);
                     signal.throwIfAborted();
-                    set((current) => ({ revision: current.revision + 1 }));
+                    set((current) => ({
+                        selection: transitionConversationSelection(current.selection, { kind: "retry-requested" }),
+                        revision: current.revision + 1,
+                    }));
                     return;
                 }
                 const message = cause instanceof Error ? cause.message : "Chat is unavailable.";
                 const runtimeFailure = isRuntimeConnectionFailure(cause);
-                if (openedBot !== null && get().target.kind === "conversation-access" && !runtimeFailure) {
-                    set({ view: { kind: "session-failed", bot: openedBot, message } });
+                const failedSelection = get().selection;
+                if (failedSelection.kind === "loading") {
+                    set({
+                        selection: transitionConversationSelection(failedSelection, {
+                            kind: "session-load-failed",
+                            message,
+                            target: failedSelection.target,
+                        }),
+                        view:
+                            openedBot === null
+                                ? { kind: "failed", message }
+                                : runtimeFailure
+                                  ? { kind: "runtime-disconnected", bot: openedBot, message }
+                                  : { kind: "active", bot: openedBot },
+                        ...(runtimeFailure
+                            ? { connectionStatus: { kind: "disconnected" as const, label: "Disconnected" as const } }
+                            : {}),
+                    });
                     return;
                 }
                 if (openedBot !== null && runtimeFailure) {
@@ -406,12 +441,7 @@ export const createBotChatHomeStore = (
         selectBot: (botId) => {
             const current = get();
             const selected = current.bots.find((bot) => bot.botId === botId);
-            const activeBot =
-                current.view.kind === "switching"
-                    ? current.view.view.bot
-                    : "bot" in current.view
-                      ? current.view.bot
-                      : null;
+            const activeBot = "bot" in current.view ? current.view.bot : null;
             if (selected === undefined || selected.botId === activeBot?.botId) {
                 return;
             }
@@ -425,8 +455,10 @@ export const createBotChatHomeStore = (
                 draftSettings: null,
                 optimisticTitles: new Map(),
                 revision: state.revision + 1,
-                sessionView: { kind: "conversation-access" },
-                target: { kind: "draft", key: options.createId() },
+                selection: transitionConversationSelection(state.selection, {
+                    kind: "draft-selected",
+                    key: options.createId(),
+                }),
                 view: { kind: "connecting", bot: selected },
             }));
         },
@@ -451,8 +483,10 @@ export const createBotChatHomeStore = (
                     draftSettings: null,
                     optimisticTitles: new Map(),
                     revision: state.revision + 1,
-                    sessionView: { kind: "conversation-access" },
-                    target: { kind: "draft", key: options.createId() },
+                    selection: transitionConversationSelection(state.selection, {
+                        kind: "draft-selected",
+                        key: options.createId(),
+                    }),
                     view: { kind: "setup", bot, reason: "unconfigured" },
                 }));
                 return true;
@@ -470,12 +504,7 @@ export const createBotChatHomeStore = (
         },
         removeBot: async (signal) => {
             const current = get();
-            const activeBot =
-                current.view.kind === "switching"
-                    ? current.view.view.bot
-                    : "bot" in current.view
-                      ? current.view.bot
-                      : null;
+            const activeBot = "bot" in current.view ? current.view.bot : null;
             if (activeBot === null || current.bots.length < 2) {
                 return false;
             }
@@ -499,8 +528,10 @@ export const createBotChatHomeStore = (
                     draftSettings: null,
                     optimisticTitles: new Map(),
                     revision: state.revision + 1,
-                    sessionView: { kind: "conversation-access" },
-                    target: { kind: "draft", key: options.createId() },
+                    selection: transitionConversationSelection(state.selection, {
+                        kind: "draft-selected",
+                        key: options.createId(),
+                    }),
                     view: { kind: "connecting", bot: selected },
                 }));
                 return true;
@@ -525,8 +556,10 @@ export const createBotChatHomeStore = (
             }
             options.navigation.showDraft();
             set((state) => ({
-                target: { kind: "draft", key: options.createId() },
-                sessionView: { kind: "conversation-access" },
+                selection: transitionConversationSelection(state.selection, {
+                    kind: "draft-selected",
+                    key: options.createId(),
+                }),
                 creation: transitionConversationCreation(state.creation, { kind: "reset" }),
                 draft: "",
                 draftSettings: null,
@@ -536,19 +569,29 @@ export const createBotChatHomeStore = (
         openManaged: (isExternal, id) => {
             options.navigation.showManaged(isExternal, id);
             set((current) => ({
-                target: { kind: "session-access", sessionId: id },
-                sessionView: { kind: "conversation-access" },
+                selection: transitionConversationSelection(current.selection, {
+                    kind: "target-selected",
+                    target: { kind: "session", sessionId: id },
+                }),
                 creation: transitionConversationCreation(current.creation, { kind: "reset" }),
                 draftSettings: null,
                 revision: current.revision + 1,
             }));
         },
-        retry: () => set((current) => ({ revision: current.revision + 1 })),
+        retry: () =>
+            set((current) => ({
+                selection: transitionConversationSelection(current.selection, { kind: "retry-requested" }),
+                revision: current.revision + 1,
+            })),
         forkInstead: () => {
-            const current = get().target;
-            if (current.kind === "continue") {
+            const current = get().selection;
+            if (current.kind === "failed" && current.target.kind === "continue") {
+                const target: ConversationTarget = { ...current.target, action: "fork" };
                 options.navigation.showForkInstead();
-                set((state) => ({ target: { ...current, action: "fork" }, revision: state.revision + 1 }));
+                set((state) => ({
+                    selection: transitionConversationSelection(state.selection, { kind: "target-selected", target }),
+                    revision: state.revision + 1,
+                }));
             }
         },
         setDraft: (draft) => {
@@ -567,11 +610,15 @@ export const createBotChatHomeStore = (
         setDraftSettings: (draftSettings) => set({ draftSettings }),
         createConversation: async (draft, attachments, signal) => {
             const current = get();
-            if (current.view.kind !== "draft" || current.target.kind !== "draft" || current.draftSettings === null) {
+            if (
+                current.view.kind !== "active" ||
+                current.selection.kind !== "draft" ||
+                current.draftSettings === null
+            ) {
                 return false;
             }
             const botId = current.view.bot.botId;
-            const commandId = current.target.key;
+            const commandId = current.selection.key;
             const settings = current.draftSettings;
             const content = draft.trim();
             const title = (
@@ -649,13 +696,16 @@ export const createBotChatHomeStore = (
                     return false;
                 }
                 options.navigation.showManaged(false, sent.conversationId);
-                set({
+                set((state) => ({
                     draft: "",
-                    target: { kind: "conversation-access", conversationId: sent.conversationId },
-                    sessionView: { kind: "session-access", session: sent.session },
-                    directoryRevision: get().directoryRevision + 1,
-                    optimisticTitles: new Map(get().optimisticTitles).set(sent.conversationId, sent.message.summary),
-                });
+                    selection: transitionConversationSelection(state.selection, {
+                        kind: "conversation-created",
+                        conversationId: sent.conversationId,
+                        session: sent.session,
+                    }),
+                    directoryRevision: state.directoryRevision + 1,
+                    optimisticTitles: new Map(state.optimisticTitles).set(sent.conversationId, sent.message.summary),
+                }));
                 centralLocalStorage.remove(newConversationDraftEntry(botId));
                 return true;
             } catch (cause) {
