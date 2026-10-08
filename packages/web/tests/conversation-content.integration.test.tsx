@@ -1,4 +1,4 @@
-import { getAllByText, getByRole, queryByText } from "@testing-library/dom";
+import { getAllByRole, getAllByText, getByRole, queryByText } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -71,6 +71,38 @@ test("Given a file-change tool reports its changed-file schema, When the user op
     );
     expect(queryByText(edit, "Request")).toBeNull();
     expect(queryByText(edit, "Response")).toBeNull();
+});
+
+test("Given a browser tool reports its tool-result schema, When the user opens it, Then Chat presents the browser output without protocol metadata", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, "inspect browser surfaces");
+
+    const browserTools = await app.waitForView(() => {
+        const tools = getAllByRole(document.body, "group", { name: "Browser: cua_repl/js" });
+        expect(tools).toHaveLength(2);
+        return tools;
+    });
+    const [timedOutTool, successfulTool] = browserTools;
+    if (timedOutTool === undefined || successfulTool === undefined) {
+        throw new Error("Expected two browser tools");
+    }
+    expect(timedOutTool.textContent).toContain("js execution timed out; kernel reset, rerun your request");
+    expect(timedOutTool.textContent).not.toContain("structuredContent");
+    expect(timedOutTool.textContent).not.toContain("codex/toolSurface");
+    expect(queryByText(timedOutTool, "Request")).toBeNull();
+    expect(queryByText(timedOutTool, "Response")).toBeNull();
+    expect(successfulTool.textContent).not.toContain("null");
 });
 
 test("Given the daemon emits reasoning, a tool, and text, When the user observes and stops an unfinished turn, Then partial content is visible before completion and survives remount", {
