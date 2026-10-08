@@ -6,6 +6,7 @@ import type { ToolRendererProps } from "./tool-renderer.ts";
 const requestSchema = v.pipe(
     v.strictObject({
         command: v.pipe(v.string(), v.minLength(1)),
+        description: v.optional(v.string()),
         timeout: v.optional(v.number()),
         workdir: v.optional(v.string()),
     }),

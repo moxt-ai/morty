@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 import { CwdShellCommandToolCall, matchesCwdShellCommandToolCall } from "./cwd-shell-command-tool-call.tsx";
+import { FilePathEditToolCall, matchesFilePathEditToolCall } from "./file-path-edit-tool-call.tsx";
 import { FilePathReadToolCall, matchesFilePathReadToolCall } from "./file-path-read-tool-call.tsx";
 import { GlobToolCall, matchesGlobToolCall } from "./glob-tool-call.tsx";
 import { GrepToolCall, matchesGrepToolCall } from "./grep-tool-call.tsx";
@@ -8,6 +9,7 @@ import { matchesOutputDiffEditToolCall, OutputDiffEditToolCall } from "./output-
 import { matchesPatchEditToolCall, PatchEditToolCall } from "./patch-edit-tool-call.tsx";
 import { matchesPathReadToolCall, PathReadToolCall } from "./path-read-tool-call.tsx";
 import { matchesQuestionToolCall, QuestionToolCall } from "./question-tool-call.tsx";
+import { matchesSkillToolCall, SkillToolCall } from "./skill-tool-call.tsx";
 import type { ToolRendererProps, ToolThinkingEntry } from "./tool-renderer.ts";
 import { matchesWorkdirShellCommandToolCall, WorkdirShellCommandToolCall } from "./workdir-shell-command-tool-call.tsx";
 
@@ -20,6 +22,14 @@ const TOOL_RENDERERS: readonly ToolRenderer[] = [
     {
         Component: QuestionToolCall,
         matches: matchesQuestionToolCall,
+    },
+    {
+        Component: SkillToolCall,
+        matches: matchesSkillToolCall,
+    },
+    {
+        Component: FilePathEditToolCall,
+        matches: matchesFilePathEditToolCall,
     },
     {
         Component: InputDiffEditToolCall,
