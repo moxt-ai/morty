@@ -18,7 +18,7 @@ import { Button } from "../../components/ui/cloud-button.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
-import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import { type BotChatApi, connectedChatRuntimeAgents } from "../../services/chat/bot-chat-api.ts";
 import type { QueuedDraftMessage } from "../../view-models/chat/conversation-creation-machine.ts";
 import { createBrowserFilePreviewStore } from "../../view-models/chat/file-preview-store.ts";
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
@@ -121,7 +121,7 @@ export function MobiusSessionPane({
     readonly session: OpenMobiusSession;
     readonly initialMessage?: QueuedDraftMessage | undefined;
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "connectSession">;
+    readonly requests: Pick<BotChatApi, "connectSession" | "workspace">;
     readonly onStatusChange: (sessionId: string, status: SessionActivityState) => void;
 }) {
     const sessionId = session.result.ready.sessionId;
@@ -141,6 +141,9 @@ export function MobiusSessionPane({
     const taskControls = useStore(pane.tasks);
     const lifetime = useRef<AbortController | null>(null);
     const messageList = useRef<HTMLDivElement | null>(null);
+    const [harnesses, setHarnesses] = useState<readonly { readonly label: string; readonly value: string }[]>([
+        { label: session.agentRef, value: session.agentRef },
+    ]);
     const readImage = useCallback<MarkdownImageReader>(
         async (path, signal) => {
             for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -217,6 +220,27 @@ export function MobiusSessionPane({
     useEffect(() => {
         onStatusChange(sessionId, model.activity);
     }, [model.activity, onStatusChange, sessionId]);
+    useEffect(() => {
+        const controller = new AbortController();
+        // The harness list is display-only in an existing conversation: every
+        // entry is disabled, so a failed load just leaves the current harness.
+        requests
+            .workspace(botId, controller.signal)
+            .then((workspace) => {
+                setHarnesses(
+                    connectedChatRuntimeAgents(workspace.runtime).map((agent) => ({
+                        label: `${agent.label} · ${agent.machineName}`,
+                        value: `${agent.runtimeId}:${agent.agentRef}`,
+                    })),
+                );
+            })
+            .catch((cause: unknown) => {
+                if (!controller.signal.aborted) {
+                    reportApplicationError(cause, "session-pane-harnesses");
+                }
+            });
+        return () => controller.abort();
+    }, [botId, requests]);
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
         run(async (signal) => await pane.store.getState().configure(option, value, booleanValue, signal));
     const openLocalFile = useCallback(
@@ -370,11 +394,15 @@ export function MobiusSessionPane({
                         controls={[
                             {
                                 disabled: true,
+                                harnessLockedLabel: "The harness cannot be changed for an existing conversation.",
                                 id: "harness",
                                 kind: "select" as const,
                                 label: "Harness",
+                                locked: true,
                                 onValueChange: () => {},
-                                options: [{ value: session.agentRef, label: session.agentRef }],
+                                options: harnesses.some((harness) => harness.value === session.agentRef)
+                                    ? harnesses
+                                    : [...harnesses, { label: session.agentRef, value: session.agentRef }],
                                 value: session.agentRef,
                             },
                             ...model.options.map((option) =>
@@ -404,10 +432,17 @@ export function MobiusSessionPane({
                                       },
                             ),
                         ]}
+                        onRefresh={() => {
+                            const controller = lifetime.current;
+                            if (controller !== null) {
+                                void pane.store.getState().refreshSettings(controller.signal);
+                            }
+                        }}
+                        settingsLoading={model.operation.kind === "configuring"}
                     />
                     {model.operation.kind === "configuring" && (
                         <span role="status" className="sr-only">
-                            Applying agent settings…
+                            Updating agent settings…
                         </span>
                     )}
                 </BotChatComposer>

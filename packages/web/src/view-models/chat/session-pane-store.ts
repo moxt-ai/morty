@@ -149,6 +149,7 @@ export interface SessionPaneStore {
         booleanValue: boolean,
         signal: AbortSignal,
     ) => Promise<void>;
+    readonly refreshSettings: (signal: AbortSignal) => Promise<void>;
     readonly respondToPermission: (response: PermissionInteractionResponse, signal: AbortSignal) => Promise<void>;
     readonly respondToElicitation: (response: ElicitationInteractionResponse, signal: AbortSignal) => Promise<void>;
     readonly stop: (signal: AbortSignal) => Promise<void>;
@@ -1031,6 +1032,48 @@ export function createSessionPaneModel(options: {
                         operation: {
                             kind: "failed",
                             message: cause instanceof Error ? cause.message : "The selection could not be applied.",
+                        },
+                    });
+                }
+            },
+            refreshSettings: async (signal) => {
+                if (client === null || get().connection.kind !== "ready") {
+                    return;
+                }
+                set({ operation: { kind: "configuring" } });
+                try {
+                    const connected = client;
+                    const recovery = await readNativeEventsV2(connected, sessionId, sessionIdentity, signal);
+                    sessionEvents = mergeSessionEvents(sessionEvents, recovery.events);
+                    // The newest events page carries the Agent's latest
+                    // config_option_update, so it is the authoritative view of
+                    // the session's harness settings.
+                    let options = get().options;
+                    for (let index = sessionEvents.length - 1; index >= 0; index -= 1) {
+                        const event = sessionEvents[index];
+                        if (
+                            event !== undefined &&
+                            event.type === "acp" &&
+                            event.payload.sessionUpdate === "config_option_update"
+                        ) {
+                            options = sessionConfigOptionsFromAcp(event.payload);
+                            break;
+                        }
+                    }
+                    sessionConfigurations = options.map((candidate) => ({
+                        booleanValue: candidate.type === "boolean" ? candidate.booleanValue : false,
+                        configId: candidate.id,
+                        value: candidate.type === "select" ? candidate.currentValue : "",
+                        valueType: candidate.type,
+                    }));
+                    saveLastAgentSettings(botId, session.agentRef, options);
+                    set({ messages: deriveTimeline().messages, operation: { kind: "idle" }, options });
+                } catch (cause) {
+                    signal.throwIfAborted();
+                    set({
+                        operation: {
+                            kind: "failed",
+                            message: cause instanceof Error ? cause.message : "The settings could not be reloaded.",
                         },
                     });
                 }

@@ -1,4 +1,5 @@
 import { ChevronDown, LoaderCircle, RefreshCw, SlidersHorizontal } from "lucide-react";
+import { Tooltip } from "radix-ui";
 import { useState } from "react";
 import { dataTestId } from "@/data-testid";
 import { Select } from "../ui/option-select.tsx";
@@ -6,9 +7,11 @@ import { Popover } from "../ui/popover.tsx";
 
 interface ChatConfigurationSelectControl {
     readonly disabled: boolean;
+    readonly harnessLockedLabel?: string | undefined;
     readonly id: string;
     readonly kind: "select";
     readonly label: string;
+    readonly locked?: boolean | undefined;
     readonly onValueChange: (value: string) => void;
     readonly options: readonly { readonly label: string; readonly tabLabel?: string; readonly value: string }[];
     readonly searchable?: boolean;
@@ -79,25 +82,45 @@ export function ChatConfigurationMenu({
                         aria-label="Harness"
                     >
                         <span className="block px-2 pb-1.5 text-xs font-medium text-copy-tertiary">Harness</span>
-                        {harness?.options.map((option) => (
-                            <button
-                                aria-selected={option.value === harness.value}
-                                className="w-full truncate rounded-lg px-2 py-2 text-left text-[13px] outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-selected:bg-white aria-selected:font-medium aria-selected:shadow-sm motion-reduce:transition-none"
-                                data-testid={dataTestId.agentHarness(option.value)}
-                                disabled={harness.disabled}
-                                key={option.value}
-                                onClick={() => {
-                                    if (option.value !== harness.value) {
-                                        harness.onValueChange(option.value);
-                                    }
-                                }}
-                                role="tab"
-                                title={option.label}
-                                type="button"
-                            >
-                                {option.tabLabel ?? option.label}
-                            </button>
-                        ))}
+                        {harness?.options.map((option) => {
+                            const tab = (
+                                <button
+                                    aria-selected={option.value === harness.value}
+                                    className="w-full truncate rounded-lg px-2 py-2 text-left text-[13px] outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-selected:bg-white aria-selected:font-medium aria-selected:shadow-sm motion-reduce:transition-none"
+                                    data-testid={dataTestId.agentHarness(option.value)}
+                                    disabled={harness.disabled}
+                                    key={option.value}
+                                    onClick={() => {
+                                        if (option.value !== harness.value) {
+                                            harness.onValueChange(option.value);
+                                        }
+                                    }}
+                                    role="tab"
+                                    title={option.label}
+                                    type="button"
+                                >
+                                    {option.tabLabel ?? option.label}
+                                </button>
+                            );
+                            if (harness.locked === true) {
+                                return (
+                                    <Tooltip.Root key={option.value}>
+                                        <Tooltip.Trigger asChild>{tab}</Tooltip.Trigger>
+                                        <Tooltip.Portal>
+                                            <Tooltip.Content
+                                                className="z-[70] max-w-60 rounded-lg bg-foreground px-2.5 py-1.5 text-xs leading-5 text-background shadow-lg"
+                                                side="right"
+                                                sideOffset={6}
+                                            >
+                                                {harness.harnessLockedLabel ?? option.label}
+                                                <Tooltip.Arrow className="fill-foreground" />
+                                            </Tooltip.Content>
+                                        </Tooltip.Portal>
+                                    </Tooltip.Root>
+                                );
+                            }
+                            return tab;
+                        })}
                     </div>
                     <div
                         aria-busy={settingsLoading}
