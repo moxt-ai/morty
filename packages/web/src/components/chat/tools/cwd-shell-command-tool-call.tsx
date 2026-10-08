@@ -7,6 +7,7 @@ const requestSchema = v.pipe(
     v.strictObject({
         command: v.pipe(v.string(), v.minLength(1)),
         cwd: v.optional(v.string()),
+        description: v.optional(v.string()),
     }),
     v.readonly(),
 );
