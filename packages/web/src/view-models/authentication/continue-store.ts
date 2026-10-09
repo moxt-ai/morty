@@ -5,7 +5,14 @@ import { BotChatApi } from "@/services/chat/bot-chat-api";
 import { AnonymousIdentityApi, hasStoredAnonymousCredential } from "@/services/identity/anonymous-identity-api";
 import { ManagementApi } from "@/services/management/management-api";
 
-type SessionHandoff = { readonly harness: string; readonly sessionId: string };
+export type NativeSessionImportAvailability =
+    | { readonly kind: "available" }
+    | { readonly kind: "unavailable"; readonly reason: string };
+type SessionHandoff = {
+    readonly harness: string;
+    readonly importAvailability: NativeSessionImportAvailability;
+    readonly sessionId: string;
+};
 type NativeSessionChoice = "fork" | "import" | "skip";
 type ContinueState =
     | {
@@ -56,7 +63,19 @@ function initialState(): ContinueState {
     }
     const replacesWorkspace = hasStoredAnonymousCredential();
     if (harness !== null && sessionId !== null) {
-        return { code, handoff: { harness, sessionId }, kind: "session-confirm", replacesWorkspace };
+        const importAvailability: NativeSessionImportAvailability =
+            harness === "codex"
+                ? {
+                      kind: "unavailable",
+                      reason: "The active Codex session owns the original thread. Fork it to continue in Morty.",
+                  }
+                : { kind: "available" };
+        return {
+            code,
+            handoff: { harness, importAvailability, sessionId },
+            kind: "session-confirm",
+            replacesWorkspace,
+        };
     }
     return replacesWorkspace ? { code, kind: "workspace-confirm" } : { code, kind: "workspace-redeeming" };
 }
@@ -67,6 +86,9 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
         continueSession: (choice) => {
             const state = get().state;
             if (state.kind === "session-confirm" || state.kind === "session-failed") {
+                if (choice === "import" && state.handoff.importAvailability.kind === "unavailable") {
+                    return;
+                }
                 set({
                     state: {
                         choice,

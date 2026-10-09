@@ -3,12 +3,38 @@ import { expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given a native session handoff, When importing fails, Then the choice page shows progress and allows a fork retry", {
+test("Given a Codex native session handoff, When the user hovers over import, Then import is disabled and explains that the original session is still owned by Codex", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({
         page: {
             harness: "codex",
+            kind: "continue",
+            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
+        },
+    });
+    const importSession = await vi.waitFor(() => getByRole(document.body, "button", { name: "Import session" }));
+    const forkSession = getByRole(document.body, "button", { name: "Fork session" });
+    if (!(importSession instanceof HTMLButtonElement) || !(forkSession instanceof HTMLButtonElement)) {
+        throw new Error("The native session actions are not buttons.");
+    }
+
+    expect(importSession.disabled).toBe(true);
+    expect(forkSession.disabled).toBe(false);
+
+    await app.user.hover(getByRole(document.body, "group", { name: "Why import is unavailable" }));
+
+    expect(
+        await vi.waitFor(() => getByRole(document.body, "tooltip", { name: /active Codex session owns/u })),
+    ).toBeInstanceOf(HTMLElement);
+});
+
+test("Given a native session handoff, When importing fails, Then the choice page shows progress and allows a fork retry", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({
+        page: {
+            harness: "opencode",
             kind: "continue",
             sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
         },

@@ -1,11 +1,57 @@
 import { AuthenticateWithRedirectCallback, SignIn, SignUp, useUser } from "@clerk/react";
 import { createRootRoute, createRoute, createRouter, Link, Outlet } from "@tanstack/react-router";
+import { Tooltip } from "radix-ui";
 import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import { Button, reportApplicationError, Spinner } from "../../index.ts";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
-import { createContinueStore } from "../../view-models/authentication/continue-store.ts";
+import {
+    createContinueStore,
+    type NativeSessionImportAvailability,
+} from "../../view-models/authentication/continue-store.ts";
 import { Page } from "../application/app.tsx";
+
+function ImportSessionButton({
+    importAvailability,
+    importing,
+    redeeming,
+    select,
+}: {
+    readonly importAvailability: NativeSessionImportAvailability;
+    readonly importing: boolean;
+    readonly redeeming: boolean;
+    readonly select: () => void;
+}) {
+    const button = (
+        <Button className="w-full" disabled={redeeming || importAvailability.kind === "unavailable"} onClick={select}>
+            Import session
+            {importing ? <Spinner label="Importing session" /> : null}
+        </Button>
+    );
+    if (importAvailability.kind === "available") {
+        return button;
+    }
+    return (
+        <Tooltip.Provider delayDuration={150}>
+            <Tooltip.Root>
+                <Tooltip.Trigger asChild>
+                    <fieldset aria-label="Why import is unavailable" className="m-0 min-w-0 rounded-md border-0 p-0">
+                        {button}
+                    </fieldset>
+                </Tooltip.Trigger>
+                <Tooltip.Portal>
+                    <Tooltip.Content
+                        className="z-50 max-w-72 rounded-md bg-foreground px-3 py-2 text-xs leading-5 text-background shadow-md"
+                        sideOffset={6}
+                    >
+                        {importAvailability.reason}
+                        <Tooltip.Arrow className="fill-foreground" />
+                    </Tooltip.Content>
+                </Tooltip.Portal>
+            </Tooltip.Root>
+        </Tooltip.Provider>
+    );
+}
 
 function LandingPage() {
     return (
@@ -128,15 +174,12 @@ function ContinuePage() {
                             </p>
                         ) : null}
                         <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                            <Button
-                                disabled={state.kind === "session-redeeming"}
-                                onClick={() => continueSession("import")}
-                            >
-                                Import session
-                                {state.kind === "session-redeeming" && state.choice === "import" ? (
-                                    <Spinner label="Importing session" />
-                                ) : null}
-                            </Button>
+                            <ImportSessionButton
+                                importAvailability={state.handoff.importAvailability}
+                                importing={state.kind === "session-redeeming" && state.choice === "import"}
+                                redeeming={state.kind === "session-redeeming"}
+                                select={() => continueSession("import")}
+                            />
                             <Button
                                 disabled={state.kind === "session-redeeming"}
                                 variant="outline"
