@@ -34,8 +34,9 @@ replacement confirmation.
 5. Run the command from the user's current working directory. The script resolves and
    validates `$PWD`, then uses it as the paired Runtime's default Morty workspace.
 
-Run this command normally. It registers the Runtime with the per-user Mobius manager,
-which remains online after this command and the current conversation exit.
+Run this command in the current TUI and keep the pairing flow and its progress there.
+It registers the Runtime with the per-user Mobius manager, which remains online after
+this command and the current conversation exit.
 
 ```sh
 BASE_URL="{{BASE_URL}}"
@@ -61,8 +62,9 @@ log path. It waits at most five minutes. `runtime_started` or `binding_activated
 progress; only `status: "ready"` confirms
 an active binding and online Runtime. A successful chat reply is a separate check.
 
-When ready, tell the user: **Your Machine is connected. Return to your Morty page
-to start chatting. Keep the Runtime online.** Include the returned URL, Machine ID, and workspace.
+When ready, report in the current TUI: **Your Machine is connected. Return to your
+Morty page to start chatting. Keep the Runtime online.** Include the returned URL,
+Machine ID, and workspace. Do not output a text QR code.
 
 On failure, use `error.code` and the private Runtime log to resolve the problem.
 If `identity_ready` was emitted, set `SESSION_ID` to this current harness session's
