@@ -168,6 +168,7 @@ export function ConversationSidebar({
     const access = useStore(remoteAccess);
     const [networkDiagnostic] = useState(() =>
         createNetworkDiagnosticStore({
+            measureBrowserMobius: transport.measureMobiusLatency,
             measureBrowserMorty: transport.measureMortyLatency,
             measureServerHops: (signal) => requests.networkDiagnostic(botId, signal),
         }),
@@ -564,6 +565,16 @@ export function ConversationSidebar({
                                     role="status"
                                 >
                                     {diagnostic.state.browserMortyLatencyMs} ms
+                                </dd>
+                            </div>
+                            <div className="flex items-center justify-between gap-4 px-4 py-3">
+                                <dt>Browser ↔ Mobius</dt>
+                                <dd
+                                    aria-label="Browser to Mobius latency"
+                                    className="font-mono font-medium"
+                                    role="status"
+                                >
+                                    {diagnostic.state.browserMobiusLatencyMs} ms
                                 </dd>
                             </div>
                             <div className="flex items-center justify-between gap-4 px-4 py-3">

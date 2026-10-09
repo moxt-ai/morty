@@ -18,6 +18,7 @@ const diagnosticPongFrame = v.strictObject({ kind: v.literal("diagnostic.pong"),
 const notificationFrame = v.strictObject({ kind: v.literal("notification"), subscriptionId: v.string() });
 const eventFrame = v.strictObject({ kind: v.literal("event"), subscriptionId: v.string(), data: v.string() });
 const subscriptionEndFrame = v.strictObject({ kind: v.literal("subscription.end"), subscriptionId: v.string() });
+const mobiusHealthSchema = v.strictObject({ service: v.literal("mobius-relay-platform"), status: v.literal("ok") });
 const serverFrame = v.variant("kind", [
     responseBeginFrame,
     responseEndFrame,
@@ -167,6 +168,35 @@ export class WebSocketApiTransport {
                 this.#settleDiagnostic(requestId)?.reject(cause);
             }
         });
+    };
+
+    readonly measureMobiusLatency = async (origin: string, parent: AbortSignal): Promise<number> => {
+        parent.throwIfAborted();
+        const endpoint = new URL(origin);
+        if (
+            endpoint.origin !== origin ||
+            (endpoint.protocol !== "https:" &&
+                !(endpoint.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname))) ||
+            endpoint.username !== "" ||
+            endpoint.password !== "" ||
+            endpoint.pathname !== "/" ||
+            endpoint.search !== "" ||
+            endpoint.hash !== ""
+        ) {
+            throw new Error("The Mobius diagnostic endpoint is invalid.");
+        }
+        endpoint.pathname = "/mobius/api/dashboard/health";
+        endpoint.searchParams.set("diagnostic", crypto.randomUUID());
+        const signal = AbortSignal.any([parent, AbortSignal.timeout(10_000)]);
+        const startedAt = performance.now();
+        const response = await fetch(endpoint, { cache: "no-store", signal });
+        signal.throwIfAborted();
+        if (!response.ok) {
+            await response.body?.cancel();
+            throw new Error("Mobius did not respond to the network diagnostic.");
+        }
+        v.parse(mobiusHealthSchema, await response.json());
+        return Math.max(0, Math.round(performance.now() - startedAt));
     };
 
     readonly waitForChange = async (request: Request): Promise<void> => {

@@ -140,6 +140,7 @@ export class ChatService {
             this.#platform.measureRuntimeLatency(scope.projectId, runtime.runtimeId, scope.signal),
         ]);
         return {
+            mobiusOrigin: this.#platform.configuration().origin,
             mobiusDaemonLatencyMs,
             mortyMobiusLatencyMs,
         };

@@ -4,6 +4,7 @@ type NetworkDiagnosticState =
     | { readonly kind: "closed" }
     | { readonly kind: "measuring" }
     | {
+          readonly browserMobiusLatencyMs: number;
           readonly browserMortyLatencyMs: number;
           readonly kind: "ready";
           readonly mobiusDaemonLatencyMs: number;
@@ -12,10 +13,13 @@ type NetworkDiagnosticState =
     | { readonly kind: "failed"; readonly message: string };
 
 interface NetworkDiagnosticOperations {
+    readonly measureBrowserMobius: (origin: string, signal: AbortSignal) => Promise<number>;
     readonly measureBrowserMorty: (signal: AbortSignal) => Promise<number>;
-    readonly measureServerHops: (
-        signal: AbortSignal,
-    ) => Promise<{ readonly mobiusDaemonLatencyMs: number; readonly mortyMobiusLatencyMs: number }>;
+    readonly measureServerHops: (signal: AbortSignal) => Promise<{
+        readonly mobiusDaemonLatencyMs: number;
+        readonly mobiusOrigin: string;
+        readonly mortyMobiusLatencyMs: number;
+    }>;
 }
 
 export interface NetworkDiagnosticStore {
@@ -44,10 +48,12 @@ export const createNetworkDiagnosticStore = (operations: NetworkDiagnosticOperat
                     operations.measureBrowserMorty(signal),
                     operations.measureServerHops(signal),
                 ]);
+                const browserMobiusLatencyMs = await operations.measureBrowserMobius(platform.mobiusOrigin, signal);
                 signal.throwIfAborted();
                 if (active === controller) {
                     set({
                         state: {
+                            browserMobiusLatencyMs,
                             browserMortyLatencyMs,
                             kind: "ready",
                             mobiusDaemonLatencyMs: platform.mobiusDaemonLatencyMs,

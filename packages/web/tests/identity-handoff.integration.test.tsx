@@ -109,9 +109,11 @@ test("Given a connected shared workspace, When the user refreshes Network Diagno
     const dialog = getByRole(document.body, "dialog", { name: "Network Diagnostic" });
     await vi.waitFor(() => {
         expect(dialog.textContent).toContain("Browser ↔ Morty");
+        expect(dialog.textContent).toContain("Browser ↔ Mobius");
         expect(dialog.textContent).toContain("Morty ↔ Mobius");
         expect(dialog.textContent).toContain("Mobius ↔ Daemon");
         expect(getByRole(dialog, "status", { name: "Browser to Morty latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Browser to Mobius latency" }).textContent).toMatch(/^\d+ ms$/u);
         expect(getByRole(dialog, "status", { name: "Morty to Mobius latency" }).textContent).toMatch(/^\d+ ms$/u);
         expect(getByRole(dialog, "status", { name: "Mobius to daemon latency" }).textContent).toMatch(/^\d+ ms$/u);
     });
@@ -121,6 +123,7 @@ test("Given a connected shared workspace, When the user refreshes Network Diagno
     expect(getByRole(dialog, "status", { name: "Measuring network latency" })).toBeInstanceOf(HTMLElement);
     await vi.waitFor(() => {
         expect(getByRole(dialog, "status", { name: "Browser to Morty latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Browser to Mobius latency" }).textContent).toMatch(/^\d+ ms$/u);
         expect(getByRole(dialog, "status", { name: "Morty to Mobius latency" }).textContent).toMatch(/^\d+ ms$/u);
         expect(getByRole(dialog, "status", { name: "Mobius to daemon latency" }).textContent).toMatch(/^\d+ ms$/u);
     });

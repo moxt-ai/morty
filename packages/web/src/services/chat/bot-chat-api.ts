@@ -71,6 +71,7 @@ export type ChatRuntime = v.InferOutput<typeof chatRuntimeSchema>;
 const workspaceSchema = v.object({ runtime: chatRuntimeSchema });
 const networkDiagnosticSchema = v.strictObject({
     mobiusDaemonLatencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
+    mobiusOrigin: v.pipe(v.string(), v.url()),
     mortyMobiusLatencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
 });
 export type ChatWorkspace = v.InferOutput<typeof workspaceSchema>;
