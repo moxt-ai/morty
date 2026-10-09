@@ -54,6 +54,7 @@ type LocalInteraction =
     | { readonly kind: "elicitation"; readonly elicitation: ElicitationInteraction };
 
 const SESSION_EVENT_PAGE_LIMIT = 500;
+const OLDER_HISTORY_MESSAGE_TARGET = 10;
 
 function interactionId(interaction: LocalInteraction): string {
     return interaction.kind === "permission"
@@ -487,24 +488,28 @@ export function createSessionPaneModel(options: {
                 loadingOlderHistory = true;
                 set({ historyLoading: true });
                 try {
-                    const page = await client.sessions.querySessionNativeEventsV2(
-                        sessionId,
-                        {
-                            additionalDirectoryIds: session.entry.additionalDirectories.map(
-                                (directory) => directory.directoryId,
-                            ),
-                            agentId: session.agentRef,
-                            directoryId: session.result.ready.directoryId,
-                        },
-                        { cursor: historyCursor, eventLimit: SESSION_EVENT_PAGE_LIMIT },
-                        signal,
-                    );
-                    signal.throwIfAborted();
-                    if (sessionGenerationId !== null && page.events.sessionGenerationId !== sessionGenerationId) {
-                        throw new Error("The Session reloaded while older messages were loading.");
+                    const initialMessageCount = deriveTimeline().messages.length;
+                    while (
+                        historyCursor !== null &&
+                        deriveTimeline().messages.length - initialMessageCount < OLDER_HISTORY_MESSAGE_TARGET
+                    ) {
+                        const requestedCursor: string = historyCursor;
+                        const page = await client.sessions.querySessionNativeEventsV2(
+                            sessionId,
+                            sessionIdentity,
+                            { cursor: requestedCursor, eventLimit: SESSION_EVENT_PAGE_LIMIT },
+                            signal,
+                        );
+                        signal.throwIfAborted();
+                        if (sessionGenerationId !== null && page.events.sessionGenerationId !== sessionGenerationId) {
+                            throw new Error("The Session reloaded while older messages were loading.");
+                        }
+                        if (page.events.nextCursor === requestedCursor) {
+                            throw new Error("The Runtime returned the same older-message cursor twice.");
+                        }
+                        replaceTimeline(mergeSessionEvents(page.events.events, sessionEvents));
+                        historyCursor = page.events.nextCursor;
                     }
-                    replaceTimeline(mergeSessionEvents(page.events.events, sessionEvents));
-                    historyCursor = page.events.nextCursor;
                     const timeline = deriveTimeline();
                     signal.throwIfAborted();
                     set({
