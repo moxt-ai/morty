@@ -137,6 +137,28 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                 outcome: "complete",
                 output: [{ kind: "text", text: "![Generated picture](file:///workspace/generated-picture.png)" }],
             };
+        case "generate an image":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        content: [
+                            {
+                                type: "content",
+                                content: {
+                                    data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV4kAAAAASUVORK5CYII=",
+                                    mimeType: "image/png",
+                                    type: "image",
+                                },
+                            },
+                        ],
+                        title: "Generate image",
+                        output: "null",
+                    },
+                ],
+            };
         case "show source file":
             return {
                 outcome: "complete",

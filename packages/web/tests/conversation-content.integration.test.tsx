@@ -307,3 +307,27 @@ test("Given an Agent response references a local image, When the user reads it a
     const restored = await app.waitForView(() => getByRole(document.body, "img", { name: "Generated picture" }));
     expect(restored.getAttribute("src")).toMatch(/^blob:/u);
 });
+
+test("Given Codex generates an image, When the user opens the completed tool call, Then Chat displays the generated image", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, "generate an image");
+
+    const imageTool = await app.waitForView(() => getByRole(document.body, "group", { name: "Tool: Generate image" }));
+    const disclosure = getByRole(imageTool, "button", { name: "Generate image Tool succeeded" });
+    expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+    await app.user.click(disclosure);
+    const image = await app.waitForView(() => getByRole(imageTool, "img", { name: "Image" }));
+    expect(image.getAttribute("src")).toMatch(/^blob:/u);
+    expect(imageTool.textContent).not.toContain("iVBORw0KGgo");
+});
