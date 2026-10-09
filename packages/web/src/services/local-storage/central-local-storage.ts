@@ -288,10 +288,8 @@ export const anonymousCredentialEntry = jsonLocalStorageEntry({
 });
 
 const storedWorkspaceSchema = v.pipe(
-    v.union([
-        v.pipe(v.object({ projectId: workspaceProjectIdSchema, userId: v.string() }), v.readonly()),
-        v.pipe(v.object({ kind: v.literal("recovery") }), v.readonly()),
-    ]),
+    v.object({ projectId: workspaceProjectIdSchema, userId: v.string() }),
+    v.readonly(),
 );
 
 export const workspaceEntry = jsonLocalStorageEntry({

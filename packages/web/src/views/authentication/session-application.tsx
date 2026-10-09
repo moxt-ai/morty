@@ -1,30 +1,12 @@
-import { useSession } from "@clerk/react";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { Button, createApplicationRouter } from "../../index.ts";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { useStore } from "zustand";
+import { createApplicationRouter } from "../../index.ts";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
-import {
-    type AnonymousIdentity,
-    AnonymousIdentityApi,
-    IdentityApiError,
-} from "../../services/identity/anonymous-identity-api.ts";
-import { verifySession, waitForClerk } from "../../view-models/authentication/session.ts";
-import { App, Page } from "../application/app.tsx";
+import { createAnonymousSessionStore } from "../../view-models/authentication/anonymous-session-store.ts";
+import { App } from "../application/app.tsx";
 import { MobiusManagement, userBotConnection } from "../applications/mobius-management.tsx";
 import { type ActiveIdentity, ActiveIdentityProvider } from "./identity-context.tsx";
-import { router as authRouter } from "./router.tsx";
-
-type IdentityState =
-    | { readonly kind: "loading" }
-    | { readonly kind: "anonymous"; readonly identity: AnonymousIdentity }
-    | {
-          readonly kind: "clerk";
-          readonly localIdentity: AnonymousIdentity | null;
-          readonly userId: string;
-          readonly projectId: string;
-      }
-    | { readonly kind: "conflict"; readonly identity: AnonymousIdentity }
-    | { readonly kind: "recovery" }
-    | { readonly kind: "failed" };
+import { router as continuationRouter } from "./router.tsx";
 
 type WorkspaceApplicationProps = {
     readonly activeIdentity: ActiveIdentity;
@@ -52,161 +34,21 @@ export function WorkspaceApplication(props: WorkspaceApplicationProps) {
     );
 }
 
-function BindingConflict({
-    identity,
-    onResolved,
-    session,
-}: {
-    readonly identity: AnonymousIdentity;
-    readonly onResolved: (action: "discard-local" | "override", userId: string) => void;
-    readonly session: NonNullable<ReturnType<typeof useSession>["session"]>;
-}) {
-    const transport = useApiTransport();
-    const [busy, setBusy] = useState(false);
-    const [error, setError] = useState("");
-    const operation = useRef<AbortController | null>(null);
-    useEffect(() => () => operation.current?.abort(), []);
-    const resolve = (action: "discard-local" | "override") => {
-        operation.current?.abort();
-        const controller = new AbortController();
-        operation.current = controller;
-        setBusy(true);
-        setError("");
-        const api = new AnonymousIdentityApi({
-            fetchRequest: transport.fetch,
-            origin: window.location.origin,
-        });
-        void waitForClerk(() => session.getToken(), controller.signal)
-            .then((token) => {
-                if (token === null) {
-                    throw new Error("Sign-in session is unavailable.");
-                }
-                return api.bindClerk(token, identity.token, action, controller.signal);
-            })
-            .then((binding) => {
-                if (action === "discard-local") {
-                    api.clearLocal();
-                }
-                onResolved(action, binding.userId);
-            })
-            .catch((cause: unknown) => {
-                if (!controller.signal.aborted) {
-                    setError(cause instanceof Error ? cause.message : "The identity could not be updated.");
-                }
-            })
-            .finally(() => {
-                if (!controller.signal.aborted) {
-                    operation.current = null;
-                    setBusy(false);
-                }
-            });
-    };
-    return (
-        <Page>
-            <section className="mx-auto max-w-xl rounded-xl border border-border bg-card p-6 shadow-sm">
-                <h1 className="text-xl font-semibold">Choose which workspace to keep</h1>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                    This account is already connected to another workspace. You can discard this device’s local
-                    workspace, or connect the account to this workspace instead.
-                </p>
-                {error.length > 0 && (
-                    <p role="alert" className="mt-4 text-sm text-red-700">
-                        {error}
-                    </p>
-                )}
-                <div className="mt-6 flex flex-wrap gap-3">
-                    <Button disabled={busy} variant="destructive" onClick={() => resolve("discard-local")}>
-                        Discard local workspace
-                    </Button>
-                    <Button disabled={busy} onClick={() => resolve("override")}>
-                        Use this workspace instead
-                    </Button>
-                    <Button disabled={busy} variant="ghost" onClick={() => void session.end()}>
-                        Sign out
-                    </Button>
-                </div>
-            </section>
-        </Page>
-    );
-}
-
 export function SessionApplication() {
     const transport = useApiTransport();
-    const { isLoaded, session } = useSession();
-    const [state, setState] = useState<IdentityState>({ kind: "loading" });
-    const activeSession = useRef(session);
-    activeSession.current = session;
-    const authenticationPath = ["/login", "/register", "/sso-callback", "/continue"].some((path) =>
-        window.location.pathname.startsWith(path),
-    );
+    const [store] = useState(() => createAnonymousSessionStore(transport.fetch, window.location.origin));
+    const { authorize, load, state } = useStore(store);
+    const continuationPath = window.location.pathname.startsWith("/continue");
     useEffect(() => {
-        if (!isLoaded || authenticationPath) {
+        if (continuationPath) {
             return;
         }
         const controller = new AbortController();
-        const api = new AnonymousIdentityApi({
-            fetchRequest: transport.fetch,
-            origin: window.location.origin,
-        });
-        void api
-            .loadExisting(controller.signal)
-            .then(async (existing) => {
-                controller.signal.throwIfAborted();
-                if (existing === null && api.needsRecovery()) {
-                    setState({ kind: "recovery" });
-                    return;
-                }
-                const identity = existing ?? (await api.loadOrCreate(controller.signal));
-                if (session === null || session === undefined) {
-                    setState({ identity, kind: "anonymous" });
-                    return;
-                }
-                const clerkToken = await waitForClerk(() => session.getToken(), controller.signal);
-                if (clerkToken === null) {
-                    throw new Error("Sign-in session is unavailable.");
-                }
-                const binding = await api.clerkBinding(clerkToken, controller.signal);
-                if (binding.kind === "bound") {
-                    setState(
-                        binding.userId === identity.userId
-                            ? {
-                                  kind: "clerk",
-                                  localIdentity: identity,
-                                  userId: binding.userId,
-                                  projectId: identity.projectId,
-                              }
-                            : { identity, kind: "conflict" },
-                    );
-                    return;
-                }
-                try {
-                    const created = await api.bindClerk(clerkToken, identity.token, "bind", controller.signal);
-                    setState({
-                        kind: "clerk",
-                        localIdentity: identity,
-                        userId: created.userId,
-                        projectId: identity.projectId,
-                    });
-                } catch (cause) {
-                    if (cause instanceof IdentityApiError && cause.code === "BINDING_CONFLICT") {
-                        setState({ identity, kind: "conflict" });
-                        return;
-                    }
-                    throw cause;
-                }
-            })
-            .catch(() => {
-                if (!controller.signal.aborted) {
-                    setState({ kind: "failed" });
-                }
-            });
+        void load(controller.signal);
         return () => controller.abort();
-    }, [authenticationPath, isLoaded, session, transport.fetch]);
-    if (!isLoaded) {
-        return <App state={{ kind: "loading" }} />;
-    }
-    if (authenticationPath) {
-        return <App state={{ kind: "authentication", router: authRouter }} />;
+    }, [continuationPath, load]);
+    if (continuationPath) {
+        return <App state={{ kind: "authentication", router: continuationRouter }} />;
     }
     if (state.kind === "loading") {
         return <App state={{ kind: "loading" }} />;
@@ -214,91 +56,14 @@ export function SessionApplication() {
     if (state.kind === "failed") {
         return <App state={{ kind: "failed" }} />;
     }
-    if (state.kind === "recovery") {
-        return (
-            <Page>
-                <section className="mx-auto max-w-xl rounded-xl border border-border bg-card p-6 shadow-sm">
-                    <h1 className="text-xl font-semibold">Recover your workspace</h1>
-                    <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                        This device’s local workspace has been discarded. On your other device, open your workspace and
-                        create a transfer link. Open that link here to restore the same workspace.
-                    </p>
-                </section>
-            </Page>
-        );
-    }
-    if (state.kind === "conflict") {
-        if (session === null || session === undefined) {
-            return <App state={{ kind: "failed" }} />;
-        }
-        return (
-            <BindingConflict
-                identity={state.identity}
-                session={session}
-                onResolved={(action, userId) =>
-                    setState(
-                        action === "discard-local"
-                            ? { kind: "recovery" }
-                            : {
-                                  kind: "clerk",
-                                  localIdentity: state.identity,
-                                  userId,
-                                  projectId: state.identity.projectId,
-                              },
-                    )
-                }
-            />
-        );
-    }
-    if (state.kind === "anonymous") {
-        const api = new AnonymousIdentityApi({
-            fetchRequest: transport.fetch,
-            origin: window.location.origin,
-        });
-        const activeIdentity: ActiveIdentity = {
-            getToken: async (signal) => {
-                signal.throwIfAborted();
-                return state.identity.token;
-            },
-            kind: "anonymous",
-            projectId: state.identity.projectId,
-        };
-        return (
-            <WorkspaceApplication
-                activeIdentity={activeIdentity}
-                userId={state.identity.userId}
-                authorize={async (signal) => {
-                    const current = await api.loadOrCreate(signal);
-                    if (current.userId !== state.identity.userId) {
-                        throw new Error("Anonymous identity changed.");
-                    }
-                }}
-            />
-        );
-    }
-    if (session === null || session === undefined) {
-        return <App state={{ kind: "failed" }} />;
-    }
-    const expectedSessionId = session.id;
     const activeIdentity: ActiveIdentity = {
-        kind: "clerk",
-        projectId: state.projectId,
-        getToken: (signal) => waitForClerk(() => activeSession.current?.getToken() ?? Promise.resolve(null), signal),
+        getToken: async (signal) => {
+            signal.throwIfAborted();
+            return state.identity.token;
+        },
+        projectId: state.identity.projectId,
     };
     return (
-        <WorkspaceApplication
-            activeIdentity={activeIdentity}
-            userId={state.userId}
-            authorize={(signal) =>
-                verifySession(
-                    transport.fetch,
-                    expectedSessionId,
-                    activeSession.current?.id,
-                    () => activeSession.current?.getToken() ?? Promise.resolve(null),
-                    signal,
-                    state.projectId,
-                )
-            }
-        />
+        <WorkspaceApplication activeIdentity={activeIdentity} userId={state.identity.userId} authorize={authorize} />
     );
 }

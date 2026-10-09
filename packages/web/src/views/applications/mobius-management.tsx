@@ -63,14 +63,7 @@ export function MobiusManagement() {
             });
             const localIdentity = await api.loadExisting(signal);
             const token =
-                localIdentity?.projectId === identity.projectId
-                    ? localIdentity.token
-                    : identity.kind === "anonymous"
-                      ? await identity.getToken(signal)
-                      : null;
-            if (token === null) {
-                throw new Error("The current user token is unavailable.");
-            }
+                localIdentity?.projectId === identity.projectId ? localIdentity.token : await identity.getToken(signal);
             return {
                 accessToken: token,
                 token: await api.createRecoveryToken(token, identity.projectId, signal),
@@ -107,9 +100,6 @@ export function MobiusManagement() {
     );
     const replaceWorkspace = useCallback(
         async (location: WorkspaceLocation, signal: AbortSignal) => {
-            if (identity.kind !== "anonymous") {
-                throw new Error("Only a fresh anonymous workspace can change region.");
-            }
             const api = new AnonymousIdentityApi({
                 fetchRequest: transport.fetch,
                 origin: window.location.origin,
@@ -118,7 +108,7 @@ export function MobiusManagement() {
             signal.throwIfAborted();
             window.location.reload();
         },
-        [identity.kind, transport.fetch],
+        [transport.fetch],
     );
     return (
         <BotChatHome
@@ -127,9 +117,9 @@ export function MobiusManagement() {
             currentUserToken={currentUserToken}
             endRemoteAccess={endRemoteAccess}
             replaceCurrentUser={replaceCurrentUser}
+            replaceWorkspace={replaceWorkspace}
             projectId={identity.projectId}
             selectedBotPreference={selectedBotPreference}
-            {...(identity.kind === "anonymous" ? { replaceWorkspace } : {})}
         />
     );
 }

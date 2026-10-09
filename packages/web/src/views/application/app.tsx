@@ -64,7 +64,7 @@ export function App({ state }: { readonly state: AppState }) {
             return (
                 <main className="grid min-h-dvh place-items-center bg-background">
                     <p role="alert" className="text-red-700">
-                        Sign-in is temporarily unavailable. Please reload to try again.
+                        Morty is temporarily unavailable. Please reload to try again.
                     </p>
                 </main>
             );

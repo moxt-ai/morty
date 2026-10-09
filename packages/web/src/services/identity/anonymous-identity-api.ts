@@ -26,22 +26,15 @@ const identitySchema = v.pipe(v.object({ token: tokenSchema, ...workspaceSchema.
 export const ANONYMOUS_CREDENTIAL_KEY_NAME = anonymousCredentialEntry.key;
 
 function readStoredWorkspace() {
-    const workspace = centralLocalStorage.read(workspaceEntry);
-    return workspace !== null && !("kind" in workspace) ? workspace : null;
+    return centralLocalStorage.read(workspaceEntry);
 }
 const anonymousSessionSchema = v.pipe(
     v.object({ authentication: v.object({ kind: v.literal("anonymous") }), userId: v.string() }),
     v.readonly(),
 );
 const transferSchema = v.pipe(v.object({ url: v.pipe(v.string(), v.url()) }), v.readonly());
-const bindingSchema = v.variant("kind", [
-    v.pipe(v.object({ kind: v.literal("unbound") }), v.readonly()),
-    v.pipe(v.object({ kind: v.literal("bound"), userId: v.string() }), v.readonly()),
-]);
-
 export type AnonymousIdentity = v.InferOutput<typeof identitySchema>;
 export type IdentityTransfer = v.InferOutput<typeof transferSchema>;
-export type ClerkBinding = v.InferOutput<typeof bindingSchema>;
 
 /** Whether this browser already holds an anonymous credential, without validating it. */
 export function hasStoredAnonymousCredential(): boolean {
@@ -203,50 +196,9 @@ export class AnonymousIdentityApi {
     readonly saveIdentity = (identity: AnonymousIdentity): void =>
         this.#saveIdentity(v.parse(identitySchema, identity));
 
-    readonly clerkBinding = async (clerkToken: string, signal: AbortSignal): Promise<ClerkBinding> =>
-        v.parse(
-            bindingSchema,
-            await this.#request(
-                "/identity/clerk-binding",
-                { method: "GET", headers: { authorization: `Bearer ${clerkToken}` } },
-                signal,
-            ),
-        );
-
-    readonly bindClerk = async (
-        clerkToken: string,
-        anonymousToken: string,
-        action: "bind" | "discard-local" | "override",
-        signal: AbortSignal,
-    ) => {
-        const bound = v.parse(
-            v.pipe(v.object({ kind: v.literal("bound"), userId: v.string() }), v.readonly()),
-            await this.#request(
-                "/identity/clerk-binding",
-                {
-                    method: "POST",
-                    headers: { authorization: `Bearer ${clerkToken}`, "content-type": "application/json" },
-                    body: JSON.stringify({ action, anonymousToken: v.parse(tokenSchema, anonymousToken) }),
-                },
-                signal,
-            ),
-        );
-        return bound;
-    };
-
     readonly #saveIdentity = (identity: AnonymousIdentity) => {
         centralLocalStorage.write(anonymousCredentialEntry, identity);
         centralLocalStorage.write(workspaceEntry, { userId: identity.userId, projectId: identity.projectId });
-    };
-
-    readonly clearLocal = () => {
-        centralLocalStorage.remove(anonymousCredentialEntry);
-        centralLocalStorage.write(workspaceEntry, { kind: "recovery" });
-    };
-
-    readonly needsRecovery = () => {
-        const workspace = centralLocalStorage.read(workspaceEntry);
-        return workspace !== null && "kind" in workspace && workspace.kind === "recovery";
     };
 
     readonly #anonymousSession = async (
@@ -301,7 +253,7 @@ export class AnonymousIdentityApi {
     };
 }
 
-export class IdentityApiError extends Error {
+class IdentityApiError extends Error {
     readonly code: string;
     constructor(code: string, message: string) {
         super(message);

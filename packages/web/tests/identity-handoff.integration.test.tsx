@@ -31,6 +31,14 @@ test("Given a Codex native session handoff, When the user hovers over import, Th
     ).toBeInstanceOf(HTMLElement);
 });
 
+test("Given a new browser, When Morty loads, Then the anonymous workspace opens", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ page: { kind: "bootstrap" } });
+
+    expect(await app.queryElementByTestId(dataTestId.closeDialog)).toBeInstanceOf(HTMLElement);
+});
+
 test("Given a native session handoff, When importing fails, Then the choice page shows progress and allows a fork retry", {
     timeout: 30_000,
 }, async () => {

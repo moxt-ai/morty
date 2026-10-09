@@ -5,6 +5,7 @@ import { ToastProvider } from "../../src/components/ui/toast.tsx";
 import { ApiTransportProvider } from "../../src/services/api/api-transport-context.tsx";
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
 import { App } from "../../src/views/application/app.tsx";
+import { Bootstrap } from "../../src/views/application/bootstrap.tsx";
 import { router as authenticationRouter } from "../../src/views/authentication/router.tsx";
 import { WorkspaceApplication } from "../../src/views/authentication/session-application.tsx";
 import { createChatWorkerEnvironment } from "../support/chat-worker.ts";
@@ -44,6 +45,7 @@ export async function createTestApp(
         readonly agent?: { readonly id: string; readonly label: string };
         readonly page?:
             | { readonly kind: "continue"; readonly harness: string; readonly sessionId: string }
+            | { readonly kind: "bootstrap" }
             | { readonly kind: "managed-session"; readonly sessionId: string }
             | { readonly kind: "workspace" };
         readonly prepare?: (application: Application) => void | Promise<void>;
@@ -60,6 +62,8 @@ export async function createTestApp(
         transfer.searchParams.set("sessionId", page.sessionId);
         window.location.href = transfer.href;
         authenticationRouter.history.replace(`${transfer.pathname}${transfer.search}${transfer.hash}`);
+    } else if (page.kind === "bootstrap") {
+        window.location.href = new URL("/", current.origin).href;
     } else if (options.application === undefined) {
         const destination = new URL("/chat", current.origin);
         if (page.kind === "managed-session") {
@@ -74,7 +78,9 @@ export async function createTestApp(
         return render(
             <ApiTransportProvider transport={current.transport}>
                 <ToastProvider>
-                    {page.kind === "continue" ? (
+                    {page.kind === "bootstrap" ? (
+                        <Bootstrap />
+                    ) : page.kind === "continue" ? (
                         <App state={{ kind: "authentication", router: authenticationRouter }} />
                     ) : (
                         <WorkspaceApplication

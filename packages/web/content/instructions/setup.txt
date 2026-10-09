@@ -2,7 +2,7 @@
 
 This is the standalone entry for testing and external sharing, such as Twitter.
 Reuse the user's saved identity or create an anonymous identity and personal Machine.
-No Clerk registration is required. Web-generated instructions use `/pair.md?token=...`.
+No registration is required. Web-generated instructions use `/pair.md?token=...`.
 Only setup loads local configuration before connecting. It reuses the saved user
 token and Machine selection for this origin, including an identity saved by pair, or
 creates an identity if none is available. It first reconnects a Mobius-managed

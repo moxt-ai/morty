@@ -1,16 +1,9 @@
 import { createContext, type ReactNode, useContext } from "react";
 
-export type ActiveIdentity =
-    | {
-          readonly getToken: (signal: AbortSignal) => Promise<string | null>;
-          readonly kind: "anonymous";
-          readonly projectId: string;
-      }
-    | {
-          readonly getToken: (signal: AbortSignal) => Promise<string | null>;
-          readonly kind: "clerk";
-          readonly projectId: string;
-      };
+export type ActiveIdentity = {
+    readonly getToken: (signal: AbortSignal) => Promise<string>;
+    readonly projectId: string;
+};
 
 const IdentityContext = createContext<ActiveIdentity | null>(null);
 

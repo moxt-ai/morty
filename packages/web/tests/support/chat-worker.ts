@@ -90,7 +90,6 @@ export async function createChatWorkerEnvironment() {
                     signal.throwIfAborted();
                     return identity.token;
                 },
-                kind: "anonymous" as const,
                 projectId: identity.projectId,
             },
             origin,
