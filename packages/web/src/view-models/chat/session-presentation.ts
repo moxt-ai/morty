@@ -243,10 +243,40 @@ function mergeToolPresentation(
     };
 }
 
-function projectAcpUpdate(event: SessionEventV2, update: AcpSessionUpdateV2): readonly SessionMessage[] {
+function isBotInstructions(content: ContentBlockV2): boolean {
+    return content.type === "resource" && content.resource.uri === BOT_INSTRUCTIONS_URI;
+}
+
+function isSubmittedContentEcho(submitted: ContentBlockV2, echoed: ContentBlockV2): boolean {
+    if (submitted.type === echoed.type) {
+        return JSON.stringify(submitted) === JSON.stringify(echoed);
+    }
+    if (submitted.type === "image" && echoed.type === "external_image") {
+        return submitted.mimeType === echoed.mimeType;
+    }
+    if (submitted.type === "audio" && echoed.type === "external_audio") {
+        return submitted.mimeType === echoed.mimeType;
+    }
+    return submitted.type === "resource" && echoed.type === "external_resource"
+        ? submitted.resource.uri === echoed.uri
+        : false;
+}
+
+function projectAcpUpdate(
+    event: SessionEventV2,
+    update: AcpSessionUpdateV2,
+    submittedPrompts: Map<string, ContentBlockV2[]>,
+): readonly SessionMessage[] {
     switch (update.sessionUpdate) {
-        case "user_message_chunk":
-            if (update.content.type === "resource" && update.content.resource.uri === BOT_INSTRUCTIONS_URI) {
+        case "user_message_chunk": {
+            for (const contents of submittedPrompts.values()) {
+                const echoIndex = contents.findIndex((content) => isSubmittedContentEcho(content, update.content));
+                if (echoIndex !== -1) {
+                    contents.splice(echoIndex, 1);
+                    return [];
+                }
+            }
+            if (isBotInstructions(update.content)) {
                 return [];
             }
             return [
@@ -257,6 +287,7 @@ function projectAcpUpdate(event: SessionEventV2, update: AcpSessionUpdateV2): re
                     role: "user",
                 },
             ];
+        }
         case "agent_message_chunk":
             return [
                 {
@@ -294,20 +325,36 @@ function projectAcpUpdate(event: SessionEventV2, update: AcpSessionUpdateV2): re
     }
 }
 
-function projectEvent(event: SessionEventV2): readonly SessionMessage[] {
-    return event.type === "acp" ? projectAcpUpdate(event, event.payload) : [];
-}
-
 export function sessionEventLogPresentation(events: readonly SessionEventV2[]): SessionTimeline {
     const messages: SessionMessage[] = [];
     const toolIndexes = new Map<string, number>();
+    const submittedPrompts = new Map<string, ContentBlockV2[]>();
     for (const event of events) {
-        if (event.type !== "acp") {
+        if (event.type === "lifecycle-metadata") {
+            const lifecycle = event.payload;
+            if (lifecycle.kind === "prompt.requested") {
+                submittedPrompts.set(lifecycle.commandId, [...lifecycle.content]);
+                const contents = lifecycle.content.filter((content) => !isBotInstructions(content));
+                if (contents.length > 0) {
+                    messages.push({
+                        commandId: lifecycle.commandId,
+                        contents,
+                        id: event.eventId,
+                        role: "user",
+                    });
+                }
+            } else if (
+                lifecycle.kind === "prompt.completed" ||
+                lifecycle.kind === "prompt.failed" ||
+                lifecycle.kind === "prompt.failed-before-start"
+            ) {
+                submittedPrompts.delete(lifecycle.commandId);
+            }
             continue;
         }
         const update = event.payload;
         if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update") {
-            messages.push(...projectEvent(event));
+            messages.push(...projectAcpUpdate(event, update, submittedPrompts));
             continue;
         }
         const existingIndex = toolIndexes.get(update.toolCallId);

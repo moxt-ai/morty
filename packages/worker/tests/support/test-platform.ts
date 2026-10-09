@@ -56,6 +56,7 @@ export async function startTestPlatform(options: { readonly allowedOrigins?: Rea
                         files: mortyFiles,
                         agentId: agents[0]?.id ?? "codex",
                         agentName: agents[0]?.label ?? "Codex",
+                        echoUserMessage: false,
                         additionalAgents: agents.slice(1).map((agent) => ({ id: agent.id, name: agent.label })),
                         ...(nativeSessionIds === undefined ? {} : { nativeSessionIds }),
                     },

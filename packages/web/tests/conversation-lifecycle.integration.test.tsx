@@ -69,6 +69,35 @@ test("Given a completed turn, When the user leaves and reopens it, Then daemon h
     expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull();
 });
 
+test("Given Claude Code does not echo the submitted prompt, When the response starts, Then my message is visible once", {
+    timeout: 30_000,
+}, async () => {
+    const prompt = "Show this prompt without an Agent echo";
+    const app = await createTestApp({
+        connectAgent: true,
+        agent: { id: "claude-code", label: "Claude Code" },
+    });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, prompt);
+
+    await app.waitForView(() => {
+        expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([prompt]);
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes(`Codex turn 1: ${prompt}`) === true),
+        ).toBe(true);
+    });
+});
+
 test("Given more than 50 saved messages, When the user reopens the conversation, Then the first history page shows 50 messages", {
     timeout: 60_000,
 }, async () => {
