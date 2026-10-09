@@ -1,19 +1,9 @@
-import {
-    type AcpSessionUpdateV2,
-    decodeIdentifier,
-    decodeRecordedSessionEvent,
-    type SessionEventV2,
-} from "@moxt-ai/mobius-protocol";
+import { type AcpSessionUpdateV2, decodeIdentifier, type SessionEventV2 } from "@moxt-ai/mobius-protocol";
 import {
     type MobiusClient,
-    MobiusControlEvent,
     MobiusElicitationResponseRequest,
-    type MobiusLiveSessionEventObserver,
     type MobiusLiveSessionEventObserverV2,
     MobiusPermissionResponseRequest,
-    MobiusTurnCompletedEvent,
-    MobiusTurnFailedEvent,
-    MobiusTurnStartedEvent,
     type PromptResource,
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
@@ -541,6 +531,135 @@ export function createSessionPaneModel(options: {
                         session.result.action === "conversation" ? session.result.access : undefined,
                     );
                     const connected = client;
+                    const receiveLifecycle = async (
+                        payload: Extract<SessionEventV2, { readonly type: "lifecycle-metadata" }>["payload"],
+                    ): Promise<boolean> => {
+                        if ("event" in payload) {
+                            const event = payload.event;
+                            if (event.kind === "session.permission.requested") {
+                                set((current) => ({
+                                    interactions: replaceInteraction(current.interactions, event.interactionId, {
+                                        kind: "permission",
+                                        permission: { ...event, state: { kind: "pending" } },
+                                    }),
+                                }));
+                                return true;
+                            }
+                            if (event.kind === "session.permission.resolved") {
+                                set((current) => ({
+                                    interactions: resolvePermission(
+                                        current.interactions,
+                                        event.interactionId,
+                                        event.outcome,
+                                        event.optionId,
+                                    ),
+                                }));
+                                return true;
+                            }
+                            if (event.kind === "session.elicitation.requested") {
+                                const { accepted, ...elicitation } = event;
+                                set((current) => ({
+                                    interactions: replaceInteraction(current.interactions, event.interactionId, {
+                                        kind: "elicitation",
+                                        elicitation: {
+                                            ...elicitation,
+                                            state: accepted
+                                                ? { action: "accept", content: "", kind: "submitted" }
+                                                : { kind: "pending" },
+                                        },
+                                    }),
+                                }));
+                                return true;
+                            }
+                            if (event.kind === "session.elicitation.resolved") {
+                                set((current) => ({
+                                    interactions: resolveElicitation(
+                                        current.interactions,
+                                        event.interactionId,
+                                        event.action,
+                                    ),
+                                }));
+                                return true;
+                            }
+
+                            return true;
+                        }
+                        if (payload.kind === "session.queue.changed") {
+                            const execution = await connected.sessions.readSessionExecution(
+                                sessionId,
+                                sessionIdentity,
+                                signal,
+                            );
+                            signal.throwIfAborted();
+                            messageQueue.getState().replace(execution.queued);
+                            return true;
+                        }
+                        if (payload.kind === "prompt.started") {
+                            delivery.getState().reconcile([payload.commandId]);
+                            const queued = messageQueue.getState().takeStarted(payload.commandId);
+                            if (command !== "" && command !== payload.commandId) {
+                                tasks.getState().finish(command);
+                                activeTurn.turnCleared(command);
+                            }
+                            command = payload.commandId;
+                            const accepted = activeTurn.current();
+                            const turnId =
+                                queued?.turnId ??
+                                (accepted.kind === "accepted" && accepted.commandId === payload.commandId
+                                    ? accepted.turnId
+                                    : payload.commandId);
+                            tasks.getState().start(payload.commandId, turnId);
+                            activeTurn.submissionAccepted(payload.commandId, turnId);
+                            set({ activity: startSessionWork({ commandId: payload.commandId }) });
+                            return true;
+                        }
+                        if (
+                            payload.kind === "prompt.completed" ||
+                            payload.kind === "prompt.failed" ||
+                            payload.kind === "prompt.failed-before-start"
+                        ) {
+                            delivery.getState().reconcile([payload.commandId]);
+                            if (payload.kind === "prompt.completed" && payload.stopReason === "steered") {
+                                const [recovery, execution] = await Promise.all([
+                                    readNativeEventsV2(connected, sessionId, sessionIdentity, signal),
+                                    connected.sessions.readSessionExecution(sessionId, sessionIdentity, signal),
+                                ]);
+                                signal.throwIfAborted();
+                                replaceTimeline(mergeSessionEvents(sessionEvents, recovery.events));
+                                const running = execution.turn;
+                                if (running !== null) {
+                                    command = running.commandId;
+                                    tasks.getState().start(running.commandId, running.commandId);
+                                    activeTurn.submissionAccepted(running.commandId, running.commandId);
+                                    const timeline = deriveTimeline();
+                                    set({
+                                        activity: startSessionWork({ commandId: running.commandId }),
+                                        messages: timeline.messages,
+                                        operation: { kind: "idle" },
+                                    });
+                                    return true;
+                                }
+                            }
+                            const activity = transitionSessionActivity(
+                                get().activity,
+                                payload.kind === "prompt.failed" || payload.kind === "prompt.failed-before-start"
+                                    ? {
+                                          commandId: payload.commandId,
+                                          kind: "work-failed",
+                                          message: payload.message,
+                                      }
+                                    : { commandId: payload.commandId, kind: "work-completed" },
+                            );
+                            const completed = deriveTimeline();
+                            set({ activity, messages: completed.messages, operation: { kind: "idle" } });
+                            tasks.getState().finish(payload.commandId);
+                            activeTurn.turnCleared(payload.commandId);
+                            if (command === payload.commandId) {
+                                command = "";
+                            }
+                        }
+                        return true;
+                    };
                     const observer: MobiusLiveSessionEventObserverV2 = {
                         reconcile: async (connection) => {
                             const reconcilingTurn = activeTurn.current();
@@ -633,6 +752,7 @@ export function createSessionPaneModel(options: {
                                 replaceTimeline(mergeSessionEvents(sessionEvents, [event]));
                             }
                             if (event.type !== "acp") {
+                                await receiveLifecycle(event.payload);
                                 const timeline = deriveTimeline();
                                 if (timeline.messages !== get().messages) {
                                     set({ messages: timeline.messages });
@@ -667,145 +787,14 @@ export function createSessionPaneModel(options: {
                             return true;
                         },
                     };
-                    const lifecycleObserver: MobiusLiveSessionEventObserver = {
-                        reconcile: () => Promise.resolve(),
-                        receive: async ({ payload }) => {
-                            if (payload instanceof MobiusControlEvent) {
-                                const event = decodeRecordedSessionEvent(payload.encodedPayload);
-                                if (event.kind === "session.permission.requested") {
-                                    set((current) => ({
-                                        interactions: replaceInteraction(current.interactions, event.interactionId, {
-                                            kind: "permission",
-                                            permission: { ...event, state: { kind: "pending" } },
-                                        }),
-                                    }));
-                                    return true;
-                                }
-                                if (event.kind === "session.permission.resolved") {
-                                    set((current) => ({
-                                        interactions: resolvePermission(
-                                            current.interactions,
-                                            event.interactionId,
-                                            event.outcome,
-                                            event.optionId,
-                                        ),
-                                    }));
-                                    return true;
-                                }
-                                if (event.kind === "session.elicitation.requested") {
-                                    const { accepted, ...elicitation } = event;
-                                    set((current) => ({
-                                        interactions: replaceInteraction(current.interactions, event.interactionId, {
-                                            kind: "elicitation",
-                                            elicitation: {
-                                                ...elicitation,
-                                                state: accepted
-                                                    ? { action: "accept", content: "", kind: "submitted" }
-                                                    : { kind: "pending" },
-                                            },
-                                        }),
-                                    }));
-                                    return true;
-                                }
-                                if (event.kind === "session.elicitation.resolved") {
-                                    set((current) => ({
-                                        interactions: resolveElicitation(
-                                            current.interactions,
-                                            event.interactionId,
-                                            event.action,
-                                        ),
-                                    }));
-                                    return true;
-                                }
-                                if (event.kind === "session.queue.changed") {
-                                    const execution = await connected.sessions.readSessionExecution(
-                                        sessionId,
-                                        sessionIdentity,
-                                        signal,
-                                    );
-                                    signal.throwIfAborted();
-                                    messageQueue.getState().replace(execution.queued);
-                                    return true;
-                                }
-                                return true;
-                            }
-                            if (payload instanceof MobiusTurnStartedEvent) {
-                                delivery.getState().reconcile([payload.commandId]);
-                                const queued = messageQueue.getState().takeStarted(payload.commandId);
-                                if (command !== "" && command !== payload.commandId) {
-                                    tasks.getState().finish(command);
-                                    activeTurn.turnCleared(command);
-                                }
-                                command = payload.commandId;
-                                const accepted = activeTurn.current();
-                                const turnId =
-                                    queued?.turnId ??
-                                    (accepted.kind === "accepted" && accepted.commandId === payload.commandId
-                                        ? accepted.turnId
-                                        : payload.commandId);
-                                tasks.getState().start(payload.commandId, turnId);
-                                activeTurn.submissionAccepted(payload.commandId, turnId);
-                                set({ activity: startSessionWork({ commandId: payload.commandId }) });
-                                return true;
-                            }
-                            if (
-                                payload instanceof MobiusTurnCompletedEvent ||
-                                payload instanceof MobiusTurnFailedEvent
-                            ) {
-                                delivery.getState().reconcile([payload.commandId]);
-                                if (payload instanceof MobiusTurnCompletedEvent && payload.stopReason === "steered") {
-                                    const [recovery, execution] = await Promise.all([
-                                        readNativeEventsV2(connected, sessionId, sessionIdentity, signal),
-                                        connected.sessions.readSessionExecution(sessionId, sessionIdentity, signal),
-                                    ]);
-                                    signal.throwIfAborted();
-                                    replaceTimeline(mergeSessionEvents(sessionEvents, recovery.events));
-                                    const running = execution.turn;
-                                    if (running !== null) {
-                                        command = running.commandId;
-                                        tasks.getState().start(running.commandId, running.commandId);
-                                        activeTurn.submissionAccepted(running.commandId, running.commandId);
-                                        const timeline = deriveTimeline();
-                                        set({
-                                            activity: startSessionWork({ commandId: running.commandId }),
-                                            messages: timeline.messages,
-                                            operation: { kind: "idle" },
-                                        });
-                                        return true;
-                                    }
-                                }
-                                const activity = transitionSessionActivity(
-                                    get().activity,
-                                    payload instanceof MobiusTurnFailedEvent
-                                        ? {
-                                              commandId: payload.commandId,
-                                              kind: "work-failed",
-                                              message: payload.message,
-                                          }
-                                        : { commandId: payload.commandId, kind: "work-completed" },
-                                );
-                                const completed = deriveTimeline();
-                                set({ activity, messages: completed.messages, operation: { kind: "idle" } });
-                                tasks.getState().finish(payload.commandId);
-                                activeTurn.turnCleared(payload.commandId);
-                                if (command === payload.commandId) {
-                                    command = "";
-                                }
-                            }
-                            return true;
-                        },
-                    };
-                    const [lifecycleSubscription, subscription] = await Promise.all([
-                        connected.events.subscribeLive(sessionId, lifecycleObserver, signal),
-                        connected.events.subscribeLiveV2(sessionId, observer, signal),
-                    ]);
+                    const subscription = await connected.events.subscribeLiveV2(sessionId, observer, signal);
                     signal.throwIfAborted();
                     set({ connection: { kind: "ready", client: connected } });
                     if (initialCommandId !== null) {
                         await get().send(signal);
                         signal.throwIfAborted();
                     }
-                    await Promise.race([lifecycleSubscription.completed, subscription.completed]);
+                    await subscription.completed;
                     signal.throwIfAborted();
                     throw new Error("Session updates disconnected. Reopen the Session to continue.");
                 } catch (cause) {
