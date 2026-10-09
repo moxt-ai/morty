@@ -342,7 +342,7 @@ export function MobiusSessionPane({
                 </FollowLatestScrollArea>
                 <LoadMoreTrigger
                     container={messageList}
-                    hasMore={model.connection.kind === "ready" && model.hasOlderHistory}
+                    hasMore={model.hasOlderHistory}
                     loading={model.historyLoading}
                     onLoadMore={loadOlderMessages}
                     revision={model.historyRevision}
