@@ -168,8 +168,8 @@ export function ConversationSidebar({
     const access = useStore(remoteAccess);
     const [networkDiagnostic] = useState(() =>
         createNetworkDiagnosticStore({
-            measureBrowserRelay: transport.measureRelayLatency,
-            measureRelayDaemon: (signal) => requests.networkDiagnostic(botId, signal),
+            measureBrowserMorty: transport.measureMortyLatency,
+            measureServerHops: (signal) => requests.networkDiagnostic(botId, signal),
         }),
     );
     const diagnostic = useStore(networkDiagnostic);
@@ -557,23 +557,33 @@ export function ConversationSidebar({
                     ) : (
                         <dl className="divide-y divide-border rounded-lg border border-border">
                             <div className="flex items-center justify-between gap-4 px-4 py-3">
-                                <dt>Browser ↔ Relay</dt>
+                                <dt>Browser ↔ Morty</dt>
                                 <dd
-                                    aria-label="Browser to relay latency"
+                                    aria-label="Browser to Morty latency"
                                     className="font-mono font-medium"
                                     role="status"
                                 >
-                                    {diagnostic.state.browserRelayLatencyMs} ms
+                                    {diagnostic.state.browserMortyLatencyMs} ms
                                 </dd>
                             </div>
                             <div className="flex items-center justify-between gap-4 px-4 py-3">
-                                <dt>Relay ↔ Daemon</dt>
+                                <dt>Morty ↔ Mobius</dt>
                                 <dd
-                                    aria-label="Relay to daemon latency"
+                                    aria-label="Morty to Mobius latency"
                                     className="font-mono font-medium"
                                     role="status"
                                 >
-                                    {diagnostic.state.relayDaemonLatencyMs} ms
+                                    {diagnostic.state.mortyMobiusLatencyMs} ms
+                                </dd>
+                            </div>
+                            <div className="flex items-center justify-between gap-4 px-4 py-3">
+                                <dt>Mobius ↔ Daemon</dt>
+                                <dd
+                                    aria-label="Mobius to daemon latency"
+                                    className="font-mono font-medium"
+                                    role="status"
+                                >
+                                    {diagnostic.state.mobiusDaemonLatencyMs} ms
                                 </dd>
                             </div>
                         </dl>

@@ -95,7 +95,7 @@ test("Given a shared workspace, When the user opens the user menu, Then they can
     );
 });
 
-test("Given a connected shared workspace, When the user refreshes Network Diagnostic, Then both latency measurements update", {
+test("Given a connected shared workspace, When the user refreshes Network Diagnostic, Then every network hop latency updates", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -108,18 +108,21 @@ test("Given a connected shared workspace, When the user refreshes Network Diagno
 
     const dialog = getByRole(document.body, "dialog", { name: "Network Diagnostic" });
     await vi.waitFor(() => {
-        expect(dialog.textContent).toContain("Browser ↔ Relay");
-        expect(dialog.textContent).toContain("Relay ↔ Daemon");
-        expect(getByRole(dialog, "status", { name: "Browser to relay latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Relay to daemon latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(dialog.textContent).toContain("Browser ↔ Morty");
+        expect(dialog.textContent).toContain("Morty ↔ Mobius");
+        expect(dialog.textContent).toContain("Mobius ↔ Daemon");
+        expect(getByRole(dialog, "status", { name: "Browser to Morty latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Morty to Mobius latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Mobius to daemon latency" }).textContent).toMatch(/^\d+ ms$/u);
     });
 
     await app.user.click(getByRole(dialog, "button", { name: "Refresh network diagnostic" }));
 
     expect(getByRole(dialog, "status", { name: "Measuring network latency" })).toBeInstanceOf(HTMLElement);
     await vi.waitFor(() => {
-        expect(getByRole(dialog, "status", { name: "Browser to relay latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Relay to daemon latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Browser to Morty latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Morty to Mobius latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Mobius to daemon latency" }).textContent).toMatch(/^\d+ ms$/u);
     });
 });
 

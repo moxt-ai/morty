@@ -3,12 +3,19 @@ import { createStore } from "zustand/vanilla";
 type NetworkDiagnosticState =
     | { readonly kind: "closed" }
     | { readonly kind: "measuring" }
-    | { readonly browserRelayLatencyMs: number; readonly kind: "ready"; readonly relayDaemonLatencyMs: number }
+    | {
+          readonly browserMortyLatencyMs: number;
+          readonly kind: "ready";
+          readonly mobiusDaemonLatencyMs: number;
+          readonly mortyMobiusLatencyMs: number;
+      }
     | { readonly kind: "failed"; readonly message: string };
 
 interface NetworkDiagnosticOperations {
-    readonly measureBrowserRelay: (signal: AbortSignal) => Promise<number>;
-    readonly measureRelayDaemon: (signal: AbortSignal) => Promise<number>;
+    readonly measureBrowserMorty: (signal: AbortSignal) => Promise<number>;
+    readonly measureServerHops: (
+        signal: AbortSignal,
+    ) => Promise<{ readonly mobiusDaemonLatencyMs: number; readonly mortyMobiusLatencyMs: number }>;
 }
 
 export interface NetworkDiagnosticStore {
@@ -33,13 +40,20 @@ export const createNetworkDiagnosticStore = (operations: NetworkDiagnosticOperat
             const signal = AbortSignal.any([parent, controller.signal, AbortSignal.timeout(15_000)]);
             set({ state: { kind: "measuring" } });
             try {
-                const [browserRelayLatencyMs, relayDaemonLatencyMs] = await Promise.all([
-                    operations.measureBrowserRelay(signal),
-                    operations.measureRelayDaemon(signal),
+                const [browserMortyLatencyMs, platform] = await Promise.all([
+                    operations.measureBrowserMorty(signal),
+                    operations.measureServerHops(signal),
                 ]);
                 signal.throwIfAborted();
                 if (active === controller) {
-                    set({ state: { browserRelayLatencyMs, kind: "ready", relayDaemonLatencyMs } });
+                    set({
+                        state: {
+                            browserMortyLatencyMs,
+                            kind: "ready",
+                            mobiusDaemonLatencyMs: platform.mobiusDaemonLatencyMs,
+                            mortyMobiusLatencyMs: platform.mortyMobiusLatencyMs,
+                        },
+                    });
                 }
             } catch (cause) {
                 parent.throwIfAborted();

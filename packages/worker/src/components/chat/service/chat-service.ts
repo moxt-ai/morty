@@ -135,12 +135,13 @@ export class ChatService {
 
     readonly networkDiagnostic = async (scope: ChatScope) => {
         const runtime = await this.localRuntime(scope);
+        const [mortyMobiusLatencyMs, mobiusDaemonLatencyMs] = await Promise.all([
+            this.#platform.measureMobiusLatency(scope.projectId, scope.signal),
+            this.#platform.measureRuntimeLatency(scope.projectId, runtime.runtimeId, scope.signal),
+        ]);
         return {
-            relayDaemonLatencyMs: await this.#platform.measureRuntimeLatency(
-                scope.projectId,
-                runtime.runtimeId,
-                scope.signal,
-            ),
+            mobiusDaemonLatencyMs,
+            mortyMobiusLatencyMs,
         };
     };
 

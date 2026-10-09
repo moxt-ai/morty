@@ -235,6 +235,47 @@ export class PlatformProjectGateway {
         }
     };
 
+    readonly measureMobiusLatency = async (projectId: string, parent: AbortSignal): Promise<number> => {
+        const parsedProjectId = v.parse(platformIdentifier, projectId);
+        const signal = AbortSignal.any([parent, AbortSignal.timeout(15_000)]);
+        const endpoint = new URL(this.configuration().origin);
+        endpoint.pathname = `/mobius/api/v1/projects/${encodeURIComponent(parsedProjectId)}/latency`;
+        const startedAt = performance.now();
+        try {
+            const response = await fetch(endpoint, {
+                headers: {
+                    authorization: `Bearer ${v.parse(platformCredentialBindingsSchema, this.#bindings).MOBIUS_APP_SECRET}`,
+                },
+                signal,
+            });
+            this.#observeMobiusResponse({ serverTiming: response.headers.get("server-timing") });
+            signal.throwIfAborted();
+            if (!response.ok) {
+                await response.body?.cancel();
+                throw new PlatformProjectError(
+                    "PLATFORM_UNAVAILABLE",
+                    "Mobius did not respond to the network diagnostic.",
+                    502,
+                );
+            }
+            await response.body?.cancel();
+            return Math.max(0, Math.round(performance.now() - startedAt));
+        } catch (cause) {
+            parent.throwIfAborted();
+            if (signal.aborted) {
+                throw new PlatformProjectError("PLATFORM_TIMEOUT", "The network diagnostic timed out.", 504, {
+                    cause,
+                });
+            }
+            if (cause instanceof PlatformProjectError) {
+                throw cause;
+            }
+            throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "The network diagnostic failed.", 502, {
+                cause,
+            });
+        }
+    };
+
     readonly openChatRuntimeHost = async (
         projectId: string,
         runtimeId: string,

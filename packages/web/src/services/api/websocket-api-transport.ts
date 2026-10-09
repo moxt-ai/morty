@@ -145,7 +145,7 @@ export class WebSocketApiTransport {
         });
     };
 
-    readonly measureRelayLatency = async (parent: AbortSignal): Promise<number> => {
+    readonly measureMortyLatency = async (parent: AbortSignal): Promise<number> => {
         parent.throwIfAborted();
         const socket = await this.#connect(parent);
         parent.throwIfAborted();
