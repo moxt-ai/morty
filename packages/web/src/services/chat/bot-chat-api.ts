@@ -165,50 +165,13 @@ class BrowserSessionTransport implements MobiusHttpTransport, MobiusLiveEventTra
     readonly close = (): void => this.#webSocket.close();
 }
 
-class BrowserSessionClient implements MobiusClient {
-    readonly attempts: MobiusClient["attempts"];
-    readonly capabilities: MobiusClient["capabilities"];
-    readonly channels: MobiusClient["channels"];
-    readonly credentials: MobiusClient["credentials"];
-    readonly events: MobiusClient["events"];
-    readonly interactions: MobiusClient["interactions"];
-    readonly runtimePairings: MobiusClient["runtimePairings"];
-    readonly runtimes: MobiusClient["runtimes"];
-    readonly sessions: MobiusClient["sessions"];
-    readonly #sessionTransport: BrowserSessionTransport;
-    readonly toolCalls: MobiusClient["toolCalls"];
-    readonly turns: MobiusClient["turns"];
-    readonly #client: MobiusClient;
-
-    constructor(options: ConstructorParameters<typeof MobiusClient>[0], transport: BrowserSessionTransport) {
-        const client = new MobiusClient(options);
-        this.#client = client;
-        this.#sessionTransport = transport;
-        this.attempts = client.attempts;
-        this.capabilities = client.capabilities;
-        this.channels = client.channels;
-        this.credentials = client.credentials;
-        this.events = client.events;
-        this.interactions = client.interactions;
-        this.runtimePairings = client.runtimePairings;
-        this.runtimes = client.runtimes;
-        this.sessions = client.sessions;
-        this.toolCalls = client.toolCalls;
-        this.turns = client.turns;
-    }
-
-    readonly close = (): void => {
-        this.#client.close();
-        this.#sessionTransport.close();
-    };
-}
-
 export class BotChatApi {
     readonly #agentSettingsCache = new Map<string, AgentSettingsResult>();
     readonly #fetchRequest: (request: Request) => Promise<Response>;
     readonly #origin: string;
     readonly #projectId: string;
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
+    readonly #sessionTransports = new Map<string, BrowserSessionTransport>();
     readonly #subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
     readonly #waitForChange: (request: Request) => Promise<void>;
     readonly listBots: ManagementApi["listBots"];
@@ -235,6 +198,12 @@ export class BotChatApi {
         this.createBot = management.createBot;
         this.deleteBot = management.deleteBot;
     }
+    readonly close = (): void => {
+        for (const transport of this.#sessionTransports.values()) {
+            transport.close();
+        }
+        this.#sessionTransports.clear();
+    };
     readonly access = async (botId: string, parent: AbortSignal, conversationId: string): Promise<ChatAccess> =>
         v.parse(
             accessSchema,
@@ -527,31 +496,32 @@ export class BotChatApi {
         if (access.sessionId !== sessionId) {
             throw new CloudApiError("INVALID_SESSION_ACCESS", "The selected Session could not be verified.");
         }
-        const transport = new BrowserSessionTransport();
-        return new BrowserSessionClient(
-            {
-                endpoint,
-                projectId,
-                operationTimeoutMilliseconds: 120000,
-                transport,
-                credentialProvider: {
-                    credential: async (parent) => {
-                        if (Date.parse(access.expiresAt) - Date.now() < 30000) {
-                            access = await readAccess(parent);
-                        }
-                        if (
-                            sessionEndpoint(access.endpoint) !== endpoint ||
-                            access.projectId !== projectId ||
-                            access.sessionId !== sessionId
-                        ) {
-                            throw new CloudApiError("INVALID_SESSION_ACCESS", "The selected Session changed.");
-                        }
-                        return access.credential;
-                    },
+        let sharedTransport = this.#sessionTransports.get(endpoint);
+        if (sharedTransport === undefined) {
+            sharedTransport = new BrowserSessionTransport();
+            this.#sessionTransports.set(endpoint, sharedTransport);
+        }
+        return new MobiusClient({
+            endpoint,
+            projectId,
+            operationTimeoutMilliseconds: 120000,
+            transport: sharedTransport,
+            credentialProvider: {
+                credential: async (parent) => {
+                    if (Date.parse(access.expiresAt) - Date.now() < 30000) {
+                        access = await readAccess(parent);
+                    }
+                    if (
+                        sessionEndpoint(access.endpoint) !== endpoint ||
+                        access.projectId !== projectId ||
+                        access.sessionId !== sessionId
+                    ) {
+                        throw new CloudApiError("INVALID_SESSION_ACCESS", "The selected Session changed.");
+                    }
+                    return access.credential;
                 },
             },
-            transport,
-        );
+        });
     };
     readonly #request = async (
         botId: string,

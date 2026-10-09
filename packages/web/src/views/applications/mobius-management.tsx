@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import { createSelectedBotPreference } from "../../services/bots/selected-bot-preference.ts";
 import { BotChatApi } from "../../services/chat/bot-chat-api.ts";
@@ -41,6 +41,7 @@ export function MobiusManagement() {
             }),
         [identity, transport],
     );
+    useEffect(() => () => requests.close(), [requests]);
     const createTransfer = useCallback(
         async (signal: AbortSignal) => {
             const api = new AnonymousIdentityApi({
