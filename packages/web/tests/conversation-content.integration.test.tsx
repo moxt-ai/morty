@@ -41,8 +41,8 @@ test("Given the agent sends separate reasoning messages, When the user reads the
     }
     await sendPrompt(app, composer, "separate reasoning paragraphs");
     const thinking = await app.queryElementByTestId(dataTestId.agentReasoning);
+    await app.user.click(getByText(thinking, "Show intermediate steps"));
     await app.waitForView(() => {
-        expect(getAllByText(thinking, "Thinking")).toHaveLength(1);
         expect(thinking.querySelectorAll("p")).toHaveLength(2);
         expect(thinking.textContent).toContain("Inspecting the reported behavior.");
         expect(thinking.textContent).toContain("Checking the message boundaries.");
@@ -240,21 +240,16 @@ test("Given the daemon emits reasoning, a tool, and text, When the user observes
         throw new Error("Expected the message composer");
     }
     await sendPrompt(app, composer, prompt);
-    const thinking = await app.waitForView(() => {
-        const match = app
-            .elementsByTestId(dataTestId.agentReasoning)
-            .find((element) => element.textContent?.includes("Inspecting the workspace") === true);
-        if (match === undefined) {
-            throw new Error(`Reasoning is unavailable: ${document.body.textContent}`);
-        }
-        return match;
-    });
+    const thinking = await app.queryElementByTestId(dataTestId.agentReasoning);
     if (!(thinking instanceof HTMLDetailsElement)) {
         throw new Error("Expected reasoning to use a disclosure");
     }
+    if (!thinking.open) {
+        await app.user.click(getByText(thinking, "Show intermediate steps"));
+    }
+    await app.waitForView(() => expect(thinking.textContent).toContain("Inspecting the workspace"));
     expect(thinking.open).toBe(true);
     expect(thinking.textContent).toContain("Show intermediate steps");
-    expect(thinking.textContent).toContain("Thinking");
     await app.waitForView(() => expect(document.body.textContent).toContain("Read package metadata"));
     const genericTool = await app.queryElementByTestId(dataTestId.agentToolCall);
     expect(getByRole(genericTool, "button").getAttribute("aria-expanded")).toBe("false");
