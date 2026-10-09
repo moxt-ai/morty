@@ -514,7 +514,7 @@ function evaluate(target, snapshot, summaries, state) {
         summaries.prSummary.pending === 0 &&
         summaries.prSummary.failed === 0 &&
         pr.mergeable === "MERGEABLE" &&
-        pr.mergeStateStatus === "CLEAN"
+        (pr.mergeStateStatus === "CLEAN" || pr.mergeStateStatus === "BEHIND")
     ) {
         return {
             kind: "ready",
