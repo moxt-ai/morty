@@ -292,30 +292,22 @@ interface SessionEventRecoveryV2 {
     readonly nextCursor: string | null;
 }
 
-const HISTORY_EVENT_PAGE_SIZE = 200;
-
 async function readNativeEventsV2(
     client: MobiusClient,
     sessionId: string,
     identity: SessionIdentity,
     signal: AbortSignal,
-    currentEvents: readonly SessionEventV2[] = [],
-    cursor: string | null = null,
-    expectedDaemonGenerationId: string | null = null,
 ): Promise<SessionEventRecoveryV2> {
     const page = await client.sessions.querySessionNativeEventsV2(
         sessionId,
         identity,
-        { cursor, eventLimit: HISTORY_EVENT_PAGE_SIZE },
+        { cursor: null, eventLimit: 200 },
         signal,
     );
     signal.throwIfAborted();
-    if (expectedDaemonGenerationId !== null && page.events.daemonGenerationId !== expectedDaemonGenerationId) {
-        throw new Error("The Runtime restarted while messages were loading.");
-    }
     return {
         daemonGenerationId: page.events.daemonGenerationId,
-        events: mergeSessionEvents(page.events.events, currentEvents),
+        events: page.events.events,
         nextCursor: page.events.nextCursor,
     };
 }
@@ -491,18 +483,24 @@ export function createSessionPaneModel(options: {
                 loadingOlderHistory = true;
                 set({ historyLoading: true });
                 try {
-                    const recovery = await readNativeEventsV2(
-                        client,
+                    const page = await client.sessions.querySessionNativeEventsV2(
                         sessionId,
-                        sessionIdentity,
+                        {
+                            additionalDirectoryIds: session.entry.additionalDirectories.map(
+                                (directory) => directory.directoryId,
+                            ),
+                            agentId: session.agentRef,
+                            directoryId: session.result.ready.directoryId,
+                        },
+                        { cursor: historyCursor, eventLimit: 200 },
                         signal,
-                        sessionEvents,
-                        historyCursor,
-                        daemonGenerationId,
                     );
                     signal.throwIfAborted();
-                    sessionEvents = recovery.events;
-                    historyCursor = recovery.nextCursor;
+                    if (daemonGenerationId !== null && page.events.daemonGenerationId !== daemonGenerationId) {
+                        throw new Error("The Runtime restarted while older messages were loading.");
+                    }
+                    sessionEvents = mergeSessionEvents(page.events.events, sessionEvents);
+                    historyCursor = page.events.nextCursor;
                     const timeline = deriveTimeline();
                     signal.throwIfAborted();
                     set({
