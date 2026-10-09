@@ -102,3 +102,48 @@ test("Given the daemon has queued work, When the user steers it into the active 
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
     await viewer.close();
 });
+
+test("Given a follow-up is queued, When the user stops the active turn, Then the started follow-up appears in the message list", {
+    timeout: 30_000,
+}, async () => {
+    const activePrompt = "wait for steering";
+    const queuedPrompt = "Explain Golang ==";
+    const app = await createTestApp({ connectAgent: true, agent: { id: "opencode", label: "OpenCode" } });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, activePrompt);
+    await app.queryElementByTestId(
+        dataTestId.sendMessage,
+        (element) => element.getAttribute("aria-label") === "Stop agent output",
+    );
+    await sendPrompt(
+        app,
+        (await app.queryElementByTestId(dataTestId.messageComposer)) as HTMLTextAreaElement,
+        queuedPrompt,
+    );
+    await app.queryElementByTestId(
+        dataTestId.queuedMessage,
+        (element) => element.textContent?.includes(queuedPrompt) === true,
+    );
+
+    await app.user.click(
+        await app.queryElementByTestId(
+            dataTestId.sendMessage,
+            (element) => element.getAttribute("aria-label") === "Stop agent output",
+        ),
+    );
+
+    await app.waitForView(() =>
+        expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
+            activePrompt,
+            queuedPrompt,
+        ]),
+    );
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+});
