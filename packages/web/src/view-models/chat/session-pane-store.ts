@@ -53,6 +53,8 @@ type LocalInteraction =
     | { readonly kind: "permission"; readonly permission: PermissionInteraction }
     | { readonly kind: "elicitation"; readonly elicitation: ElicitationInteraction };
 
+const SESSION_EVENT_PAGE_LIMIT = 500;
+
 function interactionId(interaction: LocalInteraction): string {
     return interaction.kind === "permission"
         ? interaction.permission.interactionId
@@ -124,6 +126,7 @@ export interface SessionPaneStore {
     readonly connection: Connection;
     readonly messages: readonly SessionMessage[];
     readonly historyLoading: boolean;
+    readonly historyRevision: number;
     readonly hasOlderHistory: boolean;
     readonly options: readonly SessionConfigOption[];
     readonly draft: string;
@@ -295,7 +298,7 @@ async function readNativeEventsV2(
     const page = await client.sessions.querySessionNativeEventsV2(
         sessionId,
         identity,
-        { cursor: null, eventLimit: 200 },
+        { cursor: null, eventLimit: SESSION_EVENT_PAGE_LIMIT },
         signal,
     );
     signal.throwIfAborted();
@@ -468,6 +471,7 @@ export function createSessionPaneModel(options: {
             connection: { kind: "loading" },
             messages: initialTimeline.messages,
             historyLoading: false,
+            historyRevision: 0,
             hasOlderHistory: historyCursor !== null,
             options: session.result.ready.configOptions,
             draft: options.initialMessage?.content ?? centralLocalStorage.read(draftEntry) ?? "",
@@ -491,7 +495,7 @@ export function createSessionPaneModel(options: {
                             agentId: session.agentRef,
                             directoryId: session.result.ready.directoryId,
                         },
-                        { cursor: historyCursor, eventLimit: 200 },
+                        { cursor: historyCursor, eventLimit: SESSION_EVENT_PAGE_LIMIT },
                         signal,
                     );
                     signal.throwIfAborted();
@@ -504,6 +508,7 @@ export function createSessionPaneModel(options: {
                     signal.throwIfAborted();
                     set({
                         hasOlderHistory: historyCursor !== null,
+                        historyRevision: get().historyRevision + 1,
                         messages: timeline.messages,
                     });
                 } catch (cause) {
@@ -731,6 +736,7 @@ export function createSessionPaneModel(options: {
                             })();
                             set({
                                 hasOlderHistory: historyCursor !== null,
+                                historyRevision: 0,
                                 interactions,
                                 activity: restoredActivity,
                                 messages: nativeMessages,

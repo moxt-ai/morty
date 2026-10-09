@@ -98,10 +98,10 @@ test("Given Claude Code does not echo the submitted prompt, When the response st
     });
 });
 
-test("Given more than 50 saved messages, When the user reopens the conversation, Then the first history page shows 50 messages", {
-    timeout: 60_000,
+test("Given more saved messages than one history page, When the user reaches the top of a reopened conversation, Then the older messages load", {
+    timeout: 90_000,
 }, async () => {
-    const prompts = Array.from({ length: 26 }, (_, index) => `Pagination message ${index + 1}`);
+    const prompts = Array.from({ length: 100 }, (_, index) => `Pagination message ${index + 1}`);
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -160,9 +160,18 @@ test("Given more than 50 saved messages, When the user reopens the conversation,
     await app.user.click(conversation);
 
     const page = await firstHistoryPage;
-    expect(page.prompts.slice(-25)).toEqual(prompts.slice(-25));
-    expect(page.responses.slice(-25)).toEqual(
-        prompts.slice(-25).map((prompt, index) => `Codex turn ${index + 2}: ${prompt}`),
+    expect(page.prompts).not.toContain(prompts[0]);
+    expect(page.prompts.at(-1)).toBe(prompts.at(-1));
+    expect(page.responses).not.toContain(`Codex turn 1: ${prompts[0]}`);
+    expect(page.responses.at(-1)).toBe(`Codex turn ${prompts.length.toString()}: ${prompts.at(-1)}`);
+    const messages = queryByRole(document.body, "log", { name: "Messages" });
+    if (!(messages instanceof HTMLElement)) {
+        throw new Error("Expected the Session message list");
+    }
+    messages.scrollTop = 0;
+    messages.dispatchEvent(new Event("scroll", { bubbles: true }));
+    await app.waitForView(() =>
+        expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual(prompts),
     );
 });
 
