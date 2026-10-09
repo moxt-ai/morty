@@ -292,24 +292,67 @@ interface SessionEventRecoveryV2 {
     readonly nextCursor: string | null;
 }
 
+const HISTORY_MESSAGE_PAGE_SIZE = 50;
+const HISTORY_EVENT_BATCH_SIZE = 200;
+
+function sessionHistoryMessageCount(events: readonly SessionEventV2[]): number {
+    const messages = new Set<string>();
+    for (const event of events) {
+        if (event.type !== "acp") {
+            continue;
+        }
+        const update = event.payload;
+        if (update.sessionUpdate !== "user_message_chunk" && update.sessionUpdate !== "agent_message_chunk") {
+            continue;
+        }
+        messages.add(
+            update.messageId === null || update.messageId === undefined
+                ? event.eventId
+                : `${update.sessionUpdate}:${update.messageId}`,
+        );
+    }
+    return messages.size;
+}
+
 async function readNativeEventsV2(
     client: MobiusClient,
     sessionId: string,
     identity: SessionIdentity,
     signal: AbortSignal,
+    currentEvents: readonly SessionEventV2[] = [],
+    cursor: string | null = null,
+    expectedDaemonGenerationId: string | null = null,
 ): Promise<SessionEventRecoveryV2> {
-    const page = await client.sessions.querySessionNativeEventsV2(
-        sessionId,
-        identity,
-        { cursor: null, eventLimit: 50 },
-        signal,
-    );
-    signal.throwIfAborted();
-    return {
-        daemonGenerationId: page.events.daemonGenerationId,
-        events: page.events.events,
-        nextCursor: page.events.nextCursor,
-    };
+    const initialMessageCount = sessionHistoryMessageCount(currentEvents);
+    const visitedCursors = new Set<string>();
+    let daemonGenerationId = expectedDaemonGenerationId;
+    let events = currentEvents;
+    let nextCursor = cursor;
+    for (;;) {
+        const page = await client.sessions.querySessionNativeEventsV2(
+            sessionId,
+            identity,
+            { cursor: nextCursor, eventLimit: HISTORY_EVENT_BATCH_SIZE },
+            signal,
+        );
+        signal.throwIfAborted();
+        if (daemonGenerationId !== null && page.events.daemonGenerationId !== daemonGenerationId) {
+            throw new Error("The Runtime restarted while messages were loading.");
+        }
+        daemonGenerationId = page.events.daemonGenerationId;
+        events = mergeSessionEvents(page.events.events, events);
+        nextCursor = page.events.nextCursor;
+        if (
+            nextCursor === null ||
+            sessionHistoryMessageCount(events) - initialMessageCount >= HISTORY_MESSAGE_PAGE_SIZE
+        ) {
+            return { daemonGenerationId, events, nextCursor };
+        }
+        if (visitedCursors.has(nextCursor)) {
+            throw new Error("The Runtime returned a repeating Session history cursor.");
+        }
+        visitedCursors.add(nextCursor);
+    }
 }
 
 function mergeSessionEvents(
@@ -483,24 +526,18 @@ export function createSessionPaneModel(options: {
                 loadingOlderHistory = true;
                 set({ historyLoading: true });
                 try {
-                    const page = await client.sessions.querySessionNativeEventsV2(
+                    const recovery = await readNativeEventsV2(
+                        client,
                         sessionId,
-                        {
-                            additionalDirectoryIds: session.entry.additionalDirectories.map(
-                                (directory) => directory.directoryId,
-                            ),
-                            agentId: session.agentRef,
-                            directoryId: session.result.ready.directoryId,
-                        },
-                        { cursor: historyCursor, eventLimit: 50 },
+                        sessionIdentity,
                         signal,
+                        sessionEvents,
+                        historyCursor,
+                        daemonGenerationId,
                     );
                     signal.throwIfAborted();
-                    if (daemonGenerationId !== null && page.events.daemonGenerationId !== daemonGenerationId) {
-                        throw new Error("The Runtime restarted while older messages were loading.");
-                    }
-                    sessionEvents = mergeSessionEvents(page.events.events, sessionEvents);
-                    historyCursor = page.events.nextCursor;
+                    sessionEvents = recovery.events;
+                    historyCursor = recovery.nextCursor;
                     const timeline = deriveTimeline();
                     signal.throwIfAborted();
                     set({

@@ -1,3 +1,4 @@
+import { queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -66,6 +67,74 @@ test("Given a completed turn, When the user leaves and reopens it, Then daemon h
         expect(replies[0]?.textContent).toContain(`Codex turn 1: ${prompt}`);
     });
     expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull();
+});
+
+test("Given more than 50 saved messages, When the user reopens the conversation, Then the first history page shows 50 messages", {
+    timeout: 60_000,
+}, async () => {
+    const prompts = Array.from({ length: 26 }, (_, index) => `Pagination message ${index + 1}`);
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    for (const [index, prompt] of prompts.entries()) {
+        const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+        if (!(composer instanceof HTMLTextAreaElement)) {
+            throw new Error("Expected the message composer");
+        }
+        await sendPrompt(app, composer, prompt);
+        await app.waitForView(() =>
+            expect(
+                app
+                    .elementsByTestId(dataTestId.agentResponse)
+                    .some((element) => element.textContent?.includes(`Codex turn ${index + 1}: ${prompt}`) === true),
+            ).toBe(true),
+        );
+        await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    }
+
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    const conversation = await app.waitForView(() => {
+        const candidate = app
+            .elementsByTestId(dataTestId.managedConversation)
+            .find((element) => element.textContent?.includes(prompts[0] ?? "") === true);
+        if (candidate === undefined) {
+            throw new Error(`The completed conversation is unavailable: ${document.body.textContent}`);
+        }
+        return candidate;
+    });
+    const firstHistoryPage = new Promise<{
+        readonly prompts: readonly string[];
+        readonly responses: readonly string[];
+    }>((resolve) => {
+        let loadingObserved = false;
+        const observe = () => {
+            const loading = queryByRole(document.body, "status", { name: "Loading messages" });
+            loadingObserved ||= loading !== null;
+            if (!loadingObserved || loading !== null) {
+                return;
+            }
+            observer.disconnect();
+            resolve({
+                prompts: app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent ?? ""),
+                responses: app
+                    .elementsByTestId(dataTestId.agentResponse)
+                    .map((element) => element.textContent ?? "")
+                    .filter((text) => text.startsWith("Codex turn ")),
+            });
+        };
+        const observer = new MutationObserver(observe);
+        observer.observe(document.body, { childList: true, subtree: true });
+        observe();
+    });
+    await app.user.click(conversation);
+
+    const page = await firstHistoryPage;
+    expect(page.prompts.slice(-25)).toEqual(prompts.slice(-25));
+    expect(page.responses.slice(-25)).toEqual(
+        prompts.slice(-25).map((prompt, index) => `Codex turn ${index + 2}: ${prompt}`),
+    );
 });
 
 test("Given a stale Session link, When the user opens it, Then the Session failure replaces the empty landing", {
