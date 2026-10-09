@@ -1,6 +1,6 @@
 import { expect, test } from "./infra/test.ts";
 
-test("Given a linked TypeScript file, When the user opens it, Then a highlighted half overlay covers the conversation", async ({
+test("Given a linked TypeScript file longer than the preview, When the user opens it, Then the complete highlighted source fills the scrollable overlay", async ({
     runtime,
 }, testInfo) => {
     const { page } = runtime;
@@ -29,6 +29,14 @@ test("Given a linked TypeScript file, When the user opens it, Then a highlighted
     await expect(preview.getByText("tsx", { exact: true })).toBeHidden();
     await expect(preview.getByRole("button", { name: "Copy code" })).toBeHidden();
     await expect(preview.locator('[data-streamdown="code-block"]')).toHaveCSS("border-top-width", "0px");
+    const codeBody = preview.locator('[data-streamdown="code-block-body"]');
+    await expect(codeBody).toContainText("export const fileExplorerEnd = true;");
+    await expect
+        .poll(async () => {
+            const box = await codeBody.boundingBox();
+            return box?.height ?? 0;
+        })
+        .toBeGreaterThan(400);
     const messagesBox = await messages.boundingBox();
     const previewBox = await preview.boundingBox();
     expect(messagesBoxBefore).not.toBeNull();
