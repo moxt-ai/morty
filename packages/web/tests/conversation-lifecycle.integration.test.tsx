@@ -98,7 +98,7 @@ test("Given Claude Code does not echo the submitted prompt, When the response st
     });
 });
 
-test("Given more saved messages than one history page, When the user reaches the top of a reopened conversation, Then at least ten older messages load or history is exhausted", {
+test("Given more saved messages than one history page, When the user reaches the top of a reopened conversation, Then at least twenty older messages load or history is exhausted", {
     timeout: 90_000,
 }, async () => {
     const prompts = Array.from({ length: 7 }, (_, index) => `many session events: Pagination message ${index + 1}`);
