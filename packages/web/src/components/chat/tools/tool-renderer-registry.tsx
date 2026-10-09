@@ -6,6 +6,7 @@ import { FilePathEditToolCall, matchesFilePathEditToolCall } from "./file-path-e
 import { FilePathReadToolCall, matchesFilePathReadToolCall } from "./file-path-read-tool-call.tsx";
 import { GlobToolCall, matchesGlobToolCall } from "./glob-tool-call.tsx";
 import { GrepToolCall, matchesGrepToolCall } from "./grep-tool-call.tsx";
+import { ImageGenerationToolCall, matchesImageGenerationToolCall } from "./image-generation-tool-call.tsx";
 import { InputDiffEditToolCall, matchesInputDiffEditToolCall } from "./input-diff-edit-tool-call.tsx";
 import { matchesOutputDiffEditToolCall, OutputDiffEditToolCall } from "./output-diff-edit-tool-call.tsx";
 import { matchesPatchEditToolCall, PatchEditToolCall } from "./patch-edit-tool-call.tsx";
@@ -28,6 +29,10 @@ const TOOL_RENDERERS: readonly ToolRenderer[] = [
     {
         Component: SkillToolCall,
         matches: matchesSkillToolCall,
+    },
+    {
+        Component: ImageGenerationToolCall,
+        matches: matchesImageGenerationToolCall,
     },
     {
         Component: ChangedFilesEditToolCall,

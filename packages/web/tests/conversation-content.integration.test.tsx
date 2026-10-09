@@ -308,7 +308,7 @@ test("Given an Agent response references a local image, When the user reads it a
     expect(restored.getAttribute("src")).toMatch(/^blob:/u);
 });
 
-test("Given Codex generates an image, When the user opens the completed tool call, Then Chat displays the generated image", {
+test("Given Codex generates an image, When the user opens the tool, Then Chat shows the image without raw protocol fields", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -329,5 +329,8 @@ test("Given Codex generates an image, When the user opens the completed tool cal
     await app.user.click(disclosure);
     const image = await app.waitForView(() => getByRole(imageTool, "img", { name: "Image" }));
     expect(image.getAttribute("src")).toMatch(/^blob:/u);
+    expect(imageTool.textContent).not.toContain("Request");
+    expect(imageTool.textContent).not.toContain("Response");
+    expect(imageTool.textContent).not.toContain("null");
     expect(imageTool.textContent).not.toContain("iVBORw0KGgo");
 });

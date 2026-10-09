@@ -1,4 +1,5 @@
 import { Check, ChevronDown, ChevronRight, Folder, FolderOpen, LoaderCircle, MapPinPlus, X } from "lucide-react";
+import { Tooltip } from "radix-ui";
 import { useState } from "react";
 import { dataTestId } from "@/data-testid";
 import type { DraftControlsStore } from "@/view-models/chat/draft-controls-store";
@@ -6,42 +7,16 @@ import { Button } from "../ui/cloud-button.tsx";
 import { Dialog } from "../ui/dialog.tsx";
 import { Popover } from "../ui/popover.tsx";
 
-const WORKING_DIRECTORY_LABEL_LENGTH = 30;
-
-type MiddleTruncation =
-    | { readonly kind: "complete"; readonly value: string }
-    | { readonly kind: "truncated"; readonly prefix: string; readonly suffix: string };
-
-function middleTruncate(value: string, maximumLength: number): MiddleTruncation {
-    if (value.length <= maximumLength) {
-        return { kind: "complete", value };
-    }
-    const marker = "...";
-    const retainedLength = maximumLength - marker.length;
-    const prefixLength = Math.ceil(retainedLength / 2);
-    const suffixLength = Math.floor(retainedLength / 2);
-    return {
-        kind: "truncated",
-        prefix: value.slice(0, prefixLength),
-        suffix: value.slice(value.length - suffixLength),
-    };
-}
-
-function MiddleTruncatedLabel({ value }: { readonly value: string }) {
-    const displayedValue = middleTruncate(value, WORKING_DIRECTORY_LABEL_LENGTH);
-    if (displayedValue.kind === "complete") {
-        return displayedValue.value;
-    }
+// Clips the start of the path so its leaf stays visible, fading the cut edge out
+// gradually; the owning button's title tooltip carries the full path on hover.
+function StartClippedLabel({ value }: { readonly value: string }) {
     return (
-        <>
-            <span className="flex min-w-0 flex-1 overflow-hidden">
-                <span className="shrink-0">{displayedValue.prefix}</span>
-            </span>
-            <span className="shrink-0">...</span>
-            <span className="flex min-w-0 flex-1 justify-end overflow-hidden">
-                <span className="shrink-0">{displayedValue.suffix}</span>
-            </span>
-        </>
+        <span
+            className="min-w-0 flex-1 overflow-hidden whitespace-nowrap [-webkit-mask-image:linear-gradient(to_right,transparent,black_12px)] [mask-image:linear-gradient(to_right,transparent,black_12px)]"
+            dir="rtl"
+        >
+            <span dir="ltr">{value}</span>
+        </span>
     );
 }
 
@@ -65,22 +40,38 @@ export function CwdSelector({
     return (
         <>
             <Popover.Root onOpenChange={setMenuOpen} open={menuOpen}>
-                <Popover.Trigger asChild>
-                    <button
-                        aria-label={`Working directory: ${workingDirectory}`}
-                        className="flex h-9 min-w-0 max-w-[200px] items-center gap-2 rounded-lg px-2 text-[13px] text-copy-secondary outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
-                        data-testid={dataTestId.workingDirectory}
-                        disabled={disabled}
-                        title={workingDirectory}
-                        type="button"
-                    >
-                        <FolderOpen aria-hidden="true" className="size-4 shrink-0" />
-                        <span className="flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap">
-                            <MiddleTruncatedLabel value={workingDirectory} />
-                        </span>
-                        <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-                    </button>
-                </Popover.Trigger>
+                <Tooltip.Provider delayDuration={150}>
+                    <Tooltip.Root>
+                        <Tooltip.Trigger asChild>
+                            <Popover.Trigger asChild>
+                                <button
+                                    aria-label={`Working directory: ${workingDirectory}`}
+                                    className="flex h-9 min-w-0 max-w-[200px] items-center gap-2 rounded-lg px-2 text-[13px] text-copy-secondary outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
+                                    data-testid={dataTestId.workingDirectory}
+                                    disabled={disabled}
+                                    type="button"
+                                >
+                                    <FolderOpen aria-hidden="true" className="size-4 shrink-0" />
+                                    <StartClippedLabel value={workingDirectory} />
+                                    <ChevronDown
+                                        aria-hidden="true"
+                                        className="size-3.5 shrink-0 text-muted-foreground"
+                                    />
+                                </button>
+                            </Popover.Trigger>
+                        </Tooltip.Trigger>
+                        <Tooltip.Portal>
+                            <Tooltip.Content
+                                className="z-[70] max-w-80 break-all rounded-lg bg-foreground px-3 py-2 text-xs leading-5 text-background shadow-lg"
+                                side="top"
+                                sideOffset={8}
+                            >
+                                {workingDirectory}
+                                <Tooltip.Arrow className="fill-foreground" />
+                            </Tooltip.Content>
+                        </Tooltip.Portal>
+                    </Tooltip.Root>
+                </Tooltip.Provider>
                 <Popover.Portal>
                     <Popover.Content
                         align="start"
@@ -105,9 +96,7 @@ export function CwdSelector({
                                         type="button"
                                     >
                                         <Folder aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-                                        <span className="flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap">
-                                            <MiddleTruncatedLabel value={recent.directoryLabel} />
-                                        </span>
+                                        <StartClippedLabel value={recent.directoryLabel} />
                                         {recent.directoryId === settings.cwd.directoryId && (
                                             <Check aria-hidden="true" className="size-4 shrink-0" />
                                         )}
