@@ -54,7 +54,7 @@ type LocalInteraction =
     | { readonly kind: "elicitation"; readonly elicitation: ElicitationInteraction };
 
 const SESSION_EVENT_PAGE_LIMIT = 500;
-const OLDER_HISTORY_MESSAGE_TARGET = 10;
+const OLDER_HISTORY_MESSAGE_TARGET = 20;
 
 function interactionId(interaction: LocalInteraction): string {
     return interaction.kind === "permission"
