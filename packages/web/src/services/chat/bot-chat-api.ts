@@ -69,6 +69,9 @@ const chatRuntimeSchema = v.object({
 });
 export type ChatRuntime = v.InferOutput<typeof chatRuntimeSchema>;
 const workspaceSchema = v.object({ runtime: chatRuntimeSchema });
+const networkDiagnosticSchema = v.strictObject({
+    relayDaemonLatencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
+});
 export type ChatWorkspace = v.InferOutput<typeof workspaceSchema>;
 export type ChatAgentSelection = {
     readonly runtimeId: Identifier;
@@ -235,6 +238,9 @@ export class BotChatApi {
             accessSchema,
             await this.#request(botId, "access", { conversationId: v.parse(identifier, conversationId) }, parent),
         );
+    readonly networkDiagnostic = async (botId: string, signal: AbortSignal): Promise<number> =>
+        v.parse(networkDiagnosticSchema, await this.#request(botId, "network-diagnostic", undefined, signal))
+            .relayDaemonLatencyMs;
     readonly createConversation = async (
         botId: string,
         conversationKey: string,

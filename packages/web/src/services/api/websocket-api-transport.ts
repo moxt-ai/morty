@@ -14,6 +14,7 @@ const errorFrame = v.strictObject({
     message: v.string(),
 });
 const pongFrame = v.strictObject({ kind: v.literal("pong") });
+const diagnosticPongFrame = v.strictObject({ kind: v.literal("diagnostic.pong"), requestId: v.string() });
 const notificationFrame = v.strictObject({ kind: v.literal("notification"), subscriptionId: v.string() });
 const eventFrame = v.strictObject({ kind: v.literal("event"), subscriptionId: v.string(), data: v.string() });
 const subscriptionEndFrame = v.strictObject({ kind: v.literal("subscription.end"), subscriptionId: v.string() });
@@ -22,6 +23,7 @@ const serverFrame = v.variant("kind", [
     responseEndFrame,
     errorFrame,
     pongFrame,
+    diagnosticPongFrame,
     notificationFrame,
     eventFrame,
     subscriptionEndFrame,
@@ -46,6 +48,13 @@ interface PendingWatch {
     readonly reject: (cause: unknown) => void;
     readonly resolve: () => void;
     readonly release: () => void;
+}
+
+interface PendingDiagnostic {
+    readonly reject: (cause: unknown) => void;
+    readonly release: () => void;
+    readonly resolve: (latencyMs: number) => void;
+    readonly startedAt: number;
 }
 
 interface PendingEventStream extends PendingWatch {
@@ -75,6 +84,7 @@ export class WebSocketApiTransport {
     readonly #origin: string;
     readonly #pending = new Map<string, PendingRequest>();
     readonly #eventStreams = new Map<string, PendingEventStream>();
+    readonly #diagnostics = new Map<string, PendingDiagnostic>();
     readonly #watches = new Map<string, PendingWatch>();
     #state: BridgeState = { kind: "disconnected" };
 
@@ -131,6 +141,30 @@ export class WebSocketApiTransport {
                 );
             } catch (cause) {
                 this.#settle(requestId)?.reject(cause);
+            }
+        });
+    };
+
+    readonly measureRelayLatency = async (parent: AbortSignal): Promise<number> => {
+        parent.throwIfAborted();
+        const socket = await this.#connect(parent);
+        parent.throwIfAborted();
+        const requestId = crypto.randomUUID();
+        const timeout = AbortSignal.timeout(10_000);
+        const signal = AbortSignal.any([parent, timeout]);
+        return await new Promise<number>((resolve, reject) => {
+            const abort = () => this.#settleDiagnostic(requestId)?.reject(signal.reason);
+            signal.addEventListener("abort", abort, { once: true });
+            this.#diagnostics.set(requestId, {
+                reject,
+                release: () => signal.removeEventListener("abort", abort),
+                resolve,
+                startedAt: performance.now(),
+            });
+            try {
+                socket.send(JSON.stringify({ kind: "diagnostic.ping", requestId }));
+            } catch (cause) {
+                this.#settleDiagnostic(requestId)?.reject(cause);
             }
         });
     };
@@ -251,6 +285,9 @@ export class WebSocketApiTransport {
         for (const subscriptionId of [...this.#eventStreams.keys()]) {
             this.#settleEventStream(subscriptionId)?.reject(new Error("The Chat API transport closed."));
         }
+        for (const requestId of [...this.#diagnostics.keys()]) {
+            this.#settleDiagnostic(requestId)?.reject(new Error("The Chat API transport closed."));
+        }
     };
 
     readonly #connect = async (signal: AbortSignal): Promise<WebSocket> => {
@@ -322,6 +359,9 @@ export class WebSocketApiTransport {
                             new Error("The Chat WebSocket bridge disconnected."),
                         );
                     }
+                    for (const requestId of [...this.#diagnostics.keys()]) {
+                        this.#settleDiagnostic(requestId)?.reject(new Error("The Chat WebSocket bridge disconnected."));
+                    }
                 },
                 { once: true },
             );
@@ -371,6 +411,13 @@ export class WebSocketApiTransport {
             return;
         }
         const frame = parsed.output;
+        if (frame.kind === "diagnostic.pong") {
+            const pending = this.#settleDiagnostic(frame.requestId);
+            if (pending !== undefined) {
+                pending.resolve(Math.max(0, Math.round(performance.now() - pending.startedAt)));
+            }
+            return;
+        }
         if (frame.kind === "notification") {
             this.#settleWatch(frame.subscriptionId)?.resolve();
             return;
@@ -436,6 +483,15 @@ export class WebSocketApiTransport {
         const pending = this.#pending.get(requestId);
         if (pending !== undefined) {
             this.#pending.delete(requestId);
+            pending.release();
+        }
+        return pending;
+    };
+
+    readonly #settleDiagnostic = (requestId: string): PendingDiagnostic | undefined => {
+        const pending = this.#diagnostics.get(requestId);
+        if (pending !== undefined) {
+            this.#diagnostics.delete(requestId);
             pending.release();
         }
         return pending;

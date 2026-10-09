@@ -10,6 +10,7 @@ export function Dialog({
     busy = false,
     wide = false,
     testId,
+    headerAction,
     children,
 }: {
     readonly title: string;
@@ -18,6 +19,7 @@ export function Dialog({
     readonly busy?: boolean;
     readonly wide?: boolean;
     readonly testId?: string;
+    readonly headerAction?: ReactNode;
     readonly children: ReactNode;
 }) {
     const [returnFocus] = useState(() =>
@@ -44,12 +46,13 @@ export function Dialog({
                     }}
                     className={`fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] ${wide ? "max-w-5xl" : "max-w-lg"} -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-border bg-card p-6 text-[13px] leading-5 text-foreground shadow-lg outline-none motion-safe:animate-cloud-enter`}
                 >
-                    <header className="mb-5 pr-7">
+                    <header className={`mb-5 ${headerAction === undefined ? "pr-7" : "pr-16"}`}>
                         <Primitive.Title className="text-base font-semibold tracking-tight">{title}</Primitive.Title>
                         <Primitive.Description className="mt-1.5 text-[13px] leading-5 text-muted-foreground">
                             {description}
                         </Primitive.Description>
                     </header>
+                    {headerAction !== undefined && <div className="absolute right-14 top-3">{headerAction}</div>}
                     {children}
                     <Primitive.Close asChild>
                         <Button

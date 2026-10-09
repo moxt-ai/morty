@@ -65,6 +65,7 @@ export function BotChatHome({
         | "createConversation"
         | "conversationSession"
         | "agentSettings"
+        | "networkDiagnostic"
     >;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
     readonly currentUserToken: (

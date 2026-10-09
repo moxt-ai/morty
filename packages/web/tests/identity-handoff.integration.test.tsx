@@ -59,6 +59,34 @@ test("Given a shared workspace, When the user opens the user menu, Then they can
     );
 });
 
+test("Given a connected shared workspace, When the user refreshes Network Diagnostic, Then both latency measurements update", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    await app.user.click(await app.queryElementByTestId(dataTestId.userMenu));
+    await app.user.click(getByRole(document.body, "menuitem", { name: "Network Diagnostic" }));
+
+    const dialog = getByRole(document.body, "dialog", { name: "Network Diagnostic" });
+    await vi.waitFor(() => {
+        expect(dialog.textContent).toContain("Browser ↔ Relay");
+        expect(dialog.textContent).toContain("Relay ↔ Daemon");
+        expect(getByRole(dialog, "status", { name: "Browser to relay latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Relay to daemon latency" }).textContent).toMatch(/^\d+ ms$/u);
+    });
+
+    await app.user.click(getByRole(dialog, "button", { name: "Refresh network diagnostic" }));
+
+    expect(getByRole(dialog, "status", { name: "Measuring network latency" })).toBeInstanceOf(HTMLElement);
+    await vi.waitFor(() => {
+        expect(getByRole(dialog, "status", { name: "Browser to relay latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Relay to daemon latency" }).textContent).toMatch(/^\d+ ms$/u);
+    });
+});
+
 test("Given a shared workspace, When the user chooses to end remote access from the user menu, Then they must confirm the transfer-wide revocation and can back up their token", {
     timeout: 30_000,
 }, async () => {

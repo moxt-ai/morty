@@ -133,6 +133,17 @@ export class ChatService {
         };
     };
 
+    readonly networkDiagnostic = async (scope: ChatScope) => {
+        const runtime = await this.localRuntime(scope);
+        return {
+            relayDaemonLatencyMs: await this.#platform.measureRuntimeLatency(
+                scope.projectId,
+                runtime.runtimeId,
+                scope.signal,
+            ),
+        };
+    };
+
     readonly setupRuntimes = async (scope: ChatScope) => {
         const bot = await this.#bot(scope);
         if (bot.configuration !== null) {

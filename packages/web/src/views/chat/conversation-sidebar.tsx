@@ -11,6 +11,7 @@ import {
     Share2,
     SquarePen,
     UserRound,
+    Wifi,
 } from "lucide-react";
 import { ContextMenu, DropdownMenu, Tooltip } from "radix-ui";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -19,12 +20,14 @@ import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { Input } from "../../components/ui/input.tsx";
 import { dataTestId } from "../../data-testid.ts";
+import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import type { BotConnectionStatus, BotOperation } from "../../view-models/chat/bot-chat-home-store.ts";
 import { createConversationDirectoryStore } from "../../view-models/chat/conversation-directory-store.ts";
 import type { ConversationListStatus } from "../../view-models/chat/conversation-status-store.ts";
+import { createNetworkDiagnosticStore } from "../../view-models/chat/network-diagnostic-store.ts";
 import { createRemoteAccessStore } from "../../view-models/chat/remote-access-store.ts";
 import { BotSwitcherMenu } from "./bot-switcher-menu.tsx";
 import { MachineSharing } from "./machine-sharing.tsx";
@@ -129,7 +132,12 @@ export function ConversationSidebar({
     readonly onSelectBot: (botId: string) => void;
     readonly requests: Pick<
         BotChatApi,
-        "archiveManagedSession" | "workspace" | "nativeSessions" | "nativeSession" | "managedSessions"
+        | "archiveManagedSession"
+        | "workspace"
+        | "nativeSessions"
+        | "nativeSession"
+        | "managedSessions"
+        | "networkDiagnostic"
     >;
     readonly activeId: string;
     readonly directoryRevision: number;
@@ -147,6 +155,7 @@ export function ConversationSidebar({
     readonly sessionStatuses: ReadonlyMap<string, ConversationListStatus>;
 }) {
     const botId = activeBot.botId;
+    const transport = useApiTransport();
     const [store] = useState(() => createConversationDirectoryStore(botId, requests));
     const { archive, archiveSession, load, state: directory } = useStore(store);
     const [revision, refresh] = useState(0);
@@ -157,7 +166,20 @@ export function ConversationSidebar({
         createRemoteAccessStore({ currentToken: currentUserToken, endRemoteAccess, replaceCurrentUser }),
     );
     const access = useStore(remoteAccess);
+    const [networkDiagnostic] = useState(() =>
+        createNetworkDiagnosticStore({
+            measureBrowserRelay: transport.measureRelayLatency,
+            measureRelayDaemon: (signal) => requests.networkDiagnostic(botId, signal),
+        }),
+    );
+    const diagnostic = useStore(networkDiagnostic);
     const lifetime = useRef<AbortController | null>(null);
+    const measureNetwork = () => {
+        const controller = lifetime.current;
+        if (controller !== null) {
+            void diagnostic.measure(controller.signal).catch(() => undefined);
+        }
+    };
     const sessions =
         directory.kind === "ready" || directory.kind === "refreshing" || directory.kind === "stale"
             ? directory.sessions.map((session) => ({
@@ -426,6 +448,13 @@ export function ConversationSidebar({
                             >
                                 <DropdownMenu.Item
                                     className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 outline-none data-[highlighted]:bg-accent"
+                                    onSelect={measureNetwork}
+                                >
+                                    <Wifi aria-hidden="true" className="size-4" />
+                                    Network Diagnostic
+                                </DropdownMenu.Item>
+                                <DropdownMenu.Item
+                                    className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 outline-none data-[highlighted]:bg-accent"
                                     data-testid={dataTestId.replaceCurrentUser}
                                     onSelect={() => {
                                         const controller = lifetime.current;
@@ -484,6 +513,71 @@ export function ConversationSidebar({
                     onClose={() => setSharing(false)}
                 >
                     <MachineSharing createTransfer={createTransfer} />
+                </Dialog>
+            )}
+            {diagnostic.state.kind !== "closed" && (
+                <Dialog
+                    title="Network Diagnostic"
+                    description="Round-trip latency for this browser and its connected Runtime."
+                    headerAction={
+                        <Button
+                            aria-label="Refresh network diagnostic"
+                            disabled={diagnostic.state.kind === "measuring"}
+                            onClick={measureNetwork}
+                            size="icon"
+                            title="Refresh network diagnostic"
+                            variant="ghost"
+                        >
+                            <RefreshCw
+                                aria-hidden="true"
+                                className={`size-4 ${diagnostic.state.kind === "measuring" ? "animate-spin" : ""}`}
+                            />
+                        </Button>
+                    }
+                    onClose={diagnostic.close}
+                >
+                    {diagnostic.state.kind === "measuring" ? (
+                        <div
+                            aria-label="Measuring network latency"
+                            className="flex items-center gap-2 text-muted-foreground"
+                            role="status"
+                        >
+                            <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                            Measuring network latency…
+                        </div>
+                    ) : diagnostic.state.kind === "failed" ? (
+                        <div className="space-y-4">
+                            <p className="text-destructive" role="alert">
+                                {diagnostic.state.message}
+                            </p>
+                            <Button onClick={measureNetwork} variant="outline">
+                                Try again
+                            </Button>
+                        </div>
+                    ) : (
+                        <dl className="divide-y divide-border rounded-lg border border-border">
+                            <div className="flex items-center justify-between gap-4 px-4 py-3">
+                                <dt>Browser ↔ Relay</dt>
+                                <dd
+                                    aria-label="Browser to relay latency"
+                                    className="font-mono font-medium"
+                                    role="status"
+                                >
+                                    {diagnostic.state.browserRelayLatencyMs} ms
+                                </dd>
+                            </div>
+                            <div className="flex items-center justify-between gap-4 px-4 py-3">
+                                <dt>Relay ↔ Daemon</dt>
+                                <dd
+                                    aria-label="Relay to daemon latency"
+                                    className="font-mono font-medium"
+                                    role="status"
+                                >
+                                    {diagnostic.state.relayDaemonLatencyMs} ms
+                                </dd>
+                            </div>
+                        </dl>
+                    )}
                 </Dialog>
             )}
             {(access.state.kind === "confirming-end" ||

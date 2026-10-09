@@ -77,6 +77,9 @@ const discoveredRuntimeSchema = v.object({
     online: v.boolean(),
     runtimeId: platformIdentifier,
 });
+const runtimeLatencySchema = v.strictObject({
+    latencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
+});
 
 export class PlatformProjectGateway {
     readonly #bindings: CloudBindings;
@@ -187,6 +190,46 @@ export class PlatformProjectGateway {
                 throw cause;
             }
             throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Platform could not read Runtime Agents.", 502, {
+                cause,
+            });
+        }
+    };
+
+    readonly measureRuntimeLatency = async (projectId: string, runtimeId: string, parent: AbortSignal) => {
+        const parsedProjectId = v.parse(platformIdentifier, projectId);
+        const parsedRuntimeId = v.parse(platformIdentifier, runtimeId);
+        const signal = AbortSignal.any([parent, AbortSignal.timeout(15_000)]);
+        const endpoint = new URL(this.configuration().origin);
+        endpoint.pathname = `/mobius/api/v1/projects/${encodeURIComponent(parsedProjectId)}/runtimes/${encodeURIComponent(parsedRuntimeId)}/latency`;
+        try {
+            const response = await fetch(endpoint, {
+                headers: {
+                    authorization: `Bearer ${v.parse(platformCredentialBindingsSchema, this.#bindings).MOBIUS_APP_SECRET}`,
+                },
+                signal,
+            });
+            this.#observeMobiusResponse({ serverTiming: response.headers.get("server-timing") });
+            signal.throwIfAborted();
+            if (!response.ok) {
+                await response.body?.cancel();
+                throw new PlatformProjectError(
+                    "RUNTIME_UNAVAILABLE",
+                    "The local Runtime did not respond to the network diagnostic.",
+                    503,
+                );
+            }
+            return v.parse(runtimeLatencySchema, await response.json()).latencyMs;
+        } catch (cause) {
+            parent.throwIfAborted();
+            if (signal.aborted) {
+                throw new PlatformProjectError("PLATFORM_TIMEOUT", "The network diagnostic timed out.", 504, {
+                    cause,
+                });
+            }
+            if (cause instanceof PlatformProjectError) {
+                throw cause;
+            }
+            throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "The network diagnostic failed.", 502, {
                 cause,
             });
         }

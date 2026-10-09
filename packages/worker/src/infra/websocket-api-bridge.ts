@@ -30,7 +30,16 @@ const subscribeFrame = v.strictObject({
 const unwatchFrame = v.strictObject({ kind: v.literal("unwatch"), subscriptionId: requestId });
 const cancelFrame = v.strictObject({ kind: v.literal("cancel"), requestId });
 const pingFrame = v.strictObject({ kind: v.literal("ping") });
-const clientFrame = v.variant("kind", [requestFrame, watchFrame, subscribeFrame, unwatchFrame, cancelFrame, pingFrame]);
+const diagnosticPingFrame = v.strictObject({ kind: v.literal("diagnostic.ping"), requestId });
+const clientFrame = v.variant("kind", [
+    requestFrame,
+    watchFrame,
+    subscribeFrame,
+    unwatchFrame,
+    cancelFrame,
+    pingFrame,
+    diagnosticPingFrame,
+]);
 const CONNECTION_IDLE_MILLISECONDS = 60_000;
 const REQUEST_TIMEOUT_MILLISECONDS = 120_000;
 
@@ -178,6 +187,10 @@ export function createWebSocketApiBridge(
         const frame = parsed.output;
         if (frame.kind === "ping") {
             send(server, { kind: "pong" });
+            return;
+        }
+        if (frame.kind === "diagnostic.ping") {
+            send(server, { kind: "diagnostic.pong", requestId: frame.requestId });
             return;
         }
         if (frame.kind === "cancel") {
