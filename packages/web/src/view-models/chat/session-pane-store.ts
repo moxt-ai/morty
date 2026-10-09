@@ -284,9 +284,9 @@ function sessionConfigOptionsFromAcp(
 }
 
 interface SessionEventRecoveryV2 {
-    readonly sessionGenerationId: string;
     readonly events: readonly SessionEventV2[];
     readonly nextCursor: string | null;
+    readonly sessionGenerationId: string;
 }
 
 async function readNativeEventsV2(
@@ -303,9 +303,9 @@ async function readNativeEventsV2(
     );
     signal.throwIfAborted();
     return {
-        sessionGenerationId: page.events.sessionGenerationId,
         events: page.events.events,
         nextCursor: page.events.nextCursor,
+        sessionGenerationId: page.events.sessionGenerationId,
     };
 }
 
@@ -343,6 +343,7 @@ export function createSessionPaneModel(options: {
     let client: MobiusClient | null = null;
     let sessionEvents: SessionEventV2[] = [];
     let sessionGenerationId: string | null = null;
+    const supersededSessionGenerationIds = new Set<string>();
     let historyCursor: string | null = null;
     let loadingOlderHistory = false;
     let command = openedActiveTurn.kind === "idle" ? "" : openedActiveTurn.commandId;
@@ -500,7 +501,7 @@ export function createSessionPaneModel(options: {
                     );
                     signal.throwIfAborted();
                     if (sessionGenerationId !== null && page.events.sessionGenerationId !== sessionGenerationId) {
-                        throw new Error("The Runtime restarted while older messages were loading.");
+                        throw new Error("The Session reloaded while older messages were loading.");
                     }
                     replaceTimeline(mergeSessionEvents(page.events.events, sessionEvents));
                     historyCursor = page.events.nextCursor;
@@ -630,7 +631,14 @@ export function createSessionPaneModel(options: {
                                     connected.sessions.readSessionExecution(sessionId, sessionIdentity, signal),
                                 ]);
                                 signal.throwIfAborted();
+                                if (sessionGenerationId !== recovery.sessionGenerationId) {
+                                    if (sessionGenerationId !== null) {
+                                        supersededSessionGenerationIds.add(sessionGenerationId);
+                                    }
+                                    sessionGenerationId = recovery.sessionGenerationId;
+                                }
                                 replaceTimeline(mergeSessionEvents(sessionEvents, recovery.events));
+                                historyCursor = recovery.nextCursor;
                                 const running = execution.turn;
                                 if (running !== null) {
                                     command = running.commandId;
@@ -680,6 +688,9 @@ export function createSessionPaneModel(options: {
                                     break;
                             }
                             const recovery = await readNativeEventsV2(connected, sessionId, sessionIdentity, signal);
+                            if (sessionGenerationId !== null && sessionGenerationId !== recovery.sessionGenerationId) {
+                                supersededSessionGenerationIds.add(sessionGenerationId);
+                            }
                             sessionGenerationId = recovery.sessionGenerationId;
                             replaceTimeline(recovery.events);
                             historyCursor = recovery.nextCursor;
@@ -755,12 +766,27 @@ export function createSessionPaneModel(options: {
                         },
                         receive: async (events) => {
                             for (const event of events) {
-                                const latest = sessionEvents.at(-1);
-                                if (latest === undefined || latest.eventId < event.eventId) {
+                                if (sessionGenerationId !== event.sessionGenerationId) {
+                                    if (supersededSessionGenerationIds.has(event.sessionGenerationId)) {
+                                        continue;
+                                    }
+                                    if (sessionGenerationId !== null) {
+                                        supersededSessionGenerationIds.add(sessionGenerationId);
+                                    }
+                                    sessionGenerationId = event.sessionGenerationId;
+                                    historyCursor = null;
                                     sessionEvents.push(event);
                                     timelineProjection.append(event);
-                                } else if (!sessionEvents.some((candidate) => candidate.eventId === event.eventId)) {
-                                    replaceTimeline(mergeSessionEvents(sessionEvents, [event]));
+                                } else {
+                                    const latest = sessionEvents.at(-1);
+                                    if (latest === undefined || latest.eventId < event.eventId) {
+                                        sessionEvents.push(event);
+                                        timelineProjection.append(event);
+                                    } else if (
+                                        !sessionEvents.some((candidate) => candidate.eventId === event.eventId)
+                                    ) {
+                                        replaceTimeline(mergeSessionEvents(sessionEvents, [event]));
+                                    }
                                 }
                                 if (event.type !== "acp") {
                                     await receiveLifecycle(event.payload);
