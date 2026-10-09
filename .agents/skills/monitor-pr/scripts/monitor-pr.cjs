@@ -39,6 +39,7 @@ query MonitorPullRequest($owner: String!, $name: String!, $number: Int!) {
                 nodes {
                   __typename
                   ... on CheckRun {
+                    databaseId
                     name
                     status
                     conclusion
@@ -70,6 +71,7 @@ query MonitorPullRequest($owner: String!, $name: String!, $number: Int!) {
               nodes {
                 __typename
                 ... on CheckRun {
+                  databaseId
                   name
                   status
                   conclusion
@@ -110,6 +112,7 @@ query MonitorCommitContexts($owner: String!, $name: String!, $oid: GitObjectID!,
             nodes {
               __typename
               ... on CheckRun {
+                databaseId
                 name
                 status
                 conclusion
@@ -360,11 +363,30 @@ function describeContext(item) {
     };
 }
 
+function latestContexts(contexts) {
+    const latest = new Map();
+    for (const item of contexts) {
+        const workflow = item.__typename === "CheckRun" ? item.checkSuite?.workflowRun?.workflow?.name || "" : "";
+        const name = item.__typename === "CheckRun" ? item.name : item.context;
+        const key = `${item.__typename}:${workflow}:${name}`;
+        const current = latest.get(key);
+        if (
+            current === undefined ||
+            (item.__typename === "CheckRun" &&
+                current.__typename === "CheckRun" &&
+                (item.databaseId ?? 0) > (current.databaseId ?? 0))
+        ) {
+            latest.set(key, item);
+        }
+    }
+    return [...latest.values()];
+}
+
 function summarize(commit, contexts) {
     if (commit?.statusCheckRollup === null || commit?.statusCheckRollup === undefined) {
         return { unknown: true, passed: 0, pending: 0, failed: 0, total: 0, items: [] };
     }
-    const items = contexts.map(describeContext);
+    const items = latestContexts(contexts).map(describeContext);
     return {
         unknown: false,
         passed: items.filter((item) => item.category === "passed").length,
