@@ -692,6 +692,11 @@ export function createSessionPaneModel(options: {
                                     set({ connection: { kind: "loading" } });
                                     break;
                             }
+                            const executionPromise = connected.sessions.readSessionExecution(
+                                sessionId,
+                                sessionIdentity,
+                                signal,
+                            );
                             const recovery = await readNativeEventsV2(connected, sessionId, sessionIdentity, signal);
                             if (sessionGenerationId !== null && sessionGenerationId !== recovery.sessionGenerationId) {
                                 supersededSessionGenerationIds.add(sessionGenerationId);
@@ -707,11 +712,7 @@ export function createSessionPaneModel(options: {
                                 historyRevision: 0,
                                 messages: native.messages,
                             });
-                            const execution = await connected.sessions.readSessionExecution(
-                                sessionId,
-                                sessionIdentity,
-                                signal,
-                            );
+                            const execution = await executionPromise;
                             const running = execution.turn;
                             messageQueue.getState().replace(execution.queued);
                             if (running !== null) {
