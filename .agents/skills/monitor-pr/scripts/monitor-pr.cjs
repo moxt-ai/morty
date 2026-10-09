@@ -418,8 +418,7 @@ function reportSnapshot(target, snapshot) {
     const prSummary = summarize(snapshot.pullRequestCommit, snapshot.pullRequestContexts);
     const queueSummary = summarize(snapshot.queueCommit, snapshot.queueContexts);
     const queue = pr.mergeQueueEntry;
-    const phase =
-        queue !== null ? "IN MERGE QUEUE" : pr.autoMergeRequest !== null ? "WAITING FOR MERGE QUEUE" : pr.state;
+    const phase = queue === null ? pr.state : "IN MERGE QUEUE";
     console.log(`[${new Date().toISOString()}] ${target.repo}#${target.number} — ${phase}`);
     console.log(`PR CI: ${summaryText(prSummary)} (head ${shortSha(pr.headRefOid)})`);
     const pending = itemNames(prSummary, "pending");
@@ -510,7 +509,6 @@ function evaluate(target, snapshot, summaries, state) {
     }
     if (
         pr.mergeQueueEntry === null &&
-        pr.autoMergeRequest === null &&
         !pr.isDraft &&
         !summaries.prSummary.unknown &&
         summaries.prSummary.pending === 0 &&
@@ -579,11 +577,9 @@ async function monitor(options, context) {
             }
             state.headOid = snapshot.pullRequest.headRefOid;
             console.log(
-                snapshot.pullRequest.mergeQueueEntry !== null
-                    ? `Next check: ${options.intervalSeconds}s, unless merged or failed`
-                    : snapshot.pullRequest.autoMergeRequest !== null
-                      ? `Next check: ${options.intervalSeconds}s, until queued, merged, or failed`
-                      : `Next check: ${options.intervalSeconds}s, unless ready to merge, queued, or failed`,
+                snapshot.pullRequest.mergeQueueEntry === null
+                    ? `Next check: ${options.intervalSeconds}s, unless ready to merge, queued, or failed`
+                    : `Next check: ${options.intervalSeconds}s, unless merged or failed`,
             );
         } catch (error) {
             if (context.signal.aborted || error.name === "AbortError") {
