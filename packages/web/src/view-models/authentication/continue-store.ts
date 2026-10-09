@@ -67,7 +67,7 @@ function initialState(): ContinueState {
             harness === "codex"
                 ? {
                       kind: "unavailable",
-                      reason: "The active Codex session owns the original thread. Fork it to continue in Morty.",
+                      reason: `${harness} doesn't support import conversation`,
                   }
                 : { kind: "available" };
         return {

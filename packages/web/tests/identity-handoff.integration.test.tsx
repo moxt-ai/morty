@@ -3,7 +3,7 @@ import { expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given a Codex native session handoff, When the user hovers over import, Then import is disabled and explains that the original session is still owned by Codex", {
+test("Given a Codex native session handoff, When the user hovers over import, Then import is disabled and explains that Codex does not support it", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({
@@ -25,7 +25,9 @@ test("Given a Codex native session handoff, When the user hovers over import, Th
     await app.user.hover(getByRole(document.body, "group", { name: "Why import is unavailable" }));
 
     expect(
-        await vi.waitFor(() => getByRole(document.body, "tooltip", { name: /active Codex session owns/u })),
+        await vi.waitFor(() =>
+            getByRole(document.body, "tooltip", { name: "codex doesn't support import conversation" }),
+        ),
     ).toBeInstanceOf(HTMLElement);
 });
 
