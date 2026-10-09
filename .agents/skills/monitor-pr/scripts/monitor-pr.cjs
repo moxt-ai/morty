@@ -136,7 +136,7 @@ query MonitorCommitContexts($owner: String!, $name: String!, $oid: GitObjectID!,
 function usage() {
     return `Usage: monitor-pr.cjs [--repo OWNER/REPO] [--pr NUMBER|URL] [--interval SECONDS]
 
-Monitor a pull request, its CI, and its merge-queue entry until it merges.
+Monitor an open pull request until it is ready to merge, or a queued pull request until it merges.
 The default and minimum reporting interval is 10 seconds.`;
 }
 
@@ -413,12 +413,13 @@ function itemNames(summary, category) {
     return summary.items.filter((item) => item.category === category).map((item) => item.name);
 }
 
-function reportSnapshot(target, snapshot, intervalSeconds) {
+function reportSnapshot(target, snapshot) {
     const pr = snapshot.pullRequest;
     const prSummary = summarize(snapshot.pullRequestCommit, snapshot.pullRequestContexts);
     const queueSummary = summarize(snapshot.queueCommit, snapshot.queueContexts);
     const queue = pr.mergeQueueEntry;
-    console.log(`[${new Date().toISOString()}] ${target.repo}#${target.number} — ${pr.state}`);
+    const phase = queue === null ? pr.state : "IN MERGE QUEUE";
+    console.log(`[${new Date().toISOString()}] ${target.repo}#${target.number} — ${phase}`);
     console.log(`PR CI: ${summaryText(prSummary)} (head ${shortSha(pr.headRefOid)})`);
     const pending = itemNames(prSummary, "pending");
     const failed = itemNames(prSummary, "failed");
@@ -446,7 +447,6 @@ function reportSnapshot(target, snapshot, intervalSeconds) {
             console.log(`Queue failed: ${queueFailed.join(", ")}`);
         }
     }
-    console.log(`Next check: ${intervalSeconds}s, unless merged or failed`);
     return { prSummary, queueSummary };
 }
 
@@ -507,6 +507,20 @@ function evaluate(target, snapshot, summaries, state) {
             message: `PR head changed after queueing (${shortSha(state.headOid)} -> ${shortSha(pr.headRefOid)})`,
         };
     }
+    if (
+        pr.mergeQueueEntry === null &&
+        !pr.isDraft &&
+        !summaries.prSummary.unknown &&
+        summaries.prSummary.pending === 0 &&
+        summaries.prSummary.failed === 0 &&
+        pr.mergeable === "MERGEABLE" &&
+        pr.mergeStateStatus === "CLEAN"
+    ) {
+        return {
+            kind: "ready",
+            message: `${target.repo}#${target.number} is ready to merge (${summaries.prSummary.passed}/${summaries.prSummary.total} checks passed; head ${shortSha(pr.headRefOid)})`,
+        };
+    }
     return { kind: "continue" };
 }
 
@@ -545,10 +559,14 @@ async function monitor(options, context) {
         try {
             const snapshot = await readSnapshot(target, context);
             state.consecutiveFailures = 0;
-            const summaries = reportSnapshot(target, snapshot, options.intervalSeconds);
+            const summaries = reportSnapshot(target, snapshot);
             const result = evaluate(target, snapshot, summaries, state);
             if (result.kind === "merged") {
-                console.log(`SUCCESS: ${result.message}`);
+                console.log(`MERGED: ${result.message}`);
+                return;
+            }
+            if (result.kind === "ready") {
+                console.log(`READY TO MERGE: ${result.message}`);
                 return;
             }
             if (result.kind === "failed") {
@@ -558,6 +576,11 @@ async function monitor(options, context) {
                 state.observedQueue = true;
             }
             state.headOid = snapshot.pullRequest.headRefOid;
+            console.log(
+                snapshot.pullRequest.mergeQueueEntry === null
+                    ? `Next check: ${options.intervalSeconds}s, unless ready to merge, queued, or failed`
+                    : `Next check: ${options.intervalSeconds}s, unless merged or failed`,
+            );
         } catch (error) {
             if (context.signal.aborted || error.name === "AbortError") {
                 throw error;
