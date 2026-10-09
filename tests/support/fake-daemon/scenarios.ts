@@ -88,6 +88,38 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     }),
                 ),
             };
+        case "many session events":
+            return {
+                outcome: "complete",
+                output: [
+                    ...Array.from(
+                        { length: 40 },
+                        (_, index): HarnessOutput => ({
+                            activityType: "reasoning",
+                            kind: "activity",
+                            output: `Reasoning step ${index.toString().padStart(3, "0")}.`,
+                            title: "Thinking",
+                        }),
+                    ),
+                    ...Array.from(
+                        { length: 20 },
+                        (_, index): HarnessOutput => ({
+                            activityType: "tool",
+                            content: [],
+                            kind: "activity",
+                            output: `Tool result ${index.toString()}`,
+                            title: `Inspect item ${index.toString()}`,
+                        }),
+                    ),
+                    ...Array.from(
+                        { length: 20 },
+                        (_, index): HarnessOutput => ({
+                            kind: "text",
+                            text: `Answer part ${index.toString().padStart(3, "0")}.`,
+                        }),
+                    ),
+                ],
+            };
         case "show generated picture":
             return {
                 outcome: "complete",

@@ -325,37 +325,87 @@ function projectAcpUpdate(
     }
 }
 
-export function sessionEventLogPresentation(events: readonly SessionEventV2[]): SessionTimeline {
+function mergeAdjacentText(previous: SessionMessage | undefined, incoming: SessionMessage): SessionMessage | null {
+    if (
+        previous?.role !== "assistant" ||
+        incoming.role !== "assistant" ||
+        previous.presentation.kind !== incoming.presentation.kind ||
+        (incoming.presentation.kind !== "message" && incoming.presentation.kind !== "thought") ||
+        (previous.presentation.kind !== "message" && previous.presentation.kind !== "thought") ||
+        previous.presentation.messageId !== incoming.presentation.messageId ||
+        previous.presentation.content.type !== "text" ||
+        incoming.presentation.content.type !== "text"
+    ) {
+        return null;
+    }
+    return {
+        ...previous,
+        presentation: {
+            ...incoming.presentation,
+            content: {
+                ...incoming.presentation.content,
+                text: previous.presentation.content.text + incoming.presentation.content.text,
+            },
+        },
+    };
+}
+
+export interface SessionTimelineProjection {
+    readonly append: (event: SessionEventV2) => SessionTimeline;
+    readonly current: () => SessionTimeline;
+}
+
+export function createSessionTimelineProjection(events: readonly SessionEventV2[]): SessionTimelineProjection {
     const messages: SessionMessage[] = [];
-    const toolIndexes = new Map<string, number>();
     const submittedPrompts = new Map<string, ContentBlockV2[]>();
-    for (const event of events) {
+    const toolIndexes = new Map<string, number>();
+    let timeline: SessionTimeline = { messages: [] };
+    const commit = (): SessionTimeline => {
+        timeline = { messages: [...messages] };
+        return timeline;
+    };
+    const append = (event: SessionEventV2, publish: boolean): SessionTimeline => {
         if (event.type === "lifecycle-metadata") {
             const lifecycle = event.payload;
             if (lifecycle.kind === "prompt.requested") {
                 submittedPrompts.set(lifecycle.commandId, [...lifecycle.content]);
                 const contents = lifecycle.content.filter((content) => !isBotInstructions(content));
-                if (contents.length > 0) {
-                    messages.push({
-                        commandId: lifecycle.commandId,
-                        contents,
-                        id: event.eventId,
-                        role: "user",
-                    });
+                if (contents.length === 0) {
+                    return timeline;
                 }
-            } else if (
+                messages.push({
+                    commandId: lifecycle.commandId,
+                    contents,
+                    id: event.eventId,
+                    role: "user",
+                });
+                return publish ? commit() : timeline;
+            }
+            if (
                 lifecycle.kind === "prompt.completed" ||
                 lifecycle.kind === "prompt.failed" ||
                 lifecycle.kind === "prompt.failed-before-start"
             ) {
                 submittedPrompts.delete(lifecycle.commandId);
             }
-            continue;
+            return timeline;
         }
         const update = event.payload;
         if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update") {
-            messages.push(...projectAcpUpdate(event, update, submittedPrompts));
-            continue;
+            const projected = projectAcpUpdate(event, update, submittedPrompts);
+            if (projected.length === 0) {
+                return timeline;
+            }
+            for (const message of projected) {
+                const previousIndex = messages.length - 1;
+                const merged = mergeAdjacentText(messages[previousIndex], message);
+                if (merged === null) {
+                    messages.push(message);
+                } else {
+                    messages[previousIndex] = merged;
+                }
+            }
+            return publish ? commit() : timeline;
         }
         const existingIndex = toolIndexes.get(update.toolCallId);
         const existing = existingIndex === undefined ? undefined : messages[existingIndex];
@@ -375,8 +425,20 @@ export function sessionEventLogPresentation(events: readonly SessionEventV2[]): 
         } else {
             messages[existingIndex] = message;
         }
+        return publish ? commit() : timeline;
+    };
+    for (const event of events) {
+        append(event, false);
     }
-    return { messages };
+    commit();
+    return {
+        append: (event) => append(event, true),
+        current: () => timeline,
+    };
+}
+
+export function sessionEventLogPresentation(events: readonly SessionEventV2[]): SessionTimeline {
+    return createSessionTimelineProjection(events).current();
 }
 
 export function sessionEventCommandIds(events: readonly SessionEventV2[]): readonly string[] {

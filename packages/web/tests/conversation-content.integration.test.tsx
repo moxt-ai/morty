@@ -49,6 +49,39 @@ test("Given the agent sends separate reasoning messages, When the user reads the
     });
 });
 
+test("Given the agent sends many session events, When the response completes, Then every event type remains usable without mounting collapsed reasoning", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, "many session events");
+    const thinking = await app.queryElementByTestId(dataTestId.agentReasoning);
+    if (!(thinking instanceof HTMLDetailsElement)) {
+        throw new Error("Expected reasoning to use a disclosure");
+    }
+    await app.waitForView(() => {
+        expect(thinking.open).toBe(false);
+        expect(document.body.textContent).toContain("Inspect item 19");
+        expect(document.body.textContent).toContain("Answer part 019.");
+    });
+    expect(document.body.textContent).not.toContain("Reasoning step 000.");
+    expect(document.body.textContent).not.toContain("Reasoning step 039.");
+
+    await app.user.click(getByText(thinking, "Show intermediate steps"));
+    await app.waitForView(() => {
+        expect(document.body.textContent).toContain("Reasoning step 000.");
+        expect(document.body.textContent).toContain("Reasoning step 039.");
+    });
+});
+
 test("Given a file-change tool includes a rich diff, When the user views it, Then the complete edit stays collapsed until opened", {
     timeout: 30_000,
 }, async () => {

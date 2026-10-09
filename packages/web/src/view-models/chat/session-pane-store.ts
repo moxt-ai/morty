@@ -39,7 +39,11 @@ import type {
     PermissionInteraction,
     PermissionInteractionResponse,
 } from "./session-pane-types.ts";
-import { type SessionMessage, sessionEventCommandIds, sessionEventLogPresentation } from "./session-presentation.ts";
+import {
+    createSessionTimelineProjection,
+    type SessionMessage,
+    sessionEventCommandIds,
+} from "./session-presentation.ts";
 import {
     createSessionTaskControlsStore,
     findCompactCommand,
@@ -344,7 +348,7 @@ export function createSessionPaneModel(options: {
     const activeTurn = createSessionActiveTurn({ initial: initialActiveTurn });
     const openedActiveTurn = activeTurn.current();
     let client: MobiusClient | null = null;
-    let sessionEvents: readonly SessionEventV2[] = [];
+    let sessionEvents: SessionEventV2[] = [];
     let daemonGenerationId: string | null = null;
     let historyCursor: string | null = null;
     let loadingOlderHistory = false;
@@ -393,7 +397,12 @@ export function createSessionPaneModel(options: {
     });
     const initialActivity: SessionActivityState =
         command === "" ? { kind: "idle" } : startSessionWork({ commandId: command });
-    const deriveTimeline = () => sessionEventLogPresentation(sessionEvents);
+    let timelineProjection = createSessionTimelineProjection(sessionEvents);
+    const deriveTimeline = () => timelineProjection.current();
+    const replaceTimeline = (events: readonly SessionEventV2[]): void => {
+        sessionEvents = [...events];
+        timelineProjection = createSessionTimelineProjection(sessionEvents);
+    };
     const tasks = createSessionTaskControlsStore({
         commands: session.result.ready.commands,
         steeringSupported: session.result.ready.capabilities.steering,
@@ -499,7 +508,7 @@ export function createSessionPaneModel(options: {
                     if (daemonGenerationId !== null && page.events.daemonGenerationId !== daemonGenerationId) {
                         throw new Error("The Runtime restarted while older messages were loading.");
                     }
-                    sessionEvents = mergeSessionEvents(page.events.events, sessionEvents);
+                    replaceTimeline(mergeSessionEvents(page.events.events, sessionEvents));
                     historyCursor = page.events.nextCursor;
                     const timeline = deriveTimeline();
                     signal.throwIfAborted();
@@ -553,7 +562,7 @@ export function createSessionPaneModel(options: {
                             daemonGenerationId = recovery.daemonGenerationId;
                             const running = execution.turn;
                             messageQueue.getState().replace(execution.queued);
-                            sessionEvents = recovery.events;
+                            replaceTimeline(recovery.events);
                             historyCursor = recovery.nextCursor;
                             if (running !== null) {
                                 command = running.commandId;
@@ -616,10 +625,18 @@ export function createSessionPaneModel(options: {
                             }
                         },
                         receive: async (event) => {
-                            sessionEvents = mergeSessionEvents(sessionEvents, [event]);
+                            const latest = sessionEvents.at(-1);
+                            if (latest === undefined || latest.eventId < event.eventId) {
+                                sessionEvents.push(event);
+                                timelineProjection.append(event);
+                            } else if (!sessionEvents.some((candidate) => candidate.eventId === event.eventId)) {
+                                replaceTimeline(mergeSessionEvents(sessionEvents, [event]));
+                            }
                             if (event.type !== "acp") {
                                 const timeline = deriveTimeline();
-                                set({ messages: timeline.messages });
+                                if (timeline.messages !== get().messages) {
+                                    set({ messages: timeline.messages });
+                                }
                                 return true;
                             }
                             const update = event.payload;
@@ -644,7 +661,9 @@ export function createSessionPaneModel(options: {
                                 set({ options: configOptions });
                             }
                             const timeline = deriveTimeline();
-                            set({ messages: timeline.messages });
+                            if (timeline.messages !== get().messages) {
+                                set({ messages: timeline.messages });
+                            }
                             return true;
                         },
                     };
@@ -740,7 +759,7 @@ export function createSessionPaneModel(options: {
                                         connected.sessions.readSessionExecution(sessionId, sessionIdentity, signal),
                                     ]);
                                     signal.throwIfAborted();
-                                    sessionEvents = mergeSessionEvents(sessionEvents, recovery.events);
+                                    replaceTimeline(mergeSessionEvents(sessionEvents, recovery.events));
                                     const running = execution.turn;
                                     if (running !== null) {
                                         command = running.commandId;
@@ -1044,7 +1063,7 @@ export function createSessionPaneModel(options: {
                 try {
                     const connected = client;
                     const recovery = await readNativeEventsV2(connected, sessionId, sessionIdentity, signal);
-                    sessionEvents = mergeSessionEvents(sessionEvents, recovery.events);
+                    replaceTimeline(mergeSessionEvents(sessionEvents, recovery.events));
                     // The newest events page carries the Agent's latest
                     // config_option_update, so it is the authoritative view of
                     // the session's harness settings.

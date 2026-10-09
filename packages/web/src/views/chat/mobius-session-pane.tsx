@@ -76,17 +76,21 @@ function thinkingEntry(message: SessionMessage): AgentThinkingEntry | null {
 }
 
 function sessionRenderItems(messages: readonly SessionMessage[]): readonly SessionRenderItem[] {
-    const items: SessionRenderItem[] = [];
+    type RenderItemBuilder =
+        | { kind: "assistant-text"; id: string; messageId: string | null; text: string }
+        | { readonly kind: "event"; readonly message: SessionMessage }
+        | { entries: AgentThinkingEntry[]; readonly id: string; readonly kind: "thinking" };
+    const items: RenderItemBuilder[] = [];
     for (const message of messages) {
         const text = assistantText(message);
         const thinking = thinkingEntry(message);
         const previous = items.at(-1);
         if (text !== null && previous?.kind === "assistant-text" && previous.messageId === text.messageId) {
-            items[items.length - 1] = { ...previous, text: previous.text + text.text };
+            previous.text += text.text;
         } else if (text !== null) {
             items.push({ kind: "assistant-text", id: message.id, messageId: text.messageId, text: text.text });
         } else if (thinking !== null && previous?.kind === "thinking") {
-            items[items.length - 1] = { ...previous, entries: [...previous.entries, thinking] };
+            previous.entries.push(thinking);
         } else if (thinking !== null) {
             items.push({ entries: [thinking], id: message.id, kind: "thinking" });
         } else {

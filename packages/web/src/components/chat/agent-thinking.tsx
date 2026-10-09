@@ -1,5 +1,5 @@
 import { Brain, ChevronDown, Wrench } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import type { SessionToolPresentation } from "../../view-models/chat/session-presentation.ts";
 import { AgentMarkdown, type MarkdownImageReader } from "../agents/agent-markdown.tsx";
@@ -39,9 +39,11 @@ function ReasoningContent({ active, entry }: { readonly active: boolean; readonl
 
 function ReasoningDisclosure({ active, entry }: { readonly active: boolean; readonly entry: ReasoningEntry }) {
     const disclosure = useRef<HTMLDetailsElement>(null);
+    const [contentVisible, setContentVisible] = useState(active);
     useEffect(() => {
         if (disclosure.current !== null) {
             disclosure.current.open = active;
+            setContentVisible(active);
         }
     }, [active]);
     return (
@@ -49,6 +51,7 @@ function ReasoningDisclosure({ active, entry }: { readonly active: boolean; read
             aria-label="Agent thinking"
             className="group/thinking min-w-0"
             data-testid={dataTestId.agentReasoning}
+            onToggle={(event) => setContentVisible(event.currentTarget.open)}
             ref={disclosure}
         >
             <summary className="flex min-h-10 w-fit cursor-pointer list-none items-center gap-2 rounded-lg px-1 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
@@ -58,15 +61,17 @@ function ReasoningDisclosure({ active, entry }: { readonly active: boolean; read
                 />
                 <span>Show intermediate steps</span>
             </summary>
-            <div className="mt-1 ml-1 grid min-w-0 gap-4 border-l border-[#d9dde1] py-2 pl-5 [overflow-wrap:anywhere]">
-                <section className="grid min-w-0 gap-2">
-                    <div className="flex items-center gap-2 text-sm text-copy-secondary">
-                        <Brain aria-hidden="true" className="size-4" />
-                        <span>Thinking</span>
-                    </div>
-                    <ReasoningContent active={active} entry={entry} />
-                </section>
-            </div>
+            {contentVisible && (
+                <div className="mt-1 ml-1 grid min-w-0 gap-4 border-l border-[#d9dde1] py-2 pl-5 [overflow-wrap:anywhere]">
+                    <section className="grid min-w-0 gap-2">
+                        <div className="flex items-center gap-2 text-sm text-copy-secondary">
+                            <Brain aria-hidden="true" className="size-4" />
+                            <span>Thinking</span>
+                        </div>
+                        <ReasoningContent active={active} entry={entry} />
+                    </section>
+                </div>
+            )}
         </details>
     );
 }
