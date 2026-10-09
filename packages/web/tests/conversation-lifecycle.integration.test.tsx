@@ -98,10 +98,10 @@ test("Given Claude Code does not echo the submitted prompt, When the response st
     });
 });
 
-test("Given more than 50 saved messages, When the user reopens the conversation, Then the first history page shows 50 messages", {
-    timeout: 60_000,
+test("Given more saved messages than one history page, When the user reaches the top of a reopened conversation, Then the older messages load", {
+    timeout: 90_000,
 }, async () => {
-    const prompts = Array.from({ length: 26 }, (_, index) => `Pagination message ${index + 1}`);
+    const prompts = Array.from({ length: 7 }, (_, index) => `many session events: Pagination message ${index + 1}`);
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -117,7 +117,10 @@ test("Given more than 50 saved messages, When the user reopens the conversation,
             expect(
                 app
                     .elementsByTestId(dataTestId.agentResponse)
-                    .some((element) => element.textContent?.includes(`Codex turn ${index + 1}: ${prompt}`) === true),
+                    .some(
+                        (element) =>
+                            element.textContent?.includes(`Completed Pagination message ${index + 1}`) === true,
+                    ),
             ).toBe(true),
         );
         await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
@@ -150,7 +153,7 @@ test("Given more than 50 saved messages, When the user reopens the conversation,
                 responses: app
                     .elementsByTestId(dataTestId.agentResponse)
                     .map((element) => element.textContent ?? "")
-                    .filter((text) => text.startsWith("Codex turn ")),
+                    .filter((text) => text.includes("Completed Pagination message")),
             });
         };
         const observer = new MutationObserver(observe);
@@ -160,9 +163,18 @@ test("Given more than 50 saved messages, When the user reopens the conversation,
     await app.user.click(conversation);
 
     const page = await firstHistoryPage;
-    expect(page.prompts.slice(-25)).toEqual(prompts.slice(-25));
-    expect(page.responses.slice(-25)).toEqual(
-        prompts.slice(-25).map((prompt, index) => `Codex turn ${index + 2}: ${prompt}`),
+    expect(page.prompts).not.toContain(prompts[0]);
+    expect(page.prompts.at(-1)).toBe(prompts.at(-1));
+    expect(page.responses.some((response) => response.includes("Completed Pagination message 1"))).toBe(false);
+    expect(page.responses.at(-1)).toContain(`Completed Pagination message ${prompts.length.toString()}`);
+    const messages = queryByRole(document.body, "log", { name: "Messages" });
+    if (!(messages instanceof HTMLElement)) {
+        throw new Error("Expected the Session message list");
+    }
+    messages.scrollTop = 0;
+    messages.dispatchEvent(new Event("scroll", { bubbles: true }));
+    await app.waitForView(() =>
+        expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual(prompts),
     );
 });
 

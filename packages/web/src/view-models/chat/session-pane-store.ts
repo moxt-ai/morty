@@ -53,6 +53,8 @@ type LocalInteraction =
     | { readonly kind: "permission"; readonly permission: PermissionInteraction }
     | { readonly kind: "elicitation"; readonly elicitation: ElicitationInteraction };
 
+const SESSION_EVENT_PAGE_LIMIT = 500;
+
 function interactionId(interaction: LocalInteraction): string {
     return interaction.kind === "permission"
         ? interaction.permission.interactionId
@@ -124,6 +126,7 @@ export interface SessionPaneStore {
     readonly connection: Connection;
     readonly messages: readonly SessionMessage[];
     readonly historyLoading: boolean;
+    readonly historyRevision: number;
     readonly hasOlderHistory: boolean;
     readonly options: readonly SessionConfigOption[];
     readonly draft: string;
@@ -281,9 +284,9 @@ function sessionConfigOptionsFromAcp(
 }
 
 interface SessionEventRecoveryV2 {
-    readonly daemonGenerationId: string;
     readonly events: readonly SessionEventV2[];
     readonly nextCursor: string | null;
+    readonly sessionGenerationId: string;
 }
 
 async function readNativeEventsV2(
@@ -295,14 +298,14 @@ async function readNativeEventsV2(
     const page = await client.sessions.querySessionNativeEventsV2(
         sessionId,
         identity,
-        { cursor: null, eventLimit: 200 },
+        { cursor: null, eventLimit: SESSION_EVENT_PAGE_LIMIT },
         signal,
     );
     signal.throwIfAborted();
     return {
-        daemonGenerationId: page.events.daemonGenerationId,
         events: page.events.events,
         nextCursor: page.events.nextCursor,
+        sessionGenerationId: page.events.sessionGenerationId,
     };
 }
 
@@ -339,7 +342,8 @@ export function createSessionPaneModel(options: {
     const openedActiveTurn = activeTurn.current();
     let client: MobiusClient | null = null;
     let sessionEvents: SessionEventV2[] = [];
-    let daemonGenerationId: string | null = null;
+    let sessionGenerationId: string | null = null;
+    const supersededSessionGenerationIds = new Set<string>();
     let historyCursor: string | null = null;
     let loadingOlderHistory = false;
     let command = openedActiveTurn.kind === "idle" ? "" : openedActiveTurn.commandId;
@@ -468,6 +472,7 @@ export function createSessionPaneModel(options: {
             connection: { kind: "loading" },
             messages: initialTimeline.messages,
             historyLoading: false,
+            historyRevision: 0,
             hasOlderHistory: historyCursor !== null,
             options: session.result.ready.configOptions,
             draft: options.initialMessage?.content ?? centralLocalStorage.read(draftEntry) ?? "",
@@ -491,12 +496,12 @@ export function createSessionPaneModel(options: {
                             agentId: session.agentRef,
                             directoryId: session.result.ready.directoryId,
                         },
-                        { cursor: historyCursor, eventLimit: 200 },
+                        { cursor: historyCursor, eventLimit: SESSION_EVENT_PAGE_LIMIT },
                         signal,
                     );
                     signal.throwIfAborted();
-                    if (daemonGenerationId !== null && page.events.daemonGenerationId !== daemonGenerationId) {
-                        throw new Error("The Runtime restarted while older messages were loading.");
+                    if (sessionGenerationId !== null && page.events.sessionGenerationId !== sessionGenerationId) {
+                        throw new Error("The Session reloaded while older messages were loading.");
                     }
                     replaceTimeline(mergeSessionEvents(page.events.events, sessionEvents));
                     historyCursor = page.events.nextCursor;
@@ -504,6 +509,7 @@ export function createSessionPaneModel(options: {
                     signal.throwIfAborted();
                     set({
                         hasOlderHistory: historyCursor !== null,
+                        historyRevision: get().historyRevision + 1,
                         messages: timeline.messages,
                     });
                 } catch (cause) {
@@ -625,7 +631,14 @@ export function createSessionPaneModel(options: {
                                     connected.sessions.readSessionExecution(sessionId, sessionIdentity, signal),
                                 ]);
                                 signal.throwIfAborted();
+                                if (sessionGenerationId !== recovery.sessionGenerationId) {
+                                    if (sessionGenerationId !== null) {
+                                        supersededSessionGenerationIds.add(sessionGenerationId);
+                                    }
+                                    sessionGenerationId = recovery.sessionGenerationId;
+                                }
                                 replaceTimeline(mergeSessionEvents(sessionEvents, recovery.events));
+                                historyCursor = recovery.nextCursor;
                                 const running = execution.turn;
                                 if (running !== null) {
                                     command = running.commandId;
@@ -678,7 +691,10 @@ export function createSessionPaneModel(options: {
                                 readNativeEventsV2(connected, sessionId, sessionIdentity, signal),
                                 connected.sessions.readSessionExecution(sessionId, sessionIdentity, signal),
                             ]);
-                            daemonGenerationId = recovery.daemonGenerationId;
+                            if (sessionGenerationId !== null && sessionGenerationId !== recovery.sessionGenerationId) {
+                                supersededSessionGenerationIds.add(sessionGenerationId);
+                            }
+                            sessionGenerationId = recovery.sessionGenerationId;
                             const running = execution.turn;
                             messageQueue.getState().replace(execution.queued);
                             replaceTimeline(recovery.events);
@@ -731,6 +747,7 @@ export function createSessionPaneModel(options: {
                             })();
                             set({
                                 hasOlderHistory: historyCursor !== null,
+                                historyRevision: 0,
                                 interactions,
                                 activity: restoredActivity,
                                 messages: nativeMessages,
@@ -745,12 +762,27 @@ export function createSessionPaneModel(options: {
                         },
                         receive: async (events) => {
                             for (const event of events) {
-                                const latest = sessionEvents.at(-1);
-                                if (latest === undefined || latest.eventId < event.eventId) {
+                                if (sessionGenerationId !== event.sessionGenerationId) {
+                                    if (supersededSessionGenerationIds.has(event.sessionGenerationId)) {
+                                        continue;
+                                    }
+                                    if (sessionGenerationId !== null) {
+                                        supersededSessionGenerationIds.add(sessionGenerationId);
+                                    }
+                                    sessionGenerationId = event.sessionGenerationId;
+                                    historyCursor = null;
                                     sessionEvents.push(event);
                                     timelineProjection.append(event);
-                                } else if (!sessionEvents.some((candidate) => candidate.eventId === event.eventId)) {
-                                    replaceTimeline(mergeSessionEvents(sessionEvents, [event]));
+                                } else {
+                                    const latest = sessionEvents.at(-1);
+                                    if (latest === undefined || latest.eventId < event.eventId) {
+                                        sessionEvents.push(event);
+                                        timelineProjection.append(event);
+                                    } else if (
+                                        !sessionEvents.some((candidate) => candidate.eventId === event.eventId)
+                                    ) {
+                                        replaceTimeline(mergeSessionEvents(sessionEvents, [event]));
+                                    }
                                 }
                                 if (event.type !== "acp") {
                                     await receiveLifecycle(event.payload);

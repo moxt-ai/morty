@@ -32,6 +32,41 @@ export const mortyFiles = new Map<string, { readonly content: string | Uint8Arra
     ],
 ]);
 
+function manySessionEvents(completion?: string): HarnessReplyPlan {
+    return {
+        outcome: "complete",
+        output: [
+            ...Array.from(
+                { length: 40 },
+                (_, index): HarnessOutput => ({
+                    activityType: "reasoning",
+                    kind: "activity",
+                    output: `Reasoning step ${index.toString().padStart(3, "0")}.`,
+                    title: "Thinking",
+                }),
+            ),
+            ...Array.from(
+                { length: 20 },
+                (_, index): HarnessOutput => ({
+                    activityType: "tool",
+                    content: [],
+                    kind: "activity",
+                    output: `Tool result ${index.toString()}`,
+                    title: `Inspect item ${index.toString()}`,
+                }),
+            ),
+            ...Array.from(
+                { length: 20 },
+                (_, index): HarnessOutput => ({
+                    kind: "text",
+                    text: `Answer part ${index.toString().padStart(3, "0")}.`,
+                }),
+            ),
+            ...(completion === undefined ? [] : [{ kind: "text" as const, text: completion }]),
+        ],
+    };
+}
+
 /** Shared Morty scenario data; the protocol peer has no prompt-specific branches. */
 export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | "steer"): HarnessReplyPlan {
     if (mode === "steer") {
@@ -39,6 +74,10 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
             outcome: prompt === "Use the revised requirement" ? "hold" : "complete",
             output: [{ kind: "text", text: `Steered: ${prompt}` }],
         };
+    }
+    const eventBurstPrefix = "many session events: ";
+    if (prompt.startsWith(eventBurstPrefix)) {
+        return manySessionEvents(`Completed ${prompt.slice(eventBurstPrefix.length)}`);
     }
     switch (prompt) {
         case "hold with rich content":
@@ -101,41 +140,33 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                 ),
             };
         case "many session events":
-            return {
-                outcome: "complete",
-                output: [
-                    ...Array.from(
-                        { length: 40 },
-                        (_, index): HarnessOutput => ({
-                            activityType: "reasoning",
-                            kind: "activity",
-                            output: `Reasoning step ${index.toString().padStart(3, "0")}.`,
-                            title: "Thinking",
-                        }),
-                    ),
-                    ...Array.from(
-                        { length: 20 },
-                        (_, index): HarnessOutput => ({
-                            activityType: "tool",
-                            content: [],
-                            kind: "activity",
-                            output: `Tool result ${index.toString()}`,
-                            title: `Inspect item ${index.toString()}`,
-                        }),
-                    ),
-                    ...Array.from(
-                        { length: 20 },
-                        (_, index): HarnessOutput => ({
-                            kind: "text",
-                            text: `Answer part ${index.toString().padStart(3, "0")}.`,
-                        }),
-                    ),
-                ],
-            };
+            return manySessionEvents();
         case "show generated picture":
             return {
                 outcome: "complete",
                 output: [{ kind: "text", text: "![Generated picture](file:///workspace/generated-picture.png)" }],
+            };
+        case "generate an image":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        content: [
+                            {
+                                type: "content",
+                                content: {
+                                    data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV4kAAAAASUVORK5CYII=",
+                                    mimeType: "image/png",
+                                    type: "image",
+                                },
+                            },
+                        ],
+                        title: "Generate image",
+                        output: "null",
+                    },
+                ],
             };
         case "show source file":
             return {

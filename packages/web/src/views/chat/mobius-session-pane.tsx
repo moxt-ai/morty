@@ -345,7 +345,7 @@ export function MobiusSessionPane({
                     hasMore={model.connection.kind === "ready" && model.hasOlderHistory}
                     loading={model.historyLoading}
                     onLoadMore={loadOlderMessages}
-                    revision={model.messages.length}
+                    revision={model.historyRevision}
                 />
                 <ChatMessageQueue
                     messages={messageQueue.messages}

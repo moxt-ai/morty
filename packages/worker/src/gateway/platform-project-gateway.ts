@@ -525,22 +525,9 @@ export class PlatformProjectGateway {
             projectId,
             signal,
             async (client) => {
-                const session = (await client.runtimes.querySessions(selection.runtimeId, [sessionId], signal)).find(
-                    (candidate) => candidate.sessionId === sessionId,
-                );
-                if (session === undefined) {
-                    throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
-                }
-                const ready = await client.sessions.load(
-                    selection.runtimeId,
-                    sessionId,
-                    {
-                        additionalDirectoryIds: session.additionalDirectories.map((item) => item.directoryId),
-                        agentId: session.agentId,
-                        directoryId: session.directoryId,
-                    },
-                    signal,
-                );
+                const restored = await client.sessions.restore(selection.runtimeId, sessionId, signal);
+                const session = restored.entry;
+                const ready = restored.ready;
                 return {
                     agentRef: session.agentId,
                     ready,
