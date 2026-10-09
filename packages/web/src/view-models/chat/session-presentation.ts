@@ -298,84 +298,14 @@ function projectEvent(event: SessionEventV2): readonly SessionMessage[] {
     return event.type === "acp" ? projectAcpUpdate(event, event.payload) : [];
 }
 
-function visiblePromptContent(contents: readonly ContentBlockV2[]): readonly ContentBlockV2[] {
-    return contents.filter((content) => content.type !== "resource" || content.resource.uri !== BOT_INSTRUCTIONS_URI);
-}
-
 export function sessionEventLogPresentation(events: readonly SessionEventV2[]): SessionTimeline {
     const messages: SessionMessage[] = [];
     const toolIndexes = new Map<string, number>();
-    const requests = new Map(
-        events.flatMap((event) =>
-            event.type === "lifecycle-metadata" && event.payload.kind === "prompt.requested"
-                ? [[event.payload.commandId, event] as const]
-                : [],
-        ),
-    );
-    const recoveredRequests = new Map<
-        string,
-        { readonly contents: readonly ContentBlockV2[]; readonly eventId: string }
-    >();
     for (const event of events) {
-        if (
-            event.type !== "acp" ||
-            event.payload.sessionUpdate !== "user_message_chunk" ||
-            event.payload.messageId === null ||
-            event.payload.messageId === undefined ||
-            requests.has(event.payload.messageId)
-        ) {
-            continue;
-        }
-        const current = recoveredRequests.get(event.payload.messageId);
-        recoveredRequests.set(event.payload.messageId, {
-            contents: [...(current?.contents ?? []), event.payload.content],
-            eventId: current?.eventId ?? event.eventId,
-        });
-    }
-    const admittedPromptCommands = new Set(
-        events.flatMap((event) =>
-            event.type === "lifecycle-metadata" && event.payload.kind === "prompt.started"
-                ? [event.payload.commandId]
-                : [],
-        ),
-    );
-    const renderedPromptCommands = new Set<string>();
-    for (const event of events) {
-        if (event.type === "lifecycle-metadata") {
-            const payload = event.payload;
-            if (
-                payload.kind === "prompt.started" &&
-                admittedPromptCommands.has(payload.commandId) &&
-                !renderedPromptCommands.has(payload.commandId)
-            ) {
-                renderedPromptCommands.add(payload.commandId);
-                const request = requests.get(payload.commandId);
-                const recovered = recoveredRequests.get(payload.commandId);
-                const contents =
-                    request?.payload.kind === "prompt.requested"
-                        ? visiblePromptContent(request.payload.content)
-                        : (recovered?.contents ?? []);
-                const eventId = request?.eventId ?? recovered?.eventId;
-                if (eventId !== undefined && contents.length > 0) {
-                    messages.push({
-                        commandId: payload.commandId,
-                        contents,
-                        id: eventId,
-                        role: "user",
-                    });
-                }
-            }
+        if (event.type !== "acp") {
             continue;
         }
         const update = event.payload;
-        if (
-            update.sessionUpdate === "user_message_chunk" &&
-            update.messageId !== null &&
-            update.messageId !== undefined &&
-            admittedPromptCommands.has(update.messageId)
-        ) {
-            continue;
-        }
         if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update") {
             messages.push(...projectEvent(event));
             continue;
@@ -405,14 +335,22 @@ export function sessionEventLogPresentation(events: readonly SessionEventV2[]): 
 export function sessionEventCommandIds(events: readonly SessionEventV2[]): readonly string[] {
     const commandIds: string[] = [];
     for (const event of events) {
+        if (event.type === "lifecycle-metadata") {
+            if ("commandId" in event.payload && !commandIds.includes(event.payload.commandId)) {
+                commandIds.push(event.payload.commandId);
+            }
+            continue;
+        }
+        const update = event.payload;
         if (
-            event.type !== "lifecycle-metadata" ||
-            !("commandId" in event.payload) ||
-            commandIds.includes(event.payload.commandId)
+            update.sessionUpdate !== "user_message_chunk" ||
+            update.messageId === null ||
+            update.messageId === undefined ||
+            commandIds.includes(update.messageId)
         ) {
             continue;
         }
-        commandIds.push(event.payload.commandId);
+        commandIds.push(update.messageId);
     }
     return commandIds;
 }

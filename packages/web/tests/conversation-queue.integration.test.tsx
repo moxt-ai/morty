@@ -96,9 +96,9 @@ test("Given the daemon has queued work, When the user steers it into the active 
     }
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected fake daemon");
+        throw new Error("Expected a connected controlled Agent Runtime");
     }
-    daemon.continueReply("wait for steering", { outcome: "complete", output: [] });
+    await daemon.continueReply("wait for steering", { outcome: "complete", output: [] });
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
     await viewer.close();
 });

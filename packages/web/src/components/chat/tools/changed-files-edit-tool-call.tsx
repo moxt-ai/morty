@@ -1,7 +1,5 @@
 import * as v from "valibot";
-import { AgentRichContent } from "../../agents/agent-rich-content.tsx";
 import { EditToolPresentation } from "./edit-tool-presentation.tsx";
-import { toolRichContent } from "./tool-display-content.ts";
 import type { ToolRendererProps } from "./tool-renderer.ts";
 
 const changesSchema = v.pipe(
@@ -51,7 +49,6 @@ export function ChangedFilesEditToolCall({ autoOpen, entry }: ToolRendererProps)
                     </li>
                 ))}
             </ul>
-            <AgentRichContent contents={toolRichContent(entry.content)} />
         </EditToolPresentation>
     );
 }

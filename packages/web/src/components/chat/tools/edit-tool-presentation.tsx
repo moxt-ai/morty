@@ -1,7 +1,7 @@
 import { FileDiff } from "lucide-react";
 import type { ReactNode } from "react";
 import { HighlightedCode, languageForPath } from "./highlighted-code.tsx";
-import { ToolCallStatus, useToolCallDisclosure } from "./tool-call-status.tsx";
+import { ToolCallDisclosure } from "./tool-call-status.tsx";
 import type { ToolRendererProps } from "./tool-renderer.ts";
 
 export interface FileDiffValue {
@@ -33,18 +33,15 @@ export function EditToolPresentation({
     children,
     entry,
 }: ToolRendererProps & { readonly children: ReactNode }) {
-    const disclosure = useToolCallDisclosure(autoOpen);
     return (
-        <details aria-label={`Edit: ${entry.title}`} className="group/tool min-w-0" ref={disclosure}>
-            <summary
-                className="flex min-h-8 w-full min-w-0 cursor-pointer list-none items-center gap-2 rounded-lg px-1 text-sm text-copy-secondary outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                title={entry.title}
-            >
-                <FileDiff aria-hidden="true" className="size-4 shrink-0" />
-                <span className="min-w-0 flex-1 truncate whitespace-nowrap">{entry.title}</span>
-                <ToolCallStatus state={entry.state} />
-            </summary>
+        <ToolCallDisclosure
+            ariaLabel={`Edit: ${entry.title}`}
+            autoOpen={autoOpen}
+            icon={<FileDiff aria-hidden="true" className="size-4 shrink-0" />}
+            state={entry.state}
+            title={entry.title}
+        >
             <div className="mt-1 ml-5 grid min-w-0 gap-2 text-xs">{children}</div>
-        </details>
+        </ToolCallDisclosure>
     );
 }

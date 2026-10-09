@@ -317,6 +317,7 @@ export function MobiusSessionPane({
                                                 model.activity.kind === "working" && index === renderItems.length - 1
                                             }
                                             entries={item.entries}
+                                            readImage={readImage}
                                         />
                                     </div>
                                 ) : (

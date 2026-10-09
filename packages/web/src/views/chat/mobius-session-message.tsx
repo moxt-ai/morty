@@ -352,7 +352,7 @@ export function MobiusSessionMessage({
     }
     return (
         <div data-testid={dataTestId.agentResponse}>
-            <AgentThinking active={active} entries={[presentation.entry]} />
+            <AgentThinking active={active} entries={[presentation.entry]} readImage={readImage} />
         </div>
     );
 }

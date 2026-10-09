@@ -4,14 +4,14 @@ import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../web/src/services/identity/a
 import { ChatApi, jsonRequest, text } from "./chat-api.ts";
 import type { E2EHarness } from "./harness.ts";
 import { LocalStack } from "./local-stack.ts";
-import { FakeSetupDaemon } from "./setup-daemon.ts";
+import { ControlledSetupRuntime } from "./setup-daemon.ts";
 import { followSetupInstructions } from "./setup-instructions.ts";
 
 export async function createTestRuntime(harness: E2EHarness) {
     const agentId = "claude";
     const agentName = "Codex";
     const stack = await LocalStack.create(harness);
-    const runtime = new FakeSetupDaemon({
+    const runtime = new ControlledSetupRuntime({
         agentId,
         agentName,
         files: mortyFiles,

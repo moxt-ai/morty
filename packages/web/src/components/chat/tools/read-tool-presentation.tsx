@@ -1,10 +1,7 @@
-import type { AgentDisplayContent } from "@moxt-ai/mobius-sdk";
 import { FileText } from "lucide-react";
 import type { ReactNode } from "react";
 import { dataTestId } from "../../../data-testid.ts";
-import { AgentRichContent } from "../../agents/agent-rich-content.tsx";
-import { ToolCallStatus, useToolCallDisclosure } from "./tool-call-status.tsx";
-import { toolRichContent } from "./tool-display-content.ts";
+import { ToolCallDisclosure } from "./tool-call-status.tsx";
 import type { ToolCallState } from "./tool-renderer.ts";
 
 export interface NumberedCodeLine {
@@ -36,41 +33,31 @@ export function ReadToolLabel({ children }: { readonly children: string }) {
 export function ReadToolPresentation({
     autoOpen,
     children,
-    content,
     path,
     state,
     title,
 }: {
     readonly autoOpen: boolean;
     readonly children: ReactNode;
-    readonly content: readonly AgentDisplayContent[];
     readonly path: string;
     readonly state: ToolCallState;
     readonly title: string;
 }) {
-    const disclosure = useToolCallDisclosure(autoOpen);
     return (
-        <details
-            aria-label={`Read: ${title}`}
-            className="group/tool min-w-0"
-            data-testid={dataTestId.recognizedReadToolCall}
-            ref={disclosure}
+        <ToolCallDisclosure
+            ariaLabel={`Read: ${title}`}
+            autoOpen={autoOpen}
+            icon={<FileText aria-hidden="true" className="size-4 shrink-0" />}
+            state={state}
+            testId={dataTestId.recognizedReadToolCall}
+            title={title}
         >
-            <summary
-                className="flex min-h-8 w-full min-w-0 cursor-pointer list-none items-center gap-2 rounded-lg px-1 text-sm text-copy-secondary outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                title={title}
-            >
-                <FileText aria-hidden="true" className="size-4 shrink-0" />
-                <span className="min-w-0 flex-1 truncate whitespace-nowrap">{title}</span>
-                <ToolCallStatus state={state} />
-            </summary>
             <div className="mt-1 ml-5 grid min-w-0 gap-2 text-xs">
                 <div className="truncate font-mono text-copy-secondary" title={path}>
                     {path}
                 </div>
                 {children}
-                <AgentRichContent contents={toolRichContent(content)} />
             </div>
-        </details>
+        </ToolCallDisclosure>
     );
 }

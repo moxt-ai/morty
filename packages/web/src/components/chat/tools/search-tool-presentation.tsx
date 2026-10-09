@@ -1,22 +1,18 @@
 import { Search } from "lucide-react";
-import { AgentRichContent } from "../../agents/agent-rich-content.tsx";
-import { ToolCallStatus, useToolCallDisclosure } from "./tool-call-status.tsx";
-import { toolRichContent, toolTextContent } from "./tool-display-content.ts";
+import { ToolCallDisclosure } from "./tool-call-status.tsx";
+import { toolTextContent } from "./tool-display-content.ts";
 import type { ToolRendererProps } from "./tool-renderer.ts";
 
 export function SearchToolPresentation({ autoOpen, entry, path }: ToolRendererProps & { readonly path: string }) {
     const result = toolTextContent(entry.content) ?? entry.output;
-    const disclosure = useToolCallDisclosure(autoOpen);
     return (
-        <details aria-label={`Search: ${entry.title}`} className="group/tool min-w-0" ref={disclosure}>
-            <summary
-                className="flex min-h-8 w-full min-w-0 cursor-pointer list-none items-center gap-2 rounded-lg px-1 text-sm text-copy-secondary outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                title={entry.title}
-            >
-                <Search aria-hidden="true" className="size-4 shrink-0" />
-                <span className="min-w-0 flex-1 truncate whitespace-nowrap">{entry.title}</span>
-                <ToolCallStatus state={entry.state} />
-            </summary>
+        <ToolCallDisclosure
+            ariaLabel={`Search: ${entry.title}`}
+            autoOpen={autoOpen}
+            icon={<Search aria-hidden="true" className="size-4 shrink-0" />}
+            state={entry.state}
+            title={entry.title}
+        >
             <div className="mt-1 ml-5 grid min-w-0 gap-2 text-xs">
                 <div className="truncate font-mono text-copy-secondary" title={path}>
                     {path}
@@ -29,8 +25,7 @@ export function SearchToolPresentation({ autoOpen, entry, path }: ToolRendererPr
                         </pre>
                     </div>
                 )}
-                <AgentRichContent contents={toolRichContent(entry.content)} />
             </div>
-        </details>
+        </ToolCallDisclosure>
     );
 }

@@ -8,7 +8,7 @@ async function startLongResponse(text: string) {
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected fake daemon");
+        throw new Error("Expected a controlled Agent Runtime");
     }
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -20,7 +20,7 @@ async function startLongResponse(text: string) {
     }
     await sendPrompt(app, composer, "hold after first delta");
     await app.waitForView(() => expect(document.body.textContent).toContain("Partial reply"));
-    daemon.continueReply("hold after first delta", {
+    await daemon.continueReply("hold after first delta", {
         outcome: "hold",
         output: [{ kind: "text", text }],
     });
@@ -47,7 +47,7 @@ test("Given a long quoted code block, When output grows and I load more, Then th
         expect(document.body.textContent?.match(/x/gu)?.length ?? 0).toBeLessThan(64_000);
         expect(document.body.textContent).toContain("Latest output (text preview)");
     });
-    daemon.continueReply("hold after first delta", {
+    await daemon.continueReply("hold after first delta", {
         outcome: "hold",
         output: [{ kind: "text", text: "\nNEW_LIVE_OUTPUT" }],
     });
@@ -65,7 +65,7 @@ test("Given a long quoted code block, When output grows and I load more, Then th
         expect(response.textContent?.match(/x{60}/gu)).toHaveLength(900);
         expect(response.textContent).not.toContain("Latest output (text preview)");
     });
-    daemon.continueReply("hold after first delta", { outcome: "complete", output: [] });
+    await daemon.continueReply("hold after first delta", { outcome: "complete", output: [] });
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
     expect(document.body.textContent).toContain("NEW_LIVE_OUTPUT");
 });

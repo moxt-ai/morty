@@ -1,6 +1,16 @@
-import type { Output, ReplyPlan } from "@moxt-ai/mobius-test/fake-daemon/model";
+import type { HarnessOutput, HarnessReplyPlan } from "@moxt-ai/mobius-test-support/fake-daemon";
 
-export const mortyFiles = new Map([
+export const mortyFiles = new Map<string, { readonly content: string | Uint8Array; readonly mediaType: string }>([
+    [
+        "/workspace/generated-picture.png",
+        {
+            content: Buffer.from(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV4kAAAAASUVORK5CYII=",
+                "base64",
+            ),
+            mediaType: "image/png",
+        },
+    ],
     [
         "/workspace/edit-tool-presentation.tsx",
         {
@@ -11,7 +21,7 @@ export const mortyFiles = new Map([
 ]);
 
 /** Shared Morty scenario data; the protocol peer has no prompt-specific branches. */
-export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | "steer"): ReplyPlan {
+export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | "steer"): HarnessReplyPlan {
     if (mode === "steer") {
         return {
             outcome: prompt === "Use the revised requirement" ? "hold" : "complete",
@@ -32,8 +42,9 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     {
                         kind: "activity",
                         activityType: "tool",
+                        content: [],
                         title: "Read package metadata",
-                        output: "Read package metadata",
+                        output: "Package metadata response",
                     },
                     { kind: "text", text: "Partial rich reply" },
                 ],
@@ -69,13 +80,18 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
             return {
                 outcome: "complete",
                 output: ["Inspecting the reported behavior.", "Checking the message boundaries."].map(
-                    (output): Output => ({
+                    (output): HarnessOutput => ({
                         activityType: "reasoning",
                         kind: "activity",
                         output,
                         title: "Thinking",
                     }),
                 ),
+            };
+        case "show generated picture":
+            return {
+                outcome: "complete",
+                output: [{ kind: "text", text: "![Generated picture](file:///workspace/generated-picture.png)" }],
             };
         case "show source file":
             return {
@@ -95,6 +111,7 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     {
                         kind: "activity",
                         activityType: "tool",
+                        content: [],
                         title: "Later live tool",
                         output: "Later live tool output",
                     },
@@ -108,6 +125,14 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     {
                         kind: "activity",
                         activityType: "tool",
+                        content: [
+                            {
+                                newText: "export const status = 'after';\n",
+                                oldText: "export const status = 'before';\n",
+                                path: "/workspace/app.js",
+                                type: "diff",
+                            },
+                        ],
                         title: "/workspace/app.js, /workspace/index.html, /workspace/styles.css",
                         output: JSON.stringify({
                             changes: ["/workspace/app.js", "/workspace/index.html", "/workspace/styles.css"],
@@ -122,6 +147,7 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     {
                         kind: "activity",
                         activityType: "tool",
+                        content: [],
                         title: "cua_repl/js",
                         output: JSON.stringify({
                             content: [
@@ -146,6 +172,7 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     {
                         kind: "activity",
                         activityType: "tool",
+                        content: [],
                         title: "cua_repl/js",
                         output: "null",
                     },
@@ -158,6 +185,7 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     {
                         kind: "activity",
                         activityType: "tool",
+                        content: [],
                         title: '/bin/zsh -lc "true"',
                         output: JSON.stringify({ exitCode: 0, output: "" }),
                     },
@@ -170,6 +198,7 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     {
                         kind: "activity",
                         activityType: "tool",
+                        content: [],
                         title: '/bin/zsh -lc "pnpm test"',
                         output: JSON.stringify({
                             exitCode: 0,
@@ -191,6 +220,7 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     {
                         kind: "activity",
                         activityType: "tool",
+                        content: [],
                         title: "Read package metadata",
                         output: "Read package metadata",
                     },
