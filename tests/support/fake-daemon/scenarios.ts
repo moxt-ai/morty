@@ -1,5 +1,17 @@
 import type { HarnessOutput, HarnessReplyPlan } from "@moxt-ai/mobius-test-support/fake-daemon";
 
+const FILE_EXPLORER_SOURCE = [
+    "export function FileExplorer() {",
+    "    return <aside>Files</aside>;",
+    "}",
+    ...Array.from(
+        { length: 48 },
+        (_, index) => `export const explorerRow${index.toString()} = "File ${index.toString()}";`,
+    ),
+    "export const fileExplorerEnd = true;",
+    "",
+].join("\n");
+
 export const mortyFiles = new Map<string, { readonly content: string | Uint8Array; readonly mediaType: string }>([
     [
         "/workspace/generated-picture.png",
@@ -14,7 +26,7 @@ export const mortyFiles = new Map<string, { readonly content: string | Uint8Arra
     [
         "/workspace/edit-tool-presentation.tsx",
         {
-            content: "export function FileExplorer() {\n    return <aside>Files</aside>;\n}\n",
+            content: FILE_EXPLORER_SOURCE,
             mediaType: "text/typescript",
         },
     ],
