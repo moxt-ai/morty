@@ -284,7 +284,7 @@ function sessionConfigOptionsFromAcp(
 }
 
 interface SessionEventRecoveryV2 {
-    readonly daemonGenerationId: string;
+    readonly sessionGenerationId: string;
     readonly events: readonly SessionEventV2[];
     readonly nextCursor: string | null;
 }
@@ -303,7 +303,7 @@ async function readNativeEventsV2(
     );
     signal.throwIfAborted();
     return {
-        daemonGenerationId: page.events.daemonGenerationId,
+        sessionGenerationId: page.events.sessionGenerationId,
         events: page.events.events,
         nextCursor: page.events.nextCursor,
     };
@@ -342,7 +342,7 @@ export function createSessionPaneModel(options: {
     const openedActiveTurn = activeTurn.current();
     let client: MobiusClient | null = null;
     let sessionEvents: SessionEventV2[] = [];
-    let daemonGenerationId: string | null = null;
+    let sessionGenerationId: string | null = null;
     let historyCursor: string | null = null;
     let loadingOlderHistory = false;
     let command = openedActiveTurn.kind === "idle" ? "" : openedActiveTurn.commandId;
@@ -499,7 +499,7 @@ export function createSessionPaneModel(options: {
                         signal,
                     );
                     signal.throwIfAborted();
-                    if (daemonGenerationId !== null && page.events.daemonGenerationId !== daemonGenerationId) {
+                    if (sessionGenerationId !== null && page.events.sessionGenerationId !== sessionGenerationId) {
                         throw new Error("The Runtime restarted while older messages were loading.");
                     }
                     replaceTimeline(mergeSessionEvents(page.events.events, sessionEvents));
@@ -683,7 +683,7 @@ export function createSessionPaneModel(options: {
                                 readNativeEventsV2(connected, sessionId, sessionIdentity, signal),
                                 connected.sessions.readSessionExecution(sessionId, sessionIdentity, signal),
                             ]);
-                            daemonGenerationId = recovery.daemonGenerationId;
+                            sessionGenerationId = recovery.sessionGenerationId;
                             const running = execution.turn;
                             messageQueue.getState().replace(execution.queued);
                             replaceTimeline(recovery.events);
