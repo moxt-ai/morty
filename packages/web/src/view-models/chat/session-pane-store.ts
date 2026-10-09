@@ -743,46 +743,46 @@ export function createSessionPaneModel(options: {
                                     break;
                             }
                         },
-                        receive: async (event) => {
-                            const latest = sessionEvents.at(-1);
-                            if (latest === undefined || latest.eventId < event.eventId) {
-                                sessionEvents.push(event);
-                                timelineProjection.append(event);
-                            } else if (!sessionEvents.some((candidate) => candidate.eventId === event.eventId)) {
-                                replaceTimeline(mergeSessionEvents(sessionEvents, [event]));
-                            }
-                            if (event.type !== "acp") {
-                                await receiveLifecycle(event.payload);
+                        receive: async (events) => {
+                            for (const event of events) {
+                                const latest = sessionEvents.at(-1);
+                                if (latest === undefined || latest.eventId < event.eventId) {
+                                    sessionEvents.push(event);
+                                    timelineProjection.append(event);
+                                } else if (!sessionEvents.some((candidate) => candidate.eventId === event.eventId)) {
+                                    replaceTimeline(mergeSessionEvents(sessionEvents, [event]));
+                                }
+                                if (event.type !== "acp") {
+                                    await receiveLifecycle(event.payload);
+                                } else {
+                                    const update = event.payload;
+                                    if (update.sessionUpdate === "available_commands_update") {
+                                        tasks.getState().updateCommands(
+                                            update.availableCommands.map((available) => ({
+                                                description: available.description,
+                                                inputHint: available.input?.hint ?? "",
+                                                name: available.name,
+                                            })),
+                                        );
+                                    }
+                                    if (update.sessionUpdate === "config_option_update") {
+                                        const configOptions = sessionConfigOptionsFromAcp(update);
+                                        sessionConfigurations = configOptions.map((candidate) => ({
+                                            booleanValue: candidate.type === "boolean" ? candidate.booleanValue : false,
+                                            configId: candidate.id,
+                                            value: candidate.type === "select" ? candidate.currentValue : "",
+                                            valueType: candidate.type,
+                                        }));
+                                        saveLastAgentSettings(botId, session.agentRef, configOptions);
+                                        set({ options: configOptions });
+                                    }
+                                }
                                 const timeline = deriveTimeline();
                                 if (timeline.messages !== get().messages) {
                                     set({ messages: timeline.messages });
                                 }
-                                return true;
-                            }
-                            const update = event.payload;
-                            if (update.sessionUpdate === "available_commands_update") {
-                                tasks.getState().updateCommands(
-                                    update.availableCommands.map((available) => ({
-                                        description: available.description,
-                                        inputHint: available.input?.hint ?? "",
-                                        name: available.name,
-                                    })),
-                                );
-                            }
-                            if (update.sessionUpdate === "config_option_update") {
-                                const configOptions = sessionConfigOptionsFromAcp(update);
-                                sessionConfigurations = configOptions.map((candidate) => ({
-                                    booleanValue: candidate.type === "boolean" ? candidate.booleanValue : false,
-                                    configId: candidate.id,
-                                    value: candidate.type === "select" ? candidate.currentValue : "",
-                                    valueType: candidate.type,
-                                }));
-                                saveLastAgentSettings(botId, session.agentRef, configOptions);
-                                set({ options: configOptions });
-                            }
-                            const timeline = deriveTimeline();
-                            if (timeline.messages !== get().messages) {
-                                set({ messages: timeline.messages });
+                                await new Promise<void>((resolve) => queueMicrotask(resolve));
+                                signal.throwIfAborted();
                             }
                             return true;
                         },

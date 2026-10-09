@@ -28,11 +28,16 @@ export function observeTestId(testId: string): Promise<HTMLElement> {
 }
 
 export async function sendPrompt(app: TestApp, composer: HTMLTextAreaElement, prompt: string): Promise<void> {
+    await app.waitForView(() => {
+        if (composer.disabled) {
+            throw new Error("The message composer is not ready.");
+        }
+    });
     await app.user.click(composer);
     await app.user.paste(prompt);
     const send = await app.queryElementByTestId(
         dataTestId.sendMessage,
-        (element) => element instanceof HTMLButtonElement && !element.disabled,
+        (element) => element instanceof HTMLButtonElement && element.type === "submit" && !element.disabled,
     );
     await app.user.click(send);
 }
