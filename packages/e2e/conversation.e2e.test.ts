@@ -37,6 +37,14 @@ test("Given a linked TypeScript file longer than the preview, When the user open
             return box?.height ?? 0;
         })
         .toBeGreaterThan(400);
+    const fileContents = preview.getByRole("region", { name: "File contents" });
+    await expect(fileContents).toBeVisible();
+    await expect
+        .poll(async () => await fileContents.evaluate((element) => element.scrollHeight - element.clientHeight))
+        .toBeGreaterThan(0);
+    await fileContents.focus();
+    await page.keyboard.press("End");
+    await expect.poll(async () => await fileContents.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
     const messagesBox = await messages.boundingBox();
     const previewBox = await preview.boundingBox();
     expect(messagesBoxBefore).not.toBeNull();

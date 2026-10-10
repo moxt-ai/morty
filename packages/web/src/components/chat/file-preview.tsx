@@ -33,7 +33,7 @@ export function FilePreview({ onClose, state }: { readonly onClose: () => void; 
             className="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-border bg-surface-elevated shadow-2xl sm:w-[min(50vw,56rem)]"
             data-testid={dataTestId.filePreview}
         >
-            <header className="flex min-h-14 items-center gap-3 border-b border-border px-4">
+            <header className="flex min-h-14 shrink-0 items-center gap-3 border-b border-border px-4">
                 <FileText aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate text-sm font-medium" title={state.path}>
                     {title}
@@ -50,10 +50,10 @@ export function FilePreview({ onClose, state }: { readonly onClose: () => void; 
             </header>
             <div
                 className={cn(
-                    "flex min-h-0 flex-1 overflow-auto",
+                    "flex min-h-0 flex-1",
                     state.kind === "text"
-                        ? "items-stretch justify-stretch bg-white"
-                        : "items-center justify-center bg-surface-subtle p-5",
+                        ? "items-stretch justify-stretch overflow-hidden bg-white"
+                        : "items-center justify-center overflow-auto bg-surface-subtle p-5",
                 )}
             >
                 {state.kind === "loading" ? (
@@ -63,12 +63,15 @@ export function FilePreview({ onClose, state }: { readonly onClose: () => void; 
                 ) : state.kind === "failed" ? (
                     <p className="text-sm text-destructive">{state.message}</p>
                 ) : state.kind === "text" ? (
-                    <div
-                        className="min-h-full w-full overflow-hidden bg-white [&_pre]:!max-h-none"
+                    <section
+                        aria-label="File contents"
+                        className="h-full min-h-0 w-full overflow-auto bg-white [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring [&_pre]:!max-h-none"
                         data-testid={dataTestId.filePreviewContent}
+                        // biome-ignore lint/a11y/noNoninteractiveTabindex: the scroll region must be keyboard reachable
+                        tabIndex={0}
                     >
                         <HighlightedCode bare code={state.text} language={languageForPath(state.name)} />
-                    </div>
+                    </section>
                 ) : (
                     <PreviewImage state={state} />
                 )}

@@ -479,6 +479,9 @@ function evaluate(target, snapshot, summaries, state) {
     if (pr.state === "CLOSED") {
         return { kind: "failed", message: "Pull request closed without merging" };
     }
+    if (pr.mergeStateStatus === "BEHIND") {
+        return { kind: "failed", message: "Pull request branch is behind the base branch" };
+    }
     const prCheck = terminalCheck(summaries.prSummary, "PR head");
     if (prCheck !== undefined) {
         return { kind: "failed", message: prCheck };
@@ -514,7 +517,7 @@ function evaluate(target, snapshot, summaries, state) {
         summaries.prSummary.pending === 0 &&
         summaries.prSummary.failed === 0 &&
         pr.mergeable === "MERGEABLE" &&
-        (pr.mergeStateStatus === "CLEAN" || pr.mergeStateStatus === "BEHIND")
+        pr.mergeStateStatus === "CLEAN"
     ) {
         return {
             kind: "ready",
