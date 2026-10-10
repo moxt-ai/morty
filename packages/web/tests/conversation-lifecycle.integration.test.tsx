@@ -254,6 +254,9 @@ test("Given more saved messages than one history page, When the user reaches the
     expect(page.prompts.at(-1)).toBe(prompts.at(-1));
     expect(page.responses.some((response) => response.includes("Completed Pagination message 1"))).toBe(false);
     expect(page.responses.at(-1)).toContain(`Completed Pagination message ${prompts.length.toString()}`);
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "textbox", { name: "Message" }).hasAttribute("disabled")).toBe(false),
+    );
     const messages = queryByRole(document.body, "log", { name: "Messages" });
     if (!(messages instanceof HTMLElement)) {
         throw new Error("Expected the Session message list");
