@@ -12,6 +12,28 @@ import { MobiusSessionMessage } from "./mobius-session-message.tsx";
 
 export type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 
+function NativeSessionDirectorySkeleton() {
+    return (
+        <div role="status" aria-label="Discovering native sessions">
+            <span className="sr-only">Discovering native sessions</span>
+            <div aria-hidden="true" className="grid animate-pulse gap-2 motion-reduce:animate-none">
+                <div className="rounded-lg p-3">
+                    <div className="h-4 w-3/4 rounded-full bg-muted" />
+                    <div className="mt-2 h-3 w-1/2 rounded-full bg-muted" />
+                </div>
+                <div className="rounded-lg p-3">
+                    <div className="h-4 w-2/3 rounded-full bg-muted" />
+                    <div className="mt-2 h-3 w-3/5 rounded-full bg-muted" />
+                </div>
+                <div className="rounded-lg p-3">
+                    <div className="h-4 w-4/5 rounded-full bg-muted" />
+                    <div className="mt-2 h-3 w-2/5 rounded-full bg-muted" />
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export function NativeSessionDialog({
     botId,
     requests,
@@ -76,7 +98,7 @@ export function NativeSessionDialog({
                         />
                     )}
                     <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
-                        {model.directory.kind === "loading" && <p role="status">Discovering native sessions…</p>}
+                        {model.directory.kind === "loading" && <NativeSessionDirectorySkeleton />}
                         {model.directory.kind === "empty" && <p>Connect a local agent to browse its sessions.</p>}
                         {model.directory.kind === "failed" && <p role="alert">{model.directory.message}</p>}
                         {model.directory.kind === "ready" && model.directory.entries.length === 0 && (
@@ -117,9 +139,12 @@ export function NativeSessionDialog({
                         )}
                     </div>
                 </section>
-                <section aria-label="Selected session preview" className="min-w-0 space-y-4 overflow-y-auto p-4 sm:p-6">
+                <section
+                    aria-label="Selected session preview"
+                    className={`min-w-0 overflow-y-auto p-4 sm:p-6 ${model.preview.kind === "empty" ? "flex items-center justify-center" : ""}`}
+                >
                     {model.preview.kind === "empty" && (
-                        <p className="text-muted-foreground">Select a session to preview its history.</p>
+                        <p className="text-center text-muted-foreground">Select a session to preview its history.</p>
                     )}
                     {model.preview.kind === "loading" && <p role="status">Loading session preview…</p>}
                     {model.preview.kind === "failed" && (
@@ -128,7 +153,7 @@ export function NativeSessionDialog({
                         </p>
                     )}
                     {model.preview.kind === "ready" && (
-                        <>
+                        <div className="space-y-4">
                             <h2 className="font-semibold">{model.preview.entry.title || "Untitled session"}</h2>
                             {model.preview.content.messages.length === 0 && <p>No events in this session.</p>}
                             {model.preview.content.messages.map((message) => (
@@ -145,7 +170,7 @@ export function NativeSessionDialog({
                             {model.preview.content.truncated && (
                                 <p className="text-muted-foreground">Showing a partial event preview.</p>
                             )}
-                        </>
+                        </div>
                     )}
                 </section>
             </div>
