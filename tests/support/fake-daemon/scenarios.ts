@@ -80,6 +80,23 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
         return manySessionEvents(`Completed ${prompt.slice(eventBurstPrefix.length)}`);
     }
     switch (prompt) {
+        case "draw a deployment diagram":
+            return {
+                outcome: "hold",
+                output: [
+                    { kind: "text", text: "```mermaid\nflowchart LR\n    Browser --> Worker\n    Worker --> Agent\n" },
+                ],
+            };
+        case "draw a sequence diagram":
+            return {
+                outcome: "hold",
+                output: [
+                    {
+                        kind: "text",
+                        text: "```mermaid\nsequenceDiagram\n    Client->>Server: Send request\n    Server-->>Client: Return response\n```\n\nRequest sequence.",
+                    },
+                ],
+            };
         case "hold with rich content":
             return {
                 outcome: "hold",

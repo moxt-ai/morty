@@ -321,6 +321,9 @@ export function MobiusSessionPane({
                                         openLocalFile={openLocalFile}
                                         readImage={readImage}
                                         text={item.text}
+                                        streaming={
+                                            model.activity.kind === "working" && index === renderItems.length - 1
+                                        }
                                     />
                                 ) : item.kind === "thinking" ? (
                                     <div data-testid={dataTestId.agentResponse}>

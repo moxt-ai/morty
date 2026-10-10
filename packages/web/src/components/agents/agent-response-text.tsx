@@ -6,6 +6,7 @@ const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 type ResponseProps = {
     readonly text: string;
+    readonly streaming: boolean;
     readonly openLocalFile: (path: string) => void;
     readonly readImage?: MarkdownImageReader | undefined;
 };
@@ -17,6 +18,7 @@ const MarkdownPreview = memo(function MarkdownPreview({
     openLocalFile,
     readImage,
     sourceCharacters,
+    streaming,
 }: MarkdownPreviewProps) {
     return (
         <AgentMarkdown
@@ -25,12 +27,12 @@ const MarkdownPreview = memo(function MarkdownPreview({
             openLocalFile={openLocalFile}
             readImage={readImage}
             sourceCharacters={sourceCharacters}
-            streaming={false}
+            streaming={streaming}
         />
     );
 });
 
-export function AgentResponseText({ text, openLocalFile, readImage }: ResponseProps) {
+export function AgentResponseText({ text, openLocalFile, readImage, streaming }: ResponseProps) {
     const [visibleCharacters, setVisibleCharacters] = useState(PREVIEW_CHARACTERS);
     // Expand one document, rather than independent fragments: the Markdown parser
     // retains list, table, quote and code context across every expansion.
@@ -51,6 +53,7 @@ export function AgentResponseText({ text, openLocalFile, readImage }: ResponsePr
                 openLocalFile={openLocalFile}
                 readImage={readImage}
                 sourceCharacters={text.length}
+                streaming={streaming}
             />
             {truncated && (
                 <div className="my-3 space-y-2 text-sm text-muted-foreground">
