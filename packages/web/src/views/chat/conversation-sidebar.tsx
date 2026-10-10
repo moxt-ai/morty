@@ -22,6 +22,7 @@ import { Input } from "../../components/ui/input.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
+import { registerDaemonDiagnostics } from "../../services/diagnostics/browser-diagnostics.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import type { BotConnectionStatus, BotOperation } from "../../view-models/chat/bot-chat-home-store.ts";
@@ -29,18 +30,27 @@ import { createConversationDirectoryStore } from "../../view-models/chat/convers
 import type { ConversationListStatus } from "../../view-models/chat/conversation-status-store.ts";
 import { createNetworkDiagnosticStore } from "../../view-models/chat/network-diagnostic-store.ts";
 import { createRemoteAccessStore } from "../../view-models/chat/remote-access-store.ts";
+import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import { BotSwitcherMenu } from "./bot-switcher-menu.tsx";
 import { MachineSharing } from "./machine-sharing.tsx";
 import { NativeSessionDialog, type OpenMobiusSession } from "./native-session-dialog.tsx";
 
-function SidebarActionTooltip({ children, label }: { readonly children: ReactNode; readonly label: string }) {
+function SidebarActionTooltip({
+    children,
+    label,
+    side = "bottom",
+}: {
+    readonly children: ReactNode;
+    readonly label: string;
+    readonly side?: "top" | "bottom";
+}) {
     return (
         <Tooltip.Root>
             <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
             <Tooltip.Portal>
                 <Tooltip.Content
                     className="z-[70] rounded-lg bg-foreground px-2.5 py-1.5 text-xs text-background shadow-lg"
-                    side="bottom"
+                    side={side}
                     sideOffset={6}
                 >
                     {label}
@@ -185,6 +195,7 @@ export function ConversationSidebar({
         | "nativeSessions"
         | "nativeSession"
         | "managedSessions"
+        | "daemonDiagnostics"
         | "networkDiagnostic"
     >;
     readonly activeId: string;
@@ -222,6 +233,16 @@ export function ConversationSidebar({
         }),
     );
     const diagnostic = useStore(networkDiagnostic);
+    useEffect(
+        () =>
+            registerDaemonDiagnostics({
+                botId,
+                sessionId: activeId,
+                nativeSessionId: null,
+                read: (signal) => requests.daemonDiagnostics(botId, signal),
+            }),
+        [botId, activeId, requests],
+    );
     const lifetime = useRef<AbortController | null>(null);
     const measureNetwork = () => {
         const controller = lifetime.current;
@@ -477,80 +498,86 @@ export function ConversationSidebar({
                     </section>
                 ))}
             </div>
-            <div className="col-start-2 row-start-2 flex items-center gap-1 sm:col-auto sm:row-auto sm:mt-3 sm:border-t sm:border-black/[0.06] sm:pt-3">
-                {access.state.kind !== "ended" && (
-                    <DropdownMenu.Root>
-                        <DropdownMenu.Trigger asChild>
-                            <Button
-                                aria-label="User menu"
-                                className="min-h-10 shrink-0 rounded-full"
-                                data-testid={dataTestId.userMenu}
-                                disabled={access.state.kind === "loading"}
-                                size="icon"
-                                variant="ghost"
-                            >
-                                {access.state.kind === "loading" ? (
-                                    <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-                                ) : (
-                                    <UserRound aria-hidden="true" className="size-4" />
-                                )}
-                            </Button>
-                        </DropdownMenu.Trigger>
-                        <DropdownMenu.Portal>
-                            <DropdownMenu.Content
-                                align="start"
-                                className="z-[110] min-w-52 rounded-lg border border-border bg-background p-1 text-sm text-foreground shadow-lg"
-                                side="top"
-                                sideOffset={6}
-                            >
-                                <DropdownMenu.Item
-                                    className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 outline-none data-[highlighted]:bg-accent"
-                                    onSelect={measureNetwork}
+            <Tooltip.Provider delayDuration={150} disableHoverableContent>
+                <div className="col-start-2 row-start-2 flex items-center gap-1 sm:col-auto sm:row-auto sm:mt-3 sm:border-t sm:border-black/[0.06] sm:pt-3">
+                    <BugReportButton appearance="icon" />
+                    {access.state.kind !== "ended" && (
+                        <DropdownMenu.Root>
+                            <SidebarActionTooltip label="User menu" side="top">
+                                <DropdownMenu.Trigger asChild>
+                                    <Button
+                                        aria-label="User menu"
+                                        className="min-h-10 shrink-0 rounded-full"
+                                        data-testid={dataTestId.userMenu}
+                                        disabled={access.state.kind === "loading"}
+                                        size="icon"
+                                        variant="ghost"
+                                    >
+                                        {access.state.kind === "loading" ? (
+                                            <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                                        ) : (
+                                            <UserRound aria-hidden="true" className="size-4" />
+                                        )}
+                                    </Button>
+                                </DropdownMenu.Trigger>
+                            </SidebarActionTooltip>
+                            <DropdownMenu.Portal>
+                                <DropdownMenu.Content
+                                    align="start"
+                                    className="z-[110] min-w-52 rounded-lg border border-border bg-background p-1 text-sm text-foreground shadow-lg"
+                                    side="top"
+                                    sideOffset={6}
                                 >
-                                    <Wifi aria-hidden="true" className="size-4" />
-                                    Network Diagnostic
-                                </DropdownMenu.Item>
-                                <DropdownMenu.Item
-                                    className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 outline-none data-[highlighted]:bg-accent"
-                                    data-testid={dataTestId.replaceCurrentUser}
-                                    onSelect={() => {
-                                        const controller = lifetime.current;
-                                        if (controller !== null) {
-                                            void access.requestReplacement(controller.signal);
-                                        }
-                                    }}
-                                >
-                                    <Repeat2 aria-hidden="true" className="size-4" />
-                                    Replace current user
-                                </DropdownMenu.Item>
-                                <DropdownMenu.Item
-                                    className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-destructive outline-none data-[highlighted]:bg-destructive/10"
-                                    data-testid={dataTestId.endRemoteAccess}
-                                    onSelect={() => {
-                                        const controller = lifetime.current;
-                                        if (controller !== null) {
-                                            void access.requestEnd(controller.signal);
-                                        }
-                                    }}
-                                >
-                                    <LogOut aria-hidden="true" className="size-4" />
-                                    End remote access
-                                </DropdownMenu.Item>
-                            </DropdownMenu.Content>
-                        </DropdownMenu.Portal>
-                    </DropdownMenu.Root>
-                )}
-                <Button
-                    aria-label="Share My Machine"
-                    variant="ghost"
-                    className="size-10 shrink-0 justify-center rounded-full px-0 text-copy-secondary hover:bg-white/70 sm:min-h-10 sm:flex-1 sm:justify-start sm:rounded-xl sm:px-3"
-                    data-testid={dataTestId.shareMachine}
-                    onClick={() => setSharing(true)}
-                >
-                    <Share2 className="size-4" aria-hidden="true" />
-                    <span className="hidden sm:inline">Share My Machine</span>
-                </Button>
-            </div>
+                                    <DropdownMenu.Item
+                                        className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 outline-none data-[highlighted]:bg-accent"
+                                        onSelect={measureNetwork}
+                                    >
+                                        <Wifi aria-hidden="true" className="size-4" />
+                                        Network Diagnostic
+                                    </DropdownMenu.Item>
+                                    <DropdownMenu.Item
+                                        className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 outline-none data-[highlighted]:bg-accent"
+                                        data-testid={dataTestId.replaceCurrentUser}
+                                        onSelect={() => {
+                                            const controller = lifetime.current;
+                                            if (controller !== null) {
+                                                void access.requestReplacement(controller.signal);
+                                            }
+                                        }}
+                                    >
+                                        <Repeat2 aria-hidden="true" className="size-4" />
+                                        Replace current user
+                                    </DropdownMenu.Item>
+                                    <DropdownMenu.Item
+                                        className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-destructive outline-none data-[highlighted]:bg-destructive/10"
+                                        data-testid={dataTestId.endRemoteAccess}
+                                        onSelect={() => {
+                                            const controller = lifetime.current;
+                                            if (controller !== null) {
+                                                void access.requestEnd(controller.signal);
+                                            }
+                                        }}
+                                    >
+                                        <LogOut aria-hidden="true" className="size-4" />
+                                        End remote access
+                                    </DropdownMenu.Item>
+                                </DropdownMenu.Content>
+                            </DropdownMenu.Portal>
+                        </DropdownMenu.Root>
+                    )}
+                    <SidebarActionTooltip label="Share My Machine" side="top">
+                        <Button
+                            aria-label="Share My Machine"
+                            variant="ghost"
+                            className="size-10 shrink-0 justify-center rounded-full px-0 text-copy-secondary hover:bg-white/70"
+                            data-testid={dataTestId.shareMachine}
+                            onClick={() => setSharing(true)}
+                        >
+                            <Share2 className="size-4" aria-hidden="true" />
+                        </Button>
+                    </SidebarActionTooltip>
+                </div>
+            </Tooltip.Provider>
             {dialog && (
                 <NativeSessionDialog
                     botId={botId}

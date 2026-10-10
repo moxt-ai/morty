@@ -31,12 +31,59 @@ test("Given a Codex native session handoff, When the user hovers over import, Th
     ).toBeInstanceOf(HTMLElement);
 });
 
+test("Given a native session handoff, When the choice page loads, Then a QR code of the same page is offered for another device", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({
+        page: {
+            harness: "opencode",
+            kind: "continue",
+            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
+        },
+    });
+    const qrCode = await vi.waitFor(() =>
+        getByRole(document.body, "img", { name: "QR code to continue on another device" }),
+    );
+
+    expect(qrCode.getAttribute("src")).toMatch(/^data:image\/png/u);
+
+    await app.user.click(getByRole(document.body, "button", { name: "Show QR code" }));
+
+    const dialog = await vi.waitFor(() => getByRole(document.body, "dialog", { name: "Continue on another device" }));
+    const dialogQrCode = await vi.waitFor(() =>
+        getByRole(dialog, "img", { name: "QR code to continue on another device" }),
+    );
+
+    expect(dialogQrCode.getAttribute("src")).toBe(qrCode.getAttribute("src"));
+});
+
 test("Given a new browser, When Morty loads, Then the anonymous workspace opens", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap" } });
 
     expect(await app.queryElementByTestId(dataTestId.closeDialog)).toBeInstanceOf(HTMLElement);
+});
+
+test("Given a shared workspace, When the user hovers each sidebar action, Then every action is icon-only and shows a tooltip naming it", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp();
+    await app.user.click(await app.queryElementByTestId(dataTestId.closeDialog));
+    const reportBug = await vi.waitFor(() => getByRole(document.body, "button", { name: "Report a bug" }));
+    const actions = [
+        { element: reportBug, tooltip: "Report a bug" },
+        { element: await app.queryElementByTestId(dataTestId.userMenu), tooltip: "User menu" },
+        { element: await app.queryElementByTestId(dataTestId.shareMachine), tooltip: "Share My Machine" },
+    ];
+
+    for (const { element, tooltip } of actions) {
+        expect(element.textContent).toBe("");
+        await app.user.hover(element);
+        expect(await vi.waitFor(() => getByRole(document.body, "tooltip", { name: tooltip }))).toBeInstanceOf(
+            HTMLElement,
+        );
+    }
 });
 
 test("Given a native session handoff, When importing fails, Then the choice page shows progress and allows a fork retry", {

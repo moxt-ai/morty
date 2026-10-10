@@ -1,5 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { HarnessReplyPlan } from "@moxt-ai/mobius-test-support/fake-daemon";
 import {
     type ControlledAgentBehavior,
     connectControlledAgentRuntime,
@@ -114,5 +115,11 @@ export class ControlledSetupRuntime implements SetupRuntime {
         const active = Array.from(this.#active.values());
         this.#active.clear();
         await Promise.all(active.map((daemon) => daemon[Symbol.asyncDispose]()));
+    };
+
+    readonly continueReply = async (prompt: string, plan: HarnessReplyPlan): Promise<void> => {
+        for (const daemon of this.#active.values()) {
+            await daemon.continueReply(prompt, plan);
+        }
     };
 }

@@ -1,15 +1,20 @@
 import { defaultRemarkPlugins, Streamdown } from "streamdown";
+import { isDisplayableImageType } from "../../services/chat/image-media-type.ts";
 import "streamdown/styles.css";
 import { type ComponentProps, useEffect, useMemo, useState } from "react";
 import { dataTestId } from "@/data-testid";
 import { cn } from "@/lib/utils";
 import { boundedCodeHighlighter } from "./bounded-code-highlighter.ts";
+import { MermaidCodeBlock } from "./mermaid-code-block.tsx";
+import { remarkMermaidCompletion } from "./remark-mermaid-completion.ts";
 
-const STREAM_ANIMATION = Object.freeze({ duration: 180, stagger: 0 });
 const STREAMDOWN_CONTROLS = Object.freeze({
     code: Object.freeze({ copy: true, download: false }),
 });
-const STREAMDOWN_PLUGINS = Object.freeze({ code: boundedCodeHighlighter });
+const STREAMDOWN_PLUGINS = Object.freeze({
+    code: boundedCodeHighlighter,
+    renderers: [{ language: "mermaid", component: MermaidCodeBlock }],
+});
 const STREAMDOWN_TRANSLATIONS = Object.freeze({ copyCode: "Copy code" });
 const LOCAL_FILE_URL_ORIGIN = "https://local-file.morty.invalid";
 export const MAX_MARKDOWN_CHARACTERS = 32 * 1024;
@@ -136,8 +141,6 @@ export type MarkdownImageReader = (
     signal: AbortSignal,
 ) => Promise<{ readonly bytes: Uint8Array; readonly mediaType: string }>;
 
-const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/u;
-
 function directImageSource(value: string): string {
     if (localFilePath(value) !== null) {
         return "";
@@ -175,7 +178,11 @@ function AgentMarkdownImage({
         setSource(null);
         void readImage(requestedSource, controller.signal)
             .then((file) => {
-                if (controller.signal.aborted || !SAFE_IMAGE_MIME.test(file.mediaType)) {
+                if (controller.signal.aborted) {
+                    return;
+                }
+                if (!isDisplayableImageType(file.mediaType)) {
+                    setSource("");
                     return;
                 }
                 objectUrl = URL.createObjectURL(new Blob([Uint8Array.from(file.bytes)], { type: file.mediaType }));
@@ -220,6 +227,14 @@ export function AgentMarkdown({
     sourceCharacters = markdown.length,
     streaming,
 }: AgentMarkdownProps) {
+    const remarkPlugins = useMemo(() => {
+        // Explicit options also distinguish Streamdown's cached parser configurations.
+        const completion: [typeof remarkMermaidCompletion, { readonly streaming: boolean }] = [
+            remarkMermaidCompletion,
+            { streaming },
+        ];
+        return [completion, ...STREAMDOWN_REMARK_PLUGINS];
+    }, [streaming]);
     const components = useMemo(
         () => ({
             a: (properties: ComponentProps<"a">) => <AgentMarkdownLink {...properties} openLocalFile={openLocalFile} />,
@@ -238,7 +253,6 @@ export function AgentMarkdown({
         </pre>
     ) : (
         <Streamdown
-            animated={streaming ? STREAM_ANIMATION : false}
             className={cn(
                 "agent-markdown min-w-0 text-[15px] leading-6 text-foreground [overflow-wrap:anywhere]",
                 "[&_p]:my-2 [&_p]:whitespace-pre-line",
@@ -259,9 +273,9 @@ export function AgentMarkdown({
             controls={STREAMDOWN_CONTROLS}
             isAnimating={streaming}
             lineNumbers={false}
-            mode={streaming ? "streaming" : "static"}
+            mode="static"
             plugins={STREAMDOWN_PLUGINS}
-            remarkPlugins={STREAMDOWN_REMARK_PLUGINS}
+            remarkPlugins={remarkPlugins}
             translations={STREAMDOWN_TRANSLATIONS}
         >
             {markdown}

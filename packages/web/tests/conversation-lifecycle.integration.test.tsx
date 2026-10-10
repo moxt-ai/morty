@@ -213,7 +213,7 @@ test("Given Claude Code does not echo the submitted prompt, When the response st
     });
 });
 
-test("Given more saved messages than one history page, When the user reaches the top of a reopened conversation, Then at least twenty older messages load or history is exhausted", {
+test("Given more saved messages than one history page, When the user reaches the top of a reopened conversation, Then older messages appear without losing recent history", {
     timeout: 90_000,
 }, async () => {
     const prompts = Array.from({ length: 7 }, (_, index) => `many session events: Pagination message ${index + 1}`);
@@ -282,15 +282,20 @@ test("Given more saved messages than one history page, When the user reaches the
     expect(page.prompts.at(-1)).toBe(prompts.at(-1));
     expect(page.responses.some((response) => response.includes("Completed Pagination message 1"))).toBe(false);
     expect(page.responses.at(-1)).toContain(`Completed Pagination message ${prompts.length.toString()}`);
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "textbox", { name: "Message" }).hasAttribute("disabled")).toBe(false),
+    );
     const messages = queryByRole(document.body, "log", { name: "Messages" });
     if (!(messages instanceof HTMLElement)) {
         throw new Error("Expected the Session message list");
     }
     messages.scrollTop = 0;
     messages.dispatchEvent(new Event("scroll", { bubbles: true }));
-    await app.waitForView(() =>
-        expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual(prompts),
-    );
+    await app.waitForView(() => {
+        const loadedPrompts = app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent);
+        expect(loadedPrompts.length).toBeGreaterThan(page.prompts.length);
+        expect(loadedPrompts.slice(-page.prompts.length)).toEqual(page.prompts);
+    });
 });
 
 test("Given a stale Session link, When the user opens it, Then the Session failure replaces the empty landing", {

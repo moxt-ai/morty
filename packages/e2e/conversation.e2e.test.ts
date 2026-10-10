@@ -1,6 +1,7 @@
+import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
-test("Given a linked TypeScript file longer than the preview, When the user opens it, Then the complete highlighted source fills the scrollable overlay", async ({
+test("Given a linked TypeScript file longer than the preview, When the user opens it, Then the complete numbered and highlighted source fills the scrollable overlay", async ({
     runtime,
 }, testInfo) => {
     const { page } = runtime;
@@ -18,6 +19,17 @@ test("Given a linked TypeScript file longer than the preview, When the user open
     await expect(preview).toContainText("export function FileExplorer");
     const highlightedTokens = preview.locator('code span[style*="--sdm-c"]');
     await expect(highlightedTokens.first()).toBeVisible();
+    const lineNumbers = preview.locator(`[data-testid="${dataTestId.filePreviewLineNumbers}"] [data-line-number]`);
+    await expect(lineNumbers).toHaveCount(53);
+    await expect(lineNumbers.last()).toHaveText("53");
+    const firstLineNumberBox = await lineNumbers.first().boundingBox();
+    const firstCodeLineBox = await preview.locator("code > span").first().boundingBox();
+    expect(firstLineNumberBox).not.toBeNull();
+    expect(firstCodeLineBox).not.toBeNull();
+    if (firstLineNumberBox === null || firstCodeLineBox === null) {
+        throw new Error("Expected the first line number and source line to have browser layout boxes");
+    }
+    expect(firstLineNumberBox.y).toBeCloseTo(firstCodeLineBox.y, 0);
     await expect
         .poll(async () => {
             const colors = await highlightedTokens.evaluateAll((tokens) =>

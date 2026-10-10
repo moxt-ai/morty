@@ -1,6 +1,8 @@
 import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
+    // Let Node strip dependency types without rewriting native class-field semantics.
+    build: { external: ["**/third-party/mobius/**"] },
     testDir: ".",
     testMatch: "*.e2e.test.ts",
     globalSetup: "./infra/global-setup.ts",

@@ -2,6 +2,7 @@ import {
     decodeAgentSettingsDiscoveredEvent,
     decodeNativeSessionEventsV2,
     decodeNativeSessionResult,
+    decodeRuntimeDiagnosticsResult,
     decodeSessionReadyEvent,
     decodeSessionStatusChangedEvent,
     decodeWorkspaceEntriesEvent,
@@ -19,6 +20,7 @@ import {
     WsTransport,
 } from "@moxt-ai/mobius-sdk";
 import * as v from "valibot";
+import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 
 const identifier = v.custom<Identifier>(isIdentifier);
@@ -154,15 +156,72 @@ class BrowserSessionTransport implements MobiusHttpTransport, MobiusLiveEventTra
     readonly #http = new HttpTransport();
     readonly #webSocket = new WsTransport();
 
-    readonly fetch = async (request: Request): Promise<Response> =>
+    readonly #fetch = async (request: Request): Promise<Response> =>
         await (request.headers.get("accept")?.startsWith("text/event-stream") === true ||
         request.headers.get("accept") === "application/octet-stream"
             ? this.#http
             : this.#webSocket
         ).fetch(request);
 
-    readonly openLiveSessionEvents = async (request: Request): Promise<ReadableStream<MobiusTransportSessionEvent>> =>
-        await this.#webSocket.openLiveSessionEvents(request);
+    readonly fetch = async (request: Request): Promise<Response> => {
+        const started = performance.now();
+        const operation = new URL(request.url).pathname.split("/").slice(-1)[0] ?? "request";
+        try {
+            const response = await this.#fetch(request);
+            recordBrowserDiagnostic({
+                at: new Date().toISOString(),
+                component: "relay",
+                operation,
+                requestId: response.headers.get("x-request-id") ?? "",
+                elapsedMs: Math.round(performance.now() - started),
+                outcome: String(response.status),
+            });
+            return response;
+        } catch (cause) {
+            recordBrowserDiagnostic({
+                at: new Date().toISOString(),
+                component: "relay",
+                operation,
+                requestId: "",
+                elapsedMs: Math.round(performance.now() - started),
+                outcome: request.signal.aborted ? "cancelled" : "error",
+            });
+            throw cause;
+        }
+    };
+
+    readonly openLiveSessionEvents = async (request: Request): Promise<ReadableStream<MobiusTransportSessionEvent>> => {
+        recordBrowserDiagnostic({
+            at: new Date().toISOString(),
+            component: "relay",
+            operation: "live-events",
+            outcome: "connecting",
+            requestId: "",
+            elapsedMs: 0,
+        });
+        try {
+            const stream = await this.#webSocket.openLiveSessionEvents(request);
+            recordBrowserDiagnostic({
+                at: new Date().toISOString(),
+                component: "relay",
+                operation: "live-events",
+                outcome: "connected",
+                requestId: "",
+                elapsedMs: 0,
+            });
+            return stream;
+        } catch (cause) {
+            recordBrowserDiagnostic({
+                at: new Date().toISOString(),
+                component: "relay",
+                operation: "live-events",
+                outcome: request.signal.aborted ? "cancelled" : "error",
+                requestId: "",
+                elapsedMs: 0,
+            });
+            throw cause;
+        }
+    };
 
     readonly close = (): void => this.#webSocket.close();
 }
@@ -210,6 +269,10 @@ export class BotChatApi {
         v.parse(
             accessSchema,
             await this.#request(botId, "access", { conversationId: v.parse(identifier, conversationId) }, parent),
+        );
+    readonly daemonDiagnostics = async (botId: string, signal: AbortSignal) =>
+        decodeRuntimeDiagnosticsResult(
+            JSON.stringify(await this.#request(botId, "daemon-diagnostics", undefined, signal)),
         );
     readonly networkDiagnostic = async (botId: string, signal: AbortSignal) =>
         v.parse(networkDiagnosticSchema, await this.#request(botId, "network-diagnostic", undefined, signal));
@@ -329,7 +392,7 @@ export class BotChatApi {
             await this.#request(botId, "continue-native-session", { action, harness, sessionId }, signal),
         );
         const result = decodeNativeSessionResult(JSON.stringify(stored.result));
-        if (result.action !== action || result.ready.sessionId !== result.targetSessionId) {
+        if (result.action !== action || (action === "fork" && result.ready.sessionId !== result.targetSessionId)) {
             throw new CloudApiError("INVALID_SESSION", "The continued Chat session is invalid.");
         }
         return {
@@ -577,6 +640,7 @@ export class BotChatApi {
                 parsed.success ? parsed.output.error.code : "CHAT_UNAVAILABLE",
                 parsed.success ? parsed.output.error.message : "Chat is unavailable.",
                 response.status,
+                response.headers.get("x-morty-request-id") ?? response.headers.get("x-request-id") ?? "",
             );
         }
         return value;

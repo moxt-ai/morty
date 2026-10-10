@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @source "./";
 @source "../node_modules/streamdown/dist/*.js";
+@source "../node_modules/@streamdown/mermaid/dist/*.js";
+
+.agent-mermaid [aria-label="Mermaid chart"] {
+    padding: 1rem 1rem 1rem 3.25rem;
+}
 
 :root {
     --background: #fafafb;

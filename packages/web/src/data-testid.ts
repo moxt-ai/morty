@@ -64,5 +64,6 @@ export const dataTestId = Object.freeze({
     localFileLink: "chat-local-file-link",
     filePreview: "chat-file-preview",
     filePreviewContent: "chat-file-preview-content",
+    filePreviewLineNumbers: "chat-file-preview-line-numbers",
     closeFilePreview: "chat-close-file-preview",
 });

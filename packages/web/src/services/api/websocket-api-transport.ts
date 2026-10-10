@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
 
 const responseBeginFrame = v.strictObject({
     kind: v.literal("response.begin"),
@@ -100,6 +101,34 @@ export class WebSocketApiTransport {
     };
 
     readonly fetch = async (request: Request): Promise<Response> => {
+        const requestId = crypto.randomUUID();
+        const started = performance.now();
+        const operation = new URL(request.url).pathname.split("/").slice(-1)[0] ?? "request";
+        try {
+            const response = await this.#fetch(request, requestId);
+            response.headers.set("x-morty-request-id", requestId);
+            recordBrowserDiagnostic({
+                at: new Date().toISOString(),
+                component: "worker",
+                operation,
+                requestId,
+                elapsedMs: Math.round(performance.now() - started),
+                outcome: String(response.status),
+            });
+            return response;
+        } catch (cause) {
+            recordBrowserDiagnostic({
+                at: new Date().toISOString(),
+                component: "worker",
+                operation,
+                requestId,
+                elapsedMs: Math.round(performance.now() - started),
+                outcome: request.signal.aborted ? "cancelled" : "error",
+            });
+            throw cause;
+        }
+    };
+    readonly #fetch = async (request: Request, requestId: string): Promise<Response> => {
         request.signal.throwIfAborted();
         const url = new URL(request.url);
         if (url.origin !== this.#origin || !url.pathname.startsWith("/morty/api/")) {
@@ -116,7 +145,6 @@ export class WebSocketApiTransport {
         request.signal.throwIfAborted();
         const socket = await this.#connect(request.signal);
         request.signal.throwIfAborted();
-        const requestId = crypto.randomUUID();
         return await new Promise<Response>((resolve, reject) => {
             const abort = () => {
                 socket.send(JSON.stringify({ kind: "cancel", requestId }));
@@ -351,6 +379,14 @@ export class WebSocketApiTransport {
                     reject(new Error("The Chat API transport is closed."));
                     return;
                 }
+                recordBrowserDiagnostic({
+                    at: new Date().toISOString(),
+                    component: "worker",
+                    operation: "connection",
+                    outcome: "connected",
+                    requestId: "",
+                    elapsedMs: 0,
+                });
                 this.#state = { kind: "connected", socket };
                 const keepalive = setInterval(() => {
                     if (socket.readyState === WebSocket.OPEN) {
@@ -375,6 +411,14 @@ export class WebSocketApiTransport {
             socket.addEventListener(
                 "close",
                 () => {
+                    recordBrowserDiagnostic({
+                        at: new Date().toISOString(),
+                        component: "worker",
+                        operation: "connection",
+                        outcome: "disconnected",
+                        requestId: "",
+                        elapsedMs: 0,
+                    });
                     if (this.#state.kind === "connected" && this.#state.socket === socket) {
                         this.#state = { kind: "disconnected" };
                     }

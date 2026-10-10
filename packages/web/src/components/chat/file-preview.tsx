@@ -22,6 +22,23 @@ function PreviewImage({ state }: { readonly state: Extract<FilePreviewState, { r
     ) : null;
 }
 
+function CodeLineNumbers({ code }: { readonly code: string }) {
+    const lineCount = code.split("\n").length;
+    return (
+        <div
+            aria-hidden="true"
+            className="sticky left-0 z-10 self-stretch border-r border-border/70 bg-surface-subtle px-3 py-4 text-right font-mono text-xs leading-4 text-muted-foreground select-none"
+            data-testid={dataTestId.filePreviewLineNumbers}
+        >
+            {Array.from({ length: lineCount }, (_, index) => (
+                <span className="block h-4" data-line-number="" key={index.toString()}>
+                    {index + 1}
+                </span>
+            ))}
+        </div>
+    );
+}
+
 export function FilePreview({ onClose, state }: { readonly onClose: () => void; readonly state: FilePreviewState }) {
     if (state.kind === "closed") {
         return null;
@@ -70,7 +87,12 @@ export function FilePreview({ onClose, state }: { readonly onClose: () => void; 
                         // biome-ignore lint/a11y/noNoninteractiveTabindex: the scroll region must be keyboard reachable
                         tabIndex={0}
                     >
-                        <HighlightedCode bare code={state.text} language={languageForPath(state.name)} />
+                        <div className="flex min-w-0 items-start">
+                            <CodeLineNumbers code={state.text} />
+                            <div className="min-w-0 flex-1 [&_pre]:leading-4">
+                                <HighlightedCode bare code={state.text} language={languageForPath(state.name)} />
+                            </div>
+                        </div>
                     </section>
                 ) : (
                     <PreviewImage state={state} />
