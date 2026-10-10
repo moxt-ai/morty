@@ -201,11 +201,11 @@ export async function createTestApp(
     return app;
 }
 
-export async function closeTestApps(): Promise<void> {
+async function closeTestApps(): Promise<void> {
     await Promise.all([...activeApps].map(async (app) => await app.close()));
 }
 
-export async function closeTestEnvironment(): Promise<void> {
+async function closeTestEnvironment(): Promise<void> {
     await (await environment).close();
 }
 
