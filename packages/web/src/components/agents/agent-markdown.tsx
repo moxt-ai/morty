@@ -1,4 +1,5 @@
 import { defaultRemarkPlugins, Streamdown } from "streamdown";
+import { isDisplayableImageType } from "../../services/chat/image-media-type.ts";
 import "streamdown/styles.css";
 import { type ComponentProps, useEffect, useMemo, useState } from "react";
 import { dataTestId } from "@/data-testid";
@@ -140,8 +141,6 @@ export type MarkdownImageReader = (
     signal: AbortSignal,
 ) => Promise<{ readonly bytes: Uint8Array; readonly mediaType: string }>;
 
-const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/u;
-
 function directImageSource(value: string): string {
     if (localFilePath(value) !== null) {
         return "";
@@ -179,7 +178,11 @@ function AgentMarkdownImage({
         setSource(null);
         void readImage(requestedSource, controller.signal)
             .then((file) => {
-                if (controller.signal.aborted || !SAFE_IMAGE_MIME.test(file.mediaType)) {
+                if (controller.signal.aborted) {
+                    return;
+                }
+                if (!isDisplayableImageType(file.mediaType)) {
+                    setSource("");
                     return;
                 }
                 objectUrl = URL.createObjectURL(new Blob([Uint8Array.from(file.bytes)], { type: file.mediaType }));
