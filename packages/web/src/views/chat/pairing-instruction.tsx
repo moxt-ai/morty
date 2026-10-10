@@ -9,9 +9,11 @@ import { createPairingInstructionStore } from "../../view-models/chat/pairing-in
 
 export function PairingInstruction({
     botId,
+    disabled = false,
     requests,
 }: {
     readonly botId: string;
+    readonly disabled?: boolean;
     readonly requests: Pick<BotChatApi, "createPairingInstruction">;
 }) {
     const [store] = useState(() => createPairingInstructionStore(botId, requests));
@@ -45,10 +47,11 @@ export function PairingInstruction({
                     <input
                         aria-label="Agent pairing instruction"
                         data-testid={dataTestId.pairingInstruction}
+                        disabled={disabled}
                         readOnly
                         value={`follow ${state.url}`}
                         onFocus={(event) => event.currentTarget.select()}
-                        className="min-w-0 flex-1 rounded-lg border border-border bg-muted/30 p-3 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="min-w-0 flex-1 rounded-lg border border-border bg-muted/30 p-3 font-mono text-xs outline-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-ring"
                     />
                 ) : (
                     <p role="status" className="flex-1">
@@ -61,9 +64,9 @@ export function PairingInstruction({
                     size="icon"
                     aria-label="Copy pairing instruction"
                     title="Copy pairing instruction"
-                    disabled={state.kind !== "ready"}
+                    disabled={disabled || state.kind !== "ready"}
                     onClick={() => {
-                        if (state.kind !== "ready") {
+                        if (disabled || state.kind !== "ready") {
                             return;
                         }
                         resetCopy();
