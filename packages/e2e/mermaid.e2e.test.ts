@@ -20,6 +20,9 @@ test("Given a paired Bot, When a Mermaid reply finishes, Then I can view, copy a
     await expect(diagram).toBeVisible();
     await expect(diagram).toContainText("Worker");
     await expect(diagram).toContainText("Agent");
+    await expect(diagram.getByText("Browser", { exact: true })).toBeInViewport({ ratio: 1 });
+    await expect(diagram.getByText("Worker", { exact: true })).toBeInViewport({ ratio: 1 });
+    await expect(diagram.getByText("Agent", { exact: true })).toBeInViewport({ ratio: 1 });
     await page.screenshot({ path: testInfo.outputPath("mermaid-streamed.png"), fullPage: true });
 
     await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
@@ -27,6 +30,7 @@ test("Given a paired Bot, When a Mermaid reply finishes, Then I can view, copy a
     expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("Worker --> Agent");
     await response.getByRole("button", { name: "View diagram fullscreen", exact: true }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByRole("dialog").getByText("Worker", { exact: true })).toBeInViewport({ ratio: 1 });
     await page.screenshot({ path: testInfo.outputPath("mermaid-fullscreen.png"), fullPage: true });
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -34,6 +38,7 @@ test("Given a paired Bot, When a Mermaid reply finishes, Then I can view, copy a
     await expect(diagram).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(diagram).toBeVisible();
+    await expect(diagram.getByText("Browser", { exact: true })).toBeInViewport({ ratio: 1 });
     await page.screenshot({ path: testInfo.outputPath("mermaid-mobile.png"), fullPage: true });
 });
 
@@ -49,6 +54,7 @@ test("Given a live reply with a closed Mermaid fence, When I read the response, 
     const diagram = response.getByRole("img", { name: "Mermaid chart", exact: true });
     await expect(diagram).toBeVisible();
     await expect(diagram).toContainText("Send request");
+    await expect(diagram.getByText("Send request", { exact: true })).toBeInViewport({ ratio: 1 });
     await expect(page.getByRole("button", { name: "Stop agent output", exact: true })).toBeVisible();
     await response.getByText("View diagram source", { exact: true }).click();
     await expect(response.getByText("Client->>Server: Send request", { exact: false }).last()).toBeVisible();

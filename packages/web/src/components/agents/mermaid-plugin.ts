@@ -20,7 +20,9 @@ export const mermaidPlugin: DiagramPlugin = {
                     svg: DOMPurify.sanitize(svg, {
                         USE_PROFILES: { svg: true, svgFilters: true },
                         FORBID_TAGS: ["a", "image", "foreignObject", "feImage"],
-                        ALLOWED_URI_REGEXP: /^#/u,
+                        // A URI regex also filters SVG coordinates and dimensions.
+                        // Remove link attributes without discarding diagram geometry.
+                        FORBID_ATTR: ["href", "xlink:href"],
                     }),
                 };
             },
