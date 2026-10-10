@@ -65,6 +65,27 @@ test("Given a new browser, When Morty loads, Then the anonymous workspace opens"
     expect(await app.queryElementByTestId(dataTestId.closeDialog)).toBeInstanceOf(HTMLElement);
 });
 
+test("Given a shared workspace, When the user hovers each sidebar action, Then every action is icon-only and shows a tooltip naming it", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp();
+    await app.user.click(await app.queryElementByTestId(dataTestId.closeDialog));
+    const reportBug = await vi.waitFor(() => getByRole(document.body, "button", { name: "Report a bug" }));
+    const actions = [
+        { element: reportBug, tooltip: "Report a bug" },
+        { element: await app.queryElementByTestId(dataTestId.userMenu), tooltip: "User menu" },
+        { element: await app.queryElementByTestId(dataTestId.shareMachine), tooltip: "Share My Machine" },
+    ];
+
+    for (const { element, tooltip } of actions) {
+        expect(element.textContent).toBe("");
+        await app.user.hover(element);
+        expect(await vi.waitFor(() => getByRole(document.body, "tooltip", { name: tooltip }))).toBeInstanceOf(
+            HTMLElement,
+        );
+    }
+});
+
 test("Given a native session handoff, When importing fails, Then the choice page shows progress and allows a fork retry", {
     timeout: 30_000,
 }, async () => {

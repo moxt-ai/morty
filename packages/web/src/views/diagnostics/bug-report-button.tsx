@@ -1,3 +1,5 @@
+import { Bug } from "lucide-react";
+import { Tooltip } from "radix-ui";
 import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
@@ -5,19 +7,45 @@ import { Dialog } from "../../components/ui/dialog.tsx";
 import { sentryBugReportSink } from "../../services/diagnostics/bug-report.ts";
 import { createBugReportStore } from "../../view-models/bug-report-store.ts";
 
-export function BugReportButton({ floating = false }: { readonly floating?: boolean }) {
+const appearances = {
+    floating: "fixed bottom-2 right-2 z-40 bg-background/90 text-xs",
+    icon: "size-10 shrink-0 justify-center rounded-full px-0 text-copy-secondary hover:bg-white/70",
+    labelled: "min-h-10 shrink-0 text-xs",
+};
+
+export function BugReportButton({ appearance = "labelled" }: { readonly appearance?: keyof typeof appearances }) {
     const [open, setOpen] = useState(false);
+    const trigger = (
+        <Button
+            aria-label="Report a bug"
+            className={appearances[appearance]}
+            onClick={() => setOpen(true)}
+            variant="ghost"
+        >
+            {appearance === "icon" ? <Bug aria-hidden="true" className="size-4" /> : "Report a bug"}
+        </Button>
+    );
     return (
         <>
-            <Button
-                variant="ghost"
-                className={
-                    floating ? "fixed bottom-2 right-2 z-40 bg-background/90 text-xs" : "min-h-10 shrink-0 text-xs"
-                }
-                onClick={() => setOpen(true)}
-            >
-                Report a bug
-            </Button>
+            {appearance === "icon" ? (
+                <Tooltip.Provider delayDuration={150} disableHoverableContent>
+                    <Tooltip.Root>
+                        <Tooltip.Trigger asChild>{trigger}</Tooltip.Trigger>
+                        <Tooltip.Portal>
+                            <Tooltip.Content
+                                className="z-[70] rounded-lg bg-foreground px-2.5 py-1.5 text-xs text-background shadow-lg"
+                                side="top"
+                                sideOffset={6}
+                            >
+                                Report a bug
+                                <Tooltip.Arrow className="fill-foreground" />
+                            </Tooltip.Content>
+                        </Tooltip.Portal>
+                    </Tooltip.Root>
+                </Tooltip.Provider>
+            ) : (
+                trigger
+            )}
             {open && <BugReportDialog onClose={() => setOpen(false)} />}
         </>
     );
