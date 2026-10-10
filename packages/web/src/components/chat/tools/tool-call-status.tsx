@@ -32,7 +32,7 @@ export function ToolCallDisclosure({
         <fieldset aria-label={ariaLabel} className="group/tool m-0 min-w-0 border-0 p-0" data-testid={testId}>
             <button
                 aria-expanded={open}
-                className="flex min-h-8 w-full min-w-0 cursor-pointer items-center gap-2 rounded-lg px-1 text-sm text-copy-secondary outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex min-h-8 w-full min-w-0 cursor-pointer items-center gap-2 rounded-lg px-1 text-sm text-muted-foreground outline-none hover:text-copy-secondary focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => setOpen((current) => !current)}
                 title={title}
                 type="button"

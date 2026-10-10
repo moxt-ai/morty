@@ -33,7 +33,9 @@ function ReasoningContent({ entry }: { readonly entry: ReasoningEntry }) {
             followThreshold={24}
             style={{ maxHeight: "10.5rem", overflowY: "auto" }}
         >
-            <pre className="m-0 whitespace-pre-wrap font-sans text-[15px] leading-6 text-foreground">{entry.text}</pre>
+            <pre className="m-0 whitespace-pre-wrap font-sans text-[15px] leading-6 text-muted-foreground">
+                {entry.text}
+            </pre>
         </FollowLatestScrollArea>
     );
 }
@@ -55,7 +57,7 @@ function ReasoningDisclosure({ active, entry }: { readonly active: boolean; read
             onToggle={(event) => setContentVisible(event.currentTarget.open)}
             ref={disclosure}
         >
-            <summary className="flex min-h-10 w-fit cursor-pointer list-none items-center gap-2 rounded-lg px-1 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+            <summary className="flex min-h-10 w-fit cursor-pointer list-none items-center gap-2 rounded-lg px-1 text-muted-foreground outline-none hover:text-copy-secondary focus-visible:ring-2 focus-visible:ring-ring">
                 <ChevronDown
                     aria-hidden="true"
                     className="size-3.5 -rotate-90 transition-transform group-open/thinking:rotate-0 motion-reduce:transition-none"

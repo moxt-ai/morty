@@ -380,3 +380,26 @@ test("Given Codex generates an image, When the user opens the tool, Then Chat sh
     expect(imageTool.textContent).not.toContain("null");
     expect(imageTool.textContent).not.toContain("iVBORw0KGgo");
 });
+
+test("Given Codex views an image, When the user opens the tool, Then Chat shows the image without its raw path", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, "view an image");
+
+    const imageTool = await app.waitForView(() => getByRole(document.body, "group", { name: "Tool: View image" }));
+    await app.user.click(getByRole(imageTool, "button", { name: "View image Tool succeeded" }));
+    expect(await app.waitForView(() => getByRole(imageTool, "img", { name: "Image" }))).toBeDefined();
+    expect(imageTool.textContent).not.toContain("Request");
+    expect(imageTool.textContent).not.toContain("Response");
+    expect(imageTool.textContent).not.toContain("image/png");
+});

@@ -1,6 +1,35 @@
 import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
+test("Given an agent answer with reasoning and a tool call, When the user reads it, Then agent work is grayer than the answer", async ({
+    runtime,
+}) => {
+    const { page } = runtime;
+    await runtime.openPairedChat();
+
+    await page.getByRole("textbox", { name: "Message" }).fill("distinguish agent work");
+    await page.getByRole("button", { name: "Send message" }).click();
+
+    const response = page.getByRole("article", { name: "Agent response" }).filter({
+        hasText: "The requested update is complete.",
+    });
+    const answer = response.getByText("The requested update is complete.", { exact: true });
+    const reasoningSummary = page.getByText("Show intermediate steps", { exact: true });
+    const toolDisclosure = page.getByRole("button", { name: "Inspect workspace Tool succeeded" });
+    await expect(answer).toBeVisible();
+
+    const answerColor = await answer.evaluate((element) => getComputedStyle(element).color);
+    const agentWorkColor = await reasoningSummary.evaluate((element) => getComputedStyle(element).color);
+    expect(agentWorkColor).not.toBe(answerColor);
+    await expect(toolDisclosure).toHaveCSS("color", agentWorkColor);
+
+    await reasoningSummary.click();
+    await expect(page.getByText("Inspecting the request before acting.", { exact: true })).toHaveCSS(
+        "color",
+        agentWorkColor,
+    );
+});
+
 test("Given a linked TypeScript file longer than the preview, When the user opens it, Then the complete numbered and highlighted source fills the scrollable overlay", async ({
     runtime,
 }, testInfo) => {
