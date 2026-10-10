@@ -210,7 +210,55 @@ export const createBotChatHomeStore = (
         load: async (signal) => {
             set((current) => ({ view: "bot" in current.view ? current.view : { kind: "loading" } }));
             let openedBot: ManagedBot | null = null;
+            const watchWorkspaceChanges = async (bot: ManagedBot): Promise<void> => {
+                while (true) {
+                    try {
+                        await requests.waitForWorkspaceChange(bot.botId, signal);
+                    } catch (cause) {
+                        if (cause instanceof DOMException && cause.name === "TimeoutError") {
+                            continue;
+                        }
+                        throw cause;
+                    }
+                    signal.throwIfAborted();
+                    const changedWorkspace = await requests.workspace(bot.botId, signal);
+                    signal.throwIfAborted();
+                    const changedReason = setupReason(changedWorkspace);
+                    set((current) =>
+                        current.selection.kind === "draft"
+                            ? {
+                                  connectionStatus: runtimeConnectionStatus(changedWorkspace),
+                                  view:
+                                      changedReason === null
+                                          ? { kind: "active", bot }
+                                          : { kind: "setup", bot, reason: changedReason },
+                              }
+                            : { connectionStatus: runtimeConnectionStatus(changedWorkspace) },
+                    );
+                }
+            };
             try {
+                const current = get();
+                if (
+                    current.view.kind === "active" &&
+                    current.selection.kind === "loading" &&
+                    current.selection.target.kind === "session"
+                ) {
+                    const bot = current.view.bot;
+                    const target = current.selection.target;
+                    openedBot = bot;
+                    const session = await requests.managedSession(bot.botId, target.sessionId, signal);
+                    signal.throwIfAborted();
+                    set((state) => ({
+                        selection: transitionConversationSelection(state.selection, {
+                            kind: "session-loaded",
+                            session,
+                            target,
+                        }),
+                    }));
+                    await watchWorkspaceChanges(bot);
+                    return;
+                }
                 const bots = await requests.listBots(signal);
                 const preferredBotId = options.selectedBotPreference.read();
                 const bot = bots.find((candidate) => candidate.botId === preferredBotId) ?? bots[0];
@@ -256,33 +304,6 @@ export const createBotChatHomeStore = (
                 set({ connectionStatus: runtimeConnectionStatus(workspace) });
                 const currentSelection = get().selection;
                 const currentTarget = currentSelection.kind === "draft" ? null : currentSelection.target;
-                const watchWorkspaceChanges = async (): Promise<void> => {
-                    while (true) {
-                        try {
-                            await requests.waitForWorkspaceChange(bot.botId, signal);
-                        } catch (cause) {
-                            if (cause instanceof DOMException && cause.name === "TimeoutError") {
-                                continue;
-                            }
-                            throw cause;
-                        }
-                        signal.throwIfAborted();
-                        const changedWorkspace = await requests.workspace(bot.botId, signal);
-                        signal.throwIfAborted();
-                        const changedReason = setupReason(changedWorkspace);
-                        set((current) =>
-                            current.selection.kind === "draft"
-                                ? {
-                                      connectionStatus: runtimeConnectionStatus(changedWorkspace),
-                                      view:
-                                          changedReason === null
-                                              ? { kind: "active", bot }
-                                              : { kind: "setup", bot, reason: changedReason },
-                                  }
-                                : { connectionStatus: runtimeConnectionStatus(changedWorkspace) },
-                        );
-                    }
-                };
                 if (currentTarget?.kind === "continue") {
                     const session = await requests.continueNativeSession(
                         bot.botId,
@@ -301,7 +322,7 @@ export const createBotChatHomeStore = (
                             target: currentTarget,
                         }),
                     });
-                    await watchWorkspaceChanges();
+                    await watchWorkspaceChanges(bot);
                     return;
                 }
                 if (currentTarget?.kind === "session") {
@@ -315,18 +336,18 @@ export const createBotChatHomeStore = (
                             target: currentTarget,
                         }),
                     }));
-                    await watchWorkspaceChanges();
+                    await watchWorkspaceChanges(bot);
                     return;
                 }
                 const reason = currentTarget === null ? setupReason(workspace) : null;
                 if (reason !== null) {
                     set({ view: { kind: "setup", bot, reason } });
-                    await watchWorkspaceChanges();
+                    await watchWorkspaceChanges(bot);
                     return;
                 }
                 if (currentTarget === null) {
                     set({ view: { kind: "active", bot } });
-                    await watchWorkspaceChanges();
+                    await watchWorkspaceChanges(bot);
                     return;
                 }
                 await conversations.getState().open(bot.botId, currentTarget.conversationId, signal);
@@ -345,7 +366,7 @@ export const createBotChatHomeStore = (
                         target: currentTarget,
                     }),
                 }));
-                await watchWorkspaceChanges();
+                await watchWorkspaceChanges(bot);
             } catch (cause) {
                 if (signal.aborted) {
                     return;
@@ -563,7 +584,7 @@ export const createBotChatHomeStore = (
                 creation: transitionConversationCreation(state.creation, { kind: "reset" }),
                 draft: "",
                 draftSettings: null,
-                revision: state.revision + 1,
+                revision: state.view.kind === "active" ? state.revision : state.revision + 1,
             }));
         },
         openManaged: (isExternal, id) => {
