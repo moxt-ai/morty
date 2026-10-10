@@ -69,6 +69,27 @@ test("Given a completed turn, When the user leaves and reopens it, Then daemon h
     expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull();
 });
 
+test("Given a named conversation, When the user opens it, Then the Session title heads the conversation", {
+    timeout: 30_000,
+}, async () => {
+    const title = "Show the Session title in the conversation header";
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, title);
+
+    await app.waitForView(() =>
+        expect(queryByRole(document.body, "heading", { level: 2, name: title })).not.toBeNull(),
+    );
+});
+
 test("Given Claude Code does not echo the submitted prompt, When the response starts, Then my message is visible once", {
     timeout: 30_000,
 }, async () => {

@@ -266,6 +266,14 @@ export function MobiusSessionPane({
     return (
         <>
             <section className="flex min-h-0 min-w-0 flex-1 animate-cloud-enter flex-col motion-reduce:animate-none">
+                <header className="flex h-12 shrink-0 items-center border-b border-border/80 px-4 sm:px-8 lg:px-12">
+                    <h2
+                        className="min-w-0 truncate text-sm font-semibold"
+                        title={session.entry.title || "Untitled session"}
+                    >
+                        {session.entry.title || "Untitled session"}
+                    </h2>
+                </header>
                 <FollowLatestScrollArea
                     role="log"
                     container={messageList}

@@ -703,7 +703,7 @@ export const createBotChatHomeStore = (
             }
             try {
                 signal.throwIfAborted();
-                const session = requests.conversationSession(access, { kind: "idle" }, settings.workspaceLabel);
+                const session = requests.conversationSession(access, { kind: "idle" }, settings.workspaceLabel, title);
                 set((state) => ({
                     creation: transitionConversationCreation(state.creation, {
                         commandId,

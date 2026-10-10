@@ -239,6 +239,7 @@ export class BotChatApi {
         access: ChatAccess,
         activeTurn: ConversationActiveTurn,
         directoryLabel = access.workspaceRef,
+        title = "Untitled session",
     ) => ({
         agentRef: access.agentRef,
         instructions: access.instructions,
@@ -253,7 +254,7 @@ export class BotChatApi {
             entryId: access.sessionId,
             mobiusSessionIds: [access.sessionId],
             nativeSessionId: access.sessionId,
-            title: "",
+            title,
             directoryId: access.workspaceRef,
             directoryLabel,
             additionalDirectories: [],
