@@ -188,6 +188,28 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     },
                 ],
             };
+        case "view an image":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        content: [
+                            {
+                                type: "content",
+                                content: {
+                                    data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV4kAAAAASUVORK5CYII=",
+                                    mimeType: "image/png",
+                                    type: "image",
+                                },
+                            },
+                        ],
+                        title: "View image",
+                        output: "image/png",
+                    },
+                ],
+            };
         case "show source file":
             return {
                 outcome: "complete",

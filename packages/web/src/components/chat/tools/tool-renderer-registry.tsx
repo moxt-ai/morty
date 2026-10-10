@@ -14,6 +14,7 @@ import { matchesPathReadToolCall, PathReadToolCall } from "./path-read-tool-call
 import { matchesQuestionToolCall, QuestionToolCall } from "./question-tool-call.tsx";
 import { matchesSkillToolCall, SkillToolCall } from "./skill-tool-call.tsx";
 import type { ToolRendererProps, ToolThinkingEntry } from "./tool-renderer.ts";
+import { matchesViewImageToolCall, ViewImageToolCall } from "./view-image-tool-call.tsx";
 import { matchesWorkdirShellCommandToolCall, WorkdirShellCommandToolCall } from "./workdir-shell-command-tool-call.tsx";
 
 interface ToolRenderer {
@@ -33,6 +34,10 @@ const TOOL_RENDERERS: readonly ToolRenderer[] = [
     {
         Component: ImageGenerationToolCall,
         matches: matchesImageGenerationToolCall,
+    },
+    {
+        Component: ViewImageToolCall,
+        matches: matchesViewImageToolCall,
     },
     {
         Component: ChangedFilesEditToolCall,

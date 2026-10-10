@@ -34,6 +34,27 @@ function NativeSessionDirectorySkeleton() {
     );
 }
 
+function NativeSessionPreviewSkeleton() {
+    return (
+        <div role="status" aria-label="Loading session preview">
+            <div aria-hidden="true" className="grid animate-pulse gap-8 motion-reduce:animate-none">
+                <div className="h-5 w-2/5 rounded-full bg-muted" />
+                <div className="ml-auto grid w-full max-w-[68%] justify-items-end gap-2">
+                    <div className="h-4 w-2/3 rounded-full bg-muted" />
+                    <div className="h-4 w-full rounded-full bg-muted" />
+                    <div className="h-4 w-4/5 rounded-full bg-muted" />
+                </div>
+                <div className="grid w-full max-w-[78%] gap-2">
+                    <div className="h-4 w-1/3 rounded-full bg-muted" />
+                    <div className="h-4 w-full rounded-full bg-muted" />
+                    <div className="h-4 w-5/6 rounded-full bg-muted" />
+                    <div className="h-4 w-3/5 rounded-full bg-muted" />
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export function NativeSessionDialog({
     botId,
     requests,
@@ -146,7 +167,7 @@ export function NativeSessionDialog({
                     {model.preview.kind === "empty" && (
                         <p className="text-center text-muted-foreground">Select a session to preview its history.</p>
                     )}
-                    {model.preview.kind === "loading" && <p role="status">Loading session preview…</p>}
+                    {model.preview.kind === "loading" && <NativeSessionPreviewSkeleton />}
                     {model.preview.kind === "failed" && (
                         <p role="alert" className="text-destructive">
                             {model.preview.message}
