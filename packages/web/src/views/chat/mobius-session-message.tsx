@@ -241,15 +241,22 @@ export function MobiusAssistantText({
     text,
     openLocalFile,
     readImage,
+    streaming,
 }: {
     readonly text: string;
+    readonly streaming: boolean;
     readonly openLocalFile: (path: string) => void;
     readonly readImage?: MarkdownImageReader | undefined;
 }) {
     return (
         <div className="min-w-0" data-testid={dataTestId.agentResponse}>
             <MessageBubble speaker="assistant">
-                <AgentResponseText text={text} openLocalFile={openLocalFile} readImage={readImage} />
+                <AgentResponseText
+                    text={text}
+                    openLocalFile={openLocalFile}
+                    readImage={readImage}
+                    streaming={streaming}
+                />
             </MessageBubble>
         </div>
     );
@@ -296,6 +303,7 @@ export function MobiusSessionMessage({
                     openLocalFile={openLocalFile}
                     readImage={readImage}
                     text={presentation.content.text}
+                    streaming={active}
                 />
             );
         }
