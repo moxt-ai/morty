@@ -570,7 +570,7 @@ export class ChatService {
         entryId: string,
         input: NativePreviewInput,
     ) => {
-        const events = await this.#platform.queryRuntimeNativeEventsV2(
+        const events = await this.#platform.previewRuntimeNativeEventsV2(
             scope.projectId,
             runtimeId,
             input.nativeSessionId,
