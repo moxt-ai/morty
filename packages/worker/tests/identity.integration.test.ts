@@ -304,7 +304,7 @@ test("Given a user with a draft Bot on a Project-scoped Platform, When setup lis
     expect(await response.json()).toEqual({ runtimes: [] });
 });
 
-test("Given an anonymous user, When machine access is shared, Then it has no expiry and remains available until revoked or exhausted", async () => {
+test("Given an anonymous user, When machine access is shared, Then its expiring continue URL remains reusable beyond five uses and issued access remains available until revoked", async () => {
     const environment = fixture.environment();
     const owner = await fixture.createAnonymousUser();
     const createTransfer = async () => {
@@ -316,9 +316,10 @@ test("Given an anonymous user, When machine access is shared, Then it has no exp
             environment,
         );
         expect(response.status).toBe(201);
-        const transferValue: unknown = await response.json();
-        expect(transferValue).not.toHaveProperty("expiresAt");
-        const transfer = v.parse(v.object({ url: v.string() }), transferValue);
+        const transfer = v.parse(
+            v.object({ url: v.string(), expiresAt: v.pipe(v.string(), v.isoTimestamp()) }),
+            await response.json(),
+        );
         return { ...transfer, code: new URL(transfer.url).hash.slice("#code=".length) };
     };
     const redeem = (code: string) =>
@@ -365,10 +366,10 @@ test("Given an anonymous user, When machine access is shared, Then it has no exp
     expect((await worker.fetch(accountRequest(recoveryToken, owner.projectId), environment)).status).toBe(200);
     expect((await worker.fetch(accountRequest(owner.token, owner.projectId), environment)).status).toBe(200);
 
-    const limitedTransfer = await createTransfer();
+    const reusableTransfer = await createTransfer();
     const issuedTokens = [];
-    for (let redemption = 0; redemption < 5; redemption++) {
-        const response = await redeem(limitedTransfer.code);
+    for (let redemption = 0; redemption < 6; redemption++) {
+        const response = await redeem(reusableTransfer.code);
         expect(response.status).toBe(200);
         const received = v.parse(
             v.object({ userId: v.string(), token: v.pipe(v.string(), v.startsWith("mobius_anon_v2_")) }),
@@ -377,10 +378,8 @@ test("Given an anonymous user, When machine access is shared, Then it has no exp
         expect(received.userId).toBe(owner.userId);
         issuedTokens.push(received.token);
     }
-    expect(new Set(issuedTokens).size).toBe(5);
-    const exhausted = await redeem(limitedTransfer.code);
-    expect(exhausted.status).toBe(410);
-    expect(await exhausted.json()).toMatchObject({ error: { code: "TRANSFER_UNAVAILABLE" } });
+    expect(new Set(issuedTokens).size).toBe(6);
+    expect((await worker.fetch(accountRequest(issuedTokens[0] ?? "", owner.projectId), environment)).status).toBe(200);
 });
 
 test("Given the first browser for a workspace, When remote access ends after a recovery token is created, Then the browser credential is revoked and recovery remains available", async () => {

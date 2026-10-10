@@ -113,6 +113,20 @@
             "when": 1790475576126,
             "tag": "0027_dazzling_grim_reaper",
             "breakpoints": true
+        },
+        {
+            "idx": 28,
+            "version": "6",
+            "when": 1791626135227,
+            "tag": "0028_lovely_harpoon",
+            "breakpoints": true
+        },
+        {
+            "idx": 29,
+            "version": "6",
+            "when": 1791626143135,
+            "tag": "0029_late_hammerhead",
+            "breakpoints": true
         }
     ]
 }

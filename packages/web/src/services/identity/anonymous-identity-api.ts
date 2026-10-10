@@ -32,7 +32,10 @@ const anonymousSessionSchema = v.pipe(
     v.object({ authentication: v.object({ kind: v.literal("anonymous") }), userId: v.string() }),
     v.readonly(),
 );
-const transferSchema = v.pipe(v.object({ url: v.pipe(v.string(), v.url()) }), v.readonly());
+const transferSchema = v.pipe(
+    v.object({ expiresAt: v.pipe(v.string(), v.isoTimestamp()), url: v.pipe(v.string(), v.url()) }),
+    v.readonly(),
+);
 export type AnonymousIdentity = v.InferOutput<typeof identitySchema>;
 export type IdentityTransfer = v.InferOutput<typeof transferSchema>;
 
