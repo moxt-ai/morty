@@ -230,6 +230,7 @@ export function ConversationSidebar({
             registerDaemonDiagnostics({
                 botId,
                 sessionId: activeId,
+                nativeSessionId: null,
                 read: (signal) => requests.daemonDiagnostics(botId, signal),
             }),
         [botId, activeId, requests],

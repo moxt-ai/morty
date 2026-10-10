@@ -392,7 +392,7 @@ export class BotChatApi {
             await this.#request(botId, "continue-native-session", { action, harness, sessionId }, signal),
         );
         const result = decodeNativeSessionResult(JSON.stringify(stored.result));
-        if (result.action !== action || result.ready.sessionId !== result.targetSessionId) {
+        if (result.action !== action || (action === "fork" && result.ready.sessionId !== result.targetSessionId)) {
             throw new CloudApiError("INVALID_SESSION", "The continued Chat session is invalid.");
         }
         return {
@@ -640,6 +640,7 @@ export class BotChatApi {
                 parsed.success ? parsed.output.error.code : "CHAT_UNAVAILABLE",
                 parsed.success ? parsed.output.error.message : "Chat is unavailable.",
                 response.status,
+                response.headers.get("x-morty-request-id") ?? response.headers.get("x-request-id") ?? "",
             );
         }
         return value;

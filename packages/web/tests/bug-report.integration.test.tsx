@@ -3,8 +3,9 @@ import { close as closeSentry, init, makeFetchTransport } from "@sentry/react";
 import { getByRole, queryByRole } from "@testing-library/dom";
 import { cleanup, render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { App } from "../src/views/application/app.tsx";
+import { createTestApp } from "./infra/test-app.tsx";
 
 const observers = new Set<MutationObserver>();
 afterEach(() => {
@@ -120,5 +121,60 @@ test("Given Sentry rejects a report, When the user retries after it recovers, Th
         expect(inbox.envelopes[0]).toContain("My message disappeared");
     } finally {
         await inbox.close();
+    }
+});
+
+test("Given a native handoff cannot find its Agent, When the user reports the displayed error, Then the report includes its code and attempts daemon diagnostics for that Machine", {
+    timeout: 30_000,
+}, async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-10T07:21:00Z"));
+    const inbox = await createReportInbox();
+    try {
+        const app = await createTestApp({ page: { kind: "continue", harness: "pi", sessionId: "native-session" } });
+        const importButton = await app.waitForView(() =>
+            getByRole(document.body, "button", { name: "Import session" }),
+        );
+        await app.user.click(importButton);
+        await app.waitForView(() => {
+            expect(getByRole(document.body, "alert").textContent).toContain("handoff harness is unavailable");
+        });
+        await app.user.click(getByRole(document.body, "button", { name: "Report a bug" }));
+        await app.user.type(getByRole(document.body, "textbox", { name: "What went wrong?" }), "Cannot continue Pi");
+        await app.user.click(getByRole(document.body, "button", { name: "Send report" }));
+        await visibleMessage(document.body, "status", "Report sent");
+        const envelope = inbox.envelopes[0] ?? "";
+        const report = JSON.parse(envelope.trim().split("\n").at(-1) ?? "null");
+        expect(report).toMatchObject({
+            botId: app.botId,
+            sessionId: null,
+            nativeSessionId: "native-session",
+            daemon: { kind: "unavailable", code: "AGENT_REQUIRED" },
+        });
+        expect(report.web.entries).toContainEqual(
+            expect.objectContaining({
+                component: "web",
+                operation: "continue-native-session",
+                outcome: "HARNESS_UNAVAILABLE",
+                requestId: expect.stringMatching(/^[a-f0-9-]{36}$/u),
+            }),
+        );
+        expect(envelope).not.toContain("The handoff harness is unavailable.");
+        await app.close();
+        render(<App state={{ kind: "failed" }} />);
+        const user = userEvent.setup();
+        await user.click(getByRole(document.body, "button", { name: "Report a bug" }));
+        await user.type(getByRole(document.body, "textbox", { name: "What went wrong?" }), "Another page failed");
+        await user.click(getByRole(document.body, "button", { name: "Send report" }));
+        await visibleMessage(document.body, "status", "Report sent");
+        const afterUnmount = JSON.parse((inbox.envelopes[1] ?? "").trim().split("\n").at(-1) ?? "null");
+        expect(afterUnmount).toMatchObject({
+            botId: null,
+            sessionId: null,
+            daemon: { kind: "unavailable", code: "NO_ACTIVE_RUNTIME" },
+        });
+    } finally {
+        await inbox.close();
+        vi.useRealTimers();
     }
 });

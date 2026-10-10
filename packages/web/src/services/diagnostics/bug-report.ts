@@ -12,6 +12,7 @@ export interface BugReport {
     readonly relatedEventId: string | null;
     readonly botId: string | null;
     readonly sessionId: string | null;
+    readonly nativeSessionId: string | null;
     readonly web: ReturnType<typeof browserDiagnosticsSnapshot>;
     readonly daemon:
         | { readonly kind: "available"; readonly diagnostics: RuntimeDiagnosticsResult }
@@ -61,6 +62,7 @@ export async function collectBugReport(description: string, signal: AbortSignal)
         release: (getClient()?.getOptions().release ?? "development").slice(0, 128),
         botId: source?.botId ?? null,
         sessionId: source?.sessionId ?? null,
+        nativeSessionId: source?.nativeSessionId ?? null,
         web,
         daemon,
     };
