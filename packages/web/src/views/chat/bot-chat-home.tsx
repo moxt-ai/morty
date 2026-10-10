@@ -302,6 +302,7 @@ export function BotChatHome({
                     session={model.selection.session}
                     initialMessage={model.creation.kind === "draft-message-sent" ? model.creation.message : undefined}
                     onStatusChange={onStatusChange}
+                    onTitleChange={store.getState().updateConversationTitle}
                 />
             ) : (
                 <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">

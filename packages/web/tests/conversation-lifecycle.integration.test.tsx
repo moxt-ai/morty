@@ -156,6 +156,34 @@ test("Given a named conversation, When the user opens it, Then the Session title
     );
 });
 
+test("Given a new conversation titled from its prompt, When the Agent generates a title, Then the new title replaces it in the header and directory", {
+    timeout: 30_000,
+}, async () => {
+    const promptTitle = "Use the Agent generated title";
+    const agentTitle = "Agent generated title";
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, promptTitle);
+
+    await app.waitForView(() => {
+        expect(queryByRole(document.body, "heading", { level: 2, name: agentTitle })).not.toBeNull();
+        expect(queryByRole(document.body, "heading", { level: 2, name: promptTitle })).toBeNull();
+        expect(
+            app
+                .elementsByTestId(dataTestId.managedConversation)
+                .some((conversation) => conversation.textContent?.includes(agentTitle) === true),
+        ).toBe(true);
+    });
+});
+
 test("Given Claude Code does not echo the submitted prompt, When the response starts, Then my message is visible once", {
     timeout: 30_000,
 }, async () => {

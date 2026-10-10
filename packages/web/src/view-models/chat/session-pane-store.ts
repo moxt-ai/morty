@@ -126,6 +126,7 @@ function resolvePermission(
 
 export interface SessionPaneStore {
     readonly connection: Connection;
+    readonly title: string;
     readonly messages: readonly SessionMessage[];
     readonly historyLoading: boolean;
     readonly historyRevision: number;
@@ -323,6 +324,7 @@ export function createSessionPaneModel(options: {
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession">;
     readonly initialMessage?: QueuedDraftMessage | undefined;
+    readonly onTitleChange: (sessionId: string, title: string) => void;
 }) {
     const { session, botId, requests } = options;
     const sessionId = session.result.ready.sessionId;
@@ -339,6 +341,7 @@ export function createSessionPaneModel(options: {
     let client: MobiusClient | null = null;
     let sessionEvents: SessionEventV2[] = [];
     let sessionGenerationId: string | null = null;
+    let sessionTitle = session.entry.title;
     const supersededSessionGenerationIds = new Set<string>();
     let historyCursor: string | null = null;
     let loadingOlderHistory = false;
@@ -466,6 +469,7 @@ export function createSessionPaneModel(options: {
     const store = createStore<SessionPaneStore>()((set, get) => {
         return {
             connection: { kind: "loading" },
+            title: sessionTitle,
             messages: initialTimeline.messages,
             historyLoading: false,
             historyRevision: 0,
@@ -697,6 +701,17 @@ export function createSessionPaneModel(options: {
                             }
                             sessionGenerationId = recovery.sessionGenerationId;
                             replaceTimeline(recovery.events);
+                            for (const event of recovery.events) {
+                                if (
+                                    event.type === "acp" &&
+                                    event.payload.sessionUpdate === "session_info_update" &&
+                                    Object.hasOwn(event.payload, "title") &&
+                                    event.payload.title !== null &&
+                                    event.payload.title !== undefined
+                                ) {
+                                    sessionTitle = event.payload.title;
+                                }
+                            }
                             historyCursor = recovery.nextCursor;
                             const native = deriveTimeline();
                             delivery.getState().reconcile(sessionEventCommandIds(sessionEvents));
@@ -705,7 +720,9 @@ export function createSessionPaneModel(options: {
                                 hasOlderHistory: historyCursor !== null,
                                 historyRevision: 0,
                                 messages: native.messages,
+                                title: sessionTitle,
                             });
+                            options.onTitleChange(sessionId, sessionTitle);
                             const execution = await executionPromise;
                             const running = execution.turn;
                             messageQueue.getState().replace(execution.queued);
@@ -811,6 +828,16 @@ export function createSessionPaneModel(options: {
                                         }));
                                         saveLastAgentSettings(botId, session.agentRef, configOptions);
                                         set({ options: configOptions });
+                                    }
+                                    if (
+                                        update.sessionUpdate === "session_info_update" &&
+                                        Object.hasOwn(update, "title") &&
+                                        update.title !== null &&
+                                        update.title !== undefined
+                                    ) {
+                                        sessionTitle = update.title;
+                                        set({ title: sessionTitle });
+                                        options.onTitleChange(sessionId, sessionTitle);
                                     }
                                 }
                                 const timeline = deriveTimeline();

@@ -285,6 +285,14 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     },
                 ],
             };
+        case "Use the Agent generated title":
+            return {
+                outcome: "complete",
+                output: [
+                    { kind: "session-title", title: "Agent generated title" },
+                    { kind: "text", text: "The Agent generated a concise title." },
+                ],
+            };
         case "show huge tool outputs": {
             const middle = "MIDDLE_SHOULD_NOT_RENDER";
             const output = `BEGIN_TOOL_OUTPUT\n${"x".repeat(24_000)}${middle}${"y".repeat(24_000)}\nEND_TOOL_OUTPUT`;

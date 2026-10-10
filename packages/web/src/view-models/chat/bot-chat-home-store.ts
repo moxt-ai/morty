@@ -120,6 +120,7 @@ export interface BotChatHomeStore {
     readonly forkInstead: () => void;
     readonly setDraft: (draft: string) => void;
     readonly setDraftSettings: (settings: ChatDraftConfiguration | null) => void;
+    readonly updateConversationTitle: (sessionId: string, title: string) => void;
     readonly createConversation: (
         draft: string,
         attachments: readonly ComposerAttachment[],
@@ -629,6 +630,15 @@ export const createBotChatHomeStore = (
             set({ draft });
         },
         setDraftSettings: (draftSettings) => set({ draftSettings }),
+        updateConversationTitle: (sessionId, title) =>
+            set((state) => ({
+                optimisticTitles: new Map(state.optimisticTitles).set(sessionId, title),
+                selection: transitionConversationSelection(state.selection, {
+                    kind: "session-title-updated",
+                    sessionId,
+                    title,
+                }),
+            })),
         createConversation: async (draft, attachments, signal) => {
             const current = get();
             if (

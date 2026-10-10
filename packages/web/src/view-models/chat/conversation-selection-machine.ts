@@ -29,6 +29,7 @@ export type ConversationSelectionEvent =
       }
     | { readonly kind: "session-load-failed"; readonly message: string; readonly target: ConversationTarget }
     | { readonly kind: "retry-requested" }
+    | { readonly kind: "session-title-updated"; readonly sessionId: string; readonly title: string }
     | {
           readonly kind: "continued-session-loaded";
           readonly session: OpenMobiusSession;
@@ -74,6 +75,16 @@ export function transitionConversationSelection(
                 : state;
         case "retry-requested":
             return state.kind === "failed" ? { kind: "loading", target: state.target } : state;
+        case "session-title-updated":
+            return state.kind === "ready" && state.session.result.ready.sessionId === event.sessionId
+                ? {
+                      ...state,
+                      session: {
+                          ...state.session,
+                          entry: { ...state.session.entry, title: event.title },
+                      },
+                  }
+                : state;
         case "continued-session-loaded":
             return state.kind === "loading" &&
                 state.target.kind === "continue" &&

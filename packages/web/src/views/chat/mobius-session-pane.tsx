@@ -127,12 +127,14 @@ export function MobiusSessionPane({
     botId,
     requests,
     onStatusChange,
+    onTitleChange,
 }: {
     readonly session: OpenMobiusSession;
     readonly initialMessage?: QueuedDraftMessage | undefined;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession" | "workspace">;
     readonly onStatusChange: (sessionId: string, status: SessionActivityState) => void;
+    readonly onTitleChange: (sessionId: string, title: string) => void;
 }) {
     const sessionId = session.result.ready.sessionId;
     const [pane] = useState(() =>
@@ -141,6 +143,7 @@ export function MobiusSessionPane({
             botId,
             requests,
             initialMessage,
+            onTitleChange,
         }),
     );
     const model = useStore(pane.store);
@@ -267,11 +270,8 @@ export function MobiusSessionPane({
         <>
             <section className="flex min-h-0 min-w-0 flex-1 animate-cloud-enter flex-col motion-reduce:animate-none">
                 <header className="flex h-12 shrink-0 items-center border-b border-border/80 px-4 sm:px-8 lg:px-12">
-                    <h2
-                        className="min-w-0 truncate text-sm font-semibold"
-                        title={session.entry.title || "Untitled session"}
-                    >
-                        {session.entry.title || "Untitled session"}
+                    <h2 className="min-w-0 truncate text-sm font-semibold" title={model.title || "Untitled session"}>
+                        {model.title || "Untitled session"}
                     </h2>
                 </header>
                 <FollowLatestScrollArea
