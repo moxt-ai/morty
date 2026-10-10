@@ -426,13 +426,13 @@ function mergeAdjacentText(previous: SessionMessage | undefined, incoming: Sessi
     };
 }
 
-export interface SessionTimelineProjection {
+interface SessionTimelineProjection {
     readonly append: (event: SessionEventV2) => SessionTimeline;
     readonly complete: () => SessionTimeline;
     readonly current: () => SessionTimeline;
 }
 
-export function createSessionTimelineProjection(events: readonly SessionEventV2[]): SessionTimelineProjection {
+function createSessionTimelineProjection(events: readonly SessionEventV2[]): SessionTimelineProjection {
     const messages: SessionMessage[] = [];
     const messageIdsWithFirstEventLoaded = new Set<string>();
     const submittedPrompts = new Map<string, ContentBlockV2[]>();
