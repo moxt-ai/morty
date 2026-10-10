@@ -11,10 +11,11 @@ not approve, update, rerun, enqueue, dequeue, close, or merge the pull request
 unless the user separately asks for that action.
 
 For an open pull request outside the merge queue, stop successfully when it is
-green and mergeable, and report `READY TO MERGE`. Once a non-null
-`mergeQueueEntry` has been observed, continue until the pull request is
-confirmed merged. `autoMergeRequest` alone does not mean that the pull request
-is in the merge queue.
+green, mergeable, and up to date, and report `READY TO MERGE`. Fail immediately
+when GitHub reports that the head branch is behind its base branch. Once a
+non-null `mergeQueueEntry` has been observed, continue until the pull request
+is confirmed merged. `autoMergeRequest` alone does not mean that the pull
+request is in the merge queue.
 
 ## Resolve the target and interval
 
@@ -115,7 +116,8 @@ or current merge-queue head:
 4. The PR is closed without `merged` or `mergedAt` being set.
 5. GitHub reports the PR as conflicting (`mergeable: CONFLICTING` or the
    equivalent dirty merge state).
-6. A previously observed merge-queue entry disappears while the PR remains
+6. GitHub reports `mergeStateStatus: BEHIND`.
+7. A previously observed merge-queue entry disappears while the PR remains
    unmerged. Include the matching removal reason; do not call this a successful
    dequeue.
 
@@ -123,8 +125,8 @@ For a terminal check failure, report its name, workflow when available, state,
 conclusion, details URL, and whether it ran on the PR or queue head. Never rerun
 it automatically.
 
-Draft status, missing approval, `BLOCKED`, `BEHIND`, `UNSTABLE`, a locked queue,
-and pending or expected checks are blocked or waiting states, not terminal CI
+Draft status, missing approval, `BLOCKED`, `UNSTABLE`, a locked queue, and
+pending or expected checks are blocked or waiting states, not terminal CI
 failures. Report them and continue because they can change without replacing
 the PR. If the user specified an overall deadline, stop at that deadline and
 report a timeout distinct from CI or merge-queue failure.
@@ -139,10 +141,8 @@ promptly on user cancellation.
 
 Outside the merge queue, success requires fresh API data showing that the pull
 request is not a draft, all current PR-head checks have completed without
-failure, `mergeable` is `MERGEABLE`, and `mergeStateStatus` is either `CLEAN` or
-`BEHIND`. Emit `READY TO MERGE` with the final PR-head CI summary, then stop.
-A green `BEHIND` pull request is ready even if branch protection may require an
-update before GitHub permits the merge.
+failure, `mergeable` is `MERGEABLE`, and `mergeStateStatus` is `CLEAN`. Emit
+`READY TO MERGE` with the final PR-head CI summary, then stop.
 
 After observing a non-null `mergeQueueEntry`, success requires fresh API data
 showing `merged: true` or a non-null `mergedAt`. Emit `MERGED` with the merge
