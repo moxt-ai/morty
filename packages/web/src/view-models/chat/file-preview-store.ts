@@ -1,7 +1,7 @@
 import { createStore } from "zustand/vanilla";
+import { isDisplayableImageType } from "../../services/chat/image-media-type.ts";
 import { downloadLocalFile, type LocalFileDownload } from "../../services/chat/local-file-download.ts";
 
-const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/u;
 const TEXT_MIME = /^(?:text\/|application\/(?:json|xml|javascript|x-httpd-php|x-sh|x-yaml))(?:;|$)/u;
 const TEXT_EXTENSIONS = new Set([
     "bash",
@@ -113,7 +113,7 @@ function createFilePreviewStore(
                 if (active !== controller) {
                     return;
                 }
-                if (SAFE_IMAGE_MIME.test(file.mediaType)) {
+                if (isDisplayableImageType(file.mediaType)) {
                     set({
                         state: {
                             bytes: file.bytes,
