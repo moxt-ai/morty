@@ -2,7 +2,7 @@ import { fireEvent, getAllByRole, getByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { observeTestId, sendPrompt } from "./infra/application-scenario.ts";
+import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
 test("Given an unpaired workspace, When a user manages Bots, Then pairing and the surviving Bot remain visible", {
@@ -88,7 +88,7 @@ test("Given a paired Bot with cached agent settings, When a user refreshes and f
     expect(created.optionalElementByTestId(dataTestId.pairingInstruction)).toBeNull();
 
     await created.user.click(await created.queryElementByTestId(dataTestId.agentConfiguration));
-    const loading = observeTestId(dataTestId.agentSettingsLoading);
+    const loading = created.queryElementByTestId(dataTestId.agentSettingsLoading);
     await created.user.click(await created.queryElementByTestId(dataTestId.refreshAgentSettings));
     await loading;
     await created.user.click(
