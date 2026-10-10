@@ -50,6 +50,29 @@ test("Given the agent sends separate reasoning messages, When the user reads the
     expect(thinking.querySelector("code")).toBeNull();
 });
 
+test("Given reasoning exceeds 16K characters, When the user opens the intermediate steps, Then Chat shows the retained tail and a truncation notice", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, "long reasoning");
+    const thinking = await app.queryElementByTestId(dataTestId.agentReasoning);
+    await app.user.click(getByText(thinking, "Show intermediate steps"));
+    await app.waitForView(() => {
+        expect(thinking.textContent).toContain("Earlier reasoning was truncated to the most recent 16K characters.");
+        expect(thinking.textContent).toContain("REASONING END RETAINED");
+    });
+    expect(thinking.textContent).not.toContain("REASONING START OMITTED");
+    expect(thinking.querySelector("pre")?.textContent?.length).toBeLessThanOrEqual(16_384);
+});
+
 test("Given the agent sends many session events, When the response completes, Then every event type remains usable without mounting collapsed reasoning", {
     timeout: 30_000,
 }, async () => {

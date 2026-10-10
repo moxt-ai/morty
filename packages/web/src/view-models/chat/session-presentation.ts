@@ -23,6 +23,28 @@ export interface SessionToolPresentation {
     readonly title: string;
 }
 
+export const REASONING_CHARACTER_LIMIT = 16 * 1024;
+
+export type SessionText =
+    | {
+          readonly kind: "initial";
+          readonly length: number;
+          readonly truncated: boolean;
+          readonly value: string;
+      }
+    | {
+          readonly kind: "appended";
+          readonly length: number;
+          readonly previous: SessionText;
+          readonly truncated: boolean;
+          readonly value: string;
+      };
+
+type TextContentBlock = Extract<ContentBlockV2, { readonly type: "text" }>;
+type SessionContentBlock =
+    | (Omit<TextContentBlock, "text"> & { readonly text: SessionText })
+    | Exclude<ContentBlockV2, TextContentBlock>;
+
 export type SessionMessage =
     | {
           readonly role: "user";
@@ -35,8 +57,8 @@ export type SessionMessage =
           readonly id: string;
           readonly commandId: string | null;
           readonly presentation:
-              | { readonly kind: "message"; readonly content: ContentBlockV2; readonly messageId: string | null }
-              | { readonly kind: "thought"; readonly content: ContentBlockV2; readonly messageId: string | null }
+              | { readonly kind: "message"; readonly content: SessionContentBlock; readonly messageId: string | null }
+              | { readonly kind: "thought"; readonly content: SessionContentBlock; readonly messageId: string | null }
               | { readonly kind: "tool"; readonly entry: SessionToolPresentation }
               | { readonly kind: "completed"; readonly stopReason: string }
               | { readonly kind: "failure"; readonly code: string; readonly message: string };
@@ -55,6 +77,43 @@ function encodedJson(value: unknown): string {
         return "";
     }
     return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+function initialSessionText(value: string, limit?: number): SessionText {
+    const truncated = limit !== undefined && value.length > limit;
+    const retained = truncated ? value.slice(-limit) : value;
+    return { kind: "initial", length: retained.length, truncated, value: retained };
+}
+
+function sessionContent(content: ContentBlockV2, textLimit?: number): SessionContentBlock {
+    return content.type === "text" ? { ...content, text: initialSessionText(content.text, textLimit) } : content;
+}
+
+export function sessionTextValue(text: SessionText): string {
+    const chunks: string[] = [];
+    let current: SessionText = text;
+    for (;;) {
+        chunks.push(current.value);
+        if (current.kind === "initial") {
+            break;
+        }
+        current = current.previous;
+    }
+    chunks.reverse();
+    return chunks.join("");
+}
+
+function appendSessionText(previous: SessionText, incoming: SessionText, prefix: string, limit?: number): SessionText {
+    const value = `${prefix}${sessionTextValue(incoming)}`;
+    const length = previous.length + value.length;
+    const truncated = previous.truncated || incoming.truncated;
+    if (limit === undefined || length <= limit) {
+        return { kind: "appended", length, previous, truncated, value };
+    }
+    const previousLength = Math.max(0, limit - value.length);
+    const retainedPrevious = previousLength === 0 ? "" : sessionTextValue(previous).slice(-previousLength);
+    const retained = `${retainedPrevious}${value.slice(-limit)}`;
+    return { kind: "initial", length: retained.length, truncated: true, value: retained };
 }
 
 function displayContent(update: ToolCallUpdateV2): readonly AgentDisplayContent[] {
@@ -293,7 +352,11 @@ function projectAcpUpdate(
                 {
                     commandId: null,
                     id: event.eventId,
-                    presentation: { content: update.content, kind: "message", messageId: update.messageId ?? null },
+                    presentation: {
+                        content: sessionContent(update.content),
+                        kind: "message",
+                        messageId: update.messageId ?? null,
+                    },
                     role: "assistant",
                 },
             ];
@@ -302,7 +365,11 @@ function projectAcpUpdate(
                 {
                     commandId: null,
                     id: event.eventId,
-                    presentation: { content: update.content, kind: "thought", messageId: update.messageId ?? null },
+                    presentation: {
+                        content: sessionContent(update.content, REASONING_CHARACTER_LIMIT),
+                        kind: "thought",
+                        messageId: update.messageId ?? null,
+                    },
                     role: "assistant",
                 },
             ];
@@ -332,7 +399,8 @@ function mergeAdjacentText(previous: SessionMessage | undefined, incoming: Sessi
         previous.presentation.kind !== incoming.presentation.kind ||
         (incoming.presentation.kind !== "message" && incoming.presentation.kind !== "thought") ||
         (previous.presentation.kind !== "message" && previous.presentation.kind !== "thought") ||
-        previous.presentation.messageId !== incoming.presentation.messageId ||
+        (incoming.presentation.kind === "message" &&
+            previous.presentation.messageId !== incoming.presentation.messageId) ||
         previous.presentation.content.type !== "text" ||
         incoming.presentation.content.type !== "text"
     ) {
@@ -344,7 +412,15 @@ function mergeAdjacentText(previous: SessionMessage | undefined, incoming: Sessi
             ...incoming.presentation,
             content: {
                 ...incoming.presentation.content,
-                text: previous.presentation.content.text + incoming.presentation.content.text,
+                text: appendSessionText(
+                    previous.presentation.content.text,
+                    incoming.presentation.content.text,
+                    incoming.presentation.kind === "thought" &&
+                        previous.presentation.messageId !== incoming.presentation.messageId
+                        ? "\n\n"
+                        : "",
+                    incoming.presentation.kind === "thought" ? REASONING_CHARACTER_LIMIT : undefined,
+                ),
             },
         },
     };

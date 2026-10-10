@@ -1,7 +1,10 @@
 import { Brain, ChevronDown, Wrench } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { dataTestId } from "../../data-testid.ts";
-import type { SessionToolPresentation } from "../../view-models/chat/session-presentation.ts";
+import {
+    REASONING_CHARACTER_LIMIT,
+    type SessionToolPresentation,
+} from "../../view-models/chat/session-presentation.ts";
 import type { MarkdownImageReader } from "../agents/agent-markdown.tsx";
 import { AgentRichContent } from "../agents/agent-rich-content.tsx";
 import { FollowLatestScrollArea } from "../utils/follow-latest-scroll-area.tsx";
@@ -16,6 +19,7 @@ export type AgentThinkingEntry =
           readonly kind: "reasoning";
           readonly messageId: string | null;
           readonly text: string;
+          readonly truncated: boolean;
       }
     | SessionToolPresentation;
 
@@ -71,6 +75,11 @@ function ReasoningDisclosure({ active, entry }: { readonly active: boolean; read
                             <Brain aria-hidden="true" className="size-4" />
                             <span>Thinking</span>
                         </div>
+                        {entry.truncated && (
+                            <p className="m-0 text-xs text-copy-secondary">
+                                Earlier reasoning was truncated to the most recent 16K characters.
+                            </p>
+                        )}
                         <ReasoningContent entry={entry} />
                     </section>
                 </div>
@@ -140,12 +149,23 @@ export function AgentThinking({
             return;
         }
         let messageId = first.messageId;
-        let text = first.text;
+        const text = [first.text];
         for (const entry of reasoning.slice(1)) {
-            text += entry.messageId === messageId ? entry.text : `\n\n${entry.text}`;
+            if (entry.messageId !== messageId) {
+                text.push("\n\n");
+            }
+            text.push(entry.text);
             messageId = entry.messageId;
         }
-        timeline.push({ entry: { ...first, text }, kind: "reasoning" });
+        const combined = text.join("");
+        timeline.push({
+            entry: {
+                ...first,
+                text: combined.slice(-REASONING_CHARACTER_LIMIT),
+                truncated: reasoning.some((entry) => entry.truncated) || combined.length > REASONING_CHARACTER_LIMIT,
+            },
+            kind: "reasoning",
+        });
         reasoning = [];
     };
     for (const entry of entries) {

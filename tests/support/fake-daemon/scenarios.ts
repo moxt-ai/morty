@@ -179,6 +179,24 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     { kind: "text", text: "The requested update is complete." },
                 ],
             };
+        case "long reasoning":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        activityType: "reasoning",
+                        kind: "activity",
+                        output: `REASONING START OMITTED ${"x".repeat(9_000)}`,
+                        title: "Thinking",
+                    },
+                    {
+                        activityType: "reasoning",
+                        kind: "activity",
+                        output: `${"y".repeat(9_000)} REASONING END RETAINED`,
+                        title: "Thinking",
+                    },
+                ],
+            };
         case "many session events":
             return manySessionEvents();
         case "show generated picture":

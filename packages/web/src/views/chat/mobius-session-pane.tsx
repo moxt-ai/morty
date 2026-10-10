@@ -25,7 +25,7 @@ import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
 import { sessionDebugBlocks } from "../../view-models/chat/session-debug-blocks.ts";
 import { createSessionPaneModel, sessionPanePresentation } from "../../view-models/chat/session-pane-store.ts";
-import type { SessionMessage } from "../../view-models/chat/session-presentation.ts";
+import { type SessionMessage, sessionTextValue } from "../../view-models/chat/session-presentation.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
 import { MobiusAssistantText, MobiusSessionMessage } from "./mobius-session-message.tsx";
 
@@ -52,7 +52,7 @@ function assistantText(message: SessionMessage): { readonly messageId: string | 
         message.presentation.kind === "message" &&
         message.presentation.content.type === "text"
     ) {
-        return { messageId: message.presentation.messageId, text: message.presentation.content.text };
+        return { messageId: message.presentation.messageId, text: sessionTextValue(message.presentation.content.text) };
     }
     return null;
 }
@@ -69,7 +69,8 @@ function thinkingEntry(message: SessionMessage): AgentThinkingEntry | null {
             id: message.id,
             kind: "reasoning",
             messageId: message.presentation.messageId,
-            text: message.presentation.content.text,
+            text: sessionTextValue(message.presentation.content.text),
+            truncated: message.presentation.content.text.truncated,
         };
     }
     return null;
@@ -77,7 +78,7 @@ function thinkingEntry(message: SessionMessage): AgentThinkingEntry | null {
 
 function sessionRenderItems(messages: readonly SessionMessage[]): readonly SessionRenderItem[] {
     type RenderItemBuilder =
-        | { kind: "assistant-text"; id: string; messageId: string | null; text: string }
+        | { kind: "assistant-text"; id: string; messageId: string | null; text: string[] }
         | { readonly kind: "event"; readonly message: SessionMessage }
         | { entries: AgentThinkingEntry[]; readonly id: string; readonly kind: "thinking" };
     const items: RenderItemBuilder[] = [];
@@ -86,9 +87,9 @@ function sessionRenderItems(messages: readonly SessionMessage[]): readonly Sessi
         const thinking = thinkingEntry(message);
         const previous = items.at(-1);
         if (text !== null && previous?.kind === "assistant-text" && previous.messageId === text.messageId) {
-            previous.text += text.text;
+            previous.text.push(text.text);
         } else if (text !== null) {
-            items.push({ kind: "assistant-text", id: message.id, messageId: text.messageId, text: text.text });
+            items.push({ kind: "assistant-text", id: message.id, messageId: text.messageId, text: [text.text] });
         } else if (thinking !== null && previous?.kind === "thinking") {
             previous.entries.push(thinking);
         } else if (thinking !== null) {
@@ -97,7 +98,9 @@ function sessionRenderItems(messages: readonly SessionMessage[]): readonly Sessi
             items.push({ kind: "event", message });
         }
     }
-    return items;
+    return items.map(
+        (item): SessionRenderItem => (item.kind === "assistant-text" ? { ...item, text: item.text.join("") } : item),
+    );
 }
 
 function MessageListSkeleton() {
