@@ -177,7 +177,7 @@ test("Given a shell tool completes, When the user views the conversation, Then t
     expect(queryByText(shellTool, "Response")).toBeNull();
 });
 
-test("Given a response links to a TypeScript file, When the user opens it, Then the source is syntax highlighted beside the conversation", {
+test("Given a response links to a TypeScript file, When the user opens it, Then numbered and highlighted source appears beside the conversation", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -193,8 +193,12 @@ test("Given a response links to a TypeScript file, When the user opens it, Then 
     await app.user.click(await app.queryElementByTestId(dataTestId.localFileLink));
     const preview = await app.queryElementByTestId(dataTestId.filePreview);
     const content = await app.queryElementByTestId(dataTestId.filePreviewContent);
+    const lineNumbers = app.elementByTestId(dataTestId.filePreviewLineNumbers, content);
     expect(preview.parentElement?.querySelector('[role="log"][aria-label="Messages"]')).not.toBeNull();
     expect(content.textContent).toContain("export function FileExplorer");
+    expect(Array.from(lineNumbers.querySelectorAll("[data-line-number]"), (line) => line.textContent)).toEqual(
+        Array.from({ length: 53 }, (_, index) => (index + 1).toString()),
+    );
     await app.waitForView(() => expect(content.querySelector('code span[style*="--sdm-c"]')).not.toBeNull());
 });
 
