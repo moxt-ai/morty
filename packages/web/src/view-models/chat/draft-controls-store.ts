@@ -55,6 +55,7 @@ function cacheDraftSettings(requests: object, botId: string, settings: ReadyDraf
 type CwdBrowserState =
     | { readonly kind: "closed" }
     | { readonly kind: "loading"; readonly directory: WorkspaceEntriesEvent; readonly path: string }
+    | { readonly kind: "previewing"; readonly directory: WorkspaceEntriesEvent; readonly path: string }
     | { readonly kind: "ready"; readonly directory: WorkspaceEntriesEvent; readonly path: string }
     | {
           readonly kind: "failed";
@@ -272,7 +273,6 @@ export const createDraftControlsStore = (
                     });
                     return;
                 }
-                set({ cwdBrowser: { kind: "loading", directory: browser.directory, path } });
                 const directory = await requests.workspaceDirectory(botId, pathDirectoryId(requestedPath), signal);
                 signal.throwIfAborted();
                 set({ cwdBrowser: { kind: "ready", directory, path: directory.directoryLabel } });
@@ -404,7 +404,12 @@ export const createDraftControlsStore = (
             saveCwd: async (signal) => {
                 const browser = get().cwdBrowser;
                 const settings = get().settings;
-                if (browser.kind === "closed" || settings.kind !== "ready") {
+                if (
+                    browser.kind === "closed" ||
+                    browser.kind === "loading" ||
+                    browser.kind === "previewing" ||
+                    settings.kind !== "ready"
+                ) {
                     return;
                 }
                 cwdOperation?.abort();
@@ -558,7 +563,7 @@ export const createDraftControlsStore = (
                 if (browser.kind !== "closed") {
                     cwdOperation?.abort();
                     cwdOperation = null;
-                    set({ cwdBrowser: { kind: "ready", directory: browser.directory, path } });
+                    set({ cwdBrowser: { kind: "previewing", directory: browser.directory, path } });
                     void previewCwd(path, signal);
                 }
             },
