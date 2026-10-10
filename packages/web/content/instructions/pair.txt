@@ -31,6 +31,12 @@ replacement confirmation.
    or `oh-my-pi` in Oh My Pi.
    Honor an explicit user choice instead. Do not ask the user to choose when your
    own harness is available. Complete its installation/authentication if needed.
+   Runtime pairing and relay traffic bypass `HTTP_PROXY` and `HTTPS_PROXY` by
+   default. When the user explicitly requires the system proxy, append `--use-proxy`
+   to the `setup.mjs` command. This opt-in honors `http_proxy`/`HTTP_PROXY`,
+   `https_proxy`/`HTTPS_PROXY`, and `no_proxy`/`NO_PROXY`; lowercase values take
+   precedence. It does not read `ALL_PROXY` or `SOCKS_PROXY`. The selection is
+   saved with the Mobius Runtime connection for reconnects.
 5. Run the command from the user's current working directory. The script resolves and
    validates `$PWD`, then uses it as the paired Runtime's default Morty workspace.
 
@@ -45,6 +51,9 @@ TOKEN="<one-use token from the supplied URL>"
 HARNESS="<codex, claude, opencode, or oh-my-pi>"
 node "$SCRIPT_DIR/setup.mjs" pair --base-url "$BASE_URL" --cwd "$PWD" --token="$TOKEN" --harness "$HARNESS"
 ```
+
+Do not add `--use-proxy` merely because proxy environment variables are present.
+Without that flag, Mobius connects to the Runtime relay directly.
 
 This single command exchanges the ticket, creates a fresh Runtime pairing for the
 Project and Machine returned by that ticket and the current working directory, saves only

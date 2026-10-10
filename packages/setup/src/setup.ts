@@ -62,6 +62,7 @@ interface ManagedConnection {
     readonly appId: string;
     readonly connectionId: string;
     readonly runtimeId: string;
+    readonly relayProxy: "direct" | "environment";
 }
 
 interface SetupIdentity {
@@ -84,6 +85,7 @@ type Options =
           readonly cwd: string;
           readonly harness: string;
           readonly token: string;
+          readonly useProxy: boolean;
       }
     | {
           readonly mode: "setup";
@@ -91,6 +93,7 @@ type Options =
           readonly cwd: string;
           readonly harness: string;
           readonly sessionId: string;
+          readonly useProxy: boolean;
       };
 
 function errorCode(cause: unknown): unknown {
@@ -343,6 +346,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     function readOptions(): Options {
+        if (args.filter((argument) => argument === "--use-proxy").length > 1) {
+            fail("INVALID_ARGUMENTS");
+        }
         const { values, positionals } = parseArgs({
             args: [...args],
             allowPositionals: true,
@@ -352,6 +358,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 harness: { type: "string" },
                 "base-url": { type: "string" },
                 "session-id": { type: "string" },
+                "use-proxy": { type: "boolean" },
             },
         });
         if (positionals.length !== 1 || !["pair", "setup"].includes(positionals[0])) {
@@ -382,6 +389,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 cwd,
                 harness,
                 token: text(values.token, /^mobius_pair_v2\.[A-Za-z0-9_-]{1,128}\.[A-Za-z0-9_-]{43}$/u),
+                useProxy: values["use-proxy"] === true,
             };
         }
         if (values.token !== undefined) {
@@ -390,7 +398,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (values["session-id"] === undefined) {
             fail("SESSION_ID_REQUIRED");
         }
-        return { mode: "setup", base, cwd, harness, sessionId: identifier(values["session-id"]) };
+        return {
+            mode: "setup",
+            base,
+            cwd,
+            harness,
+            sessionId: identifier(values["session-id"]),
+            useProxy: values["use-proxy"] === true,
+        };
     }
 
     async function preparePairIdentity(context: Context, ticket: string): Promise<PairIdentity> {
@@ -503,6 +518,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     appId: identifier(connection.app_id),
                     connectionId: identifier(connection.connection_id),
                     runtimeId: identifier(connection.runtime_id),
+                    relayProxy:
+                        connection.relay_proxy === "environment"
+                            ? "environment"
+                            : connection.relay_proxy === "direct"
+                              ? "direct"
+                              : fail("INVALID_PAIR_LIST"),
                 };
             });
         } finally {
@@ -531,14 +552,17 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return selection;
     }
 
-    async function prepareRuntime(context: Context, cwd: string, mode: Options["mode"]): Promise<RuntimeSelection> {
+    async function prepareRuntime(context: Context, cwd: string, options: Options): Promise<RuntimeSelection> {
         progress("pairing", "Preparing the Runtime connection.");
         const project = await request(context, "/management/project");
         const appId = identifier(project.appId);
-        if (mode === "pair") {
+        if (options.mode === "pair") {
             return await createRuntimePairing(context, appId);
         }
-        const existing = (await listManagedConnections(context, cwd)).find((connection) => connection.appId === appId);
+        const relayProxy = options.useProxy ? "environment" : "direct";
+        const existing = (await listManagedConnections(context, cwd)).find(
+            (connection) => connection.appId === appId && connection.relayProxy === relayProxy,
+        );
         if (existing !== undefined) {
             emit({
                 status: "runtime_reused",
@@ -550,7 +574,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return await createRuntimePairing(context, appId);
     }
 
-    function runtimeArguments(runtime: RuntimeSelection, cwd: string): readonly string[] {
+    function runtimeArguments(runtime: RuntimeSelection, cwd: string, useProxy: boolean): readonly string[] {
         if (runtime.kind === "existing") {
             return ["start", "--connection", runtime.connectionId];
         }
@@ -564,6 +588,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             runtime.pairingCode,
             "--workspace",
             cwd,
+            ...(useProxy ? ["--use-proxy"] : []),
         ];
     }
 
@@ -579,9 +604,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
-    async function startRuntime(context: Context, runtime: RuntimeSelection, cwd: string): Promise<Context> {
-        const started = await runMobius(context, runtimeArguments(runtime, cwd), cwd);
-        emit({ status: "runtime_started", ...started });
+    async function startRuntime(
+        context: Context,
+        runtime: RuntimeSelection,
+        cwd: string,
+        useProxy: boolean,
+    ): Promise<Context> {
+        const started = await runMobius(context, runtimeArguments(runtime, cwd, useProxy), cwd);
+        emit({ status: "runtime_started", proxyRoute: useProxy ? "environment" : "direct", ...started });
         return await saveConfiguration(context, { workspace: cwd });
     }
 
@@ -799,9 +829,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             context = identity.context;
             context = await verifyIdentityAndBot(context, options.mode);
             emit({ status: "identity_ready", userId: context.config.user_id, botId: context.config.bot_id });
-            const runtime = await prepareRuntime(context, cwd, options.mode);
+            const runtime = await prepareRuntime(context, cwd, options);
             validateExpectedRuntime(identity, runtime);
-            context = await startRuntime(context, runtime, cwd);
+            context = await startRuntime(context, runtime, cwd, options.useProxy);
             await waitForRuntime(context, runtime, options.harness);
             context = await bindAgent(context, runtime, options.harness);
             await finishSetup(context, runtime, options);

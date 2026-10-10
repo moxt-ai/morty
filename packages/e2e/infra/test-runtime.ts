@@ -105,7 +105,7 @@ export async function createTestRuntime(harness: E2EHarness) {
                     agentName,
                 );
             },
-            followInstructions: async (instructionUrl: string, sessionId?: string) => {
+            followInstructions: async (instructionUrl: string, sessionId?: string, useProxy?: boolean) => {
                 const url = new URL(instructionUrl, stack.chatOrigin);
                 let clockTime = Date.parse("2026-09-15T12:00:00Z");
                 const result = await followSetupInstructions({
@@ -123,6 +123,7 @@ export async function createTestRuntime(harness: E2EHarness) {
                     },
                     runtime,
                     sessionId,
+                    useProxy,
                 });
                 return {
                     botId: text(result.ready.botId, "ready Bot"),

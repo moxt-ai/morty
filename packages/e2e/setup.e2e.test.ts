@@ -13,6 +13,19 @@ test("Given another Project has a managed Runtime, When pair redeems a Bot ticke
     expect(statuses).toContain("prepared");
     expect(statuses).not.toContain("runtime_reused");
     expect(statuses).toContain("ready");
+    expect(connected.events).toContainEqual(
+        expect.objectContaining({ status: "runtime_started", proxyRoute: "direct" }),
+    );
+});
+
+test("Given system proxy access is required, When setup uses --use-proxy, Then the Runtime uses the environment proxy route", async ({
+    runtime,
+}) => {
+    const connected = await runtime.followInstructions("/setup.md", "proxy-session", true);
+
+    expect(connected.events).toContainEqual(
+        expect.objectContaining({ status: "runtime_started", proxyRoute: "environment" }),
+    );
 });
 
 test("Given a saved setup handoff, When its Runtime reconnects, Then setup waits and returns a browser-renderable QR code", async ({

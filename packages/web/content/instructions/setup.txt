@@ -32,6 +32,12 @@ replacement confirmation.
    `SESSION_ID` to this current harness session's exact ID. Both values are required.
    Honor an explicit user choice instead. Complete that harness's installation and
    authentication if needed; do not ask the user to choose when your own harness is available.
+   Runtime pairing and relay traffic bypass `HTTP_PROXY` and `HTTPS_PROXY` by
+   default. When the user explicitly requires the system proxy, append `--use-proxy`
+   to the `setup.mjs` command. This opt-in honors `http_proxy`/`HTTP_PROXY`,
+   `https_proxy`/`HTTPS_PROXY`, and `no_proxy`/`NO_PROXY`; lowercase values take
+   precedence. It does not read `ALL_PROXY` or `SOCKS_PROXY`. The selection is
+   saved with the Mobius Runtime connection for reconnects.
 5. Run the command from the user's current working directory. The script resolves and
    validates `$PWD`, then uses it as the paired Runtime's default Morty workspace.
 
@@ -47,6 +53,9 @@ HARNESS="<codex, claude, opencode, or oh-my-pi>"
 SESSION_ID="<current harness session ID>"
 node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --cwd "$PWD" --harness "$HARNESS" --session-id "$SESSION_ID"
 ```
+
+Do not add `--use-proxy` merely because proxy environment variables are present.
+Without that flag, Mobius connects to the Runtime relay directly.
 
 The command handles identity, Runtime pairing, Runtime launch, Machine binding, and
 readiness. The selected Runtime uses the command's current working directory and joins

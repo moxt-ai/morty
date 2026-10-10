@@ -18,6 +18,7 @@ export async function followSetupInstructions(options: {
     readonly runtime: SetupRuntime;
     readonly sessionId?: string;
     readonly signal: AbortSignal;
+    readonly useProxy?: boolean;
 }) {
     const url = new URL(options.instructionUrl);
     const document = await fetch(url, { signal: options.signal, redirect: "error" });
@@ -35,6 +36,9 @@ export async function followSetupInstructions(options: {
             .replaceAll("$SESSION_ID", options.sessionId ?? "")
             .replaceAll("$TOKEN", url.searchParams.get("token") ?? ""),
     );
+    if (options.useProxy === true) {
+        args.push("--use-proxy");
+    }
     const download = markdown.match(/https?:\/\/[^\s`]+\/setup\.mjs/u)?.[0];
     assert.ok(download);
     const response = await fetch(download, { signal: options.signal, redirect: "error" });

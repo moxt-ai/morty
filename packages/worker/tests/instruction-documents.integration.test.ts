@@ -79,6 +79,13 @@ test("Given setup and pairing documents, When users fetch them from configured a
     expect(documents.get("setup")).toContain('node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL"');
     expect(documents.get("setup")).toContain("first reconnects a Mobius-managed");
     expect(documents.get("setup")).toContain("Do not retain or back up App");
+    for (const document of documents.values()) {
+        expect(document).toContain("bypass `HTTP_PROXY` and `HTTPS_PROXY` by");
+        expect(document).toContain("append `--use-proxy`");
+        expect(document).toContain("`http_proxy`/`HTTP_PROXY`");
+        expect(document).toContain("does not read `ALL_PROXY` or `SOCKS_PROXY`");
+        expect(document).toContain("Without that flag, Mobius connects to the Runtime relay directly.");
+    }
 
     for (const origin of ["https://custom.example", "http://localhost:5173"]) {
         for (const name of ["setup", "pair"]) {

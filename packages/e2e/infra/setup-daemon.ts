@@ -15,6 +15,7 @@ type Connection = Readonly<{
     channel_id: string;
     credential: string;
     origin: string;
+    relay_proxy: "direct" | "environment";
 }>;
 
 /** Setup CLI test port backed by the production daemon and a controlled Agent harness. */
@@ -42,10 +43,11 @@ export class ControlledSetupRuntime implements SetupRuntime {
             await writeFile(
                 output.slice("--output-json=".length),
                 JSON.stringify(
-                    Array.from(this.#saved.values(), ({ app_id, connection_id, runtime_id }) => ({
+                    Array.from(this.#saved.values(), ({ app_id, connection_id, runtime_id, relay_proxy }) => ({
                         app_id,
                         connection_id,
                         runtime_id,
+                        relay_proxy,
                     })),
                 ),
             );
@@ -87,6 +89,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
             runtime_id: text(claim.runtimeId, "Runtime ID"),
             credential: text(claim.runtimeCredential, "Runtime credential"),
             origin,
+            relay_proxy: args.includes("--use-proxy") ? "environment" : "direct",
         };
         this.#saved.set(connection.connection_id, connection);
         await this.#connect(connection, signal);
