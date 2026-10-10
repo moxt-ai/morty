@@ -159,6 +159,26 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     }),
                 ),
             };
+        case "distinguish agent work":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        activityType: "reasoning",
+                        kind: "activity",
+                        output: "Inspecting the request before acting.",
+                        title: "Thinking",
+                    },
+                    {
+                        activityType: "tool",
+                        content: [],
+                        kind: "activity",
+                        output: "Workspace is ready.",
+                        title: "Inspect workspace",
+                    },
+                    { kind: "text", text: "The requested update is complete." },
+                ],
+            };
         case "many session events":
             return manySessionEvents();
         case "show generated picture":
