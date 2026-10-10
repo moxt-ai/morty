@@ -132,7 +132,28 @@ test("Given a draft Bot, When its owner configures and opens it, Then setup list
 
         const listed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
         expect(listed.status).toBe(200);
-        expect(await listed.json()).toMatchObject({ sessions: [{ id: access.sessionId, status: { kind: "idle" } }] });
+        const sessions = v.parse(
+            v.object({
+                sessions: v.array(
+                    v.object({
+                        createdAt: v.pipe(v.string(), v.isoTimestamp()),
+                        id: v.string(),
+                        status: v.object({ kind: v.string() }),
+                        updatedAt: v.pipe(v.string(), v.isoTimestamp()),
+                    }),
+                ),
+            }),
+            await listed.json(),
+        );
+        expect(sessions).toMatchObject({
+            sessions: [
+                {
+                    id: access.sessionId,
+                    status: { kind: "idle" },
+                    updatedAt: AUTH_TIME.toISOString(),
+                },
+            ],
+        });
     } finally {
         await fixture.close();
     }

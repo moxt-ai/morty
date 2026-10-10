@@ -6,6 +6,7 @@ import { PlatformProjectError, platformIdentifier } from "../../management/entit
 
 const summarySchema = v.pipe(
     v.object({
+        createdAt: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
         projectId: platformIdentifier,
         userId: platformIdentifier,
         id: platformIdentifier,
@@ -31,6 +32,7 @@ export class ManagedSessionStorage {
         signal.throwIfAborted();
         const result = await this.#requireDatabase()
             .select({
+                createdAt: chatManagedSession.createdAt,
                 projectId: chatManagedSession.projectId,
                 userId: chatManagedSession.userId,
                 id: chatManagedSession.resourceId,
@@ -57,6 +59,7 @@ export class ManagedSessionStorage {
     ) => {
         const value = v.parse(summarySchema, {
             ...record,
+            createdAt: Date.now(),
             projectId,
             userId,
         });
@@ -68,7 +71,7 @@ export class ManagedSessionStorage {
                 userId: value.userId,
                 botId,
                 resourceId: value.id,
-                createdAt: Date.now(),
+                createdAt: value.createdAt,
             })
             .onConflictDoNothing()
             .run();
