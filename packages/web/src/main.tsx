@@ -6,6 +6,7 @@ import { ToastProvider } from "./components/ui/toast.tsx";
 import { installMortyDebugBridge } from "./debug-bridge.ts";
 import { Page } from "./views/application/app.tsx";
 import { Bootstrap } from "./views/application/bootstrap.tsx";
+import { BugReportButton } from "./views/diagnostics/bug-report-button.tsx";
 import "./styles.css";
 
 installMortyDebugBridge();
@@ -25,6 +26,7 @@ createRoot(rootElement, {
                 fallback={
                     <Page>
                         <p role="alert">Morty encountered an error. Please reload to try again.</p>
+                        <BugReportButton />
                     </Page>
                 }
             >

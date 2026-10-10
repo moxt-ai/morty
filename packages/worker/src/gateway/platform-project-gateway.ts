@@ -1,3 +1,4 @@
+import { decodeRuntimeDiagnosticsResult } from "@moxt-ai/mobius-protocol";
 import {
     MobiusApiError,
     MobiusAppCredentialProvider,
@@ -190,6 +191,33 @@ export class PlatformProjectGateway {
                 throw cause;
             }
             throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Platform could not read Runtime Agents.", 502, {
+                cause,
+            });
+        }
+    };
+
+    readonly readRuntimeDiagnostics = async (projectId: string, runtimeId: string, parent: AbortSignal) => {
+        const endpoint = new URL(this.configuration().origin);
+        endpoint.pathname = `/mobius/api/v1/projects/${encodeURIComponent(v.parse(platformIdentifier, projectId))}/runtimes/${encodeURIComponent(v.parse(platformIdentifier, runtimeId))}/diagnostics`;
+        const signal = AbortSignal.any([parent, AbortSignal.timeout(10_000)]);
+        try {
+            const response = await fetch(endpoint, {
+                signal,
+                headers: {
+                    authorization: `Bearer ${v.parse(platformCredentialBindingsSchema, this.#bindings).MOBIUS_APP_SECRET}`,
+                },
+            });
+            if (!response.ok) {
+                await response.body?.cancel();
+                throw new PlatformProjectError("RUNTIME_UNAVAILABLE", "Daemon diagnostics are unavailable.", 503);
+            }
+            return decodeRuntimeDiagnosticsResult(await response.text());
+        } catch (cause) {
+            parent.throwIfAborted();
+            if (signal.aborted) {
+                throw new PlatformProjectError("PLATFORM_TIMEOUT", "Daemon diagnostics timed out.", 504, { cause });
+            }
+            throw new PlatformProjectError("RUNTIME_UNAVAILABLE", "Daemon diagnostics are unavailable.", 503, {
                 cause,
             });
         }

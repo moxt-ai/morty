@@ -9,7 +9,6 @@ export default defineConfig({
         environment: "happy-dom",
         // Each file owns real Chat and Platform isolates. Bound their concurrent startup.
         maxWorkers: 2,
-        setupFiles: ["./tests/infra/application-scenario.ts"],
         include: ["tests/**/*.integration.test.tsx"],
         testTimeout: 5_000,
         coverage: {

@@ -1,6 +1,7 @@
 import { getByTestId, queryAllByTestId } from "@testing-library/dom";
 import { render } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
+import { afterAll, afterEach } from "vitest";
 import { ToastProvider } from "../../src/components/ui/toast.tsx";
 import { ApiTransportProvider } from "../../src/services/api/api-transport-context.tsx";
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
@@ -207,3 +208,14 @@ export async function closeTestApps(): Promise<void> {
 export async function closeTestEnvironment(): Promise<void> {
     await (await environment).close();
 }
+
+afterEach(async () => {
+    await closeTestApps();
+    document.body.replaceChildren();
+    window.localStorage.clear();
+    window.history.replaceState(null, "", "/");
+});
+
+afterAll(async () => {
+    await closeTestEnvironment();
+});
