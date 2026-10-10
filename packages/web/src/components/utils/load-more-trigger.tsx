@@ -63,7 +63,7 @@ export function LoadMoreTrigger({
             });
     };
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         const element = container.current;
         if (element === null) {
             return;
@@ -71,7 +71,7 @@ export function LoadMoreTrigger({
         const request = (): void => requestRef.current();
         element.addEventListener("scroll", request, { passive: true });
         return () => element.removeEventListener("scroll", request);
-    }, [container]);
+    });
 
     // A container already resting at the top edge emits no further scroll
     // events, so re-check the edge after mount and whenever the rendered
