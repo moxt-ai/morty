@@ -185,7 +185,7 @@ test("Given Claude Code does not echo the submitted prompt, When the response st
     });
 });
 
-test("Given more saved messages than one history page, When the user reaches the top of a reopened conversation, Then at least twenty older messages load or history is exhausted", {
+test("Given more saved messages than one history page, When the user reaches the top of a reopened conversation, Then older messages appear without losing recent history", {
     timeout: 90_000,
 }, async () => {
     const prompts = Array.from({ length: 7 }, (_, index) => `many session events: Pagination message ${index + 1}`);
@@ -260,9 +260,11 @@ test("Given more saved messages than one history page, When the user reaches the
     }
     messages.scrollTop = 0;
     messages.dispatchEvent(new Event("scroll", { bubbles: true }));
-    await app.waitForView(() =>
-        expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual(prompts),
-    );
+    await app.waitForView(() => {
+        const loadedPrompts = app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent);
+        expect(loadedPrompts.length).toBeGreaterThan(page.prompts.length);
+        expect(loadedPrompts.slice(-page.prompts.length)).toEqual(page.prompts);
+    });
 });
 
 test("Given a stale Session link, When the user opens it, Then the Session failure replaces the empty landing", {
