@@ -141,6 +141,30 @@ test("Given a file-change tool includes a rich diff, When the user views it, The
     expect(queryByText(edit, "Response")).toBeNull();
 });
 
+test("Given a file-change tool repeats its rich diff in raw output, When the user opens it, Then Chat shows the edit once", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, "change one file with duplicate diffs");
+
+    const edit = await app.waitForView(() =>
+        getByRole(document.body, "group", {
+            name: "Edit: /workspace/app.js",
+        }),
+    );
+    await app.user.click(getByRole(edit, "button", { name: "/workspace/app.js Tool succeeded" }));
+    expect(getAllByText(edit, "/workspace/app.js", { exact: true })).toHaveLength(2);
+});
+
 test("Given a browser tool reports its tool-result schema, When the user opens it, Then Chat presents the browser output without protocol metadata", {
     timeout: 30_000,
 }, async () => {

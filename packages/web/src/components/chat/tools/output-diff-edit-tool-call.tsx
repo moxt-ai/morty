@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { EditToolPresentation, FileDiffList } from "./edit-tool-presentation.tsx";
+import { EditToolPresentation, FileDiffList, fileDiffsWithoutRichContent } from "./edit-tool-presentation.tsx";
 import type { ToolRendererProps } from "./tool-renderer.ts";
 import { isOversizedToolText } from "./tool-text-preview.tsx";
 
@@ -34,7 +34,7 @@ export function OutputDiffEditToolCall({ autoOpen, entry }: ToolRendererProps) {
     }
     return (
         <EditToolPresentation autoOpen={autoOpen} entry={entry}>
-            <FileDiffList diffs={output.output} />
+            <FileDiffList diffs={fileDiffsWithoutRichContent(output.output, entry)} />
         </EditToolPresentation>
     );
 }

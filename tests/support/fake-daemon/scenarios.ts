@@ -295,6 +295,33 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     },
                 ],
             };
+        case "change one file with duplicate diffs":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        content: [
+                            {
+                                newText: "export const status = 'after';\n",
+                                oldText: "export const status = 'before';\n",
+                                path: "/workspace/app.js",
+                                type: "diff",
+                            },
+                        ],
+                        title: "/workspace/app.js",
+                        output: JSON.stringify([
+                            {
+                                newText: "export const status = 'after';\n",
+                                oldText: "export const status = 'before';\n",
+                                path: "/workspace/app.js",
+                                type: "diff",
+                            },
+                        ]),
+                    },
+                ],
+            };
         case "inspect browser surfaces":
             return {
                 outcome: "complete",
