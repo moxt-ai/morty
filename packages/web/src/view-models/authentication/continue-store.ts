@@ -80,6 +80,16 @@ function initialState(): ContinueState {
     return replacesWorkspace ? { code, kind: "workspace-confirm" } : { code, kind: "workspace-redeeming" };
 }
 
+export function continueCode(state: ContinueState): string | null {
+    return state.kind === "invalid" || state.kind === "failed" ? null : state.code;
+}
+
+export function continueUrl(code: string): string {
+    const url = new URL(window.location.href);
+    url.hash = new URLSearchParams({ code }).toString();
+    return url.toString();
+}
+
 export const createContinueStore = (fetchRequest: (request: Request) => Promise<Response>) =>
     createStore<ContinueStore>()((set, get) => ({
         state: initialState(),

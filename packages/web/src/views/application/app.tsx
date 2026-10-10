@@ -1,6 +1,7 @@
 import { type AnyRouter, RouterProvider } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { Spinner } from "../../index.ts";
+import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 
 export type AppState =
     | { readonly kind: "loading" }
@@ -51,6 +52,15 @@ export function Page({
 }
 
 export function App({ state }: { readonly state: AppState }) {
+    return (
+        <>
+            <ApplicationContent state={state} />
+            {state.kind !== "signed-in" && <BugReportButton floating />}
+        </>
+    );
+}
+
+function ApplicationContent({ state }: { readonly state: AppState }) {
     switch (state.kind) {
         case "loading":
             return (

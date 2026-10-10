@@ -22,6 +22,7 @@ import { Input } from "../../components/ui/input.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
+import { registerDaemonDiagnostics } from "../../services/diagnostics/browser-diagnostics.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import type { BotConnectionStatus, BotOperation } from "../../view-models/chat/bot-chat-home-store.ts";
@@ -29,6 +30,7 @@ import { createConversationDirectoryStore } from "../../view-models/chat/convers
 import type { ConversationListStatus } from "../../view-models/chat/conversation-status-store.ts";
 import { createNetworkDiagnosticStore } from "../../view-models/chat/network-diagnostic-store.ts";
 import { createRemoteAccessStore } from "../../view-models/chat/remote-access-store.ts";
+import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import { BotSwitcherMenu } from "./bot-switcher-menu.tsx";
 import { MachineSharing } from "./machine-sharing.tsx";
 import { NativeSessionDialog, type OpenMobiusSession } from "./native-session-dialog.tsx";
@@ -185,6 +187,7 @@ export function ConversationSidebar({
         | "nativeSessions"
         | "nativeSession"
         | "managedSessions"
+        | "daemonDiagnostics"
         | "networkDiagnostic"
     >;
     readonly activeId: string;
@@ -222,6 +225,15 @@ export function ConversationSidebar({
         }),
     );
     const diagnostic = useStore(networkDiagnostic);
+    useEffect(
+        () =>
+            registerDaemonDiagnostics({
+                botId,
+                sessionId: activeId,
+                read: (signal) => requests.daemonDiagnostics(botId, signal),
+            }),
+        [botId, activeId, requests],
+    );
     const lifetime = useRef<AbortController | null>(null);
     const measureNetwork = () => {
         const controller = lifetime.current;
@@ -478,6 +490,7 @@ export function ConversationSidebar({
                 ))}
             </div>
             <div className="col-start-2 row-start-2 flex items-center gap-1 sm:col-auto sm:row-auto sm:mt-3 sm:border-t sm:border-black/[0.06] sm:pt-3">
+                <BugReportButton />
                 {access.state.kind !== "ended" && (
                     <DropdownMenu.Root>
                         <DropdownMenu.Trigger asChild>
