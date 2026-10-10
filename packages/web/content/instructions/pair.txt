@@ -1,5 +1,11 @@
 # Pair Morty
 
+Morty is a browser chat app that lets the user continue working with a local coding
+agent in the selected workspace. Pairing connects your harness as that local agent so
+the user can direct the work from Morty while the Runtime remains online.
+Stop working on the user's task in this session. Complete only this pairing; the user
+will handle their work through Morty.
+
 The user supplied `follow <origin>/pair.md?token=...`. That token is a one-use
 ticket, valid for **10 minutes**, for their existing user, Machine, and workspace.
 Fetching this document does not consume it. Do not create another user or Machine.

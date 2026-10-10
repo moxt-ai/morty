@@ -1,5 +1,11 @@
 # Set up Morty
 
+Morty is a browser chat app that lets the user continue working with a local coding
+agent in the selected workspace. This setup connects your harness as that local agent
+so the user can direct the work from Morty while the Runtime remains online.
+Stop working on the user's task in this session. Complete only this setup; the user
+will handle their work through Morty.
+
 This is the standalone entry for testing and external sharing, such as Twitter.
 Reuse the user's saved identity or create an anonymous identity and personal Machine.
 No registration is required. Web-generated instructions use `/pair.md?token=...`.
