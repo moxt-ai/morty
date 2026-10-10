@@ -1,11 +1,11 @@
-import { and, eq, isNull, lt, notExists, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, notExists, or, sql } from "drizzle-orm";
 import * as v from "valibot";
 import {
     agentPairingTicket,
     anonymousCredential,
     appUser,
     clerkUserBinding,
-    identityTransfer,
+    continueLink,
     managedBot,
     platformProjectMapping,
 } from "../../../schema/project-do/index.ts";
@@ -25,8 +25,10 @@ const anonymousToken = v.pipe(
     ),
 );
 const userRow = v.pipe(v.object({ userId: v.string() }), v.readonly());
+const continueLinkLifetime = 24 * 60 * 60 * 1000;
 export interface IdentityTransfer {
     readonly code: string;
+    readonly expiresAt: number;
 }
 
 export type BindingResult =
@@ -82,13 +84,13 @@ export class IdentityStorage {
             .select({ userId: anonymousCredential.userId })
             .from(anonymousCredential)
             .innerJoin(platformProjectMapping, eq(platformProjectMapping.userId, anonymousCredential.userId))
-            .leftJoin(identityTransfer, eq(identityTransfer.id, anonymousCredential.remoteTransferId))
+            .leftJoin(continueLink, eq(continueLink.id, anonymousCredential.remoteTransferId))
             .where(
                 and(
                     eq(anonymousCredential.tokenHash, await digest(parsed.output)),
                     eq(anonymousCredential.status, "active"),
                     eq(platformProjectMapping.projectId, this.#projectId),
-                    or(isNull(anonymousCredential.remoteTransferId), isNull(identityTransfer.revokedAt)),
+                    or(isNull(anonymousCredential.remoteTransferId), isNull(continueLink.revokedAt)),
                 ),
             )
             .get();
@@ -100,17 +102,19 @@ export class IdentityStorage {
     readonly createTransfer = async (userId: string, now: number, signal: AbortSignal): Promise<IdentityTransfer> => {
         signal.throwIfAborted();
         const code = createProjectCredential("mobius_transfer_v2", v.parse(v.string(), this.#projectId));
+        const expiresAt = now + continueLinkLifetime;
         await requireIdentityDatabase(this.#database)
-            .insert(identityTransfer)
+            .insert(continueLink)
             .values({
                 id: `transfer_${crypto.randomUUID()}`,
                 codeHash: await digest(code),
                 userId,
+                expiresAt,
                 createdAt: now,
             })
             .run();
         signal.throwIfAborted();
-        return { code };
+        return { code, expiresAt };
     };
 
     readonly createRecoveryToken = async (userId: string, now: number, signal: AbortSignal): Promise<string> => {
@@ -147,32 +151,36 @@ export class IdentityStorage {
         const token = `mobius_anon_v2_${randomSecret()}`;
         const results = await database.batch([
             database
-                .update(identityTransfer)
+                .update(continueLink)
                 .set({
-                    redemptionCount: sql`${identityTransfer.redemptionCount} + 1`,
-                    consumedAt: sql`case when ${identityTransfer.redemptionCount} + 1 = 5 then ${now} else null end`,
                     claimNonce,
                 })
                 .where(
                     and(
-                        eq(identityTransfer.codeHash, codeHash),
-                        isNull(identityTransfer.consumedAt),
-                        lt(identityTransfer.redemptionCount, 5),
+                        eq(continueLink.codeHash, codeHash),
+                        isNull(continueLink.revokedAt),
+                        or(
+                            gt(continueLink.expiresAt, now),
+                            and(
+                                eq(continueLink.expiresAt, 0),
+                                gt(sql`${continueLink.createdAt} + ${continueLinkLifetime}`, now),
+                            ),
+                        ),
                     ),
                 ),
             database.insert(anonymousCredential).select(
                 database
                     .select({
                         id: sql<string>`${credentialId}`.as("id"),
-                        userId: identityTransfer.userId,
+                        userId: continueLink.userId,
                         tokenHash: sql<string>`${await digest(token)}`.as("token_hash"),
                         status: sql<"active">`'active'`.as("status"),
                         createdAt: sql<number>`${now}`.as("created_at"),
                         revokedAt: sql<null>`null`.as("revoked_at"),
-                        remoteTransferId: identityTransfer.id,
+                        remoteTransferId: continueLink.id,
                     })
-                    .from(identityTransfer)
-                    .where(and(eq(identityTransfer.codeHash, codeHash), eq(identityTransfer.claimNonce, claimNonce))),
+                    .from(continueLink)
+                    .where(and(eq(continueLink.codeHash, codeHash), eq(continueLink.claimNonce, claimNonce))),
             ),
         ]);
         signal.throwIfAborted();
@@ -207,13 +215,13 @@ export class IdentityStorage {
             })
             .from(anonymousCredential)
             .innerJoin(platformProjectMapping, eq(platformProjectMapping.userId, anonymousCredential.userId))
-            .leftJoin(identityTransfer, eq(identityTransfer.id, anonymousCredential.remoteTransferId))
+            .leftJoin(continueLink, eq(continueLink.id, anonymousCredential.remoteTransferId))
             .where(
                 and(
                     eq(anonymousCredential.tokenHash, await digest(parsed.output)),
                     eq(anonymousCredential.status, "active"),
                     eq(platformProjectMapping.projectId, this.#projectId),
-                    or(isNull(anonymousCredential.remoteTransferId), isNull(identityTransfer.revokedAt)),
+                    or(isNull(anonymousCredential.remoteTransferId), isNull(continueLink.revokedAt)),
                 ),
             )
             .get();
@@ -244,13 +252,13 @@ export class IdentityStorage {
         }
         const results = await database.batch([
             database
-                .update(identityTransfer)
-                .set({ revokedAt: now, consumedAt: now })
+                .update(continueLink)
+                .set({ revokedAt: now })
                 .where(
                     and(
-                        eq(identityTransfer.id, credential.transferId),
-                        eq(identityTransfer.userId, credential.userId),
-                        isNull(identityTransfer.revokedAt),
+                        eq(continueLink.id, credential.transferId),
+                        eq(continueLink.userId, credential.userId),
+                        isNull(continueLink.revokedAt),
                     ),
                 ),
             database
@@ -371,7 +379,7 @@ export class IdentityStorage {
         }
         await database.batch([
             database.delete(agentPairingTicket).where(eq(agentPairingTicket.userId, localUserId)),
-            database.delete(identityTransfer).where(eq(identityTransfer.userId, localUserId)),
+            database.delete(continueLink).where(eq(continueLink.userId, localUserId)),
             database.delete(anonymousCredential).where(eq(anonymousCredential.userId, localUserId)),
             database.delete(managedBot).where(eq(managedBot.userId, localUserId)),
             database.delete(appUser).where(eq(appUser.id, localUserId)),

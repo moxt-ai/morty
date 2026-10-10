@@ -159,6 +159,44 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     }),
                 ),
             };
+        case "distinguish agent work":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        activityType: "reasoning",
+                        kind: "activity",
+                        output: "Inspecting the request before acting.",
+                        title: "Thinking",
+                    },
+                    {
+                        activityType: "tool",
+                        content: [],
+                        kind: "activity",
+                        output: "Workspace is ready.",
+                        title: "Inspect workspace",
+                    },
+                    { kind: "text", text: "The requested update is complete." },
+                ],
+            };
+        case "long reasoning":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        activityType: "reasoning",
+                        kind: "activity",
+                        output: `REASONING START OMITTED ${"x".repeat(9_000)}`,
+                        title: "Thinking",
+                    },
+                    {
+                        activityType: "reasoning",
+                        kind: "activity",
+                        output: `${"y".repeat(9_000)} REASONING END RETAINED`,
+                        title: "Thinking",
+                    },
+                ],
+            };
         case "many session events":
             return manySessionEvents();
         case "show generated picture":
@@ -185,6 +223,28 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                         ],
                         title: "Generate image",
                         output: "null",
+                    },
+                ],
+            };
+        case "view an image":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        content: [
+                            {
+                                type: "content",
+                                content: {
+                                    data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV4kAAAAASUVORK5CYII=",
+                                    mimeType: "image/png",
+                                    type: "image",
+                                },
+                            },
+                        ],
+                        title: "View image",
+                        output: "image/png",
                     },
                 ],
             };

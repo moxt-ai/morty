@@ -24,6 +24,8 @@ import removeLocalSessionMetadata from "../../migrations/project-do/0024_fair_bl
 import removeIntegrationTables from "../../migrations/project-do/0025_misty_scarlet_witch.sql?raw";
 import removeManagedBotAgentRef from "../../migrations/project-do/0026_slimy_ink.sql?raw";
 import removeIdentityTransferExpiry from "../../migrations/project-do/0027_dazzling_grim_reaper.sql?raw";
+import restoreContinueLinkExpiry from "../../migrations/project-do/0028_lovely_harpoon.sql?raw";
+import removeContinueLinkUsageLimit from "../../migrations/project-do/0029_late_hammerhead.sql?raw";
 
 const migrations = [
     management,
@@ -52,6 +54,8 @@ const migrations = [
     removeIntegrationTables,
     removeManagedBotAgentRef,
     removeIdentityTransferExpiry,
+    restoreContinueLinkExpiry,
+    removeContinueLinkUsageLimit,
 ];
 
 type BoundValue = ArrayBuffer | string | number | null;
