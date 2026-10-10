@@ -154,6 +154,70 @@ test("Given a Bot has a recent directory from another harness, When its workspac
     expect(menu.textContent).toContain("/saved-by-another-harness");
 });
 
+test("Given the working directory browser is open, When the user edits the path, Then folder navigation is disabled until the preview settles", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const failure = app.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
+
+    await Promise.race([
+        app.queryElementByTestId(
+            dataTestId.botConnectionStatus,
+            (element) => element.textContent?.includes("Connected") === true,
+        ),
+        failure,
+    ]);
+    await app.user.click(await app.queryElementByTestId(dataTestId.workingDirectory));
+    await app.user.click(await app.queryElementByTestId(dataTestId.changeWorkingDirectory));
+
+    const path = await app.queryElementByTestId(dataTestId.workingDirectoryPath);
+    const preview = await app.queryElementByTestId(dataTestId.workingDirectoryPreview);
+    const navigation = getAllByRole(preview, "button")[0];
+    if (!(path instanceof HTMLInputElement) || !(navigation instanceof HTMLButtonElement)) {
+        throw new Error("Expected working directory path and folder navigation controls");
+    }
+    expect(navigation.disabled).toBe(false);
+
+    await app.user.type(path, "/");
+    expect(navigation.disabled).toBe(true);
+
+    await Promise.race([
+        app.waitForView(() => {
+            const settledNavigation = getAllByRole(
+                app.elementByTestId(dataTestId.workingDirectoryPreview),
+                "button",
+            )[0];
+            if (!(settledNavigation instanceof HTMLButtonElement)) {
+                throw new Error("Expected settled folder navigation controls");
+            }
+            expect(settledNavigation.disabled).toBe(false);
+            return settledNavigation;
+        }),
+        failure,
+    ]);
+
+    await app.user.type(path, "/missing-cwd-preview");
+    const failedNavigation = getAllByRole(app.elementByTestId(dataTestId.workingDirectoryPreview), "button")[0];
+    if (!(failedNavigation instanceof HTMLButtonElement)) {
+        throw new Error("Expected folder navigation controls during failed preview");
+    }
+    expect(failedNavigation.disabled).toBe(true);
+
+    await Promise.race([
+        app.waitForView(() => {
+            const failedPreview = app.elementByTestId(dataTestId.workingDirectoryPreview);
+            expect(getByRole(failedPreview, "alert")).toBeDefined();
+            const settledNavigation = getAllByRole(failedPreview, "button")[0];
+            if (!(settledNavigation instanceof HTMLButtonElement)) {
+                throw new Error("Expected folder navigation controls after failed preview");
+            }
+            expect(settledNavigation.disabled).toBe(false);
+            return settledNavigation;
+        }),
+        failure,
+    ]);
+});
+
 test("Given a Bot paired with Pi, When the user opens its settings and sends a prompt, Then Pi and its streamed reply are visible", {
     timeout: 30_000,
 }, async () => {

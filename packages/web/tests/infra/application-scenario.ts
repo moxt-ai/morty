@@ -1,18 +1,6 @@
 import { queryByTestId } from "@testing-library/dom";
-import { afterAll, afterEach } from "vitest";
 import { dataTestId } from "../../src/data-testid.ts";
-import { closeTestApps, closeTestEnvironment, type TestApp } from "./test-app.tsx";
-
-afterEach(async () => {
-    await closeTestApps();
-    document.body.replaceChildren();
-    window.localStorage.clear();
-    window.history.replaceState(null, "", "/");
-});
-
-afterAll(async () => {
-    await closeTestEnvironment();
-});
+import type { TestApp } from "./test-app.tsx";
 
 export function observeTestId(testId: string): Promise<HTMLElement> {
     return new Promise((resolve) => {

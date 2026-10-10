@@ -22,6 +22,7 @@ import { Input } from "../../components/ui/input.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
+import { registerDaemonDiagnostics } from "../../services/diagnostics/browser-diagnostics.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import type { BotConnectionStatus, BotOperation } from "../../view-models/chat/bot-chat-home-store.ts";
@@ -29,6 +30,7 @@ import { createConversationDirectoryStore } from "../../view-models/chat/convers
 import type { ConversationListStatus } from "../../view-models/chat/conversation-status-store.ts";
 import { createNetworkDiagnosticStore } from "../../view-models/chat/network-diagnostic-store.ts";
 import { createRemoteAccessStore } from "../../view-models/chat/remote-access-store.ts";
+import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import { BotSwitcherMenu } from "./bot-switcher-menu.tsx";
 import { MachineSharing } from "./machine-sharing.tsx";
 import { NativeSessionDialog, type OpenMobiusSession } from "./native-session-dialog.tsx";
@@ -49,6 +51,54 @@ function SidebarActionTooltip({ children, label }: { readonly children: ReactNod
             </Tooltip.Portal>
         </Tooltip.Root>
     );
+}
+
+interface ConversationGroup {
+    readonly label: string;
+    readonly sessions: readonly ManagedChatSession[];
+}
+
+const DAY_MILLISECONDS = 24 * 60 * 60 * 1_000;
+
+function localCalendarDay(date: Date): number {
+    return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function conversationGroupLabel(updatedAt: Date, now: Date): string {
+    const daysAgo = Math.floor((localCalendarDay(now) - localCalendarDay(updatedAt)) / DAY_MILLISECONDS);
+    if (daysAgo <= 0) {
+        return "Today";
+    }
+    if (daysAgo === 1) {
+        return "Yesterday";
+    }
+    if (daysAgo <= 7) {
+        return "Previous 7 Days";
+    }
+    if (daysAgo <= 30) {
+        return "Previous 30 Days";
+    }
+    return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(updatedAt);
+}
+
+function groupConversationsByUpdatedAt(
+    sessions: readonly ManagedChatSession[],
+    now: Date,
+): readonly ConversationGroup[] {
+    const groups: ConversationGroup[] = [];
+    const sorted = sessions
+        .map((session) => ({ session, updatedAt: new Date(session.updatedAt) }))
+        .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime());
+    for (const { session, updatedAt } of sorted) {
+        const label = conversationGroupLabel(updatedAt, now);
+        const previous = groups.at(-1);
+        if (previous?.label === label) {
+            groups[groups.length - 1] = { label, sessions: [...previous.sessions, session] };
+        } else {
+            groups.push({ label, sessions: [session] });
+        }
+    }
+    return groups;
 }
 
 function UserTokenBackup({ token }: { readonly token: string }) {
@@ -137,6 +187,7 @@ export function ConversationSidebar({
         | "nativeSessions"
         | "nativeSession"
         | "managedSessions"
+        | "daemonDiagnostics"
         | "networkDiagnostic"
     >;
     readonly activeId: string;
@@ -174,6 +225,15 @@ export function ConversationSidebar({
         }),
     );
     const diagnostic = useStore(networkDiagnostic);
+    useEffect(
+        () =>
+            registerDaemonDiagnostics({
+                botId,
+                sessionId: activeId,
+                read: (signal) => requests.daemonDiagnostics(botId, signal),
+            }),
+        [botId, activeId, requests],
+    );
     const lifetime = useRef<AbortController | null>(null);
     const measureNetwork = () => {
         const controller = lifetime.current;
@@ -188,6 +248,7 @@ export function ConversationSidebar({
                   title: optimisticTitles.get(session.id) ?? session.title,
               }))
             : null;
+    const conversationGroups = sessions === null ? null : groupConversationsByUpdatedAt(sessions, new Date());
     const refreshing = directory.kind === "refreshing";
     // The directory belongs to the active Bot, not to the selected Session.
     // Session selection is managed by the home view-model and must not restart
@@ -343,85 +404,93 @@ export function ConversationSidebar({
                 {sessions !== null && sessions.length === 0 && (
                     <p className="px-2 py-3 text-xs text-muted-foreground">Your Chat conversations will appear here.</p>
                 )}
-                {sessions?.map((session) => (
-                    <ContextMenu.Root key={session.id}>
-                        <ContextMenu.Trigger asChild>
-                            <button
-                                data-testid={dataTestId.managedConversation}
-                                type="button"
-                                aria-current={activeId === session.id ? "page" : undefined}
-                                disabled={connectionStatus.kind !== "connected"}
-                                onClick={() => {
-                                    onOpen(session);
-                                    setExpanded(false);
-                                }}
-                                className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-transparent px-3 py-2.5 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color,box-shadow] duration-150 hover:bg-white/70 focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent aria-[current=page]:bg-white aria-[current=page]:text-foreground aria-[current=page]:shadow-[0_1px_4px_rgba(17,24,20,0.08),inset_3px_0_0_var(--primary)] motion-reduce:transition-none"
-                            >
-                                <span className="min-w-0">
-                                    <span className="block truncate">{session.title}</span>
-                                    {session.directoryLabel.length > 0 && (
-                                        <span
-                                            className="block truncate text-[11px] leading-4 font-normal text-copy-secondary"
-                                            title={session.directoryLabel}
-                                        >
-                                            {session.directoryLabel}
+                {conversationGroups?.map((group) => (
+                    <section className="space-y-1" key={group.label}>
+                        <h3 className="px-3 pt-2 pb-1 text-[11px] font-semibold text-muted-foreground">
+                            {group.label}
+                        </h3>
+                        {group.sessions.map((session) => (
+                            <ContextMenu.Root key={session.id}>
+                                <ContextMenu.Trigger asChild>
+                                    <button
+                                        data-testid={dataTestId.managedConversation}
+                                        type="button"
+                                        aria-current={activeId === session.id ? "page" : undefined}
+                                        disabled={connectionStatus.kind !== "connected"}
+                                        onClick={() => {
+                                            onOpen(session);
+                                            setExpanded(false);
+                                        }}
+                                        className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-transparent px-3 py-2.5 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color,box-shadow] duration-150 hover:bg-white/70 focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent aria-[current=page]:bg-white aria-[current=page]:text-foreground aria-[current=page]:shadow-[0_1px_4px_rgba(17,24,20,0.08),inset_3px_0_0_var(--primary)] motion-reduce:transition-none"
+                                    >
+                                        <span className="min-w-0">
+                                            <span className="block truncate">{session.title}</span>
+                                            {session.directoryLabel.length > 0 && (
+                                                <span
+                                                    className="block truncate text-[11px] leading-4 font-normal text-copy-secondary"
+                                                    title={session.directoryLabel}
+                                                >
+                                                    {session.directoryLabel}
+                                                </span>
+                                            )}
                                         </span>
-                                    )}
-                                </span>
-                                {(sessionStatuses.get(session.id) ?? session.status).kind === "working" ? (
-                                    <span
-                                        aria-label="Session working"
-                                        className="inline-flex text-primary"
-                                        data-testid={dataTestId.sessionStatus}
-                                        role="status"
-                                    >
-                                        <LoaderCircle
-                                            aria-hidden="true"
-                                            className="size-4 animate-spin motion-reduce:animate-none"
-                                        />
-                                    </span>
-                                ) : sessionStatuses.get(session.id)?.kind === "failed" ? (
-                                    <span
-                                        aria-label="Session failed"
-                                        className="text-xs text-destructive"
-                                        data-testid={dataTestId.sessionStatus}
-                                        role="status"
-                                    >
-                                        Failed
-                                    </span>
-                                ) : sessionStatuses.get(session.id)?.kind === "unread" ? (
-                                    <span
-                                        aria-label="Unread response"
-                                        className="inline-flex size-4 items-center justify-center"
-                                        data-testid={dataTestId.sessionStatus}
-                                        role="status"
-                                    >
-                                        <span className="size-2 rounded-full bg-primary" />
-                                    </span>
-                                ) : null}
-                            </button>
-                        </ContextMenu.Trigger>
-                        <ContextMenu.Portal>
-                            <ContextMenu.Content className="z-[110] min-w-40 rounded-lg border border-border bg-background p-1 text-sm text-foreground shadow-lg">
-                                <ContextMenu.Item
-                                    className="cursor-pointer rounded-md px-3 py-2 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-accent"
-                                    data-testid={dataTestId.archiveConversation}
-                                    disabled={archive.kind === "archiving"}
-                                    onSelect={() => {
-                                        const controller = lifetime.current;
-                                        if (controller !== null) {
-                                            void archiveSession(session.id, controller.signal);
-                                        }
-                                    }}
-                                >
-                                    Archive conversation
-                                </ContextMenu.Item>
-                            </ContextMenu.Content>
-                        </ContextMenu.Portal>
-                    </ContextMenu.Root>
+                                        {(sessionStatuses.get(session.id) ?? session.status).kind === "working" ? (
+                                            <span
+                                                aria-label="Session working"
+                                                className="inline-flex text-primary"
+                                                data-testid={dataTestId.sessionStatus}
+                                                role="status"
+                                            >
+                                                <LoaderCircle
+                                                    aria-hidden="true"
+                                                    className="size-4 animate-spin motion-reduce:animate-none"
+                                                />
+                                            </span>
+                                        ) : sessionStatuses.get(session.id)?.kind === "failed" ? (
+                                            <span
+                                                aria-label="Session failed"
+                                                className="text-xs text-destructive"
+                                                data-testid={dataTestId.sessionStatus}
+                                                role="status"
+                                            >
+                                                Failed
+                                            </span>
+                                        ) : sessionStatuses.get(session.id)?.kind === "unread" ? (
+                                            <span
+                                                aria-label="Unread response"
+                                                className="inline-flex size-4 items-center justify-center"
+                                                data-testid={dataTestId.sessionStatus}
+                                                role="status"
+                                            >
+                                                <span className="size-2 rounded-full bg-primary" />
+                                            </span>
+                                        ) : null}
+                                    </button>
+                                </ContextMenu.Trigger>
+                                <ContextMenu.Portal>
+                                    <ContextMenu.Content className="z-[110] min-w-40 rounded-lg border border-border bg-background p-1 text-sm text-foreground shadow-lg">
+                                        <ContextMenu.Item
+                                            className="cursor-pointer rounded-md px-3 py-2 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-accent"
+                                            data-testid={dataTestId.archiveConversation}
+                                            disabled={archive.kind === "archiving"}
+                                            onSelect={() => {
+                                                const controller = lifetime.current;
+                                                if (controller !== null) {
+                                                    void archiveSession(session.id, controller.signal);
+                                                }
+                                            }}
+                                        >
+                                            Archive conversation
+                                        </ContextMenu.Item>
+                                    </ContextMenu.Content>
+                                </ContextMenu.Portal>
+                            </ContextMenu.Root>
+                        ))}
+                    </section>
                 ))}
             </div>
             <div className="col-start-2 row-start-2 flex items-center gap-1 sm:col-auto sm:row-auto sm:mt-3 sm:border-t sm:border-black/[0.06] sm:pt-3">
+                <BugReportButton />
                 {access.state.kind !== "ended" && (
                     <DropdownMenu.Root>
                         <DropdownMenu.Trigger asChild>

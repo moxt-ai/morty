@@ -37,6 +37,8 @@ export function CwdSelector({
     const browser = viewModel.cwdBrowser;
     const workingDirectory = settings.cwd.directoryLabel;
     const directory = browser.kind === "closed" ? null : browser.directory;
+    const directoryNavigationDisabled = browser.kind === "previewing";
+    const directoryPending = browser.kind === "loading" || browser.kind === "previewing";
     return (
         <>
             <Popover.Root onOpenChange={setMenuOpen} open={menuOpen}>
@@ -151,6 +153,8 @@ export function CwdSelector({
                             />
                         </label>
                         <section
+                            aria-busy={directoryPending}
+                            aria-disabled={directoryNavigationDisabled}
                             aria-label={directory === null ? undefined : `Folders in ${directory.directoryLabel}`}
                             className="min-h-56 overflow-hidden rounded-xl border border-border bg-surface-subtle/50"
                             data-testid={dataTestId.workingDirectoryPreview}
@@ -176,12 +180,13 @@ export function CwdSelector({
                                     {directory !== null && (
                                         <ul
                                             aria-label={`Folders in ${directory.directoryLabel}`}
-                                            className="max-h-64 overflow-y-auto p-2"
+                                            className={`max-h-64 overflow-y-auto p-2 ${directoryNavigationDisabled ? "opacity-50" : ""}`}
                                         >
                                             {directory.parentDirectoryId.length > 0 && (
                                                 <li>
                                                     <button
-                                                        className="flex h-10 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-accent"
+                                                        className="flex h-10 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-accent disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                                        disabled={directoryNavigationDisabled}
                                                         onClick={() =>
                                                             void viewModel.browseCwd(
                                                                 directory.parentDirectoryId,
@@ -200,7 +205,8 @@ export function CwdSelector({
                                                 <li key={entry.directoryId}>
                                                     <button
                                                         aria-label={entry.name}
-                                                        className="flex h-10 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-accent"
+                                                        className="flex h-10 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-accent disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                                        disabled={directoryNavigationDisabled}
                                                         onClick={() =>
                                                             void viewModel.browseCwd(entry.directoryId, signal)
                                                         }
@@ -224,7 +230,7 @@ export function CwdSelector({
                         </Button>
                         <Button
                             data-testid={dataTestId.saveWorkingDirectory}
-                            disabled={browser.kind === "loading"}
+                            disabled={directoryPending}
                             onClick={() => void viewModel.saveCwd(signal)}
                         >
                             Save

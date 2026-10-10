@@ -1,5 +1,6 @@
 import { breadcrumbsIntegration, browserTracingIntegration, type Event, init } from "@sentry/react";
 import * as v from "valibot";
+import { recordBrowserError } from "./services/diagnostics/browser-diagnostics.ts";
 
 function withoutQuery(value: string): string {
     try {
@@ -77,3 +78,6 @@ if (configuration.VITE_SENTRY_DSN.length > 0) {
         },
     });
 }
+
+window.addEventListener("error", () => recordBrowserError("uncaught_error"));
+window.addEventListener("unhandledrejection", () => recordBrowserError("unhandled_rejection"));
