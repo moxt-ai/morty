@@ -55,41 +55,6 @@ function receive(socket: MiniflareWebSocket): Promise<unknown> {
     });
 }
 
-function receiveResponse(socket: MiniflareWebSocket, requestId: string): Promise<unknown[]> {
-    return new Promise((resolve, reject) => {
-        const frames: unknown[] = [];
-        let done = false;
-        const close = () => reject(new Error("The WebSocket closed before replying."));
-        socket.addEventListener("close", close, { once: true });
-        socket.addEventListener("message", (event) => {
-            if (done) {
-                return;
-            }
-            const frame: unknown = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-            frames.push(frame);
-            if (
-                typeof frame === "object" &&
-                frame !== null &&
-                Reflect.get(frame, "kind") === "response.end" &&
-                Reflect.get(frame, "requestId") === requestId
-            ) {
-                done = true;
-                socket.removeEventListener("close", close);
-                resolve(frames);
-            }
-        });
-    });
-}
-
-function decodeChunk(value: unknown): { readonly requestId: string; readonly body: string } {
-    const bytes = value instanceof ArrayBuffer ? new Uint8Array(value) : Uint8Array.from(value as Uint8Array);
-    const requestIdLength = bytes[0] ?? 0;
-    return {
-        requestId: new TextDecoder().decode(bytes.subarray(1, 1 + requestIdLength)),
-        body: new TextDecoder().decode(bytes.subarray(1 + requestIdLength)),
-    };
-}
-
 test("Given a public HTTP client, When it requests browser-only APIs, Then Chat does not expose the endpoints", async () => {
     const [cloudResponse, projectResponse] = await Promise.all([
         runtime.dispatchFetch("https://chat.test/morty/api/config"),
@@ -102,7 +67,7 @@ test("Given a public HTTP client, When it requests browser-only APIs, Then Chat 
     }
 });
 
-test("Given browsers with different empty-body representations, When the Chat web application uses the WebSocket bridge, Then API requests pass and document requests are rejected", async () => {
+test("Given a browser API request, When the Chat web application uses the WebSocket bridge, Then the response is readable JSON text and document requests are rejected", async () => {
     const response = await runtime.dispatchFetch("https://chat.test/morty/ws", {
         headers: { Origin: "https://chat.test", Upgrade: "websocket" },
     });
@@ -112,7 +77,7 @@ test("Given browsers with different empty-body representations, When the Chat we
         throw new Error("Expected the Chat WebSocket bridge.");
     }
     socket.accept();
-    const reply = receiveResponse(socket, "request-1");
+    const reply = receive(socket);
     socket.send(
         JSON.stringify({
             kind: "request",
@@ -123,14 +88,12 @@ test("Given browsers with different empty-body representations, When the Chat we
             body: "",
         }),
     );
-    const frames = await reply;
-    const begin = frames[0];
-    const end = frames.at(-1);
-    expect(begin).toMatchObject({ kind: "response.begin", requestId: "request-1", status: 200 });
-    const chunks = frames.slice(1, -1).map(decodeChunk);
-    expect(chunks.every((chunk) => chunk.requestId === "request-1")).toBe(true);
-    expect(chunks.map((chunk) => chunk.body).join("")).toBe(JSON.stringify({ publishableKey: "pk_test_browser" }));
-    expect(end).toEqual({ kind: "response.end", requestId: "request-1" });
+    await expect(reply).resolves.toMatchObject({
+        kind: "response",
+        requestId: "request-1",
+        status: 200,
+        body: JSON.stringify({ publishableKey: "pk_test_browser" }),
+    });
     const rejected = receive(socket);
     socket.send(
         JSON.stringify({

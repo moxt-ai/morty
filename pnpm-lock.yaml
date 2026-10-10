@@ -459,9 +459,6 @@ importers:
       '@moxt-ai/mobius-protocol':
         specifier: workspace:*
         version: link:../protocol
-      base64-js:
-        specifier: ^1.5.1
-        version: 1.5.1
       partysocket:
         specifier: 1.3.0
         version: 1.3.0(react@19.2.8)
@@ -531,9 +528,6 @@ importers:
       '@moxt-ai/mobius-protocol':
         specifier: workspace:*
         version: link:../protocol
-      base64-js:
-        specifier: ^1.5.1
-        version: 1.5.1
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@cloudflare/workers-types@5.20261007.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.4.1)
@@ -8447,7 +8441,8 @@ snapshots:
 
   balanced-match@4.0.4: {}
 
-  base64-js@1.5.1: {}
+  base64-js@1.5.1:
+    optional: true
 
   baseline-browser-mapping@2.11.21: {}
 
