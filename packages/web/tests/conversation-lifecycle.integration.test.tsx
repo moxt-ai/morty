@@ -1,8 +1,74 @@
-import { queryByRole } from "@testing-library/dom";
-import { expect, test } from "vitest";
+import { getByRole, queryAllByRole, queryByRole } from "@testing-library/dom";
+import { expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
+
+test("Given conversations updated across recent dates, When the directory loads, Then conversations are grouped by latest activity", {
+    timeout: 60_000,
+}, async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+        vi.setSystemTime(new Date("2026-10-10T12:00:00+08:00"));
+        const app = await createTestApp({ connectAgent: true });
+        await app.queryElementByTestId(
+            dataTestId.botConnectionStatus,
+            (element) => element.textContent?.includes("Connected") === true,
+        );
+        const conversations = [
+            { title: "Today conversation", updatedAt: "2026-10-10T12:00:00+08:00" },
+            { title: "September conversation", updatedAt: "2026-09-02T12:00:00+08:00" },
+            { title: "Previous 30 days conversation", updatedAt: "2026-10-02T12:00:00+08:00" },
+            { title: "Previous 7 days conversation", updatedAt: "2026-10-06T12:00:00+08:00" },
+            { title: "Yesterday conversation", updatedAt: "2026-10-09T12:00:00+08:00" },
+        ] as const;
+        for (const [index, conversation] of conversations.entries()) {
+            vi.setSystemTime(new Date(conversation.updatedAt));
+            if (index > 0) {
+                await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+            }
+            const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+            if (!(composer instanceof HTMLTextAreaElement)) {
+                throw new Error("Expected the message composer");
+            }
+            await sendPrompt(app, composer, conversation.title);
+            await app.waitForView(() =>
+                expect(
+                    app
+                        .elementsByTestId(dataTestId.agentResponse)
+                        .some((element) => element.textContent?.includes(conversation.title) === true),
+                ).toBe(true),
+            );
+            await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+        }
+
+        vi.setSystemTime(new Date("2026-10-10T12:00:00+08:00"));
+        await app.user.click(getByRole(document.body, "button", { name: "Refresh conversations" }));
+
+        await app.waitForView(() => {
+            expect(
+                queryAllByRole(document.body, "heading", { level: 3 }).map((heading) => heading.textContent),
+            ).toEqual(["Today", "Yesterday", "Previous 7 Days", "Previous 30 Days", "September 2026"]);
+            expect(
+                app
+                    .elementsByTestId(dataTestId.managedConversation)
+                    .map(
+                        (conversation) =>
+                            conversations.find(({ title }) => conversation.textContent?.includes(title) === true)
+                                ?.title,
+                    ),
+            ).toEqual([
+                "Today conversation",
+                "Yesterday conversation",
+                "Previous 7 days conversation",
+                "Previous 30 days conversation",
+                "September conversation",
+            ]);
+        });
+    } finally {
+        vi.useRealTimers();
+    }
+});
 
 test("Given an unsent message draft, When the Chat application remounts, Then the draft remains in the composer", {
     timeout: 30_000,
