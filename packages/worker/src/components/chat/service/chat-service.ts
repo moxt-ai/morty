@@ -220,8 +220,10 @@ export class ChatService {
         return {
             sessions: owned.map((session) => {
                 const details = byId.get(session.id);
+                const createdAt = new Date(session.createdAt).toISOString();
                 return {
                     ...session,
+                    createdAt,
                     additionalDirectoryIds:
                         details?.additionalDirectories.map((directory) => directory.directoryId) ?? [],
                     directoryId: details?.directoryId ?? "default",
@@ -229,6 +231,7 @@ export class ChatService {
                     isExternal: false,
                     status: details?.status ?? { kind: "idle" },
                     title: details?.title ?? "New chat",
+                    updatedAt: details?.updatedAt ?? createdAt,
                 };
             }),
         };

@@ -40,9 +40,11 @@ const accessSchema = v.pipe(
 export type ChatAccess = v.InferOutput<typeof accessSchema>;
 const managedSessionSchema = v.pipe(
     v.object({
+        createdAt: v.pipe(v.string(), v.isoTimestamp()),
         isExternal: v.boolean(),
         id: identifier,
         title: v.string(),
+        updatedAt: v.pipe(v.string(), v.isoTimestamp()),
         directoryLabel: v.string(),
         directoryId: v.string(),
         additionalDirectoryIds: v.array(v.string()),
