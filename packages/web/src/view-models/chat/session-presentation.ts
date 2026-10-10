@@ -428,11 +428,13 @@ function mergeAdjacentText(previous: SessionMessage | undefined, incoming: Sessi
 
 export interface SessionTimelineProjection {
     readonly append: (event: SessionEventV2) => SessionTimeline;
+    readonly complete: () => SessionTimeline;
     readonly current: () => SessionTimeline;
 }
 
 export function createSessionTimelineProjection(events: readonly SessionEventV2[]): SessionTimelineProjection {
     const messages: SessionMessage[] = [];
+    const messageIdsWithFirstEventLoaded = new Set<string>();
     const submittedPrompts = new Map<string, ContentBlockV2[]>();
     const toolIndexes = new Map<string, number>();
     let timeline: SessionTimeline = { messages: [] };
@@ -455,6 +457,7 @@ export function createSessionTimelineProjection(events: readonly SessionEventV2[
                     id: event.eventId,
                     role: "user",
                 });
+                messageIdsWithFirstEventLoaded.add(event.eventId);
                 return publish ? commit() : timeline;
             }
             if (
@@ -477,6 +480,9 @@ export function createSessionTimelineProjection(events: readonly SessionEventV2[
                 const merged = mergeAdjacentText(messages[previousIndex], message);
                 if (merged === null) {
                     messages.push(message);
+                    if (messages.length > 1) {
+                        messageIdsWithFirstEventLoaded.add(message.id);
+                    }
                 } else {
                     messages[previousIndex] = merged;
                 }
@@ -498,6 +504,9 @@ export function createSessionTimelineProjection(events: readonly SessionEventV2[
         if (existingIndex === undefined) {
             toolIndexes.set(update.toolCallId, messages.length);
             messages.push(message);
+            if (update.sessionUpdate === "tool_call") {
+                messageIdsWithFirstEventLoaded.add(message.id);
+            }
         } else {
             messages[existingIndex] = message;
         }
@@ -509,7 +518,42 @@ export function createSessionTimelineProjection(events: readonly SessionEventV2[
     commit();
     return {
         append: (event) => append(event, true),
+        complete: () => ({
+            messages: timeline.messages.filter((message) => messageIdsWithFirstEventLoaded.has(message.id)),
+        }),
         current: () => timeline,
+    };
+}
+
+export interface SessionHistoryMessages {
+    readonly append: (event: SessionEventV2) => void;
+    readonly current: () => SessionTimeline;
+    readonly replace: (history: {
+        readonly events: readonly SessionEventV2[];
+        readonly nextCursor: string | null;
+    }) => void;
+    readonly updateCursor: (nextCursor: string | null) => void;
+}
+
+export function createSessionHistoryMessages(history: {
+    readonly events: readonly SessionEventV2[];
+    readonly nextCursor: string | null;
+}): SessionHistoryMessages {
+    let hasOlderEvents = history.nextCursor !== null;
+    let projection = createSessionTimelineProjection(history.events);
+    const current = (): SessionTimeline => (hasOlderEvents ? projection.complete() : projection.current());
+    return {
+        append: (event) => {
+            projection.append(event);
+        },
+        current,
+        replace: (replacement) => {
+            hasOlderEvents = replacement.nextCursor !== null;
+            projection = createSessionTimelineProjection(replacement.events);
+        },
+        updateCursor: (nextCursor) => {
+            hasOlderEvents = nextCursor !== null;
+        },
     };
 }
 
