@@ -112,6 +112,7 @@ export class ManagementApi {
                 parsed.success ? parsed.output.error.code : "MANAGEMENT_UNAVAILABLE",
                 parsed.success ? parsed.output.error.message : "Machine management is unavailable.",
                 response.status,
+                response.headers.get("x-morty-request-id") ?? response.headers.get("x-request-id") ?? "",
             );
         }
         return value;
@@ -121,10 +122,12 @@ export class ManagementApi {
 export class CloudApiError extends Error {
     readonly code: string;
     readonly status: number | null;
-    constructor(code: string, message: string, status: number | null = null) {
+    readonly requestId: string;
+    constructor(code: string, message: string, status: number | null = null, requestId = "") {
         super(message);
         this.code = code;
         this.status = status;
+        this.requestId = requestId;
         this.name = "CloudApiError";
     }
 }

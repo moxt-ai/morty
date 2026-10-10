@@ -2,6 +2,7 @@ import { isIdentifier } from "@moxt-ai/mobius-protocol";
 import { createStore } from "zustand/vanilla";
 import { createSelectedBotPreference } from "@/services/bots/selected-bot-preference";
 import { BotChatApi } from "@/services/chat/bot-chat-api";
+import { recordBrowserError, registerDaemonDiagnostics } from "@/services/diagnostics/browser-diagnostics";
 import { AnonymousIdentityApi, hasStoredAnonymousCredential } from "@/services/identity/anonymous-identity-api";
 import { ManagementApi } from "@/services/management/management-api";
 
@@ -45,6 +46,7 @@ export interface ContinueStore {
     readonly continueSession: (choice: NativeSessionChoice) => void;
     readonly continueWorkspace: () => void;
     readonly redeem: (signal: AbortSignal) => Promise<void>;
+    readonly dispose: () => void;
 }
 
 function initialState(): ContinueState {
@@ -90,8 +92,14 @@ export function continueUrl(code: string): string {
     return url.toString();
 }
 
-export const createContinueStore = (fetchRequest: (request: Request) => Promise<Response>) =>
-    createStore<ContinueStore>()((set, get) => ({
+export const createContinueStore = (fetchRequest: (request: Request) => Promise<Response>) => {
+    let releaseDiagnostics: (() => void) | null = null;
+    const dispose = () => {
+        releaseDiagnostics?.();
+        releaseDiagnostics = null;
+    };
+    return createStore<ContinueStore>()((set, get) => ({
+        dispose,
         state: initialState(),
         continueSession: (choice) => {
             const state = get().state;
@@ -125,6 +133,8 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 fetchRequest,
                 origin: window.location.origin,
             });
+            dispose();
+            let operation = "redeem";
             try {
                 const identity = await api.redeemTransfer(state.code, signal);
                 signal.throwIfAborted();
@@ -143,6 +153,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     projectId: identity.projectId,
                     getToken: async () => identity.token,
                 });
+                operation = "bots";
                 const bots = await management.listBots(signal);
                 const preferredBot = createSelectedBotPreference(identity.projectId).read();
                 const bot = bots.find((candidate) => candidate.botId === preferredBot) ?? bots[0];
@@ -161,6 +172,13 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                         throw new Error("Workspace updates are unavailable while continuing this session.");
                     },
                 });
+                releaseDiagnostics = registerDaemonDiagnostics({
+                    botId: bot.botId,
+                    sessionId: null,
+                    nativeSessionId: state.handoff.sessionId,
+                    read: (parent) => chat.daemonDiagnostics(bot.botId, parent),
+                });
+                operation = "continue-native-session";
                 const session = await chat.continueNativeSession(
                     bot.botId,
                     state.handoff.harness,
@@ -174,6 +192,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 window.location.replace(destination);
             } catch (cause) {
                 if (!signal.aborted) {
+                    recordBrowserError(operation, cause);
                     const message = cause instanceof Error ? cause.message : "This transfer link is unavailable.";
                     set({
                         state:
@@ -191,3 +210,4 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
             }
         },
     }));
+};

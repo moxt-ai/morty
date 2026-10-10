@@ -106,6 +106,7 @@ export class WebSocketApiTransport {
         const operation = new URL(request.url).pathname.split("/").slice(-1)[0] ?? "request";
         try {
             const response = await this.#fetch(request, requestId);
+            response.headers.set("x-morty-request-id", requestId);
             recordBrowserDiagnostic({
                 at: new Date().toISOString(),
                 component: "worker",

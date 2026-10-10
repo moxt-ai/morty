@@ -60,6 +60,7 @@ function ContinuePage() {
     const { continueSession, continueWorkspace, redeem, state } = useStore(store);
     const code = continueCode(state);
     const qrCodeUrl = code === null ? null : continueUrl(code);
+    useEffect(() => () => store.getState().dispose(), [store]);
     useEffect(() => {
         if (state.kind !== "session-redeeming" && state.kind !== "workspace-redeeming") {
             return;
