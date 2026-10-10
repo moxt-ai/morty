@@ -1,4 +1,5 @@
-import { getAllByRole, getByRole } from "@testing-library/dom";
+import { fireEvent, getAllByRole, getByRole } from "@testing-library/dom";
+import { act } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { observeTestId, sendPrompt } from "./infra/application-scenario.ts";
@@ -45,6 +46,31 @@ test("Given an unpaired workspace, When a user manages Bots, Then pairing and th
     );
     await app.user.click(app.elementByTestId(dataTestId.botMenuTrigger));
     expect(app.optionalElementByTestId(dataTestId.removeBot)).toBeNull();
+});
+
+test("Given an unpaired workspace, When a fresh workspace is being created in another region, Then its pairing instruction cannot be used", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp();
+    const pairing = await app.queryElementByTestId(dataTestId.pairingInstruction);
+    const copy = getByRole(document.body, "button", { name: "Copy pairing instruction" });
+    const region = getByRole(document.body, "combobox", { name: "Workspace region" });
+    if (!(pairing instanceof HTMLInputElement) || !(copy instanceof HTMLButtonElement)) {
+        throw new Error("Expected pairing instruction controls");
+    }
+    expect(pairing.disabled).toBe(false);
+    expect(copy.disabled).toBe(false);
+
+    await app.user.click(region);
+    act(() => fireEvent.click(getByRole(document.body, "option", { name: "Eastern North America" })));
+    expect(document.body.textContent).toContain("Creating a fresh workspace");
+
+    expect(pairing.disabled).toBe(true);
+    expect(copy.disabled).toBe(true);
+    await vi.waitFor(() => {
+        expect(region).toHaveProperty("disabled", false);
+        expect(document.body.textContent).toContain("Changing region replaces this fresh workspace");
+    });
 });
 
 test("Given a paired Bot with cached agent settings, When a user refreshes and filters its models, Then the reloaded configuration and Agent reply are visible", {

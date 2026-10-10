@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.tsx";
 import { dataTestId } from "../../data-testid.ts";
@@ -20,9 +20,11 @@ const locations: readonly { readonly label: string; readonly value: WorkspaceLoc
 ];
 
 export function WorkspaceRegionSelector({
+    onReplacementChange,
     projectId,
     replaceWorkspace,
 }: {
+    readonly onReplacementChange: (replacing: boolean) => void;
     readonly projectId: string;
     readonly replaceWorkspace: (location: WorkspaceLocation, signal: AbortSignal) => Promise<void>;
 }) {
@@ -30,6 +32,15 @@ export function WorkspaceRegionSelector({
     const { location, replacement, select } = useStore(store);
     const operation = useRef<AbortController | null>(null);
     useEffect(() => () => operation.current?.abort(), []);
+    useLayoutEffect(() => {
+        const replacing = replacement.kind === "replacing";
+        onReplacementChange(replacing);
+        return () => {
+            if (replacing) {
+                onReplacementChange(false);
+            }
+        };
+    }, [onReplacementChange, replacement.kind]);
 
     return (
         <div className="mt-4 space-y-1.5">

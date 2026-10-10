@@ -78,6 +78,7 @@ export function BotChatHome({
     readonly selectedBotPreference: SelectedBotPreference;
     readonly replaceWorkspace?: (location: WorkspaceLocation, signal: AbortSignal) => Promise<void>;
 }) {
+    const [workspaceReplacing, setWorkspaceReplacing] = useState(false);
     const [store] = useState(() =>
         createBotChatHomeStore(requests, {
             url: window.location.href,
@@ -450,9 +451,13 @@ export function BotChatHome({
                     {setupView?.reason === "unconfigured" &&
                         model.bots.length === 1 &&
                         replaceWorkspace !== undefined && (
-                            <WorkspaceRegionSelector projectId={projectId} replaceWorkspace={replaceWorkspace} />
+                            <WorkspaceRegionSelector
+                                onReplacementChange={setWorkspaceReplacing}
+                                projectId={projectId}
+                                replaceWorkspace={replaceWorkspace}
+                            />
                         )}
-                    <PairingInstruction botId={active.bot.botId} requests={requests} />
+                    <PairingInstruction botId={active.bot.botId} disabled={workspaceReplacing} requests={requests} />
                 </Dialog>
             )}
             {failureDialogOpen && model.view.kind === "connection-failed" && (
