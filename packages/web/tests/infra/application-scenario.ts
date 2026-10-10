@@ -1,19 +1,5 @@
-import { queryByTestId } from "@testing-library/dom";
 import { dataTestId } from "../../src/data-testid.ts";
 import type { TestApp } from "./test-app.tsx";
-
-export function observeTestId(testId: string): Promise<HTMLElement> {
-    return new Promise((resolve) => {
-        const observer = new MutationObserver(() => {
-            const element = queryByTestId(document.body, testId);
-            if (element !== null) {
-                observer.disconnect();
-                resolve(element);
-            }
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-    });
-}
 
 export async function sendPrompt(app: TestApp, composer: HTMLTextAreaElement, prompt: string): Promise<void> {
     const readyComposer = await app.queryElementByTestId(
