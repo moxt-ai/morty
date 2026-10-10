@@ -8,6 +8,7 @@ import {
 } from "./read-tool-presentation.tsx";
 import { toolTextContent } from "./tool-display-content.ts";
 import type { ToolRendererProps } from "./tool-renderer.ts";
+import { isOversizedToolText, ToolTextPreview } from "./tool-text-preview.tsx";
 
 const requestSchema = v.pipe(
     v.strictObject({
@@ -82,7 +83,21 @@ export function PathReadToolCall({ autoOpen, entry }: ToolRendererProps) {
     if (!request.success) {
         return null;
     }
-    const parsed = parseOutput(toolTextContent(entry.content) ?? responseText(entry.output));
+    const content = toolTextContent(entry.content);
+    const response = content ?? (isOversizedToolText(entry.output) ? entry.output : responseText(entry.output));
+    if (isOversizedToolText(response)) {
+        return (
+            <ReadToolPresentation
+                autoOpen={autoOpen}
+                path={request.output.path}
+                state={entry.state}
+                title={entry.title}
+            >
+                <ToolTextPreview className="font-mono text-xs" text={response} />
+            </ReadToolPresentation>
+        );
+    }
+    const parsed = parseOutput(response);
     return (
         <ReadToolPresentation autoOpen={autoOpen} path={request.output.path} state={entry.state} title={entry.title}>
             {parsed.rangeLabel.length > 0 && <ReadToolLabel>{parsed.rangeLabel}</ReadToolLabel>}

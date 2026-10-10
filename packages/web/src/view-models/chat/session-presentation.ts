@@ -51,7 +51,7 @@ function exhaustive(value: never): never {
 }
 
 function encodedJson(value: unknown): string {
-    if (value === undefined) {
+    if (value === undefined || value === null) {
         return "";
     }
     return typeof value === "string" ? value : JSON.stringify(value);

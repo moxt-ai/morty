@@ -2,6 +2,7 @@ import * as v from "valibot";
 import { ShellCommandPresentation } from "./shell-command-presentation.tsx";
 import { toolTextContent } from "./tool-display-content.ts";
 import type { ToolRendererProps } from "./tool-renderer.ts";
+import { isOversizedToolText } from "./tool-text-preview.tsx";
 
 const requestSchema = v.pipe(
     v.strictObject({
@@ -33,8 +34,11 @@ export function matchesWorkdirShellCommandToolCall({ input }: ToolRendererProps[
 }
 
 export function WorkdirShellCommandToolCall({ autoOpen, entry }: ToolRendererProps) {
-    const response = v.safeParse(responseSchema, parseJson(entry.output));
-    const output =
-        toolTextContent(entry.content) ?? (response.success ? response.output.output.trimEnd() : entry.output);
+    const displayContent = toolTextContent(entry.content);
+    const response =
+        displayContent === null && !isOversizedToolText(entry.output)
+            ? v.safeParse(responseSchema, parseJson(entry.output))
+            : null;
+    const output = displayContent ?? (response?.success === true ? response.output.output.trimEnd() : entry.output);
     return <ShellCommandPresentation autoOpen={autoOpen} entry={entry} response={output} />;
 }

@@ -4,6 +4,7 @@ import { HighlightedCode } from "./highlighted-code.tsx";
 import { ToolCallDisclosure } from "./tool-call-status.tsx";
 import { toolTextContent } from "./tool-display-content.ts";
 import type { ToolRendererProps } from "./tool-renderer.ts";
+import { isOversizedToolText, ToolTextPreview } from "./tool-text-preview.tsx";
 
 const requestSchema = v.pipe(
     v.strictObject({
@@ -59,8 +60,10 @@ export function matchesBrowserJavascriptToolCall(entry: ToolRendererProps["entry
 export function BrowserJavascriptToolCall({ autoOpen, entry }: ToolRendererProps) {
     const request = parseRequest(entry.input);
     const title = request?.title ?? entry.title;
-    const protocolResponse = responseText(entry.output);
-    const output = toolTextContent(entry.content) ?? protocolResponse ?? entry.output;
+    const displayContent = toolTextContent(entry.content);
+    const protocolResponse =
+        displayContent === null && !isOversizedToolText(entry.output) ? responseText(entry.output) : null;
+    const output = displayContent ?? protocolResponse ?? entry.output;
     return (
         <ToolCallDisclosure
             ariaLabel={`Browser: ${title}`}
@@ -75,11 +78,7 @@ export function BrowserJavascriptToolCall({ autoOpen, entry }: ToolRendererProps
                         <HighlightedCode code={request.code} language="javascript" />
                     </div>
                 )}
-                {output.length > 0 && (
-                    <pre className="max-h-96 overflow-auto rounded-lg bg-black/[0.035] p-2 whitespace-pre-wrap">
-                        {output}
-                    </pre>
-                )}
+                {output.length > 0 && <ToolTextPreview text={output} />}
             </div>
         </ToolCallDisclosure>
     );

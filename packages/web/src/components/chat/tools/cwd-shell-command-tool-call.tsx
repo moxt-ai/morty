@@ -2,6 +2,7 @@ import * as v from "valibot";
 import { ShellCommandPresentation } from "./shell-command-presentation.tsx";
 import { toolTextContent } from "./tool-display-content.ts";
 import type { ToolRendererProps } from "./tool-renderer.ts";
+import { isOversizedToolText } from "./tool-text-preview.tsx";
 
 const requestSchema = v.pipe(
     v.strictObject({
@@ -38,15 +39,19 @@ function parseJson(value: string): unknown {
 export function matchesCwdShellCommandToolCall({ input, output }: ToolRendererProps["entry"]): boolean {
     return (
         v.safeParse(requestSchema, parseJson(input)).success ||
-        v.safeParse(outputResponseSchema, parseJson(output)).success
+        (!isOversizedToolText(output) && v.safeParse(outputResponseSchema, parseJson(output)).success)
     );
 }
 
 export function CwdShellCommandToolCall({ autoOpen, entry }: ToolRendererProps) {
-    const response = v.safeParse(responseSchema, parseJson(entry.output));
+    const displayContent = toolTextContent(entry.content);
+    const response =
+        displayContent === null && !isOversizedToolText(entry.output)
+            ? v.safeParse(responseSchema, parseJson(entry.output))
+            : null;
     const output =
-        toolTextContent(entry.content) ??
-        (response.success
+        displayContent ??
+        (response?.success === true
             ? ("output" in response.output ? response.output.output : response.output.formatted_output).trimEnd()
             : entry.output);
     return <ShellCommandPresentation autoOpen={autoOpen} entry={entry} response={output} />;

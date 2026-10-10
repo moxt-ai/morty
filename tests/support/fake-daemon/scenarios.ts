@@ -130,7 +130,10 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
         case "separate reasoning paragraphs":
             return {
                 outcome: "complete",
-                output: ["Inspecting the reported behavior.", "Checking the message boundaries."].map(
+                output: [
+                    "**Inspecting** the reported behavior.\n- keep this literal",
+                    "`Checking` the message boundaries.",
+                ].map(
                     (output): HarnessOutput => ({
                         activityType: "reasoning",
                         kind: "activity",
@@ -282,6 +285,29 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     },
                 ],
             };
+        case "show huge tool outputs": {
+            const middle = "MIDDLE_SHOULD_NOT_RENDER";
+            const output = `BEGIN_TOOL_OUTPUT\n${"x".repeat(24_000)}${middle}${"y".repeat(24_000)}\nEND_TOOL_OUTPUT`;
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        content: [],
+                        title: "Huge diagnostic",
+                        output,
+                    },
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        content: [{ type: "content", content: { type: "text", text: output } }],
+                        title: '/bin/zsh -lc "huge-output"',
+                        output: JSON.stringify({ exitCode: 0, output: "fallback" }),
+                    },
+                ],
+            };
+        }
         default:
             return {
                 outcome: "complete",

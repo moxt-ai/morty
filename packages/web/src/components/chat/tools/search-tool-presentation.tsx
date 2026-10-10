@@ -2,6 +2,7 @@ import { Search } from "lucide-react";
 import { ToolCallDisclosure } from "./tool-call-status.tsx";
 import { toolTextContent } from "./tool-display-content.ts";
 import type { ToolRendererProps } from "./tool-renderer.ts";
+import { ToolTextPreview } from "./tool-text-preview.tsx";
 
 export function SearchToolPresentation({ autoOpen, entry, path }: ToolRendererProps & { readonly path: string }) {
     const result = toolTextContent(entry.content) ?? entry.output;
@@ -20,9 +21,7 @@ export function SearchToolPresentation({ autoOpen, entry, path }: ToolRendererPr
                 {result.length > 0 && (
                     <div className="grid gap-1">
                         <span className="font-medium text-copy-tertiary">Results</span>
-                        <pre className="max-h-96 overflow-auto rounded-lg bg-black/[0.035] p-2 whitespace-pre-wrap">
-                            {result}
-                        </pre>
+                        <ToolTextPreview text={result} />
                     </div>
                 )}
             </div>

@@ -43,10 +43,11 @@ test("Given the agent sends separate reasoning messages, When the user reads the
     const thinking = await app.queryElementByTestId(dataTestId.agentReasoning);
     await app.user.click(getByText(thinking, "Show intermediate steps"));
     await app.waitForView(() => {
-        expect(thinking.querySelectorAll("p")).toHaveLength(2);
-        expect(thinking.textContent).toContain("Inspecting the reported behavior.");
-        expect(thinking.textContent).toContain("Checking the message boundaries.");
+        expect(thinking.textContent).toContain("**Inspecting** the reported behavior.\n- keep this literal");
+        expect(thinking.textContent).toContain("`Checking` the message boundaries.");
     });
+    expect(thinking.querySelector("strong")).toBeNull();
+    expect(thinking.querySelector("code")).toBeNull();
 });
 
 test("Given the agent sends many session events, When the response completes, Then every event type remains usable without mounting collapsed reasoning", {
@@ -224,6 +225,47 @@ test("Given shell output contains ANSI styles, When the user opens it, Then Chat
     expect(failed?.style.color).not.toBe("");
     expect(passed?.style.color).not.toBe("");
     expect(passed?.style.fontWeight).toBe("bold");
+});
+
+test("Given tool results exceed 32 KiB, When the user opens them, Then Chat renders bounded plain-text previews", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, "show huge tool outputs");
+
+    const genericTool = await app.waitForView(() =>
+        getByRole(document.body, "group", { name: "Tool: Huge diagnostic" }),
+    );
+    const shellTool = await app.waitForView(() =>
+        getByRole(document.body, "group", {
+            name: 'Shell command: /bin/zsh -lc "huge-output"',
+        }),
+    );
+    await app.user.click(getByRole(genericTool, "button"));
+    await app.user.click(getByRole(shellTool, "button"));
+
+    for (const tool of [genericTool, shellTool]) {
+        expect(tool.textContent).toContain("BEGIN_TOOL_OUTPUT");
+        expect(tool.textContent).toContain("END_TOOL_OUTPUT");
+        expect(tool.textContent).toContain("characters omitted");
+        expect(tool.textContent).not.toContain("MIDDLE_SHOULD_NOT_RENDER");
+        expect(getByRole(tool, "button", { name: "Load more output" })).toBeDefined();
+    }
+    expect(shellTool.querySelector(`[data-testid="${dataTestId.ansiShellOutput}"]`)).toBeNull();
+    expect(queryByText(shellTool, "Request")).toBeNull();
+    expect(queryByText(shellTool, "Response")).toBeNull();
+    await app.user.click(getByRole(genericTool, "button", { name: "Load more output" }));
+    expect(genericTool.textContent).toContain("MIDDLE_SHOULD_NOT_RENDER");
+    expect(queryByText(genericTool, "Load more output")).toBeNull();
 });
 
 test("Given the daemon emits reasoning, a tool, and text, When the user observes and stops an unfinished turn, Then partial content is visible before completion and survives remount", {

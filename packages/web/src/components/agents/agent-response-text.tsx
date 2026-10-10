@@ -10,13 +10,21 @@ type ResponseProps = {
     readonly readImage?: MarkdownImageReader | undefined;
 };
 
-const MarkdownPreview = memo(function MarkdownPreview({ text, openLocalFile, readImage }: ResponseProps) {
+type MarkdownPreviewProps = ResponseProps & { readonly sourceCharacters: number };
+
+const MarkdownPreview = memo(function MarkdownPreview({
+    text,
+    openLocalFile,
+    readImage,
+    sourceCharacters,
+}: MarkdownPreviewProps) {
     return (
         <AgentMarkdown
             className="[&_p]:my-0"
             markdown={text}
             openLocalFile={openLocalFile}
             readImage={readImage}
+            sourceCharacters={sourceCharacters}
             streaming={false}
         />
     );
@@ -38,7 +46,12 @@ export function AgentResponseText({ text, openLocalFile, readImage }: ResponsePr
     const tailStart = character >= 0xdc00 && character <= 0xdfff ? tailOffset + 1 : tailOffset;
     return (
         <div>
-            <MarkdownPreview text={beginning} openLocalFile={openLocalFile} readImage={readImage} />
+            <MarkdownPreview
+                text={beginning}
+                openLocalFile={openLocalFile}
+                readImage={readImage}
+                sourceCharacters={text.length}
+            />
             {truncated && (
                 <div className="my-3 space-y-2 text-sm text-muted-foreground">
                     <p>The Markdown preview shows the beginning of this response. Load more to read additional text.</p>

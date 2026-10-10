@@ -3,6 +3,7 @@ import { ExternalLink, FileText, Image as ImageIcon, Terminal, Video } from "luc
 import { useEffect, useState } from "react";
 import type { MarkdownImageReader } from "@/components/agents/agent-markdown";
 import { AgentMarkdown } from "@/components/agents/agent-markdown";
+import { ToolTextPreview } from "@/components/chat/tools/tool-text-preview";
 
 const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/;
 const SAFE_VIDEO_MIME = /^video\/(?:mp4|webm)$/;
@@ -173,8 +174,14 @@ function AgentRichContentItem({
                     <ContentHeader content={content} />
                 </div>
                 <div className="grid max-h-96 overflow-auto font-mono text-[11px] leading-[18px] md:grid-cols-2">
-                    <pre className="m-0 whitespace-pre-wrap bg-[#fff4f2] p-3 text-[#8f2f35]">{content.oldText}</pre>
-                    <pre className="m-0 whitespace-pre-wrap bg-[#effaf4] p-3 text-[#17663f]">{content.newText}</pre>
+                    <ToolTextPreview
+                        className="max-h-none rounded-none bg-[#fff4f2] p-3 text-[#8f2f35]"
+                        text={content.oldText}
+                    />
+                    <ToolTextPreview
+                        className="max-h-none rounded-none bg-[#effaf4] p-3 text-[#17663f]"
+                        text={content.newText}
+                    />
                 </div>
             </section>
         );
@@ -206,9 +213,10 @@ function AgentRichContentItem({
                 <div className="px-3 pt-2 text-[#aeb5bc]">
                     <ContentHeader content={content} />
                 </div>
-                <pre className="m-0 max-h-80 overflow-auto px-3 pb-3 font-mono text-[11px] leading-[18px] whitespace-pre-wrap">
-                    {content.text}
-                </pre>
+                <ToolTextPreview
+                    className="max-h-80 bg-transparent px-3 pb-3 font-mono text-[11px] leading-[18px]"
+                    text={content.text}
+                />
             </section>
         );
     }
@@ -223,9 +231,10 @@ function AgentRichContentItem({
         <section className="rounded-xl border-[0.5px] border-black/9 bg-white p-3">
             <ContentHeader content={content} />
             {content.text.length > 0 && (
-                <pre className="m-0 max-h-80 overflow-auto font-mono text-[11px] leading-[18px] whitespace-pre-wrap text-[#555c68]">
-                    {content.text}
-                </pre>
+                <ToolTextPreview
+                    className="max-h-80 bg-transparent p-0 font-mono text-[11px] leading-[18px] text-[#555c68]"
+                    text={content.text}
+                />
             )}
             {content.uri.length > 0 && (
                 <code className="mt-2 block break-all text-[10px] text-muted-foreground">{content.uri}</code>

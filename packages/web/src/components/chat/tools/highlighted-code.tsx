@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
-import { AgentMarkdown } from "../../agents/agent-markdown.tsx";
+import { AgentMarkdown, MAX_MARKDOWN_CHARACTERS } from "../../agents/agent-markdown.tsx";
+import { ToolTextPreview } from "./tool-text-preview.tsx";
 
 const LANGUAGE_BY_EXTENSION: Readonly<Record<string, string>> = {
     bash: "bash",
@@ -52,6 +53,9 @@ export function HighlightedCode({
     readonly code: string;
     readonly language: string;
 }) {
+    if (code.length > MAX_MARKDOWN_CHARACTERS) {
+        return <ToolTextPreview className={cn("p-4 text-xs", bare && "max-h-none")} text={code} />;
+    }
     return (
         <AgentMarkdown
             className={cn(

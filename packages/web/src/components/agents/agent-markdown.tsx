@@ -1,17 +1,18 @@
-import { code } from "@streamdown/code";
 import { defaultRemarkPlugins, Streamdown } from "streamdown";
 import "streamdown/styles.css";
 import { type ComponentProps, useEffect, useMemo, useState } from "react";
 import { dataTestId } from "@/data-testid";
 import { cn } from "@/lib/utils";
+import { boundedCodeHighlighter } from "./bounded-code-highlighter.ts";
 
 const STREAM_ANIMATION = Object.freeze({ duration: 180, stagger: 0 });
 const STREAMDOWN_CONTROLS = Object.freeze({
     code: Object.freeze({ copy: true, download: false }),
 });
-const STREAMDOWN_PLUGINS = Object.freeze({ code });
+const STREAMDOWN_PLUGINS = Object.freeze({ code: boundedCodeHighlighter });
 const STREAMDOWN_TRANSLATIONS = Object.freeze({ copyCode: "Copy code" });
 const LOCAL_FILE_URL_ORIGIN = "https://local-file.morty.invalid";
+export const MAX_MARKDOWN_CHARACTERS = 32 * 1024;
 
 function isSafeLink(href: string): boolean {
     return (
@@ -207,10 +208,18 @@ export interface AgentMarkdownProps {
     readonly markdown: string;
     readonly openLocalFile?: ((path: string) => void) | undefined;
     readonly readImage?: MarkdownImageReader | undefined;
+    readonly sourceCharacters?: number | undefined;
     readonly streaming: boolean;
 }
 
-export function AgentMarkdown({ className, markdown, openLocalFile, readImage, streaming }: AgentMarkdownProps) {
+export function AgentMarkdown({
+    className,
+    markdown,
+    openLocalFile,
+    readImage,
+    sourceCharacters = markdown.length,
+    streaming,
+}: AgentMarkdownProps) {
     const components = useMemo(
         () => ({
             a: (properties: ComponentProps<"a">) => <AgentMarkdownLink {...properties} openLocalFile={openLocalFile} />,
@@ -218,7 +227,16 @@ export function AgentMarkdown({ className, markdown, openLocalFile, readImage, s
         }),
         [openLocalFile, readImage],
     );
-    return (
+    return sourceCharacters > MAX_MARKDOWN_CHARACTERS ? (
+        <pre
+            className={cn(
+                "m-0 min-w-0 whitespace-pre-wrap break-words font-sans text-[15px] leading-6 text-foreground",
+                className,
+            )}
+        >
+            {markdown}
+        </pre>
+    ) : (
         <Streamdown
             animated={streaming ? STREAM_ANIMATION : false}
             className={cn(

@@ -2,12 +2,13 @@ import { Brain, ChevronDown, Wrench } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import type { SessionToolPresentation } from "../../view-models/chat/session-presentation.ts";
-import { AgentMarkdown, type MarkdownImageReader } from "../agents/agent-markdown.tsx";
+import type { MarkdownImageReader } from "../agents/agent-markdown.tsx";
 import { AgentRichContent } from "../agents/agent-rich-content.tsx";
 import { FollowLatestScrollArea } from "../utils/follow-latest-scroll-area.tsx";
 import { ToolCallDisclosure, ToolCallSupplementalContent } from "./tools/tool-call-status.tsx";
 import { toolRichContent } from "./tools/tool-display-content.ts";
 import { renderRegisteredTool } from "./tools/tool-renderer-registry.tsx";
+import { ToolTextPreview } from "./tools/tool-text-preview.tsx";
 
 export type AgentThinkingEntry =
     | {
@@ -23,7 +24,7 @@ type TimelineEntry =
     | { readonly entry: ReasoningEntry; readonly kind: "reasoning" }
     | { readonly entry: SessionToolPresentation; readonly kind: "tool" };
 
-function ReasoningContent({ active, entry }: { readonly active: boolean; readonly entry: ReasoningEntry }) {
+function ReasoningContent({ entry }: { readonly entry: ReasoningEntry }) {
     const content = useRef<HTMLDivElement>(null);
     return (
         <FollowLatestScrollArea
@@ -32,7 +33,7 @@ function ReasoningContent({ active, entry }: { readonly active: boolean; readonl
             followThreshold={24}
             style={{ maxHeight: "10.5rem", overflowY: "auto" }}
         >
-            <AgentMarkdown markdown={entry.text} streaming={active} />
+            <pre className="m-0 whitespace-pre-wrap font-sans text-[15px] leading-6 text-foreground">{entry.text}</pre>
         </FollowLatestScrollArea>
     );
 }
@@ -68,7 +69,7 @@ function ReasoningDisclosure({ active, entry }: { readonly active: boolean; read
                             <Brain aria-hidden="true" className="size-4" />
                             <span>Thinking</span>
                         </div>
-                        <ReasoningContent active={active} entry={entry} />
+                        <ReasoningContent entry={entry} />
                     </section>
                 </div>
             )}
@@ -102,17 +103,13 @@ function ToolCall({
                     {entry.input.length > 0 && (
                         <div className="grid gap-1">
                             <span className="font-medium text-copy-tertiary">Request</span>
-                            <pre className="max-h-96 overflow-auto rounded-lg bg-black/[0.035] p-2 whitespace-pre-wrap">
-                                {entry.input}
-                            </pre>
+                            <ToolTextPreview text={entry.input} />
                         </div>
                     )}
                     {entry.output.length > 0 && (
                         <div className="grid gap-1">
                             <span className="font-medium text-copy-tertiary">Response</span>
-                            <pre className="max-h-96 overflow-auto rounded-lg bg-black/[0.035] p-2 whitespace-pre-wrap">
-                                {entry.output}
-                            </pre>
+                            <ToolTextPreview text={entry.output} />
                         </div>
                     )}
                 </div>

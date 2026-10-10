@@ -3,6 +3,7 @@ import { HighlightedCode, languageForPath } from "./highlighted-code.tsx";
 import { type NumberedCodeLine, NumberedCodeLines, ReadToolPresentation } from "./read-tool-presentation.tsx";
 import { toolTextContent } from "./tool-display-content.ts";
 import type { ToolRendererProps } from "./tool-renderer.ts";
+import { isOversizedToolText, ToolTextPreview } from "./tool-text-preview.tsx";
 
 const requestSchema = v.pipe(
     v.strictObject({
@@ -47,7 +48,7 @@ export function FilePathReadToolCall({ autoOpen, entry }: ToolRendererProps) {
         return null;
     }
     const response = toolTextContent(entry.content) ?? entry.output;
-    const lines = parseNumberedLines(response);
+    const lines = isOversizedToolText(response) ? null : parseNumberedLines(response);
     return (
         <ReadToolPresentation
             autoOpen={autoOpen}
@@ -56,7 +57,9 @@ export function FilePathReadToolCall({ autoOpen, entry }: ToolRendererProps) {
             title={entry.title}
         >
             {response.length > 0 &&
-                (lines === null ? (
+                (isOversizedToolText(response) ? (
+                    <ToolTextPreview className="font-mono text-xs" text={response} />
+                ) : lines === null ? (
                     <div className="overflow-hidden rounded-lg bg-black/[0.035]">
                         <HighlightedCode code={response} language={languageForPath(request.output.file_path)} />
                     </div>

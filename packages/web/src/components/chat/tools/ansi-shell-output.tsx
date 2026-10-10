@@ -2,6 +2,7 @@ import Anser from "anser";
 import { Check, Copy } from "lucide-react";
 import { type CSSProperties, useRef, useState } from "react";
 import { dataTestId } from "../../../data-testid.ts";
+import { isOversizedToolText, ToolTextPreview } from "./tool-text-preview.tsx";
 
 function color(value: string | null | undefined): string | undefined {
     return value === null || value === undefined || value.length === 0 ? undefined : `rgb(${value})`;
@@ -30,6 +31,9 @@ export function AnsiShellOutput({ output }: { readonly output: string }) {
     const content = useRef<HTMLPreElement>(null);
     const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
     const label = copy === "copied" ? "Copied" : copy === "failed" ? "Copy unavailable" : "Copy shell output";
+    if (isOversizedToolText(output)) {
+        return <ToolTextPreview className="p-4 pr-10 font-mono text-xs leading-relaxed" text={output} />;
+    }
     const segments = Anser.ansiToJson(output, { json: true, remove_empty: true });
     let offset = 0;
     const positionedSegments = segments.map((segment) => {
