@@ -3,6 +3,7 @@ import {
     type MobiusClient,
     MobiusElicitationResponseRequest,
     type MobiusLiveSessionEventObserverV2,
+    MobiusPageRequest,
     MobiusPermissionResponseRequest,
     type PromptResource,
     type SessionConfigOption,
@@ -290,23 +291,17 @@ interface SessionEventRecoveryV2 {
     readonly sessionGenerationId: string;
 }
 
-async function readNativeEventsV2(
+async function readSessionEventsV2(
     client: MobiusClient,
     sessionId: string,
-    identity: SessionIdentity,
     signal: AbortSignal,
 ): Promise<SessionEventRecoveryV2> {
-    const page = await client.sessions.querySessionNativeEventsV2(
-        sessionId,
-        identity,
-        { cursor: null, eventLimit: SESSION_EVENT_PAGE_LIMIT },
-        signal,
-    );
+    const page = await client.events.listV2(sessionId, new MobiusPageRequest(SESSION_EVENT_PAGE_LIMIT, ""), signal);
     signal.throwIfAborted();
     return {
-        events: page.events.events,
-        nextCursor: page.events.nextCursor,
-        sessionGenerationId: page.events.sessionGenerationId,
+        events: page.events,
+        nextCursor: page.nextCursor,
+        sessionGenerationId: page.sessionGenerationId,
     };
 }
 
@@ -494,21 +489,20 @@ export function createSessionPaneModel(options: {
                         deriveTimeline().messages.length - initialMessageCount < OLDER_HISTORY_MESSAGE_TARGET
                     ) {
                         const requestedCursor: string = historyCursor;
-                        const page = await client.sessions.querySessionNativeEventsV2(
+                        const page = await client.events.listV2(
                             sessionId,
-                            sessionIdentity,
-                            { cursor: requestedCursor, eventLimit: SESSION_EVENT_PAGE_LIMIT },
+                            new MobiusPageRequest(SESSION_EVENT_PAGE_LIMIT, requestedCursor),
                             signal,
                         );
                         signal.throwIfAborted();
-                        if (sessionGenerationId !== null && page.events.sessionGenerationId !== sessionGenerationId) {
+                        if (sessionGenerationId !== null && page.sessionGenerationId !== sessionGenerationId) {
                             throw new Error("The Session reloaded while older messages were loading.");
                         }
-                        if (page.events.nextCursor === requestedCursor) {
+                        if (page.nextCursor === requestedCursor) {
                             throw new Error("The Runtime returned the same older-message cursor twice.");
                         }
-                        replaceTimeline(mergeSessionEvents(page.events.events, sessionEvents));
-                        historyCursor = page.events.nextCursor;
+                        replaceTimeline(mergeSessionEvents(page.events, sessionEvents));
+                        historyCursor = page.nextCursor;
                     }
                     const timeline = deriveTimeline();
                     signal.throwIfAborted();
@@ -632,7 +626,7 @@ export function createSessionPaneModel(options: {
                             delivery.getState().reconcile([payload.commandId]);
                             if (payload.kind === "prompt.completed" && payload.stopReason === "steered") {
                                 const [recovery, execution] = await Promise.all([
-                                    readNativeEventsV2(connected, sessionId, sessionIdentity, signal),
+                                    readSessionEventsV2(connected, sessionId, signal),
                                     connected.sessions.readSessionExecution(sessionId, sessionIdentity, signal),
                                 ]);
                                 signal.throwIfAborted();
@@ -697,7 +691,7 @@ export function createSessionPaneModel(options: {
                                 sessionIdentity,
                                 signal,
                             );
-                            const recovery = await readNativeEventsV2(connected, sessionId, sessionIdentity, signal);
+                            const recovery = await readSessionEventsV2(connected, sessionId, signal);
                             if (sessionGenerationId !== null && sessionGenerationId !== recovery.sessionGenerationId) {
                                 supersededSessionGenerationIds.add(sessionGenerationId);
                             }
@@ -1093,7 +1087,7 @@ export function createSessionPaneModel(options: {
                 set({ operation: { kind: "configuring" } });
                 try {
                     const connected = client;
-                    const recovery = await readNativeEventsV2(connected, sessionId, sessionIdentity, signal);
+                    const recovery = await readSessionEventsV2(connected, sessionId, signal);
                     replaceTimeline(mergeSessionEvents(sessionEvents, recovery.events));
                     // The newest events page carries the Agent's latest
                     // config_option_update, so it is the authoritative view of
