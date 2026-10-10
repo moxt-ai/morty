@@ -120,7 +120,7 @@ export function createAuthenticationRoutes() {
                 v.parse(v.pipe(v.string(), v.url()), context.env.config.bindings.APP_ORIGIN),
             );
             url.hash = `code=${transfer.code}`;
-            return json({ url: url.toString() }, 201);
+            return json({ expiresAt: new Date(transfer.expiresAt).toISOString(), url: url.toString() }, 201);
         })
         .post("/identity/recovery-token", async (context) => {
             const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(15000)]);
@@ -177,7 +177,7 @@ export function createAuthenticationRoutes() {
                 if (identity === null) {
                     throw new ManagementError(
                         "TRANSFER_UNAVAILABLE",
-                        "This transfer link has been revoked or reached its five-use limit.",
+                        "This transfer link has expired or been revoked.",
                         410,
                     );
                 }
