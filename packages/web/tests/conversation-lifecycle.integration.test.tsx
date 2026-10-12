@@ -213,6 +213,78 @@ test("Given Claude Code does not echo the submitted prompt, When the response st
     });
 });
 
+test("Given a saved conversation longer than the initial history window, When the user reopens it and reaches the top, Then older messages load on demand", {
+    timeout: 90_000,
+}, async () => {
+    const prompts = Array.from({ length: 3 }, (_, index) => `many session events: History window message ${index + 1}`);
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    for (const [index, prompt] of prompts.entries()) {
+        const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+        if (!(composer instanceof HTMLTextAreaElement)) {
+            throw new Error("Expected the message composer");
+        }
+        await sendPrompt(app, composer, prompt);
+        await app.waitForView(() =>
+            expect(
+                app
+                    .elementsByTestId(dataTestId.agentResponse)
+                    .some(
+                        (element) =>
+                            element.textContent?.includes(`Completed History window message ${index + 1}`) === true,
+                    ),
+            ).toBe(true),
+        );
+        await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    }
+
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    const conversation = await app.waitForView(() => {
+        const candidate = app
+            .elementsByTestId(dataTestId.managedConversation)
+            .find((element) => element.textContent?.includes(prompts[0] ?? "") === true);
+        if (candidate === undefined) {
+            throw new Error(`The completed conversation is unavailable: ${document.body.textContent}`);
+        }
+        return candidate;
+    });
+    const initialHistory = new Promise<readonly string[]>((resolve) => {
+        let loadingObserved = false;
+        const observe = () => {
+            const loading = queryByRole(document.body, "status", { name: "Loading messages" });
+            loadingObserved ||= loading !== null;
+            if (!loadingObserved || loading !== null) {
+                return;
+            }
+            observer.disconnect();
+            resolve(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent ?? ""));
+        };
+        const observer = new MutationObserver(observe);
+        observer.observe(document.body, { childList: true, subtree: true });
+        observe();
+    });
+    await app.user.click(conversation);
+
+    const initialPrompts = await initialHistory;
+    expect(initialPrompts).not.toContain(prompts[0]);
+    expect(initialPrompts.at(-1)).toBe(prompts.at(-1));
+
+    const messages = queryByRole(document.body, "log", { name: "Messages" });
+    if (!(messages instanceof HTMLElement)) {
+        throw new Error("Expected the Session message list");
+    }
+    messages.scrollTop = 0;
+    messages.dispatchEvent(new Event("scroll", { bubbles: true }));
+    await app.waitForView(() => {
+        const loadedPrompts = app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent ?? "");
+        expect(loadedPrompts.length).toBeGreaterThan(initialPrompts.length);
+        expect(loadedPrompts[0]).toBe(prompts[0]);
+    });
+});
+
 test("Given more saved messages than one history page, When the user reopens it and loads more, Then complete older messages appear without losing recent history", {
     timeout: 90_000,
 }, async () => {
@@ -319,14 +391,18 @@ test("Given more saved messages than one history page, When the user reopens it 
     if (!(messages instanceof HTMLElement)) {
         throw new Error("Expected the Session message list");
     }
-    messages.scrollTop = 0;
-    messages.dispatchEvent(new Event("scroll", { bubbles: true }));
-    await app.waitForView(() => {
-        const loadedPrompts = app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent);
-        expect(loadedPrompts.length).toBeGreaterThan(page.prompts.length);
-        expect(loadedPrompts.slice(-page.prompts.length)).toEqual(page.prompts);
-    });
-    const loadedPrompts = app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent ?? "");
+    let loadedPrompts = app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent ?? "");
+    for (let attempt = 0; loadedPrompts[0] !== prompts[0] && attempt < prompts.length; attempt += 1) {
+        const previousCount = loadedPrompts.length;
+        messages.scrollTop = 0;
+        messages.dispatchEvent(new Event("scroll", { bubbles: true }));
+        loadedPrompts = await app.waitForView(() => {
+            const current = app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent ?? "");
+            expect(current.length).toBeGreaterThan(previousCount);
+            return current;
+        });
+    }
+    expect(loadedPrompts.slice(-page.prompts.length)).toEqual(page.prompts);
     const loadedResponses = app.elementsByTestId(dataTestId.agentResponse).map((element) => element.textContent ?? "");
     expect(loadedPrompts[0]).toBe(prompts[0]);
     expect(loadedResponses.some((response) => response.includes("Completed Pagination message 1"))).toBe(true);
