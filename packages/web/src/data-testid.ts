@@ -2,6 +2,8 @@ export const dataTestId = Object.freeze({
     messageComposer: "chat-message-composer",
     agentConfiguration: "chat-agent-configuration",
     agentHarness: (harnessId: string) => `chat-agent-harness-${harnessId}`,
+    harnessMark: "chat-harness-mark",
+    harnessTriggerMark: "chat-harness-trigger-mark",
     agentSettingsLoading: "chat-agent-settings-loading",
     refreshAgentSettings: "chat-refresh-agent-settings",
     agentSetting: (configId: string) => `chat-agent-setting-${configId}`,

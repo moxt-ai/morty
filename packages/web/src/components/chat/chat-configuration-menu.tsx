@@ -4,6 +4,7 @@ import { useState } from "react";
 import { dataTestId } from "@/data-testid";
 import { Select } from "../ui/option-select.tsx";
 import { Popover } from "../ui/popover.tsx";
+import { HarnessMark } from "./harness-mark.tsx";
 
 interface ChatConfigurationSelectControl {
     readonly disabled: boolean;
@@ -13,7 +14,12 @@ interface ChatConfigurationSelectControl {
     readonly label: string;
     readonly locked?: boolean | undefined;
     readonly onValueChange: (value: string) => void;
-    readonly options: readonly { readonly label: string; readonly tabLabel?: string; readonly value: string }[];
+    readonly options: readonly {
+        readonly agentRef?: string;
+        readonly label: string;
+        readonly tabLabel?: string;
+        readonly value: string;
+    }[];
     readonly searchable?: boolean;
     readonly testId?: string | undefined;
     readonly value: string;
@@ -45,6 +51,7 @@ export function ChatConfigurationMenu({
         (control): control is ChatConfigurationSelectControl => control.id === "harness" && control.kind === "select",
     );
     const settings = controls.filter((control) => control !== harness);
+    const selectedHarness = harness?.options.find((option) => option.value === harness.value);
     const selections = controls.map((control) =>
         control.kind === "boolean"
             ? `${control.label}: ${control.checked ? "On" : "Off"}`
@@ -61,6 +68,13 @@ export function ChatConfigurationMenu({
                     type="button"
                 >
                     <SlidersHorizontal aria-hidden="true" className="size-4 shrink-0" />
+                    {selectedHarness !== undefined && (
+                        <HarnessMark
+                            agentRef={selectedHarness.agentRef ?? selectedHarness.value}
+                            label={selectedHarness.label}
+                            testId={dataTestId.harnessTriggerMark}
+                        />
+                    )}
                     <span className="min-w-0 truncate">
                         {selections.filter((value) => value.length > 0).join(" · ")}
                     </span>
@@ -71,7 +85,7 @@ export function ChatConfigurationMenu({
                 <Popover.Content
                     align="start"
                     aria-label="Agent configuration"
-                    className="z-50 grid w-[min(calc(100vw-1.5rem),400px)] grid-cols-[112px_minmax(0,1fr)] overflow-hidden rounded-2xl border border-[#d5d9dc] bg-white shadow-[0_16px_42px_rgba(0,0,0,0.14)]"
+                    className="z-50 grid w-[min(calc(100vw-1.5rem),400px)] grid-cols-[136px_minmax(0,1fr)] overflow-hidden rounded-2xl border border-[#d5d9dc] bg-white shadow-[0_16px_42px_rgba(0,0,0,0.14)]"
                     role="dialog"
                     side="top"
                     sideOffset={10}
@@ -86,7 +100,7 @@ export function ChatConfigurationMenu({
                             const tab = (
                                 <button
                                     aria-selected={option.value === harness.value}
-                                    className="w-full truncate rounded-lg px-2 py-2 text-left text-[13px] outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-selected:bg-white aria-selected:font-medium aria-selected:shadow-sm motion-reduce:transition-none"
+                                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-selected:bg-white aria-selected:font-medium aria-selected:shadow-sm motion-reduce:transition-none"
                                     data-testid={dataTestId.agentHarness(option.value)}
                                     disabled={harness.disabled}
                                     key={option.value}
@@ -99,7 +113,12 @@ export function ChatConfigurationMenu({
                                     title={option.label}
                                     type="button"
                                 >
-                                    {option.tabLabel ?? option.label}
+                                    <HarnessMark
+                                        agentRef={option.agentRef ?? option.value}
+                                        label={option.label}
+                                        testId={dataTestId.harnessMark}
+                                    />
+                                    <span className="min-w-0 flex-1 truncate">{option.tabLabel ?? option.label}</span>
                                 </button>
                             );
                             if (harness.locked === true) {

@@ -103,6 +103,7 @@ export function DraftChatControls({
                             }
                         },
                         options: connectedChatRuntimeAgents(settings.workspace.runtime).map((agent) => ({
+                            agentRef: agent.agentRef,
                             value: `${agent.runtimeId}:${agent.agentRef}`,
                             label: `${agent.label} · ${agent.machineName}`,
                             tabLabel: agent.label,

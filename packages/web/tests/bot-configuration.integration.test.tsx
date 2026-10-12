@@ -244,6 +244,52 @@ test("Given the working directory browser is open, When the user edits the path,
     ]);
 });
 
+test("Given a Bot paired with the Claude harness, When the user opens its settings, Then the Claude brand mark labels the harness tab and the trigger", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true, agent: { id: "claude", label: "Claude Code" } });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+
+    const triggerMark = await app.queryElementByTestId(
+        dataTestId.harnessTriggerMark,
+        (element) => element.getAttribute("data-harness-product") === "claude",
+    );
+    expect(triggerMark.getAttribute("aria-hidden")).toBe("true");
+
+    await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
+    const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
+    const tab = getByRole(configuration, "tab", { name: "Claude Code" });
+    const tabMark = app.elementByTestId(dataTestId.harnessMark, tab);
+    expect(tabMark.getAttribute("data-harness-product")).toBe("claude");
+    expect(tabMark.getAttribute("aria-hidden")).toBe("true");
+    expect(tabMark.querySelector("svg")).not.toBeNull();
+});
+
+test("Given a Bot paired with an unlisted harness, When the user opens its settings, Then a generic mark labels the harness tab without renaming it", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true, agent: { id: "workbuddy", label: "WorkBuddy" } });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+
+    const triggerMark = await app.queryElementByTestId(
+        dataTestId.harnessTriggerMark,
+        (element) => element.getAttribute("data-harness-product") === "generic",
+    );
+    expect(triggerMark.getAttribute("aria-hidden")).toBe("true");
+
+    await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
+    const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
+    const tab = getByRole(configuration, "tab", { name: "WorkBuddy" });
+    expect(app.elementByTestId(dataTestId.harnessMark, tab).getAttribute("data-harness-product")).toBe("generic");
+    expect(getAllByRole(configuration, "tab")).toHaveLength(1);
+});
+
 test("Given a Bot paired with Pi, When the user opens its settings and sends a prompt, Then Pi and its streamed reply are visible", {
     timeout: 30_000,
 }, async () => {

@@ -121,6 +121,28 @@ function MessageListSkeleton() {
     );
 }
 
+/**
+ * Stands in for older messages while an earlier history page is fetched above
+ * the visible list. It carries no text of its own so the placeholder reads as
+ * content rather than as a status label.
+ */
+function OlderHistorySkeleton() {
+    return (
+        <div aria-label="Loading older messages" className="mx-auto mb-8 w-full min-w-0 max-w-[920px]" role="status">
+            <div aria-hidden="true" className="grid animate-pulse gap-8 motion-reduce:animate-none">
+                <div className="ml-auto grid w-full max-w-[68%] justify-items-end gap-2">
+                    <div className="h-4 w-2/3 rounded-full bg-muted" />
+                    <div className="h-4 w-4/5 rounded-full bg-muted" />
+                </div>
+                <div className="grid w-full max-w-[78%] gap-2">
+                    <div className="h-4 w-2/5 rounded-full bg-muted" />
+                    <div className="h-4 w-full rounded-full bg-muted" />
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export function MobiusSessionPane({
     session,
     initialMessage,
@@ -154,9 +176,9 @@ export function MobiusSessionPane({
     const taskControls = useStore(pane.tasks);
     const lifetime = useRef<AbortController | null>(null);
     const messageList = useRef<HTMLDivElement | null>(null);
-    const [harnesses, setHarnesses] = useState<readonly { readonly label: string; readonly value: string }[]>([
-        { label: session.agentRef, value: session.agentRef },
-    ]);
+    const [harnesses, setHarnesses] = useState<
+        readonly { readonly agentRef?: string; readonly label: string; readonly value: string }[]
+    >([{ agentRef: session.agentRef, label: session.agentRef, value: session.agentRef }]);
     const readImage = useCallback<MarkdownImageReader>(
         async (path, signal) => {
             for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -242,6 +264,7 @@ export function MobiusSessionPane({
             .then((workspace) => {
                 setHarnesses(
                     connectedChatRuntimeAgents(workspace.runtime).map((agent) => ({
+                        agentRef: agent.agentRef,
                         label: `${agent.label} · ${agent.machineName}`,
                         value: `${agent.runtimeId}:${agent.agentRef}`,
                     })),
@@ -305,11 +328,7 @@ export function MobiusSessionPane({
                                 No message history is available for this conversation.
                             </p>
                         )}
-                    {model.historyLoading && (
-                        <p role="status" className="text-center text-sm text-muted-foreground">
-                            Loading...
-                        </p>
-                    )}
+                    {model.historyLoading && <OlderHistorySkeleton />}
                     <div className="mx-auto w-full min-w-0 max-w-[920px]">
                         {renderItems.map((item, index) => (
                             <div
@@ -426,7 +445,14 @@ export function MobiusSessionPane({
                                     (harness) => harness.value.split(":").at(-1) === session.agentRef,
                                 )
                                     ? harnesses
-                                    : [...harnesses, { label: session.agentRef, value: session.agentRef }],
+                                    : [
+                                          ...harnesses,
+                                          {
+                                              agentRef: session.agentRef,
+                                              label: session.agentRef,
+                                              value: session.agentRef,
+                                          },
+                                      ],
                                 value:
                                     harnesses.find((harness) => harness.value.split(":").at(-1) === session.agentRef)
                                         ?.value ?? session.agentRef,

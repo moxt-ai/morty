@@ -298,6 +298,77 @@ test("Given more saved messages than one history page, When the user reaches the
     });
 });
 
+test("Given more saved messages than one history page, When older messages load, Then a skeleton placeholder stands in for them instead of a text label", {
+    timeout: 90_000,
+}, async () => {
+    const prompts = Array.from({ length: 7 }, (_, index) => `many session events: Skeleton message ${index + 1}`);
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    for (const [index, prompt] of prompts.entries()) {
+        const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+        if (!(composer instanceof HTMLTextAreaElement)) {
+            throw new Error("Expected the message composer");
+        }
+        await sendPrompt(app, composer, prompt);
+        await app.waitForView(() =>
+            expect(
+                app
+                    .elementsByTestId(dataTestId.agentResponse)
+                    .some(
+                        (element) => element.textContent?.includes(`Completed Skeleton message ${index + 1}`) === true,
+                    ),
+            ).toBe(true),
+        );
+        await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    }
+
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    const conversation = await app.waitForView(() => {
+        const candidate = app
+            .elementsByTestId(dataTestId.managedConversation)
+            .find((element) => element.textContent?.includes(prompts[0] ?? "") === true);
+        if (candidate === undefined) {
+            throw new Error(`The completed conversation is unavailable: ${document.body.textContent}`);
+        }
+        return candidate;
+    });
+    const placeholderText = new Promise<string>((resolve) => {
+        const observer = new MutationObserver(() => {
+            const placeholder = queryByRole(document.body, "status", { name: "Loading older messages" });
+            if (placeholder === null) {
+                return;
+            }
+            observer.disconnect();
+            resolve(placeholder.textContent ?? "");
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+    });
+    await app.user.click(conversation);
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "textbox", { name: "Message" }).hasAttribute("disabled")).toBe(false),
+    );
+    const messages = queryByRole(document.body, "log", { name: "Messages" });
+    if (!(messages instanceof HTMLElement)) {
+        throw new Error("Expected the Session message list");
+    }
+    messages.scrollTop = 0;
+    messages.dispatchEvent(new Event("scroll", { bubbles: true }));
+
+    expect(await placeholderText).not.toContain("Loading");
+    await app.waitForView(() => {
+        expect(
+            app
+                .elementsByTestId(dataTestId.userMessage)
+                .map((element) => element.textContent)
+                .includes(prompts[0] ?? ""),
+        ).toBe(true);
+        expect(queryByRole(document.body, "status", { name: "Loading older messages" })).toBeNull();
+    });
+});
+
 test("Given a stale Session link, When the user opens it, Then the Session failure replaces the empty landing", {
     timeout: 30_000,
 }, async () => {
