@@ -50,6 +50,29 @@ test("Given the agent sends separate reasoning messages, When the user reads the
     expect(thinking.querySelector("code")).toBeNull();
 });
 
+test("Given reasoning exceeds 16K characters, When the user opens the intermediate steps, Then Chat shows the retained tail and a truncation notice", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, "long reasoning");
+    const thinking = await app.queryElementByTestId(dataTestId.agentReasoning);
+    await app.user.click(getByText(thinking, "Show intermediate steps"));
+    await app.waitForView(() => {
+        expect(thinking.textContent).toContain("Earlier reasoning was truncated to the most recent 16K characters.");
+        expect(thinking.textContent).toContain("REASONING END RETAINED");
+    });
+    expect(thinking.textContent).not.toContain("REASONING START OMITTED");
+    expect(thinking.querySelector("pre")?.textContent?.length).toBeLessThanOrEqual(16_384);
+});
+
 test("Given the agent sends many session events, When the response completes, Then every event type remains usable without mounting collapsed reasoning", {
     timeout: 30_000,
 }, async () => {
@@ -116,6 +139,30 @@ test("Given a file-change tool includes a rich diff, When the user views it, The
     );
     expect(queryByText(edit, "Request")).toBeNull();
     expect(queryByText(edit, "Response")).toBeNull();
+});
+
+test("Given a file-change tool repeats its rich diff in raw output, When the user opens it, Then Chat shows the edit once", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, "change one file with duplicate diffs");
+
+    const edit = await app.waitForView(() =>
+        getByRole(document.body, "group", {
+            name: "Edit: /workspace/app.js",
+        }),
+    );
+    await app.user.click(getByRole(edit, "button", { name: "/workspace/app.js Tool succeeded" }));
+    expect(getAllByText(edit, "/workspace/app.js", { exact: true })).toHaveLength(2);
 });
 
 test("Given a browser tool reports its tool-result schema, When the user opens it, Then Chat presents the browser output without protocol metadata", {

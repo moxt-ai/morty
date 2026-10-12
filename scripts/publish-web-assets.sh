@@ -38,14 +38,23 @@ headers="$(mktemp)"
 trap 'rm -rf "$manifest_directory"; rm -f "$headers"' EXIT
 javascript_manifest="$manifest_directory/javascript.json"
 css_manifest="$manifest_directory/css.json"
+ttf_manifest="$manifest_directory/ttf.json"
+woff_manifest="$manifest_directory/woff.json"
+woff2_manifest="$manifest_directory/woff2.json"
 printf '[]\n' > "$javascript_manifest"
 printf '[]\n' > "$css_manifest"
+printf '[]\n' > "$ttf_manifest"
+printf '[]\n' > "$woff_manifest"
+printf '[]\n' > "$woff2_manifest"
 
 javascript_entries=()
 css_entries=()
+ttf_entries=()
+woff_entries=()
+woff2_entries=()
 for file in "${assets[@]}"; do
   key="${file#dist/client/}"
-  if [[ ! "$key" =~ ^assets/[A-Za-z0-9._-]+\.(css|js)$ ]]; then
+  if [[ ! "$key" =~ ^assets/[A-Za-z0-9._-]+\.(css|js|ttf|woff|woff2)$ ]]; then
     echo "Unsafe or unsupported web asset path: $key" >&2
     exit 1
   fi
@@ -57,6 +66,15 @@ for file in "${assets[@]}"; do
     *.js)
       javascript_entries+=("$entry")
       ;;
+    *.ttf)
+      ttf_entries+=("$entry")
+      ;;
+    *.woff)
+      woff_entries+=("$entry")
+      ;;
+    *.woff2)
+      woff2_entries+=("$entry")
+      ;;
   esac
 done
 
@@ -67,6 +85,9 @@ write_manifest() {
 }
 write_manifest "$javascript_manifest" "${javascript_entries[@]}"
 write_manifest "$css_manifest" "${css_entries[@]}"
+write_manifest "$ttf_manifest" "${ttf_entries[@]}"
+write_manifest "$woff_manifest" "${woff_entries[@]}"
+write_manifest "$woff2_manifest" "${woff2_entries[@]}"
 
 if ! pnpm exec wrangler r2 bucket info "$bucket" --json >/dev/null; then
   echo "Web asset bucket is unavailable: $bucket" >&2
@@ -82,7 +103,7 @@ publish_assets() {
     return
   fi
   # The pinned bulk command reuses one authenticated Wrangler process while
-  # separate manifests preserve the content type for JavaScript and CSS.
+  # separate manifests preserve each asset type's content type.
   pnpm exec wrangler r2 bulk put "$bucket" \
     --filename "$manifest" \
     --content-type "$content_type" \
@@ -93,6 +114,9 @@ publish_assets() {
 }
 publish_assets "$javascript_manifest" "text/javascript; charset=utf-8" "${#javascript_entries[@]}"
 publish_assets "$css_manifest" "text/css; charset=utf-8" "${#css_entries[@]}"
+publish_assets "$ttf_manifest" "font/ttf" "${#ttf_entries[@]}"
+publish_assets "$woff_manifest" "font/woff" "${#woff_entries[@]}"
+publish_assets "$woff2_manifest" "font/woff2" "${#woff2_entries[@]}"
 
 probe_key="${assets[0]#dist/client/}"
 curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \

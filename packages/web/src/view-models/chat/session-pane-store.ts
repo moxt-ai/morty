@@ -30,11 +30,7 @@ import type {
     PermissionInteraction,
     PermissionInteractionResponse,
 } from "./session-pane-types.ts";
-import {
-    createSessionTimelineProjection,
-    type SessionMessage,
-    sessionEventCommandIds,
-} from "./session-presentation.ts";
+import { createSessionHistoryMessages, type SessionMessage, sessionEventCommandIds } from "./session-presentation.ts";
 import {
     createSessionTaskControlsStore,
     findCompactCommand,
@@ -55,7 +51,7 @@ type LocalInteraction =
     | { readonly kind: "elicitation"; readonly elicitation: ElicitationInteraction };
 
 const SESSION_EVENT_PAGE_LIMIT = 500;
-const OLDER_HISTORY_MESSAGE_TARGET = 20;
+const HISTORY_MESSAGE_TARGET = 20;
 
 function interactionId(interaction: LocalInteraction): string {
     return interaction.kind === "permission"
@@ -306,6 +302,46 @@ async function readSessionEventsV2(
     };
 }
 
+async function readSessionHistoryV2(
+    client: MobiusClient,
+    sessionId: string,
+    initialCursor: string | null,
+    newerEvents: readonly SessionEventV2[],
+    initialMessageCount: number,
+    expectedSessionGenerationId: string | null,
+    signal: AbortSignal,
+): Promise<SessionEventRecoveryV2> {
+    let events: readonly SessionEventV2[] = newerEvents;
+    let nextCursor = initialCursor;
+    let sessionGenerationId = expectedSessionGenerationId;
+    const pendingHistoryMessages = createSessionHistoryMessages({ events, nextCursor });
+    let renderableMessages = pendingHistoryMessages.current().messages;
+    do {
+        const requestedCursor = nextCursor;
+        const page = await client.events.listV2(
+            sessionId,
+            new MobiusPageRequest(SESSION_EVENT_PAGE_LIMIT, requestedCursor ?? ""),
+            signal,
+        );
+        signal.throwIfAborted();
+        if (sessionGenerationId !== null && page.sessionGenerationId !== sessionGenerationId) {
+            throw new Error("The Session reloaded while message history was loading.");
+        }
+        if (requestedCursor !== null && page.nextCursor === requestedCursor) {
+            throw new Error("The Runtime returned the same message-history cursor twice.");
+        }
+        sessionGenerationId = page.sessionGenerationId;
+        events = mergeSessionEvents(page.events, events);
+        nextCursor = page.nextCursor;
+        pendingHistoryMessages.replace({ events, nextCursor });
+        renderableMessages = pendingHistoryMessages.current().messages;
+    } while (nextCursor !== null && renderableMessages.length - initialMessageCount < HISTORY_MESSAGE_TARGET);
+    if (sessionGenerationId === null) {
+        throw new Error("The Runtime returned no Session history generation.");
+    }
+    return { events, nextCursor, sessionGenerationId };
+}
+
 function mergeSessionEvents(
     current: readonly SessionEventV2[],
     incoming: readonly SessionEventV2[],
@@ -390,11 +426,11 @@ export function createSessionPaneModel(options: {
     });
     const initialActivity: SessionActivityState =
         command === "" ? { kind: "idle" } : startSessionWork({ commandId: command });
-    let timelineProjection = createSessionTimelineProjection(sessionEvents);
-    const deriveTimeline = () => timelineProjection.current();
+    const historyMessages = createSessionHistoryMessages({ events: sessionEvents, nextCursor: historyCursor });
+    const deriveTimeline = () => historyMessages.current();
     const replaceTimeline = (events: readonly SessionEventV2[]): void => {
         sessionEvents = [...events];
-        timelineProjection = createSessionTimelineProjection(sessionEvents);
+        historyMessages.replace({ events: sessionEvents, nextCursor: historyCursor });
     };
     const tasks = createSessionTaskControlsStore({
         commands: session.result.ready.commands,
@@ -488,26 +524,17 @@ export function createSessionPaneModel(options: {
                 set({ historyLoading: true });
                 try {
                     const initialMessageCount = deriveTimeline().messages.length;
-                    while (
-                        historyCursor !== null &&
-                        deriveTimeline().messages.length - initialMessageCount < OLDER_HISTORY_MESSAGE_TARGET
-                    ) {
-                        const requestedCursor: string = historyCursor;
-                        const page = await client.events.listV2(
-                            sessionId,
-                            new MobiusPageRequest(SESSION_EVENT_PAGE_LIMIT, requestedCursor),
-                            signal,
-                        );
-                        signal.throwIfAborted();
-                        if (sessionGenerationId !== null && page.sessionGenerationId !== sessionGenerationId) {
-                            throw new Error("The Session reloaded while older messages were loading.");
-                        }
-                        if (page.nextCursor === requestedCursor) {
-                            throw new Error("The Runtime returned the same older-message cursor twice.");
-                        }
-                        replaceTimeline(mergeSessionEvents(page.events, sessionEvents));
-                        historyCursor = page.nextCursor;
-                    }
+                    const recovery = await readSessionHistoryV2(
+                        client,
+                        sessionId,
+                        historyCursor,
+                        sessionEvents,
+                        initialMessageCount,
+                        sessionGenerationId,
+                        signal,
+                    );
+                    historyCursor = recovery.nextCursor;
+                    replaceTimeline(recovery.events);
                     const timeline = deriveTimeline();
                     signal.throwIfAborted();
                     set({
@@ -640,8 +667,8 @@ export function createSessionPaneModel(options: {
                                     }
                                     sessionGenerationId = recovery.sessionGenerationId;
                                 }
-                                replaceTimeline(mergeSessionEvents(sessionEvents, recovery.events));
                                 historyCursor = recovery.nextCursor;
+                                replaceTimeline(mergeSessionEvents(sessionEvents, recovery.events));
                                 const running = execution.turn;
                                 if (running !== null) {
                                     command = running.commandId;
@@ -695,11 +722,20 @@ export function createSessionPaneModel(options: {
                                 sessionIdentity,
                                 signal,
                             );
-                            const recovery = await readSessionEventsV2(connected, sessionId, signal);
+                            const recovery = await readSessionHistoryV2(
+                                connected,
+                                sessionId,
+                                null,
+                                [],
+                                0,
+                                null,
+                                signal,
+                            );
                             if (sessionGenerationId !== null && sessionGenerationId !== recovery.sessionGenerationId) {
                                 supersededSessionGenerationIds.add(sessionGenerationId);
                             }
                             sessionGenerationId = recovery.sessionGenerationId;
+                            historyCursor = recovery.nextCursor;
                             replaceTimeline(recovery.events);
                             for (const event of recovery.events) {
                                 if (
@@ -712,7 +748,6 @@ export function createSessionPaneModel(options: {
                                     sessionTitle = event.payload.title;
                                 }
                             }
-                            historyCursor = recovery.nextCursor;
                             const native = deriveTimeline();
                             delivery.getState().reconcile(sessionEventCommandIds(sessionEvents));
                             signal.throwIfAborted();
@@ -793,12 +828,13 @@ export function createSessionPaneModel(options: {
                                     sessionGenerationId = event.sessionGenerationId;
                                     historyCursor = null;
                                     sessionEvents.push(event);
-                                    timelineProjection.append(event);
+                                    historyMessages.updateCursor(historyCursor);
+                                    historyMessages.append(event);
                                 } else {
                                     const latest = sessionEvents.at(-1);
                                     if (latest === undefined || latest.eventId < event.eventId) {
                                         sessionEvents.push(event);
-                                        timelineProjection.append(event);
+                                        historyMessages.append(event);
                                     } else if (
                                         !sessionEvents.some((candidate) => candidate.eventId === event.eventId)
                                     ) {

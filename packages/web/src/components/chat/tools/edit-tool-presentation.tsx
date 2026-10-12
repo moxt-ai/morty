@@ -10,6 +10,22 @@ export interface FileDiffValue {
     readonly path: string;
 }
 
+export function fileDiffsWithoutRichContent(
+    diffs: readonly FileDiffValue[],
+    entry: ToolRendererProps["entry"],
+): readonly FileDiffValue[] {
+    return diffs.filter(
+        (diff) =>
+            !entry.content.some(
+                (content) =>
+                    content.type === "diff" &&
+                    content.path === diff.path &&
+                    content.oldText === (diff.oldText ?? "") &&
+                    content.newText === (diff.newText ?? ""),
+            ),
+    );
+}
+
 export function FileDiffList({ diffs }: { readonly diffs: readonly FileDiffValue[] }) {
     return diffs.map((diff) => (
         <section className="min-w-0 overflow-hidden rounded-lg border border-black/7" key={diff.path}>

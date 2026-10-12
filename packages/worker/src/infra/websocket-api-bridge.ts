@@ -78,47 +78,22 @@ function send(socket: BridgeSocket, value: Readonly<Record<string, unknown>>): v
     }
 }
 
-function encodeResponseChunk(requestIdValue: string, chunk: Uint8Array): Uint8Array {
-    const encodedRequestId = new TextEncoder().encode(requestIdValue);
-    const frame = new Uint8Array(1 + encodedRequestId.byteLength + chunk.byteLength);
-    frame[0] = encodedRequestId.byteLength;
-    frame.set(encodedRequestId, 1);
-    frame.set(chunk, 1 + encodedRequestId.byteLength);
-    return frame;
-}
-
 async function sendResponse(
     socket: BridgeSocket,
     requestIdValue: string,
     response: Response,
     signal: AbortSignal,
 ): Promise<void> {
+    signal.throwIfAborted();
+    const body = response.body === null ? null : await response.text();
+    signal.throwIfAborted();
     send(socket, {
-        kind: "response.begin",
+        kind: "response",
         requestId: requestIdValue,
         status: response.status,
         headers: [...response.headers],
+        body,
     });
-    const reader = response.body?.getReader();
-    if (reader !== undefined) {
-        try {
-            while (true) {
-                signal.throwIfAborted();
-                const chunk = await reader.read();
-                if (chunk.done) {
-                    break;
-                }
-                if (socket.readyState !== WebSocket.OPEN) {
-                    throw new Error("The WebSocket bridge closed while sending a response.");
-                }
-                socket.send(encodeResponseChunk(requestIdValue, chunk.value));
-            }
-        } finally {
-            reader.releaseLock();
-        }
-    }
-    signal.throwIfAborted();
-    send(socket, { kind: "response.end", requestId: requestIdValue });
 }
 
 function protocolError(socket: BridgeSocket, requestIdValue: string | null): void {

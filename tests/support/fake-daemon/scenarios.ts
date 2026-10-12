@@ -179,6 +179,24 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     { kind: "text", text: "The requested update is complete." },
                 ],
             };
+        case "long reasoning":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        activityType: "reasoning",
+                        kind: "activity",
+                        output: `REASONING START OMITTED ${"x".repeat(9_000)}`,
+                        title: "Thinking",
+                    },
+                    {
+                        activityType: "reasoning",
+                        kind: "activity",
+                        output: `${"y".repeat(9_000)} REASONING END RETAINED`,
+                        title: "Thinking",
+                    },
+                ],
+            };
         case "many session events":
             return manySessionEvents();
         case "show generated picture":
@@ -274,6 +292,33 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                         output: JSON.stringify({
                             changes: ["/workspace/app.js", "/workspace/index.html", "/workspace/styles.css"],
                         }),
+                    },
+                ],
+            };
+        case "change one file with duplicate diffs":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        content: [
+                            {
+                                newText: "export const status = 'after';\n",
+                                oldText: "export const status = 'before';\n",
+                                path: "/workspace/app.js",
+                                type: "diff",
+                            },
+                        ],
+                        title: "/workspace/app.js",
+                        output: JSON.stringify([
+                            {
+                                newText: "export const status = 'after';\n",
+                                oldText: "export const status = 'before';\n",
+                                path: "/workspace/app.js",
+                                type: "diff",
+                            },
+                        ]),
                     },
                 ],
             };

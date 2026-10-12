@@ -1,4 +1,4 @@
-import { getByRole, queryAllByRole, queryByRole } from "@testing-library/dom";
+import { getByRole, getByText, queryAllByRole, queryByRole } from "@testing-library/dom";
 import { expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -213,7 +213,7 @@ test("Given Claude Code does not echo the submitted prompt, When the response st
     });
 });
 
-test("Given more saved messages than one history page, When the user reaches the top of a reopened conversation, Then older messages appear without losing recent history", {
+test("Given more saved messages than one history page, When the user reopens it and loads more, Then complete older messages appear without losing recent history", {
     timeout: 90_000,
 }, async () => {
     const prompts = Array.from({ length: 7 }, (_, index) => `many session events: Pagination message ${index + 1}`);
@@ -252,6 +252,7 @@ test("Given more saved messages than one history page, When the user reaches the
         return candidate;
     });
     const firstHistoryPage = new Promise<{
+        readonly beginsWithAssistantHistory: boolean;
         readonly prompts: readonly string[];
         readonly responses: readonly string[];
     }>((resolve) => {
@@ -263,8 +264,17 @@ test("Given more saved messages than one history page, When the user reaches the
                 return;
             }
             observer.disconnect();
+            const firstPrompt = app.elementsByTestId(dataTestId.userMessage)[0];
+            const firstResponse = app.elementsByTestId(dataTestId.agentResponse)[0];
+            const visiblePrompts = app
+                .elementsByTestId(dataTestId.userMessage)
+                .map((element) => element.textContent ?? "");
             resolve({
-                prompts: app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent ?? ""),
+                beginsWithAssistantHistory:
+                    firstPrompt !== undefined &&
+                    firstResponse !== undefined &&
+                    (firstResponse.compareDocumentPosition(firstPrompt) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+                prompts: visiblePrompts,
                 responses: app
                     .elementsByTestId(dataTestId.agentResponse)
                     .map((element) => element.textContent ?? "")
@@ -278,10 +288,30 @@ test("Given more saved messages than one history page, When the user reaches the
     await app.user.click(conversation);
 
     const page = await firstHistoryPage;
+    const expectCompleteReasoning = async () => {
+        const reasoningItems = app.elementsByTestId(dataTestId.agentReasoning);
+        expect(reasoningItems.length).toBeGreaterThan(0);
+        for (const reasoning of reasoningItems) {
+            if (reasoning instanceof HTMLDetailsElement && !reasoning.open) {
+                await app.user.click(getByText(reasoning, "Show intermediate steps"));
+            }
+        }
+        await app.waitForView(() => {
+            expect(
+                reasoningItems.every(
+                    (reasoning) =>
+                        reasoning.textContent?.includes("Reasoning step 000.") === true &&
+                        reasoning.textContent.includes("Reasoning step 039."),
+                ),
+            ).toBe(true);
+        });
+    };
+    expect(page.beginsWithAssistantHistory).toBe(true);
     expect(page.prompts).not.toContain(prompts[0]);
     expect(page.prompts.at(-1)).toBe(prompts.at(-1));
     expect(page.responses.some((response) => response.includes("Completed Pagination message 1"))).toBe(false);
     expect(page.responses.at(-1)).toContain(`Completed Pagination message ${prompts.length.toString()}`);
+    await expectCompleteReasoning();
     await app.waitForView(() =>
         expect(getByRole(document.body, "textbox", { name: "Message" }).hasAttribute("disabled")).toBe(false),
     );
@@ -296,6 +326,11 @@ test("Given more saved messages than one history page, When the user reaches the
         expect(loadedPrompts.length).toBeGreaterThan(page.prompts.length);
         expect(loadedPrompts.slice(-page.prompts.length)).toEqual(page.prompts);
     });
+    const loadedPrompts = app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent ?? "");
+    const loadedResponses = app.elementsByTestId(dataTestId.agentResponse).map((element) => element.textContent ?? "");
+    expect(loadedPrompts[0]).toBe(prompts[0]);
+    expect(loadedResponses.some((response) => response.includes("Completed Pagination message 1"))).toBe(true);
+    await expectCompleteReasoning();
 });
 
 test("Given more saved messages than one history page, When older messages load, Then a skeleton placeholder stands in for them instead of a text label", {

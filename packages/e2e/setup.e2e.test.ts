@@ -1,5 +1,38 @@
 import { expect, test } from "./infra/test.ts";
 
+test("Given Claude Code's adapter is installing, When a user pairs the Machine, Then setup waits until Claude Code is ready", async ({
+    runtime,
+}) => {
+    await runtime.openChat();
+    runtime.pairWithInstallingAgent();
+    const instructionUrl = await runtime.createPairInstruction();
+
+    const connected = await runtime.followInstructions(instructionUrl);
+
+    expect(connected.events).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                status: "progress",
+                stage: "runtime",
+                message: "Waiting for claude to finish installing.",
+            }),
+            expect.objectContaining({ status: "ready" }),
+        ]),
+    );
+});
+
+test("Given Claude Code's adapter stays installing, When a user pairs the Machine, Then setup times out after sixty seconds", async ({
+    runtime,
+}) => {
+    await runtime.openChat();
+    runtime.pairWithStalledInstallingAgent();
+    const instructionUrl = await runtime.createPairInstruction();
+
+    await expect(runtime.followInstructions(instructionUrl)).rejects.toThrow(/HARNESS_INSTALL_TIMEOUT/u);
+
+    expect(runtime.setupElapsedMilliseconds()).toBe(60_000);
+});
+
 test("Given another Project has a managed Runtime, When pair redeems a Bot ticket, Then it creates a fresh Runtime for the ticket Project", async ({
     runtime,
 }) => {

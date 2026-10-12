@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { EditToolPresentation, FileDiffList } from "./edit-tool-presentation.tsx";
+import { EditToolPresentation, FileDiffList, fileDiffsWithoutRichContent } from "./edit-tool-presentation.tsx";
 import type { ToolRendererProps } from "./tool-renderer.ts";
 
 const inputSchema = v.pipe(
@@ -33,7 +33,7 @@ export function InputDiffEditToolCall({ autoOpen, entry }: ToolRendererProps) {
     }
     return (
         <EditToolPresentation autoOpen={autoOpen} entry={entry}>
-            <FileDiffList diffs={input.output} />
+            <FileDiffList diffs={fileDiffsWithoutRichContent(input.output, entry)} />
         </EditToolPresentation>
     );
 }

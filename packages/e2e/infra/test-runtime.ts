@@ -8,8 +8,10 @@ import { ControlledSetupRuntime } from "./setup-daemon.ts";
 import { followSetupInstructions } from "./setup-instructions.ts";
 
 export async function createTestRuntime(harness: E2EHarness) {
+    const setupClockStart = Date.parse("2026-09-15T12:00:00Z");
+    let setupClockTime = setupClockStart;
     const agentId = "claude";
-    const agentName = "Codex";
+    const agentName = "Claude Code";
     const stack = await LocalStack.create(harness);
     const runtime = new ControlledSetupRuntime({
         agentId,
@@ -45,6 +47,9 @@ export async function createTestRuntime(harness: E2EHarness) {
             },
             failure: runtime.failure,
             continueReply: runtime.continueReply,
+            pairWithInstallingAgent: runtime.pairWithInstallingAgent,
+            pairWithStalledInstallingAgent: runtime.pairWithStalledInstallingAgent,
+            setupElapsedMilliseconds: () => setupClockTime - setupClockStart,
             page,
             openChat,
             createPairInstruction: async () => text((await chat.createAgentPairing()).url, "pair instruction URL"),
@@ -108,7 +113,7 @@ export async function createTestRuntime(harness: E2EHarness) {
             },
             followInstructions: async (instructionUrl: string, sessionId?: string) => {
                 const url = new URL(instructionUrl, stack.chatOrigin);
-                let clockTime = Date.parse("2026-09-15T12:00:00Z");
+                setupClockTime = setupClockStart;
                 const result = await followSetupInstructions({
                     instructionUrl: url.href,
                     cwd: stack.directories.workspace,
@@ -116,10 +121,11 @@ export async function createTestRuntime(harness: E2EHarness) {
                     harness: agentId,
                     signal: harness.signal,
                     clock: {
-                        now: () => new Date(clockTime),
+                        now: () => new Date(setupClockTime),
                         wait: async (milliseconds, signal) => {
                             signal.throwIfAborted();
-                            clockTime += milliseconds;
+                            setupClockTime += milliseconds;
+                            await runtime.advanceInstallation(signal);
                         },
                     },
                     runtime,

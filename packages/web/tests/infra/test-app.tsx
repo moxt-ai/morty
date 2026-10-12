@@ -1,5 +1,5 @@
-import { getByTestId, queryAllByTestId } from "@testing-library/dom";
-import { render } from "@testing-library/react";
+import { getByTestId, getConfig, queryAllByTestId } from "@testing-library/dom";
+import { act, render } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { afterAll, afterEach } from "vitest";
 import { ToastProvider } from "../../src/components/ui/toast.tsx";
@@ -98,45 +98,50 @@ export async function createTestApp(
     let rendered = mount();
     let closed = false;
     const lifetime = new AbortController();
+    // Use RTL's async boundary to settle external updates and pending microtasks.
+    // DOM observation keeps this wait event-driven rather than polling the network.
     const waitForView = <T,>(read: () => T): Promise<T> =>
-        new Promise<T>((resolve, reject) => {
-            let lastFailure: unknown;
-            const cleanup = () => {
-                observer.disconnect();
-                clearTimeout(deadline);
-                lifetime.signal.removeEventListener("abort", abort);
-            };
-            const abort = () => {
-                cleanup();
-                reject(lifetime.signal.reason);
-            };
-            const check = () => {
-                try {
-                    const result = read();
-                    cleanup();
-                    resolve(result);
-                } catch (cause) {
-                    lastFailure = cause;
-                }
-            };
-            const observer = new MutationObserver(check);
-            const deadline = setTimeout(() => {
-                cleanup();
-                reject(lastFailure ?? new Error("The expected view did not appear."));
-            }, 12_000);
-            if (lifetime.signal.aborted) {
-                abort();
-                return;
-            }
-            lifetime.signal.addEventListener("abort", abort, { once: true });
-            observer.observe(document.body, {
-                attributes: true,
-                characterData: true,
-                childList: true,
-                subtree: true,
-            });
-            check();
-        });
+        getConfig().asyncWrapper(
+            () =>
+                new Promise<T>((resolve, reject) => {
+                    let lastFailure: unknown;
+                    const cleanup = () => {
+                        observer.disconnect();
+                        clearTimeout(deadline);
+                        lifetime.signal.removeEventListener("abort", abort);
+                    };
+                    const abort = () => {
+                        cleanup();
+                        reject(lifetime.signal.reason);
+                    };
+                    const check = () => {
+                        try {
+                            const result = read();
+                            cleanup();
+                            resolve(result);
+                        } catch (cause) {
+                            lastFailure = cause;
+                        }
+                    };
+                    const observer = new MutationObserver(check);
+                    const deadline = setTimeout(() => {
+                        cleanup();
+                        reject(lastFailure ?? new Error("The expected view did not appear."));
+                    }, 12_000);
+                    if (lifetime.signal.aborted) {
+                        abort();
+                        return;
+                    }
+                    lifetime.signal.addEventListener("abort", abort, { once: true });
+                    observer.observe(document.body, {
+                        attributes: true,
+                        characterData: true,
+                        childList: true,
+                        subtree: true,
+                    });
+                    check();
+                }),
+        );
     const matchingElements = (testId: string | RegExp): HTMLElement[] =>
         queryAllByTestId(document.body, testId).filter(
             (element) => container.contains(element) || element.closest("[data-test-app-root]") === null,
@@ -159,7 +164,15 @@ export async function createTestApp(
     const app: TestApp = {
         ...current,
         agentFailure,
-        daemon,
+        daemon:
+            daemon === null
+                ? null
+                : {
+                      ...daemon,
+                      continueReply: async (...args) => {
+                          await act(async () => await daemon.continueReply(...args));
+                      },
+                  },
         openViewer: async () => {
             const transport = new WebSocketApiTransport(current.origin);
             transport.open();
@@ -202,7 +215,9 @@ export async function createTestApp(
 }
 
 async function closeTestApps(): Promise<void> {
-    await Promise.all([...activeApps].map(async (app) => await app.close()));
+    await act(async () => {
+        await Promise.all([...activeApps].map(async (app) => await app.close()));
+    });
 }
 
 async function closeTestEnvironment(): Promise<void> {

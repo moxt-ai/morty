@@ -9,7 +9,7 @@ import { AttemptFailure } from "../../components/chat/attempt-failure.tsx";
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { isDisplayableImageType } from "../../services/chat/image-media-type.ts";
-import type { SessionMessage } from "../../view-models/chat/session-presentation.ts";
+import { type SessionMessage, sessionTextValue } from "../../view-models/chat/session-presentation.ts";
 
 const SAFE_AUDIO_MIME = /^audio\/(?:aac|mpeg|mp4|ogg|wav|webm)$/u;
 
@@ -302,7 +302,7 @@ export function MobiusSessionMessage({
                 <MobiusAssistantText
                     openLocalFile={openLocalFile}
                     readImage={readImage}
-                    text={presentation.content.text}
+                    text={sessionTextValue(presentation.content.text)}
                     streaming={active}
                 />
             );
@@ -328,7 +328,8 @@ export function MobiusSessionMessage({
                             id: message.id,
                             kind: "reasoning",
                             messageId: presentation.messageId,
-                            text: presentation.content.text,
+                            text: sessionTextValue(presentation.content.text),
+                            truncated: presentation.content.text.truncated,
                         },
                     ]}
                 />
