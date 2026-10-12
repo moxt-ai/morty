@@ -80,10 +80,21 @@ test("Given an active turn exceeds one recovery page, When the user leaves and r
     });
     await app.user.click(activeConversation);
     await app.queryElementByTestId(dataTestId.sessionStatus);
-    await app.waitForView(() =>
-        expect(queryAllByRole(document.body, "button", { name: "Load more text" })).not.toHaveLength(0),
-    );
-    await loadAllResponseText(app);
+    while (responseCharacters() < expectedCharacters) {
+        const button = await app.waitForView(() => {
+            if (responseCharacters() === expectedCharacters) {
+                return null;
+            }
+            const candidate = queryAllByRole(document.body, "button", { name: "Load more text" })[0];
+            if (candidate === undefined) {
+                throw new Error("Waiting for restored response text");
+            }
+            return candidate;
+        });
+        if (button !== null) {
+            await app.user.click(button);
+        }
+    }
     await app.waitForView(() =>
         expect(responseCharacters(), document.body.textContent?.slice(0, 2000)).toBe(expectedCharacters),
     );

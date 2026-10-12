@@ -216,7 +216,7 @@ test("Given Claude Code does not echo the submitted prompt, When the response st
 test("Given more saved messages than one history page, When the user reopens it and loads more, Then complete older messages appear without losing recent history", {
     timeout: 90_000,
 }, async () => {
-    const prompts = Array.from({ length: 7 }, (_, index) => `many session events: Pagination message ${index + 1}`);
+    const prompts = Array.from({ length: 10 }, (_, index) => `many session events: Pagination message ${index + 1}`);
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -310,7 +310,13 @@ test("Given more saved messages than one history page, When the user reopens it 
     expect(page.beginsWithAssistantHistory).toBe(true);
     expect(page.prompts).not.toContain(prompts[0]);
     expect(page.prompts.at(-1)).toBe(prompts.at(-1));
-    expect(page.responses.some((response) => response.includes("Completed Pagination message 1"))).toBe(false);
+    expect(
+        page.responses.some(
+            (response) =>
+                response.includes("Completed Pagination message 1") &&
+                !response.includes("Completed Pagination message 10"),
+        ),
+    ).toBe(false);
     expect(page.responses.at(-1)).toContain(`Completed Pagination message ${prompts.length.toString()}`);
     await expectOmittedReasoning();
     await app.waitForView(() =>
@@ -330,14 +336,20 @@ test("Given more saved messages than one history page, When the user reopens it 
     const loadedPrompts = app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent ?? "");
     const loadedResponses = app.elementsByTestId(dataTestId.agentResponse).map((element) => element.textContent ?? "");
     expect(loadedPrompts[0]).toBe(prompts[0]);
-    expect(loadedResponses.some((response) => response.includes("Completed Pagination message 1"))).toBe(true);
+    expect(
+        loadedResponses.some(
+            (response) =>
+                response.includes("Completed Pagination message 1") &&
+                !response.includes("Completed Pagination message 10"),
+        ),
+    ).toBe(true);
     await expectOmittedReasoning();
 });
 
 test("Given more saved messages than one history page, When older messages load, Then a skeleton placeholder stands in for them instead of a text label", {
     timeout: 90_000,
 }, async () => {
-    const prompts = Array.from({ length: 7 }, (_, index) => `many session events: Skeleton message ${index + 1}`);
+    const prompts = Array.from({ length: 10 }, (_, index) => `many session events: Skeleton message ${index + 1}`);
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
