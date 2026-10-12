@@ -1,8 +1,59 @@
-import { getAllByRole, getAllByText, getByRole, getByText, queryByText } from "@testing-library/dom";
+import {
+    fireEvent,
+    getAllByRole,
+    getAllByText,
+    getByRole,
+    getByText,
+    queryByRole,
+    queryByText,
+} from "@testing-library/dom";
+import { render } from "@testing-library/react";
 import { expect, test } from "vitest";
+import { renderRegisteredTool } from "../src/components/chat/tools/tool-renderer-registry.tsx";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
+
+test("Given the user selected an option and entered a custom response, When they reopen the completed ask tool, Then Chat shows both answers", () => {
+    render(
+        renderRegisteredTool({
+            content: [],
+            id: "ask-user-question",
+            input: JSON.stringify({
+                questions: [
+                    {
+                        header: "Delivery",
+                        multiSelect: false,
+                        options: [
+                            { description: "Ship the change now.", label: "Ship now" },
+                            { description: "Wait for another review.", label: "Wait" },
+                        ],
+                        question: "When should this ship?",
+                    },
+                    {
+                        header: "Notes",
+                        multiSelect: false,
+                        options: [{ description: "Enter a different response.", label: "Other" }],
+                        question: "Anything else to record?",
+                    },
+                ],
+            }),
+            kind: "tool",
+            name: "AskUserQuestion",
+            output: `Your questions have been answered: "When should this ship?"="Ship now", "Anything else to record?"="Use the customer's \\"exact\\" wording". You can now continue with these answers in mind.`,
+            state: { kind: "succeeded" },
+            title: "Asking for your input",
+        }),
+    );
+
+    const askTool = getByRole(document.body, "group", { name: "Questions: Asking for your input" });
+    const disclosure = getByRole(askTool, "button", { name: "Asking for your input Tool succeeded" });
+    fireEvent.click(disclosure);
+
+    expect(getAllByText(askTool, "Ship now", { exact: true })).toHaveLength(2);
+    expect(getByText(askTool, `Use the customer's "exact" wording`, { exact: true })).toBeDefined();
+    expect(getAllByText(askTool, "Your answer", { exact: true })).toHaveLength(2);
+});
 
 test("Given the agent sends separate adjacent messages, When the user reads the response, Then each message starts a new paragraph", {
     timeout: 30_000,
@@ -41,7 +92,7 @@ test("Given the agent sends separate reasoning messages, When the user reads the
     }
     await sendPrompt(app, composer, "separate reasoning paragraphs");
     const thinking = await app.queryElementByTestId(dataTestId.agentReasoning);
-    await app.user.click(getByText(thinking, "Show intermediate steps"));
+    await app.user.click(getByText(thinking, "Show Thinking"));
     await app.waitForView(() => {
         expect(thinking.textContent).toContain("**Inspecting** the reported behavior.\n- keep this literal");
         expect(thinking.textContent).toContain("`Checking` the message boundaries.");
@@ -64,7 +115,7 @@ test("Given reasoning exceeds 16K characters, When the user opens the intermedia
     }
     await sendPrompt(app, composer, "long reasoning");
     const thinking = await app.queryElementByTestId(dataTestId.agentReasoning);
-    await app.user.click(getByText(thinking, "Show intermediate steps"));
+    await app.user.click(getByText(thinking, "Show Thinking"));
     await app.waitForView(() => {
         expect(thinking.textContent).toContain("Earlier reasoning was truncated to the most recent 16K characters.");
         expect(thinking.textContent).toContain("REASONING END RETAINED");
@@ -99,7 +150,7 @@ test("Given the agent sends many session events, When the response completes, Th
     expect(document.body.textContent).not.toContain("Reasoning step 000.");
     expect(document.body.textContent).not.toContain("Reasoning step 039.");
 
-    await app.user.click(getByText(thinking, "Show intermediate steps"));
+    await app.user.click(getByText(thinking, "Show Thinking"));
     await app.waitForView(() => {
         expect(document.body.textContent).toContain("Reasoning step 000.");
         expect(document.body.textContent).toContain("Reasoning step 039.");
@@ -135,10 +186,31 @@ test("Given a file-change tool includes a rich diff, When the user views it, The
     expect(editDisclosure.getAttribute("aria-expanded")).toBe("true");
     expect(getAllByText(document.body, "/workspace/app.js", { exact: true }).length).toBeGreaterThan(0);
     expect(getByRole(edit, "list", { name: "Changed files" }).textContent).toBe(
-        "/workspace/app.js/workspace/index.html/workspace/styles.css",
+        "/workspace/index.html/workspace/styles.css",
     );
     expect(queryByText(edit, "Request")).toBeNull();
     expect(queryByText(edit, "Response")).toBeNull();
+});
+
+test("Given a changed-file summary repeats the rich diff path, When the user opens the edit, Then Chat omits the duplicate path row", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, "change one file with a rich diff summary");
+
+    const edit = await app.waitForView(() => getByRole(document.body, "group", { name: "Edit: /workspace/app.js" }));
+    await app.user.click(getByRole(edit, "button", { name: "/workspace/app.js Tool succeeded" }));
+    expect(queryByRole(edit, "list", { name: "Changed files" })).toBeNull();
+    expect(getAllByText(edit, "/workspace/app.js", { exact: true })).toHaveLength(2);
 });
 
 test("Given a file-change tool repeats its rich diff in raw output, When the user opens it, Then Chat shows the edit once", {
@@ -338,11 +410,11 @@ test("Given the daemon emits reasoning, a tool, and text, When the user observes
         throw new Error("Expected reasoning to use a disclosure");
     }
     if (!thinking.open) {
-        await app.user.click(getByText(thinking, "Show intermediate steps"));
+        await app.user.click(getByText(thinking, "Show Thinking"));
     }
     await app.waitForView(() => expect(thinking.textContent).toContain("Inspecting the workspace"));
     expect(thinking.open).toBe(true);
-    expect(thinking.textContent).toContain("Show intermediate steps");
+    expect(thinking.textContent).toContain("Show Thinking");
     await app.waitForView(() => expect(document.body.textContent).toContain("Read package metadata"));
     const genericTool = await app.queryElementByTestId(dataTestId.agentToolCall);
     expect(getByRole(genericTool, "button").getAttribute("aria-expanded")).toBe("false");

@@ -293,7 +293,7 @@ test("Given more saved messages than one history page, When the user reopens it 
         expect(reasoningItems.length).toBeGreaterThan(0);
         for (const reasoning of reasoningItems) {
             if (reasoning instanceof HTMLDetailsElement && !reasoning.open) {
-                await app.user.click(getByText(reasoning, "Show intermediate steps"));
+                await app.user.click(getByText(reasoning, "Show Thinking"));
             }
         }
         await app.waitForView(() => {

@@ -14,7 +14,7 @@ test("Given an agent answer with reasoning and a tool call, When the user reads 
         hasText: "The requested update is complete.",
     });
     const answer = response.getByText("The requested update is complete.", { exact: true });
-    const reasoningSummary = page.getByText("Show intermediate steps", { exact: true });
+    const reasoningSummary = page.getByText("Show Thinking", { exact: true });
     const toolDisclosure = page.getByRole("button", { name: "Inspect workspace Tool succeeded" });
     await expect(answer).toBeVisible();
 

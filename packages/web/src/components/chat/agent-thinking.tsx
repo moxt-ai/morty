@@ -66,7 +66,7 @@ function ReasoningDisclosure({ active, entry }: { readonly active: boolean; read
                     aria-hidden="true"
                     className="size-3.5 -rotate-90 transition-transform group-open/thinking:rotate-0 motion-reduce:transition-none"
                 />
-                <span>Show intermediate steps</span>
+                <span>Show Thinking</span>
             </summary>
             {contentVisible && (
                 <div className="mt-1 ml-1 grid min-w-0 gap-4 border-l border-[#d9dde1] py-2 pl-5 [overflow-wrap:anywhere]">
