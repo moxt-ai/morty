@@ -70,10 +70,8 @@ function manySessionEvents(completion?: string): HarnessReplyPlan {
 /** Shared Morty scenario data; the protocol peer has no prompt-specific branches. */
 export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | "steer"): HarnessReplyPlan {
     if (mode === "steer") {
-        return {
-            outcome: prompt === "Use the revised requirement" ? "hold" : "complete",
-            output: [{ kind: "text", text: `Steered: ${prompt}` }],
-        };
+        // A steer injects into the running turn, which stays active until the scenario completes it.
+        return { outcome: "hold", output: [{ kind: "text", text: `Steered: ${prompt}` }] };
     }
     const eventBurstPrefix = "many session events: ";
     if (prompt.startsWith(eventBurstPrefix)) {

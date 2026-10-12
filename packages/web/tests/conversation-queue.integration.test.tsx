@@ -100,6 +100,9 @@ test("Given the daemon has queued work, When the user steers it into the active 
     }
     await daemon.continueReply("wait for steering", { outcome: "complete", output: [] });
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    const delivered = app.elementsByTestId(dataTestId.agentResponse).map((element) => element.textContent ?? "");
+    expect(delivered.some((text) => text.includes(`Steered: ${instruction}`))).toBe(true);
+    expect(delivered.some((text) => text.includes(deletedInstruction))).toBe(false);
     await viewer.close();
 });
 
