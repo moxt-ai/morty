@@ -1,3 +1,5 @@
+import { tmpdir } from "node:os";
+import { dirname } from "node:path";
 import { expect, test } from "./infra/test.ts";
 
 test("Given Claude Code's adapter is installing, When a user pairs the Machine, Then setup waits until Claude Code is ready", async ({
@@ -48,7 +50,7 @@ test("Given another Project has a managed Runtime, When pair redeems a Bot ticke
     expect(statuses).toContain("ready");
 });
 
-test("Given a saved setup handoff, When its Runtime reconnects, Then setup waits and returns a browser-renderable QR code", async ({
+test("Given a saved setup handoff, When its Runtime reconnects, Then setup returns a concise QR image reference", async ({
     runtime,
 }) => {
     const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
@@ -68,5 +70,12 @@ test("Given a saved setup handoff, When its Runtime reconnects, Then setup waits
     expect(connected.configuration).not.toHaveProperty("pairing_key");
     expect(connected.configuration).not.toHaveProperty("expected_runtime_id");
     expect(connected.configuration).not.toHaveProperty("runtime_process");
-    expect(connected.qrDataUrl).toMatch(/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/u);
+    const ready = connected.events.find((event) => event.status === "ready");
+    expect(ready).not.toHaveProperty("qrDataUrl");
+    expect(ready).not.toHaveProperty("qrTextPath");
+    if (connected.qrPath === null) {
+        throw new Error("Expected setup to return a QR image path");
+    }
+    expect(dirname(connected.qrPath)).toBe(tmpdir());
+    expect(connected.qrPath).toMatch(/morty-handoff-[0-9a-f-]+\.png$/u);
 });
