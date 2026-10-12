@@ -27,6 +27,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
 
     readonly #options: ControlledAgentBehavior;
     #pairWithInstallingAgent = false;
+    #installationAdvances = true;
     #pendingConnection: Connection | null = null;
     constructor(options: ControlledAgentBehavior) {
         this.#options = options;
@@ -113,11 +114,17 @@ export class ControlledSetupRuntime implements SetupRuntime {
 
     readonly pairWithInstallingAgent = (): void => {
         this.#pairWithInstallingAgent = true;
+        this.#installationAdvances = true;
+    };
+
+    readonly pairWithStalledInstallingAgent = (): void => {
+        this.#pairWithInstallingAgent = true;
+        this.#installationAdvances = false;
     };
 
     readonly advanceInstallation = async (signal: AbortSignal): Promise<void> => {
         const connection = this.#pendingConnection;
-        if (connection === null) {
+        if (connection === null || !this.#installationAdvances) {
             return;
         }
         this.#pendingConnection = null;
