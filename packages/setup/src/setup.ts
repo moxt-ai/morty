@@ -66,6 +66,11 @@ interface ManagedConnection {
     readonly runtimeId: string;
 }
 
+interface VerifiedIdentity {
+    readonly context: Context;
+    readonly expectedRuntimeId: string | null;
+}
+
 interface SetupIdentity {
     readonly kind: "setup";
     readonly context: Context;
@@ -435,7 +440,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return { kind: "setup", context: saved };
     }
 
-    async function verifyIdentityAndBot(context: Context, mode: Options["mode"]) {
+    async function verifyIdentityAndBot(context: Context, mode: Options["mode"]): Promise<VerifiedIdentity> {
         const session = await request(context, "/session");
         identifier(session.userId);
         if (mode === "pair" && context.config.entry !== "pair") {
@@ -451,7 +456,16 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (bot === undefined) {
             fail("BOT_NOT_FOUND");
         }
-        return await saveConfiguration(context, { user_id: session.userId, bot_id: identifier(bot.botId) });
+        const botId = identifier(bot.botId);
+        const detail = await request(context, `/management/bots/${encodeURIComponent(botId)}`);
+        if (identifier(detail.botId) !== botId) {
+            fail("INVALID_RESPONSE");
+        }
+        const expectedRuntimeId = detail.runtimeId === null ? null : identifier(detail.runtimeId);
+        return {
+            context: await saveConfiguration(context, { user_id: session.userId, bot_id: botId }),
+            expectedRuntimeId,
+        };
     }
 
     async function runMobius(context: Context, args: readonly string[], cwd: string) {
@@ -546,15 +560,25 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return selection;
     }
 
-    async function prepareRuntime(context: Context, cwd: string, mode: Options["mode"]): Promise<RuntimeSelection> {
+    async function prepareRuntime(
+        context: Context,
+        cwd: string,
+        mode: Options["mode"],
+        expectedRuntimeId: string | null,
+    ): Promise<RuntimeSelection> {
         progress("pairing", "Preparing the Runtime connection.");
         const project = await request(context, "/management/project");
         const appId = identifier(project.appId);
         if (mode === "pair") {
             return await createRuntimePairing(context, appId);
         }
-        const existing = (await listManagedConnections(context, cwd)).find((connection) => connection.appId === appId);
-        if (existing !== undefined) {
+        if (expectedRuntimeId !== null) {
+            const existing = (await listManagedConnections(context, cwd)).find(
+                (connection) => connection.appId === appId && connection.runtimeId === expectedRuntimeId,
+            );
+            if (existing === undefined) {
+                fail("RUNTIME_CONNECTION_UNAVAILABLE");
+            }
             emit({
                 status: "runtime_reused",
                 runtimeId: existing.runtimeId,
@@ -816,9 +840,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 options.mode === "setup" ? await loadConfiguration(directory, base) : { directory, base, config: {} };
             const identity = await prepareIdentity(context, options);
             context = identity.context;
-            context = await verifyIdentityAndBot(context, options.mode);
+            const verified = await verifyIdentityAndBot(context, options.mode);
+            context = verified.context;
             emit({ status: "identity_ready", userId: context.config.user_id, botId: context.config.bot_id });
-            const runtime = await prepareRuntime(context, cwd, options.mode);
+            const runtime = await prepareRuntime(context, cwd, options.mode, verified.expectedRuntimeId);
             validateExpectedRuntime(identity, runtime);
             context = await startRuntime(context, runtime, cwd);
             await waitForRuntime(context, runtime, options.harness);

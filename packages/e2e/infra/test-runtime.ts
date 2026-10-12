@@ -111,7 +111,11 @@ export async function createTestRuntime(harness: E2EHarness) {
                     agentName,
                 );
             },
-            followInstructions: async (instructionUrl: string, sessionId?: string) => {
+            followInstructions: async (
+                instructionUrl: string,
+                sessionId?: string,
+                maximumWaitMilliseconds?: number,
+            ) => {
                 const url = new URL(instructionUrl, stack.chatOrigin);
                 setupClockTime = setupClockStart;
                 const result = await followSetupInstructions({
@@ -125,6 +129,12 @@ export async function createTestRuntime(harness: E2EHarness) {
                         wait: async (milliseconds, signal) => {
                             signal.throwIfAborted();
                             setupClockTime += milliseconds;
+                            if (
+                                maximumWaitMilliseconds !== undefined &&
+                                setupClockTime - setupClockStart > maximumWaitMilliseconds
+                            ) {
+                                throw new Error("Controlled setup exceeded its deterministic wait limit");
+                            }
                             await runtime.advanceInstallation(signal);
                         },
                     },

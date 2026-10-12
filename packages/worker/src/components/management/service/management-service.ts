@@ -92,6 +92,7 @@ export class ManagementService {
             displayName: bot.displayName,
             instructions: bot.instructions,
             configured: bot.configuration !== null,
+            runtimeId: bot.configuration?.runtimeId ?? null,
         };
     };
 

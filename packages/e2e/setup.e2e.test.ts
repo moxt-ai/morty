@@ -79,3 +79,24 @@ test("Given a saved setup handoff, When its Runtime reconnects, Then setup retur
     expect(dirname(connected.qrPath)).toBe(tmpdir());
     expect(connected.qrPath).toMatch(/morty-handoff-[0-9a-f-]+\.png$/u);
 });
+
+test("Given a saved Machine and another same-App connection, When its Runtime reconnects, Then setup reuses the Machine's bound Runtime", async ({
+    runtime,
+}) => {
+    await runtime.openChat();
+    await runtime.connectUnrelatedRuntime();
+    const instructionUrl = await runtime.createPairInstruction();
+    const original = await runtime.followInstructions(instructionUrl, "setup-reconnect-session");
+    await runtime.disconnectRuntime();
+
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session", 5_000);
+
+    expect(connected.botId).toBe(original.botId);
+    expect(connected.events).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({ status: "runtime_reused" }),
+            expect.objectContaining({ status: "runtime_online" }),
+            expect.objectContaining({ status: "ready" }),
+        ]),
+    );
+});
