@@ -7,11 +7,16 @@ Use `npm.cmd` to avoid PowerShell script execution-policy issues. WSL users shou
 use the POSIX reference with Linux Node and Linux paths instead.
 
 ```powershell
+$ErrorActionPreference = "Stop"
 $BASE_URL = "{{BASE_URL}}"
 $WORKSPACE = $PWD.Path
 npm.cmd install --global @moxt-ai/mobius@latest
+if ($LASTEXITCODE -ne 0) { throw "Mobius installation failed" }
 $SCRIPT_DIR = Join-Path ([IO.Path]::GetTempPath()) ("morty-setup-" + [Guid]::NewGuid())
 New-Item -ItemType Directory -Path $SCRIPT_DIR | Out-Null
+$OWNER = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+icacls.exe $SCRIPT_DIR /inheritance:r /grant:r "${OWNER}:(OI)(CI)F" | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Could not protect the download directory" }
 $SCRIPT = Join-Path $SCRIPT_DIR "setup.mjs"
 Invoke-WebRequest -Uri "$BASE_URL/setup.mjs" -OutFile $SCRIPT -TimeoutSec 45 -MaximumRedirection 0
 Get-Content -LiteralPath $SCRIPT
