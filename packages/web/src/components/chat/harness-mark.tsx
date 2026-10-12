@@ -77,7 +77,7 @@ function OhMyPiMark() {
     );
 }
 
-export function identifyHarnessProduct(agentRef: string, label: string): HarnessProduct {
+function identifyHarnessProduct(agentRef: string, label: string): HarnessProduct {
     const identity = agentRef.toLowerCase();
     const exact = HARNESS_PRODUCTS.find((entry) => entry.agentRefs.includes(identity));
     if (exact !== undefined) {
