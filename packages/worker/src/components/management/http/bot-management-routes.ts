@@ -52,6 +52,16 @@ export function createBotManagementRoutes() {
                 ),
             );
         })
+        .get("/bots/:botId/runtime-binding", authenticatedSession, async (context) => {
+            const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]);
+            return json(
+                await context.env.services.management.readBotRuntimeBinding(
+                    context.get("session").userId,
+                    context.req.param("botId"),
+                    signal,
+                ),
+            );
+        })
         .patch(
             "/bots/:botId",
             authenticatedSession,

@@ -33,7 +33,9 @@ export const publicCloudRoutes = new Hono<{ readonly Bindings: CloudBindings }>(
     .post("/identity/pairings/redeem", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .get("/projects/:projectId/session", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .get("/projects/:projectId/management/bots", (context) => cloudRoutes.fetch(context.req.raw, context.env))
-    .get("/projects/:projectId/management/bots/:botId", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .get("/projects/:projectId/management/bots/:botId/runtime-binding", (context) =>
+        cloudRoutes.fetch(context.req.raw, context.env),
+    )
     .get("/projects/:projectId/management/project", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .post("/projects/:projectId/management/runtime-pairings", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),

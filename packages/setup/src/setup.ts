@@ -457,7 +457,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             fail("BOT_NOT_FOUND");
         }
         const botId = identifier(bot.botId);
-        const detail = await request(context, `/management/bots/${encodeURIComponent(botId)}`);
+        const detail = await request(context, `/management/bots/${encodeURIComponent(botId)}/runtime-binding`);
         if (identifier(detail.botId) !== botId) {
             fail("INVALID_RESPONSE");
         }
