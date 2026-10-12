@@ -268,6 +268,20 @@ test("Given a Bot paired with the Claude harness, When the user opens its settin
     expect(tabMark.querySelector("svg")).not.toBeNull();
 });
 
+test("Given a paired Bot, When the composer controls are visible, Then the configuration trigger omits the sliders icon", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+
+    const configurationTrigger = await app.queryElementByTestId(dataTestId.agentConfiguration);
+    expect(configurationTrigger.querySelector(".lucide-sliders-horizontal")).toBeNull();
+    expect(app.elementByTestId(dataTestId.harnessTriggerMark, configurationTrigger)).toBeDefined();
+});
+
 test("Given a Bot paired with an unlisted harness, When the user opens its settings, Then a generic mark labels the harness tab without renaming it", {
     timeout: 30_000,
 }, async () => {
