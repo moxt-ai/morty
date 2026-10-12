@@ -77,6 +77,10 @@ interface PairIdentity {
 
 type PreparedIdentity = SetupIdentity | PairIdentity;
 
+type HarnessReadinessWait = { readonly kind: "pairing" } | { readonly kind: "installing"; readonly deadline: number };
+
+const HARNESS_INSTALL_TIMEOUT_MILLISECONDS = 120_000;
+
 type Options =
     | {
           readonly mode: "pair";
@@ -605,6 +609,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const runtimeId = runtime.runtimeId;
         let attempts = 0;
         if (runtime.kind === "pairing") {
+            let readiness: HarnessReadinessWait = { kind: "pairing" };
             while (true) {
                 signal.throwIfAborted();
                 const status = await request(context, `/management/runtime-pairings/${runtime.pairingId}`);
@@ -615,10 +620,18 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     progress("runtime", "Waiting for Runtime pairing to complete.");
                 }
                 if (status.status === "paired") {
-                    if (status.runtimeId !== runtimeId || !Array.isArray(status.agents)) {
+                    if (
+                        status.runtimeId !== runtimeId ||
+                        !Array.isArray(status.agents) ||
+                        !Array.isArray(status.installableAgents)
+                    ) {
                         fail("INVALID_RESPONSE");
                     }
-                    if (!status.agents.some((agent) => object(agent).id === harness)) {
+                    if (status.agents.some((agent) => object(agent).id === harness)) {
+                        emit({ status: "runtime_paired", runtimeId, harness });
+                        break;
+                    }
+                    if (!status.installableAgents.some((agent) => object(agent).id === harness)) {
                         emit({
                             status: "harness_unavailable",
                             harness,
@@ -626,8 +639,15 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                         });
                         fail("HARNESS_UNAVAILABLE");
                     }
-                    emit({ status: "runtime_paired", runtimeId, harness });
-                    break;
+                    if (readiness.kind === "pairing") {
+                        readiness = {
+                            kind: "installing",
+                            deadline: clock.now().getTime() + HARNESS_INSTALL_TIMEOUT_MILLISECONDS,
+                        };
+                        progress("runtime", `Waiting for ${harness} to finish installing.`);
+                    } else if (clock.now().getTime() >= readiness.deadline) {
+                        fail("HARNESS_INSTALL_TIMEOUT");
+                    }
                 }
                 await clock.wait(1000, signal);
             }

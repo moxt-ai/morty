@@ -9,7 +9,7 @@ import { followSetupInstructions } from "./setup-instructions.ts";
 
 export async function createTestRuntime(harness: E2EHarness) {
     const agentId = "claude";
-    const agentName = "Codex";
+    const agentName = "Claude Code";
     const stack = await LocalStack.create(harness);
     const runtime = new ControlledSetupRuntime({
         agentId,
@@ -45,6 +45,7 @@ export async function createTestRuntime(harness: E2EHarness) {
             },
             failure: runtime.failure,
             continueReply: runtime.continueReply,
+            pairWithInstallingAgent: runtime.pairWithInstallingAgent,
             page,
             openChat,
             createPairInstruction: async () => text((await chat.createAgentPairing()).url, "pair instruction URL"),
@@ -120,6 +121,7 @@ export async function createTestRuntime(harness: E2EHarness) {
                         wait: async (milliseconds, signal) => {
                             signal.throwIfAborted();
                             clockTime += milliseconds;
+                            await runtime.advanceInstallation(signal);
                         },
                     },
                     runtime,
