@@ -1,7 +1,7 @@
-import { defaultRemarkPlugins, Streamdown } from "streamdown";
+import { defaultRemarkPlugins, type MathPlugin, Streamdown } from "streamdown";
 import { isDisplayableImageType } from "../../services/chat/image-media-type.ts";
 import "streamdown/styles.css";
-import { type ComponentProps, useEffect, useMemo, useState } from "react";
+import { type ComponentProps, lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { dataTestId } from "@/data-testid";
 import { cn } from "@/lib/utils";
 import { boundedCodeHighlighter } from "./bounded-code-highlighter.ts";
@@ -17,7 +17,12 @@ const STREAMDOWN_PLUGINS = Object.freeze({
 });
 const STREAMDOWN_TRANSLATIONS = Object.freeze({ copyCode: "Copy code" });
 const LOCAL_FILE_URL_ORIGIN = "https://local-file.morty.invalid";
+const LATEX_DELIMITER_PATTERN = /(^|[^\\$])(?:\$\$[\s\S]+?\$\$|\$(?!\$)[^\n$]+\$)/u;
 export const MAX_MARKDOWN_CHARACTERS = 32 * 1024;
+
+const AgentMarkdownWithLatex = lazy(() =>
+    import("./agent-markdown-with-latex.tsx").catch(() => ({ default: AgentMarkdownContent })),
+);
 
 function isSafeLink(href: string): boolean {
     return (
@@ -219,14 +224,19 @@ export interface AgentMarkdownProps {
     readonly streaming: boolean;
 }
 
-export function AgentMarkdown({
+interface AgentMarkdownContentProps extends AgentMarkdownProps {
+    readonly mathPlugin?: MathPlugin | undefined;
+}
+
+export function AgentMarkdownContent({
     className,
     markdown,
+    mathPlugin,
     openLocalFile,
     readImage,
     sourceCharacters = markdown.length,
     streaming,
-}: AgentMarkdownProps) {
+}: AgentMarkdownContentProps) {
     const remarkPlugins = useMemo(() => {
         // Explicit options also distinguish Streamdown's cached parser configurations.
         const completion: [typeof remarkMermaidCompletion, { readonly streaming: boolean }] = [
@@ -241,6 +251,10 @@ export function AgentMarkdown({
             img: (properties: ComponentProps<"img">) => <AgentMarkdownImage {...properties} readImage={readImage} />,
         }),
         [openLocalFile, readImage],
+    );
+    const plugins = useMemo(
+        () => (mathPlugin === undefined ? STREAMDOWN_PLUGINS : { ...STREAMDOWN_PLUGINS, math: mathPlugin }),
+        [mathPlugin],
     );
     return sourceCharacters > MAX_MARKDOWN_CHARACTERS ? (
         <pre
@@ -274,11 +288,23 @@ export function AgentMarkdown({
             isAnimating={streaming}
             lineNumbers={false}
             mode="static"
-            plugins={STREAMDOWN_PLUGINS}
+            plugins={plugins}
             remarkPlugins={remarkPlugins}
             translations={STREAMDOWN_TRANSLATIONS}
         >
             {markdown}
         </Streamdown>
+    );
+}
+
+export function AgentMarkdown(properties: AgentMarkdownProps) {
+    const sourceCharacters = properties.sourceCharacters ?? properties.markdown.length;
+    if (sourceCharacters > MAX_MARKDOWN_CHARACTERS || !LATEX_DELIMITER_PATTERN.test(properties.markdown)) {
+        return <AgentMarkdownContent {...properties} />;
+    }
+    return (
+        <Suspense fallback={<AgentMarkdownContent {...properties} />}>
+            <AgentMarkdownWithLatex {...properties} />
+        </Suspense>
     );
 }
