@@ -293,7 +293,9 @@ async function readSessionEventsV2(
     sessionId: string,
     signal: AbortSignal,
 ): Promise<SessionEventRecoveryV2> {
-    const page = await client.events.listV2(sessionId, new MobiusPageRequest(SESSION_EVENT_PAGE_LIMIT, ""), signal);
+    const page = await client.events.listV2(sessionId, new MobiusPageRequest(SESSION_EVENT_PAGE_LIMIT, ""), signal, {
+        omit: ["agent-reasoning"],
+    });
     signal.throwIfAborted();
     return {
         events: page.events,
@@ -322,6 +324,7 @@ async function readSessionHistoryV2(
             sessionId,
             new MobiusPageRequest(SESSION_EVENT_PAGE_LIMIT, requestedCursor ?? ""),
             signal,
+            { omit: ["agent-reasoning"] },
         );
         signal.throwIfAborted();
         if (sessionGenerationId !== null && page.sessionGenerationId !== sessionGenerationId) {

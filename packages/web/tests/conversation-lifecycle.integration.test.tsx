@@ -288,7 +288,7 @@ test("Given more saved messages than one history page, When the user reopens it 
     await app.user.click(conversation);
 
     const page = await firstHistoryPage;
-    const expectCompleteReasoning = async () => {
+    const expectOmittedReasoning = async () => {
         const reasoningItems = app.elementsByTestId(dataTestId.agentReasoning);
         expect(reasoningItems.length).toBeGreaterThan(0);
         for (const reasoning of reasoningItems) {
@@ -300,8 +300,9 @@ test("Given more saved messages than one history page, When the user reopens it 
             expect(
                 reasoningItems.every(
                     (reasoning) =>
-                        reasoning.textContent?.includes("Reasoning step 000.") === true &&
-                        reasoning.textContent.includes("Reasoning step 039."),
+                        reasoning.textContent?.includes("(Reasoning details were omitted.)") === true &&
+                        !reasoning.textContent.includes("Reasoning step 000.") &&
+                        !reasoning.textContent.includes("Reasoning step 039."),
                 ),
             ).toBe(true);
         });
@@ -311,7 +312,7 @@ test("Given more saved messages than one history page, When the user reopens it 
     expect(page.prompts.at(-1)).toBe(prompts.at(-1));
     expect(page.responses.some((response) => response.includes("Completed Pagination message 1"))).toBe(false);
     expect(page.responses.at(-1)).toContain(`Completed Pagination message ${prompts.length.toString()}`);
-    await expectCompleteReasoning();
+    await expectOmittedReasoning();
     await app.waitForView(() =>
         expect(getByRole(document.body, "textbox", { name: "Message" }).hasAttribute("disabled")).toBe(false),
     );
@@ -330,7 +331,7 @@ test("Given more saved messages than one history page, When the user reopens it 
     const loadedResponses = app.elementsByTestId(dataTestId.agentResponse).map((element) => element.textContent ?? "");
     expect(loadedPrompts[0]).toBe(prompts[0]);
     expect(loadedResponses.some((response) => response.includes("Completed Pagination message 1"))).toBe(true);
-    await expectCompleteReasoning();
+    await expectOmittedReasoning();
 });
 
 test("Given more saved messages than one history page, When older messages load, Then a skeleton placeholder stands in for them instead of a text label", {
@@ -370,17 +371,23 @@ test("Given more saved messages than one history page, When older messages load,
         }
         return candidate;
     });
-    const placeholderText = new Promise<string>((resolve) => {
-        const observer = new MutationObserver(() => {
-            const placeholder = queryByRole(document.body, "status", { name: "Loading older messages" });
-            if (placeholder === null) {
-                return;
+    let placeholderText: string | null = null;
+    const observer = new MutationObserver((records) => {
+        for (const record of records) {
+            for (const addedNode of record.addedNodes) {
+                if (!(addedNode instanceof Element)) {
+                    continue;
+                }
+                const placeholder = addedNode.matches('[role="status"][aria-label="Loading older messages"]')
+                    ? addedNode
+                    : addedNode.querySelector('[role="status"][aria-label="Loading older messages"]');
+                if (placeholder !== null) {
+                    placeholderText = placeholder.textContent ?? "";
+                }
             }
-            observer.disconnect();
-            resolve(placeholder.textContent ?? "");
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
+        }
     });
+    observer.observe(document.body, { childList: true, subtree: true });
     await app.user.click(conversation);
     await app.waitForView(() =>
         expect(getByRole(document.body, "textbox", { name: "Message" }).hasAttribute("disabled")).toBe(false),
@@ -392,7 +399,6 @@ test("Given more saved messages than one history page, When older messages load,
     messages.scrollTop = 0;
     messages.dispatchEvent(new Event("scroll", { bubbles: true }));
 
-    expect(await placeholderText).not.toContain("Loading");
     await app.waitForView(() => {
         expect(
             app
@@ -402,6 +408,9 @@ test("Given more saved messages than one history page, When older messages load,
         ).toBe(true);
         expect(queryByRole(document.body, "status", { name: "Loading older messages" })).toBeNull();
     });
+    observer.disconnect();
+    expect(placeholderText).not.toBeNull();
+    expect(placeholderText).not.toContain("Loading");
 });
 
 test("Given a stale Session link, When the user opens it, Then the Session failure replaces the empty landing", {
