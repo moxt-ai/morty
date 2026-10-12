@@ -738,7 +738,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
-    async function createQrCode(context: Context, value: string) {
+    async function createQrCode(value: string) {
         const image = await QRCode.toBuffer(value, {
             type: "png",
             errorCorrectionLevel: "M",
@@ -755,28 +755,16 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             fail("QR_VERIFICATION_FAILED");
         }
 
-        const qrText = await QRCode.toString(value, { type: "utf8", errorCorrectionLevel: "M", margin: 2 });
-        const qrPath = join(context.directory, "handoff-qr.png");
-        const qrTextPath = join(context.directory, "handoff-qr.txt");
-        const temporaryImage = join(context.directory, `.handoff-qr-${crypto.randomUUID()}.png`);
-        const temporaryText = join(context.directory, `.handoff-qr-${crypto.randomUUID()}.txt`);
+        const qrPath = join(tmpdir(), `morty-handoff-${crypto.randomUUID()}.png`);
         try {
-            await writePrivateFile(temporaryImage, image);
-            await writePrivateFile(temporaryText, qrText);
-            await rename(temporaryImage, qrPath);
-            await rename(temporaryText, qrTextPath);
+            await writePrivateFile(qrPath, image);
             await privatePath(qrPath, false);
-            await privatePath(qrTextPath, false);
-        } finally {
-            await rm(temporaryImage, { force: true });
-            await rm(temporaryText, { force: true });
+        } catch (cause) {
+            await rm(qrPath, { force: true });
+            throw cause;
         }
 
-        return {
-            qrDataUrl: `data:image/png;base64,${image.toString("base64")}`,
-            qrPath,
-            qrTextPath,
-        };
+        return qrPath;
     }
 
     async function finishSetup(context: Context, runtime: RuntimeSelection, options: Options) {
@@ -806,13 +794,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         url.searchParams.set("harness", options.harness);
         url.searchParams.set("sessionId", options.sessionId);
         const handoffUrl = url.toString();
-        const qr = await createQrCode(context, handoffUrl);
+        const qrPath = await createQrCode(handoffUrl);
         emit({
             status: "ready",
             botId,
             url: handoffUrl,
             workspace,
-            ...qr,
+            qrPath,
             message: "Open the link or scan the QR code to chat. Keep the Runtime online.",
         });
     }

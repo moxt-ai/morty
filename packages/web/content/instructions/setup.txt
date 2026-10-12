@@ -96,10 +96,9 @@ means the binding is active and the selected Runtime/agent is online; it does no
 claim a successful test message.
 
 Return the exact clickable browser `url` and resolved `workspace` in the current TUI.
-The QR payload is the exact same URL, and the ready result provides a browser-safe PNG
-data URL at `qrDataUrl` and an owner-only PNG at `qrPath`. If the TUI supports inline
-images, display one of those PNG representations. Otherwise, return the clickable URL
-without a QR code. Do not read or output `qrTextPath`, and never print the text QR. The
+The QR payload is the exact same URL, and the ready result provides an owner-only PNG
+in the system temporary directory at `qrPath`. If the TUI supports inline images,
+display that PNG. Otherwise, return the clickable URL without a QR code. The
 link identifies this harness session
 so Chat can import it and open it after the handoff. The link can be successfully
 opened at most **five times**, does not expire, and opens the same user and Machine each time. Never open,

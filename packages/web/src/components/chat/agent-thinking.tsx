@@ -18,6 +18,7 @@ export type AgentThinkingEntry =
           readonly id: string;
           readonly kind: "reasoning";
           readonly messageId: string | null;
+          readonly omitted: boolean;
           readonly text: string;
           readonly truncated: boolean;
       }
@@ -79,6 +80,9 @@ function ReasoningDisclosure({ active, entry }: { readonly active: boolean; read
                             <p className="m-0 text-xs text-copy-secondary">
                                 Earlier reasoning was truncated to the most recent 16K characters.
                             </p>
+                        )}
+                        {entry.omitted && (
+                            <p className="m-0 text-xs text-copy-secondary">(Reasoning details were omitted.)</p>
                         )}
                         <ReasoningContent entry={entry} />
                     </section>
@@ -161,6 +165,7 @@ export function AgentThinking({
         timeline.push({
             entry: {
                 ...first,
+                omitted: reasoning.some((entry) => entry.omitted),
                 text: combined.slice(-REASONING_CHARACTER_LIMIT),
                 truncated: reasoning.some((entry) => entry.truncated) || combined.length > REASONING_CHARACTER_LIMIT,
             },

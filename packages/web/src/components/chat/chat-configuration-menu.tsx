@@ -1,4 +1,4 @@
-import { ChevronDown, LoaderCircle, RefreshCw, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, LoaderCircle, RefreshCw } from "lucide-react";
 import { Tooltip } from "radix-ui";
 import { useState } from "react";
 import { dataTestId } from "@/data-testid";
@@ -67,7 +67,6 @@ export function ChatConfigurationMenu({
                     title={selections.join(" · ")}
                     type="button"
                 >
-                    <SlidersHorizontal aria-hidden="true" className="size-4 shrink-0" />
                     {selectedHarness !== undefined && (
                         <HarnessMark
                             agentRef={selectedHarness.agentRef ?? selectedHarness.value}
