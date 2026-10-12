@@ -1,4 +1,5 @@
 import { getByRole, getByText, queryAllByRole, queryByRole } from "@testing-library/dom";
+import { act } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -371,23 +372,6 @@ test("Given more saved messages than one history page, When older messages load,
         }
         return candidate;
     });
-    let placeholderText: string | null = null;
-    const observer = new MutationObserver((records) => {
-        for (const record of records) {
-            for (const addedNode of record.addedNodes) {
-                if (!(addedNode instanceof Element)) {
-                    continue;
-                }
-                const placeholder = addedNode.matches('[role="status"][aria-label="Loading older messages"]')
-                    ? addedNode
-                    : addedNode.querySelector('[role="status"][aria-label="Loading older messages"]');
-                if (placeholder !== null) {
-                    placeholderText = placeholder.textContent ?? "";
-                }
-            }
-        }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
     await app.user.click(conversation);
     await app.waitForView(() =>
         expect(getByRole(document.body, "textbox", { name: "Message" }).hasAttribute("disabled")).toBe(false),
@@ -396,8 +380,11 @@ test("Given more saved messages than one history page, When older messages load,
     if (!(messages instanceof HTMLElement)) {
         throw new Error("Expected the Session message list");
     }
-    messages.scrollTop = 0;
-    messages.dispatchEvent(new Event("scroll", { bubbles: true }));
+    act(() => {
+        messages.scrollTop = 0;
+        messages.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+    expect(getByRole(document.body, "status", { name: "Loading older messages" }).textContent).not.toContain("Loading");
 
     await app.waitForView(() => {
         expect(
@@ -408,9 +395,6 @@ test("Given more saved messages than one history page, When older messages load,
         ).toBe(true);
         expect(queryByRole(document.body, "status", { name: "Loading older messages" })).toBeNull();
     });
-    observer.disconnect();
-    expect(placeholderText).not.toBeNull();
-    expect(placeholderText).not.toContain("Loading");
 });
 
 test("Given a stale Session link, When the user opens it, Then the Session failure replaces the empty landing", {
