@@ -79,7 +79,7 @@ type PreparedIdentity = SetupIdentity | PairIdentity;
 
 type HarnessReadinessWait = { readonly kind: "pairing" } | { readonly kind: "installing"; readonly deadline: number };
 
-const HARNESS_INSTALL_TIMEOUT_MILLISECONDS = 30_000;
+const HARNESS_INSTALL_TIMEOUT_MILLISECONDS = 60_000;
 
 type Options =
     | {

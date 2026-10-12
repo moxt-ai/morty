@@ -21,7 +21,7 @@ test("Given Claude Code's adapter is installing, When a user pairs the Machine, 
     );
 });
 
-test("Given Claude Code's adapter stays installing, When a user pairs the Machine, Then setup times out after thirty seconds", async ({
+test("Given Claude Code's adapter stays installing, When a user pairs the Machine, Then setup times out after sixty seconds", async ({
     runtime,
 }) => {
     await runtime.openChat();
@@ -30,7 +30,7 @@ test("Given Claude Code's adapter stays installing, When a user pairs the Machin
 
     await expect(runtime.followInstructions(instructionUrl)).rejects.toThrow(/HARNESS_INSTALL_TIMEOUT/u);
 
-    expect(runtime.setupElapsedMilliseconds()).toBe(30_000);
+    expect(runtime.setupElapsedMilliseconds()).toBe(60_000);
 });
 
 test("Given another Project has a managed Runtime, When pair redeems a Bot ticket, Then it creates a fresh Runtime for the ticket Project", async ({
