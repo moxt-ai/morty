@@ -1,11 +1,13 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { once } from "node:events";
 import { constants } from "node:fs";
-import { chmod, lstat, mkdir, open, readFile, realpath, rename, rm } from "node:fs/promises";
+import { mkdir, open, readFile, realpath, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
+import { validateLocalPath } from "@moxt-ai/mobius/filesystem";
+import { executableLaunch, findExecutableOnPath } from "@moxt-ai/mobius/process";
 import { decodeIdentifier } from "@moxt-ai/mobius-protocol";
 import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
@@ -201,16 +203,17 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function privatePath(path: string, directory: boolean) {
-        const stat = await lstat(path);
-        if (
-            stat.isSymbolicLink() ||
-            (directory ? !stat.isDirectory() : !stat.isFile()) ||
-            process.getuid === undefined ||
-            stat.uid !== process.getuid()
-        ) {
-            fail("UNSAFE_CONFIG_PATH");
+        try {
+            await validateLocalPath(path, directory, true, signal);
+        } catch (cause) {
+            if (signal.aborted) {
+                signal.throwIfAborted();
+            }
+            if (errorCode(cause) === "ENOENT") {
+                throw cause;
+            }
+            fail("UNSAFE_CONFIG_PATH", cause instanceof Error ? cause : undefined);
         }
-        await chmod(path, directory ? 0o700 : 0o600);
     }
 
     async function prepareDirectory(documents: string) {
@@ -229,16 +232,16 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
         try {
             const resolved = await realpath(requested);
-            const stat = await lstat(resolved);
-            if (!stat.isDirectory() || process.getuid === undefined || stat.uid !== process.getuid()) {
-                fail("UNSAFE_WORKING_DIRECTORY");
-            }
+            await validateLocalPath(resolved, true, false, signal);
             return resolved;
         } catch (cause) {
+            if (signal.aborted) {
+                signal.throwIfAborted();
+            }
             if (errorCode(cause) === "UNSAFE_WORKING_DIRECTORY") {
                 throw cause;
             }
-            fail("WORKING_DIRECTORY_UNAVAILABLE");
+            fail(errorCode(cause) === "ENOENT" ? "WORKING_DIRECTORY_UNAVAILABLE" : "UNSAFE_WORKING_DIRECTORY");
         }
     }
 
@@ -267,6 +270,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             0o600,
         );
         try {
+            await privatePath(path, false);
             await file.writeFile(value);
             await file.sync();
         } finally {
@@ -463,9 +467,16 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         );
         let child: ChildProcess | undefined;
         try {
-            child = spawn("mobius", args, {
+            await privatePath(logPath, false);
+            const executable = await findExecutableOnPath("mobius", process.env);
+            if (executable === null) {
+                fail("RUNTIME_NOT_INSTALLED");
+            }
+            const launch = executableLaunch(executable.path, args);
+            child = spawn(launch.command, [...launch.arguments], {
                 cwd,
                 stdio: ["ignore", log.fd, log.fd],
+                windowsHide: true,
             });
             await once(child, "spawn", { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) });
             if (child.pid === undefined || !Number.isSafeInteger(child.pid) || child.pid < 2) {

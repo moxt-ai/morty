@@ -69,6 +69,9 @@ test("Given setup and pairing documents, When users fetch them from configured a
         expect(document).toContain('BASE_URL="https://chat.example"\n');
         expect(document).not.toMatch(/^BASE_URL=.*\bnode\b/mu);
         expect(document).toContain("https://chat.example/setup.mjs");
+        expect(document).toContain('$env:DOCUMENT_DIR = [Environment]::GetFolderPath("MyDocuments")');
+        expect(document).toContain("--cwd $PWD.Path");
+        expect(document).toContain("```powershell");
         expect(document).not.toMatch(/\{\{.*\}\}|preview\.example|paradev\.biz|paraflow\.biz|token=ticket/);
     }
     expect(documents.get("pair")).toContain("existing user, Machine, and workspace");

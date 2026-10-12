@@ -2,9 +2,15 @@ import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { closeSync, openSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import {
+    executableLaunch,
+    findExecutableOnPath,
+    resolveExecutablePath,
+    stopProcessTree,
+} from "@moxt-ai/mobius/process";
 import type { Browser, BrowserContext, Page } from "playwright-core";
 
 interface ErrorRecord {
@@ -38,6 +44,16 @@ type BrowserState =
       };
 
 const execute = promisify(execFile);
+
+async function localLaunch(command: string, args: readonly string[]) {
+    const executable = isAbsolute(command)
+        ? await resolveExecutablePath(command)
+        : await findExecutableOnPath(command, process.env);
+    if (executable === null) {
+        throw new Error(`A supported executable is required: ${command}`);
+    }
+    return executableLaunch(executable.path, args);
+}
 
 function errorRecord(error: unknown): ErrorRecord {
     if (!(error instanceof Error)) {
@@ -151,22 +167,26 @@ export class E2EHarness {
 
     async run(command: string, args: readonly string[], options: ProcessOptions = {}) {
         this.log(`RUN ${options.label ?? `${command} ${args.join(" ")}`}`);
-        return await execute(command, args, {
+        const launch = await localLaunch(command, args);
+        return await execute(launch.command, launch.arguments, {
             cwd: options.cwd ?? fileURLToPath(new URL("../../..", import.meta.url)),
             env: { ...process.env, ...options.env },
             maxBuffer: 16 * 1024 * 1024,
             signal: this.signal,
+            windowsHide: true,
         });
     }
 
     async start(name: string, command: string, args: readonly string[], options: ProcessOptions = {}) {
+        const launch = await localLaunch(command, args);
         const logPath = join(this.artifactDirectory, `${name}.log`);
         const output = openSync(logPath, "a", 0o600);
-        const child = spawn(command, args, {
+        const child = spawn(launch.command, launch.arguments, {
             cwd: options.cwd ?? fileURLToPath(new URL("../../..", import.meta.url)),
             detached: true,
             env: { ...process.env, ...options.env },
             stdio: ["ignore", output, output],
+            windowsHide: true,
         });
         const processRecord = { child, logPath, name, output };
         this.children.push(processRecord);
@@ -178,7 +198,7 @@ export class E2EHarness {
         return child;
     }
 
-    async terminate(name: string, signal: NodeJS.Signals = "SIGTERM") {
+    async terminate(name: string) {
         const processIndex = this.children.findIndex((candidate) => candidate.name === name);
         const processRecord = this.children[processIndex];
         if (
@@ -189,11 +209,7 @@ export class E2EHarness {
         ) {
             throw new Error(`${name} is not running`);
         }
-        process.kill(-processRecord.child.pid, signal);
-        await Promise.race([
-            new Promise((resolveExit) => processRecord.child.once("exit", resolveExit)),
-            new Promise((_, reject) => setTimeout(() => reject(new Error(`${name} did not stop in time`)), 2_000)),
-        ]);
+        await stopProcessTree(processRecord.child);
         this.children.splice(processIndex, 1);
         closeSync(processRecord.output);
     }
@@ -350,14 +366,7 @@ export class E2EHarness {
     async #stopProcess({ child, name, output }: ProcessRecord) {
         try {
             if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) {
-                process.kill(-child.pid, "SIGTERM");
-                await Promise.race([
-                    new Promise((resolveExit) => child.once("exit", resolveExit)),
-                    new Promise((resolveTimeout) => setTimeout(resolveTimeout, 2_000)),
-                ]);
-                if (child.exitCode === null && child.signalCode === null) {
-                    process.kill(-child.pid, "SIGKILL");
-                }
+                await stopProcessTree(child);
             }
         } catch (error) {
             if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) {
