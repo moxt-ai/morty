@@ -57,7 +57,9 @@ export function EditToolPresentation({
             state={entry.state}
             title={entry.title}
         >
-            <div className="mt-1 ml-5 grid min-w-0 gap-2 text-xs">{children}</div>
+            {children !== null && children !== undefined && (
+                <div className="mt-1 ml-5 grid min-w-0 gap-2 text-xs">{children}</div>
+            )}
         </ToolCallDisclosure>
     );
 }

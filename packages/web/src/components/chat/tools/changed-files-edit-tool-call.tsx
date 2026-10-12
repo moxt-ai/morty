@@ -40,19 +40,24 @@ export function ChangedFilesEditToolCall({ autoOpen, entry }: ToolRendererProps)
     if (changes === null) {
         return null;
     }
+    const pathsWithoutRichContent = changes.changes.filter(
+        (path) => !entry.content.some((content) => content.type === "diff" && content.path === path),
+    );
     return (
         <EditToolPresentation autoOpen={autoOpen} entry={entry}>
-            <ul aria-label="Changed files" className="grid gap-1">
-                {changes.changes.map((path, index) => (
-                    <li
-                        className="truncate font-mono text-copy-secondary"
-                        key={`${path}:${index.toString()}`}
-                        title={path}
-                    >
-                        {path}
-                    </li>
-                ))}
-            </ul>
+            {pathsWithoutRichContent.length > 0 ? (
+                <ul aria-label="Changed files" className="grid gap-1">
+                    {pathsWithoutRichContent.map((path, index) => (
+                        <li
+                            className="truncate font-mono text-copy-secondary"
+                            key={`${path}:${index.toString()}`}
+                            title={path}
+                        >
+                            {path}
+                        </li>
+                    ))}
+                </ul>
+            ) : null}
         </EditToolPresentation>
     );
 }
