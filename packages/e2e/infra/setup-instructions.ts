@@ -23,17 +23,16 @@ export async function followSetupInstructions(options: {
     const document = await fetch(url, { signal: options.signal, redirect: "error" });
     assert.equal(document.status, 200);
     const markdown = await document.text();
-    assert.ok(markdown.includes(`BASE_URL="${url.origin}"`));
-    const command = markdown.match(/^node "\$SCRIPT_DIR\/setup\.mjs" (.+)$/mu)?.[1];
+    assert.ok(markdown.includes(`Chat origin: ${url.origin}`));
+    const command = markdown.match(/^node <downloaded-setup\.mjs> (.+)$/mu)?.[1];
     assert.ok(command);
     const args = command.split(/\s+/u).map((argument) =>
         argument
             .replaceAll('"', "")
-            .replaceAll("$BASE_URL", url.origin)
-            .replaceAll("$PWD", options.cwd)
-            .replaceAll("$HARNESS", options.harness)
-            .replaceAll("$SESSION_ID", options.sessionId ?? "")
-            .replaceAll("$TOKEN", url.searchParams.get("token") ?? ""),
+            .replaceAll("<absolute-current-workspace>", options.cwd)
+            .replaceAll("<own-harness-id>", options.harness)
+            .replaceAll("<exact-current-session-id>", options.sessionId ?? "")
+            .replaceAll("<one-use-ticket>", url.searchParams.get("token") ?? ""),
     );
     const download = markdown.match(/https?:\/\/[^\s`]+\/setup\.mjs/u)?.[0];
     assert.ok(download);

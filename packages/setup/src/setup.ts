@@ -12,6 +12,7 @@ import { decodeIdentifier } from "@moxt-ai/mobius-protocol";
 import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
 import QRCode from "qrcode";
+import { resolveDocumentsDirectory } from "./platform/index.ts";
 
 export interface SetupRuntime {
     readonly run: (
@@ -833,7 +834,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const options = readOptions();
         const base = options.base;
         const cwd = await resolveWorkingDirectory(options.cwd);
-        const directory = await prepareDirectory(host.documents);
+        const directory = await prepareDirectory(await resolveDocumentsDirectory(host.documents, signal));
         const lock = await acquireLock(directory);
         try {
             let context: Context =

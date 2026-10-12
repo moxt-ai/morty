@@ -1,0 +1,26 @@
+# Windows PowerShell setup reference
+
+Download artifact: {{BASE_URL}}/setup.mjs
+
+Use Windows Node and the selected Windows Agent from the original workspace.
+Use `npm.cmd` to avoid PowerShell script execution-policy issues. WSL users should
+use the POSIX reference with Linux Node and Linux paths instead.
+
+```powershell
+$BASE_URL = "{{BASE_URL}}"
+$WORKSPACE = $PWD.Path
+npm.cmd install --global @moxt-ai/mobius@latest
+$SCRIPT_DIR = Join-Path ([IO.Path]::GetTempPath()) ("morty-setup-" + [Guid]::NewGuid())
+New-Item -ItemType Directory -Path $SCRIPT_DIR | Out-Null
+$SCRIPT = Join-Path $SCRIPT_DIR "setup.mjs"
+Invoke-WebRequest -Uri "$BASE_URL/setup.mjs" -OutFile $SCRIPT -TimeoutSec 45 -MaximumRedirection 0
+Get-Content -LiteralPath $SCRIPT
+```
+
+Stop on an install/download error. Inspect the script before execution.
+Use `node $SCRIPT setup --base-url $BASE_URL --cwd $WORKSPACE --harness $HARNESS --session-id $SESSION_ID`
+with your own harness ID and exact current session ID. For pairing, use
+`node $SCRIPT pair --base-url $BASE_URL --cwd $WORKSPACE "--token=$TOKEN" --harness $HARNESS`.
+Assign these values separately before executing; never interpolate the one-use ticket
+into downloaded code. Do not set Documents yourself unless setup reports
+`DOCUMENT_DIR_REQUIRED`; it resolves the Windows known folder, including redirection.

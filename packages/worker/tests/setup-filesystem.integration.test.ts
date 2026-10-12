@@ -1,8 +1,10 @@
-import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, stat, symlink } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { once } from "node:events";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
 import { createIdentityFixture } from "./support/identity-fixture.ts";
@@ -146,3 +148,127 @@ test("Given a junction replaces the private Morty directory, When setup validate
         await rm(directory, { recursive: true, force: true });
     }
 });
+
+test.runIf(process.platform === "linux")(
+    "Given Linux has a configured XDG Documents folder and no DOCUMENT_DIR override, When a user runs the setup CLI, Then identity is saved in that folder and cancellation releases setup",
+    async () => {
+        const directory = await mkdtemp(join(tmpdir(), "morty-setup-xdg-"));
+        const documents = join(directory, "Redirected Documents & spaces");
+        const configuration = join(directory, "xdg-config");
+        const workspace = join(directory, "workspace");
+        await Promise.all([documents, configuration, workspace].map((path) => mkdir(path)));
+        await writeFile(join(configuration, "user-dirs.dirs"), `XDG_DOCUMENTS_DIR="${documents}"\n`);
+        const fixture = await createIdentityFixture({ appOrigin: await localOrigin() });
+        const environment = Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== "DOCUMENT_DIR"));
+        const child = spawn(
+            process.execPath,
+            [
+                fileURLToPath(new URL("../../setup/src/cli.ts", import.meta.url)),
+                "setup",
+                "--base-url",
+                fixture.origin,
+                "--cwd",
+                workspace,
+                "--harness",
+                "codex",
+                "--session-id",
+                "xdg-current-session",
+            ],
+            {
+                env: { ...environment, HOME: directory, XDG_CONFIG_HOME: configuration },
+                stdio: ["ignore", "pipe", "pipe"],
+                signal: AbortSignal.timeout(30000),
+            },
+        );
+        const exited = once(child, "exit");
+        let output = "";
+        let cancellationRequested = false;
+        child.stdout.on("data", (chunk) => {
+            output += chunk.toString();
+            if (!cancellationRequested && output.includes('"status":"identity_ready"')) {
+                cancellationRequested = true;
+                child.kill("SIGINT");
+            }
+        });
+        child.stderr.resume();
+        try {
+            const [code] = await exited;
+            expect(code, output).toBe(1);
+            expect(output).toContain('"status":"identity_ready"');
+            const saved: unknown = JSON.parse(await readFile(join(documents, "morty/config.json"), "utf8"));
+            expect(saved).toMatchObject({ base_url: fixture.origin });
+            expect(output).toContain('"code":"CANCELLED"');
+        } finally {
+            child.kill();
+            await fixture.close();
+            await rm(directory, { recursive: true, force: true });
+        }
+    },
+);
+
+test.runIf(process.env["MORTY_VERIFY_SYSTEM_DOCUMENTS"] === "true" && process.platform === "darwin")(
+    "Given macOS provides its Documents folder and DOCUMENT_DIR is unset, When setup connects and the user cancels, Then the private identity is saved in the system Documents folder",
+    async () => {
+        if (process.env["CI"] !== "true" || process.env["DOCUMENT_DIR"] !== undefined) {
+            throw new Error("System Documents verification requires an isolated CI runner without DOCUMENT_DIR");
+        }
+        const { stdout } = await promisify(execFile)(
+            "/usr/bin/osascript",
+            ["-e", "POSIX path of (path to documents folder)"],
+            {
+                timeout: 10000,
+                signal: AbortSignal.timeout(10000),
+            },
+        );
+        const documents = stdout.trim();
+        const configuration = join(documents, "morty");
+        try {
+            await stat(configuration);
+            throw new Error("Refusing to overwrite existing Morty configuration");
+        } catch (cause) {
+            if (!(cause instanceof Error && "code" in cause && cause.code === "ENOENT")) {
+                throw cause;
+            }
+        }
+        await mkdir(documents, { recursive: true });
+        const workspace = await mkdtemp(join(tmpdir(), "morty-macos-workspace-"));
+        const fixture = await createIdentityFixture({ appOrigin: await localOrigin() });
+        const cancellation = new AbortController();
+        const events: Readonly<Record<string, unknown>>[] = [];
+        try {
+            const code = await runSetup(
+                [
+                    "setup",
+                    "--base-url",
+                    fixture.origin,
+                    "--cwd",
+                    workspace,
+                    "--harness",
+                    "codex",
+                    "--session-id",
+                    "macos-current-session",
+                ],
+                {
+                    documents: "",
+                    signal: cancellation.signal,
+                    emit: (event) => {
+                        events.push(event);
+                        if (event["status"] === "identity_ready") {
+                            cancellation.abort();
+                        }
+                    },
+                },
+            );
+            expect(code).toBe(1);
+            expect(events).toContainEqual(expect.objectContaining({ status: "identity_ready" }));
+            expect(events.at(-1)).toMatchObject({ error: { code: "CANCELLED" } });
+            const saved: unknown = JSON.parse(await readFile(join(configuration, "config.json"), "utf8"));
+            expect(saved).toMatchObject({ base_url: fixture.origin });
+            expect((await stat(join(configuration, "config.json"))).mode & 0o777).toBe(0o600);
+        } finally {
+            await fixture.close();
+            await rm(configuration, { recursive: true, force: true });
+            await rm(workspace, { recursive: true, force: true });
+        }
+    },
+);

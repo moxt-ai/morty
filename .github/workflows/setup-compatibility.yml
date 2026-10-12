@@ -1,0 +1,55 @@
+name: macOS setup compatibility
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  setup:
+    name: Verify setup and real Agents on macOS
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
+      - name: Install real Agents and production adapter
+        run: >-
+          npm install --global
+          @openai/codex@latest
+          @anthropic-ai/claude-code@2.1.273
+          @agentclientprotocol/claude-agent-acp@0.73.0
+          opencode-ai@1.18.29
+      - name: Record versions
+        run: |
+          codex --version
+          claude --version
+          opencode --version
+      - name: Verify instruction delivery and native Documents resolution
+        env:
+          MORTY_VERIFY_SYSTEM_DOCUMENTS: 'true'
+        run: >-
+          pnpm --filter @moxt-ai/morty-worker exec vitest run
+          tests/instruction-documents.integration.test.ts
+          tests/setup-filesystem.integration.test.ts
+          --maxWorkers=1
+      - name: Install test browser
+        run: pnpm --filter @moxt-ai/morty-e2e exec playwright install chromium
+      - name: Verify setup pairing and reconnection
+        run: pnpm --filter @moxt-ai/morty-e2e exec playwright test setup.e2e.test.ts --workers=1
+      - name: Verify real Agent turns through Mobius
+        run: >-
+          pnpm --dir third-party/mobius/packages/cli exec vitest run
+          tests/agents/codex-live-turn.integration.test.ts
+          tests/agents/codex-native-recovery.integration.test.ts
+          tests/agents/claude-live-turn.integration.test.ts
+          tests/agents/claude-native-recovery.integration.test.ts
+          tests/agents/opencode-live-turn.integration.test.ts
+          tests/agents/opencode-native-recovery.integration.test.ts
+          --maxWorkers=1

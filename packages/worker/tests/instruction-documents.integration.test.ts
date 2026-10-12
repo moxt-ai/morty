@@ -65,23 +65,40 @@ test("Given setup and pairing documents, When users fetch them from configured a
         documents.set(name, document);
         expect(document).toMatch(/^# (?:Set up|Pair) Morty\n/);
         expect(document).not.toContain("change-policy");
-        expect(document).toContain('BASE_URL="https://chat.example"');
-        expect(document).toContain('BASE_URL="https://chat.example"\n');
-        expect(document).not.toMatch(/^BASE_URL=.*\bnode\b/mu);
+        expect(document).toContain("Chat origin: https://chat.example");
         expect(document).toContain("https://chat.example/setup.mjs");
-        expect(document).toContain('$env:DOCUMENT_DIR = [Environment]::GetFolderPath("MyDocuments")');
-        expect(document).toContain("--cwd $PWD.Path");
-        expect(document).toContain("```powershell");
+        expect(document).toContain("https://chat.example/setup-help/windows.md");
+        expect(document).toContain("https://chat.example/setup-help/posix.md");
+        expect(document).toContain("DOCUMENT_DIR");
+        expect(document).not.toContain("```powershell");
+        expect(document).not.toContain("```sh");
+        expect(document.length).toBeLessThan(4000);
         expect(document).not.toMatch(/\{\{.*\}\}|preview\.example|paradev\.biz|paraflow\.biz|token=ticket/);
     }
     expect(documents.get("pair")).toContain("existing user, Machine, and workspace");
-    expect(documents.get("pair")).toContain('TOKEN="<one-use token from the supplied URL>"');
-    expect(documents.get("pair")).toContain('node "$SCRIPT_DIR/setup.mjs" pair --base-url "$BASE_URL"');
-    expect(documents.get("pair")).toContain("Mobius owns Runtime connection state and identifiers");
-    expect(documents.get("setup")).toContain('SESSION_ID="<current harness session ID>"');
-    expect(documents.get("setup")).toContain('node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL"');
-    expect(documents.get("setup")).toContain("first reconnects a Mobius-managed");
-    expect(documents.get("setup")).toContain("Do not retain or back up App");
+    expect(documents.get("pair")).toContain("--token=<one-use-ticket>");
+    expect(documents.get("pair")).toContain("--harness <own-harness-id>");
+    expect(documents.get("setup")).toContain("--session-id <exact-current-session-id>");
+    expect(documents.get("setup")).toContain("--harness <own-harness-id>");
+    expect(documents.get("setup")).toContain("Never guess");
+
+    for (const platform of ["windows", "posix"]) {
+        const response = await worker.fetch(new Request(`https://preview.example/setup-help/${platform}.md`), {
+            APP_ORIGIN: "https://chat.example",
+        });
+        expect(response.status).toBe(200);
+        const reference = await response.text();
+        expect(reference).toContain("https://chat.example/setup.mjs");
+        expect(reference).not.toMatch(/\{\{.*\}\}|preview\.example/);
+        if (platform === "windows") {
+            expect(reference).toContain("npm.cmd");
+            expect(reference).toContain("-MaximumRedirection 0");
+            expect(reference).toContain("$PWD.Path");
+        } else {
+            expect(reference).toContain("--max-redirs 0");
+            expect(reference).toContain('"$PWD"');
+        }
+    }
 
     for (const origin of ["https://custom.example", "http://localhost:5173"]) {
         for (const name of ["setup", "pair"]) {
@@ -90,7 +107,7 @@ test("Given setup and pairing documents, When users fetch them from configured a
                 {},
             );
             expect(response.status).toBe(200);
-            expect(await response.text()).toContain(`BASE_URL="${origin}"`);
+            expect(await response.text()).toContain(`Chat origin: ${origin}`);
         }
     }
 
@@ -122,7 +139,7 @@ test("Given rendered pairing instructions at the edge, When users fetch differen
         const second = await runtime.dispatchFetch("https://preview.example/pair.md?token=second");
         expect(second.headers.get("X-Instruction-Cache")).toBe("HIT");
         expect(await second.text()).toBe(document);
-        expect(document).toContain('BASE_URL="https://chat.example"');
+        expect(document).toContain("Chat origin: https://chat.example");
         expect(document).not.toMatch(/token=first|token=second/);
 
         const otherHost = await runtime.dispatchFetch("https://other.example/pair.md?token=third");

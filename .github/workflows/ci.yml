@@ -7,6 +7,11 @@ on:
   merge_group:
   workflow_dispatch:
     inputs:
+      verify_macos_setup:
+        description: Run macOS setup compatibility instead of deployment
+        required: false
+        type: boolean
+        default: false
       environment:
         description: Environment to deploy from main
         required: true
@@ -24,9 +29,16 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  macos-setup:
+    if: github.event_name == 'workflow_dispatch' && inputs.verify_macos_setup
+    uses: ./.github/workflows/setup-compatibility.yml
+    secrets: inherit
+
   validate-worker-config:
     name: Validate Worker config (${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }})
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: >-
+      !inputs.verify_macos_setup &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
@@ -108,6 +120,7 @@ jobs:
   deploy:
     needs: [validate-worker-config]
     if: >-
+      !inputs.verify_macos_setup &&
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' && vars.ENABLE_AUTOMATIC_MORTY_STAGING_DEPLOY == 'true'))

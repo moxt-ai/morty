@@ -1,6 +1,8 @@
 import * as v from "valibot";
 import pairTemplate from "../../../../../web/content/instructions/pair.txt?raw";
 import setupTemplate from "../../../../../web/content/instructions/setup.txt?raw";
+import posixTemplate from "../../../../../web/content/instructions/setup-posix.txt?raw";
+import windowsTemplate from "../../../../../web/content/instructions/setup-windows.txt?raw";
 
 const instructionOriginSchema = v.pipe(
     v.string(),
@@ -9,7 +11,9 @@ const instructionOriginSchema = v.pipe(
     v.check((value) => URL.canParse(value) && new URL(value).origin === value),
 );
 
-export type InstructionDocument = "pair" | "setup";
+const templates = { pair: pairTemplate, setup: setupTemplate, windows: windowsTemplate, posix: posixTemplate };
+
+export type InstructionDocument = keyof typeof templates;
 
 export function instructionOrigin(value: unknown): string | null {
     const origin = v.safeParse(instructionOriginSchema, value);
@@ -17,6 +21,6 @@ export function instructionOrigin(value: unknown): string | null {
 }
 
 export function renderInstructionDocument(document: InstructionDocument, origin: string): string {
-    const template = document === "setup" ? setupTemplate : pairTemplate;
+    const template = templates[document];
     return template.replaceAll("{{BASE_URL}}", origin);
 }

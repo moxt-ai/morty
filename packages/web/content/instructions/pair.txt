@@ -1,108 +1,52 @@
 # Pair Morty
 
-Morty is a browser chat app that lets the user continue working with a local coding
-agent in the selected workspace. Pairing connects your harness as that local agent so
-the user can direct the work from Morty while the Runtime remains online.
-Stop working on the user's task in this session. Complete only this pairing; the user
-will handle their work through Morty.
+Connect this coding Agent to the user's existing user, Machine, and workspace.
+Stop the original task; complete only this pairing in the current session.
 
-The user supplied `follow <origin>/pair.md?token=...`. That token is a one-use
-ticket, valid for **10 minutes**, for their existing user, Machine, and workspace.
-Fetching this document does not consume it. Do not create another user or Machine.
-Pairing takes its identity and Machine only from the supplied ticket. After redemption,
-it fully validates the returned identity, Machine, workspace, and expected Runtime before
-continuing. The verified Chat identity, Machine, and workspace are saved to `config.json`;
-Mobius owns Runtime connection state and identifiers. Do not retain or back up App,
-Runtime, Connection, Channel, or pairing identifiers, and do not ask for an additional
-replacement confirmation.
+Chat origin: {{BASE_URL}}
 
 ## Run
 
-1. Use the server-provided Chat origin exactly: `BASE_URL="{{BASE_URL}}"`.
-   Assign shell variables before the command that expands them. Never use
-   `BASE_URL=... node ... --base-url "$BASE_URL"`; the shell expands `BASE_URL`
-   before that command-scoped assignment takes effect.
-   The script calls the Chat API at `{{BASE_URL}}/morty/api/*`.
-   The server supplies the Runtime URL separately as `pairing.relayUrl`.
+1. Identify the actual operating system, current shell, and original workspace.
+   Keep Node, the Agent, and workspace in the same operating system. WSL is Linux;
+   do not mix its executables or paths with native Windows ones.
+2. Ensure Node.js 22.13.0 or newer, npm, and the latest `@moxt-ai/mobius` are installed.
+   Choose your own harness: Codex = `codex`, Claude Code = `claude`,
+   OpenCode = `opencode`, Oh My Pi = `oh-my-pi`. Honor an explicit user choice.
+   Complete its installation/authentication if needed; do not silently select another.
+3. Take the one-use ticket from the supplied instruction URL. Download
+   {{BASE_URL}}/setup.mjs to a private temporary directory, with a finite timeout
+   and no redirects, and inspect it. Read only the matching reference if needed:
+   [Windows PowerShell]({{BASE_URL}}/setup-help/windows.md) or
+   [macOS/Linux POSIX shell]({{BASE_URL}}/setup-help/posix.md).
+4. Run the following command with real values and shell-appropriate quoting.
+   The workspace is the original absolute working directory, not the download directory.
 
-   Use `DOCUMENT_DIR` from the environment if provided; otherwise resolve the user's
-   absolute document directory. Ask if unavailable; do not use a repository directory
-   as a substitute.
-2. Ensure Node.js 22.13.0 or newer and npm are available. Install or update the
-   persistent manager with `npm install --global @moxt-ai/mobius@latest`.
-3. Download `{{BASE_URL}}/setup.mjs` to a private local directory, with a
-   finite timeout and no redirects. Inspect it before running.
-4. Set `TOKEN` from the supplied URL. Set `HARNESS` to **your own harness ID**:
-   `codex` when running in Codex, `claude` in Claude Code, `opencode` in OpenCode,
-   or `oh-my-pi` in Oh My Pi.
-   Honor an explicit user choice instead. Do not ask the user to choose when your
-   own harness is available. Complete its installation/authentication if needed.
-5. Run the command from the user's current working directory. The script resolves and
-   validates `$PWD`, then uses it as the paired Runtime's default Morty workspace.
-
-Run this command in the current TUI and keep the pairing flow and its progress there.
-It registers the Runtime with the per-user Mobius manager, which remains online after
-this command and the current conversation exit.
-
-```sh
-BASE_URL="{{BASE_URL}}"
-SCRIPT_DIR="<private directory containing setup.mjs>"
-TOKEN="<one-use token from the supplied URL>"
-HARNESS="<codex, claude, opencode, or oh-my-pi>"
-node "$SCRIPT_DIR/setup.mjs" pair --base-url "$BASE_URL" --cwd "$PWD" --token="$TOKEN" --harness "$HARNESS"
+```text
+node <downloaded-setup.mjs> pair --base-url {{BASE_URL}} --cwd <absolute-current-workspace> --token=<one-use-ticket> --harness <own-harness-id>
 ```
 
-On native Windows, use PowerShell with the Windows installation of Node and the
-selected Agent. Preserve DOCUMENT_DIR if supplied; otherwise resolve the Windows
-Documents known folder, including redirected or OneDrive Documents. Credentials
-are protected by a user-only Windows ACL; linked configuration paths are refused.
+The script resolves Documents and protects its configuration using the operating
+system's filesystem permissions. Preserve `DOCUMENT_DIR` if supplied; otherwise
+leave it unset. On `DOCUMENT_DIR_REQUIRED`, ask for an existing absolute Documents
+path and retry with that environment variable. Do not use a repository as a substitute.
+Pair always redeems its ticket and creates a fresh Runtime for that ticket's
+Project and Machine; an expired or consumed ticket needs a new web instruction.
+Mobius owns Runtime connection state and identifiers. Do not replace other
+connections or save/back up Runtime or pairing identifiers yourself.
+No separate prepare, bind, or finish command is needed.
 
-```powershell
-$BASE_URL = "{{BASE_URL}}"
-$SCRIPT_DIR = "<private directory containing setup.mjs>"
-$TOKEN = "<one-use token from the supplied URL>"
-$HARNESS = "<codex, claude, opencode, or oh-my-pi>"
-if (-not $env:DOCUMENT_DIR) {
-    $env:DOCUMENT_DIR = [Environment]::GetFolderPath("MyDocuments")
-}
-node (Join-Path $SCRIPT_DIR "setup.mjs") pair --base-url $BASE_URL --cwd $PWD.Path "--token=$TOKEN" --harness $HARNESS
-```
+## Finish
 
-Install with `npm.cmd install --global @moxt-ai/mobius@latest`. Download using
-`Invoke-WebRequest -Uri "$BASE_URL/setup.mjs" -OutFile (Join-Path $SCRIPT_DIR "setup.mjs") -TimeoutSec 45 -MaximumRedirection 0`
-and inspect it before running. Stop and resolve an empty Documents known folder
-instead of guessing a directory. Reconnecting with setup uses the same PowerShell
-arguments, replacing pair and its token with setup and `--session-id $SESSION_ID`.
+Keep progress in this session and wait for `status: "ready"` or an error (at most
+five minutes). Intermediate runtime/binding messages are not completion. The
+manager keeps the Runtime online after the command exits; a chat reply is a separate check.
 
-This single command exchanges the ticket, creates a fresh Runtime pairing for the
-Project and Machine returned by that ticket and the current working directory, saves only
-the private Chat identity and Machine configuration, and launches the Runtime through the
-singleton local manager. After Runtime pairing reports
-the requested harness, the script immediately requests
-its Machine binding and checks readiness. It does not list or reuse managed Runtime
-connections; those remain online. The setup configuration does not persist App, Runtime, Connection,
-Channel, or pairing identifiers.
+Report: **Your Machine is connected. Return to your Morty page to start chatting.
+Keep the Runtime online.** Include the returned URL, Machine ID, and workspace.
+Do not generate an identity-transfer link or a text QR code.
 
-## Observe and finish
-
-The script streams timestamped JSON progress, including its Runtime PID and private
-log path. It waits at most five minutes. `runtime_started` or `binding_activated` is
-progress; only `status: "ready"` confirms
-an active binding and online Runtime. A successful chat reply is a separate check.
-
-When ready, report in the current TUI: **Your Machine is connected. Return to your
-Morty page to start chatting. Keep the Runtime online.** Include the returned URL,
-Machine ID, and workspace. Do not output a text QR code.
-
-On failure, use `error.code` and the private Runtime log to resolve the problem.
-If `identity_ready` was emitted, set `SESSION_ID` to this current harness session's
-exact ID and reconnect using `node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --cwd "$PWD" --harness "$HARNESS" --session-id "$SESSION_ID"`.
-Setup loads the saved user and Machine and starts Runtime
-pairing fresh; its ready result includes a browser handoff as described in `/setup.md`.
-`HARNESS_UNAVAILABLE` reports the advertised alternatives; repair authentication or
-ask the user before selecting a different harness. Pair always redeems its ticket;
-an expired or consumed ticket requires a fresh web instruction to run pair again.
-
-Durable credentials belong only in private files under `$DOCUMENT_DIR/morty`, not
-command arguments, URLs, chat output, or logs. The CLI `--token` accepts only the
-one-time ticket. Never generate a browser identity-transfer link in this flow.
+On failure, use `error.code` and the private Runtime log. After `identity_ready`,
+reconnect by following [setup]({{BASE_URL}}/setup.md) with your exact current session ID.
+Fix installation/authentication for the selected harness; do not silently choose another.
+Keep credentials private; never output tokens, pairing tickets, or private configuration.
