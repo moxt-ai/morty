@@ -52,6 +52,28 @@ HARNESS="<codex, claude, opencode, or oh-my-pi>"
 node "$SCRIPT_DIR/setup.mjs" pair --base-url "$BASE_URL" --cwd "$PWD" --token="$TOKEN" --harness "$HARNESS"
 ```
 
+On native Windows, use PowerShell with the Windows installation of Node and the
+selected Agent. Preserve DOCUMENT_DIR if supplied; otherwise resolve the Windows
+Documents known folder, including redirected or OneDrive Documents. Credentials
+are protected by a user-only Windows ACL; linked configuration paths are refused.
+
+```powershell
+$BASE_URL = "{{BASE_URL}}"
+$SCRIPT_DIR = "<private directory containing setup.mjs>"
+$TOKEN = "<one-use token from the supplied URL>"
+$HARNESS = "<codex, claude, opencode, or oh-my-pi>"
+if (-not $env:DOCUMENT_DIR) {
+    $env:DOCUMENT_DIR = [Environment]::GetFolderPath("MyDocuments")
+}
+node (Join-Path $SCRIPT_DIR "setup.mjs") pair --base-url $BASE_URL --cwd $PWD.Path "--token=$TOKEN" --harness $HARNESS
+```
+
+Install with `npm.cmd install --global @moxt-ai/mobius@latest`. Download using
+`Invoke-WebRequest -Uri "$BASE_URL/setup.mjs" -OutFile (Join-Path $SCRIPT_DIR "setup.mjs") -TimeoutSec 45 -MaximumRedirection 0`
+and inspect it before running. Stop and resolve an empty Documents known folder
+instead of guessing a directory. Reconnecting with setup uses the same PowerShell
+arguments, replacing pair and its token with setup and `--session-id $SESSION_ID`.
+
 This single command exchanges the ticket, creates a fresh Runtime pairing for the
 Project and Machine returned by that ticket and the current working directory, saves only
 the private Chat identity and Machine configuration, and launches the Runtime through the

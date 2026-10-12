@@ -108,7 +108,11 @@ export class ControlledSetupRuntime implements SetupRuntime {
             signal,
         });
         this.#active.set(connection.connection_id, daemon);
-        void daemon.failure.catch(this.#failed.reject);
+        void daemon.failure.catch((cause) => {
+            if (this.#active.get(connection.connection_id) === daemon) {
+                this.#failed.reject(cause);
+            }
+        });
     }
 
     readonly disconnect = async (): Promise<void> => {

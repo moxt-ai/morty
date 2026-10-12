@@ -54,6 +54,29 @@ SESSION_ID="<current harness session ID>"
 node "$SCRIPT_DIR/setup.mjs" setup --base-url "$BASE_URL" --cwd "$PWD" --harness "$HARNESS" --session-id "$SESSION_ID"
 ```
 
+On native Windows, use PowerShell with the Windows installation of Node and the
+selected Agent. Keep the workspace on Windows; resolve Documents through the
+Windows known folder (including redirected or OneDrive Documents). If DOCUMENT_DIR
+is already supplied, preserve it. The setup secures credentials with a user-only
+Windows ACL and refuses linked configuration paths.
+
+```powershell
+$BASE_URL = "{{BASE_URL}}"
+$SCRIPT_DIR = "<private directory containing setup.mjs>"
+$HARNESS = "<codex, claude, opencode, or oh-my-pi>"
+$SESSION_ID = "<current harness session ID>"
+if (-not $env:DOCUMENT_DIR) {
+    $env:DOCUMENT_DIR = [Environment]::GetFolderPath("MyDocuments")
+}
+node (Join-Path $SCRIPT_DIR "setup.mjs") setup --base-url $BASE_URL --cwd $PWD.Path --harness $HARNESS --session-id $SESSION_ID
+```
+
+Install the manager from PowerShell using `npm.cmd install --global @moxt-ai/mobius@latest`.
+Download with a bounded request and no redirects, for example
+`Invoke-WebRequest -Uri "$BASE_URL/setup.mjs" -OutFile (Join-Path $SCRIPT_DIR "setup.mjs") -TimeoutSec 45 -MaximumRedirection 0`.
+Inspect the downloaded script before running it. Stop and resolve an empty Documents
+known folder instead of guessing a directory.
+
 The command handles identity, Runtime pairing, Runtime launch, Machine binding, and
 readiness. The selected Runtime uses the command's current working directory and joins
 the same singleton manager as every existing pairing. No separate prepare, bind, or

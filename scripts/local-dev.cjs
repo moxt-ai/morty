@@ -21,6 +21,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const net = require("node:net");
+const { pathToFileURL } = require("node:url");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const WRANGLER = path.join(REPO_ROOT, "node_modules", ".bin", "wrangler");
@@ -151,12 +152,30 @@ function parseArguments(argv) {
     return options;
 }
 
-function run(command, args, options = {}) {
+async function localLaunch(command, args) {
+    if (process.platform !== "win32") {
+        return { command, arguments: args };
+    }
+    const { executableLaunch, findExecutableOnPath, resolveExecutablePath } = await import(
+        pathToFileURL(path.join(MOBIUS_ROOT, "packages/cli/src/process/executable.ts")).href
+    );
+    const executable = path.isAbsolute(command)
+        ? await resolveExecutablePath(`${command}${path.extname(command) === "" ? ".cmd" : ""}`)
+        : await findExecutableOnPath(command, process.env);
+    if (executable === null) {
+        throw new Error(`A supported executable is required: ${command}`);
+    }
+    return executableLaunch(executable.path, args);
+}
+
+async function run(command, args, options = {}) {
+    const launch = await localLaunch(command, args);
     return new Promise((resolve, reject) => {
-        const child = spawn(command, args, {
+        const child = spawn(launch.command, launch.arguments, {
             cwd: options.cwd ?? REPO_ROOT,
             env: { ...process.env, ...options.env },
             stdio: ["ignore", "pipe", "pipe"],
+            windowsHide: true,
         });
         let stdout = "";
         let stderr = "";
@@ -179,13 +198,15 @@ function wrangler(args) {
     return run(WRANGLER, args);
 }
 
-function startProcess(name, args, logPath, command = WRANGLER, env = {}, cwd = REPO_ROOT) {
+async function startProcess(name, args, logPath, command = WRANGLER, env = {}, cwd = REPO_ROOT) {
+    const launch = await localLaunch(command, args);
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
     const output = fs.openSync(logPath, "a", 0o600);
-    const child = spawn(command, args, {
+    const child = spawn(launch.command, launch.arguments, {
         cwd,
         env: { ...process.env, ...env },
         detached: true,
+        windowsHide: true,
         stdio: ["ignore", output, output],
     });
     child.unref();
@@ -211,6 +232,10 @@ function isAlive(pid) {
 
 async function stopProcess(pid) {
     if (!isAlive(pid)) {
+        return;
+    }
+    if (process.platform === "win32") {
+        await run(path.join(process.env.SystemRoot, "System32", "taskkill.exe"), ["/PID", String(pid), "/T", "/F"]);
         return;
     }
     const signal = (name) => {
@@ -322,7 +347,7 @@ async function prepareWeb(options) {
     if (appId === undefined || appId.length === 0 || appSecret === undefined || appSecret.length === 0) {
         throw new Error("web mode requires --app-id and --app-secret");
     }
-    const pid = startProcess(
+    const pid = await startProcess(
         "web",
         ["exec", "vite", "--host", "localhost", "--port", String(chatPort)],
         logPath,
@@ -416,7 +441,7 @@ async function prepare(options) {
         ]);
 
         log("starting Platform fixture");
-        const platformPid = startProcess(
+        const platformPid = await startProcess(
             "platform",
             [
                 "dev",
@@ -509,7 +534,7 @@ async function prepare(options) {
         const variableArguments = Object.entries(variables).flatMap(([key, value]) => ["--var", `${key}:${value}`]);
 
         log("starting Chat Worker");
-        const chatPid = startProcess(
+        const chatPid = await startProcess(
             "chat",
             [
                 "dev",
@@ -645,7 +670,7 @@ async function pair(options) {
     fs.writeFileSync(pairLog, "", { mode: 0o600 });
     const shimDirectory = path.join(stack.stateDir, "local-cli-bin");
     fs.mkdirSync(shimDirectory, { recursive: true, mode: 0o700 });
-    const shim = path.join(shimDirectory, "mobius");
+    const shim = path.join(shimDirectory, process.platform === "win32" ? "mobius.cjs" : "mobius");
     fs.writeFileSync(
         shim,
         `#!/usr/bin/env node
@@ -658,8 +683,14 @@ process.exit(result.status ?? 1);
 `,
         { mode: 0o700 },
     );
+    if (process.platform === "win32") {
+        fs.writeFileSync(
+            path.join(shimDirectory, "mobius.cmd"),
+            '@ECHO off\r\nSET dp0=%~dp0\r\nSET "_prog=node"\r\n"%_prog%" "%dp0%\\mobius.cjs" %*\r\n',
+        );
+    }
     log(`pairing harness "${harness}" against workspace ${workspace}`);
-    const runtimePid = startProcess(
+    const runtimePid = await startProcess(
         "pair runtime",
         [setupBundle, "pair", "--base-url", origin, "--cwd", workspace, "--token", pairingToken, "--harness", harness],
         pairLog,
