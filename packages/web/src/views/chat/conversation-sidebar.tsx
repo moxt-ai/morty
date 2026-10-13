@@ -1,13 +1,10 @@
 import {
-    Check,
-    Copy,
     Laptop,
     List,
     LoaderCircle,
     LogOut,
     MessageSquare,
     RefreshCw,
-    Repeat2,
     Share2,
     SquarePen,
     UserRound,
@@ -18,7 +15,6 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
-import { Input } from "../../components/ui/input.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
@@ -109,52 +105,6 @@ function groupConversationsByUpdatedAt(
     return groups;
 }
 
-function UserTokenBackup({ token }: { readonly token: string }) {
-    const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
-    return (
-        <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
-            <p className="text-sm font-medium">Back up this token</p>
-            <p className="text-xs text-muted-foreground">
-                Save this recovery token somewhere secure. It remains usable after remote access ends.
-            </p>
-            <div className="flex items-center gap-2">
-                <Input
-                    aria-label="Current user token"
-                    className="font-mono text-xs"
-                    data-testid={dataTestId.currentUserToken}
-                    onFocus={(event) => event.currentTarget.select()}
-                    readOnly
-                    value={token}
-                />
-                <Button
-                    aria-label="Copy current user token"
-                    data-testid={dataTestId.copyUserToken}
-                    onClick={() => {
-                        if (navigator.clipboard === undefined) {
-                            setCopy("failed");
-                            return;
-                        }
-                        void navigator.clipboard.writeText(token).then(
-                            () => setCopy("copied"),
-                            () => setCopy("failed"),
-                        );
-                    }}
-                    size="icon"
-                    title="Copy current user token"
-                    variant="outline"
-                >
-                    {copy === "copied" ? (
-                        <Check aria-hidden="true" className="size-4" />
-                    ) : (
-                        <Copy aria-hidden="true" className="size-4" />
-                    )}
-                </Button>
-            </div>
-            {copy === "failed" && <p className="text-xs text-destructive">Select and copy the token manually.</p>}
-        </div>
-    );
-}
-
 export function ConversationSidebar({
     activeBot,
     bots,
@@ -172,9 +122,8 @@ export function ConversationSidebar({
     onOpenSession,
     onNewConversation,
     onSessionsLoaded,
-    currentUserToken,
+    currentAccessToken,
     endRemoteAccess,
-    replaceCurrentUser,
     createTransfer,
     sessionStatuses,
     directoryRevision,
@@ -207,11 +156,8 @@ export function ConversationSidebar({
     readonly onOpenSession: (session: OpenMobiusSession) => void;
     readonly onNewConversation: () => void;
     readonly onSessionsLoaded: (botId: string, sessions: readonly ManagedChatSession[]) => void;
-    readonly currentUserToken: (
-        signal: AbortSignal,
-    ) => Promise<{ readonly accessToken: string; readonly token: string }>;
+    readonly currentAccessToken: (signal: AbortSignal) => Promise<string>;
     readonly endRemoteAccess: (token: string, signal: AbortSignal) => Promise<void>;
-    readonly replaceCurrentUser: (currentToken: string, replacementToken: string, signal: AbortSignal) => Promise<void>;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
     readonly sessionStatuses: ReadonlyMap<string, ConversationListStatus>;
 }) {
@@ -223,9 +169,7 @@ export function ConversationSidebar({
     const [expanded, setExpanded] = useState(false);
     const [dialog, setDialog] = useState(false);
     const [sharing, setSharing] = useState(false);
-    const [remoteAccess] = useState(() =>
-        createRemoteAccessStore({ currentToken: currentUserToken, endRemoteAccess, replaceCurrentUser }),
-    );
+    const [remoteAccess] = useState(() => createRemoteAccessStore({ currentAccessToken, endRemoteAccess }));
     const access = useStore(remoteAccess);
     const [networkDiagnostic] = useState(() =>
         createNetworkDiagnosticStore({
@@ -539,19 +483,6 @@ export function ConversationSidebar({
                                         Network latency
                                     </DropdownMenu.Item>
                                     <DropdownMenu.Item
-                                        className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 outline-none data-[highlighted]:bg-accent"
-                                        data-testid={dataTestId.replaceCurrentUser}
-                                        onSelect={() => {
-                                            const controller = lifetime.current;
-                                            if (controller !== null) {
-                                                void access.requestReplacement(controller.signal);
-                                            }
-                                        }}
-                                    >
-                                        <Repeat2 aria-hidden="true" className="size-4" />
-                                        Replace current user
-                                    </DropdownMenu.Item>
-                                    <DropdownMenu.Item
                                         className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-destructive outline-none data-[highlighted]:bg-destructive/10"
                                         data-testid={dataTestId.endRemoteAccess}
                                         onSelect={() => {
@@ -697,7 +628,6 @@ export function ConversationSidebar({
                     testId={dataTestId.endRemoteAccessDialog}
                     onClose={access.cancel}
                 >
-                    <UserTokenBackup token={access.state.token} />
                     {access.state.kind === "failed" && (
                         <p className="mt-3 text-sm text-destructive" role="alert">
                             {access.state.message}
@@ -718,56 +648,6 @@ export function ConversationSidebar({
                             variant="destructive"
                         >
                             {access.state.kind === "ending" ? "Ending…" : "End remote access"}
-                        </Button>
-                    </div>
-                </Dialog>
-            )}
-            {(access.state.kind === "editing-replacement" ||
-                access.state.kind === "replacement-failed" ||
-                access.state.kind === "replacing") && (
-                <Dialog
-                    busy={access.state.kind === "replacing"}
-                    description="Back up the current token, then enter another user token for this workspace. Replacing the user ends remote access for the current user first."
-                    onClose={access.cancel}
-                    testId={dataTestId.replaceCurrentUserDialog}
-                    title="Replace current user"
-                >
-                    <UserTokenBackup token={access.state.currentToken} />
-                    <label className="mt-5 block space-y-2 font-medium" htmlFor="replacement-user-token">
-                        Replacement user token
-                        <Input
-                            aria-label="Replacement user token"
-                            autoComplete="off"
-                            className="font-mono text-xs"
-                            data-testid={dataTestId.replacementUserToken}
-                            disabled={access.state.kind === "replacing"}
-                            id="replacement-user-token"
-                            onChange={(event) => access.updateReplacementToken(event.currentTarget.value)}
-                            placeholder="mobius_recovery_v1.…"
-                            value={access.state.replacementToken}
-                        />
-                    </label>
-                    {access.state.kind === "replacement-failed" && (
-                        <p className="mt-3 text-sm text-destructive" role="alert">
-                            {access.state.message}
-                        </p>
-                    )}
-                    <div className="mt-5 flex justify-end gap-2">
-                        <Button disabled={access.state.kind === "replacing"} onClick={access.cancel} variant="ghost">
-                            Cancel
-                        </Button>
-                        <Button
-                            disabled={
-                                access.state.kind === "replacing" || access.state.replacementToken.trim().length === 0
-                            }
-                            onClick={() => {
-                                const controller = lifetime.current;
-                                if (controller !== null) {
-                                    void access.replace(controller.signal);
-                                }
-                            }}
-                        >
-                            {access.state.kind === "replacing" ? "Replacing…" : "Replace current user"}
                         </Button>
                     </div>
                 </Dialog>

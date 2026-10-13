@@ -35,9 +35,8 @@ import { WorkspaceRegionSelector } from "./workspace-region-selector.tsx";
 export function BotChatHome({
     requests,
     createTransfer,
-    currentUserToken,
+    currentAccessToken,
     endRemoteAccess,
-    replaceCurrentUser,
     projectId,
     replaceWorkspace,
     selectedBotPreference,
@@ -70,11 +69,8 @@ export function BotChatHome({
         | "networkDiagnostic"
     >;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
-    readonly currentUserToken: (
-        signal: AbortSignal,
-    ) => Promise<{ readonly accessToken: string; readonly token: string }>;
+    readonly currentAccessToken: (signal: AbortSignal) => Promise<string>;
     readonly endRemoteAccess: (token: string, signal: AbortSignal) => Promise<void>;
-    readonly replaceCurrentUser: (currentToken: string, replacementToken: string, signal: AbortSignal) => Promise<void>;
     readonly projectId: string;
     readonly selectedBotPreference: SelectedBotPreference;
     readonly replaceWorkspace?: (location: WorkspaceLocation, signal: AbortSignal) => Promise<void>;
@@ -293,7 +289,7 @@ export function BotChatHome({
                     onSelectBot={store.getState().selectBot}
                     requests={requests}
                     createTransfer={createTransfer}
-                    currentUserToken={currentUserToken}
+                    currentAccessToken={currentAccessToken}
                     onOpen={(session) => openManaged(session.isExternal, session.id)}
                     onOpenSession={(session) =>
                         openManaged(session.result.action === "import", session.result.ready.sessionId)
@@ -301,7 +297,6 @@ export function BotChatHome({
                     onNewConversation={newConversation}
                     onSessionsLoaded={onDirectorySessions}
                     endRemoteAccess={endRemoteAccess}
-                    replaceCurrentUser={replaceCurrentUser}
                     key={active.bot.botId}
                 />
             )}
