@@ -10,6 +10,7 @@ export function Select({
     options,
     searchable = false,
     disabled = false,
+    truncateOptions = false,
     testId,
 }: {
     readonly label: string;
@@ -19,6 +20,7 @@ export function Select({
     readonly searchable?: boolean | undefined;
     readonly disabled?: boolean;
     readonly compact?: boolean;
+    readonly truncateOptions?: boolean;
     readonly testId?: string | undefined;
 }) {
     const [search, setSearch] = useState("");
@@ -58,23 +60,30 @@ export function Select({
                 <Primitive.Content
                     position="popper"
                     sideOffset={4}
-                    className="z-[60] max-h-[var(--radix-select-content-available-height)] min-w-[var(--radix-select-trigger-width)] animate-cloud-enter overflow-hidden rounded-lg border border-border bg-card text-foreground shadow-lg motion-reduce:animate-none"
+                    className={`z-[60] max-h-[var(--radix-select-content-available-height)] animate-cloud-enter overflow-hidden rounded-lg border border-border bg-card text-foreground shadow-lg motion-reduce:animate-none ${truncateOptions ? "w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)]" : "min-w-[var(--radix-select-trigger-width)]"}`}
                 >
                     <Primitive.ScrollUpButton className="flex justify-center">
                         <ChevronUp aria-hidden="true" className="size-4" />
                     </Primitive.ScrollUpButton>
-                    <Primitive.Viewport className="p-1">
+                    <Primitive.Viewport className={truncateOptions ? "w-full p-1" : "p-1"}>
                         {visibleOptions.map((option) => (
                             <Primitive.Item
                                 data-testid={dataTestId.sessionConfigValue(option.value)}
                                 key={option.value}
+                                title={truncateOptions ? option.label : undefined}
                                 value={option.value}
-                                className="relative cursor-default select-none rounded-md py-2 pl-7 pr-3 text-[13px] outline-none data-[highlighted]:bg-accent"
+                                className={`relative cursor-default select-none rounded-md py-2 pl-7 pr-3 text-[13px] outline-none data-[highlighted]:bg-accent ${truncateOptions ? "w-full min-w-0" : ""}`}
                             >
                                 <Primitive.ItemIndicator className="absolute left-2">
                                     <Check aria-hidden="true" className="size-3.5" />
                                 </Primitive.ItemIndicator>
-                                <Primitive.ItemText>{option.label}</Primitive.ItemText>
+                                {truncateOptions ? (
+                                    <Primitive.ItemText asChild>
+                                        <span className="block truncate">{option.label}</span>
+                                    </Primitive.ItemText>
+                                ) : (
+                                    <Primitive.ItemText>{option.label}</Primitive.ItemText>
+                                )}
                             </Primitive.Item>
                         ))}
                         {visibleOptions.length === 0 && (

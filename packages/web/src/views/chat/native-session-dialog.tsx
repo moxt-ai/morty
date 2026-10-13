@@ -12,6 +12,8 @@ import { MobiusSessionMessage } from "./mobius-session-message.tsx";
 
 export type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 
+const loadMoreNativeSessions = "load-more-native-sessions";
+
 function NativeSessionDirectorySkeleton() {
     return (
         <div role="status" aria-label="Discovering native sessions">
@@ -89,6 +91,7 @@ export function NativeSessionDialog({
         }
     };
     const fallback = model.agents[0];
+    const selectedEntryId = model.preview.kind === "empty" ? "" : model.preview.entry.entryId;
     return (
         <Dialog
             title="Native Sessions"
@@ -97,10 +100,10 @@ export function NativeSessionDialog({
             busy={model.operation === "import" || model.operation === "fork"}
             wide
         >
-            <div className="grid h-[min(60dvh,36rem)] min-h-0 grid-cols-[minmax(8rem,1fr)_minmax(0,2fr)] overflow-hidden rounded-xl border border-border">
+            <div className="grid h-[min(60dvh,36rem)] min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-xl border border-border sm:grid-cols-[minmax(8rem,1fr)_minmax(0,2fr)] sm:grid-rows-1">
                 <section
                     aria-label="Native sessions"
-                    className="flex min-h-0 flex-col gap-3 border-r border-border bg-muted/30 p-3"
+                    className="flex min-h-0 flex-col gap-3 border-b border-border bg-muted/30 p-3 sm:border-r sm:border-b-0"
                 >
                     <h2 className="font-semibold">Native Session</h2>
                     {model.agents.length > 0 && (
@@ -118,15 +121,47 @@ export function NativeSessionDialog({
                             onValueChange={store.getState().selectAgent}
                         />
                     )}
-                    <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
-                        {model.directory.kind === "loading" && <NativeSessionDirectorySkeleton />}
-                        {model.directory.kind === "empty" && <p>Connect a local agent to browse its sessions.</p>}
-                        {model.directory.kind === "failed" && <p role="alert">{model.directory.message}</p>}
-                        {model.directory.kind === "ready" && model.directory.entries.length === 0 && (
-                            <p>No saved sessions were reported by this agent.</p>
-                        )}
-                        {model.directory.kind === "ready" &&
-                            model.directory.entries.map((entry) => (
+                    {model.directory.kind === "loading" && <NativeSessionDirectorySkeleton />}
+                    {model.directory.kind === "empty" && <p>Connect a local agent to browse its sessions.</p>}
+                    {model.directory.kind === "failed" && <p role="alert">{model.directory.message}</p>}
+                    {model.directory.kind === "ready" && model.directory.entries.length === 0 && (
+                        <p>No saved sessions were reported by this agent.</p>
+                    )}
+                    {model.directory.kind === "ready" && model.directory.entries.length > 0 && (
+                        <div className="sm:hidden">
+                            <Select
+                                label="Native session"
+                                value={selectedEntryId}
+                                disabled={model.operation !== "idle"}
+                                truncateOptions
+                                options={[
+                                    ...model.directory.entries.map((entry) => ({
+                                        value: entry.entryId,
+                                        label: `${entry.title || "Untitled session"} · ${entry.directoryLabel}`,
+                                    })),
+                                    ...(model.directory.nextCursor === null
+                                        ? []
+                                        : [{ value: loadMoreNativeSessions, label: "Load more" }]),
+                                ]}
+                                onValueChange={(entryId) => {
+                                    if (entryId === loadMoreNativeSessions) {
+                                        withSignal(store.getState().more);
+                                        return;
+                                    }
+                                    const entry =
+                                        model.directory.kind === "ready"
+                                            ? model.directory.entries.find((candidate) => candidate.entryId === entryId)
+                                            : undefined;
+                                    if (entry !== undefined) {
+                                        withSignal(async (signal) => await store.getState().select(entry, signal));
+                                    }
+                                }}
+                            />
+                        </div>
+                    )}
+                    {model.directory.kind === "ready" && model.directory.entries.length > 0 && (
+                        <div className="hidden min-h-0 flex-1 space-y-1 overflow-y-auto sm:block">
+                            {model.directory.entries.map((entry) => (
                                 <button
                                     type="button"
                                     key={entry.entryId}
@@ -149,7 +184,10 @@ export function NativeSessionDialog({
                                     </span>
                                 </button>
                             ))}
-                        {model.directory.kind === "ready" && model.directory.nextCursor !== null && (
+                        </div>
+                    )}
+                    {model.directory.kind === "ready" && model.directory.nextCursor !== null && (
+                        <div className="hidden sm:block">
                             <Button
                                 variant="ghost"
                                 disabled={model.operation !== "idle"}
@@ -157,8 +195,8 @@ export function NativeSessionDialog({
                             >
                                 Load more
                             </Button>
-                        )}
-                    </div>
+                        </div>
+                    )}
                 </section>
                 <section
                     aria-label="Selected session preview"

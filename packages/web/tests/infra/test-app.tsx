@@ -44,6 +44,7 @@ export async function createTestApp(
         readonly application?: Application;
         readonly connectAgent?: boolean;
         readonly agent?: { readonly id: string; readonly label: string };
+        readonly nativeSessionIds?: ReadonlySet<string>;
         readonly page?:
             | { readonly kind: "continue"; readonly harness: string; readonly sessionId: string }
             | { readonly kind: "bootstrap" }
@@ -54,7 +55,8 @@ export async function createTestApp(
 ): Promise<TestApp> {
     const current = options.application ?? (await (await environment).createApplication());
     await options.prepare?.(current);
-    const daemon = options.connectAgent === true ? await current.connectAgent(options.agent) : null;
+    const daemon =
+        options.connectAgent === true ? await current.connectAgent(options.agent, options.nativeSessionIds) : null;
     const agentFailure = daemon?.failure ?? null;
     const page = options.page ?? { kind: "workspace" };
     if (page.kind === "continue") {
