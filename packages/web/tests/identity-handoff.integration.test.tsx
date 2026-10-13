@@ -65,7 +65,7 @@ test("Given a new browser, When Morty loads, Then the anonymous workspace opens"
     expect(await app.queryElementByTestId(dataTestId.closeDialog)).toBeInstanceOf(HTMLElement);
 });
 
-test("Given a shared workspace, When the user hovers each sidebar action, Then every action is icon-only and shows a tooltip naming it", {
+test("Given a shared workspace, When the user opens Continue your work, Then the icon-only action and dialog use that name", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp();
@@ -74,7 +74,7 @@ test("Given a shared workspace, When the user hovers each sidebar action, Then e
     const actions = [
         { element: reportBug, tooltip: "Report a bug" },
         { element: await app.queryElementByTestId(dataTestId.userMenu), tooltip: "User menu" },
-        { element: await app.queryElementByTestId(dataTestId.shareMachine), tooltip: "Share My Machine" },
+        { element: await app.queryElementByTestId(dataTestId.shareMachine), tooltip: "Continue your work" },
     ];
 
     for (const { element, tooltip } of actions) {
@@ -84,6 +84,10 @@ test("Given a shared workspace, When the user hovers each sidebar action, Then e
             HTMLElement,
         );
     }
+
+    await app.user.click(getByRole(document.body, "button", { name: "Continue your work" }));
+
+    expect(getByRole(document.body, "dialog", { name: "Continue your work" })).toBeInstanceOf(HTMLElement);
 });
 
 test("Given a native session handoff, When importing fails, Then the choice page shows progress and allows a fork retry", {
