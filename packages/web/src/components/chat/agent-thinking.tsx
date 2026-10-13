@@ -84,7 +84,7 @@ function ReasoningDisclosure({ active, entry }: { readonly active: boolean; read
                         {entry.omitted && (
                             <p className="m-0 text-xs text-copy-secondary">(Reasoning details were omitted.)</p>
                         )}
-                        <ReasoningContent entry={entry} />
+                        {entry.text.trim().length > 0 && <ReasoningContent entry={entry} />}
                     </section>
                 </div>
             )}
