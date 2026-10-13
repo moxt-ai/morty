@@ -100,10 +100,11 @@ test("Given a linked TypeScript file longer than the preview, When the user open
     await page.screenshot({ fullPage: true, path: testInfo.outputPath("file-preview.png") });
 });
 
-test("Given a paired Bot, When a user sends and observes prompts across pages, Then live and completed replies remain consistent", async ({
+test("Given a working reply, When the user reloads after 65 seconds, Then elapsed time and live content remain consistent", async ({
     runtime,
 }, testInfo) => {
     const { page } = runtime;
+    await page.clock.setFixedTime(new Date("2026-10-13T08:00:00Z"));
     await runtime.openPairedChat();
 
     await page.getByRole("textbox", { name: "Message" }).fill("First conversation");
@@ -132,6 +133,9 @@ test("Given a paired Bot, When a user sends and observes prompts across pages, T
     await expect(partialResponse).toBeVisible();
     await expect(page.getByText("partial.bin", { exact: true })).toBeVisible();
     const activeSessionUrl = page.url();
+    await page.clock.setFixedTime(new Date("2026-10-13T08:01:05Z"));
+    await page.reload();
+    await expect(page.getByRole("status", { name: "Agent is working" })).toHaveText("Working for 1min 5s");
     await page.screenshot({ fullPage: true, path: testInfo.outputPath("active-turn-primary.png") });
 
     const secondPage = await page.context().newPage();

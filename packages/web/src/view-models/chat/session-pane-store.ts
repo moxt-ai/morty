@@ -11,6 +11,11 @@ import {
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
+import {
+    centralIndexedDB,
+    type SessionLastSentMessage,
+    sessionLastSentMessageEntry,
+} from "../../services/indexed-db/central-indexed-db.ts";
 import { centralLocalStorage, sessionDraftEntry } from "../../services/local-storage/central-local-storage.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
@@ -318,6 +323,7 @@ export function createSessionPaneModel(options: {
             : { kind: "idle" };
     const activeTurn = createSessionActiveTurn({ initial: initialActiveTurn });
     const openedActiveTurn = activeTurn.current();
+    const fallbackStartedAt = Date.now();
     let client: MobiusClient | null = null;
     let projection = createSessionProjection();
     let sessionTitle = session.entry.title;
@@ -365,8 +371,11 @@ export function createSessionPaneModel(options: {
             );
         },
     });
+    const lastSentMessageEntry = sessionLastSentMessageEntry(sessionId);
+    let lastSentMessage: SessionLastSentMessage | null = null;
+    let lastSentMessageRevision = 0;
     const initialActivity: SessionActivityState =
-        command === "" ? { kind: "idle" } : startSessionWork({ commandId: command });
+        command === "" ? { kind: "idle" } : startSessionWork({ commandId: command, startedAt: fallbackStartedAt });
     const deriveTimeline = (): { readonly messages: readonly SessionMessage[] } => ({
         messages: sessionProjectionMessages(projection),
     });
@@ -569,6 +578,22 @@ export function createSessionPaneModel(options: {
             },
             connect: async (signal) => {
                 try {
+                    const revision = lastSentMessageRevision;
+                    void centralIndexedDB.get(lastSentMessageEntry, signal).then((stored) => {
+                        if (stored === null || revision !== lastSentMessageRevision) {
+                            return;
+                        }
+                        lastSentMessage = stored;
+                        const current = get().activity;
+                        if (current.kind === "working" && current.commandId === stored.commandId) {
+                            set({
+                                activity: startSessionWork({
+                                    commandId: current.commandId,
+                                    startedAt: stored.sentAt,
+                                }),
+                            });
+                        }
+                    });
                     client = await requests.connectSession(
                         botId,
                         sessionId,
@@ -655,7 +680,14 @@ export function createSessionPaneModel(options: {
                                     : payload.commandId);
                             tasks.getState().start(payload.commandId, turnId);
                             activeTurn.submissionAccepted(payload.commandId, turnId);
-                            set({ activity: startSessionWork({ commandId: payload.commandId }) });
+                            const currentActivity = get().activity;
+                            const startedAt =
+                                currentActivity.kind === "working" && currentActivity.commandId === payload.commandId
+                                    ? currentActivity.startedAt
+                                    : lastSentMessage?.commandId === payload.commandId
+                                      ? lastSentMessage.sentAt
+                                      : Date.now();
+                            set({ activity: startSessionWork({ commandId: payload.commandId, startedAt }) });
                             return true;
                         }
                         if (
@@ -678,7 +710,13 @@ export function createSessionPaneModel(options: {
                                     activeTurn.submissionAccepted(running.commandId, running.commandId);
                                     const timeline = deriveTimeline();
                                     set({
-                                        activity: startSessionWork({ commandId: running.commandId }),
+                                        activity: startSessionWork({
+                                            commandId: running.commandId,
+                                            startedAt:
+                                                lastSentMessage?.commandId === running.commandId
+                                                    ? lastSentMessage.sentAt
+                                                    : Date.now(),
+                                        }),
                                         messages: timeline.messages,
                                         operation: { kind: "idle" },
                                     });
@@ -743,8 +781,19 @@ export function createSessionPaneModel(options: {
                                 activeTurn.turnCleared(reconciliation.turn.commandId);
                                 command = "";
                             }
+                            const currentActivity = get().activity;
                             const restoredActivity =
-                                command === "" ? ({ kind: "idle" } as const) : startSessionWork({ commandId: command });
+                                command === ""
+                                    ? ({ kind: "idle" } as const)
+                                    : currentActivity.kind === "working" && currentActivity.commandId === command
+                                      ? currentActivity
+                                      : startSessionWork({
+                                            commandId: command,
+                                            startedAt:
+                                                lastSentMessage?.commandId === command
+                                                    ? lastSentMessage.sentAt
+                                                    : Date.now(),
+                                        });
                             signal.throwIfAborted();
                             const interactions: readonly LocalInteraction[] = (() => {
                                 const interaction = execution.turn?.interaction;
@@ -857,6 +906,9 @@ export function createSessionPaneModel(options: {
                 const commandId = initialCommandId ?? crypto.randomUUID();
                 initialCommandId = null;
                 command = commandId;
+                lastSentMessageRevision += 1;
+                lastSentMessage = { commandId, sentAt: Date.now() };
+                void centralIndexedDB.set(lastSentMessageEntry, lastSentMessage, signal);
                 const prompt = current.draft.trim();
                 const displayPrompt =
                     prompt ||
@@ -869,7 +921,7 @@ export function createSessionPaneModel(options: {
                     attachment.kind === "image" ? [attachment.image] : [],
                 );
                 centralLocalStorage.remove(draftEntry);
-                const activity = startSessionWork({ commandId });
+                const activity = startSessionWork({ commandId, startedAt: lastSentMessage.sentAt });
                 const pending = deriveTimeline();
                 set({
                     activity,
@@ -946,7 +998,10 @@ export function createSessionPaneModel(options: {
                 }
                 const pending = state.journal;
                 command = pending.commandId;
-                const retrying = startSessionWork({ commandId: pending.commandId });
+                const retrying = startSessionWork({
+                    commandId: pending.commandId,
+                    startedAt: lastSentMessage?.commandId === pending.commandId ? lastSentMessage.sentAt : Date.now(),
+                });
                 const retried = deriveTimeline();
                 set({ activity: retrying, messages: retried.messages });
                 const accepted = await delivery.getState().retry(signal);
@@ -990,6 +1045,9 @@ export function createSessionPaneModel(options: {
                 );
                 signal.throwIfAborted();
                 if (queued !== null) {
+                    lastSentMessageRevision += 1;
+                    lastSentMessage = { commandId: queued.commandId, sentAt: Date.now() };
+                    void centralIndexedDB.set(lastSentMessageEntry, lastSentMessage, signal);
                     centralLocalStorage.remove(draftEntry);
                     set({ draft: "", attachments: [] });
                 }

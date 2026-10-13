@@ -377,11 +377,13 @@ export function MobiusSessionPane({
                                 )}
                             </div>
                         ))}
-                        {presentation.workingIndicatorVisible && presentation.outputState !== "idle" && (
-                            <div className="mt-6 sm:px-2">
-                                <WorkingIndicator />
-                            </div>
-                        )}
+                        {presentation.workingIndicatorVisible &&
+                            presentation.outputState !== "idle" &&
+                            model.activity.kind === "working" && (
+                                <div className="mt-6 sm:px-2">
+                                    <WorkingIndicator startedAt={model.activity.startedAt} />
+                                </div>
+                            )}
                     </div>
                 </FollowLatestScrollArea>
                 <LoadMoreTrigger

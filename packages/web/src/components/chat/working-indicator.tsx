@@ -1,5 +1,5 @@
 import { LoaderCircle } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { dataTestId } from "../../data-testid.ts";
 
 function workingDuration(elapsedSeconds: number): string {
@@ -10,15 +10,19 @@ function workingDuration(elapsedSeconds: number): string {
     return `${minutes.toString()}min ${(elapsedSeconds % 60).toString()}s`;
 }
 
-export function WorkingIndicator() {
-    const startedAt = useRef(Date.now());
-    const [elapsedSeconds, setElapsedSeconds] = useState(0);
+function elapsedSecondsSince(startedAt: number): number {
+    return Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+}
+
+export function WorkingIndicator({ startedAt }: { readonly startedAt: number }) {
+    const [elapsedSeconds, setElapsedSeconds] = useState(() => elapsedSecondsSince(startedAt));
 
     useEffect(() => {
-        const update = () => setElapsedSeconds(Math.floor((Date.now() - startedAt.current) / 1000));
+        const update = () => setElapsedSeconds(elapsedSecondsSince(startedAt));
+        update();
         const interval = window.setInterval(update, 1000);
         return () => window.clearInterval(interval);
-    }, []);
+    }, [startedAt]);
 
     return (
         <span

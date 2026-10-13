@@ -1,8 +1,10 @@
 import { getByRole, queryAllByRole, within } from "@testing-library/dom";
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
+
+afterEach(() => vi.useRealTimers());
 
 async function loadAllResponseText(app: Awaited<ReturnType<typeof createTestApp>>) {
     while (true) {
@@ -218,6 +220,8 @@ test("Given a conversation is running in the background, When it completes after
 test("Given a running reply, When the user reads the conversation, Then its working indicator appears in message history until completion", {
     timeout: 30_000,
 }, async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-13T08:00:00Z"));
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -263,7 +267,7 @@ test("Given a running reply, When the user reads the conversation, Then its work
             throw new Error("Expected the submitted user message");
         }
         expect(userMessage.compareDocumentPosition(indicator) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
-        expect(indicator.textContent).toMatch(/Working for \d+(?:min \d+)?s/u);
+        expect(indicator.textContent).toBe("Working for 0s");
         expect(app.elementsByTestId(dataTestId.workingSpinner)).toHaveLength(1);
         expect(app.elementsByTestId(dataTestId.workingIndicator)).toHaveLength(1);
     });
