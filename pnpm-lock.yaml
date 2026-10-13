@@ -531,6 +531,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^5.20260918.1
         version: 5.20261007.1
+      '@moxt-ai/mobius-sdk':
+        specifier: workspace:*
+        version: link:../mobius-sdk
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
