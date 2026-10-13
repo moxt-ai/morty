@@ -79,10 +79,23 @@ jobs:
       - run: pnpm check:static
 
   tests:
-    name: tests
+    name: Tests (${{ matrix.suite }} ${{ matrix.shard }})
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: web
+            shard: 1/2
+            report: web-1
+          - suite: web
+            shard: 2/2
+            report: web-2
+          - suite: worker
+            shard: 1/1
+            report: worker
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -92,19 +105,60 @@ jobs:
         with:
           mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
 
-      - run: pnpm test:coverage
+      - name: Run integration tests with coverage
+        working-directory: packages/${{ matrix.suite }}
+        run: pnpm exec vitest run --coverage --shard="$TEST_SHARD" --coverage.reportsDirectory="../../coverage/$COVERAGE_REPORT"
+        env:
+          TEST_SHARD: ${{ matrix.shard }}
+          COVERAGE_REPORT: ${{ matrix.report }}
 
-      - name: Save coverage report
-        continue-on-error: true
+      - name: Verify web asset publishing
+        if: matrix.suite == 'worker'
+        run: pnpm test:web-assets
+
+      - name: Save suite coverage
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-${{ matrix.report }}
+          path: coverage/
+          if-no-files-found: error
+          retention-days: 14
+
+  coverage:
+    name: Merge coverage
+    needs: [tests]
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+        with:
+          mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: coverage-*
+          path: coverage/
+          merge-multiple: true
+
+      - run: pnpm test:coverage:merge --web-shards=2
+
+      - name: Save combined coverage report
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: coverage-report
           path: coverage/
+          if-no-files-found: error
           retention-days: 14
 
   check:
     name: check
-    needs: [static, tests]
+    needs: [static, tests, coverage]
     if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -113,9 +167,11 @@ jobs:
         run: |
           test "$STATIC_RESULT" = success
           test "$TESTS_RESULT" = success
+          test "$COVERAGE_RESULT" = success
         env:
           STATIC_RESULT: ${{ needs.static.result }}
           TESTS_RESULT: ${{ needs.tests.result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
 
   deploy:
     needs: [validate-worker-config]

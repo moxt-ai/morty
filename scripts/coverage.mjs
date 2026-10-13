@@ -37,7 +37,10 @@ try {
         failed ||= status !== 0;
     }
     const coverage = createCoverageMap({});
-    for (const [name] of suites) {
+    const reportNames = process.argv.includes("--web-shards=2")
+        ? ["web-1", "web-2", "worker"]
+        : suites.map(([name]) => name);
+    for (const name of reportNames) {
         const report = await readFile(new URL(`../coverage/${name}/coverage-final.json`, import.meta.url), "utf8");
         const suite = createCoverageMap(JSON.parse(report));
         if (suite.files().length === 0) {
