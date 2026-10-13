@@ -1,8 +1,6 @@
 import * as v from "valibot";
 import pairTemplate from "../../../../../web/content/instructions/pair.txt?raw";
 import setupTemplate from "../../../../../web/content/instructions/setup.txt?raw";
-import posixTemplate from "../../../../../web/content/instructions/setup-posix.txt?raw";
-import windowsTemplate from "../../../../../web/content/instructions/setup-windows.txt?raw";
 
 const instructionOriginSchema = v.pipe(
     v.string(),
@@ -11,7 +9,7 @@ const instructionOriginSchema = v.pipe(
     v.check((value) => URL.canParse(value) && new URL(value).origin === value),
 );
 
-const templates = { pair: pairTemplate, setup: setupTemplate, windows: windowsTemplate, posix: posixTemplate };
+const templates = { pair: pairTemplate, setup: setupTemplate };
 
 export type InstructionDocument = keyof typeof templates;
 

@@ -22,6 +22,4 @@ function response(document: InstructionDocument, requestUrl: string, configuredO
 
 export const instructionDocumentRoutes = new Hono<{ readonly Bindings: CloudBindings }>()
     .get("/setup.md", (context) => response("setup", context.req.url, context.env.APP_ORIGIN))
-    .get("/pair.md", (context) => response("pair", context.req.url, context.env.APP_ORIGIN))
-    .get("/setup-help/windows.md", (context) => response("windows", context.req.url, context.env.APP_ORIGIN))
-    .get("/setup-help/posix.md", (context) => response("posix", context.req.url, context.env.APP_ORIGIN));
+    .get("/pair.md", (context) => response("pair", context.req.url, context.env.APP_ORIGIN));

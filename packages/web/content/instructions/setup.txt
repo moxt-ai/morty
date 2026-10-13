@@ -18,9 +18,8 @@ Chat origin: {{BASE_URL}}
    If the current ID is unavailable, ask the user for it before running setup.
 3. Download {{BASE_URL}}/setup.mjs to a private temporary directory, with a finite
    timeout and no redirects. Inspect it before running. Use commands appropriate
-   to the current shell. Read only the matching reference if needed:
-   [Windows PowerShell]({{BASE_URL}}/setup-help/windows.md) or
-   [macOS/Linux POSIX shell]({{BASE_URL}}/setup-help/posix.md).
+   to the current shell; stop if installation or download fails.
+   Make the temporary directory private with native filesystem permissions.
 4. Run the following command with real values and shell-appropriate quoting.
    The workspace is the original absolute working directory, not the download directory.
 

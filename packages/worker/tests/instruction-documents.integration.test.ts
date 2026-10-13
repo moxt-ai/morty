@@ -67,8 +67,7 @@ test("Given setup and pairing documents, When users fetch them from configured a
         expect(document).not.toContain("change-policy");
         expect(document).toContain("Chat origin: https://chat.example");
         expect(document).toContain("https://chat.example/setup.mjs");
-        expect(document).toContain("https://chat.example/setup-help/windows.md");
-        expect(document).toContain("https://chat.example/setup-help/posix.md");
+        expect(document).not.toContain("/setup-help/");
         expect(document).toContain("DOCUMENT_DIR");
         expect(document).not.toContain("```powershell");
         expect(document).not.toContain("```sh");
@@ -81,24 +80,6 @@ test("Given setup and pairing documents, When users fetch them from configured a
     expect(documents.get("setup")).toContain("--session-id <exact-current-session-id>");
     expect(documents.get("setup")).toContain("--harness <own-harness-id>");
     expect(documents.get("setup")).toContain("Never guess");
-
-    for (const platform of ["windows", "posix"]) {
-        const response = await worker.fetch(new Request(`https://preview.example/setup-help/${platform}.md`), {
-            APP_ORIGIN: "https://chat.example",
-        });
-        expect(response.status).toBe(200);
-        const reference = await response.text();
-        expect(reference).toContain("https://chat.example/setup.mjs");
-        expect(reference).not.toMatch(/\{\{.*\}\}|preview\.example/);
-        if (platform === "windows") {
-            expect(reference).toContain("npm.cmd");
-            expect(reference).toContain("-MaximumRedirection 0");
-            expect(reference).toContain("$PWD.Path");
-        } else {
-            expect(reference).toContain("--max-redirs 0");
-            expect(reference).toContain('"$PWD"');
-        }
-    }
 
     for (const origin of ["https://custom.example", "http://localhost:5173"]) {
         for (const name of ["setup", "pair"]) {
