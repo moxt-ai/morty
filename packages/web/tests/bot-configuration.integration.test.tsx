@@ -49,6 +49,7 @@ test("Given an unpaired workspace, When a user creates a Machine, Then its pairi
 
     await app.user.click(await app.queryElementByTestId(dataTestId.closeDialog));
     await app.user.click(await app.queryElementByTestId(dataTestId.botMenuTrigger));
+    expect(getByRole(document.body, "button", { name: "Pair the machine" })).toBeInstanceOf(HTMLElement);
     await app.user.click(await app.queryElementByTestId(dataTestId.createBot));
     const name = await app.queryElementByTestId(dataTestId.botNameInput);
     await app.user.type(name, "Laptop Bot");
@@ -99,6 +100,25 @@ test("Given an unpaired workspace, When a fresh workspace is being created in an
         expect(region).toHaveProperty("disabled", false);
         expect(document.body.textContent).toContain("Changing region replaces this fresh workspace");
     });
+});
+
+test("Given a paired Machine, When its Runtime disconnects, Then the Machine menu does not offer pairing", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({
+        prepare: async (application) => {
+            const runtime = await application.connectAgent();
+            await runtime.disconnect();
+        },
+    });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Disconnected") === true,
+    );
+    await app.user.click(await app.queryElementByTestId(dataTestId.closeDialog));
+    await app.user.click(await app.queryElementByTestId(dataTestId.botMenuTrigger));
+
+    expect(app.optionalElementByTestId(dataTestId.pairBotAgain)).toBeNull();
 });
 
 test("Given a paired Bot with cached agent settings, When a user filters its models, Then the configuration and Agent reply are visible", {
