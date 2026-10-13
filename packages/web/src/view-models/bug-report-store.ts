@@ -6,17 +6,54 @@ type ReportState =
     | { readonly kind: "sending" }
     | { readonly kind: "sent"; readonly id: string; readonly daemonAvailable: boolean; readonly truncated: boolean }
     | { readonly kind: "failed"; readonly message: string };
+
+export const bugReportImageAccept = "image/png,image/jpeg,image/gif,image/webp";
+export interface BugReportImage {
+    readonly id: string;
+    readonly file: File;
+}
+
 export function createBugReportStore(sink: BugReportSink) {
     let active: AbortController | null = null;
     return createStore<{
         readonly state: ReportState;
         readonly description: string;
+        readonly images: readonly BugReportImage[];
+        readonly addImages: (files: readonly File[]) => void;
+        readonly removeImage: (id: string) => void;
         readonly describe: (value: string) => void;
-        readonly send: () => Promise<void>;
+        readonly send: (signal?: AbortSignal) => Promise<void>;
         readonly close: () => void;
     }>((set, get) => ({
         description: "",
+        images: [],
         state: { kind: "editing" },
+        addImages: (files) => {
+            if (get().state.kind === "sending" || get().state.kind === "sent" || files.length === 0) {
+                return;
+            }
+            const message =
+                get().images.length + files.length > 3
+                    ? "You can attach up to 3 images."
+                    : files.some((file) => !bugReportImageAccept.split(",").includes(file.type))
+                      ? "Only PNG, JPEG, GIF, and WebP images are supported."
+                      : files.some((file) => file.size === 0 || file.size > 2_500_000)
+                        ? "Images must be between 1 byte and 2.5 MB."
+                        : null;
+            if (message !== null) {
+                set({ state: { kind: "failed", message } });
+                return;
+            }
+            set({
+                images: [...get().images, ...files.map((file) => ({ id: crypto.randomUUID(), file }))],
+                state: { kind: "editing" },
+            });
+        },
+        removeImage: (id) => {
+            if (get().state.kind !== "sending" && get().state.kind !== "sent") {
+                set({ images: get().images.filter((image) => image.id !== id), state: { kind: "editing" } });
+            }
+        },
         describe: (value) => {
             if (get().state.kind !== "sending" && get().state.kind !== "sent") {
                 set({ description: value.slice(0, 2000), state: { kind: "editing" } });
@@ -26,17 +63,27 @@ export function createBugReportStore(sink: BugReportSink) {
             active?.abort(new DOMException("Report closed", "AbortError"));
             active = null;
         },
-        send: async () => {
-            if (get().description.trim() === "" || get().state.kind === "sending" || get().state.kind === "sent") {
+        send: async (parent) => {
+            if (
+                parent?.aborted ||
+                get().description.trim() === "" ||
+                get().state.kind === "sending" ||
+                get().state.kind === "sent"
+            ) {
                 return;
             }
             const controller = new AbortController();
+            const signal = parent === undefined ? controller.signal : AbortSignal.any([parent, controller.signal]);
             active = controller;
             set({ state: { kind: "sending" } });
             try {
-                const report = await collectBugReport(get().description, controller.signal);
-                const id = await sink.submit(report, controller.signal);
-                controller.signal.throwIfAborted();
+                const report = await collectBugReport(get().description, signal);
+                const id = await sink.submit(
+                    report,
+                    signal,
+                    get().images.map((image) => image.file),
+                );
+                signal.throwIfAborted();
                 set({
                     state: {
                         kind: "sent",
@@ -48,7 +95,7 @@ export function createBugReportStore(sink: BugReportSink) {
                     },
                 });
             } catch (cause) {
-                if (controller.signal.aborted) {
+                if (signal.aborted) {
                     return;
                 }
                 set({

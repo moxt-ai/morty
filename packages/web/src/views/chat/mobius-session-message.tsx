@@ -205,7 +205,7 @@ function UserMessage({
                 {message.contents.map((content, index) => (
                     <ContentBlock
                         content={content}
-                        key={`${message.id}:${index.toString()}`}
+                        key={`${message.firstEvent.eventId}:${index.toString()}`}
                         openLocalFile={openLocalFile}
                         readImage={readImage}
                         speaker="user"
@@ -325,7 +325,7 @@ export function MobiusSessionMessage({
                     active={active}
                     entries={[
                         {
-                            id: message.id,
+                            id: message.firstEvent.eventId,
                             kind: "reasoning",
                             messageId: presentation.messageId,
                             omitted: presentation.omitted,

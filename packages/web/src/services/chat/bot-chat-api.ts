@@ -238,6 +238,7 @@ export class BotChatApi {
     readonly listBots: ManagementApi["listBots"];
     readonly readBot: ManagementApi["readBot"];
     readonly createBot: ManagementApi["createBot"];
+    readonly updateBot: ManagementApi["updateBot"];
     readonly deleteBot: ManagementApi["deleteBot"];
     constructor(options: {
         readonly fetchRequest: (request: Request) => Promise<Response>;
@@ -257,6 +258,7 @@ export class BotChatApi {
         this.listBots = management.listBots;
         this.readBot = management.readBot;
         this.createBot = management.createBot;
+        this.updateBot = management.updateBot;
         this.deleteBot = management.deleteBot;
     }
     readonly close = (): void => {

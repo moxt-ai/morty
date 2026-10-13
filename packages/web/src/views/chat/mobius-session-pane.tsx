@@ -67,7 +67,7 @@ function thinkingEntry(message: SessionMessage): AgentThinkingEntry | null {
     }
     if (message.presentation.kind === "thought" && message.presentation.content.type === "text") {
         return {
-            id: message.id,
+            id: message.firstEvent.eventId,
             kind: "reasoning",
             messageId: message.presentation.messageId,
             omitted: message.presentation.omitted,
@@ -91,11 +91,16 @@ function sessionRenderItems(messages: readonly SessionMessage[]): readonly Sessi
         if (text !== null && previous?.kind === "assistant-text" && previous.messageId === text.messageId) {
             previous.text.push(text.text);
         } else if (text !== null) {
-            items.push({ kind: "assistant-text", id: message.id, messageId: text.messageId, text: [text.text] });
+            items.push({
+                kind: "assistant-text",
+                id: message.firstEvent.eventId,
+                messageId: text.messageId,
+                text: [text.text],
+            });
         } else if (thinking !== null && previous?.kind === "thinking") {
             previous.entries.push(thinking);
         } else if (thinking !== null) {
-            items.push({ entries: [thinking], id: message.id, kind: "thinking" });
+            items.push({ entries: [thinking], id: message.firstEvent.eventId, kind: "thinking" });
         } else {
             items.push({ kind: "event", message });
         }
@@ -337,7 +342,7 @@ export function MobiusSessionPane({
                     <div className="mx-auto w-full min-w-0 max-w-[920px]">
                         {renderItems.map((item, index) => (
                             <div
-                                key={item.kind === "event" ? item.message.id : item.id}
+                                key={item.kind === "event" ? item.message.firstEvent.eventId : item.id}
                                 className="my-8 first:mt-0 last:mb-0"
                             >
                                 {item.kind === "assistant-text" ? (
@@ -494,12 +499,6 @@ export function MobiusSessionPane({
                                       },
                             ),
                         ]}
-                        onRefresh={() => {
-                            const controller = lifetime.current;
-                            if (controller !== null) {
-                                void pane.store.getState().refreshSettings(controller.signal);
-                            }
-                        }}
                         settingsLoading={model.operation.kind === "configuring"}
                     />
                     {model.operation.kind === "configuring" && (

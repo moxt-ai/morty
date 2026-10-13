@@ -5,7 +5,32 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given an unpaired workspace, When a user manages Bots, Then pairing and the surviving Bot remain visible", {
+test("Given a Machine, When a user renames it, Then the new name is visible in the Machine selector", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp();
+    await app.user.click(await app.queryElementByTestId(dataTestId.closeDialog));
+    await app.user.click(await app.queryElementByTestId(dataTestId.botMenuTrigger));
+
+    expect(getByRole(document.body, "button", { name: "Create a new machine" })).toBeDefined();
+    await app.user.click(getByRole(document.body, "button", { name: "Rename machine" }));
+
+    const name = getByRole(document.body, "textbox", { name: "Machine name" });
+    expect(name).toBeInstanceOf(HTMLInputElement);
+    expect((name as HTMLInputElement).value).toBe("My Machine");
+    await app.user.clear(name);
+    await app.user.type(name, "Studio Machine");
+    await app.user.click(getByRole(document.body, "button", { name: "Rename Machine" }));
+
+    await app.queryElementByTestId(
+        dataTestId.botMenuTrigger,
+        (element) => element.textContent?.includes("Studio Machine") === true,
+    );
+    await app.user.click(app.elementByTestId(dataTestId.botMenuTrigger));
+    expect(getByRole(document.body, "button", { name: "Studio Machine" })).toBeDefined();
+});
+
+test("Given an unpaired workspace, When a user creates a Machine, Then its pairing dialog and the surviving Machine remain visible", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp();
@@ -37,6 +62,9 @@ test("Given an unpaired workspace, When a user manages Bots, Then pairing and th
         dataTestId.botMenuTrigger,
         (element) => element.textContent?.includes("Laptop Bot") === true,
     );
+    expect(getByRole(document.body, "dialog", { name: "Connect agent" })).toBeInstanceOf(HTMLElement);
+    expect(await app.queryElementByTestId(dataTestId.pairingInstruction)).toBeInstanceOf(HTMLInputElement);
+    await app.user.click(await app.queryElementByTestId(dataTestId.closeDialog));
     await app.user.click(app.elementByTestId(dataTestId.botMenuTrigger));
     await app.user.click(await app.queryElementByTestId(dataTestId.removeBot));
     await app.user.click(await app.queryElementByTestId(dataTestId.confirmRemoveBot));
@@ -73,7 +101,7 @@ test("Given an unpaired workspace, When a fresh workspace is being created in an
     });
 });
 
-test("Given a paired Bot with cached agent settings, When a user refreshes and filters its models, Then the reloaded configuration and Agent reply are visible", {
+test("Given a paired Bot with cached agent settings, When a user filters its models, Then the configuration and Agent reply are visible", {
     timeout: 30_000,
 }, async () => {
     const created = await createTestApp({ connectAgent: true });
@@ -88,9 +116,6 @@ test("Given a paired Bot with cached agent settings, When a user refreshes and f
     expect(created.optionalElementByTestId(dataTestId.pairingInstruction)).toBeNull();
 
     await created.user.click(await created.queryElementByTestId(dataTestId.agentConfiguration));
-    const loading = created.queryElementByTestId(dataTestId.agentSettingsLoading);
-    await created.user.click(await created.queryElementByTestId(dataTestId.refreshAgentSettings));
-    await loading;
     await created.user.click(
         await created.queryElementByTestId(
             dataTestId.agentSetting("model"),

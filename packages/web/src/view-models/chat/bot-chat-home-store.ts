@@ -38,6 +38,7 @@ export type BotConnectionStatus =
 export type BotOperation =
     | { readonly kind: "idle" }
     | { readonly kind: "creating" }
+    | { readonly kind: "renaming" }
     | { readonly kind: "removing" }
     | { readonly kind: "failed"; readonly message: string };
 
@@ -112,6 +113,7 @@ export interface BotChatHomeStore {
     readonly load: (signal: AbortSignal) => Promise<void>;
     readonly selectBot: (botId: string) => void;
     readonly createBot: (displayName: string, signal: AbortSignal) => Promise<boolean>;
+    readonly renameBot: (displayName: string, signal: AbortSignal) => Promise<boolean>;
     readonly removeBot: (signal: AbortSignal) => Promise<boolean>;
     readonly resetBotOperation: () => void;
     readonly newConversation: () => void;
@@ -170,6 +172,20 @@ export function setupDescription(reason: SetupReason): string {
     }
 }
 
+function replaceViewBot(view: BotChatHomeView, bot: ManagedBot): BotChatHomeView {
+    switch (view.kind) {
+        case "connecting":
+        case "active":
+        case "setup":
+        case "runtime-disconnected":
+        case "connection-failed":
+            return view.bot.botId === bot.botId ? { ...view, bot } : view;
+        case "loading":
+        case "failed":
+            return view;
+    }
+}
+
 export const createBotChatHomeStore = (
     requests: Pick<
         BotChatApi,
@@ -182,6 +198,7 @@ export const createBotChatHomeStore = (
         | "listBots"
         | "managedSession"
         | "readBot"
+        | "updateBot"
         | "waitForSetupChange"
         | "waitForWorkspaceChange"
         | "workspace"
@@ -518,6 +535,45 @@ export const createBotChatHomeStore = (
                         botOperation: {
                             kind: "failed",
                             message: cause instanceof Error ? cause.message : "The Machine could not be created.",
+                        },
+                    });
+                }
+                return false;
+            }
+        },
+        renameBot: async (displayName, signal) => {
+            const name = displayName.trim();
+            if (name.length === 0 || name.length > 80) {
+                set({ botOperation: { kind: "failed", message: "Enter a Machine name between 1 and 80 characters." } });
+                return false;
+            }
+            const current = get();
+            const activeBot = "bot" in current.view ? current.view.bot : null;
+            if (activeBot === null) {
+                return false;
+            }
+            set({ botOperation: { kind: "renaming" } });
+            try {
+                const detail = await requests.readBot(activeBot.botId, signal);
+                const updated = await requests.updateBot(
+                    activeBot.botId,
+                    { displayName: name, instructions: detail.instructions },
+                    signal,
+                );
+                signal.throwIfAborted();
+                const renamedBot = { botId: updated.botId, displayName: updated.displayName };
+                set((state) => ({
+                    bots: state.bots.map((bot) => (bot.botId === renamedBot.botId ? renamedBot : bot)),
+                    botOperation: { kind: "idle" },
+                    view: replaceViewBot(state.view, renamedBot),
+                }));
+                return true;
+            } catch (cause) {
+                if (!signal.aborted) {
+                    set({
+                        botOperation: {
+                            kind: "failed",
+                            message: cause instanceof Error ? cause.message : "The Machine could not be renamed.",
                         },
                     });
                 }

@@ -46,6 +46,7 @@ export function BotChatHome({
         BotChatApi,
         | "listBots"
         | "readBot"
+        | "updateBot"
         | "createBot"
         | "deleteBot"
         | "access"
@@ -260,6 +261,13 @@ export function BotChatHome({
             clearComposer();
         }
     };
+    const createBot = async (displayName: string, signal: AbortSignal) => {
+        const created = await store.getState().createBot(displayName, signal);
+        if (created) {
+            setPairingDialogOpen(true);
+        }
+        return created;
+    };
 
     return (
         <main
@@ -277,8 +285,9 @@ export function BotChatHome({
                     bots={model.bots}
                     botOperation={model.botOperation}
                     connectionStatus={connectionStatus}
-                    onCreateBot={store.getState().createBot}
+                    onCreateBot={createBot}
                     onPairAgain={() => setPairingDialogOpen(true)}
+                    onRenameBot={store.getState().renameBot}
                     onRemoveBot={store.getState().removeBot}
                     onResetBotOperation={store.getState().resetBotOperation}
                     onSelectBot={store.getState().selectBot}

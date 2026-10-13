@@ -162,6 +162,7 @@ export function ConversationSidebar({
     connectionStatus,
     onCreateBot,
     onPairAgain,
+    onRenameBot,
     onRemoveBot,
     onResetBotOperation,
     onSelectBot,
@@ -185,6 +186,7 @@ export function ConversationSidebar({
     readonly connectionStatus: BotConnectionStatus;
     readonly onCreateBot: (displayName: string, signal: AbortSignal) => Promise<boolean>;
     readonly onPairAgain: () => void;
+    readonly onRenameBot: (displayName: string, signal: AbortSignal) => Promise<boolean>;
     readonly onRemoveBot: (signal: AbortSignal) => Promise<boolean>;
     readonly onResetBotOperation: () => void;
     readonly onSelectBot: (botId: string) => void;
@@ -300,6 +302,7 @@ export function ConversationSidebar({
                 operation={botOperation}
                 onCreate={onCreateBot}
                 onPairAgain={onPairAgain}
+                onRename={onRenameBot}
                 onRemove={onRemoveBot}
                 onResetOperation={onResetBotOperation}
                 onSelect={onSelectBot}

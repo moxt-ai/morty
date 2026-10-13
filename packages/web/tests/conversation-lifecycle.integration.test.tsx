@@ -1,6 +1,7 @@
 import { getByRole, getByText, queryAllByRole, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
-import { expect, test, vi } from "vitest";
+import { flushSync } from "react-dom";
+import { expect, onTestFinished, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
@@ -214,10 +215,10 @@ test("Given Claude Code does not echo the submitted prompt, When the response st
     });
 });
 
-test("Given more saved messages than one history page, When the user reopens it and loads more, Then complete older messages appear without losing recent history", {
+test("Given more saved messages than one history page, When live output arrives while the user loads more, Then older and live messages remain visible", {
     timeout: 90_000,
 }, async () => {
-    const prompts = Array.from({ length: 10 }, (_, index) => `many session events: Pagination message ${index + 1}`);
+    const prompts = Array.from({ length: 7 }, (_, index) => `many session events: Pagination message ${index + 1}`);
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -286,6 +287,10 @@ test("Given more saved messages than one history page, When the user reopens it 
         observer.observe(document.body, { childList: true, subtree: true });
         observe();
     });
+    vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+    onTestFinished(() => {
+        vi.useRealTimers();
+    });
     await app.user.click(conversation);
 
     const page = await firstHistoryPage;
@@ -315,7 +320,7 @@ test("Given more saved messages than one history page, When the user reopens it 
         page.responses.some(
             (response) =>
                 response.includes("Completed Pagination message 1") &&
-                !response.includes("Completed Pagination message 10"),
+                !response.includes(`Completed Pagination message ${prompts.length.toString()}`),
         ),
     ).toBe(false);
     expect(page.responses.at(-1)).toContain(`Completed Pagination message ${prompts.length.toString()}`);
@@ -323,28 +328,58 @@ test("Given more saved messages than one history page, When the user reopens it 
     await app.waitForView(() =>
         expect(getByRole(document.body, "textbox", { name: "Message" }).hasAttribute("disabled")).toBe(false),
     );
+    const composer = getByRole(document.body, "textbox", { name: "Message" });
+    if (!(composer instanceof HTMLTextAreaElement) || app.daemon === null) {
+        throw new Error("Expected the message composer and controlled Agent");
+    }
+    const livePrompt = "hold after first delta";
+    await sendPrompt(app, composer, livePrompt);
+    await app.waitForView(() =>
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes("Partial reply") === true),
+        ).toBe(true),
+    );
     const messages = queryByRole(document.body, "log", { name: "Messages" });
     if (!(messages instanceof HTMLElement)) {
         throw new Error("Expected the Session message list");
     }
     messages.scrollTop = 0;
-    messages.dispatchEvent(new Event("scroll", { bubbles: true }));
+    flushSync(() => messages.dispatchEvent(new Event("scroll", { bubbles: true })));
+    getByRole(document.body, "status", { name: "Loading older messages" });
+    await app.daemon.continueReply(livePrompt, {
+        outcome: "complete",
+        output: [{ kind: "text", text: "Live completion while older messages load" }],
+    });
     await app.waitForView(() => {
         const loadedPrompts = app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent);
-        expect(loadedPrompts.length).toBeGreaterThan(page.prompts.length);
-        expect(loadedPrompts.slice(-page.prompts.length)).toEqual(page.prompts);
+        const loadedResponses = app
+            .elementsByTestId(dataTestId.agentResponse)
+            .map((element) => element.textContent ?? "");
+        expect(loadedPrompts.length).toBeGreaterThan(page.prompts.length + 1);
+        expect(loadedPrompts.slice(-(page.prompts.length + 1), -1)).toEqual(page.prompts);
+        expect(loadedPrompts.at(-1)).toBe(livePrompt);
+        expect(loadedResponses.some((response) => response.includes("Live completion while older messages load"))).toBe(
+            true,
+        );
     });
     const loadedPrompts = app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent ?? "");
     const loadedResponses = app.elementsByTestId(dataTestId.agentResponse).map((element) => element.textContent ?? "");
     expect(loadedPrompts[0]).toBe(prompts[0]);
+    expect(loadedPrompts.at(-1)).toBe(livePrompt);
     expect(
         loadedResponses.some(
             (response) =>
                 response.includes("Completed Pagination message 1") &&
-                !response.includes("Completed Pagination message 10"),
+                !response.includes(`Completed Pagination message ${prompts.length.toString()}`),
         ),
     ).toBe(true);
+    expect(loadedResponses.some((response) => response.includes("Live completion while older messages load"))).toBe(
+        true,
+    );
     await expectOmittedReasoning();
+    vi.useRealTimers();
 });
 
 test("Given more saved messages than one history page, When older messages load, Then a skeleton placeholder stands in for them instead of a text label", {

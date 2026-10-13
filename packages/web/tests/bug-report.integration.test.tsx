@@ -1,19 +1,124 @@
 import { createServer } from "node:http";
 import { close as closeSentry, init, makeFetchTransport } from "@sentry/react";
-import { getByRole, queryByRole } from "@testing-library/dom";
+import { getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
 import { cleanup, render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { App } from "../src/views/application/app.tsx";
 import { createTestApp } from "./infra/test-app.tsx";
 
 const observers = new Set<MutationObserver>();
+const pngBytes = Uint8Array.from(
+    atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aOuoAAAAASUVORK5CYII="),
+    (char) => char.charCodeAt(0),
+);
+beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-13T08:00:00Z"));
+});
 afterEach(() => {
     for (const observer of observers) {
         observer.disconnect();
     }
     observers.clear();
     cleanup();
+    vi.useRealTimers();
+});
+
+test("Given the report dialog is open, When a user pastes and selects images and removes one, Then Sentry receives only the remaining image with the description and diagnostics", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-13T08:00:00Z"));
+    const inbox = await createReportInbox();
+    try {
+        render(<App state={{ kind: "failed" }} />);
+        const user = userEvent.setup();
+        await user.click(getByRole(document.body, "button", { name: "Report a bug" }));
+        const description = getByRole(document.body, "textbox", { name: "What went wrong?" });
+        await user.type(description, "The layout is broken");
+        const clipboard = new DataTransfer();
+        clipboard.items.add(new File([pngBytes], "pasted.png", { type: "image/png" }));
+        await user.paste(clipboard);
+        expect(getByRole(document.body, "img", { name: "pasted.png" })).toBeDefined();
+        await user.upload(
+            getByLabelText(document.body, "Attach images"),
+            new File([pngBytes], "selected.png", { type: "image/png" }),
+        );
+        expect(getByRole(document.body, "img", { name: "selected.png" })).toBeDefined();
+        await user.click(getByRole(document.body, "button", { name: "Remove selected.png" }));
+        expect(queryByRole(document.body, "img", { name: "selected.png" })).toBeNull();
+        expect(inbox.envelopes).toHaveLength(0);
+        await user.click(getByRole(document.body, "button", { name: "Send report" }));
+        await visibleMessage(document.body, "status", "Report sent");
+        expect(inbox.envelopes).toHaveLength(1);
+        const envelope = inbox.envelopes[0] ?? "";
+        expect(envelope).toContain('"description":"The layout is broken"');
+        expect(envelope).toContain('"filename":"diagnostics.json"');
+        expect(envelope).toContain('"filename":"image-1.png"');
+        expect(envelope).toContain('"content_type":"image/png"');
+        expect(envelope).not.toContain('"filename":"image-2.png"');
+        expect(inbox.bodies[0]?.includes(Buffer.from(pngBytes))).toBe(true);
+    } finally {
+        await inbox.close();
+        vi.useRealTimers();
+    }
+});
+
+test.each([
+    { name: "an unsupported file", type: "image/svg+xml", size: 20, count: 1, error: "Only PNG, JPEG, GIF, and WebP" },
+    { name: "an oversized image", type: "image/png", size: 2_500_001, count: 1, error: "between 1 byte and 2.5 MB" },
+    { name: "an empty image", type: "image/png", size: 0, count: 1, error: "between 1 byte and 2.5 MB" },
+    { name: "too many images", type: "image/png", size: 20, count: 4, error: "up to 3 images" },
+])(
+    "Given the report dialog is open, When the user pastes $name, Then an actionable error appears without uploading it",
+    async ({ type, size, count, error }) => {
+        const inbox = await createReportInbox();
+        try {
+            render(<App state={{ kind: "failed" }} />);
+            const user = userEvent.setup();
+            await user.click(getByRole(document.body, "button", { name: "Report a bug" }));
+            await user.click(getByRole(document.body, "textbox", { name: "What went wrong?" }));
+            await user.paste("The layout is broken");
+            const clipboard = new DataTransfer();
+            for (let index = 0; index < count; index += 1) {
+                clipboard.items.add(new File([new Uint8Array(size)], `invalid-${index}.png`, { type }));
+            }
+            await user.paste(clipboard);
+            const dialog = getByRole(document.body, "dialog");
+            expect(getByRole(dialog, "alert").textContent).toContain(error);
+            expect(queryByRole(dialog, "list", { name: "Attached images" })).toBeNull();
+            expect(inbox.envelopes).toHaveLength(0);
+            await user.click(getByRole(dialog, "button", { name: "Send report" }));
+            await visibleMessage(dialog, "status", "Report sent");
+            expect(inbox.envelopes[0]).toContain('"description":"The layout is broken"');
+            expect(inbox.envelopes[0]).not.toContain('"content_type":"image/');
+        } finally {
+            await inbox.close();
+        }
+    },
+);
+
+test("Given a file claims to be a PNG, When its contents do not match and the user submits it, Then the report is rejected locally and can be sent after removing the image", async () => {
+    const inbox = await createReportInbox();
+    try {
+        render(<App state={{ kind: "failed" }} />);
+        const user = userEvent.setup();
+        await user.click(getByRole(document.body, "button", { name: "Report a bug" }));
+        await user.type(getByRole(document.body, "textbox", { name: "What went wrong?" }), "The layout is broken");
+        await user.upload(
+            getByLabelText(document.body, "Attach images"),
+            new File(["not an image"], "invalid.png", { type: "image/png" }),
+        );
+        await user.click(getByRole(document.body, "button", { name: "Send report" }));
+        const dialog = getByRole(document.body, "dialog");
+        await visibleMessage(dialog, "alert", "does not match");
+        expect(inbox.envelopes).toHaveLength(0);
+        await user.click(getByRole(dialog, "button", { name: "Remove invalid.png" }));
+        await user.click(getByRole(dialog, "button", { name: "Send report" }));
+        await visibleMessage(dialog, "status", "Report sent");
+        expect(inbox.envelopes).toHaveLength(1);
+    } finally {
+        await inbox.close();
+    }
 });
 function visibleMessage(container: HTMLElement, role: "status" | "alert", text: string): Promise<HTMLElement> {
     return new Promise((resolve) => {
@@ -35,14 +140,17 @@ function visibleMessage(container: HTMLElement, role: "status" | "alert", text: 
 // Stateful Sentry peer at its HTTP ingestion boundary, with the real browser SDK.
 async function createReportInbox() {
     const envelopes: string[] = [];
+    const bodies: Buffer[] = [];
     let status = 200;
     const server = createServer(async (request, response) => {
-        let content = "";
+        const chunks: Buffer[] = [];
         for await (const chunk of request) {
-            content += String(chunk);
+            chunks.push(Buffer.from(chunk));
         }
         if (request.method === "POST" && status === 200) {
-            envelopes.push(content);
+            const body = Buffer.concat(chunks);
+            bodies.push(body);
+            envelopes.push(body.toString("utf8"));
         }
         response
             .writeHead(request.method === "OPTIONS" ? 200 : status, {
@@ -66,6 +174,7 @@ async function createReportInbox() {
     });
     return {
         envelopes,
+        bodies,
         accept: (next: number) => {
             status = next;
         },
@@ -110,15 +219,21 @@ test("Given Sentry rejects a report, When the user retries after it recovers, Th
         const user = userEvent.setup();
         await user.click(getByRole(document.body, "button", { name: "Report a bug" }));
         await user.type(getByRole(document.body, "textbox", { name: "What went wrong?" }), "My message disappeared");
+        await user.upload(
+            getByLabelText(document.body, "Attach images"),
+            new File([pngBytes], "retry.png", { type: "image/png" }),
+        );
         await user.click(getByRole(document.body, "button", { name: "Send report" }));
         // The application already has its startup error; the dialog owns the report error.
         const dialog = getByRole(document.body, "dialog");
         expect((await visibleMessage(dialog, "alert", "not accepted")).textContent).toContain("not accepted");
+        expect(getByRole(dialog, "img", { name: "retry.png" })).toBeDefined();
         inbox.accept(200);
         await user.click(getByRole(dialog, "button", { name: "Send report" }));
         expect((await visibleMessage(dialog, "status", "Report sent")).textContent).toContain("Report sent");
         expect(inbox.envelopes).toHaveLength(1);
         expect(inbox.envelopes[0]).toContain("My message disappeared");
+        expect(inbox.bodies[0]?.includes(Buffer.from(pngBytes))).toBe(true);
     } finally {
         await inbox.close();
     }

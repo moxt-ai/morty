@@ -110,6 +110,7 @@ test("Given the agent sends separate reasoning messages, When the user reads the
     await app.waitForView(() => {
         expect(restoredThinking.textContent).toContain("(Reasoning details were omitted.)");
     });
+    expect(restoredThinking.textContent?.endsWith("(Reasoning details were omitted.)")).toBe(true);
     expect(restoredThinking.textContent).not.toContain("Inspecting");
     expect(restoredThinking.textContent).not.toContain("Checking");
 });
