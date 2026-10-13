@@ -5,7 +5,6 @@ import { dataTestId } from "@/data-testid";
 import type { MarkdownImageReader } from "../../components/agents/agent-markdown.tsx";
 import { AgentThinking, type AgentThinkingEntry } from "../../components/chat/agent-thinking.tsx";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
-import { ChatComposerMoreMenu } from "../../components/chat/chat-composer-more-menu.tsx";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
 import { ChatMessageQueue } from "../../components/chat/chat-message-queue.tsx";
 import { FilePreview } from "../../components/chat/file-preview.tsx";
@@ -421,14 +420,6 @@ export function MobiusSessionPane({
                     </div>
                 )}
                 <BotChatComposer
-                    actions={
-                        presentation.compactAvailable ? (
-                            <ChatComposerMoreMenu
-                                compactDisabled={presentation.compactDisabled}
-                                onCompact={() => runAndFollow(pane.store.getState().compact)}
-                            />
-                        ) : undefined
-                    }
                     attachments={model.attachments}
                     disabled={presentation.composerDisabled}
                     draft={model.draft}

@@ -45,11 +45,7 @@ import {
     sessionProjectionPagination,
     transitionSessionProjection,
 } from "./session-projection.ts";
-import {
-    createSessionTaskControlsStore,
-    findCompactCommand,
-    type SessionTaskControlsStore,
-} from "./session-task-controls.ts";
+import { createSessionTaskControlsStore, type SessionTaskControlsStore } from "./session-task-controls.ts";
 
 type Operation =
     | { readonly kind: "idle" }
@@ -157,7 +153,6 @@ export interface SessionPaneStore {
     readonly queueDraft: (signal: AbortSignal) => Promise<void>;
     readonly steerQueued: (commandId: string, signal: AbortSignal) => Promise<void>;
     readonly deleteQueued: (commandId: string, signal: AbortSignal) => Promise<void>;
-    readonly compact: (signal: AbortSignal) => Promise<void>;
     readonly configure: (
         option: SessionConfigOption,
         value: string,
@@ -193,7 +188,6 @@ export function sessionPanePresentation(
         delivery.state.kind === "delivery-unknown" ||
         model.operation.kind === "sending" ||
         model.operation.kind === "configuring" ||
-        tasks.operation.kind === "compacting" ||
         waitingForInput ||
         queue.operation.kind === "submitting" ||
         tasks.operation.kind === "steering" ||
@@ -202,7 +196,6 @@ export function sessionPanePresentation(
     const submittingCommandId = model.operation.kind === "sending" ? model.operation.commandId : null;
     const activeCommandId = workingActivityCommandId ?? submittingCommandId;
     const busy = activeCommandId !== null || composerDisabled;
-    const compactAvailable = findCompactCommand(tasks.commands) !== null;
     const activeMessageId =
         workingActivityCommandId !== null || submittingCommandId !== null
             ? (model.messages.findLast((message) => message.role === "assistant")?.firstEvent.eventId ?? null)
@@ -215,12 +208,6 @@ export function sessionPanePresentation(
         activeCommandId,
         busy,
         composerDisabled,
-        compactAvailable,
-        compactDisabled:
-            model.connection.kind !== "ready" ||
-            model.operation.kind !== "idle" ||
-            tasks.operation.kind !== "idle" ||
-            !compactAvailable,
         composerError:
             model.activity.kind === "failed"
                 ? model.activity.message
@@ -381,7 +368,6 @@ export function createSessionPaneModel(options: {
         messages: sessionProjectionMessages(projection),
     });
     const tasks = createSessionTaskControlsStore({
-        commands: session.result.ready.commands,
         steeringSupported: session.result.ready.capabilities.steering,
         port: {
             cancel: async (turnId, idempotencyKey, signal) => {
@@ -806,17 +792,6 @@ export function createSessionPaneModel(options: {
                                 }
                                 if (event.type !== "acp") {
                                     await receiveLifecycle(event.payload);
-                                } else {
-                                    const update = event.payload;
-                                    if (update.sessionUpdate === "available_commands_update") {
-                                        tasks.getState().updateCommands(
-                                            update.availableCommands.map((available) => ({
-                                                description: available.description,
-                                                inputHint: available.input?.hint ?? "",
-                                                name: available.name,
-                                            })),
-                                        );
-                                    }
                                 }
                                 await new Promise<void>((resolve) => queueMicrotask(resolve));
                                 signal.throwIfAborted();
@@ -1026,21 +1001,6 @@ export function createSessionPaneModel(options: {
             },
             deleteQueued: async (commandId, signal) => {
                 await messageQueue.getState().deleteMessage(commandId, signal);
-            },
-            compact: async (signal) => {
-                if (get().connection.kind !== "ready") {
-                    return;
-                }
-                await tasks.getState().compact(
-                    { ...request, images: [], resources: [] },
-                    (commandId, _prompt) => {
-                        command = commandId;
-                        const activity = startSessionWork({ commandId });
-                        const timeline = deriveTimeline();
-                        set({ activity, messages: timeline.messages });
-                    },
-                    signal,
-                );
             },
             configure: async (option, value, booleanValue, signal) => {
                 if (client === null || get().connection.kind !== "ready") {

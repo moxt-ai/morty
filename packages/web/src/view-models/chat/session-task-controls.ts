@@ -1,4 +1,4 @@
-import type { MobiusTurn, SessionCommand, SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
+import type { MobiusTurn, SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
 import { SessionPromptDisposition } from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
 
@@ -11,8 +11,7 @@ type TaskControlOperation =
     | { readonly kind: "idle" }
     | { readonly kind: "running"; readonly active: ActiveTurn }
     | { readonly kind: "steering"; readonly active: ActiveTurn }
-    | { readonly kind: "stopping"; readonly active: ActiveTurn }
-    | { readonly kind: "compacting"; readonly commandId: string };
+    | { readonly kind: "stopping"; readonly active: ActiveTurn };
 
 type TaskControlFeedback = { readonly kind: "none" } | { readonly kind: "failed"; readonly message: string };
 
@@ -22,15 +21,9 @@ interface TaskControlPort {
 }
 
 export interface SessionTaskControlsStore {
-    readonly commands: readonly SessionCommand[];
     readonly feedback: TaskControlFeedback;
     readonly operation: TaskControlOperation;
     readonly steeringSupported: boolean;
-    readonly compact: (
-        request: Omit<SubmitMobiusTurnRequest, "content" | "disposition" | "idempotencyKey" | "targetCommandId">,
-        onStarted: (commandId: string, prompt: string) => void,
-        signal: AbortSignal,
-    ) => Promise<{ readonly commandId: string; readonly prompt: string; readonly turnId: string } | null>;
     readonly dismissFailure: () => void;
     readonly finish: (commandId: string) => void;
     readonly start: (commandId: string, turnId: string) => void;
@@ -41,60 +34,20 @@ export interface SessionTaskControlsStore {
         signal: AbortSignal,
     ) => Promise<{ readonly commandId: string } | null>;
     readonly stop: (signal: AbortSignal) => Promise<void>;
-    readonly updateCommands: (commands: readonly SessionCommand[]) => void;
 }
 
 function errorMessage(cause: unknown, fallback: string): string {
     return cause instanceof Error ? cause.message : fallback;
 }
 
-function compactCommand(commands: readonly SessionCommand[]): SessionCommand | null {
-    return commands.find((command) => command.name.toLowerCase() === "compact") ?? null;
-}
-
 export const createSessionTaskControlsStore = (options: {
-    readonly commands: readonly SessionCommand[];
     readonly port: TaskControlPort;
     readonly steeringSupported: boolean;
 }) =>
     createStore<SessionTaskControlsStore>()((set, get) => ({
-        commands: options.commands,
         feedback: { kind: "none" },
         operation: { kind: "idle" },
         steeringSupported: options.steeringSupported,
-        compact: async (request, onStarted, parent) => {
-            const state = get();
-            const command = compactCommand(state.commands);
-            if (state.operation.kind !== "idle" || command === null) {
-                return null;
-            }
-            const commandId = crypto.randomUUID();
-            const prompt = `/${command.name}`;
-            const signal = AbortSignal.any([parent, AbortSignal.timeout(120_000)]);
-            set({ feedback: { kind: "none" }, operation: { commandId, kind: "compacting" } });
-            onStarted(commandId, prompt);
-            try {
-                const accepted = await options.port.submit(
-                    { ...request, content: prompt, idempotencyKey: commandId },
-                    signal,
-                );
-                signal.throwIfAborted();
-                const operation = get().operation;
-                if (operation.kind === "compacting" && operation.commandId === commandId) {
-                    set({ operation: { active: { commandId, turnId: accepted.turnId }, kind: "running" } });
-                }
-                return { commandId, prompt, turnId: accepted.turnId };
-            } catch (cause) {
-                if (parent.aborted) {
-                    throw cause;
-                }
-                set({
-                    feedback: { kind: "failed", message: errorMessage(cause, "The context could not be compacted.") },
-                    operation: { kind: "idle" },
-                });
-                return null;
-            }
-        },
         dismissFailure: () => set({ feedback: { kind: "none" } }),
         finish: (commandId) => {
             const operation = get().operation;
@@ -169,9 +122,4 @@ export const createSessionTaskControlsStore = (options: {
                 });
             }
         },
-        updateCommands: (commands) => set({ commands }),
     }));
-
-export function findCompactCommand(commands: readonly SessionCommand[]): SessionCommand | null {
-    return compactCommand(commands);
-}

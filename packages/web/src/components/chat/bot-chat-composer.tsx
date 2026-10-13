@@ -56,7 +56,6 @@ function AttachmentPreview({
 
 export function BotChatComposer({
     attachments,
-    actions,
     children,
     disabled,
     draft,
@@ -72,7 +71,6 @@ export function BotChatComposer({
     submitDisabled,
 }: {
     readonly attachments: readonly ComposerAttachment[];
-    readonly actions?: ReactNode;
     readonly children: ReactNode;
     readonly disabled: boolean;
     readonly draft: string;
@@ -263,7 +261,6 @@ export function BotChatComposer({
                         <div className="flex min-w-0 items-center gap-1 overflow-x-auto">{children}</div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                        {actions}
                         <Button
                             aria-busy={outputState === "sending"}
                             aria-label={
