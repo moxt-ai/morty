@@ -234,6 +234,9 @@ export function sessionPanePresentation(
                     : controlRunning
                       ? "running"
                       : "idle",
+        workingIndicatorVisible:
+            activeCommandId !== null &&
+            model.messages.some((message) => message.role === "user" && message.commandId === activeCommandId),
         shouldQueueOnSubmit: tasks.operation.kind === "running",
         submitDisabled:
             (tasks.operation.kind === "running" ? queue.operation.kind !== "idle" : busy) ||

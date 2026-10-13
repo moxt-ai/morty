@@ -227,12 +227,44 @@ test("Given a running reply, When the user reads the conversation, Then its work
     if (!(composer instanceof HTMLTextAreaElement)) {
         throw new Error("Expected the message composer");
     }
-    await sendPrompt(app, composer, "hold after first delta");
+    let appearedBeforeUserMessage = false;
+    const observer = new MutationObserver(() => {
+        const messages = getByRole(document.body, "log", { name: "Messages" });
+        const indicator = within(messages).queryByRole("status", { name: "Agent is working" });
+        if (
+            indicator !== null &&
+            !app
+                .elementsByTestId(dataTestId.userMessage)
+                .some((message) => message.textContent?.includes("hold after first delta"))
+        ) {
+            appearedBeforeUserMessage = true;
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    try {
+        await sendPrompt(app, composer, "hold after first delta");
+        await app.waitForView(() => {
+            const messages = getByRole(document.body, "log", { name: "Messages" });
+            expect(messages.textContent).toContain("Partial reply");
+            expect(within(messages).getByRole("status", { name: "Agent is working" })).toBeDefined();
+        });
+    } finally {
+        observer.disconnect();
+    }
+    expect(appearedBeforeUserMessage).toBe(false);
     await app.waitForView(() => {
         const messages = getByRole(document.body, "log", { name: "Messages" });
         expect(messages.textContent).toContain("Partial reply");
         const indicator = within(messages).getByRole("status", { name: "Agent is working" });
+        const userMessage = app
+            .elementsByTestId(dataTestId.userMessage)
+            .find((message) => message.textContent?.includes("hold after first delta"));
+        if (userMessage === undefined) {
+            throw new Error("Expected the submitted user message");
+        }
+        expect(userMessage.compareDocumentPosition(indicator) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
         expect(indicator.textContent).toMatch(/Working for \d+(?:min \d+)?s/u);
+        expect(app.elementsByTestId(dataTestId.workingSpinner)).toHaveLength(1);
         expect(app.elementsByTestId(dataTestId.workingIndicator)).toHaveLength(1);
     });
     const daemon = app.daemon;
@@ -246,6 +278,16 @@ test("Given a running reply, When the user reads the conversation, Then its work
     await app.waitForView(() => {
         const messages = getByRole(document.body, "log", { name: "Messages" });
         expect(messages.textContent).toContain("and the final chunk");
+        expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
+        expect(getByRole(document.body, "button", { name: "Send message" })).toBeDefined();
+    });
+    await sendPrompt(app, composer, "hold after first delta");
+    await app.waitForView(() => {
+        expect(app.optionalElementByTestId(dataTestId.workingIndicator)).not.toBeNull();
+        expect(getByRole(document.body, "button", { name: "Stop agent output" })).toBeDefined();
+    });
+    await app.user.click(getByRole(document.body, "button", { name: "Stop agent output" }));
+    await app.waitForView(() => {
         expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
         expect(getByRole(document.body, "button", { name: "Send message" })).toBeDefined();
     });
