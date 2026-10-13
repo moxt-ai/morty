@@ -34,6 +34,7 @@ export type BotChatHomeView =
 export type BotConnectionStatus =
     | { readonly kind: "connecting"; readonly label: "Connecting" }
     | { readonly kind: "connected"; readonly label: "Connected" }
+    | { readonly kind: "unpaired"; readonly label: "Disconnected" }
     | { readonly kind: "disconnected"; readonly label: "Disconnected" };
 export type BotOperation =
     | { readonly kind: "idle" }
@@ -298,7 +299,7 @@ export const createBotChatHomeStore = (
                 signal.throwIfAborted();
                 if (!detail.configured) {
                     set((current) => ({
-                        connectionStatus: { kind: "disconnected", label: "Disconnected" },
+                        connectionStatus: { kind: "unpaired", label: "Disconnected" },
                         selection:
                             current.selection.kind === "loading"
                                 ? transitionConversationSelection(current.selection, {
@@ -516,7 +517,7 @@ export const createBotChatHomeStore = (
                 set((state) => ({
                     bots: [...state.bots, bot],
                     botOperation: { kind: "idle" },
-                    connectionStatus: { kind: "disconnected", label: "Disconnected" },
+                    connectionStatus: { kind: "unpaired", label: "Disconnected" },
                     creation: transitionConversationCreation(state.creation, { kind: "reset" }),
                     draft: "",
                     draftSettings: null,

@@ -1,4 +1,4 @@
-import { Bot, Check, ChevronDown, Pencil, Plus, RotateCw, Trash2 } from "lucide-react";
+import { Bot, Check, ChevronDown, Link, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
@@ -130,7 +130,7 @@ export function BotSwitcherMenu({
                             </button>
                         ))}
                         <div className="my-1 border-t border-border" />
-                        {connectionStatus.kind === "disconnected" && (
+                        {connectionStatus.kind === "unpaired" && (
                             <button
                                 className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
                                 data-testid={dataTestId.pairBotAgain}
@@ -140,8 +140,8 @@ export function BotSwitcherMenu({
                                 }}
                                 type="button"
                             >
-                                <RotateCw aria-hidden="true" className="size-4" />
-                                Pair again
+                                <Link aria-hidden="true" className="size-4" />
+                                Pair the machine
                             </button>
                         )}
                         <button

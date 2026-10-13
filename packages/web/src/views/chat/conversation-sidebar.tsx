@@ -536,7 +536,7 @@ export function ConversationSidebar({
                                         onSelect={measureNetwork}
                                     >
                                         <Wifi aria-hidden="true" className="size-4" />
-                                        Network Diagnostic
+                                        Network latency
                                     </DropdownMenu.Item>
                                     <DropdownMenu.Item
                                         className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 outline-none data-[highlighted]:bg-accent"
@@ -604,15 +604,15 @@ export function ConversationSidebar({
             )}
             {diagnostic.state.kind !== "closed" && (
                 <Dialog
-                    title="Network Diagnostic"
+                    title="Network latency"
                     description="Round-trip latency for this browser and its connected Runtime."
                     headerAction={
                         <Button
-                            aria-label="Refresh network diagnostic"
+                            aria-label="Refresh network latency"
                             disabled={diagnostic.state.kind === "measuring"}
                             onClick={measureNetwork}
                             size="icon"
-                            title="Refresh network diagnostic"
+                            title="Refresh network latency"
                             variant="ghost"
                         >
                             <RefreshCw

@@ -354,9 +354,6 @@ export function BotChatHome({
                                     ) : (
                                         <div className="flex flex-wrap justify-center gap-2">
                                             <Button onClick={store.getState().retry}>Reconnect</Button>
-                                            <Button variant="outline" onClick={() => setPairingDialogOpen(true)}>
-                                                Pair again
-                                            </Button>
                                         </div>
                                     )}
                                 </div>
@@ -476,25 +473,14 @@ export function BotChatHome({
                     onClose={() => setFailureDialogOpen(false)}
                     testId={dataTestId.runtimeSetupFailure}
                 >
-                    <div className="flex flex-wrap gap-2">
-                        <Button
-                            onClick={() => {
-                                setFailureDialogOpen(false);
-                                store.getState().retry();
-                            }}
-                        >
-                            Reconnect
-                        </Button>
-                        <Button
-                            variant="outline"
-                            onClick={() => {
-                                setFailureDialogOpen(false);
-                                setPairingDialogOpen(true);
-                            }}
-                        >
-                            Pair again
-                        </Button>
-                    </div>
+                    <Button
+                        onClick={() => {
+                            setFailureDialogOpen(false);
+                            store.getState().retry();
+                        }}
+                    >
+                        Reconnect
+                    </Button>
                 </Dialog>
             )}
             {disconnectionNotice.kind === "visible" && !disconnectedNotificationDismissed && (

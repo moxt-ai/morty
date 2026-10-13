@@ -73,6 +73,7 @@ export async function createChatWorkerEnvironment() {
                 return {
                     failure: runtime.failure,
                     continueReply: runtime.continueReply,
+                    disconnect: async () => await runtime[Symbol.asyncDispose](),
                 };
             },
             connectRuntime: async () => {
