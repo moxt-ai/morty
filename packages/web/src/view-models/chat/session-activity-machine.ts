@@ -1,6 +1,6 @@
 export type SessionActivityState =
     | { readonly kind: "idle" }
-    | { readonly kind: "working"; readonly commandId: string }
+    | { readonly kind: "working"; readonly commandId: string; readonly startedAt: number }
     | { readonly kind: "failed"; readonly commandId: string | null; readonly message: string };
 
 export type SessionActivityEvent =
@@ -28,8 +28,11 @@ export function transitionSessionActivity(
     }
 }
 
-export function startSessionWork(event: { readonly commandId: string }): SessionActivityState {
-    return { commandId: event.commandId, kind: "working" };
+export function startSessionWork(event: {
+    readonly commandId: string;
+    readonly startedAt: number;
+}): SessionActivityState {
+    return { commandId: event.commandId, kind: "working", startedAt: event.startedAt };
 }
 
 export function workingCommandId(state: SessionActivityState): string | null {

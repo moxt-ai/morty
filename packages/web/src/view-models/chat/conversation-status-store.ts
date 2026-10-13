@@ -2,7 +2,11 @@ import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { SessionActivityState } from "./session-activity-machine.ts";
 
-export type ConversationListStatus = SessionActivityState | { readonly kind: "unread" };
+export type ConversationListStatus =
+    | { readonly kind: "idle" }
+    | { readonly commandId: string; readonly kind: "working" }
+    | { readonly kind: "failed"; readonly commandId: string | null; readonly message: string }
+    | { readonly kind: "unread" };
 
 interface ConversationStatusState {
     readonly statuses: ReadonlyMap<string, ConversationListStatus>;
