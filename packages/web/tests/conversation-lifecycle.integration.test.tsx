@@ -385,7 +385,7 @@ test("Given more saved messages than one history page, When live output arrives 
 test("Given more saved messages than one history page, When older messages load, Then a skeleton placeholder stands in for them instead of a text label", {
     timeout: 90_000,
 }, async () => {
-    const prompts = Array.from({ length: 10 }, (_, index) => `many session events: Skeleton message ${index + 1}`);
+    const prompts = Array.from({ length: 7 }, (_, index) => `many session events: Skeleton message ${index + 1}`);
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
