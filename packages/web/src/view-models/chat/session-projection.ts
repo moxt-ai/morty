@@ -61,7 +61,7 @@ export function createSessionProjection(): SessionProjection {
     return { kind: "pristine", pending: null, revision: 0 };
 }
 
-export function sessionConfigOptionsFromAcp(
+function sessionConfigOptionsFromAcp(
     update: Extract<AcpSessionUpdateV2, { readonly sessionUpdate: "config_option_update" }>,
 ): readonly SessionConfigOption[] {
     return update.configOptions.map((option) => ({

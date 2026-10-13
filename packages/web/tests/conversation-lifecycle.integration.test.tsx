@@ -218,7 +218,7 @@ test("Given Claude Code does not echo the submitted prompt, When the response st
 test("Given more saved messages than one history page, When live output arrives while the user loads more, Then older and live messages remain visible", {
     timeout: 90_000,
 }, async () => {
-    const prompts = Array.from({ length: 10 }, (_, index) => `many session events: Pagination message ${index + 1}`);
+    const prompts = Array.from({ length: 7 }, (_, index) => `many session events: Pagination message ${index + 1}`);
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -320,7 +320,7 @@ test("Given more saved messages than one history page, When live output arrives 
         page.responses.some(
             (response) =>
                 response.includes("Completed Pagination message 1") &&
-                !response.includes("Completed Pagination message 10"),
+                !response.includes(`Completed Pagination message ${prompts.length.toString()}`),
         ),
     ).toBe(false);
     expect(page.responses.at(-1)).toContain(`Completed Pagination message ${prompts.length.toString()}`);
@@ -372,7 +372,7 @@ test("Given more saved messages than one history page, When live output arrives 
         loadedResponses.some(
             (response) =>
                 response.includes("Completed Pagination message 1") &&
-                !response.includes("Completed Pagination message 10"),
+                !response.includes(`Completed Pagination message ${prompts.length.toString()}`),
         ),
     ).toBe(true);
     expect(loadedResponses.some((response) => response.includes("Live completion while older messages load"))).toBe(

@@ -412,7 +412,7 @@ function mergeAdjacentText(previous: SessionMessage | undefined, incoming: Sessi
     };
 }
 
-export interface ReducedSessionMessage {
+interface ReducedSessionMessage {
     readonly complete: boolean;
     readonly message: SessionMessage;
     readonly unresolvedEvents: readonly SessionEventV2[];
