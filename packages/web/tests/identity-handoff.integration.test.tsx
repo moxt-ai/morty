@@ -119,27 +119,14 @@ test("Given a native session handoff, When importing fails, Then the choice page
     expect(getByRole(forkSession, "status", { name: "Forking session" })).toBeInstanceOf(HTMLElement);
 });
 
-test("Given a shared workspace, When the user opens the user menu, Then they can back up their token before replacing the current user", {
+test("Given a shared workspace, When the user opens the user menu, Then replacing the current user is unavailable", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp();
     await app.user.click(await app.queryElementByTestId(dataTestId.closeDialog));
     await app.user.click(await app.queryElementByTestId(dataTestId.userMenu));
-    await app.user.click(await app.queryElementByTestId(dataTestId.replaceCurrentUser));
 
-    const dialog = await app.queryElementByTestId(dataTestId.replaceCurrentUserDialog);
-    expect(dialog.textContent).toContain("Replace current user");
-    expect(dialog.textContent).toContain("Back up this token");
-    expect(app.elementByTestId(dataTestId.currentUserToken, dialog)).toHaveProperty(
-        "value",
-        expect.stringMatching(/^mobius_recovery_v1\./u),
-    );
-    expect(app.elementByTestId(dataTestId.copyUserToken, dialog).getAttribute("aria-label")).toBe(
-        "Copy current user token",
-    );
-    expect(app.elementByTestId(dataTestId.replacementUserToken, dialog).getAttribute("aria-label")).toBe(
-        "Replacement user token",
-    );
+    expect(queryByRole(document.body, "menuitem", { name: "Replace current user" })).toBeNull();
 });
 
 test("Given a connected shared workspace, When the user refreshes Network latency, Then every network hop latency updates", {
@@ -176,7 +163,7 @@ test("Given a connected shared workspace, When the user refreshes Network latenc
     });
 });
 
-test("Given a shared workspace, When the user chooses to end remote access from the user menu, Then they must confirm the transfer-wide revocation and can back up their token", {
+test("Given a shared workspace, When the user chooses to end remote access from the user menu, Then they confirm the transfer-wide revocation without a recovery code", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp();
@@ -193,11 +180,8 @@ test("Given a shared workspace, When the user chooses to end remote access from 
     expect(dialog.textContent).toContain("End remote access?");
     expect(dialog.textContent).toContain("every browser using this access link");
     expect(dialog.textContent).toContain("Your local Runtime and task will keep running");
-    expect(dialog.textContent).toContain("Back up this token");
-    expect(app.elementByTestId(dataTestId.currentUserToken, dialog)).toHaveProperty(
-        "value",
-        expect.stringMatching(/^mobius_recovery_v1\./u),
-    );
+    expect(dialog.textContent).not.toContain("Back up this token");
+    expect(queryByRole(dialog, "textbox", { name: "Current user token" })).toBeNull();
     expect(dialog.textContent).toContain("Cancel");
     expect(dialog.textContent).toContain("End remote access");
 });

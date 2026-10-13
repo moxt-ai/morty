@@ -56,7 +56,7 @@ export function MobiusManagement() {
         },
         [identity.projectId, transport.fetch],
     );
-    const currentUserToken = useCallback(
+    const currentAccessToken = useCallback(
         async (signal: AbortSignal) => {
             const api = new AnonymousIdentityApi({
                 fetchRequest: transport.fetch,
@@ -65,10 +65,7 @@ export function MobiusManagement() {
             const localIdentity = await api.loadExisting(signal);
             const token =
                 localIdentity?.projectId === identity.projectId ? localIdentity.token : await identity.getToken(signal);
-            return {
-                accessToken: token,
-                token: await api.createRecoveryToken(token, identity.projectId, signal),
-            };
+            return token;
         },
         [identity, transport.fetch],
     );
@@ -80,21 +77,6 @@ export function MobiusManagement() {
             });
             await api.endRemoteAccess(token, signal);
             signal.throwIfAborted();
-            window.location.reload();
-        },
-        [transport.fetch],
-    );
-    const replaceCurrentUser = useCallback(
-        async (currentAccessToken: string, replacementToken: string, signal: AbortSignal) => {
-            const api = new AnonymousIdentityApi({
-                fetchRequest: transport.fetch,
-                origin: window.location.origin,
-            });
-            await api.resolveIdentity(replacementToken, signal);
-            await api.endRemoteAccess(currentAccessToken, signal);
-            signal.throwIfAborted();
-            const replacement = await api.resolveIdentity(replacementToken, signal);
-            api.saveIdentity(replacement);
             window.location.reload();
         },
         [transport.fetch],
@@ -115,9 +97,8 @@ export function MobiusManagement() {
         <BotChatHome
             requests={requests}
             createTransfer={createTransfer}
-            currentUserToken={currentUserToken}
+            currentAccessToken={currentAccessToken}
             endRemoteAccess={endRemoteAccess}
-            replaceCurrentUser={replaceCurrentUser}
             replaceWorkspace={replaceWorkspace}
             projectId={identity.projectId}
             selectedBotPreference={selectedBotPreference}
