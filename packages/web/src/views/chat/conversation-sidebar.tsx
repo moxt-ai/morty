@@ -236,7 +236,6 @@ export function ConversationSidebar({
                 </span>
                 <span className="hidden min-w-0 sm:block">
                     <h1 className="truncate text-[15px] leading-5 font-semibold tracking-[-0.015em]">Morty</h1>
-                    <span className="block text-[11px] leading-4 text-muted-foreground">Local agents</span>
                 </span>
             </div>
             <BotSwitcherMenu

@@ -63,7 +63,7 @@ test("Given a new browser, When Morty loads, Then Morty opens without presenting
     const app = await createTestApp({ page: { kind: "bootstrap" } });
 
     expect(await app.queryElementByTestId(dataTestId.closeDialog)).toBeInstanceOf(HTMLElement);
-    expect(document.body.textContent).toContain("Local agents");
+    expect(document.body.textContent).not.toContain("Local agents");
     expect(document.body.textContent?.toLowerCase()).not.toContain("workspace");
 });
 
