@@ -377,7 +377,7 @@ export function MobiusSessionPane({
                                 )}
                             </div>
                         ))}
-                        {presentation.outputState !== "idle" && (
+                        {presentation.workingIndicatorVisible && presentation.outputState !== "idle" && (
                             <div className="mt-6 sm:px-2">
                                 <WorkingIndicator />
                             </div>

@@ -50,7 +50,7 @@ export function ChatConfigurationMenu({
     );
     const settings = controls.filter((control) => control !== harness);
     const selectedHarness = harness?.options.find((option) => option.value === harness.value);
-    const selections = controls.map((control) =>
+    const selections = settings.map((control) =>
         control.kind === "boolean"
             ? `${control.label}: ${control.checked ? "On" : "Off"}`
             : (control.options.find((option) => option.value === control.value)?.label ?? control.value),
