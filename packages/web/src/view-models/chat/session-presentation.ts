@@ -48,13 +48,13 @@ type SessionContentBlock =
 export type SessionMessage =
     | {
           readonly role: "user";
-          readonly id: string;
+          readonly firstEvent: SessionEventV2;
           readonly commandId: string | null;
           readonly contents: readonly ContentBlockV2[];
       }
     | {
           readonly role: "assistant";
-          readonly id: string;
+          readonly firstEvent: SessionEventV2;
           readonly commandId: string | null;
           readonly presentation:
               | { readonly kind: "message"; readonly content: SessionContentBlock; readonly messageId: string | null }
@@ -311,77 +311,45 @@ function isBotInstructions(content: ContentBlockV2): boolean {
     return content.type === "resource" && content.resource.uri === BOT_INSTRUCTIONS_URI;
 }
 
-function isSubmittedContentEcho(submitted: ContentBlockV2, echoed: ContentBlockV2): boolean {
-    if (submitted.type === echoed.type) {
-        return JSON.stringify(submitted) === JSON.stringify(echoed);
-    }
-    if (submitted.type === "image" && echoed.type === "external_image") {
-        return submitted.mimeType === echoed.mimeType;
-    }
-    if (submitted.type === "audio" && echoed.type === "external_audio") {
-        return submitted.mimeType === echoed.mimeType;
-    }
-    return submitted.type === "resource" && echoed.type === "external_resource"
-        ? submitted.resource.uri === echoed.uri
-        : false;
-}
-
-function projectAcpUpdate(
-    event: SessionEventV2,
-    update: AcpSessionUpdateV2,
-    submittedPrompts: Map<string, ContentBlockV2[]>,
-): readonly SessionMessage[] {
+function messageFromAcpUpdate(event: SessionEventV2, update: AcpSessionUpdateV2): SessionMessage | null {
     switch (update.sessionUpdate) {
         case "user_message_chunk": {
-            for (const contents of submittedPrompts.values()) {
-                const echoIndex = contents.findIndex((content) => isSubmittedContentEcho(content, update.content));
-                if (echoIndex !== -1) {
-                    contents.splice(echoIndex, 1);
-                    return [];
-                }
-            }
             if (isBotInstructions(update.content)) {
-                return [];
+                return null;
             }
-            return [
-                {
-                    commandId: null,
-                    contents: [update.content],
-                    id: event.eventId,
-                    role: "user",
-                },
-            ];
+            return {
+                commandId: null,
+                contents: [update.content],
+                firstEvent: event,
+                role: "user",
+            };
         }
         case "agent_message_chunk":
-            return [
-                {
-                    commandId: null,
-                    id: event.eventId,
-                    presentation: {
-                        content: sessionContent(update.content),
-                        kind: "message",
-                        messageId: update.messageId ?? null,
-                    },
-                    role: "assistant",
+            return {
+                commandId: null,
+                firstEvent: event,
+                presentation: {
+                    content: sessionContent(update.content),
+                    kind: "message",
+                    messageId: update.messageId ?? null,
                 },
-            ];
+                role: "assistant",
+            };
         case "agent_thought_chunk":
-            return [
-                {
-                    commandId: null,
-                    id: event.eventId,
-                    presentation: {
-                        content: sessionContent(update.content, REASONING_CHARACTER_LIMIT),
-                        kind: "thought",
-                        messageId: update.messageId ?? null,
-                        omitted: event.mobiusMetadata?.omitted === true,
-                    },
-                    role: "assistant",
+            return {
+                commandId: null,
+                firstEvent: event,
+                presentation: {
+                    content: sessionContent(update.content, REASONING_CHARACTER_LIMIT),
+                    kind: "thought",
+                    messageId: update.messageId ?? null,
+                    omitted: event.mobiusMetadata?.omitted === true,
                 },
-            ];
+                role: "assistant",
+            };
         case "tool_call":
         case "tool_call_update":
-            return [];
+            return null;
         case "available_commands_update":
         case "compaction_summary_chunk":
         case "compaction_update":
@@ -392,11 +360,20 @@ function projectAcpUpdate(
         case "plan_update":
         case "session_info_update":
         case "usage_update":
-            return [];
+            return null;
         default:
             return exhaustive(update);
     }
 }
+
+type SessionEventResult =
+    | { readonly kind: "consumed"; readonly index: number; readonly message: SessionMessage }
+    | {
+          readonly kind: "constructed";
+          readonly firstEvent: "known" | "possibly-before-page";
+          readonly message: SessionMessage;
+      }
+    | { readonly kind: "skipped" };
 
 function mergeAdjacentText(previous: SessionMessage | undefined, incoming: SessionMessage): SessionMessage | null {
     if (
@@ -435,139 +412,175 @@ function mergeAdjacentText(previous: SessionMessage | undefined, incoming: Sessi
     };
 }
 
-interface SessionTimelineProjection {
-    readonly append: (event: SessionEventV2) => SessionTimeline;
-    readonly complete: () => SessionTimeline;
-    readonly current: () => SessionTimeline;
+export interface ReducedSessionMessage {
+    readonly complete: boolean;
+    readonly message: SessionMessage;
+    readonly unresolvedEvents: readonly SessionEventV2[];
 }
 
-function createSessionTimelineProjection(events: readonly SessionEventV2[]): SessionTimelineProjection {
-    const messages: SessionMessage[] = [];
-    const messageIdsWithFirstEventLoaded = new Set<string>();
-    const submittedPrompts = new Map<string, ContentBlockV2[]>();
-    const toolIndexes = new Map<string, number>();
-    let timeline: SessionTimeline = { messages: [] };
-    const commit = (): SessionTimeline => {
-        timeline = { messages: [...messages] };
-        return timeline;
-    };
-    const append = (event: SessionEventV2, publish: boolean): SessionTimeline => {
-        if (event.type === "lifecycle-metadata") {
-            const lifecycle = event.payload;
-            if (lifecycle.kind === "prompt.requested") {
-                submittedPrompts.set(lifecycle.commandId, [...lifecycle.content]);
-                const contents = lifecycle.content.filter((content) => !isBotInstructions(content));
-                if (contents.length === 0) {
-                    return timeline;
-                }
-                messages.push({
-                    commandId: lifecycle.commandId,
-                    contents,
-                    id: event.eventId,
-                    role: "user",
-                });
-                messageIdsWithFirstEventLoaded.add(event.eventId);
-                return publish ? commit() : timeline;
-            }
-            if (
-                lifecycle.kind === "prompt.completed" ||
-                lifecycle.kind === "prompt.failed" ||
-                lifecycle.kind === "prompt.failed-before-start"
-            ) {
-                submittedPrompts.delete(lifecycle.commandId);
-            }
-            return timeline;
+export interface SessionMessageReduction {
+    readonly entries: readonly ReducedSessionMessage[];
+}
+
+function consumeSessionEvent(
+    entries: readonly ReducedSessionMessage[],
+    event: SessionEventV2,
+    leadingEvent: "known" | "possibly-before-page",
+): SessionEventResult {
+    if (event.type === "lifecycle-metadata") {
+        const lifecycle = event.payload;
+        if (lifecycle.kind === "prompt.requested") {
+            const contents = lifecycle.content.filter((content) => !isBotInstructions(content));
+            return contents.length === 0
+                ? { kind: "skipped" }
+                : {
+                      firstEvent: "known",
+                      kind: "constructed",
+                      message: {
+                          commandId: lifecycle.commandId,
+                          contents,
+                          firstEvent: event,
+                          role: "user",
+                      },
+                  };
         }
-        const update = event.payload;
-        if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update") {
-            const projected = projectAcpUpdate(event, update, submittedPrompts);
-            if (projected.length === 0) {
-                return timeline;
-            }
-            for (const message of projected) {
-                const previousIndex = messages.length - 1;
-                const merged = mergeAdjacentText(messages[previousIndex], message);
-                if (merged === null) {
-                    messages.push(message);
-                    if (messages.length > 1) {
-                        messageIdsWithFirstEventLoaded.add(message.id);
-                    }
-                } else {
-                    messages[previousIndex] = merged;
-                }
-            }
-            return publish ? commit() : timeline;
-        }
-        const existingIndex = toolIndexes.get(update.toolCallId);
-        const existing = existingIndex === undefined ? undefined : messages[existingIndex];
-        const previous =
-            existing?.role === "assistant" && existing.presentation.kind === "tool"
-                ? existing.presentation.entry
-                : null;
-        const message: SessionMessage = {
-            commandId: null,
-            id: existing?.id ?? event.eventId,
-            presentation: { entry: mergeToolPresentation(previous, update), kind: "tool" },
-            role: "assistant",
-        };
-        if (existingIndex === undefined) {
-            toolIndexes.set(update.toolCallId, messages.length);
-            messages.push(message);
-            if (update.sessionUpdate === "tool_call") {
-                messageIdsWithFirstEventLoaded.add(message.id);
-            }
-        } else {
-            messages[existingIndex] = message;
-        }
-        return publish ? commit() : timeline;
-    };
-    for (const event of events) {
-        append(event, false);
+        return { kind: "skipped" };
     }
-    commit();
-    return {
-        append: (event) => append(event, true),
-        complete: () => ({
-            messages: timeline.messages.filter((message) => messageIdsWithFirstEventLoaded.has(message.id)),
-        }),
-        current: () => timeline,
+    const update = event.payload;
+    if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update") {
+        const message = messageFromAcpUpdate(event, update);
+        if (message === null) {
+            return { kind: "skipped" };
+        }
+        const previousIndex = entries.length - 1;
+        const merged = mergeAdjacentText(entries[previousIndex]?.message, message);
+        return merged === null
+            ? {
+                  firstEvent: entries.length === 0 ? leadingEvent : "known",
+                  kind: "constructed",
+                  message,
+              }
+            : { index: previousIndex, kind: "consumed", message: merged };
+    }
+    const existingIndex = entries.findIndex(
+        (entry) =>
+            entry.message.role === "assistant" &&
+            entry.message.presentation.kind === "tool" &&
+            entry.message.presentation.entry.id === update.toolCallId,
+    );
+    const existing = existingIndex === -1 ? undefined : entries[existingIndex]?.message;
+    const previous =
+        existing?.role === "assistant" && existing.presentation.kind === "tool" ? existing.presentation.entry : null;
+    const message: SessionMessage = {
+        commandId: null,
+        firstEvent: existing?.firstEvent ?? event,
+        presentation: { entry: mergeToolPresentation(previous, update), kind: "tool" },
+        role: "assistant",
     };
+    return existingIndex === -1
+        ? {
+              firstEvent: update.sessionUpdate === "tool_call" ? "known" : "possibly-before-page",
+              kind: "constructed",
+              message,
+          }
+        : { index: existingIndex, kind: "consumed", message };
 }
 
-export interface SessionHistoryMessages {
-    readonly append: (event: SessionEventV2) => void;
-    readonly current: () => SessionTimeline;
-    readonly replace: (history: {
-        readonly events: readonly SessionEventV2[];
-        readonly nextCursor: string | null;
-    }) => void;
-    readonly updateCursor: (nextCursor: string | null) => void;
+function applySessionEvent(
+    entries: readonly ReducedSessionMessage[],
+    event: SessionEventV2,
+    result: SessionEventResult,
+): readonly ReducedSessionMessage[] {
+    switch (result.kind) {
+        case "consumed": {
+            const previous = entries[result.index];
+            if (previous === undefined) {
+                return entries;
+            }
+            const next = [...entries];
+            next[result.index] = {
+                complete: previous.complete,
+                message: result.message,
+                unresolvedEvents: previous.complete ? [] : [...previous.unresolvedEvents, event],
+            };
+            return next;
+        }
+        case "constructed":
+            return [
+                ...entries,
+                {
+                    complete: result.firstEvent === "known",
+                    message: result.message,
+                    unresolvedEvents: result.firstEvent === "known" ? [] : [event],
+                },
+            ];
+        case "skipped":
+            return entries;
+        default:
+            return exhaustive(result);
+    }
 }
 
-export function createSessionHistoryMessages(history: {
+function reduceSessionEvents(
+    events: readonly SessionEventV2[],
+    leadingEvent: "known" | "possibly-before-page",
+): SessionMessageReduction {
+    let entries: readonly ReducedSessionMessage[] = [];
+    for (const event of events) {
+        entries = applySessionEvent(entries, event, consumeSessionEvent(entries, event, leadingEvent));
+    }
+    return { entries };
+}
+
+export function createSessionMessageReduction(history: {
     readonly events: readonly SessionEventV2[];
     readonly nextCursor: string | null;
-}): SessionHistoryMessages {
-    let hasOlderEvents = history.nextCursor !== null;
-    let projection = createSessionTimelineProjection(history.events);
-    const current = (): SessionTimeline => (hasOlderEvents ? projection.complete() : projection.current());
+}): SessionMessageReduction {
+    return reduceSessionEvents(history.events, history.nextCursor === null ? "known" : "possibly-before-page");
+}
+
+function mergeSessionEventSequences(
+    first: readonly SessionEventV2[],
+    second: readonly SessionEventV2[],
+): readonly SessionEventV2[] {
+    const events = new Map(first.map((event) => [event.eventId, event]));
+    for (const event of second) {
+        events.set(event.eventId, event);
+    }
+    return [...events.values()].sort((left, right) =>
+        left.eventId < right.eventId ? -1 : left.eventId > right.eventId ? 1 : 0,
+    );
+}
+
+export function appendSessionMessageEvent(
+    reduction: SessionMessageReduction,
+    event: SessionEventV2,
+): SessionMessageReduction {
     return {
-        append: (event) => {
-            projection.append(event);
-        },
-        current,
-        replace: (replacement) => {
-            hasOlderEvents = replacement.nextCursor !== null;
-            projection = createSessionTimelineProjection(replacement.events);
-        },
-        updateCursor: (nextCursor) => {
-            hasOlderEvents = nextCursor !== null;
-        },
+        entries: applySessionEvent(reduction.entries, event, consumeSessionEvent(reduction.entries, event, "known")),
     };
+}
+
+export function prependSessionMessageEvents(
+    reduction: SessionMessageReduction,
+    history: { readonly events: readonly SessionEventV2[]; readonly nextCursor: string | null },
+): SessionMessageReduction {
+    const unresolvedEvents = reduction.entries.flatMap((entry) => entry.unresolvedEvents);
+    const older = createSessionMessageReduction({
+        events: mergeSessionEventSequences(history.events, unresolvedEvents),
+        nextCursor: history.nextCursor,
+    });
+    return {
+        entries: [...older.entries, ...reduction.entries.filter((entry) => entry.complete)],
+    };
+}
+
+export function sessionReductionMessages(reduction: SessionMessageReduction): readonly SessionMessage[] {
+    return reduction.entries.flatMap((entry) => (entry.complete ? [entry.message] : []));
 }
 
 export function sessionEventLogPresentation(events: readonly SessionEventV2[]): SessionTimeline {
-    return createSessionTimelineProjection(events).current();
+    return { messages: sessionReductionMessages(reduceSessionEvents(events, "known")) };
 }
 
 export function sessionEventCommandIds(events: readonly SessionEventV2[]): readonly string[] {

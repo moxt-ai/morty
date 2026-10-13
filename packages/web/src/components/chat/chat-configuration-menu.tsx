@@ -1,4 +1,4 @@
-import { ChevronDown, LoaderCircle, RefreshCw } from "lucide-react";
+import { ChevronDown, LoaderCircle } from "lucide-react";
 import { Tooltip } from "radix-ui";
 import { useState } from "react";
 import { dataTestId } from "@/data-testid";
@@ -39,11 +39,9 @@ export type ChatConfigurationControl = ChatConfigurationSelectControl | ChatConf
 
 export function ChatConfigurationMenu({
     controls,
-    onRefresh,
     settingsLoading = false,
 }: {
     readonly controls: readonly ChatConfigurationControl[];
-    readonly onRefresh?: (() => void) | undefined;
     readonly settingsLoading?: boolean;
 }) {
     const [open, setOpen] = useState(false);
@@ -147,21 +145,6 @@ export function ChatConfigurationMenu({
                         className="grid min-h-44 grid-rows-[auto_1fr] gap-2 p-3"
                         role="tabpanel"
                     >
-                        {onRefresh !== undefined && (
-                            <div className="flex justify-end">
-                                <button
-                                    aria-label="Refresh agent settings"
-                                    data-testid={dataTestId.refreshAgentSettings}
-                                    className="flex size-8 items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
-                                    disabled={settingsLoading}
-                                    onClick={onRefresh}
-                                    title="Refresh agent settings"
-                                    type="button"
-                                >
-                                    <RefreshCw aria-hidden="true" className="size-4" />
-                                </button>
-                            </div>
-                        )}
                         <div className="grid content-start gap-3">
                             {settingsLoading ? (
                                 <div

@@ -1,4 +1,4 @@
-import { type AcpSessionUpdateV2, decodeIdentifier, type SessionEventV2 } from "@moxt-ai/mobius-protocol";
+import { decodeIdentifier, type SessionEventV2 } from "@moxt-ai/mobius-protocol";
 import {
     type MobiusClient,
     MobiusElicitationResponseRequest,
@@ -30,7 +30,21 @@ import type {
     PermissionInteraction,
     PermissionInteractionResponse,
 } from "./session-pane-types.ts";
-import { createSessionHistoryMessages, type SessionMessage, sessionEventCommandIds } from "./session-presentation.ts";
+import {
+    createSessionMessageReduction,
+    type SessionMessage,
+    sessionEventCommandIds,
+    sessionReductionMessages,
+} from "./session-presentation.ts";
+import {
+    createSessionProjection,
+    type SessionEventHistory,
+    type SessionProjectionEffect,
+    type SessionProjectionInput,
+    sessionProjectionMessages,
+    sessionProjectionPagination,
+    transitionSessionProjection,
+} from "./session-projection.ts";
 import {
     createSessionTaskControlsStore,
     findCompactCommand,
@@ -191,7 +205,7 @@ export function sessionPanePresentation(
     const compactAvailable = findCompactCommand(tasks.commands) !== null;
     const activeMessageId =
         workingActivityCommandId !== null || submittingCommandId !== null
-            ? (model.messages.findLast((message) => message.role === "assistant")?.id ?? null)
+            ? (model.messages.findLast((message) => message.role === "assistant")?.firstEvent.eventId ?? null)
             : null;
     const deliveryUnknownCommandId =
         delivery.state.kind === "delivery-unknown" ? delivery.state.journal.commandId : null;
@@ -246,78 +260,18 @@ interface SessionIdentity {
     readonly directoryId: string;
 }
 
-function sessionConfigOptionsFromAcp(
-    update: Extract<AcpSessionUpdateV2, { readonly sessionUpdate: "config_option_update" }>,
-): readonly SessionConfigOption[] {
-    return update.configOptions.map((option) => ({
-        booleanValue: option.type === "boolean" ? option.currentValue : false,
-        category: option.category ?? "",
-        currentValue: option.type === "select" ? option.currentValue : "",
-        description: option.description ?? "",
-        id: option.id,
-        name: option.name,
-        type: option.type,
-        values:
-            option.type === "boolean"
-                ? []
-                : option.options.flatMap((item) =>
-                      "group" in item
-                          ? item.options.map((value) => ({
-                                description: value.description ?? "",
-                                groupId: item.group,
-                                groupName: item.name,
-                                name: value.name,
-                                value: value.value,
-                            }))
-                          : [
-                                {
-                                    description: item.description ?? "",
-                                    groupId: "",
-                                    groupName: "",
-                                    name: item.name,
-                                    value: item.value,
-                                },
-                            ],
-                  ),
-    }));
-}
-
-interface SessionEventRecoveryV2 {
-    readonly events: readonly SessionEventV2[];
-    readonly nextCursor: string | null;
-    readonly sessionGenerationId: string;
-}
-
-async function readSessionEventsV2(
-    client: MobiusClient,
-    sessionId: string,
-    signal: AbortSignal,
-): Promise<SessionEventRecoveryV2> {
-    const page = await client.events.listV2(sessionId, new MobiusPageRequest(SESSION_EVENT_PAGE_LIMIT, ""), signal, {
-        omit: ["agent-reasoning"],
-    });
-    signal.throwIfAborted();
-    return {
-        events: page.events,
-        nextCursor: page.nextCursor,
-        sessionGenerationId: page.sessionGenerationId,
-    };
-}
-
 async function readSessionHistoryV2(
     client: MobiusClient,
     sessionId: string,
     initialCursor: string | null,
     newerEvents: readonly SessionEventV2[],
-    initialMessageCount: number,
     expectedSessionGenerationId: string | null,
     signal: AbortSignal,
-): Promise<SessionEventRecoveryV2> {
+): Promise<SessionEventHistory> {
     let events: readonly SessionEventV2[] = newerEvents;
     let nextCursor = initialCursor;
     let sessionGenerationId = expectedSessionGenerationId;
-    const pendingHistoryMessages = createSessionHistoryMessages({ events, nextCursor });
-    let renderableMessages = pendingHistoryMessages.current().messages;
+    let renderableMessages = sessionReductionMessages(createSessionMessageReduction({ events, nextCursor }));
     do {
         const requestedCursor = nextCursor;
         const page = await client.events.listV2(
@@ -336,9 +290,8 @@ async function readSessionHistoryV2(
         sessionGenerationId = page.sessionGenerationId;
         events = mergeSessionEvents(page.events, events);
         nextCursor = page.nextCursor;
-        pendingHistoryMessages.replace({ events, nextCursor });
-        renderableMessages = pendingHistoryMessages.current().messages;
-    } while (nextCursor !== null && renderableMessages.length - initialMessageCount < HISTORY_MESSAGE_TARGET);
+        renderableMessages = sessionReductionMessages(createSessionMessageReduction({ events, nextCursor }));
+    } while (nextCursor !== null && renderableMessages.length < HISTORY_MESSAGE_TARGET);
     if (sessionGenerationId === null) {
         throw new Error("The Runtime returned no Session history generation.");
     }
@@ -378,11 +331,8 @@ export function createSessionPaneModel(options: {
     const activeTurn = createSessionActiveTurn({ initial: initialActiveTurn });
     const openedActiveTurn = activeTurn.current();
     let client: MobiusClient | null = null;
-    let sessionEvents: SessionEventV2[] = [];
-    let sessionGenerationId: string | null = null;
+    let projection = createSessionProjection();
     let sessionTitle = session.entry.title;
-    const supersededSessionGenerationIds = new Set<string>();
-    let historyCursor: string | null = null;
     let loadingOlderHistory = false;
     let command = openedActiveTurn.kind === "idle" ? "" : openedActiveTurn.commandId;
     let initialCommandId = options.initialMessage?.commandId ?? null;
@@ -429,12 +379,9 @@ export function createSessionPaneModel(options: {
     });
     const initialActivity: SessionActivityState =
         command === "" ? { kind: "idle" } : startSessionWork({ commandId: command });
-    const historyMessages = createSessionHistoryMessages({ events: sessionEvents, nextCursor: historyCursor });
-    const deriveTimeline = () => historyMessages.current();
-    const replaceTimeline = (events: readonly SessionEventV2[]): void => {
-        sessionEvents = [...events];
-        historyMessages.replace({ events: sessionEvents, nextCursor: historyCursor });
-    };
+    const deriveTimeline = (): { readonly messages: readonly SessionMessage[] } => ({
+        messages: sessionProjectionMessages(projection),
+    });
     const tasks = createSessionTaskControlsStore({
         commands: session.result.ready.commands,
         steeringSupported: session.result.ready.capabilities.steering,
@@ -506,13 +453,93 @@ export function createSessionPaneModel(options: {
     const initialTimeline = deriveTimeline();
 
     const store = createStore<SessionPaneStore>()((set, get) => {
+        let historyLoadController: AbortController | null = null;
+        const commitProjection = (input: SessionProjectionInput): readonly SessionProjectionEffect[] => {
+            const result = transitionSessionProjection(projection, input);
+            projection = result.state;
+            const pagination = sessionProjectionPagination(projection);
+            set({
+                hasOlderHistory: pagination !== null,
+                historyRevision: projection.revision,
+                messages: sessionProjectionMessages(projection),
+            });
+            for (const effect of result.effects) {
+                if (effect.kind !== "adopted") {
+                    continue;
+                }
+                if (effect.config !== undefined) {
+                    sessionConfigurations = effect.config.map((candidate) => ({
+                        booleanValue: candidate.type === "boolean" ? candidate.booleanValue : false,
+                        configId: candidate.id,
+                        value: candidate.type === "select" ? candidate.currentValue : "",
+                        valueType: candidate.type,
+                    }));
+                    saveLastAgentSettings(botId, session.agentRef, effect.config);
+                    set({ options: effect.config });
+                }
+                if (effect.title !== undefined) {
+                    sessionTitle = effect.title;
+                    set({ title: sessionTitle });
+                    options.onTitleChange(sessionId, sessionTitle);
+                }
+            }
+            return result.effects;
+        };
+        const loadProjectionHistory = async (
+            effect: Extract<SessionProjectionEffect, { readonly kind: "load-history" }>,
+            connected: MobiusClient,
+            parentSignal: AbortSignal,
+        ): Promise<void> => {
+            historyLoadController?.abort();
+            const controller = new AbortController();
+            historyLoadController = controller;
+            const revision = projection.revision;
+            try {
+                const history = await readSessionHistoryV2(
+                    connected,
+                    sessionId,
+                    null,
+                    [],
+                    effect.generation,
+                    AbortSignal.any([parentSignal, controller.signal, AbortSignal.timeout(45_000)]),
+                );
+                parentSignal.throwIfAborted();
+                if (controller.signal.aborted || projection.pending === null || projection.revision !== revision) {
+                    return;
+                }
+                commitProjection({ history, kind: "history-loaded", revision });
+                delivery.getState().reconcile(sessionEventCommandIds(history.events));
+            } catch (cause) {
+                parentSignal.throwIfAborted();
+                if (controller.signal.aborted || projection.revision !== revision) {
+                    return;
+                }
+                throw cause;
+            } finally {
+                if (historyLoadController === controller) {
+                    historyLoadController = null;
+                }
+            }
+        };
+        const dispatchProjection = async (
+            input: SessionProjectionInput,
+            connected: MobiusClient,
+            signal: AbortSignal,
+        ): Promise<void> => {
+            const effects = commitProjection(input);
+            for (const effect of effects) {
+                if (effect.kind === "load-history") {
+                    await loadProjectionHistory(effect, connected, signal);
+                }
+            }
+        };
         return {
             connection: { kind: "loading" },
             title: sessionTitle,
             messages: initialTimeline.messages,
             historyLoading: false,
             historyRevision: 0,
-            hasOlderHistory: historyCursor !== null,
+            hasOlderHistory: false,
             options: session.result.ready.configOptions,
             draft: options.initialMessage?.content ?? centralLocalStorage.read(draftEntry) ?? "",
             attachments: options.initialMessage?.attachments ?? [],
@@ -520,31 +547,23 @@ export function createSessionPaneModel(options: {
             operation: { kind: "idle" },
             activity: initialActivity,
             loadOlderMessages: async (signal) => {
-                if (loadingOlderHistory || historyCursor === null || client === null) {
+                const pagination = sessionProjectionPagination(projection);
+                if (loadingOlderHistory || pagination === null || client === null) {
                     return;
                 }
                 loadingOlderHistory = true;
                 set({ historyLoading: true });
                 try {
-                    const initialMessageCount = deriveTimeline().messages.length;
-                    const recovery = await readSessionHistoryV2(
+                    const page = await readSessionHistoryV2(
                         client,
                         sessionId,
-                        historyCursor,
-                        sessionEvents,
-                        initialMessageCount,
-                        sessionGenerationId,
+                        pagination.nextCursor,
+                        [],
+                        pagination.generation,
                         signal,
                     );
-                    historyCursor = recovery.nextCursor;
-                    replaceTimeline(recovery.events);
-                    const timeline = deriveTimeline();
                     signal.throwIfAborted();
-                    set({
-                        hasOlderHistory: historyCursor !== null,
-                        historyRevision: get().historyRevision + 1,
-                        messages: timeline.messages,
-                    });
+                    commitProjection({ kind: "older-page", page, revision: pagination.revision });
                 } catch (cause) {
                     signal.throwIfAborted();
                     set({
@@ -659,19 +678,12 @@ export function createSessionPaneModel(options: {
                         ) {
                             delivery.getState().reconcile([payload.commandId]);
                             if (payload.kind === "prompt.completed" && payload.stopReason === "steered") {
-                                const [recovery, execution] = await Promise.all([
-                                    readSessionEventsV2(connected, sessionId, signal),
-                                    connected.sessions.readSessionExecution(sessionId, sessionIdentity, signal),
-                                ]);
+                                const execution = await connected.sessions.readSessionExecution(
+                                    sessionId,
+                                    sessionIdentity,
+                                    signal,
+                                );
                                 signal.throwIfAborted();
-                                if (sessionGenerationId !== recovery.sessionGenerationId) {
-                                    if (sessionGenerationId !== null) {
-                                        supersededSessionGenerationIds.add(sessionGenerationId);
-                                    }
-                                    sessionGenerationId = recovery.sessionGenerationId;
-                                }
-                                historyCursor = recovery.nextCursor;
-                                replaceTimeline(mergeSessionEvents(sessionEvents, recovery.events));
                                 const running = execution.turn;
                                 if (running !== null) {
                                     command = running.commandId;
@@ -725,42 +737,8 @@ export function createSessionPaneModel(options: {
                                 sessionIdentity,
                                 signal,
                             );
-                            const recovery = await readSessionHistoryV2(
-                                connected,
-                                sessionId,
-                                null,
-                                [],
-                                0,
-                                null,
-                                signal,
-                            );
-                            if (sessionGenerationId !== null && sessionGenerationId !== recovery.sessionGenerationId) {
-                                supersededSessionGenerationIds.add(sessionGenerationId);
-                            }
-                            sessionGenerationId = recovery.sessionGenerationId;
-                            historyCursor = recovery.nextCursor;
-                            replaceTimeline(recovery.events);
-                            for (const event of recovery.events) {
-                                if (
-                                    event.type === "acp" &&
-                                    event.payload.sessionUpdate === "session_info_update" &&
-                                    Object.hasOwn(event.payload, "title") &&
-                                    event.payload.title !== null &&
-                                    event.payload.title !== undefined
-                                ) {
-                                    sessionTitle = event.payload.title;
-                                }
-                            }
-                            const native = deriveTimeline();
-                            delivery.getState().reconcile(sessionEventCommandIds(sessionEvents));
+                            await dispatchProjection({ kind: "reconcile" }, connected, signal);
                             signal.throwIfAborted();
-                            set({
-                                hasOlderHistory: historyCursor !== null,
-                                historyRevision: 0,
-                                messages: native.messages,
-                                title: sessionTitle,
-                            });
-                            options.onTitleChange(sessionId, sessionTitle);
                             const execution = await executionPromise;
                             const running = execution.turn;
                             messageQueue.getState().replace(execution.queued);
@@ -820,28 +798,12 @@ export function createSessionPaneModel(options: {
                             }
                         },
                         receive: async (events) => {
+                            const historyLoads: Promise<void>[] = [];
                             for (const event of events) {
-                                if (sessionGenerationId !== event.sessionGenerationId) {
-                                    if (supersededSessionGenerationIds.has(event.sessionGenerationId)) {
-                                        continue;
-                                    }
-                                    if (sessionGenerationId !== null) {
-                                        supersededSessionGenerationIds.add(sessionGenerationId);
-                                    }
-                                    sessionGenerationId = event.sessionGenerationId;
-                                    historyCursor = null;
-                                    sessionEvents.push(event);
-                                    historyMessages.updateCursor(historyCursor);
-                                    historyMessages.append(event);
-                                } else {
-                                    const latest = sessionEvents.at(-1);
-                                    if (latest === undefined || latest.eventId < event.eventId) {
-                                        sessionEvents.push(event);
-                                        historyMessages.append(event);
-                                    } else if (
-                                        !sessionEvents.some((candidate) => candidate.eventId === event.eventId)
-                                    ) {
-                                        replaceTimeline(mergeSessionEvents(sessionEvents, [event]));
+                                const effects = commitProjection({ event, kind: "live-event" });
+                                for (const effect of effects) {
+                                    if (effect.kind === "load-history") {
+                                        historyLoads.push(loadProjectionHistory(effect, connected, signal));
                                     }
                                 }
                                 if (event.type !== "acp") {
@@ -857,35 +819,11 @@ export function createSessionPaneModel(options: {
                                             })),
                                         );
                                     }
-                                    if (update.sessionUpdate === "config_option_update") {
-                                        const configOptions = sessionConfigOptionsFromAcp(update);
-                                        sessionConfigurations = configOptions.map((candidate) => ({
-                                            booleanValue: candidate.type === "boolean" ? candidate.booleanValue : false,
-                                            configId: candidate.id,
-                                            value: candidate.type === "select" ? candidate.currentValue : "",
-                                            valueType: candidate.type,
-                                        }));
-                                        saveLastAgentSettings(botId, session.agentRef, configOptions);
-                                        set({ options: configOptions });
-                                    }
-                                    if (
-                                        update.sessionUpdate === "session_info_update" &&
-                                        Object.hasOwn(update, "title") &&
-                                        update.title !== null &&
-                                        update.title !== undefined
-                                    ) {
-                                        sessionTitle = update.title;
-                                        set({ title: sessionTitle });
-                                        options.onTitleChange(sessionId, sessionTitle);
-                                    }
-                                }
-                                const timeline = deriveTimeline();
-                                if (timeline.messages !== get().messages) {
-                                    set({ messages: timeline.messages });
                                 }
                                 await new Promise<void>((resolve) => queueMicrotask(resolve));
                                 signal.throwIfAborted();
                             }
+                            await Promise.all(historyLoads);
                             return true;
                         },
                     };
@@ -1153,31 +1091,9 @@ export function createSessionPaneModel(options: {
                 set({ operation: { kind: "configuring" } });
                 try {
                     const connected = client;
-                    const recovery = await readSessionEventsV2(connected, sessionId, signal);
-                    replaceTimeline(mergeSessionEvents(sessionEvents, recovery.events));
-                    // The newest events page carries the Agent's latest
-                    // config_option_update, so it is the authoritative view of
-                    // the session's harness settings.
-                    let options = get().options;
-                    for (let index = sessionEvents.length - 1; index >= 0; index -= 1) {
-                        const event = sessionEvents[index];
-                        if (
-                            event !== undefined &&
-                            event.type === "acp" &&
-                            event.payload.sessionUpdate === "config_option_update"
-                        ) {
-                            options = sessionConfigOptionsFromAcp(event.payload);
-                            break;
-                        }
-                    }
-                    sessionConfigurations = options.map((candidate) => ({
-                        booleanValue: candidate.type === "boolean" ? candidate.booleanValue : false,
-                        configId: candidate.id,
-                        value: candidate.type === "select" ? candidate.currentValue : "",
-                        valueType: candidate.type,
-                    }));
-                    saveLastAgentSettings(botId, session.agentRef, options);
-                    set({ messages: deriveTimeline().messages, operation: { kind: "idle" }, options });
+                    await dispatchProjection({ kind: "reconcile" }, connected, signal);
+                    signal.throwIfAborted();
+                    set({ operation: { kind: "idle" } });
                 } catch (cause) {
                     signal.throwIfAborted();
                     set({

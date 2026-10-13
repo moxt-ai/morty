@@ -181,7 +181,7 @@ export function NativeSessionDialog({
                                 <MobiusSessionMessage
                                     deliveryUnknownUserMessageId={null}
                                     failureApproval={{ kind: "unavailable" }}
-                                    key={message.id}
+                                    key={message.firstEvent.eventId}
                                     message={message}
                                     onRemoveUnknownDelivery={() => undefined}
                                     onRetryUnknownDelivery={() => undefined}

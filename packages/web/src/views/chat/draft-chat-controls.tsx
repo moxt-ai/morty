@@ -134,12 +134,6 @@ export function DraftChatControls({
                               },
                     ),
                 ]}
-                onRefresh={() => {
-                    const controller = operation.current;
-                    if (controller !== null) {
-                        void viewModel.refreshAgentSettings(controller.signal);
-                    }
-                }}
                 settingsLoading={settingsLoading}
             />
             <CwdSelector

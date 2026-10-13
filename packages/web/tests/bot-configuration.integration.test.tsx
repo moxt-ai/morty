@@ -76,7 +76,7 @@ test("Given an unpaired workspace, When a fresh workspace is being created in an
     });
 });
 
-test("Given a paired Bot with cached agent settings, When a user refreshes and filters its models, Then the reloaded configuration and Agent reply are visible", {
+test("Given a paired Bot with cached agent settings, When a user filters its models, Then the configuration and Agent reply are visible", {
     timeout: 30_000,
 }, async () => {
     const created = await createTestApp({ connectAgent: true });
@@ -91,9 +91,6 @@ test("Given a paired Bot with cached agent settings, When a user refreshes and f
     expect(created.optionalElementByTestId(dataTestId.pairingInstruction)).toBeNull();
 
     await created.user.click(await created.queryElementByTestId(dataTestId.agentConfiguration));
-    const loading = created.queryElementByTestId(dataTestId.agentSettingsLoading);
-    await created.user.click(await created.queryElementByTestId(dataTestId.refreshAgentSettings));
-    await loading;
     await created.user.click(
         await created.queryElementByTestId(
             dataTestId.agentSetting("model"),
