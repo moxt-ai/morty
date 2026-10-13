@@ -547,9 +547,7 @@ function mergeSessionEventSequences(
     for (const event of second) {
         events.set(event.eventId, event);
     }
-    return [...events.values()].sort((left, right) =>
-        left.eventId < right.eventId ? -1 : left.eventId > right.eventId ? 1 : 0,
-    );
+    return [...events.values()];
 }
 
 export function appendSessionMessageEvent(

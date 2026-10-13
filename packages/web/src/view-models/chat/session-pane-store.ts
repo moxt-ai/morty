@@ -306,9 +306,7 @@ function mergeSessionEvents(
     for (const event of incoming) {
         byId.set(event.eventId, event);
     }
-    return [...byId.values()].sort((left, right) =>
-        left.eventId < right.eventId ? -1 : left.eventId > right.eventId ? 1 : 0,
-    );
+    return [...byId.values()];
 }
 
 export function createSessionPaneModel(options: {

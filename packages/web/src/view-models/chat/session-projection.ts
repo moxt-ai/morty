@@ -30,8 +30,8 @@ export type SessionProjection =
     | {
           readonly kind: "established";
           readonly config: ObservedConfig | null;
+          readonly eventIds: ReadonlySet<string>;
           readonly generation: string;
-          readonly latestEventId: string | null;
           readonly pagination: { readonly nextCursor: string | null };
           readonly pending: PendingEvents | null;
           readonly reduction: SessionMessageReduction;
@@ -105,9 +105,7 @@ function mergeSessionEvents(
     for (const event of second) {
         events.set(event.eventId, event);
     }
-    return [...events.values()].sort((left, right) =>
-        left.eventId < right.eventId ? -1 : left.eventId > right.eventId ? 1 : 0,
-    );
+    return [...events.values()];
 }
 
 function newestConfig(events: readonly SessionEventV2[]): ObservedConfig | null {
@@ -159,12 +157,11 @@ function adoptGeneration(
     history: SessionEventHistory,
     events: readonly SessionEventV2[],
 ): SessionProjection {
-    const last = events.at(-1);
     return {
         config: newestConfig(events),
+        eventIds: new Set(events.map((event) => event.eventId)),
         generation: history.sessionGenerationId,
         kind: "established",
-        latestEventId: last?.eventId ?? null,
         pagination: { nextCursor: history.nextCursor },
         pending: null,
         reduction: createSessionMessageReduction({ events, nextCursor: history.nextCursor }),
@@ -179,14 +176,14 @@ function applyNewerEvents(
     let next = { ...state, pending: null };
     const applied: SessionEventV2[] = [];
     for (const event of history.events) {
-        if (next.latestEventId !== null && event.eventId <= next.latestEventId) {
+        if (next.eventIds.has(event.eventId)) {
             continue;
         }
         const config = newestConfig([event]) ?? next.config;
         next = {
             ...next,
             config,
-            latestEventId: event.eventId,
+            eventIds: new Set([...next.eventIds, event.eventId]),
             reduction: appendSessionMessageEvent(next.reduction, event),
         };
         applied.push(event);
@@ -218,7 +215,7 @@ export function transitionSessionProjection(
                     },
                 };
             }
-            if (state.latestEventId !== null && event.eventId <= state.latestEventId) {
+            if (state.eventIds.has(event.eventId)) {
                 return { effects: [], state };
             }
             const config = newestConfig([event]) ?? state.config;
@@ -227,7 +224,7 @@ export function transitionSessionProjection(
                 state: {
                     ...state,
                     config,
-                    latestEventId: event.eventId,
+                    eventIds: new Set([...state.eventIds, event.eventId]),
                     reduction: appendSessionMessageEvent(state.reduction, event),
                 },
             };
