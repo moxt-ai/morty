@@ -69,7 +69,7 @@ function initialState(): ContinueState {
             harness === "codex"
                 ? {
                       kind: "unavailable",
-                      reason: `${harness} doesn't support import conversation`,
+                      reason: `${harness} doesn't support importing sessions`,
                   }
                 : { kind: "available" };
         return {

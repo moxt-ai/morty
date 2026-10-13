@@ -398,7 +398,7 @@ export function BotChatHome({
                                     </h1>
                                     <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-muted-foreground">
                                         {model.view.kind === "connecting"
-                                            ? "Chat is restoring access to this conversation."
+                                            ? "Chat is restoring access to this session."
                                             : "Ask a question, explore your project, or start a task with your local agent."}
                                     </p>
                                 </div>

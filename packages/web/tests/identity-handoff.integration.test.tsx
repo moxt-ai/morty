@@ -26,7 +26,7 @@ test("Given a Codex native session handoff, When the user hovers over import, Th
 
     expect(
         await vi.waitFor(() =>
-            getByRole(document.body, "tooltip", { name: "codex doesn't support import conversation" }),
+            getByRole(document.body, "tooltip", { name: "codex doesn't support importing sessions" }),
         ),
     ).toBeInstanceOf(HTMLElement);
 });

@@ -334,7 +334,7 @@ export function MobiusSessionPane({
                         model.activity.kind === "idle" &&
                         !model.historyLoading && (
                             <p className="text-center text-sm text-muted-foreground" role="status">
-                                No message history is available for this conversation.
+                                No message history is available for this session.
                             </p>
                         )}
                     {model.historyLoading && <OlderHistorySkeleton />}
@@ -443,7 +443,7 @@ export function MobiusSessionPane({
                         controls={[
                             {
                                 disabled: true,
-                                harnessLockedLabel: "The harness cannot be changed for an existing conversation.",
+                                harnessLockedLabel: "The harness cannot be changed for an existing session.",
                                 id: "harness",
                                 kind: "select" as const,
                                 label: "Harness",

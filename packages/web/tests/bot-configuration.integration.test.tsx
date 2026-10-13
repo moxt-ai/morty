@@ -40,7 +40,7 @@ test("Given Morty has no paired agent, When a user creates a Machine, Then its p
     ]);
     expect(landing.textContent).toContain("My Machine");
     const conversationSetup = await app.queryElementByTestId(dataTestId.conversationSetupRequired);
-    expect(conversationSetup.textContent).toContain("No conversations yet");
+    expect(conversationSetup.textContent).toContain("No sessions yet");
     expect(conversationSetup.textContent).toContain("Connect Machine");
     expect(conversationSetup.getAttribute("role")).not.toBe("alert");
 

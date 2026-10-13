@@ -94,8 +94,8 @@ export function NativeSessionDialog({
     const selectedEntryId = model.preview.kind === "empty" ? "" : model.preview.entry.entryId;
     return (
         <Dialog
-            title="Native Sessions"
-            description="Select a native agent session to preview it, then import it or fork it as a Mobius Session."
+            title="Open Session"
+            description="Select a local agent session to preview it, then open it or fork it as a Mobius Session."
             onClose={onClose}
             busy={model.operation === "import" || model.operation === "fork"}
             wide
@@ -252,7 +252,7 @@ export function NativeSessionDialog({
                     }
                     onClick={() => withSignal(async (signal) => await store.getState().open("import", signal))}
                 >
-                    {model.operation === "import" ? "Importing…" : "Import"}
+                    {model.operation === "import" ? "Opening…" : "Open"}
                 </Button>
                 <Button
                     data-testid={dataTestId.forkLocalSession}

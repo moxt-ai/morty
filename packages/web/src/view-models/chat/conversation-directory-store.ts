@@ -74,7 +74,7 @@ export const createConversationDirectoryStore = (
                         archive: {
                             kind: "failed",
                             sessionId,
-                            message: cause instanceof Error ? cause.message : "The conversation could not be archived.",
+                            message: cause instanceof Error ? cause.message : "The session could not be archived.",
                         },
                     });
                 }
@@ -97,7 +97,7 @@ export const createConversationDirectoryStore = (
                         set({ state: { kind: "setup-required" } });
                         return;
                     }
-                    const message = cause instanceof Error ? cause.message : "Conversations are unavailable.";
+                    const message = cause instanceof Error ? cause.message : "Sessions are unavailable.";
                     set({
                         state:
                             cached === null

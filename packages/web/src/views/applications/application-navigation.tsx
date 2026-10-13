@@ -77,7 +77,7 @@ export function MobiusApplications<TConnection>({
                                             </span>
                                         </h2>
                                         <p className="mt-2 text-[13px] text-muted-foreground">
-                                            Open your local agent conversations.
+                                            Open your local agent sessions.
                                         </p>
                                     </>
                                 )}
