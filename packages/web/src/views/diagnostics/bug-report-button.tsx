@@ -1,11 +1,11 @@
-import { Bug } from "lucide-react";
+import { Bug, Paperclip, X } from "lucide-react";
 import { Tooltip } from "radix-ui";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { sentryBugReportSink } from "../../services/diagnostics/bug-report.ts";
-import { createBugReportStore } from "../../view-models/bug-report-store.ts";
+import { type BugReportImage, bugReportImageAccept, createBugReportStore } from "../../view-models/bug-report-store.ts";
 
 const appearances = {
     floating: "fixed bottom-2 right-2 z-40 bg-background/90 text-xs",
@@ -50,14 +50,50 @@ export function BugReportButton({ appearance = "labelled" }: { readonly appearan
         </>
     );
 }
+
+function ReportImage({
+    image,
+    disabled,
+    onRemove,
+}: {
+    readonly image: BugReportImage;
+    readonly disabled: boolean;
+    readonly onRemove: () => void;
+}) {
+    const [source, setSource] = useState("");
+    useEffect(() => {
+        const url = URL.createObjectURL(image.file);
+        setSource(url);
+        return () => URL.revokeObjectURL(url);
+    }, [image.file]);
+    return (
+        <li className="relative flex h-[60px] max-w-52 items-center gap-2 rounded-xl border border-border bg-surface-subtle p-2 pr-8 text-xs text-copy-secondary">
+            {source && <img alt={image.file.name} src={source} className="size-11 rounded-lg object-cover" />}
+            <span className="min-w-0 truncate" title={image.file.name}>
+                {image.file.name}
+            </span>
+            <button
+                aria-label={`Remove ${image.file.name}`}
+                className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-black/[0.06] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50"
+                disabled={disabled}
+                onClick={onRemove}
+                type="button"
+            >
+                <X aria-hidden="true" className="size-3.5" />
+            </button>
+        </li>
+    );
+}
+
 function BugReportDialog({ onClose }: { readonly onClose: () => void }) {
     const [store] = useState(() => createBugReportStore(sentryBugReportSink));
-    const { state, description, describe, send, close } = useStore(store);
+    const { state, description, images, addImages, removeImage, describe, send, close } = useStore(store);
+    const fileInput = useRef<HTMLInputElement>(null);
     useEffect(() => close, [close]);
     return (
         <Dialog
             title="Report a bug"
-            description="Send a description and recent technical diagnostics. Conversation text, files and credentials are not collected. Your description is shared with the Morty team."
+            description="Send a description, optional images and recent technical diagnostics to the Morty team. Conversation text, other files and credentials are not collected automatically."
             onClose={onClose}
         >
             {state.kind === "sent" ? (
@@ -70,6 +106,13 @@ function BugReportDialog({ onClose }: { readonly onClose: () => void }) {
                 </div>
             ) : (
                 <form
+                    onPaste={(event) => {
+                        const files = Array.from(event.clipboardData.files);
+                        if (files.length > 0) {
+                            event.preventDefault();
+                            addImages(files);
+                        }
+                    }}
                     onSubmit={(event) => {
                         event.preventDefault();
                         void send();
@@ -88,6 +131,45 @@ function BugReportDialog({ onClose }: { readonly onClose: () => void }) {
                         value={description}
                         onChange={(event) => describe(event.target.value)}
                     />
+                    {images.length > 0 && (
+                        <ul aria-label="Attached images" className="flex flex-wrap gap-2">
+                            {images.map((image) => (
+                                <ReportImage
+                                    key={image.id}
+                                    image={image}
+                                    disabled={state.kind === "sending"}
+                                    onRemove={() => removeImage(image.id)}
+                                />
+                            ))}
+                        </ul>
+                    )}
+                    <div className="space-y-1.5">
+                        <input
+                            ref={fileInput}
+                            type="file"
+                            aria-label="Attach images"
+                            accept={bugReportImageAccept}
+                            multiple
+                            hidden
+                            disabled={state.kind === "sending"}
+                            onChange={(event) => {
+                                addImages(Array.from(event.target.files ?? []));
+                                event.target.value = "";
+                            }}
+                        />
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={state.kind === "sending" || images.length >= 3}
+                            onClick={() => fileInput.current?.click()}
+                        >
+                            <Paperclip aria-hidden="true" className="size-4" />
+                            Attach images
+                        </Button>
+                        <p className="text-xs text-muted-foreground">
+                            Paste an image here or choose a file. Up to 3 images, 2.5 MB each. PNG, JPEG, GIF or WebP.
+                        </p>
+                    </div>
                     <p className="text-xs text-muted-foreground">
                         Daemon diagnostics may take up to 10 seconds. You can still send a report when your machine is
                         offline.
