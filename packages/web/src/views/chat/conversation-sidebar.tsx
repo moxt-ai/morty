@@ -499,9 +499,9 @@ export function ConversationSidebar({
                             </DropdownMenu.Portal>
                         </DropdownMenu.Root>
                     )}
-                    <SidebarActionTooltip label="Share My Machine" side="top">
+                    <SidebarActionTooltip label="Continue your work" side="top">
                         <Button
-                            aria-label="Share My Machine"
+                            aria-label="Continue your work"
                             variant="ghost"
                             className="size-10 shrink-0 justify-center rounded-full px-0 text-copy-secondary hover:bg-white/70"
                             data-testid={dataTestId.shareMachine}
@@ -526,7 +526,7 @@ export function ConversationSidebar({
             )}
             {sharing && (
                 <Dialog
-                    title="Share My Machine"
+                    title="Continue your work"
                     description="Scan the QR code or open the link on another device to use this workspace."
                     onClose={() => setSharing(false)}
                 >
