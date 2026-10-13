@@ -14,7 +14,7 @@ afterAll(async () => {
     await fixture.close();
 });
 
-test("Given visitors across Cloudflare regions, When Chat provisions and reopens workspaces, Then Platform preserves every placement", {
+test("Given visitors across Cloudflare regions, When Chat provisions and reopens Morty data, Then Platform preserves every placement", {
     timeout: 30_000,
 }, async () => {
     // Cloudflare supplies cf metadata on incoming Requests; Node does not.
@@ -68,7 +68,7 @@ test("Given visitors across Cloudflare regions, When Chat provisions and reopens
                         authorization: `Bearer ${identity.token}`,
                         "content-type": "application/json",
                     },
-                    body: JSON.stringify({ displayName: "Personal workspace" }),
+                    body: JSON.stringify({ displayName: "Morty" }),
                 }),
                 region === "wnam" ? "AS" : "NA",
                 region === "wnam" ? "CN" : "US",
@@ -80,7 +80,7 @@ test("Given visitors across Cloudflare regions, When Chat provisions and reopens
     }
 });
 
-test("Given explicit location choices, When users create workspaces, Then every supported Project code is honored", async () => {
+test("Given explicit location choices, When users create Morty identities, Then every supported Project code is honored", async () => {
     for (const [locationHint, projectCode] of [
         ["wnam", "wn"],
         ["enam", "en"],
@@ -109,7 +109,7 @@ test("Given explicit location choices, When users create workspaces, Then every 
     }
 });
 
-test("Given Projects in separate regions, When users reopen and transfer their workspaces, Then Project objects retain their identities and reject another Project", async () => {
+test("Given Projects in separate regions, When users reopen and transfer Morty access, Then Project objects retain their identities and reject another Project", async () => {
     const environment = fixture.environment();
     class RegionalRequest extends Request {
         override readonly cf: { readonly continent: string };
@@ -169,7 +169,7 @@ test("Given Projects in separate regions, When users reopen and transfer their w
     }
 });
 
-test("Given a first-time visitor, When their workspace and Bot are managed, Then both persist behind the Project boundary", async () => {
+test("Given a first-time visitor, When their identity and Bot are managed, Then both persist behind the Project boundary", async () => {
     const identity = await fixture.createAnonymousUser();
     const response = await worker.fetch(accountRequest(identity.token, identity.projectId), fixture.environment());
 
@@ -382,7 +382,7 @@ test("Given an anonymous user, When machine access is shared, Then its expiring 
     expect((await worker.fetch(accountRequest(issuedTokens[0] ?? "", owner.projectId), environment)).status).toBe(200);
 });
 
-test("Given the first browser for a workspace, When remote access ends after a recovery token is created, Then the browser credential is revoked and recovery remains available", async () => {
+test("Given the first browser for Morty, When remote access ends after a recovery token is created, Then the browser credential is revoked and recovery remains available", async () => {
     const environment = fixture.environment();
     const identity = await fixture.createAnonymousUser();
     const recoveryResponse = await worker.fetch(

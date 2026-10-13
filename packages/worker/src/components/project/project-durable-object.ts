@@ -24,7 +24,7 @@ export class ProjectDurableObject extends DurableObject<CloudBindings> {
         }
         const projectId = await cloudProjectId(request);
         if (projectId === null) {
-            return json({ error: { code: "PROJECT_REQUIRED", message: "Workspace context is required." } }, 400);
+            return json({ error: { code: "PROJECT_REQUIRED", message: "Morty context is required." } }, 400);
         }
         const validatedProjectId = v.parse(platformIdentifier, projectId);
         await this.#bindProject(validatedProjectId);
@@ -53,7 +53,7 @@ export class ProjectDurableObject extends DurableObject<CloudBindings> {
             return;
         }
         if (stored !== projectId) {
-            throw new Error("Durable Object workspace identity does not match the request.");
+            throw new Error("Durable Object project identity does not match the request.");
         }
     };
 

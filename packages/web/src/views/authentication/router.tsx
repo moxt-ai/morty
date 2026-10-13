@@ -57,12 +57,12 @@ function ImportSessionButton({
 function ContinuePage() {
     const transport = useApiTransport();
     const [store] = useState(() => createContinueStore(transport.fetch));
-    const { continueSession, continueWorkspace, redeem, state } = useStore(store);
+    const { continueIdentity, continueSession, redeem, state } = useStore(store);
     const code = continueCode(state);
     const qrCodeUrl = code === null ? null : continueUrl(code);
     useEffect(() => () => store.getState().dispose(), [store]);
     useEffect(() => {
-        if (state.kind !== "session-redeeming" && state.kind !== "workspace-redeeming") {
+        if (state.kind !== "session-redeeming" && state.kind !== "identity-redeeming") {
             return;
         }
         const controller = new AbortController();
@@ -79,7 +79,7 @@ function ContinuePage() {
                         state.kind === "session-redeeming" ||
                         state.kind === "session-failed"
                             ? "Continue native session"
-                            : "Use this Mobius workspace"}
+                            : "Continue in Morty"}
                     </h1>
                     {state.kind === "session-confirm" ||
                     state.kind === "session-redeeming" ||
@@ -98,9 +98,9 @@ function ContinuePage() {
                                     <dd className="break-all font-mono text-xs">{state.handoff.sessionId}</dd>
                                 </div>
                             </dl>
-                            {state.replacesWorkspace ? (
+                            {state.replacesIdentity ? (
                                 <p className="mt-4 text-sm leading-6 text-amber-700">
-                                    Continuing replaces the anonymous workspace currently stored on this device.
+                                    Continuing replaces the anonymous Morty identity currently stored on this device.
                                 </p>
                             ) : null}
                             {state.kind === "session-failed" ? (
@@ -141,22 +141,22 @@ function ContinuePage() {
                                 ) : null}
                             </Button>
                         </>
-                    ) : state.kind === "workspace-confirm" ? (
+                    ) : state.kind === "identity-confirm" ? (
                         <>
                             <p className="mt-4 leading-7 text-muted-foreground">
-                                Continuing replaces the anonymous workspace currently stored on this device.
+                                Continuing replaces the anonymous Morty identity currently stored on this device.
                             </p>
-                            <Button className="mt-6" onClick={continueWorkspace}>
+                            <Button className="mt-6" onClick={continueIdentity}>
                                 Replace and continue
                             </Button>
                         </>
-                    ) : state.kind === "workspace-redeeming" ? (
+                    ) : state.kind === "identity-redeeming" ? (
                         <p
                             role="status"
-                            aria-label="Securely transferring the workspace"
+                            aria-label="Securely transferring Morty access"
                             className="mt-4 text-muted-foreground"
                         >
-                            Securely transferring the workspace…
+                            Securely transferring Morty access…
                         </p>
                     ) : (
                         <>

@@ -2,7 +2,7 @@ import * as v from "valibot";
 import {
     anonymousCredentialEntry,
     centralLocalStorage,
-    workspaceEntry,
+    projectScopeEntry,
 } from "../local-storage/central-local-storage.ts";
 
 const tokenSchema = v.pipe(
@@ -16,17 +16,17 @@ const recoveryTokenSchema = v.pipe(
     v.regex(/^mobius_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43}$/u),
 );
 const projectIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u));
-const workspaceSchema = v.object({
+const projectScopeSchema = v.object({
     userId: v.string(),
     projectId: projectIdSchema,
 });
-const identitySchema = v.pipe(v.object({ token: tokenSchema, ...workspaceSchema.entries }), v.readonly());
+const identitySchema = v.pipe(v.object({ token: tokenSchema, ...projectScopeSchema.entries }), v.readonly());
 
 /** Stored key name for the anonymous credential, shared with browser tests. */
 export const ANONYMOUS_CREDENTIAL_KEY_NAME = anonymousCredentialEntry.key;
 
-function readStoredWorkspace() {
-    return centralLocalStorage.read(workspaceEntry);
+function readStoredProjectScope() {
+    return centralLocalStorage.read(projectScopeEntry);
 }
 const anonymousSessionSchema = v.pipe(
     v.object({ authentication: v.object({ kind: v.literal("anonymous") }), userId: v.string() }),
@@ -43,7 +43,7 @@ export type IdentityTransfer = v.InferOutput<typeof transferSchema>;
 export function hasStoredAnonymousCredential(): boolean {
     return centralLocalStorage.has(anonymousCredentialEntry);
 }
-export type WorkspaceLocation =
+export type DataRegion =
     | "wnam"
     | "enam"
     | "sam"
@@ -106,8 +106,8 @@ export class AnonymousIdentityApi {
         return created;
     };
 
-    readonly replaceWorkspace = async (
-        locationHint: WorkspaceLocation,
+    readonly replaceIdentity = async (
+        locationHint: DataRegion,
         requestSignal: AbortSignal,
     ): Promise<AnonymousIdentity> => {
         const created = v.parse(
@@ -160,7 +160,7 @@ export class AnonymousIdentityApi {
             signal,
         );
         centralLocalStorage.remove(anonymousCredentialEntry);
-        centralLocalStorage.remove(workspaceEntry);
+        centralLocalStorage.remove(projectScopeEntry);
     };
 
     readonly createRecoveryToken = async (
@@ -201,7 +201,7 @@ export class AnonymousIdentityApi {
 
     readonly #saveIdentity = (identity: AnonymousIdentity) => {
         centralLocalStorage.write(anonymousCredentialEntry, identity);
-        centralLocalStorage.write(workspaceEntry, { userId: identity.userId, projectId: identity.projectId });
+        centralLocalStorage.write(projectScopeEntry, { userId: identity.userId, projectId: identity.projectId });
     };
 
     readonly #anonymousSession = async (
@@ -233,12 +233,12 @@ export class AnonymousIdentityApi {
     readonly #request = async (path: string, init: RequestInit, requestSignal: AbortSignal): Promise<unknown> => {
         const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(15_000)]);
         const headers = new Headers(init.headers);
-        const workspace = readStoredWorkspace();
+        const projectScope = readStoredProjectScope();
         const scopedPath =
-            workspace !== null &&
+            projectScope !== null &&
             !path.startsWith("/projects/") &&
             !["/identity/anonymous-users", "/identity/transfers/redeem", "/identity/pairings/redeem"].includes(path)
-                ? `/projects/${encodeURIComponent(workspace.projectId)}${path}`
+                ? `/projects/${encodeURIComponent(projectScope.projectId)}${path}`
                 : path;
         const response = await this.#fetchRequest(
             new Request(new URL(`/morty/api${scopedPath}`, this.#origin), { ...init, headers, signal }),

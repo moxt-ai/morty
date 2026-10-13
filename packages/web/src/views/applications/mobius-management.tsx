@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo } from "react";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import { createSelectedBotPreference } from "../../services/bots/selected-bot-preference.ts";
 import { BotChatApi } from "../../services/chat/bot-chat-api.ts";
-import type { WorkspaceLocation } from "../../services/identity/anonymous-identity-api.ts";
+import type { DataRegion } from "../../services/identity/anonymous-identity-api.ts";
 import { AnonymousIdentityApi } from "../../services/identity/anonymous-identity-api.ts";
 import { ManagementApi } from "../../services/management/management-api.ts";
 import { BrowserChannelConnection } from "../../view-models/channel-connection.ts";
@@ -50,7 +50,7 @@ export function MobiusManagement() {
             });
             const localIdentity = await api.loadExisting(signal);
             if (localIdentity === null || localIdentity.projectId !== identity.projectId) {
-                throw new Error("This workspace cannot be shared from this device.");
+                throw new Error("Morty cannot be shared from this device.");
             }
             return await api.createTransfer(localIdentity.token, signal);
         },
@@ -81,13 +81,13 @@ export function MobiusManagement() {
         },
         [transport.fetch],
     );
-    const replaceWorkspace = useCallback(
-        async (location: WorkspaceLocation, signal: AbortSignal) => {
+    const replaceIdentity = useCallback(
+        async (location: DataRegion, signal: AbortSignal) => {
             const api = new AnonymousIdentityApi({
                 fetchRequest: transport.fetch,
                 origin: window.location.origin,
             });
-            await api.replaceWorkspace(location, signal);
+            await api.replaceIdentity(location, signal);
             signal.throwIfAborted();
             window.location.reload();
         },
@@ -99,7 +99,7 @@ export function MobiusManagement() {
             createTransfer={createTransfer}
             currentAccessToken={currentAccessToken}
             endRemoteAccess={endRemoteAccess}
-            replaceWorkspace={replaceWorkspace}
+            replaceIdentity={replaceIdentity}
             projectId={identity.projectId}
             selectedBotPreference={selectedBotPreference}
         />

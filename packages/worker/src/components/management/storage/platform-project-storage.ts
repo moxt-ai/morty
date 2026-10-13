@@ -13,7 +13,7 @@ export class PlatformProjectStorage {
     readonly #requireDatabase = (): Database => {
         const database = createDatabase(this.#database);
         if (database === null) {
-            throw new PlatformProjectError("DATABASE_UNAVAILABLE", "Workspace storage is unavailable.", 503);
+            throw new PlatformProjectError("DATABASE_UNAVAILABLE", "Morty storage is unavailable.", 503);
         }
         return database;
     };
@@ -44,7 +44,7 @@ export class PlatformProjectStorage {
             return v.parse(v.nullish(platformProjectSchema), value) ?? null;
         } catch (cause) {
             signal.throwIfAborted();
-            throw new PlatformProjectError("PROJECT_STORAGE_UNAVAILABLE", "Workspace storage is unavailable.", 503, {
+            throw new PlatformProjectError("PROJECT_STORAGE_UNAVAILABLE", "Morty storage is unavailable.", 503, {
                 cause,
             });
         }
@@ -75,7 +75,7 @@ export class PlatformProjectStorage {
             signal.throwIfAborted();
         } catch (cause) {
             signal.throwIfAborted();
-            throw new PlatformProjectError("PROJECT_STORAGE_UNAVAILABLE", "Workspace storage is unavailable.", 503, {
+            throw new PlatformProjectError("PROJECT_STORAGE_UNAVAILABLE", "Morty storage is unavailable.", 503, {
                 cause,
             });
         }

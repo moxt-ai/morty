@@ -140,8 +140,8 @@ export class ChatApi {
                         body: {},
                     },
                 ),
-            (workspace) => {
-                const runtime = object(workspace.runtime, "runtime");
+            (configuration) => {
+                const runtime = object(configuration.runtime, "runtime");
                 return (
                     runtime.online === true &&
                     Array.isArray(runtime.agents) &&

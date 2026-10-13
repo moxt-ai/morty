@@ -30,7 +30,7 @@ test("Given a Machine, When a user renames it, Then the new name is visible in t
     expect(getByRole(document.body, "button", { name: "Studio Machine" })).toBeDefined();
 });
 
-test("Given an unpaired workspace, When a user creates a Machine, Then its pairing dialog and the surviving Machine remain visible", {
+test("Given Morty has no paired agent, When a user creates a Machine, Then its pairing dialog and the surviving Machine remain visible", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp();
@@ -77,13 +77,13 @@ test("Given an unpaired workspace, When a user creates a Machine, Then its pairi
     expect(app.optionalElementByTestId(dataTestId.removeBot)).toBeNull();
 });
 
-test("Given an unpaired workspace, When a fresh workspace is being created in another region, Then its pairing instruction cannot be used", {
+test("Given Morty has no paired agent, When its data region is changing, Then its pairing instruction cannot be used", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp();
     const pairing = await app.queryElementByTestId(dataTestId.pairingInstruction);
     const copy = getByRole(document.body, "button", { name: "Copy pairing instruction" });
-    const region = getByRole(document.body, "combobox", { name: "Workspace region" });
+    const region = getByRole(document.body, "combobox", { name: "Data region" });
     if (!(pairing instanceof HTMLInputElement) || !(copy instanceof HTMLButtonElement)) {
         throw new Error("Expected pairing instruction controls");
     }
@@ -92,13 +92,13 @@ test("Given an unpaired workspace, When a fresh workspace is being created in an
 
     await app.user.click(region);
     act(() => fireEvent.click(getByRole(document.body, "option", { name: "Eastern North America" })));
-    expect(document.body.textContent).toContain("Creating a fresh workspace");
+    expect(document.body.textContent).toContain("Moving Morty data");
 
     expect(pairing.disabled).toBe(true);
     expect(copy.disabled).toBe(true);
     await vi.waitFor(() => {
         expect(region).toHaveProperty("disabled", false);
-        expect(document.body.textContent).toContain("Changing region replaces this fresh workspace");
+        expect(document.body.textContent).toContain("Changing region resets Morty data");
     });
 });
 
@@ -197,7 +197,7 @@ test("Given multiple Runtimes share a Project, When a user configures a paired B
     expect(getAllByRole(configuration, "tab")).toHaveLength(1);
 });
 
-test("Given a Bot has a recent directory from another harness, When its workspace loads, Then the directory remains available", {
+test("Given a Bot has a recent directory from another harness, When its Runtime configuration loads, Then the directory remains available", {
     timeout: 30_000,
 }, async () => {
     const created = await createTestApp({

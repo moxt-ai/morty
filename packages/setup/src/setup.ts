@@ -408,7 +408,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function preparePairIdentity(context: Context, ticket: string): Promise<PairIdentity> {
-        progress("identity", "Exchanging the one-time ticket for the existing user, Machine, and workspace.");
+        progress("identity", "Exchanging the one-time ticket for the existing user and Machine.");
         const identity = await request(context, "/identity/pairings/redeem", { token: ticket }, false);
         const expectedRuntimeId = identity.expectedRuntimeId === null ? null : identifier(identity.expectedRuntimeId);
         const saved = await saveConfiguration(context, {
@@ -717,7 +717,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function bindAgent(context: Context, runtime: RuntimeSelection, harness: string) {
-        progress("binding", `Connecting the Machine to ${harness} in the default workspace.`);
+        progress("binding", `Connecting the Machine to ${harness} in the default working directory.`);
         const runtimeId = runtime.runtimeId;
         const agentRef = identifier(harness);
         const revision = context.config.agent_ref === agentRef ? (context.config.agent_config_revision ?? 1) : 1;
@@ -733,11 +733,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return saved;
     }
 
-    function hasReadyBinding(context: Context, runtime: RuntimeSelection, workspace: Record<string, unknown>) {
+    function hasReadyBinding(context: Context, runtime: RuntimeSelection, configuration: Record<string, unknown>) {
         const runtimeId = runtime.runtimeId;
         if (
             typeof context.config.agent_ref !== "string" ||
-            !hasOnlineRuntimeAgent(object(workspace.runtime), runtimeId, context.config.agent_ref)
+            !hasOnlineRuntimeAgent(object(configuration.runtime), runtimeId, context.config.agent_ref)
         ) {
             return false;
         }
@@ -748,12 +748,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         let attempts = 0;
         while (true) {
             signal.throwIfAborted();
-            const workspace = await request(
+            const configuration = await request(
                 context,
                 `/chat/projects/${context.config.project_id}/bots/${context.config.bot_id}/workspace`,
                 {},
             );
-            if (hasReadyBinding(context, runtime, workspace)) {
+            if (hasReadyBinding(context, runtime, configuration)) {
                 return;
             }
             if (attempts++ % 10 === 0) {
@@ -795,13 +795,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     async function finishSetup(context: Context, runtime: RuntimeSelection, options: Options) {
         await waitForReadiness(context, runtime);
         const botId = context.config.bot_id;
-        const workspace = text(context.config.workspace);
+        const workingDirectory = text(context.config.workspace);
         if (options.mode === "pair") {
             emit({
                 status: "ready",
                 botId,
                 url: context.base,
-                workspace,
+                workspace: workingDirectory,
                 message: "Return to your Morty page to start chatting. Keep the Runtime online.",
             });
             return;
@@ -824,7 +824,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             status: "ready",
             botId,
             url: handoffUrl,
-            workspace,
+            workspace: workingDirectory,
             qrPath,
             message: "Open the link or scan the QR code to chat. Keep the Runtime online.",
         });

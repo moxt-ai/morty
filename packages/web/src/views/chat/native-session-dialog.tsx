@@ -64,7 +64,7 @@ export function NativeSessionDialog({
     onClose,
 }: {
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "workspace" | "nativeSessions" | "nativeSession">;
+    readonly requests: Pick<BotChatApi, "runtimeConfiguration" | "nativeSessions" | "nativeSession">;
     readonly onOpen: (session: OpenMobiusSession) => void;
     readonly onClose: () => void;
 }) {

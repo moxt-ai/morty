@@ -20,7 +20,7 @@ export function DraftChatControls({
     onSettings,
 }: {
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "workspace" | "workspaceDirectory" | "agentSettings">;
+    readonly requests: Pick<BotChatApi, "runtimeConfiguration" | "directory" | "agentSettings">;
     readonly disabled: boolean;
     readonly onSettings: (settings: ChatDraftConfiguration | null) => void;
 }) {
@@ -102,7 +102,7 @@ export function DraftChatControls({
                                 void viewModel.selectHarness(value, disabled, controller.signal);
                             }
                         },
-                        options: connectedChatRuntimeAgents(settings.workspace.runtime).map((agent) => ({
+                        options: connectedChatRuntimeAgents(settings.configuration.runtime).map((agent) => ({
                             agentRef: agent.agentRef,
                             value: `${agent.runtimeId}:${agent.agentRef}`,
                             label: `${agent.label} · ${agent.machineName}`,

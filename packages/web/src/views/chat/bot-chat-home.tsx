@@ -9,7 +9,7 @@ import { Spinner } from "../../components/ui/spinner.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { SelectedBotPreference } from "../../services/bots/selected-bot-preference.ts";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
-import type { IdentityTransfer, WorkspaceLocation } from "../../services/identity/anonymous-identity-api.ts";
+import type { DataRegion, IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import {
     createBotChatHomeStore,
     disconnectedBotNotice,
@@ -27,10 +27,10 @@ import { createConversationStatusStore } from "../../view-models/chat/conversati
 import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
+import { DataRegionSelector } from "./data-region-selector.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
 import { MobiusSessionPane } from "./mobius-session-pane.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
-import { WorkspaceRegionSelector } from "./workspace-region-selector.tsx";
 
 export function BotChatHome({
     requests,
@@ -38,7 +38,7 @@ export function BotChatHome({
     currentAccessToken,
     endRemoteAccess,
     projectId,
-    replaceWorkspace,
+    replaceIdentity,
     selectedBotPreference,
 }: {
     readonly requests: Pick<
@@ -50,10 +50,10 @@ export function BotChatHome({
         | "deleteBot"
         | "access"
         | "archiveManagedSession"
-        | "workspace"
-        | "workspaceDirectory"
+        | "runtimeConfiguration"
+        | "directory"
         | "waitForSetupChange"
-        | "waitForWorkspaceChange"
+        | "waitForRuntimeConfigurationChange"
         | "nativeSessions"
         | "nativeSession"
         | "managedSessions"
@@ -73,9 +73,9 @@ export function BotChatHome({
     readonly endRemoteAccess: (token: string, signal: AbortSignal) => Promise<void>;
     readonly projectId: string;
     readonly selectedBotPreference: SelectedBotPreference;
-    readonly replaceWorkspace?: (location: WorkspaceLocation, signal: AbortSignal) => Promise<void>;
+    readonly replaceIdentity?: (location: DataRegion, signal: AbortSignal) => Promise<void>;
 }) {
-    const [workspaceReplacing, setWorkspaceReplacing] = useState(false);
+    const [identityReplacing, setIdentityReplacing] = useState(false);
     const [store] = useState(() =>
         createBotChatHomeStore(requests, {
             url: window.location.href,
@@ -399,7 +399,7 @@ export function BotChatHome({
                                     <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-muted-foreground">
                                         {model.view.kind === "connecting"
                                             ? "Chat is restoring access to this conversation."
-                                            : "Ask a question, explore the workspace, or start a task with your local agent."}
+                                            : "Ask a question, explore your project, or start a task with your local agent."}
                                     </p>
                                 </div>
                             )}
@@ -451,14 +451,14 @@ export function BotChatHome({
                 >
                     {setupView?.reason === "unconfigured" &&
                         model.bots.length === 1 &&
-                        replaceWorkspace !== undefined && (
-                            <WorkspaceRegionSelector
-                                onReplacementChange={setWorkspaceReplacing}
+                        replaceIdentity !== undefined && (
+                            <DataRegionSelector
+                                onReplacementChange={setIdentityReplacing}
                                 projectId={projectId}
-                                replaceWorkspace={replaceWorkspace}
+                                replaceIdentity={replaceIdentity}
                             />
                         )}
-                    <PairingInstruction botId={active.bot.botId} disabled={workspaceReplacing} requests={requests} />
+                    <PairingInstruction botId={active.bot.botId} disabled={identityReplacing} requests={requests} />
                 </Dialog>
             )}
             {failureDialogOpen && model.view.kind === "connection-failed" && (

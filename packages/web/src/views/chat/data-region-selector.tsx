@@ -2,10 +2,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.tsx";
 import { dataTestId } from "../../data-testid.ts";
-import type { WorkspaceLocation } from "../../services/identity/anonymous-identity-api.ts";
-import { createWorkspaceRegionStore } from "../../view-models/chat/workspace-region-store.ts";
+import type { DataRegion } from "../../services/identity/anonymous-identity-api.ts";
+import { createDataRegionStore } from "../../view-models/chat/data-region-store.ts";
 
-const locations: readonly { readonly label: string; readonly value: WorkspaceLocation }[] = [
+const locations: readonly { readonly label: string; readonly value: DataRegion }[] = [
     { label: "Western North America", value: "wnam" },
     { label: "Eastern North America", value: "enam" },
     { label: "South America", value: "sam" },
@@ -19,16 +19,16 @@ const locations: readonly { readonly label: string; readonly value: WorkspaceLoc
     { label: "Middle East", value: "me" },
 ];
 
-export function WorkspaceRegionSelector({
+export function DataRegionSelector({
     onReplacementChange,
     projectId,
-    replaceWorkspace,
+    replaceIdentity,
 }: {
     readonly onReplacementChange: (replacing: boolean) => void;
     readonly projectId: string;
-    readonly replaceWorkspace: (location: WorkspaceLocation, signal: AbortSignal) => Promise<void>;
+    readonly replaceIdentity: (location: DataRegion, signal: AbortSignal) => Promise<void>;
 }) {
-    const [store] = useState(() => createWorkspaceRegionStore(projectId, replaceWorkspace));
+    const [store] = useState(() => createDataRegionStore(projectId, replaceIdentity));
     const { location, replacement, select } = useStore(store);
     const operation = useRef<AbortController | null>(null);
     useEffect(() => () => operation.current?.abort(), []);
@@ -44,8 +44,8 @@ export function WorkspaceRegionSelector({
 
     return (
         <div className="mt-4 space-y-1.5">
-            <label className="block text-xs font-medium text-foreground" htmlFor="workspace-region">
-                Workspace region
+            <label className="block text-xs font-medium text-foreground" htmlFor="data-region">
+                Data region
             </label>
             <Select
                 disabled={replacement.kind === "replacing"}
@@ -61,7 +61,7 @@ export function WorkspaceRegionSelector({
                     void select(selected.value, controller.signal);
                 }}
             >
-                <SelectTrigger id="workspace-region" className="w-full" data-testid={dataTestId.workspaceRegion}>
+                <SelectTrigger id="data-region" className="w-full" data-testid={dataTestId.dataRegion}>
                     <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -74,8 +74,8 @@ export function WorkspaceRegionSelector({
             </Select>
             <p className="text-xs text-muted-foreground">
                 {replacement.kind === "replacing"
-                    ? "Creating a fresh workspace in this region…"
-                    : "Changing region replaces this fresh workspace before you connect an agent."}
+                    ? "Moving Morty data to this region…"
+                    : "Changing region resets Morty data before you connect an agent."}
             </p>
             {replacement.kind === "failed" && (
                 <p role="alert" className="text-xs text-red-700">

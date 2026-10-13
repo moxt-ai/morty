@@ -118,7 +118,7 @@ export class ChatService {
                 ]),
         );
         if (!ownsProject) {
-            throw new PlatformProjectError("NOT_FOUND", "Your workspace was not found.", 404);
+            throw new PlatformProjectError("NOT_FOUND", "Your Morty data was not found.", 404);
         }
         if (!ownsBot) {
             throw new PlatformProjectError("NOT_FOUND", "Your Machine was not found.", 404);
@@ -126,7 +126,7 @@ export class ChatService {
         return { userId, projectId, botId, signal };
     };
 
-    readonly workspace = async (scope: ChatScope) => {
+    readonly runtimeConfiguration = async (scope: ChatScope) => {
         const runtime = await this.localRuntime(scope);
         return {
             runtime: await this.#platform.getChatRuntimeAgents(scope.projectId, runtime.runtimeId, scope.signal),
@@ -159,12 +159,12 @@ export class ChatService {
         return { runtimes: await this.#platform.chatRuntimes(scope.projectId, scope.signal) };
     };
 
-    readonly listWorkspace = async (scope: ChatScope, directoryId: string) => {
+    readonly listDirectory = async (scope: ChatScope, directoryId: string) => {
         const bot = await this.#bot(scope);
         if (bot.configuration === null) {
             throw new PlatformProjectError("AGENT_REQUIRED", "Choose a connected harness.", 409);
         }
-        const listing = await this.#platform.listChatWorkspace(
+        const listing = await this.#platform.listChatDirectory(
             scope.projectId,
             bot.configuration.runtimeId,
             directoryId,
@@ -172,7 +172,7 @@ export class ChatService {
         );
         this.#logger.info(
             {
-                event: "chat-workspace-listed",
+                event: "chat-directory-listed",
                 userId: scope.userId,
                 projectId: scope.projectId,
                 botId: scope.botId,

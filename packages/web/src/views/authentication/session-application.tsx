@@ -8,13 +8,13 @@ import { MobiusManagement, userBotConnection } from "../applications/mobius-mana
 import { type ActiveIdentity, ActiveIdentityProvider } from "./identity-context.tsx";
 import { router as continuationRouter } from "./router.tsx";
 
-type WorkspaceApplicationProps = {
+type MortyApplicationProps = {
     readonly activeIdentity: ActiveIdentity;
     readonly authorize: (signal: AbortSignal) => Promise<void>;
     readonly userId: string;
 };
 
-export function WorkspaceApplication(props: WorkspaceApplicationProps) {
+export function MortyApplication(props: MortyApplicationProps) {
     const transport = useApiTransport();
     const { activeIdentity, authorize, userId } = props;
     const router = useMemo(() => {
@@ -63,7 +63,5 @@ export function SessionApplication() {
         },
         projectId: state.identity.projectId,
     };
-    return (
-        <WorkspaceApplication activeIdentity={activeIdentity} userId={state.identity.userId} authorize={authorize} />
-    );
+    return <MortyApplication activeIdentity={activeIdentity} userId={state.identity.userId} authorize={authorize} />;
 }

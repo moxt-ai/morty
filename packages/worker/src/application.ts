@@ -29,7 +29,7 @@ async function bootstrapProject(request: Request, bindings: CloudBindings): Prom
     const input: unknown = await request.json();
     const parsed = v.parse(projectBootstrap, input);
     if (parsed.project.projectId !== projectId) {
-        throw new RequestError("PROJECT_CONTEXT_MISMATCH", "The workspace context is invalid.", 400);
+        throw new RequestError("PROJECT_CONTEXT_MISMATCH", "The Morty context is invalid.", 400);
     }
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(45_000)]);
     const dependencies = createApplicationDependencies(bindings);

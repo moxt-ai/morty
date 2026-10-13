@@ -30,7 +30,7 @@ const nativeListInput = v.strictObject({
 });
 const nativeEntryInput = v.strictObject({ ...nativeIdentity, discoveryId: platformIdentifier });
 const nativePreviewInput = v.strictObject({ ...nativeIdentity, nativeSessionId: platformIdentifier });
-const workspaceInput = v.strictObject({ directoryId: nativeDirectoryId });
+const directoryInput = v.strictObject({ directoryId: nativeDirectoryId });
 const nativeContinuationInput = v.strictObject({
     action: v.picklist(["fork", "import"]),
     harness: platformIdentifier,
@@ -149,7 +149,7 @@ export function createBotChatRoutes() {
             }),
         )
         .post("/bots/:botId/workspace", authenticatedSession, authorizedChat(), async (context) => {
-            return privateJson(await context.env.services.chat.workspace(context.get("chatScope")));
+            return privateJson(await context.env.services.chat.runtimeConfiguration(context.get("chatScope")));
         })
         .post("/bots/:botId/daemon-diagnostics", authenticatedSession, authorizedChat(), async (context) => {
             return privateJson(await context.env.services.chat.daemonDiagnostics(context.get("chatScope")));
@@ -164,10 +164,10 @@ export function createBotChatRoutes() {
             "/bots/:botId/workspace/directory",
             authenticatedSession,
             authorizedChat(120000),
-            bodyParser<AuthorizedChatEnvironment, typeof workspaceInput>(workspaceInput),
+            bodyParser<AuthorizedChatEnvironment, typeof directoryInput>(directoryInput),
             async (context) =>
                 privateJson(
-                    await context.env.services.chat.listWorkspace(
+                    await context.env.services.chat.listDirectory(
                         context.get("chatScope"),
                         context.req.valid("json").directoryId,
                     ),

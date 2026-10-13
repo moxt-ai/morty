@@ -91,7 +91,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
                     : [],
                 machineName: "Browser test Runtime",
                 pairingCode: option("--code"),
-                workspaceName: "Test workspace",
+                workspaceName: "Test project",
             },
             signal,
         });

@@ -34,7 +34,7 @@ export async function createChatWorkerEnvironment() {
             method: "POST",
         });
         if (identityResponse.status !== 201) {
-            throw new Error(`Could not create an anonymous workspace: ${identityResponse.status}`);
+            throw new Error(`Could not create an anonymous Morty identity: ${identityResponse.status}`);
         }
         const identity = v.parse(
             v.object({ token: v.string(), userId: v.string(), projectId: v.string() }),

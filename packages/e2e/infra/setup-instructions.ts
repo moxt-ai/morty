@@ -29,7 +29,7 @@ export async function followSetupInstructions(options: {
     const args = command.split(/\s+/u).map((argument) =>
         argument
             .replaceAll('"', "")
-            .replaceAll("<absolute-current-workspace>", options.cwd)
+            .replaceAll("<absolute-current-working-directory>", options.cwd)
             .replaceAll("<own-harness-id>", options.harness)
             .replaceAll("<exact-current-session-id>", options.sessionId ?? "")
             .replaceAll("<one-use-ticket>", url.searchParams.get("token") ?? ""),
@@ -63,7 +63,7 @@ export async function followSetupInstructions(options: {
         ready,
         identity: {
             botId: text(configuration.bot_id, "saved Bot"),
-            projectId: text(configuration.project_id, "saved workspace"),
+            projectId: text(configuration.project_id, "saved project"),
         },
     };
 }

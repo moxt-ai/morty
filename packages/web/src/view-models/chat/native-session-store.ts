@@ -54,7 +54,7 @@ export interface NativeSessionStore {
 
 export const createNativeSessionStore = (
     botId: string,
-    requests: Pick<BotChatApi, "workspace" | "nativeSessions" | "nativeSession">,
+    requests: Pick<BotChatApi, "runtimeConfiguration" | "nativeSessions" | "nativeSession">,
     onOpen: (session: OpenMobiusSession) => void,
 ) => {
     let selection: AbortController | null = null;
@@ -68,9 +68,9 @@ export const createNativeSessionStore = (
         load: async (signal) => {
             set({ directory: { kind: "loading" }, preview: { kind: "empty" }, error: "" });
             try {
-                const workspace = await requests.workspace(botId, signal);
+                const configuration = await requests.runtimeConfiguration(botId, signal);
                 signal.throwIfAborted();
-                const agents = connectedChatRuntimeAgents(workspace.runtime);
+                const agents = connectedChatRuntimeAgents(configuration.runtime);
                 set({ agents });
                 const selected = get().selected;
                 const agent = agents.find((item) => `${item.runtimeId}:${item.agentRef}` === selected) ?? agents[0];

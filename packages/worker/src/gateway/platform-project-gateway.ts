@@ -330,7 +330,7 @@ export class PlatformProjectGateway {
         return response.webSocket;
     };
 
-    readonly listChatWorkspace = async (
+    readonly listChatDirectory = async (
         projectId: string,
         runtimeId: string,
         directoryId: string,

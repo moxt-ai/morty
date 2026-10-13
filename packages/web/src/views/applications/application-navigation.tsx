@@ -7,7 +7,7 @@ import { NavigationCardLink } from "../../components/ui/navigation-card-link.tsx
 import { Spinner } from "../../components/ui/spinner.tsx";
 import type { ApplicationConnectionProps } from "../../view-models/channel-connection.ts";
 
-export interface WorkspaceApplicationProps {
+export interface MortyApplicationProps {
     readonly onChannelSelected: (channelId: string | null) => void;
     readonly userId: string;
 }
@@ -18,13 +18,13 @@ export interface ChatApplicationProps<TConnection> {
 
 export function MobiusApplications<TConnection>({
     ChatApplication,
-    WorkspaceApplication,
+    MortyApplication,
     initialConnection,
     view: selected,
     userId,
 }: ApplicationConnectionProps<TConnection> & {
     readonly ChatApplication: ComponentType<ChatApplicationProps<TConnection>>;
-    readonly WorkspaceApplication: ComponentType<WorkspaceApplicationProps>;
+    readonly MortyApplication: ComponentType<MortyApplicationProps>;
 }) {
     const connection = initialConnection;
     const [channelId, selectChannel] = useState<string | null>(null);
@@ -42,7 +42,7 @@ export function MobiusApplications<TConnection>({
                             </p>
                             <Button asChild>
                                 <Link to="/" search={{}}>
-                                    Choose a workspace
+                                    Choose a Machine
                                 </Link>
                             </Button>
                         </div>
@@ -50,8 +50,8 @@ export function MobiusApplications<TConnection>({
                 </section>
             ) : (
                 <div className="grid min-w-0 items-start gap-6 motion-safe:animate-cloud-enter lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
-                    <section aria-label="Workspace and machine management" className="min-w-0">
-                        <WorkspaceApplication userId={userId} onChannelSelected={selectChannel} />
+                    <section aria-label="Machine management" className="min-w-0">
+                        <MortyApplication userId={userId} onChannelSelected={selectChannel} />
                     </section>
                     <nav aria-label="Applications" className="grid gap-5">
                         <Card asChild>

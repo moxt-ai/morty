@@ -20,7 +20,7 @@ export interface ConversationSessionStore {
 }
 
 export function createConversationSessionStore(
-    requests: Pick<BotChatApi, "access" | "conversationSession" | "workspaceDirectory">,
+    requests: Pick<BotChatApi, "access" | "conversationSession" | "directory">,
 ) {
     return createStore<ConversationSessionStore>()((set) => ({
         state: { kind: "idle" },
@@ -29,7 +29,7 @@ export function createConversationSessionStore(
             set({ state: { kind: "loading" } });
             try {
                 const access = await requests.access(botId, signal, conversationId);
-                const directory = await requests.workspaceDirectory(botId, access.workspaceRef, signal);
+                const directory = await requests.directory(botId, access.workspaceRef, signal);
                 signal.throwIfAborted();
                 set({
                     state: {

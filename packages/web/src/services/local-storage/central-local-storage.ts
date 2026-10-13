@@ -268,14 +268,11 @@ const anonymousTokenSchema = v.pipe(
         /^(?:mobius_anon_v2_[A-Za-z0-9_-]{43}|mobius_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
     ),
 );
-const workspaceProjectIdSchema = v.pipe(
-    v.string(),
-    v.regex(/^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u),
-);
+const projectIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u));
 
 const storedAnonymousCredentialSchema = v.pipe(
     v.object({
-        projectId: workspaceProjectIdSchema,
+        projectId: projectIdSchema,
         token: anonymousTokenSchema,
         userId: v.string(),
     }),
@@ -287,12 +284,9 @@ export const anonymousCredentialEntry = jsonLocalStorageEntry({
     schema: storedAnonymousCredentialSchema,
 });
 
-const storedWorkspaceSchema = v.pipe(
-    v.object({ projectId: workspaceProjectIdSchema, userId: v.string() }),
-    v.readonly(),
-);
+const storedProjectScopeSchema = v.pipe(v.object({ projectId: projectIdSchema, userId: v.string() }), v.readonly());
 
-export const workspaceEntry = jsonLocalStorageEntry({
+export const projectScopeEntry = jsonLocalStorageEntry({
     key: "mobius.workspace.v2",
-    schema: storedWorkspaceSchema,
+    schema: storedProjectScopeSchema,
 });

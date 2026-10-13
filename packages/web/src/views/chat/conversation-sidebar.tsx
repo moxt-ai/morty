@@ -142,7 +142,7 @@ export function ConversationSidebar({
     readonly requests: Pick<
         BotChatApi,
         | "archiveManagedSession"
-        | "workspace"
+        | "runtimeConfiguration"
         | "nativeSessions"
         | "nativeSession"
         | "managedSessions"
@@ -227,7 +227,7 @@ export function ConversationSidebar({
     }, [activeBot.botId, directory, onSessionsLoaded]);
     return (
         <aside
-            aria-label="Workspace navigation"
+            aria-label="Morty navigation"
             className="grid min-h-0 w-full shrink-0 grid-cols-[minmax(0,1fr)_auto] gap-y-2 overflow-hidden border-b border-border/80 bg-sidebar px-3 py-3 sm:flex sm:w-[280px] sm:flex-col sm:gap-0 sm:border-r sm:border-b-0 sm:px-3.5 sm:py-4"
         >
             <div className="col-start-1 row-start-1 flex items-center gap-3 px-1.5 sm:col-auto sm:row-auto sm:mb-3">
@@ -236,7 +236,7 @@ export function ConversationSidebar({
                 </span>
                 <span className="hidden min-w-0 sm:block">
                     <h1 className="truncate text-[15px] leading-5 font-semibold tracking-[-0.015em]">Morty</h1>
-                    <span className="block text-[11px] leading-4 text-muted-foreground">Local workspace</span>
+                    <span className="block text-[11px] leading-4 text-muted-foreground">Local agents</span>
                 </span>
             </div>
             <BotSwitcherMenu
@@ -527,7 +527,7 @@ export function ConversationSidebar({
             {sharing && (
                 <Dialog
                     title="Continue your work"
-                    description="Scan the QR code or open the link on another device to use this workspace."
+                    description="Scan the QR code or open the link on another device to use Morty."
                     onClose={() => setSharing(false)}
                 >
                     <MachineSharing createTransfer={createTransfer} />

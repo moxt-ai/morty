@@ -291,7 +291,7 @@ export function BotSwitcherMenu({
             )}
             {dialog.kind === "remove" && (
                 <Dialog
-                    description={`Remove ${activeBot.displayName} from this workspace? Its conversations will no longer be available in Chat.`}
+                    description={`Remove ${activeBot.displayName} from Morty? Its conversations will no longer be available in Chat.`}
                     onClose={closeDialog}
                     title="Remove Machine"
                 >
