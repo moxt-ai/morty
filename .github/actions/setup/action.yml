@@ -44,6 +44,10 @@ runs:
       shell: bash
       run: pnpm --dir third-party/mobius install --frozen-lockfile
 
+    - name: Build Mobius generated harnesses
+      shell: bash
+      run: pnpm --dir third-party/mobius --filter @moxt-ai/mobius run pretypecheck
+
     - name: Install Chat dependencies
       shell: bash
       run: pnpm install --frozen-lockfile

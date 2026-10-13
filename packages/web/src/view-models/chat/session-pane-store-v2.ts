@@ -21,14 +21,9 @@ import type { ComposerAttachment } from "./composer-attachment.ts";
 import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { createSessionActiveTurn, type SessionActiveTurn } from "./session-active-turn.ts";
-import {
-    type SessionActivityState,
-    startSessionWork,
-    transitionSessionActivity,
-    workingCommandId,
-} from "./session-activity-machine.ts";
-import { createSessionDeliveryStore, type SessionDeliveryStore } from "./session-delivery-store.ts";
-import { createSessionMessageQueueStore, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
+import { type SessionActivityState, startSessionWork, transitionSessionActivity } from "./session-activity-machine.ts";
+import { createSessionDeliveryStore } from "./session-delivery-store.ts";
+import { createSessionMessageQueueStore } from "./session-message-queue-store.ts";
 import type {
     ElicitationInteraction,
     ElicitationInteractionResponse,
@@ -50,7 +45,7 @@ import {
     sessionProjectionPagination,
     transitionSessionProjection,
 } from "./session-projection-v2.ts";
-import { createSessionTaskControlsStore, type SessionTaskControlsStore } from "./session-task-controls.ts";
+import { createSessionTaskControlsStore } from "./session-task-controls.ts";
 
 type Operation =
     | { readonly kind: "idle" }
@@ -168,85 +163,6 @@ export interface SessionPaneStore {
     readonly respondToPermission: (response: PermissionInteractionResponse, signal: AbortSignal) => Promise<void>;
     readonly respondToElicitation: (response: ElicitationInteractionResponse, signal: AbortSignal) => Promise<void>;
     readonly stop: (signal: AbortSignal) => Promise<void>;
-}
-
-export function sessionPanePresentation(
-    model: SessionPaneStore,
-    delivery: SessionDeliveryStore,
-    tasks: SessionTaskControlsStore,
-    queue: SessionMessageQueueStore,
-) {
-    const waitingForInput = model.interactions.some(
-        (interaction) =>
-            (interaction.kind === "permission" && interaction.permission.state.kind !== "resolved") ||
-            (interaction.kind === "elicitation" &&
-                (interaction.elicitation.state.kind === "pending" ||
-                    interaction.elicitation.state.kind === "submitted")),
-    );
-    const controlRunning =
-        tasks.operation.kind === "running" ||
-        tasks.operation.kind === "steering" ||
-        tasks.operation.kind === "stopping";
-    const composerDisabled =
-        model.connection.kind !== "ready" ||
-        delivery.state.kind === "submitting" ||
-        delivery.state.kind === "delivery-unknown" ||
-        model.operation.kind === "sending" ||
-        model.operation.kind === "configuring" ||
-        waitingForInput ||
-        queue.operation.kind === "submitting" ||
-        tasks.operation.kind === "steering" ||
-        tasks.operation.kind === "stopping";
-    const workingActivityCommandId = workingCommandId(model.activity);
-    const submittingCommandId = model.operation.kind === "sending" ? model.operation.commandId : null;
-    const activeCommandId = workingActivityCommandId ?? submittingCommandId;
-    const busy = activeCommandId !== null || composerDisabled;
-    const activeMessageId =
-        workingActivityCommandId !== null || submittingCommandId !== null
-            ? (model.messages.findLast((message) => message.role === "assistant")?.firstEvent.eventId ?? null)
-            : null;
-    const deliveryUnknownCommandId =
-        delivery.state.kind === "delivery-unknown" ? delivery.state.journal.commandId : null;
-    const deliveryUnknownUserMessageId = deliveryUnknownCommandId === null ? null : deliveryUnknownCommandId;
-    return {
-        activeMessageId,
-        activeCommandId,
-        busy,
-        composerDisabled,
-        composerError:
-            model.activity.kind === "failed"
-                ? model.activity.message
-                : model.operation.kind === "failed"
-                  ? model.operation.message
-                  : delivery.state.kind === "failed"
-                    ? delivery.state.message
-                    : tasks.feedback.kind === "failed"
-                      ? tasks.feedback.message
-                      : queue.feedback.kind === "failed"
-                        ? queue.feedback.message
-                        : "",
-        controlRunning,
-        deliveryUnknownUserMessageId,
-        hasOlderHistory: model.hasOlderHistory,
-        historyLoading: model.historyLoading,
-        outputState:
-            queue.operation.kind === "submitting"
-                ? "sending"
-                : tasks.operation.kind === "stopping"
-                  ? "stopping"
-                  : model.operation.kind === "sending" || delivery.state.kind === "submitting"
-                    ? "sending"
-                    : controlRunning
-                      ? "running"
-                      : "idle",
-        workingIndicatorVisible:
-            activeCommandId !== null &&
-            model.messages.some((message) => message.role === "user" && message.commandId === activeCommandId),
-        shouldQueueOnSubmit: tasks.operation.kind === "running",
-        submitDisabled:
-            (tasks.operation.kind === "running" ? queue.operation.kind !== "idle" : busy) ||
-            (model.draft.trim() === "" && model.attachments.length === 0),
-    } as const;
 }
 
 interface SessionIdentity {
