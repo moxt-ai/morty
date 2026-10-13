@@ -13,11 +13,11 @@ export async function projectBindings(
 ): Promise<CloudBindings & ProjectStorageBindings> {
     signal.throwIfAborted();
     if (bindings.CHAT_PROJECT_ID !== projectId) {
-        throw new PlatformProjectError("PROJECT_CONTEXT_MISMATCH", "The workspace context is invalid.", 400);
+        throw new PlatformProjectError("PROJECT_CONTEXT_MISMATCH", "The Morty context is invalid.", 400);
     }
     const parsed = v.safeParse(projectStorageBindingsSchema, bindings);
     if (!parsed.success) {
-        throw new PlatformProjectError("PROJECT_STORAGE_UNAVAILABLE", "Workspace storage is unavailable.", 503);
+        throw new PlatformProjectError("PROJECT_STORAGE_UNAVAILABLE", "Morty storage is unavailable.", 503);
     }
     return { ...bindings, ...parsed.output };
 }

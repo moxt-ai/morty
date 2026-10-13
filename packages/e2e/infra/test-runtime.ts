@@ -147,7 +147,7 @@ export async function createTestRuntime(harness: E2EHarness) {
                     events: result.events,
                     url: text(result.ready.url, "Chat URL"),
                     qrPath: typeof result.ready.qrPath === "string" ? result.ready.qrPath : null,
-                    workspace: text(result.ready.workspace, "Runtime workspace"),
+                    workspace: text(result.ready.workspace, "Runtime working directory"),
                     message: text(result.ready.message, "ready message"),
                     identity: result.identity,
                 };

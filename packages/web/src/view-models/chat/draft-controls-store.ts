@@ -2,9 +2,9 @@ import type { SessionConfigOption, WorkspaceEntriesEvent } from "@moxt-ai/mobius
 import { createStore } from "zustand/vanilla";
 import {
     type BotChatApi,
+    type BotRuntimeConfiguration,
     type ChatAgentSelection,
     type ChatDraftConfiguration,
-    type ChatWorkspace,
     connectedChatRuntimeAgents,
 } from "@/services/chat/bot-chat-api";
 import { restoreLastAgentSettings, saveLastAgentSettings } from "@/services/chat/last-agent-settings";
@@ -23,17 +23,17 @@ type DraftSettingsState =
     | {
           readonly kind: "switching";
           readonly selectedHarness: string;
-          readonly workspace: ChatWorkspace;
+          readonly configuration: BotRuntimeConfiguration;
       }
     | {
           readonly kind: "refreshing";
-          readonly workspace: ChatWorkspace;
+          readonly configuration: BotRuntimeConfiguration;
           readonly selectedAgent: ChatAgentSelection;
           readonly cwd: WorkspaceEntriesEvent;
       }
     | {
           readonly kind: "ready";
-          readonly workspace: ChatWorkspace;
+          readonly configuration: BotRuntimeConfiguration;
           readonly selectedAgent: ChatAgentSelection;
           readonly cwd: WorkspaceEntriesEvent;
           readonly options: readonly SessionConfigOption[];
@@ -129,7 +129,7 @@ function waitForCwdPreview(signal: AbortSignal): Promise<void> {
 
 export const createDraftControlsStore = (
     botId: string,
-    requests: Pick<BotChatApi, "workspace" | "workspaceDirectory" | "agentSettings">,
+    requests: Pick<BotChatApi, "runtimeConfiguration" | "directory" | "agentSettings">,
     onSettings: (settings: ChatDraftConfiguration | null) => void,
 ) =>
     createStore<DraftControlsStore>()((set, get) => {
@@ -183,7 +183,7 @@ export const createDraftControlsStore = (
             publishSettings(ready);
         };
         const applyAgentSettings = (
-            workspace: ChatWorkspace,
+            configuration: BotRuntimeConfiguration,
             selectedAgent: ChatAgentSelection,
             cwd: WorkspaceEntriesEvent,
             options: readonly SessionConfigOption[],
@@ -191,7 +191,7 @@ export const createDraftControlsStore = (
             const restoredSettings = restoreLastAgentSettings(botId, selectedAgent.agentRef, options);
             const ready = {
                 kind: "ready" as const,
-                workspace,
+                configuration,
                 selectedAgent,
                 cwd,
                 options: restoredSettings.options,
@@ -228,7 +228,7 @@ export const createDraftControlsStore = (
             const signal = AbortSignal.any([lifetimeSignal, operation.signal, AbortSignal.timeout(120_000)]);
             set({ cwdBrowser: { kind: "loading", directory: previousDirectory, path: previousPath } });
             try {
-                const directory = await requests.workspaceDirectory(botId, directoryId, signal);
+                const directory = await requests.directory(botId, directoryId, signal);
                 signal.throwIfAborted();
                 set({ cwdBrowser: { kind: "ready", directory, path: directory.directoryLabel } });
             } catch (cause) {
@@ -273,7 +273,7 @@ export const createDraftControlsStore = (
                     });
                     return;
                 }
-                const directory = await requests.workspaceDirectory(botId, pathDirectoryId(requestedPath), signal);
+                const directory = await requests.directory(botId, pathDirectoryId(requestedPath), signal);
                 signal.throwIfAborted();
                 set({ cwdBrowser: { kind: "ready", directory, path: directory.directoryLabel } });
             } catch (cause) {
@@ -308,27 +308,27 @@ export const createDraftControlsStore = (
             }
             try {
                 while (!signal.aborted) {
-                    const workspace = await requests.workspace(botId, signal);
-                    const selected = connectedChatRuntimeAgents(workspace.runtime).find(
+                    const configuration = await requests.runtimeConfiguration(botId, signal);
+                    const selected = connectedChatRuntimeAgents(configuration.runtime).find(
                         (agent) => selectedHarness === "" || `${agent.runtimeId}:${agent.agentRef}` === selectedHarness,
                     );
                     if (selected !== undefined) {
                         const [result, defaultCwd] = await Promise.all([
                             requests.agentSettings(botId, selected.agentRef, false, signal),
-                            requests.workspaceDirectory(botId, "default", signal),
+                            requests.directory(botId, "default", signal),
                         ]);
                         signal.throwIfAborted();
                         const savedDirectoryId = readLastCwdPreference(botId, selected.runtimeId, selected.agentRef);
                         let cwd = defaultCwd;
                         if (savedDirectoryId !== null && savedDirectoryId !== defaultCwd.directoryId) {
                             try {
-                                cwd = await requests.workspaceDirectory(botId, savedDirectoryId, signal);
+                                cwd = await requests.directory(botId, savedDirectoryId, signal);
                                 signal.throwIfAborted();
                             } catch {
                                 signal.throwIfAborted();
                             }
                         }
-                        applyAgentSettings(workspace, selected, cwd, result.options);
+                        applyAgentSettings(configuration, selected, cwd, result.options);
                         return;
                     }
                     await wait(signal);
@@ -380,7 +380,7 @@ export const createDraftControlsStore = (
                 set({
                     settings: {
                         kind: "refreshing",
-                        workspace: settings.workspace,
+                        configuration: settings.configuration,
                         selectedAgent: settings.selectedAgent,
                         cwd: settings.cwd,
                     },
@@ -389,7 +389,7 @@ export const createDraftControlsStore = (
                 try {
                     const result = await requests.agentSettings(botId, settings.selectedAgent.agentRef, true, signal);
                     signal.throwIfAborted();
-                    applyAgentSettings(settings.workspace, settings.selectedAgent, settings.cwd, result.options);
+                    applyAgentSettings(settings.configuration, settings.selectedAgent, settings.cwd, result.options);
                 } catch (cause) {
                     if (!signal.aborted) {
                         set({
@@ -433,11 +433,7 @@ export const createDraftControlsStore = (
                     const requestSignal = AbortSignal.any([signal, operation.signal, AbortSignal.timeout(120_000)]);
                     set({ cwdBrowser: { kind: "loading", directory: browser.directory, path: browser.path } });
                     try {
-                        directory = await requests.workspaceDirectory(
-                            botId,
-                            pathDirectoryId(requestedPath),
-                            requestSignal,
-                        );
+                        directory = await requests.directory(botId, pathDirectoryId(requestedPath), requestSignal);
                         requestSignal.throwIfAborted();
                     } catch (cause) {
                         if (operation.signal.aborted) {
@@ -472,7 +468,7 @@ export const createDraftControlsStore = (
                 cwdOperation = operation;
                 const requestSignal = AbortSignal.any([signal, operation.signal, AbortSignal.timeout(120_000)]);
                 try {
-                    const directory = await requests.workspaceDirectory(botId, directoryId, requestSignal);
+                    const directory = await requests.directory(botId, directoryId, requestSignal);
                     requestSignal.throwIfAborted();
                     applyDirectory(settings, directory);
                 } catch (cause) {
@@ -499,14 +495,14 @@ export const createDraftControlsStore = (
                 if (settings.kind !== "ready" || disabled) {
                     return;
                 }
-                const agent = connectedChatRuntimeAgents(settings.workspace.runtime).find(
+                const agent = connectedChatRuntimeAgents(settings.configuration.runtime).find(
                     (item) => `${item.runtimeId}:${item.agentRef}` === value,
                 );
                 if (agent === undefined) {
                     return;
                 }
                 selectedHarness = value;
-                set({ settings: { kind: "switching", selectedHarness: value, workspace: settings.workspace } });
+                set({ settings: { kind: "switching", selectedHarness: value, configuration: settings.configuration } });
                 onSettings(null);
                 try {
                     await load(signal);

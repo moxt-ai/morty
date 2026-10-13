@@ -86,7 +86,7 @@ export function createAuthenticationRoutes() {
                 async () =>
                     await context.env.gateways.platformProjects.create(
                         userId,
-                        "Personal workspace",
+                        "Morty",
                         signal,
                         requestedLocation?.locationHint ?? projectLocationHint(request),
                     ),

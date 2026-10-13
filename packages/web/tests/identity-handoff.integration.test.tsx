@@ -26,7 +26,7 @@ test("Given a Codex native session handoff, When the user hovers over import, Th
 
     expect(
         await vi.waitFor(() =>
-            getByRole(document.body, "tooltip", { name: "codex doesn't support import conversation" }),
+            getByRole(document.body, "tooltip", { name: "codex doesn't support importing sessions" }),
         ),
     ).toBeInstanceOf(HTMLElement);
 });
@@ -57,15 +57,17 @@ test("Given a native session handoff, When the choice page loads, Then a QR code
     expect(dialogQrCode.getAttribute("src")).toBe(qrCode.getAttribute("src"));
 });
 
-test("Given a new browser, When Morty loads, Then the anonymous workspace opens", {
+test("Given a new browser, When Morty loads, Then Morty opens without presenting a workspace concept", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap" } });
 
     expect(await app.queryElementByTestId(dataTestId.closeDialog)).toBeInstanceOf(HTMLElement);
+    expect(document.body.textContent).not.toContain("Local agents");
+    expect(document.body.textContent?.toLowerCase()).not.toContain("workspace");
 });
 
-test("Given a shared workspace, When the user opens Continue your work, Then the icon-only action and dialog use that name", {
+test("Given shared Morty access, When the user opens Continue your work, Then the icon-only action and dialog use that name", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp();
@@ -111,7 +113,7 @@ test("Given a native session handoff, When importing fails, Then the choice page
     expect(importSession.disabled).toBe(true);
     expect(forkSession.disabled).toBe(true);
     expect(getByRole(importSession, "status", { name: "Importing session" })).toBeInstanceOf(HTMLElement);
-    expect(queryByRole(document.body, "status", { name: "Securely transferring the workspace" })).toBeNull();
+    expect(queryByRole(document.body, "status", { name: "Securely transferring Morty access" })).toBeNull();
 
     await vi.waitFor(() => expect(getByRole(document.body, "alert")).toBeInstanceOf(HTMLElement));
     expect(getByRole(document.body, "heading", { name: "Continue native session" })).toBeInstanceOf(HTMLElement);
@@ -123,7 +125,7 @@ test("Given a native session handoff, When importing fails, Then the choice page
     expect(getByRole(forkSession, "status", { name: "Forking session" })).toBeInstanceOf(HTMLElement);
 });
 
-test("Given a shared workspace, When the user opens the user menu, Then replacing the current user is unavailable", {
+test("Given shared Morty access, When the user opens the user menu, Then replacing the current user is unavailable", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp();
@@ -133,7 +135,7 @@ test("Given a shared workspace, When the user opens the user menu, Then replacin
     expect(queryByRole(document.body, "menuitem", { name: "Replace current user" })).toBeNull();
 });
 
-test("Given a connected shared workspace, When the user refreshes Network latency, Then every network hop latency updates", {
+test("Given connected shared Morty access, When the user refreshes Network latency, Then every network hop latency updates", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -167,7 +169,7 @@ test("Given a connected shared workspace, When the user refreshes Network latenc
     });
 });
 
-test("Given a shared workspace, When the user chooses to end remote access from the user menu, Then they confirm the transfer-wide revocation without a recovery code", {
+test("Given shared Morty access, When the user chooses to end remote access from the user menu, Then they confirm the transfer-wide revocation without a recovery code", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp();

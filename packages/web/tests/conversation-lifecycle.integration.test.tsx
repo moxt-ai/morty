@@ -45,7 +45,7 @@ test("Given conversations updated across recent dates, When the directory loads,
         }
 
         vi.setSystemTime(new Date("2026-10-10T12:00:00+08:00"));
-        await app.user.click(getByRole(document.body, "button", { name: "Refresh conversations" }));
+        await app.user.click(getByRole(document.body, "button", { name: "Refresh sessions" }));
 
         await app.waitForView(() => {
             expect(

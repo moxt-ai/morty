@@ -93,7 +93,7 @@ function BugReportDialog({ onClose }: { readonly onClose: () => void }) {
     return (
         <Dialog
             title="Report a bug"
-            description="Send a description, optional images and recent technical diagnostics to the Morty team. Conversation text, other files and credentials are not collected automatically."
+            description="Send a description, optional images and recent technical diagnostics to the Morty team. Session text, other files and credentials are not collected automatically."
             onClose={onClose}
         >
             {state.kind === "sent" ? (

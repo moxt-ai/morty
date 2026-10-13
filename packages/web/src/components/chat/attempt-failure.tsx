@@ -60,7 +60,7 @@ export function AttemptFailure({
                     <p className="mt-2 text-xs text-muted-foreground" role="status">
                         {copy === "failed"
                             ? "Select the command above and copy it manually."
-                            : "After approval, resend your message here. Your Machine and this conversation stay the same."}
+                            : "After approval, resend your message here. Your Machine and this session stay the same."}
                     </p>
                 </div>
             )}

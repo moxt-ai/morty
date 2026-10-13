@@ -3,9 +3,9 @@ import { createStore } from "zustand/vanilla";
 import type { SelectedBotPreference } from "../../services/bots/selected-bot-preference.ts";
 import type {
     BotChatApi,
+    BotRuntimeConfiguration,
     ChatAccess,
     ChatDraftConfiguration,
-    ChatWorkspace,
 } from "../../services/chat/bot-chat-api.ts";
 import { centralLocalStorage, newConversationDraftEntry } from "../../services/local-storage/central-local-storage.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
@@ -78,8 +78,8 @@ export function disconnectedBotNotice(
     }
 }
 
-function runtimeConnectionStatus(workspace: ChatWorkspace): BotConnectionStatus {
-    return workspace.runtime.online
+function runtimeConnectionStatus(configuration: BotRuntimeConfiguration): BotConnectionStatus {
+    return configuration.runtime.online
         ? { kind: "connected", label: "Connected" }
         : { kind: "disconnected", label: "Disconnected" };
 }
@@ -153,23 +153,23 @@ function initialSelection(urlValue: string, createId: () => string): Conversatio
         : { kind: "draft", key: createId() };
 }
 
-function setupReason(workspace: ChatWorkspace): SetupReason | null {
-    if (workspace.runtime.agents.length === 0) {
+function setupReason(configuration: BotRuntimeConfiguration): SetupReason | null {
+    if (configuration.runtime.agents.length === 0) {
         return "agent-missing";
     }
-    return workspace.runtime.online ? null : "runtime-offline";
+    return configuration.runtime.online ? null : "runtime-offline";
 }
 
 export function setupDescription(reason: SetupReason): string {
     switch (reason) {
         case "unconfigured":
-            return "Your workspace is loaded. Paste this instruction into your local agent to connect it to this workspace.";
+            return "Morty is ready. Paste this instruction into your local agent to connect it.";
         case "agent-missing":
-            return "Your workspace is loaded, but its connected Runtime no longer reports any agents. Start the paired Runtime, or use the instruction below to pair it again.";
+            return "The connected Runtime no longer reports any agents. Start the paired Runtime, or use the instruction below to pair it again.";
         case "runtime-offline":
-            return "Your workspace is loaded, but its connected Runtime is offline. Start the paired Runtime and check its internet connection, or use the instruction below to pair it again.";
+            return "The connected Runtime is offline. Start the paired Runtime and check its internet connection, or use the instruction below to pair it again.";
         case "agent-required":
-            return "Your workspace is loaded, but the server could not connect Chat to an available agent. Check that your local agent is running, or use the instruction below to pair it again.";
+            return "Morty could not connect Chat to an available agent. Check that your local agent is running, or use the instruction below to pair it again.";
     }
 }
 
@@ -201,9 +201,9 @@ export const createBotChatHomeStore = (
         | "readBot"
         | "updateBot"
         | "waitForSetupChange"
-        | "waitForWorkspaceChange"
-        | "workspace"
-        | "workspaceDirectory"
+        | "waitForRuntimeConfigurationChange"
+        | "runtimeConfiguration"
+        | "directory"
     >,
     options: {
         readonly url: string;
@@ -229,10 +229,10 @@ export const createBotChatHomeStore = (
         load: async (signal) => {
             set((current) => ({ view: "bot" in current.view ? current.view : { kind: "loading" } }));
             let openedBot: ManagedBot | null = null;
-            const watchWorkspaceChanges = async (bot: ManagedBot): Promise<void> => {
+            const watchRuntimeConfigurationChanges = async (bot: ManagedBot): Promise<void> => {
                 while (true) {
                     try {
-                        await requests.waitForWorkspaceChange(bot.botId, signal);
+                        await requests.waitForRuntimeConfigurationChange(bot.botId, signal);
                     } catch (cause) {
                         if (cause instanceof DOMException && cause.name === "TimeoutError") {
                             continue;
@@ -240,19 +240,19 @@ export const createBotChatHomeStore = (
                         throw cause;
                     }
                     signal.throwIfAborted();
-                    const changedWorkspace = await requests.workspace(bot.botId, signal);
+                    const changedConfiguration = await requests.runtimeConfiguration(bot.botId, signal);
                     signal.throwIfAborted();
-                    const changedReason = setupReason(changedWorkspace);
+                    const changedReason = setupReason(changedConfiguration);
                     set((current) =>
                         current.selection.kind === "draft"
                             ? {
-                                  connectionStatus: runtimeConnectionStatus(changedWorkspace),
+                                  connectionStatus: runtimeConnectionStatus(changedConfiguration),
                                   view:
                                       changedReason === null
                                           ? { kind: "active", bot }
                                           : { kind: "setup", bot, reason: changedReason },
                               }
-                            : { connectionStatus: runtimeConnectionStatus(changedWorkspace) },
+                            : { connectionStatus: runtimeConnectionStatus(changedConfiguration) },
                     );
                 }
             };
@@ -275,7 +275,7 @@ export const createBotChatHomeStore = (
                             target,
                         }),
                     }));
-                    await watchWorkspaceChanges(bot);
+                    await watchRuntimeConfigurationChanges(bot);
                     return;
                 }
                 const bots = await requests.listBots(signal);
@@ -318,9 +318,9 @@ export const createBotChatHomeStore = (
                     }));
                     return;
                 }
-                const workspace = await requests.workspace(bot.botId, signal);
+                const configuration = await requests.runtimeConfiguration(bot.botId, signal);
                 signal.throwIfAborted();
-                set({ connectionStatus: runtimeConnectionStatus(workspace) });
+                set({ connectionStatus: runtimeConnectionStatus(configuration) });
                 const currentSelection = get().selection;
                 const currentTarget = currentSelection.kind === "draft" ? null : currentSelection.target;
                 if (currentTarget?.kind === "continue") {
@@ -341,7 +341,7 @@ export const createBotChatHomeStore = (
                             target: currentTarget,
                         }),
                     });
-                    await watchWorkspaceChanges(bot);
+                    await watchRuntimeConfigurationChanges(bot);
                     return;
                 }
                 if (currentTarget?.kind === "session") {
@@ -355,18 +355,18 @@ export const createBotChatHomeStore = (
                             target: currentTarget,
                         }),
                     }));
-                    await watchWorkspaceChanges(bot);
+                    await watchRuntimeConfigurationChanges(bot);
                     return;
                 }
-                const reason = currentTarget === null ? setupReason(workspace) : null;
+                const reason = currentTarget === null ? setupReason(configuration) : null;
                 if (reason !== null) {
                     set({ view: { kind: "setup", bot, reason } });
-                    await watchWorkspaceChanges(bot);
+                    await watchRuntimeConfigurationChanges(bot);
                     return;
                 }
                 if (currentTarget === null) {
                     set({ view: { kind: "active", bot } });
-                    await watchWorkspaceChanges(bot);
+                    await watchRuntimeConfigurationChanges(bot);
                     return;
                 }
                 await conversations.getState().open(bot.botId, currentTarget.conversationId, signal);
@@ -385,7 +385,7 @@ export const createBotChatHomeStore = (
                         target: currentTarget,
                     }),
                 }));
-                await watchWorkspaceChanges(bot);
+                await watchRuntimeConfigurationChanges(bot);
             } catch (cause) {
                 if (signal.aborted) {
                     return;
@@ -415,7 +415,7 @@ export const createBotChatHomeStore = (
                         selection: failedSelection,
                         view: { kind: "setup", bot: openedBot, reason: "agent-required" },
                     });
-                    await requests.waitForWorkspaceChange(openedBot.botId, signal);
+                    await requests.waitForRuntimeConfigurationChange(openedBot.botId, signal);
                     signal.throwIfAborted();
                     set((current) => ({
                         selection: transitionConversationSelection(current.selection, { kind: "retry-requested" }),
@@ -451,7 +451,7 @@ export const createBotChatHomeStore = (
                         view: { kind: "runtime-disconnected", bot: openedBot, message },
                     });
                     try {
-                        await requests.waitForWorkspaceChange(openedBot.botId, signal);
+                        await requests.waitForRuntimeConfigurationChange(openedBot.botId, signal);
                         signal.throwIfAborted();
                         set((current) => ({ revision: current.revision + 1 }));
                     } catch (watchCause) {
@@ -594,7 +594,7 @@ export const createBotChatHomeStore = (
                 const bots = get().bots.filter((bot) => bot.botId !== activeBot.botId);
                 const selected = bots[0];
                 if (selected === undefined) {
-                    throw new Error("Keep at least one Machine in your workspace.");
+                    throw new Error("Keep at least one Machine in Morty.");
                 }
                 options.selectedBotPreference.write(selected.botId);
                 options.navigation.showDraft();

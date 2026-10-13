@@ -72,13 +72,13 @@ const chatRuntimeSchema = v.object({
     ),
 });
 export type ChatRuntime = v.InferOutput<typeof chatRuntimeSchema>;
-const workspaceSchema = v.object({ runtime: chatRuntimeSchema });
+const runtimeConfigurationSchema = v.object({ runtime: chatRuntimeSchema });
 const networkDiagnosticSchema = v.strictObject({
     mobiusDaemonLatencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
     mobiusOrigin: v.pipe(v.string(), v.url()),
     mortyMobiusLatencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
 });
-export type ChatWorkspace = v.InferOutput<typeof workspaceSchema>;
+export type BotRuntimeConfiguration = v.InferOutput<typeof runtimeConfigurationSchema>;
 export type ChatAgentSelection = {
     readonly runtimeId: Identifier;
     readonly machineName: string;
@@ -452,9 +452,9 @@ export class BotChatApi {
         }
         return ticket;
     };
-    readonly workspace = async (botId: string, parent: AbortSignal): Promise<ChatWorkspace> =>
-        v.parse(workspaceSchema, await this.#request(botId, "workspace", undefined, parent));
-    readonly workspaceDirectory = async (botId: string, directoryId: string, signal: AbortSignal) =>
+    readonly runtimeConfiguration = async (botId: string, parent: AbortSignal): Promise<BotRuntimeConfiguration> =>
+        v.parse(runtimeConfigurationSchema, await this.#request(botId, "workspace", undefined, parent));
+    readonly directory = async (botId: string, directoryId: string, signal: AbortSignal) =>
         decodeWorkspaceEntriesEvent(
             JSON.stringify(await this.#request(botId, "workspace/directory", { directoryId }, signal)),
         );
@@ -480,7 +480,7 @@ export class BotChatApi {
     };
     readonly waitForSetupChange = async (botId: string, parent: AbortSignal): Promise<void> =>
         await this.#waitForBotChange(botId, "setup/runtimes", parent);
-    readonly waitForWorkspaceChange = async (botId: string, parent: AbortSignal): Promise<void> =>
+    readonly waitForRuntimeConfigurationChange = async (botId: string, parent: AbortSignal): Promise<void> =>
         await this.#waitForBotChange(botId, "workspace", parent);
     readonly nativeSessions = async (
         botId: string,

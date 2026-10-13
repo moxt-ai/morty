@@ -49,7 +49,7 @@ async function createChatFixture(includeOpenCode = false, nativeSessionIds: Read
     }
 }
 
-test("Given a draft Bot, When its owner configures and opens it, Then setup lists Runtime options and workspace exposes only the configured Runtime", async () => {
+test("Given a draft Bot, When its owner configures and opens it, Then setup lists Runtime options and the Runtime endpoint exposes only the configured Runtime", async () => {
     const fixture = await createChatFixture();
     try {
         const setup = { runtimeId: fixture.runtime.runtimeId, agentRef: "codex" };
@@ -80,14 +80,14 @@ test("Given a draft Bot, When its owner configures and opens it, Then setup list
         expect(setupRuntimes).toMatchObject({
             runtimes: [{ runtimeId: fixture.runtime.runtimeId, online: true, agents: [{ agentRef: "codex" }] }],
         });
-        const draftWorkspace = await fixture.request(`chat/bots/${fixture.botId}/workspace`, {});
-        expect(draftWorkspace.status).toBe(409);
-        expect(await draftWorkspace.json()).toMatchObject({ error: { code: "AGENT_REQUIRED" } });
+        const draftRuntimeConfiguration = await fixture.request(`chat/bots/${fixture.botId}/workspace`, {});
+        expect(draftRuntimeConfiguration.status).toBe(409);
+        expect(await draftRuntimeConfiguration.json()).toMatchObject({ error: { code: "AGENT_REQUIRED" } });
         expect((await fixture.request(`chat/bots/${fixture.botId}/setup`, setup)).status).toBe(202);
 
-        const workspaceResponse = await fixture.request(`chat/bots/${fixture.botId}/workspace`, {});
-        expect(workspaceResponse.status).toBe(200);
-        expect(await workspaceResponse.json()).toMatchObject({
+        const runtimeConfigurationResponse = await fixture.request(`chat/bots/${fixture.botId}/workspace`, {});
+        expect(runtimeConfigurationResponse.status).toBe(200);
+        expect(await runtimeConfigurationResponse.json()).toMatchObject({
             runtime: { runtimeId: fixture.runtime.runtimeId, online: true, agents: [{ agentRef: "codex" }] },
         });
         const configuredSetupRuntimes = await fixture.request(`chat/bots/${fixture.botId}/setup/runtimes`, {});

@@ -125,7 +125,7 @@ test("Given a working reply, When the user reloads after 65 seconds, Then elapse
     await expect(firstConversationResponse).toHaveCount(1);
     await expect(firstConversationResponse).toBeVisible();
 
-    await page.getByRole("button", { name: "New Conversation" }).click();
+    await page.getByRole("button", { name: "New Session" }).click();
     await page.getByRole("textbox", { name: "Message" }).fill("hold after first delta");
     await page.getByRole("button", { name: "Send message" }).click();
     const partialResponse = page.getByRole("article", { name: "Agent response" }).filter({ hasText: "Partial reply" });

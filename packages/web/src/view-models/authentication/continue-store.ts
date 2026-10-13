@@ -20,31 +20,31 @@ type ContinueState =
           readonly kind: "session-confirm";
           readonly code: string;
           readonly handoff: SessionHandoff;
-          readonly replacesWorkspace: boolean;
+          readonly replacesIdentity: boolean;
       }
     | {
           readonly kind: "session-redeeming";
           readonly code: string;
           readonly handoff: SessionHandoff;
           readonly choice: NativeSessionChoice;
-          readonly replacesWorkspace: boolean;
+          readonly replacesIdentity: boolean;
       }
     | {
           readonly kind: "session-failed";
           readonly code: string;
           readonly handoff: SessionHandoff;
           readonly message: string;
-          readonly replacesWorkspace: boolean;
+          readonly replacesIdentity: boolean;
       }
-    | { readonly kind: "workspace-confirm"; readonly code: string }
-    | { readonly kind: "workspace-redeeming"; readonly code: string }
+    | { readonly kind: "identity-confirm"; readonly code: string }
+    | { readonly kind: "identity-redeeming"; readonly code: string }
     | { readonly kind: "failed"; readonly message: string }
     | { readonly kind: "invalid" };
 
 export interface ContinueStore {
     readonly state: ContinueState;
     readonly continueSession: (choice: NativeSessionChoice) => void;
-    readonly continueWorkspace: () => void;
+    readonly continueIdentity: () => void;
     readonly redeem: (signal: AbortSignal) => Promise<void>;
     readonly dispose: () => void;
 }
@@ -63,23 +63,23 @@ function initialState(): ContinueState {
     ) {
         return { kind: "invalid" };
     }
-    const replacesWorkspace = hasStoredAnonymousCredential();
+    const replacesIdentity = hasStoredAnonymousCredential();
     if (harness !== null && sessionId !== null) {
         const importAvailability: NativeSessionImportAvailability =
             harness === "codex"
                 ? {
                       kind: "unavailable",
-                      reason: `${harness} doesn't support import conversation`,
+                      reason: `${harness} doesn't support importing sessions`,
                   }
                 : { kind: "available" };
         return {
             code,
             handoff: { harness, importAvailability, sessionId },
             kind: "session-confirm",
-            replacesWorkspace,
+            replacesIdentity,
         };
     }
-    return replacesWorkspace ? { code, kind: "workspace-confirm" } : { code, kind: "workspace-redeeming" };
+    return replacesIdentity ? { code, kind: "identity-confirm" } : { code, kind: "identity-redeeming" };
 }
 
 export function continueCode(state: ContinueState): string | null {
@@ -113,20 +113,20 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                         code: state.code,
                         handoff: state.handoff,
                         kind: "session-redeeming",
-                        replacesWorkspace: state.replacesWorkspace,
+                        replacesIdentity: state.replacesIdentity,
                     },
                 });
             }
         },
-        continueWorkspace: () => {
+        continueIdentity: () => {
             const state = get().state;
-            if (state.kind === "workspace-confirm") {
-                set({ state: { code: state.code, kind: "workspace-redeeming" } });
+            if (state.kind === "identity-confirm") {
+                set({ state: { code: state.code, kind: "identity-redeeming" } });
             }
         },
         redeem: async (signal) => {
             const state = get().state;
-            if (state.kind !== "session-redeeming" && state.kind !== "workspace-redeeming") {
+            if (state.kind !== "session-redeeming" && state.kind !== "identity-redeeming") {
                 return;
             }
             const api = new AnonymousIdentityApi({
@@ -138,7 +138,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
             try {
                 const identity = await api.redeemTransfer(state.code, signal);
                 signal.throwIfAborted();
-                if (state.kind === "workspace-redeeming") {
+                if (state.kind === "identity-redeeming") {
                     window.location.replace("/");
                     return;
                 }
@@ -169,7 +169,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                         throw new Error("Session status updates are unavailable while continuing this session.");
                     },
                     waitForChange: async () => {
-                        throw new Error("Workspace updates are unavailable while continuing this session.");
+                        throw new Error("Runtime updates are unavailable while continuing this session.");
                     },
                 });
                 releaseDiagnostics = registerDaemonDiagnostics({
@@ -202,7 +202,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                                       handoff: state.handoff,
                                       kind: "session-failed",
                                       message,
-                                      replacesWorkspace: state.replacesWorkspace,
+                                      replacesIdentity: state.replacesIdentity,
                                   }
                                 : { kind: "failed", message },
                     });

@@ -9,5 +9,5 @@ export { type ApplicationShellProps, createApplicationRouter } from "./views/app
 export {
     type ChatApplicationProps,
     MobiusApplications,
-    type WorkspaceApplicationProps,
+    type MortyApplicationProps,
 } from "./views/applications/application-navigation.tsx";

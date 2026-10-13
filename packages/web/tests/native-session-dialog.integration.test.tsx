@@ -5,7 +5,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given native sessions are being discovered, When the user opens Native Sessions, Then a loading placeholder and the preview instruction are visible", {
+test("Given Chat is ready, When the user views recent sessions and opens a local session, Then every action uses session terminology", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -13,7 +13,9 @@ test("Given native sessions are being discovered, When the user opens Native Ses
         dataTestId.botConnectionStatus,
         (element) => element.textContent?.includes("Connected") === true,
     );
-    const open = getByRole(document.body, "button", { name: "Native Sessions" });
+    expect(getByRole(document.body, "heading", { name: "Recent sessions" })).toBeDefined();
+    expect(getByRole(document.body, "button", { name: "New Session" })).toBeDefined();
+    const open = getByRole(document.body, "button", { name: "Open Session" });
     const loading = app.waitForView(() => {
         const status = queryByRole(document.body, "status", {
             name: "Discovering native sessions",
@@ -27,6 +29,9 @@ test("Given native sessions are being discovered, When the user opens Native Ses
     await app.user.click(open);
 
     await loading;
+    const dialog = getByRole(document.body, "dialog", { name: "Open Session" });
+    expect(getByRole(dialog, "button", { name: "Open" })).toBeDefined();
+    expect(queryByRole(dialog, "button", { name: "Import" })).toBeNull();
     const preview = getByRole(document.body, "region", {
         name: "Selected session preview",
     });
@@ -46,7 +51,7 @@ test("Given native sessions are available, When the user selects a session from 
         dataTestId.botConnectionStatus,
         (element) => element.textContent?.includes("Connected") === true,
     );
-    await app.user.click(getByRole(document.body, "button", { name: "Native Sessions" }));
+    await app.user.click(getByRole(document.body, "button", { name: "Open Session" }));
     const menu = await app.waitForView(() =>
         getByRole(document.body, "combobox", {
             name: "Native session",

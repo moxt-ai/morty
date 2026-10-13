@@ -40,7 +40,7 @@ export class ManagementService {
 
     readonly createAnonymousUser = async (location: LocationHint, signal: AbortSignal) => {
         const userId = `usr_${crypto.randomUUID()}`;
-        const project = await this.#platform.create(userId, "Personal workspace", signal, location);
+        const project = await this.#platform.create(userId, "Morty", signal, location);
         const scoped = await this.#scopeProject(project.projectId, signal);
         return await scoped.initializeAnonymousUser(userId, project, signal);
     };
@@ -61,7 +61,7 @@ export class ManagementService {
         const { origin, appId } = this.#platform.configuration();
         const project =
             (await this.#platformProjects.read(userId, origin, appId, signal)) ??
-            (await this.#platform.create(userId, "Personal workspace", signal, location));
+            (await this.#platform.create(userId, "Morty", signal, location));
         await this.#platformProjects.save(userId, origin, appId, project, signal);
         signal.throwIfAborted();
         const bot = { botId: `bot_${crypto.randomUUID()}`, displayName: "My Machine" };
@@ -124,7 +124,7 @@ export class ManagementService {
                 this.#logger.info({ event: "user-bot-deleted", userId, botId }, "Bot audit event");
                 return;
             case "last-bot":
-                throw new ManagementError("LAST_BOT_REQUIRED", "Keep at least one Machine in your workspace.", 409);
+                throw new ManagementError("LAST_BOT_REQUIRED", "Keep at least one Machine in Morty.", 409);
             case "not-found":
                 throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
         }
@@ -202,7 +202,7 @@ export class ManagementService {
         }
         const project = await this.readProject(identity.userId, signal);
         if (project === null) {
-            throw new ManagementError("PROJECT_REQUIRED", "The Machine's workspace is unavailable.", 409);
+            throw new ManagementError("PROJECT_REQUIRED", "The Machine is unavailable in Morty.", 409);
         }
         return { ...identity, projectId: project.projectId };
     };
@@ -210,7 +210,7 @@ export class ManagementService {
     readonly #requireProject = async (userId: string, signal: AbortSignal) => {
         const project = await this.readProject(userId, signal);
         if (project === null) {
-            throw new PlatformProjectError("PROJECT_REQUIRED", "Create your workspace before pairing a Runtime.", 409);
+            throw new PlatformProjectError("PROJECT_REQUIRED", "Finish Morty setup before pairing a Runtime.", 409);
         }
         return project;
     };

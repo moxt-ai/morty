@@ -7,8 +7,8 @@ Chat origin: {{BASE_URL}}
 
 ## Run
 
-1. Identify the actual operating system, current shell, and original workspace.
-   Keep Node, the Agent, and workspace in the same operating system. WSL is Linux;
+1. Identify the actual operating system, current shell, and original working directory.
+   Keep Node, the Agent, and working directory in the same operating system. WSL is Linux;
    do not mix its executables or paths with native Windows ones.
 2. Ensure Node.js 22.13.0 or newer, npm, and the latest `@moxt-ai/mobius` are installed.
    Choose your own harness: Codex = `codex`, Claude Code = `claude`,
@@ -21,10 +21,10 @@ Chat origin: {{BASE_URL}}
    to the current shell; stop if installation or download fails.
    Make the temporary directory private with native filesystem permissions.
 4. Run the following command with real values and shell-appropriate quoting.
-   The workspace is the original absolute working directory, not the download directory.
+   Use the original absolute working directory, not the download directory.
 
 ```text
-node <downloaded-setup.mjs> setup --base-url {{BASE_URL}} --cwd <absolute-current-workspace> --harness <own-harness-id> --session-id <exact-current-session-id>
+node <downloaded-setup.mjs> setup --base-url {{BASE_URL}} --cwd <absolute-current-working-directory> --harness <own-harness-id> --session-id <exact-current-session-id>
 ```
 
 The script resolves Documents and protects its configuration using the operating
@@ -42,7 +42,7 @@ Keep progress in this session and wait for `status: "ready"` or an error (at mos
 five minutes). The manager keeps the Runtime online after the command exits.
 Only ready confirms setup; a working chat reply is a separate check.
 
-Return the exact clickable `url` and `workspace`. Display the owner-only PNG at
+Return the exact clickable `url` and the working directory from the `workspace` field. Display the owner-only PNG at
 `qrPath` if inline images are supported; otherwise return the URL. Never open,
 preview, or redeem the handoff URL yourself. Tell the user: **Open this link or
 scan the QR code to chat. It can be used up to five times, has no expiry, and

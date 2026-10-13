@@ -1,18 +1,18 @@
 import { createStore } from "zustand/vanilla";
-import type { WorkspaceLocation } from "../../services/identity/anonymous-identity-api.ts";
+import type { DataRegion } from "../../services/identity/anonymous-identity-api.ts";
 
 type ReplacementState =
     | { readonly kind: "idle" }
     | { readonly kind: "replacing" }
     | { readonly kind: "failed"; readonly message: string };
 
-export interface WorkspaceRegionStore {
-    readonly location: WorkspaceLocation;
+export interface DataRegionStore {
+    readonly location: DataRegion;
     readonly replacement: ReplacementState;
-    readonly select: (location: WorkspaceLocation, signal: AbortSignal) => Promise<void>;
+    readonly select: (location: DataRegion, signal: AbortSignal) => Promise<void>;
 }
 
-function workspaceLocationFromProjectId(projectId: string): WorkspaceLocation {
+function dataRegionFromProjectId(projectId: string): DataRegion {
     const code = projectId.split("_", 3)[1];
     switch (code) {
         case "en":
@@ -40,12 +40,12 @@ function workspaceLocationFromProjectId(projectId: string): WorkspaceLocation {
     }
 }
 
-export const createWorkspaceRegionStore = (
+export const createDataRegionStore = (
     projectId: string,
-    replaceWorkspace: (location: WorkspaceLocation, signal: AbortSignal) => Promise<void>,
+    replaceIdentity: (location: DataRegion, signal: AbortSignal) => Promise<void>,
 ) =>
-    createStore<WorkspaceRegionStore>()((set, get) => ({
-        location: workspaceLocationFromProjectId(projectId),
+    createStore<DataRegionStore>()((set, get) => ({
+        location: dataRegionFromProjectId(projectId),
         replacement: { kind: "idle" },
         select: async (location, signal) => {
             if (location === get().location || get().replacement.kind === "replacing") {
@@ -53,7 +53,7 @@ export const createWorkspaceRegionStore = (
             }
             set({ replacement: { kind: "replacing" } });
             try {
-                await replaceWorkspace(location, signal);
+                await replaceIdentity(location, signal);
                 signal.throwIfAborted();
                 set({ location, replacement: { kind: "idle" } });
             } catch (cause) {
@@ -61,7 +61,7 @@ export const createWorkspaceRegionStore = (
                 set({
                     replacement: {
                         kind: "failed",
-                        message: cause instanceof Error ? cause.message : "The workspace region could not be changed.",
+                        message: cause instanceof Error ? cause.message : "The data region could not be changed.",
                     },
                 });
             }

@@ -8,7 +8,7 @@ import { WebSocketApiTransport } from "../../src/services/api/websocket-api-tran
 import { App } from "../../src/views/application/app.tsx";
 import { Bootstrap } from "../../src/views/application/bootstrap.tsx";
 import { router as authenticationRouter } from "../../src/views/authentication/router.tsx";
-import { WorkspaceApplication } from "../../src/views/authentication/session-application.tsx";
+import { MortyApplication } from "../../src/views/authentication/session-application.tsx";
 import { createChatWorkerEnvironment } from "../support/chat-worker.ts";
 
 declare global {
@@ -49,7 +49,7 @@ export async function createTestApp(
             | { readonly kind: "continue"; readonly harness: string; readonly sessionId: string }
             | { readonly kind: "bootstrap" }
             | { readonly kind: "managed-session"; readonly sessionId: string }
-            | { readonly kind: "workspace" };
+            | { readonly kind: "morty" };
         readonly prepare?: (application: Application) => void | Promise<void>;
     } = {},
 ): Promise<TestApp> {
@@ -58,7 +58,7 @@ export async function createTestApp(
     const daemon =
         options.connectAgent === true ? await current.connectAgent(options.agent, options.nativeSessionIds) : null;
     const agentFailure = daemon?.failure ?? null;
-    const page = options.page ?? { kind: "workspace" };
+    const page = options.page ?? { kind: "morty" };
     if (page.kind === "continue") {
         const transfer = new URL(await current.createTransferUrl());
         transfer.searchParams.set("harness", page.harness);
@@ -86,7 +86,7 @@ export async function createTestApp(
                     ) : page.kind === "continue" ? (
                         <App state={{ kind: "authentication", router: authenticationRouter }} />
                     ) : (
-                        <WorkspaceApplication
+                        <MortyApplication
                             activeIdentity={current.identity}
                             authorize={async (signal) => signal.throwIfAborted()}
                             userId={current.userId}

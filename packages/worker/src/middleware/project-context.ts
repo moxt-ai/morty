@@ -30,14 +30,14 @@ export async function cloudProjectId(request: Request): Promise<string | null> {
     if (path.startsWith("/morty/api/projects/")) {
         const projectId = path.split("/")[4];
         if (projectId === undefined || projectId === "") {
-            throw new ManagementError("PROJECT_REQUIRED", "Workspace context is required.", 400);
+            throw new ManagementError("PROJECT_REQUIRED", "Morty context is required.", 400);
         }
         return v.parse(platformIdentifier, projectId);
     }
     if (path.startsWith("/morty/api/chat/projects/")) {
         const projectId = path.split("/")[5];
         if (projectId === undefined || projectId === "") {
-            throw new ManagementError("PROJECT_REQUIRED", "Workspace context is required.", 400);
+            throw new ManagementError("PROJECT_REQUIRED", "Morty context is required.", 400);
         }
         return v.parse(platformIdentifier, projectId);
     }

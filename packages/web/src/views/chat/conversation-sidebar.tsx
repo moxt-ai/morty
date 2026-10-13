@@ -142,7 +142,7 @@ export function ConversationSidebar({
     readonly requests: Pick<
         BotChatApi,
         | "archiveManagedSession"
-        | "workspace"
+        | "runtimeConfiguration"
         | "nativeSessions"
         | "nativeSession"
         | "managedSessions"
@@ -227,7 +227,7 @@ export function ConversationSidebar({
     }, [activeBot.botId, directory, onSessionsLoaded]);
     return (
         <aside
-            aria-label="Workspace navigation"
+            aria-label="Morty navigation"
             className="grid min-h-0 w-full shrink-0 grid-cols-[minmax(0,1fr)_auto] gap-y-2 overflow-hidden border-b border-border/80 bg-sidebar px-3 py-3 sm:flex sm:w-[280px] sm:flex-col sm:gap-0 sm:border-r sm:border-b-0 sm:px-3.5 sm:py-4"
         >
             <div className="col-start-1 row-start-1 flex items-center gap-3 px-1.5 sm:col-auto sm:row-auto sm:mb-3">
@@ -236,7 +236,6 @@ export function ConversationSidebar({
                 </span>
                 <span className="hidden min-w-0 sm:block">
                     <h1 className="truncate text-[15px] leading-5 font-semibold tracking-[-0.015em]">Morty</h1>
-                    <span className="block text-[11px] leading-4 text-muted-foreground">Local workspace</span>
                 </span>
             </div>
             <BotSwitcherMenu
@@ -253,12 +252,12 @@ export function ConversationSidebar({
             />
             <div className="col-start-1 row-start-2 flex min-w-0 items-center justify-between px-1 sm:col-auto sm:row-auto sm:mb-2">
                 <h2 className="hidden text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground sm:block">
-                    Conversations
+                    Recent sessions
                 </h2>
                 <Button
                     variant="ghost"
                     className="size-10 shrink-0 justify-center rounded-lg px-0 sm:hidden"
-                    aria-label="Conversations"
+                    aria-label="Recent sessions"
                     aria-expanded={expanded}
                     aria-controls="chat-conversations"
                     onClick={() => setExpanded((value) => !value)}
@@ -267,9 +266,9 @@ export function ConversationSidebar({
                 </Button>
                 <Tooltip.Provider delayDuration={150}>
                     <div className="flex items-center gap-0.5">
-                        <SidebarActionTooltip label="New Conversation">
+                        <SidebarActionTooltip label="New Session">
                             <Button
-                                aria-label="New Conversation"
+                                aria-label="New Session"
                                 className="size-8 rounded-lg"
                                 data-testid={dataTestId.newConversation}
                                 onClick={onNewConversation}
@@ -279,9 +278,9 @@ export function ConversationSidebar({
                                 <SquarePen aria-hidden="true" className="size-3.5" />
                             </Button>
                         </SidebarActionTooltip>
-                        <SidebarActionTooltip label="Native Sessions">
+                        <SidebarActionTooltip label="Open Session">
                             <Button
-                                aria-label="Native Sessions"
+                                aria-label="Open Session"
                                 className="size-8 rounded-lg"
                                 onClick={() => setDialog(true)}
                                 size="icon"
@@ -290,12 +289,12 @@ export function ConversationSidebar({
                                 <Laptop aria-hidden="true" className="size-3.5" />
                             </Button>
                         </SidebarActionTooltip>
-                        <SidebarActionTooltip label={refreshing ? "Refreshing conversations" : "Refresh conversations"}>
+                        <SidebarActionTooltip label={refreshing ? "Refreshing sessions" : "Refresh sessions"}>
                             <Button
                                 variant="ghost"
                                 size="icon"
                                 className="size-8 rounded-lg"
-                                aria-label={refreshing ? "Refreshing conversations" : "Refresh conversations"}
+                                aria-label={refreshing ? "Refreshing sessions" : "Refresh sessions"}
                                 aria-busy={refreshing}
                                 disabled={refreshing}
                                 onClick={() => refresh((value) => value + 1)}
@@ -314,11 +313,11 @@ export function ConversationSidebar({
             >
                 {directory.kind === "loading" && (
                     <div
-                        aria-label="Loading conversations"
+                        aria-label="Loading sessions"
                         className="space-y-1 animate-pulse motion-reduce:animate-none"
                         role="status"
                     >
-                        <span className="sr-only">Loading conversations…</span>
+                        <span className="sr-only">Loading sessions…</span>
                         <div aria-hidden="true" className="px-3 py-2.5">
                             <div className="h-3.5 w-3/4 rounded-full bg-border" />
                         </div>
@@ -343,7 +342,7 @@ export function ConversationSidebar({
                         <span className="mb-2 flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary">
                             <MessageSquare aria-hidden="true" className="size-4" />
                         </span>
-                        <p className="text-sm font-medium text-foreground">No conversations yet</p>
+                        <p className="text-sm font-medium text-foreground">No sessions yet</p>
                         <p className="mt-1 text-xs leading-5 text-muted-foreground">
                             Connect this Machine to start chatting.
                         </p>
@@ -358,7 +357,7 @@ export function ConversationSidebar({
                     </p>
                 )}
                 {sessions !== null && sessions.length === 0 && (
-                    <p className="px-2 py-3 text-xs text-muted-foreground">Your Chat conversations will appear here.</p>
+                    <p className="px-2 py-3 text-xs text-muted-foreground">Your Chat sessions will appear here.</p>
                 )}
                 {conversationGroups?.map((group) => (
                     <section className="space-y-1" key={group.label}>
@@ -436,7 +435,7 @@ export function ConversationSidebar({
                                                 }
                                             }}
                                         >
-                                            Archive conversation
+                                            Archive session
                                         </ContextMenu.Item>
                                     </ContextMenu.Content>
                                 </ContextMenu.Portal>
@@ -527,7 +526,7 @@ export function ConversationSidebar({
             {sharing && (
                 <Dialog
                     title="Continue your work"
-                    description="Scan the QR code or open the link on another device to use this workspace."
+                    description="Scan the QR code or open the link on another device to use Morty."
                     onClose={() => setSharing(false)}
                 >
                     <MachineSharing createTransfer={createTransfer} />

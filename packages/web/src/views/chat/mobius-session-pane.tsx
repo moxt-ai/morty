@@ -163,7 +163,7 @@ export function MobiusSessionPane({
     readonly session: OpenMobiusSession;
     readonly initialMessage?: QueuedDraftMessage | undefined;
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "connectSession" | "workspace">;
+    readonly requests: Pick<BotChatApi, "connectSession" | "runtimeConfiguration">;
     readonly onStatusChange: (sessionId: string, status: SessionActivityState) => void;
     readonly onTitleChange: (sessionId: string, title: string) => void;
 }) {
@@ -269,10 +269,10 @@ export function MobiusSessionPane({
         // The harness list is display-only in an existing conversation: every
         // entry is disabled, so a failed load just leaves the current harness.
         requests
-            .workspace(botId, controller.signal)
-            .then((workspace) => {
+            .runtimeConfiguration(botId, controller.signal)
+            .then((configuration) => {
                 setHarnesses(
-                    connectedChatRuntimeAgents(workspace.runtime).map((agent) => ({
+                    connectedChatRuntimeAgents(configuration.runtime).map((agent) => ({
                         agentRef: agent.agentRef,
                         label: `${agent.label} · ${agent.machineName}`,
                         value: `${agent.runtimeId}:${agent.agentRef}`,
@@ -334,7 +334,7 @@ export function MobiusSessionPane({
                         model.activity.kind === "idle" &&
                         !model.historyLoading && (
                             <p className="text-center text-sm text-muted-foreground" role="status">
-                                No message history is available for this conversation.
+                                No message history is available for this session.
                             </p>
                         )}
                     {model.historyLoading && <OlderHistorySkeleton />}
@@ -443,7 +443,7 @@ export function MobiusSessionPane({
                         controls={[
                             {
                                 disabled: true,
-                                harnessLockedLabel: "The harness cannot be changed for an existing conversation.",
+                                harnessLockedLabel: "The harness cannot be changed for an existing session.",
                                 id: "harness",
                                 kind: "select" as const,
                                 label: "Harness",

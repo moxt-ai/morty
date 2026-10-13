@@ -74,7 +74,7 @@ test("Given setup and pairing documents, When users fetch them from configured a
         expect(document.length).toBeLessThan(4000);
         expect(document).not.toMatch(/\{\{.*\}\}|preview\.example|paradev\.biz|paraflow\.biz|token=ticket/);
     }
-    expect(documents.get("pair")).toContain("existing user, Machine, and workspace");
+    expect(documents.get("pair")).toContain("existing Morty user and Machine");
     expect(documents.get("pair")).toContain("--token=<one-use-ticket>");
     expect(documents.get("pair")).toContain("--harness <own-harness-id>");
     expect(documents.get("setup")).toContain("--session-id <exact-current-session-id>");
