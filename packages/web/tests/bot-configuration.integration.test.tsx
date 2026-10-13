@@ -313,7 +313,7 @@ test("Given a Bot paired with the Claude harness, When the user opens its settin
     expect(tabMark.querySelector("svg")).not.toBeNull();
 });
 
-test("Given a paired Bot, When the composer controls are visible, Then the configuration trigger omits the sliders icon", {
+test("Given a paired Bot, When the composer controls are visible, Then the configuration trigger shows its harness mark without repeating the harness or machine name", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -323,6 +323,9 @@ test("Given a paired Bot, When the composer controls are visible, Then the confi
     );
 
     const configurationTrigger = await app.queryElementByTestId(dataTestId.agentConfiguration);
+    expect(configurationTrigger.textContent).toContain("Test Small");
+    expect(configurationTrigger.textContent).not.toContain("Codex");
+    expect(configurationTrigger.textContent).not.toContain("Controlled Agent Runtime");
     expect(configurationTrigger.querySelector(".lucide-sliders-horizontal")).toBeNull();
     expect(app.elementByTestId(dataTestId.harnessTriggerMark, configurationTrigger)).toBeDefined();
 });
