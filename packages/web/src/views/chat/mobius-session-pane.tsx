@@ -14,6 +14,7 @@ import {
     type PermissionInteractionResponse,
     SessionInteractionCards,
 } from "../../components/chat/session-interactions.tsx";
+import { WorkingIndicator } from "../../components/chat/working-indicator.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
@@ -372,6 +373,11 @@ export function MobiusSessionPane({
                                 )}
                             </div>
                         ))}
+                        {presentation.outputState !== "idle" && (
+                            <div className="mt-6 sm:px-2">
+                                <WorkingIndicator />
+                            </div>
+                        )}
                     </div>
                 </FollowLatestScrollArea>
                 <LoadMoreTrigger

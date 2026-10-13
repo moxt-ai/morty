@@ -1,4 +1,4 @@
-import { queryAllByRole } from "@testing-library/dom";
+import { getByRole, queryAllByRole, within } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -213,4 +213,40 @@ test("Given a conversation is running in the background, When it completes after
                 .some((element) => element.getAttribute("aria-label") === "Unread response"),
         ).toBe(false),
     );
+});
+
+test("Given a running reply, When the user reads the conversation, Then its working indicator appears in message history until completion", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, "hold after first delta");
+    await app.waitForView(() => {
+        const messages = getByRole(document.body, "log", { name: "Messages" });
+        expect(messages.textContent).toContain("Partial reply");
+        const indicator = within(messages).getByRole("status", { name: "Agent is working" });
+        expect(indicator.textContent).toMatch(/Working for \d+(?:min \d+)?s/u);
+        expect(app.elementsByTestId(dataTestId.workingIndicator)).toHaveLength(1);
+    });
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected a connected controlled Agent Runtime");
+    }
+    await daemon.continueReply("hold after first delta", {
+        outcome: "complete",
+        output: [{ kind: "text", text: " and the final chunk" }],
+    });
+    await app.waitForView(() => {
+        const messages = getByRole(document.body, "log", { name: "Messages" });
+        expect(messages.textContent).toContain("and the final chunk");
+        expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
+        expect(getByRole(document.body, "button", { name: "Send message" })).toBeDefined();
+    });
 });
