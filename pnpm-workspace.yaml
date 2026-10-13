@@ -96,3 +96,5 @@ allowBuilds:
   simple-git-hooks: true
   utf-8-validate: false
   workerd: true
+  '@google/genai': false
+  protobufjs: false

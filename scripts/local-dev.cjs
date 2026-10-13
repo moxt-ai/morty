@@ -428,6 +428,8 @@ async function prepare(options) {
                 "0",
                 "--persist-to",
                 platformPersist,
+                "--var",
+                "MOBIUS_SESSION_WEBHOOK_SECRET_ENCRYPTION_KEY:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
             ],
             platformLog,
         );

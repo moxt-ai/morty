@@ -1,4 +1,11 @@
-import type { AcpSessionUpdateV2, SessionEventV2 } from "@moxt-ai/mobius-protocol";
+import type {
+    AcpSessionUpdateV2,
+    SessionEventV2,
+    SessionHistoryMessageV3,
+    SessionLiveEventItemV3,
+    SessionLiveEventV3,
+    SessionSettingsV3,
+} from "@moxt-ai/mobius-protocol";
 import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
 import {
     appendSessionMessageEvent,
@@ -10,42 +17,35 @@ import {
 } from "./session-presentation.ts";
 
 export interface SessionEventHistory {
-    readonly events: readonly SessionEventV2[];
+    readonly messages: readonly SessionHistoryMessageV3[];
     readonly nextCursor: string | null;
-    readonly sessionGenerationId: string;
+    readonly throughSeq: number;
 }
 
 interface PendingEvents {
-    readonly generation: string | null;
-    readonly buffer: readonly SessionEventV2[];
-}
-
-interface ObservedConfig {
-    readonly eventId: string;
-    readonly options: readonly SessionConfigOption[];
+    readonly buffer: readonly SessionLiveEventV3[];
+    readonly reloadAttempted: boolean;
 }
 
 export type SessionProjection =
     | { readonly kind: "pristine"; readonly pending: PendingEvents | null; readonly revision: number }
     | {
           readonly kind: "established";
-          readonly config: ObservedConfig | null;
-          readonly eventIds: ReadonlySet<string>;
-          readonly generation: string;
           readonly pagination: { readonly nextCursor: string | null };
           readonly pending: PendingEvents | null;
           readonly reduction: SessionMessageReduction;
           readonly revision: number;
+          readonly throughSeq: number;
       };
 
 export type SessionProjectionInput =
-    | { readonly event: SessionEventV2; readonly kind: "live-event" }
+    | { readonly event: SessionLiveEventV3; readonly kind: "live-event" }
     | { readonly kind: "reconcile" }
     | { readonly history: SessionEventHistory; readonly kind: "history-loaded"; readonly revision: number }
     | { readonly kind: "older-page"; readonly page: SessionEventHistory; readonly revision: number };
 
 export type SessionProjectionEffect =
-    | { readonly generation: string | null; readonly kind: "load-history" }
+    | { readonly kind: "load-history" }
     | {
           readonly config?: readonly SessionConfigOption[] | undefined;
           readonly kind: "adopted";
@@ -61,134 +61,151 @@ export function createSessionProjection(): SessionProjection {
     return { kind: "pristine", pending: null, revision: 0 };
 }
 
-function sessionConfigOptionsFromAcp(
-    update: Extract<AcpSessionUpdateV2, { readonly sessionUpdate: "config_option_update" }>,
-): readonly SessionConfigOption[] {
-    return update.configOptions.map((option) => ({
-        booleanValue: option.type === "boolean" ? option.currentValue : false,
-        category: option.category ?? "",
-        currentValue: option.type === "select" ? option.currentValue : "",
-        description: option.description ?? "",
-        id: option.id,
-        name: option.name,
-        type: option.type,
-        values:
-            option.type === "boolean"
-                ? []
-                : option.options.flatMap((item) =>
-                      "group" in item
-                          ? item.options.map((value) => ({
-                                description: value.description ?? "",
-                                groupId: item.group,
-                                groupName: item.name,
-                                name: value.name,
-                                value: value.value,
-                            }))
-                          : [
-                                {
-                                    description: item.description ?? "",
-                                    groupId: "",
-                                    groupName: "",
-                                    name: item.name,
-                                    value: item.value,
-                                },
-                            ],
-                  ),
-    }));
-}
-
-function mergeSessionEvents(
-    first: readonly SessionEventV2[],
-    second: readonly SessionEventV2[],
-): readonly SessionEventV2[] {
-    const events = new Map(first.map((event) => [event.eventId, event]));
-    for (const event of second) {
-        events.set(event.eventId, event);
-    }
-    return [...events.values()];
-}
-
-function newestConfig(events: readonly SessionEventV2[]): ObservedConfig | null {
-    for (let index = events.length - 1; index >= 0; index -= 1) {
-        const event = events[index];
-        if (event?.type === "acp" && event.payload.sessionUpdate === "config_option_update") {
-            return { eventId: event.eventId, options: sessionConfigOptionsFromAcp(event.payload) };
-        }
-    }
-    return null;
-}
-
-function newestTitle(events: readonly SessionEventV2[]): string | undefined {
-    for (let index = events.length - 1; index >= 0; index -= 1) {
-        const event = events[index];
-        if (
-            event?.type === "acp" &&
-            event.payload.sessionUpdate === "session_info_update" &&
-            Object.hasOwn(event.payload, "title") &&
-            event.payload.title !== null &&
-            event.payload.title !== undefined
-        ) {
-            return event.payload.title;
-        }
-    }
-    return undefined;
-}
-
-function adoptionEffect(
-    events: readonly SessionEventV2[],
-    clearMissingConfig: boolean,
-): readonly SessionProjectionEffect[] {
-    const config = newestConfig(events);
-    const title = newestTitle(events);
-    if (config === null && title === undefined && !clearMissingConfig) {
-        return [];
-    }
-    return [
-        {
-            ...(config === null ? (clearMissingConfig ? { config: [] } : {}) : { config: config.options }),
-            kind: "adopted",
-            ...(title === undefined ? {} : { title }),
-        },
-    ];
-}
-
-function adoptGeneration(
-    state: SessionProjection,
-    history: SessionEventHistory,
-    events: readonly SessionEventV2[],
-): SessionProjection {
+function presentationEvent(sessionId: string, eventId: string, payload: AcpSessionUpdateV2): SessionEventV2 {
     return {
-        config: newestConfig(events),
-        eventIds: new Set(events.map((event) => event.eventId)),
-        generation: history.sessionGenerationId,
-        kind: "established",
-        pagination: { nextCursor: history.nextCursor },
-        pending: null,
-        reduction: createSessionMessageReduction({ events, nextCursor: history.nextCursor }),
-        revision: state.revision + 1,
+        eventId,
+        payload,
+        position: eventId,
+        provenance: { kind: "original" },
+        recordedAt: "1970-01-01T00:00:00.000Z",
+        sessionGenerationId: "session-v3",
+        sessionId,
+        type: "acp",
     };
 }
 
-function applyNewerEvents(
-    state: Extract<SessionProjection, { readonly kind: "established" }>,
-    history: SessionEventHistory,
-): { readonly events: readonly SessionEventV2[]; readonly state: SessionProjection } {
-    let next = { ...state, pending: null };
-    const applied: SessionEventV2[] = [];
-    for (const event of history.events) {
-        if (next.eventIds.has(event.eventId)) {
+function historyPresentationEvents(message: SessionHistoryMessageV3): readonly SessionEventV2[] {
+    const { item } = message;
+    if (
+        item.sessionUpdate === "user_message" ||
+        item.sessionUpdate === "agent_message" ||
+        item.sessionUpdate === "agent_thought"
+    ) {
+        return item.content.map((content, index) =>
+            presentationEvent(message.sessionId, `v3-history:${message.messageId}:${index.toString()}`, {
+                content,
+                messageId: message.messageId,
+                sessionUpdate:
+                    item.sessionUpdate === "user_message"
+                        ? "user_message_chunk"
+                        : item.sessionUpdate === "agent_message"
+                          ? "agent_message_chunk"
+                          : "agent_thought_chunk",
+            }),
+        );
+    }
+    if (item.sessionUpdate === "tool_call") {
+        return [
+            presentationEvent(message.sessionId, `v3-history:${message.messageId}`, {
+                ...item,
+                sessionUpdate: "tool_call",
+            }),
+        ];
+    }
+    return [presentationEvent(message.sessionId, `v3-history:${message.messageId}`, item)];
+}
+
+function livePresentationEvent(event: SessionLiveEventV3): SessionEventV2 | null {
+    const item: SessionLiveEventItemV3 = event.item;
+    if (
+        item.sessionUpdate !== "user_message_chunk" &&
+        item.sessionUpdate !== "agent_message_chunk" &&
+        item.sessionUpdate !== "agent_thought_chunk" &&
+        item.sessionUpdate !== "tool_call" &&
+        item.sessionUpdate !== "tool_call_update" &&
+        item.sessionUpdate !== "plan"
+    ) {
+        return null;
+    }
+    return presentationEvent(event.sessionId, `v3-live:${event.seq.toString()}`, item);
+}
+
+function historyEvents(messages: readonly SessionHistoryMessageV3[]): readonly SessionEventV2[] {
+    return messages.flatMap(historyPresentationEvents);
+}
+
+export function sessionSettingsOptions(settings: SessionSettingsV3): readonly SessionConfigOption[] {
+    return settings.settings.map(
+        (option): SessionConfigOption => ({
+            booleanValue: typeof option.value === "boolean" ? option.value : false,
+            category: "",
+            currentValue: typeof option.value === "string" ? option.value : String(option.value),
+            description: "",
+            id: option.id,
+            name: option.name,
+            type: typeof option.value === "boolean" ? "boolean" : "select",
+            values: [],
+        }),
+    );
+}
+
+function configOptions(item: SessionLiveEventItemV3): readonly SessionConfigOption[] | null {
+    if (item.sessionUpdate !== "config_option_update") {
+        return null;
+    }
+    return item.configOptions.map(
+        (option): SessionConfigOption => ({
+            booleanValue: typeof option.currentValue === "boolean" ? option.currentValue : false,
+            category: "",
+            currentValue: typeof option.currentValue === "string" ? option.currentValue : "",
+            description: option.description ?? "",
+            id: option.id,
+            name: option.name,
+            type: typeof option.currentValue === "boolean" ? "boolean" : "select",
+            values:
+                typeof option.currentValue === "boolean"
+                    ? []
+                    : (option.options ?? []).map((entry) => ({
+                          description: entry.description ?? "",
+                          groupId: "",
+                          groupName: "",
+                          name: entry.name,
+                          value: entry.value,
+                      })),
+        }),
+    );
+}
+
+function adoptionEffect(events: readonly SessionLiveEventV3[]): readonly SessionProjectionEffect[] {
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+        const event = events[index];
+        if (event === undefined) {
             continue;
         }
-        const config = newestConfig([event]) ?? next.config;
-        next = {
-            ...next,
-            config,
-            eventIds: new Set([...next.eventIds, event.eventId]),
-            reduction: appendSessionMessageEvent(next.reduction, event),
-        };
-        applied.push(event);
+        const config = configOptions(event.item);
+        if (config !== null) {
+            return [{ config, kind: "adopted" }];
+        }
     }
-    return { events: applied, state: next };
+    return [];
+}
+
+function applyLive(
+    state: Extract<SessionProjection, { readonly kind: "established" }>,
+    events: readonly SessionLiveEventV3[],
+): Extract<SessionProjection, { readonly kind: "established" }> {
+    let reduction = state.reduction;
+    let throughSeq = state.throughSeq;
+    const ordered = events.toSorted((left, right) => left.seq - right.seq);
+    for (const event of ordered) {
+        if (event.seq <= throughSeq) {
+            continue;
+        }
+        if (event.seq !== throughSeq + 1) {
+            return {
+                ...state,
+                pending: { buffer: ordered.filter((candidate) => candidate.seq > throughSeq), reloadAttempted: false },
+                reduction,
+                throughSeq,
+            };
+        }
+        const presentation = livePresentationEvent(event);
+        if (presentation !== null) {
+            reduction = appendSessionMessageEvent(reduction, presentation);
+        }
+        throughSeq = event.seq;
+    }
+    return { ...state, pending: null, reduction, throughSeq };
 }
 
 export function transitionSessionProjection(
@@ -197,72 +214,68 @@ export function transitionSessionProjection(
 ): SessionProjectionResult {
     switch (input.kind) {
         case "live-event": {
-            const { event } = input;
-            if (state.kind === "pristine" || event.sessionGenerationId !== state.generation) {
-                if (state.pending?.generation === event.sessionGenerationId) {
-                    return {
-                        effects: [],
-                        state: { ...state, pending: { ...state.pending, buffer: [...state.pending.buffer, event] } },
-                    };
+            if (state.kind === "pristine") {
+                const revision = state.revision + 1;
+                return {
+                    effects: [{ kind: "load-history" }],
+                    state: { ...state, pending: { buffer: [input.event], reloadAttempted: false }, revision },
+                };
+            }
+            if (input.event.seq <= state.throughSeq) {
+                return { effects: [], state };
+            }
+            if (state.pending !== null || input.event.seq !== state.throughSeq + 1) {
+                const buffer = [...(state.pending?.buffer ?? []), input.event];
+                if (state.pending !== null) {
+                    return { effects: [], state: { ...state, pending: { ...state.pending, buffer } } };
                 }
                 const revision = state.revision + 1;
                 return {
-                    effects: [{ generation: event.sessionGenerationId, kind: "load-history" }],
-                    state: {
-                        ...state,
-                        pending: { buffer: [event], generation: event.sessionGenerationId },
-                        revision,
-                    },
+                    effects: [{ kind: "load-history" }],
+                    state: { ...state, pending: { buffer, reloadAttempted: false }, revision },
                 };
             }
-            if (state.eventIds.has(event.eventId)) {
-                return { effects: [], state };
-            }
-            const config = newestConfig([event]) ?? state.config;
             return {
-                effects: adoptionEffect([event], false),
-                state: {
-                    ...state,
-                    config,
-                    eventIds: new Set([...state.eventIds, event.eventId]),
-                    reduction: appendSessionMessageEvent(state.reduction, event),
-                },
+                effects: adoptionEffect([input.event]),
+                state: applyLive(state, [input.event]),
             };
         }
         case "reconcile": {
             const revision = state.revision + 1;
             return {
-                effects: [{ generation: null, kind: "load-history" }],
-                state: { ...state, pending: { buffer: [], generation: null }, revision },
+                effects: [{ kind: "load-history" }],
+                state: { ...state, pending: { buffer: [], reloadAttempted: false }, revision },
             };
         }
         case "history-loaded": {
             if (state.pending === null || input.revision !== state.revision) {
                 return { effects: [], state };
             }
-            const replacing =
-                state.pending.generation !== null ||
-                state.kind === "pristine" ||
-                input.history.sessionGenerationId !== state.generation;
-            const events = mergeSessionEvents(input.history.events, state.pending.buffer);
-            if (replacing) {
-                const clearMissingConfig =
-                    state.kind === "established" && state.generation !== input.history.sessionGenerationId;
-                return {
-                    effects: adoptionEffect(events, clearMissingConfig),
-                    state: adoptGeneration(state, input.history, events),
-                };
-            }
-            const merged = applyNewerEvents(state, input.history);
-            return { effects: adoptionEffect(merged.events, false), state: merged.state };
+            const buffered = state.pending.buffer.filter((event) => event.seq > input.history.throughSeq);
+            const established: Extract<SessionProjection, { readonly kind: "established" }> = {
+                kind: "established",
+                pagination: { nextCursor: input.history.nextCursor },
+                pending: null,
+                reduction: createSessionMessageReduction({
+                    events: historyEvents(input.history.messages),
+                    nextCursor: input.history.nextCursor,
+                }),
+                revision: state.revision + 1,
+                throughSeq: input.history.throughSeq,
+            };
+            const reconciled = applyLive(established, buffered);
+            const applied = buffered.filter((event) => event.seq <= reconciled.throughSeq);
+            const retry = reconciled.pending !== null && !state.pending.reloadAttempted;
+            return {
+                effects: [...adoptionEffect(applied), ...(retry ? [{ kind: "load-history" as const }] : [])],
+                state:
+                    retry && reconciled.pending !== null
+                        ? { ...reconciled, pending: { ...reconciled.pending, reloadAttempted: true } }
+                        : reconciled,
+            };
         }
         case "older-page": {
-            if (
-                state.kind !== "established" ||
-                state.pending !== null ||
-                input.revision !== state.revision ||
-                input.page.sessionGenerationId !== state.generation
-            ) {
+            if (state.kind !== "established" || state.pending !== null || input.revision !== state.revision) {
                 return { effects: [], state };
             }
             return {
@@ -270,7 +283,10 @@ export function transitionSessionProjection(
                 state: {
                     ...state,
                     pagination: { nextCursor: input.page.nextCursor },
-                    reduction: prependSessionMessageEvents(state.reduction, input.page),
+                    reduction: prependSessionMessageEvents(state.reduction, {
+                        events: historyEvents(input.page.messages),
+                        nextCursor: input.page.nextCursor,
+                    }),
                     revision: state.revision + 1,
                 },
             };
@@ -286,8 +302,8 @@ export function sessionProjectionMessages(state: SessionProjection): readonly Se
 
 export function sessionProjectionPagination(
     state: SessionProjection,
-): { readonly generation: string; readonly nextCursor: string; readonly revision: number } | null {
+): { readonly nextCursor: string; readonly revision: number } | null {
     return state.kind === "established" && state.pending === null && state.pagination.nextCursor !== null
-        ? { generation: state.generation, nextCursor: state.pagination.nextCursor, revision: state.revision }
+        ? { nextCursor: state.pagination.nextCursor, revision: state.revision }
         : null;
 }
