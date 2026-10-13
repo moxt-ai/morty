@@ -260,6 +260,13 @@ export function BotChatHome({
             clearComposer();
         }
     };
+    const createBot = async (displayName: string, signal: AbortSignal) => {
+        const created = await store.getState().createBot(displayName, signal);
+        if (created) {
+            setPairingDialogOpen(true);
+        }
+        return created;
+    };
 
     return (
         <main
@@ -277,7 +284,7 @@ export function BotChatHome({
                     bots={model.bots}
                     botOperation={model.botOperation}
                     connectionStatus={connectionStatus}
-                    onCreateBot={store.getState().createBot}
+                    onCreateBot={createBot}
                     onPairAgain={() => setPairingDialogOpen(true)}
                     onRemoveBot={store.getState().removeBot}
                     onResetBotOperation={store.getState().resetBotOperation}

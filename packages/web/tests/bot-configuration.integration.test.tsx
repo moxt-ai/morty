@@ -5,7 +5,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given an unpaired workspace, When a user manages Bots, Then pairing and the surviving Bot remain visible", {
+test("Given an unpaired workspace, When a user creates a Machine, Then its pairing dialog and the surviving Machine remain visible", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp();
@@ -37,6 +37,9 @@ test("Given an unpaired workspace, When a user manages Bots, Then pairing and th
         dataTestId.botMenuTrigger,
         (element) => element.textContent?.includes("Laptop Bot") === true,
     );
+    expect(getByRole(document.body, "dialog", { name: "Connect agent" })).toBeInstanceOf(HTMLElement);
+    expect(await app.queryElementByTestId(dataTestId.pairingInstruction)).toBeInstanceOf(HTMLInputElement);
+    await app.user.click(await app.queryElementByTestId(dataTestId.closeDialog));
     await app.user.click(app.elementByTestId(dataTestId.botMenuTrigger));
     await app.user.click(await app.queryElementByTestId(dataTestId.removeBot));
     await app.user.click(await app.queryElementByTestId(dataTestId.confirmRemoveBot));
