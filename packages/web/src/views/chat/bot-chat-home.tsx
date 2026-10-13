@@ -46,6 +46,7 @@ export function BotChatHome({
         BotChatApi,
         | "listBots"
         | "readBot"
+        | "updateBot"
         | "createBot"
         | "deleteBot"
         | "access"
@@ -286,6 +287,7 @@ export function BotChatHome({
                     connectionStatus={connectionStatus}
                     onCreateBot={createBot}
                     onPairAgain={() => setPairingDialogOpen(true)}
+                    onRenameBot={store.getState().renameBot}
                     onRemoveBot={store.getState().removeBot}
                     onResetBotOperation={store.getState().resetBotOperation}
                     onSelectBot={store.getState().selectBot}

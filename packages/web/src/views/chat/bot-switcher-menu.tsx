@@ -1,4 +1,4 @@
-import { Bot, Check, ChevronDown, Plus, RotateCw, Trash2 } from "lucide-react";
+import { Bot, Check, ChevronDown, Pencil, Plus, RotateCw, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
@@ -7,7 +7,11 @@ import { dataTestId } from "../../data-testid.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import type { BotConnectionStatus, BotOperation } from "../../view-models/chat/bot-chat-home-store.ts";
 
-type BotDialog = { readonly kind: "closed" } | { readonly kind: "create" } | { readonly kind: "remove" };
+type BotDialog =
+    | { readonly kind: "closed" }
+    | { readonly kind: "create" }
+    | { readonly kind: "rename" }
+    | { readonly kind: "remove" };
 
 export function BotSwitcherMenu({
     activeBot,
@@ -16,6 +20,7 @@ export function BotSwitcherMenu({
     operation,
     onCreate,
     onPairAgain,
+    onRename,
     onRemove,
     onResetOperation,
     onSelect,
@@ -26,6 +31,7 @@ export function BotSwitcherMenu({
     readonly operation: BotOperation;
     readonly onCreate: (displayName: string, signal: AbortSignal) => Promise<boolean>;
     readonly onPairAgain: () => void;
+    readonly onRename: (displayName: string, signal: AbortSignal) => Promise<boolean>;
     readonly onRemove: (signal: AbortSignal) => Promise<boolean>;
     readonly onResetOperation: () => void;
     readonly onSelect: (botId: string) => void;
@@ -140,6 +146,19 @@ export function BotSwitcherMenu({
                         )}
                         <button
                             className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
+                            onClick={() => {
+                                setOpen(false);
+                                setName(activeBot.displayName);
+                                onResetOperation();
+                                setDialog({ kind: "rename" });
+                            }}
+                            type="button"
+                        >
+                            <Pencil aria-hidden="true" className="size-4" />
+                            Rename machine
+                        </button>
+                        <button
+                            className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
                             data-testid={dataTestId.createBot}
                             onClick={() => {
                                 setOpen(false);
@@ -150,7 +169,7 @@ export function BotSwitcherMenu({
                             type="button"
                         >
                             <Plus aria-hidden="true" className="size-4" />
-                            Create a new Machine
+                            Create a new machine
                         </button>
                         {bots.length >= 2 && (
                             <button
@@ -174,7 +193,7 @@ export function BotSwitcherMenu({
                 <Dialog
                     description="Create a separate Machine before pairing another Runtime. Each Machine keeps its own Runtime binding."
                     onClose={closeDialog}
-                    title="Create a new Machine"
+                    title="Create a new machine"
                 >
                     <form
                         className="mt-5 grid gap-4"
@@ -216,6 +235,55 @@ export function BotSwitcherMenu({
                                 type="submit"
                             >
                                 {operation.kind === "creating" ? "Creating…" : "Create Machine"}
+                            </Button>
+                        </div>
+                    </form>
+                </Dialog>
+            )}
+            {dialog.kind === "rename" && (
+                <Dialog description="Choose a new name for this Machine." onClose={closeDialog} title="Rename machine">
+                    <form
+                        className="mt-5 grid gap-4"
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            const controller = begin();
+                            void onRename(name, controller.signal).then((renamed) => {
+                                if (renamed && !controller.signal.aborted) {
+                                    closeDialog();
+                                }
+                            });
+                        }}
+                    >
+                        <label className="grid gap-1.5 text-sm font-medium">
+                            Machine name
+                            <input
+                                autoFocus
+                                className="h-10 rounded-lg border border-border bg-background px-3 font-normal outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                                disabled={operation.kind === "renaming"}
+                                maxLength={80}
+                                onChange={(event) => setName(event.currentTarget.value)}
+                                value={name}
+                            />
+                        </label>
+                        {operation.kind === "failed" && <p className="text-sm text-destructive">{operation.message}</p>}
+                        <div className="flex justify-end gap-2">
+                            <Button
+                                disabled={operation.kind === "renaming"}
+                                onClick={closeDialog}
+                                type="button"
+                                variant="ghost"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                disabled={
+                                    operation.kind === "renaming" ||
+                                    name.trim().length === 0 ||
+                                    name.trim() === activeBot.displayName
+                                }
+                                type="submit"
+                            >
+                                {operation.kind === "renaming" ? "Renaming…" : "Rename Machine"}
                             </Button>
                         </div>
                     </form>

@@ -5,6 +5,31 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
+test("Given a Machine, When a user renames it, Then the new name is visible in the Machine selector", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp();
+    await app.user.click(await app.queryElementByTestId(dataTestId.closeDialog));
+    await app.user.click(await app.queryElementByTestId(dataTestId.botMenuTrigger));
+
+    expect(getByRole(document.body, "button", { name: "Create a new machine" })).toBeDefined();
+    await app.user.click(getByRole(document.body, "button", { name: "Rename machine" }));
+
+    const name = getByRole(document.body, "textbox", { name: "Machine name" });
+    expect(name).toBeInstanceOf(HTMLInputElement);
+    expect((name as HTMLInputElement).value).toBe("My Machine");
+    await app.user.clear(name);
+    await app.user.type(name, "Studio Machine");
+    await app.user.click(getByRole(document.body, "button", { name: "Rename Machine" }));
+
+    await app.queryElementByTestId(
+        dataTestId.botMenuTrigger,
+        (element) => element.textContent?.includes("Studio Machine") === true,
+    );
+    await app.user.click(app.elementByTestId(dataTestId.botMenuTrigger));
+    expect(getByRole(document.body, "button", { name: "Studio Machine" })).toBeDefined();
+});
+
 test("Given an unpaired workspace, When a user creates a Machine, Then its pairing dialog and the surviving Machine remain visible", {
     timeout: 30_000,
 }, async () => {
