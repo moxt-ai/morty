@@ -384,6 +384,7 @@ async function prepare(options) {
     const platformLog = path.join(stateDir, "platform.log");
     const chatOrigin = `http://localhost:${chatPort}`;
     const platformOrigin = `http://127.0.0.1:${platformPort}`;
+    const sessionWebhookSecretEncryptionKey = crypto.randomBytes(32).toString("base64");
     let stack = {
         mode: options.mode,
         chatLog,
@@ -428,6 +429,8 @@ async function prepare(options) {
                 "0",
                 "--persist-to",
                 platformPersist,
+                "--var",
+                `MOBIUS_SESSION_WEBHOOK_SECRET_ENCRYPTION_KEY:${sessionWebhookSecretEncryptionKey}`,
             ],
             platformLog,
         );
