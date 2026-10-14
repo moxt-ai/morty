@@ -1,4 +1,4 @@
-import { Bot, Check, ChevronDown, Link, Pencil, Plus, Settings, Trash2 } from "lucide-react";
+import { Bot, Check, ChevronDown, Link, Plus, Settings, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
@@ -33,7 +33,6 @@ export function BotSwitcherMenu({
     readonly onSelect: (botId: string) => void;
 }) {
     const [open, setOpen] = useState(false);
-    const [settingsOpen, setSettingsOpen] = useState(false);
     const [dialog, setDialog] = useState<BotDialog>({ kind: "closed" });
     const [name, setName] = useState("");
     const operationController = useRef<AbortController | null>(null);
@@ -67,9 +66,6 @@ export function BotSwitcherMenu({
                 <Popover.Root
                     onOpenChange={(value) => {
                         setOpen(value);
-                        if (value) {
-                            setSettingsOpen(false);
-                        }
                     }}
                     open={open}
                 >
@@ -170,65 +166,20 @@ export function BotSwitcherMenu({
                         </Popover.Content>
                     </Popover.Portal>
                 </Popover.Root>
-                <Popover.Root
-                    open={settingsOpen}
-                    onOpenChange={(value) => {
-                        setSettingsOpen(value);
-                        if (value) {
-                            setOpen(false);
-                        }
+                <button
+                    type="button"
+                    aria-label={`Configure ${activeBot.displayName}`}
+                    title={`Configure ${activeBot.displayName}`}
+                    onClick={() => {
+                        setOpen(false);
+                        setName(activeBot.displayName);
+                        onResetOperation();
+                        setDialog({ kind: "rename" });
                     }}
+                    className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground outline-none hover:bg-white/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
                 >
-                    <Popover.Trigger asChild>
-                        <button
-                            type="button"
-                            aria-label={`Configure ${activeBot.displayName}`}
-                            title={`Configure ${activeBot.displayName}`}
-                            className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground outline-none hover:bg-white/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 data-[state=open]:bg-white/70"
-                        >
-                            <Settings aria-hidden="true" className="size-4" />
-                        </button>
-                    </Popover.Trigger>
-                    <Popover.Portal>
-                        <Popover.Content
-                            align="end"
-                            side="bottom"
-                            sideOffset={6}
-                            aria-label={`Settings for ${activeBot.displayName}`}
-                            className="z-[100] w-[min(calc(100vw-1.5rem),260px)] rounded-xl border border-border bg-background p-1.5 text-sm shadow-xl"
-                        >
-                            <p className="truncate px-2 py-1.5 text-xs font-semibold">{activeBot.displayName}</p>
-                            <button
-                                className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
-                                onClick={() => {
-                                    setSettingsOpen(false);
-                                    setName(activeBot.displayName);
-                                    onResetOperation();
-                                    setDialog({ kind: "rename" });
-                                }}
-                                type="button"
-                            >
-                                <Pencil aria-hidden="true" className="size-4" />
-                                Rename machine
-                            </button>
-                            {bots.length >= 2 && (
-                                <button
-                                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-destructive outline-none hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-ring/60"
-                                    data-testid={dataTestId.removeBot}
-                                    onClick={() => {
-                                        setSettingsOpen(false);
-                                        onResetOperation();
-                                        setDialog({ kind: "remove" });
-                                    }}
-                                    type="button"
-                                >
-                                    <Trash2 aria-hidden="true" className="size-4" />
-                                    Remove Machine
-                                </button>
-                            )}
-                        </Popover.Content>
-                    </Popover.Portal>
-                </Popover.Root>
+                    <Settings aria-hidden="true" className="size-4" />
+                </button>
             </div>
             {dialog.kind === "rename" && (
                 <Dialog
@@ -260,25 +211,43 @@ export function BotSwitcherMenu({
                             />
                         </label>
                         {operation.kind === "failed" && <p className="text-sm text-destructive">{operation.message}</p>}
-                        <div className="flex justify-end gap-2">
-                            <Button
-                                disabled={operation.kind === "renaming"}
-                                onClick={closeDialog}
-                                type="button"
-                                variant="ghost"
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                disabled={
-                                    operation.kind === "renaming" ||
-                                    name.trim().length === 0 ||
-                                    name.trim() === activeBot.displayName
-                                }
-                                type="submit"
-                            >
-                                {operation.kind === "renaming" ? "Renaming…" : "Rename Machine"}
-                            </Button>
+                        <div className="flex items-center gap-2">
+                            {bots.length >= 2 && (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    className="mr-auto text-destructive hover:text-destructive"
+                                    data-testid={dataTestId.removeBot}
+                                    disabled={operation.kind === "renaming"}
+                                    onClick={() => {
+                                        onResetOperation();
+                                        setDialog({ kind: "remove" });
+                                    }}
+                                >
+                                    <Trash2 aria-hidden="true" className="size-4" />
+                                    Remove Machine
+                                </Button>
+                            )}
+                            <div className="ml-auto flex gap-2">
+                                <Button
+                                    disabled={operation.kind === "renaming"}
+                                    onClick={closeDialog}
+                                    type="button"
+                                    variant="ghost"
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    disabled={
+                                        operation.kind === "renaming" ||
+                                        name.trim().length === 0 ||
+                                        name.trim() === activeBot.displayName
+                                    }
+                                    type="submit"
+                                >
+                                    {operation.kind === "renaming" ? "Renaming…" : "Rename Machine"}
+                                </Button>
+                            </div>
                         </div>
                     </form>
                 </Dialog>

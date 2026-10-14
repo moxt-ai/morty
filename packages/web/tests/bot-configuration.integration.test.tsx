@@ -16,7 +16,6 @@ test("Given a selected Machine, When a user opens its settings and renames it, T
     expect(queryByRole(document.body, "button", { name: "Rename machine" })).toBeNull();
     await app.user.keyboard("{Escape}");
     await app.user.click(getByRole(document.body, "button", { name: "Configure My Machine" }));
-    await app.user.click(getByRole(document.body, "button", { name: "Rename machine" }));
 
     const name = getByRole(document.body, "textbox", { name: "Machine name" });
     expect(name).toBeInstanceOf(HTMLInputElement);
