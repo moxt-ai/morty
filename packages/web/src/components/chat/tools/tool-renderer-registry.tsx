@@ -11,6 +11,7 @@ import { InputDiffEditToolCall, matchesInputDiffEditToolCall } from "./input-dif
 import { matchesOutputDiffEditToolCall, OutputDiffEditToolCall } from "./output-diff-edit-tool-call.tsx";
 import { matchesPatchEditToolCall, PatchEditToolCall } from "./patch-edit-tool-call.tsx";
 import { matchesPathReadToolCall, PathReadToolCall } from "./path-read-tool-call.tsx";
+import { matchesPiFileToolCall, PiFileToolCall } from "./pi-file-tool-call.tsx";
 import { matchesQuestionToolCall, QuestionToolCall } from "./question-tool-call.tsx";
 import { matchesSkillToolCall, SkillToolCall } from "./skill-tool-call.tsx";
 import type { ToolRendererProps, ToolThinkingEntry } from "./tool-renderer.ts";
@@ -46,6 +47,10 @@ const TOOL_RENDERERS: readonly ToolRenderer[] = [
     {
         Component: BrowserJavascriptToolCall,
         matches: matchesBrowserJavascriptToolCall,
+    },
+    {
+        Component: PiFileToolCall,
+        matches: matchesPiFileToolCall,
     },
     {
         Component: FilePathEditToolCall,
