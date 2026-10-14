@@ -171,13 +171,17 @@ export class ManagementService {
         return await this.#platform.readPairing(project.projectId, pairingId, signal);
     };
 
-    readonly createAgentPairing = async (token: string | undefined, botId: string, signal: AbortSignal) => {
+    readonly createAgentPairing = async (token: string | undefined, botId: string | null, signal: AbortSignal) => {
         const session = await this.#authentication.session(token, signal);
         if (session.kind === "unavailable") {
             throw new ManagementError("AUTH_UNAVAILABLE", "Sign-in is temporarily unavailable.", 503);
         }
         if (session.kind === "unauthenticated") {
             throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
+        }
+        if (botId === null) {
+            await this.#requireProject(session.session.userId, signal);
+            return await this.#authentication.createPairing(session.session.userId, null, null, signal);
         }
         const bot = await this.#managedBots.readBot(session.session.userId, botId, signal);
         if (bot === null) {

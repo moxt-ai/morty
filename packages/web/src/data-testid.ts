@@ -39,8 +39,6 @@ export const dataTestId = Object.freeze({
     botConnectionStatus: "chat-bot-connection-status",
     botMenuTrigger: "chat-bot-menu-trigger",
     createBot: "chat-create-bot",
-    botNameInput: "chat-bot-name-input",
-    confirmCreateBot: "chat-confirm-create-bot",
     pairBotAgain: "chat-pair-bot-again",
     removeBot: "chat-remove-bot",
     confirmRemoveBot: "chat-confirm-remove-bot",

@@ -38,7 +38,6 @@ export type BotConnectionStatus =
     | { readonly kind: "disconnected"; readonly label: "Disconnected" };
 export type BotOperation =
     | { readonly kind: "idle" }
-    | { readonly kind: "creating" }
     | { readonly kind: "renaming" }
     | { readonly kind: "removing" }
     | { readonly kind: "failed"; readonly message: string };
@@ -113,7 +112,7 @@ export interface BotChatHomeStore {
     readonly optimisticTitles: ReadonlyMap<string, string>;
     readonly load: (signal: AbortSignal) => Promise<void>;
     readonly selectBot: (botId: string) => void;
-    readonly createBot: (displayName: string, signal: AbortSignal) => Promise<boolean>;
+    readonly selectPairedBot: (bot: ManagedBot) => void;
     readonly renameBot: (displayName: string, signal: AbortSignal) => Promise<boolean>;
     readonly removeBot: (signal: AbortSignal) => Promise<boolean>;
     readonly resetBotOperation: () => void;
@@ -194,7 +193,6 @@ export const createBotChatHomeStore = (
         | "conversationSession"
         | "continueNativeSession"
         | "createConversation"
-        | "createBot"
         | "deleteBot"
         | "listBots"
         | "managedSession"
@@ -502,45 +500,9 @@ export const createBotChatHomeStore = (
                 view: { kind: "connecting", bot: selected },
             }));
         },
-        createBot: async (displayName, signal) => {
-            const name = displayName.trim();
-            if (name.length === 0 || name.length > 80) {
-                set({ botOperation: { kind: "failed", message: "Enter a Machine name between 1 and 80 characters." } });
-                return false;
-            }
-            set({ botOperation: { kind: "creating" } });
-            try {
-                const bot = await requests.createBot(name, signal);
-                signal.throwIfAborted();
-                options.selectedBotPreference.write(bot.botId);
-                options.navigation.showDraft();
-                set((state) => ({
-                    bots: [...state.bots, bot],
-                    botOperation: { kind: "idle" },
-                    connectionStatus: { kind: "unpaired", label: "Disconnected" },
-                    creation: transitionConversationCreation(state.creation, { kind: "reset" }),
-                    draft: "",
-                    draftSettings: null,
-                    optimisticTitles: new Map(),
-                    revision: state.revision + 1,
-                    selection: transitionConversationSelection(state.selection, {
-                        kind: "draft-selected",
-                        key: options.createId(),
-                    }),
-                    view: { kind: "setup", bot, reason: "unconfigured" },
-                }));
-                return true;
-            } catch (cause) {
-                if (!signal.aborted) {
-                    set({
-                        botOperation: {
-                            kind: "failed",
-                            message: cause instanceof Error ? cause.message : "The Machine could not be created.",
-                        },
-                    });
-                }
-                return false;
-            }
+        selectPairedBot: (bot) => {
+            set((state) => ({ bots: [...state.bots.filter((candidate) => candidate.botId !== bot.botId), bot] }));
+            get().selectBot(bot.botId);
         },
         renameBot: async (displayName, signal) => {
             const name = displayName.trim();

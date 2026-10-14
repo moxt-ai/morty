@@ -1,0 +1,1 @@
+ALTER TABLE `agent_pairing_ticket` ADD `creates_bot` integer DEFAULT false NOT NULL;

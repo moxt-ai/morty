@@ -27,6 +27,8 @@ import removeIdentityTransferExpiry from "../../migrations/project-do/0027_dazzl
 import restoreContinueLinkExpiry from "../../migrations/project-do/0028_lovely_harpoon.sql?raw";
 import removeContinueLinkUsageLimit from "../../migrations/project-do/0029_late_hammerhead.sql?raw";
 
+import deferredAgentPairing from "../../migrations/project-do/0030_tough_speedball.sql?raw";
+
 const migrations = [
     management,
     anonymousIdentity,
@@ -56,6 +58,7 @@ const migrations = [
     removeIdentityTransferExpiry,
     restoreContinueLinkExpiry,
     removeContinueLinkUsageLimit,
+    deferredAgentPairing,
 ];
 
 type BoundValue = ArrayBuffer | string | number | null;

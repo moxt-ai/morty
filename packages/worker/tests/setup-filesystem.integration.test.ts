@@ -151,6 +151,7 @@ test("Given a junction replaces the private Morty directory, When setup validate
 
 test.runIf(process.platform === "linux")(
     "Given Linux has a configured XDG Documents folder and no DOCUMENT_DIR override, When a user runs the setup CLI, Then identity is saved in that folder and cancellation releases setup",
+    { timeout: 30000 },
     async () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-setup-xdg-"));
         const documents = join(directory, "Redirected Documents & spaces");

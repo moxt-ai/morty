@@ -5,21 +5,29 @@ import { Button } from "../../components/ui/cloud-button.tsx";
 import { useToast } from "../../components/ui/toast.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import type { ManagedBot } from "../../services/management/management-api.ts";
 import { createPairingInstructionStore } from "../../view-models/chat/pairing-instruction-store.ts";
 
 export function PairingInstruction({
     botId,
     disabled = false,
     requests,
+    onPaired,
 }: {
-    readonly botId: string;
+    readonly botId: string | null;
     readonly disabled?: boolean;
-    readonly requests: Pick<BotChatApi, "createPairingInstruction">;
+    readonly requests: Pick<BotChatApi, "createPairingInstruction" | "waitForPairedBot">;
+    readonly onPaired?: (bot: ManagedBot) => void;
 }) {
     const [store] = useState(() => createPairingInstructionStore(botId, requests));
     const { copy, copyInstruction, load, resetCopy, state } = useStore(store);
     const [revision, refresh] = useState(0);
     const showToast = useToast();
+    useEffect(() => {
+        if (state.kind === "paired") {
+            onPaired?.(state.bot);
+        }
+    }, [state, onPaired]);
     useEffect(() => {
         if (copy === "idle") {
             return;
@@ -55,7 +63,11 @@ export function PairingInstruction({
                     />
                 ) : (
                     <p role="status" className="flex-1">
-                        {state.kind === "loading" ? "Preparing pairing instruction…" : state.message}
+                        {state.kind === "loading"
+                            ? "Preparing pairing instruction…"
+                            : state.kind === "paired"
+                              ? "Agent connected."
+                              : state.message}
                     </p>
                 )}
                 <Button

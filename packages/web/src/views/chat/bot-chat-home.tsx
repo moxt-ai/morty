@@ -10,6 +10,7 @@ import { dataTestId } from "../../data-testid.ts";
 import type { SelectedBotPreference } from "../../services/bots/selected-bot-preference.ts";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { DataRegion, IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
+import type { ManagedBot } from "../../services/management/management-api.ts";
 import {
     createBotChatHomeStore,
     disconnectedBotNotice,
@@ -46,7 +47,6 @@ export function BotChatHome({
         | "listBots"
         | "readBot"
         | "updateBot"
-        | "createBot"
         | "deleteBot"
         | "access"
         | "archiveManagedSession"
@@ -62,6 +62,7 @@ export function BotChatHome({
         | "continueNativeSession"
         | "connectSession"
         | "createPairingInstruction"
+        | "waitForPairedBot"
         | "createConversation"
         | "conversationSession"
         | "agentSettings"
@@ -115,7 +116,7 @@ export function BotChatHome({
     const [statusStore] = useState(() => createConversationStatusStore(requests));
     const [statusLifetime] = useState(() => new AbortController());
     const sessionStatuses = useStore(statusStore, (state) => state.statuses);
-    const [pairingDialogOpen, setPairingDialogOpen] = useState(false);
+    const [pairingDialog, setPairingDialog] = useState<"closed" | "existing" | "new">("closed");
     const [failureDialogOpen, setFailureDialogOpen] = useState(false);
     const [disconnectedNotificationDismissed, setDisconnectedNotificationDismissed] = useState(false);
     const [attachments, setAttachments] = useState<readonly ComposerAttachment[]>([]);
@@ -165,7 +166,7 @@ export function BotChatHome({
 
     useEffect(() => {
         if (model.view.kind === "active") {
-            setPairingDialogOpen(false);
+            setPairingDialog((current) => (current === "new" ? current : "closed"));
             setFailureDialogOpen(false);
         }
         if (
@@ -180,7 +181,7 @@ export function BotChatHome({
         if (model.view.kind === "connection-failed") {
             setFailureDialogOpen(true);
         } else if (setupView !== null) {
-            setPairingDialogOpen(true);
+            setPairingDialog("existing");
         }
     }, [model.selection.kind, model.view.kind, setupView]);
 
@@ -257,12 +258,9 @@ export function BotChatHome({
             clearComposer();
         }
     };
-    const createBot = async (displayName: string, signal: AbortSignal) => {
-        const created = await store.getState().createBot(displayName, signal);
-        if (created) {
-            setPairingDialogOpen(true);
-        }
-        return created;
+    const selectPairedBot = (bot: ManagedBot) => {
+        store.getState().selectPairedBot(bot);
+        setPairingDialog("closed");
     };
 
     return (
@@ -281,8 +279,8 @@ export function BotChatHome({
                     bots={model.bots}
                     botOperation={model.botOperation}
                     connectionStatus={connectionStatus}
-                    onCreateBot={createBot}
-                    onPairAgain={() => setPairingDialogOpen(true)}
+                    onConnectAgent={() => setPairingDialog("new")}
+                    onPairAgain={() => setPairingDialog("existing")}
                     onRenameBot={store.getState().renameBot}
                     onRemoveBot={store.getState().removeBot}
                     onResetBotOperation={store.getState().resetBotOperation}
@@ -433,23 +431,26 @@ export function BotChatHome({
                     )}
                 </section>
             )}
-            {pairingDialogOpen && active !== null && (
+            {pairingDialog !== "closed" && active !== null && (
                 <Dialog
                     title={
-                        disconnectedBot
-                            ? "Machine disconnected"
-                            : setupView === null
-                              ? "Pair agent again"
-                              : "Connect agent"
+                        pairingDialog === "new"
+                            ? "Connect another agent"
+                            : disconnectedBot
+                              ? "Machine disconnected"
+                              : setupView === null
+                                ? "Pair agent again"
+                                : "Connect agent"
                     }
                     description={
-                        setupView === null
+                        pairingDialog === "new" || setupView === null
                             ? "Paste this one-time instruction into your local agent, then return here after it connects."
                             : setupDescription(setupView.reason)
                     }
-                    onClose={() => setPairingDialogOpen(false)}
+                    onClose={() => setPairingDialog("closed")}
                 >
-                    {setupView?.reason === "unconfigured" &&
+                    {pairingDialog === "existing" &&
+                        setupView?.reason === "unconfigured" &&
                         model.bots.length === 1 &&
                         replaceIdentity !== undefined && (
                             <DataRegionSelector
@@ -458,7 +459,13 @@ export function BotChatHome({
                                 replaceIdentity={replaceIdentity}
                             />
                         )}
-                    <PairingInstruction botId={active.bot.botId} disabled={identityReplacing} requests={requests} />
+                    <PairingInstruction
+                        key={pairingDialog === "new" ? "new" : active.bot.botId}
+                        botId={pairingDialog === "new" ? null : active.bot.botId}
+                        disabled={identityReplacing}
+                        requests={requests}
+                        onPaired={selectPairedBot}
+                    />
                 </Dialog>
             )}
             {failureDialogOpen && model.view.kind === "connection-failed" && (

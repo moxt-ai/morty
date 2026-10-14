@@ -551,3 +551,88 @@ test("Given Morty configuration and sessions, When public and account endpoints 
         sessionId: expect.stringMatching(/^sess_/),
     });
 });
+
+test("Given an additional-agent instruction, When the instruction is abandoned or redeemed concurrently, Then only one redemption succeeds and incomplete pairing creates no Machine", async () => {
+    const environment = fixture.environment();
+    const identity = await fixture.createAnonymousUser();
+    const bots = async () => {
+        const response = await worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bots`, {
+                headers: { authorization: `Bearer ${identity.token}` },
+            }),
+            environment,
+        );
+        expect(response.status).toBe(200);
+        return v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await response.json()).bots;
+    };
+    const original = await bots();
+    const issue = async () => {
+        const response = await fetchPublicApplication(
+            new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/identity/pairings`, {
+                method: "POST",
+                headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+                body: JSON.stringify({}),
+            }),
+            environment,
+        );
+        expect(response.status).toBe(201);
+        const ticket = v.parse(v.object({ url: v.string() }), await response.json());
+        return new URL(ticket.url).searchParams.get("token");
+    };
+    await issue();
+    await issue();
+    const token = await issue();
+    expect(await bots()).toEqual(original);
+    const redeem = () =>
+        fetchPublicApplication(
+            new Request(`${APP_ORIGIN}/morty/api/identity/pairings/redeem`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ token }),
+            }),
+            environment,
+        );
+    const responses = await Promise.all([redeem(), redeem()]);
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 410]);
+    const success = responses.find((response) => response.status === 200);
+    if (success === undefined) {
+        throw new Error("Expected one successful redemption");
+    }
+    const paired = v.parse(
+        v.object({ botId: v.string(), userId: v.string(), expectedRuntimeId: v.null() }),
+        await success.json(),
+    );
+    expect(paired.userId).toBe(identity.userId);
+    const after = await bots();
+    expect(after).toEqual(original);
+    expect(after.map((bot) => bot.botId)).not.toContain(paired.botId);
+    expect(after.map((bot) => bot.botId)).toContain(original[0]?.botId);
+    const runtime = await fixture.connectAgent(identity.projectId, [{ id: "claude", label: "Codex" }]);
+    const configure = (agentRef: string) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/chat/projects/${identity.projectId}/bots/${paired.botId}/setup`, {
+                method: "POST",
+                headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+                body: JSON.stringify({ runtimeId: runtime.runtimeId, agentRef }),
+            }),
+            environment,
+        );
+    const failed = await configure("missing_agent");
+    expect(failed.status).toBe(409);
+    expect(await failed.json()).toMatchObject({ error: { code: "AGENT_UNAVAILABLE" } });
+    expect(await bots()).toEqual(original);
+    const configured = await Promise.all([configure("claude"), configure("claude")]);
+    expect(configured.map((response) => response.status)).toEqual([202, 202]);
+    expect(await bots()).toHaveLength(original.length + 1);
+    expect((await bots()).map((bot) => bot.botId)).toContain(paired.botId);
+    const deleted = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bots/${paired.botId}`, {
+            method: "DELETE",
+            headers: { authorization: `Bearer ${identity.token}` },
+        }),
+        environment,
+    );
+    expect(deleted.status).toBe(204);
+    expect((await configure("claude")).status).toBe(404);
+    expect(await bots()).toEqual(original);
+});

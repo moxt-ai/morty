@@ -251,19 +251,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
-    async function acquireLock(directory: string) {
-        const lock = join(directory, ".setup-lock");
-        try {
-            await mkdir(lock, { mode: 0o700 });
-        } catch (cause) {
-            if (errorCode(cause) === "EEXIST") {
-                fail("SETUP_BUSY");
-            }
-            throw cause;
-        }
-        return lock;
-    }
-
     async function readPrivateJson(path: string) {
         await privatePath(path, false);
         return object(JSON.parse(await readFile(path, "utf8")));
@@ -446,6 +433,17 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         identifier(session.userId);
         if (mode === "pair" && context.config.entry !== "pair") {
             fail("PAIRING_TICKET_REQUIRED");
+        }
+        if (mode === "pair" && context.config.bot_id !== undefined) {
+            const botId = identifier(context.config.bot_id);
+            const detail = await request(context, `/management/bots/${encodeURIComponent(botId)}/runtime-binding`);
+            if (identifier(detail.botId) !== botId) {
+                fail("INVALID_RESPONSE");
+            }
+            return {
+                context: await saveConfiguration(context, { user_id: session.userId }),
+                expectedRuntimeId: detail.runtimeId === null ? null : identifier(detail.runtimeId),
+            };
         }
         const listed = await request(context, "/management/bots");
         if (!Array.isArray(listed.bots)) {
@@ -835,24 +833,19 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const base = options.base;
         const cwd = await resolveWorkingDirectory(options.cwd);
         const directory = await prepareDirectory(await resolveDocumentsDirectory(host.documents, signal));
-        const lock = await acquireLock(directory);
-        try {
-            let context: Context =
-                options.mode === "setup" ? await loadConfiguration(directory, base) : { directory, base, config: {} };
-            const identity = await prepareIdentity(context, options);
-            context = identity.context;
-            const verified = await verifyIdentityAndBot(context, options.mode);
-            context = verified.context;
-            emit({ status: "identity_ready", userId: context.config.user_id, botId: context.config.bot_id });
-            const runtime = await prepareRuntime(context, cwd, options.mode, verified.expectedRuntimeId);
-            validateExpectedRuntime(identity, runtime);
-            context = await startRuntime(context, runtime, cwd);
-            await waitForRuntime(context, runtime, options.harness);
-            context = await bindAgent(context, runtime, options.harness);
-            await finishSetup(context, runtime, options);
-        } finally {
-            await rm(lock, { recursive: true, force: true });
-        }
+        let context: Context =
+            options.mode === "setup" ? await loadConfiguration(directory, base) : { directory, base, config: {} };
+        const identity = await prepareIdentity(context, options);
+        context = identity.context;
+        const verified = await verifyIdentityAndBot(context, options.mode);
+        context = verified.context;
+        emit({ status: "identity_ready", userId: context.config.user_id, botId: context.config.bot_id });
+        const runtime = await prepareRuntime(context, cwd, options.mode, verified.expectedRuntimeId);
+        validateExpectedRuntime(identity, runtime);
+        context = await startRuntime(context, runtime, cwd);
+        await waitForRuntime(context, runtime, options.harness);
+        context = await bindAgent(context, runtime, options.harness);
+        await finishSetup(context, runtime, options);
     }
 
     try {

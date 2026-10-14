@@ -1,4 +1,4 @@
-import { and, eq, exists, gt, isNull, sql } from "drizzle-orm";
+import { and, eq, exists, gt, isNull, or, sql } from "drizzle-orm";
 import * as v from "valibot";
 import { agentPairingTicket, anonymousCredential, managedBot } from "../../../schema/project-do/index.ts";
 import { createProjectCredential, readProjectCredential } from "../entity/project-credential.ts";
@@ -8,6 +8,7 @@ const agentPairingLifetime = 10 * 60 * 1000;
 
 export interface AgentPairing {
     readonly code: string;
+    readonly botId: string;
     readonly expiresAt: number;
 }
 
@@ -22,7 +23,7 @@ export class AgentPairingStorage {
 
     readonly createPairing = async (
         userId: string,
-        botId: string,
+        botId: string | null,
         expectedRuntimeId: string | null,
         now: number,
         signal: AbortSignal,
@@ -30,12 +31,20 @@ export class AgentPairingStorage {
         signal.throwIfAborted();
         const code = createProjectCredential("mobius_pair_v2", v.parse(v.string(), this.#projectId));
         const expiresAt = now + agentPairingLifetime;
+        const targetBotId = botId ?? `bot_${crypto.randomUUID()}`;
         await requireIdentityDatabase(this.#database)
             .insert(agentPairingTicket)
-            .values({ codeHash: await digest(code), userId, botId, expectedRuntimeId, expiresAt })
+            .values({
+                codeHash: await digest(code),
+                userId,
+                botId: targetBotId,
+                createsBot: botId === null,
+                expectedRuntimeId,
+                expiresAt,
+            })
             .run();
         signal.throwIfAborted();
-        return { code, expiresAt };
+        return { code, expiresAt, botId: targetBotId };
     };
 
     readonly redeemPairing = async (
@@ -68,16 +77,19 @@ export class AgentPairingStorage {
                         eq(agentPairingTicket.codeHash, hash),
                         isNull(agentPairingTicket.consumedAt),
                         gt(agentPairingTicket.expiresAt, now),
-                        exists(
-                            database
-                                .select({ botId: managedBot.botId })
-                                .from(managedBot)
-                                .where(
-                                    and(
-                                        eq(managedBot.botId, agentPairingTicket.botId),
-                                        eq(managedBot.userId, agentPairingTicket.userId),
+                        or(
+                            eq(agentPairingTicket.createsBot, true),
+                            exists(
+                                database
+                                    .select({ botId: managedBot.botId })
+                                    .from(managedBot)
+                                    .where(
+                                        and(
+                                            eq(managedBot.botId, agentPairingTicket.botId),
+                                            eq(managedBot.userId, agentPairingTicket.userId),
+                                        ),
                                     ),
-                                ),
+                            ),
                         ),
                     ),
                 ),
