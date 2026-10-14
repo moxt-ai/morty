@@ -45,7 +45,7 @@ Only ready confirms setup; a working chat reply is a separate check.
 Return the exact clickable `url` and the working directory from the `workspace` field. Display the owner-only PNG at
 `qrPath` if inline images are supported; otherwise return the URL. Never open,
 preview, or redeem the handoff URL yourself. Tell the user: **Open this link or
-scan the QR code to chat. It can be used up to five times, has no expiry, and
+scan the QR code to chat. It is valid for 24 hours and
 opens the same user and Machine. Keep the Runtime online. You can bind an account later.**
 
 On failure, use `error.code` and the private Runtime log. Fix installation or
