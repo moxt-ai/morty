@@ -139,9 +139,9 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
             return {
                 outcome: "complete",
                 output: [
-                    { kind: "text", text: "Auto-merge is armed on the rebased head." },
-                    { kind: "text", text: "Policy, title, and Worker-config checks are green." },
-                    { kind: "text", text: "Static checks are green now; only the test job remains." },
+                    { kind: "message", text: "Auto-merge is armed on the rebased head." },
+                    { kind: "message", text: "Policy, title, and Worker-config checks are green." },
+                    { kind: "message", text: "Static checks are green now; only the test job remains." },
                 ],
             };
         case "separate reasoning paragraphs":
