@@ -1,4 +1,4 @@
-import { FileText, LoaderCircle, Paperclip, Plus, Send, Square, X } from "lucide-react";
+import { FileText, LoaderCircle, Plus, Send, Square, X } from "lucide-react";
 import { type ClipboardEvent, type FormEvent, type KeyboardEvent, type ReactNode, useRef, useState } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import {
@@ -9,7 +9,6 @@ import {
 } from "../../services/chat/attachment-reader.ts";
 import type { ComposerAttachment } from "../../view-models/chat/composer-attachment.ts";
 import { Button } from "../ui/cloud-button.tsx";
-import { Popover } from "../ui/popover.tsx";
 import { Textarea } from "../ui/textarea.tsx";
 
 export type { ComposerAttachment } from "../../view-models/chat/composer-attachment.ts";
@@ -86,7 +85,6 @@ export function BotChatComposer({
     readonly submitDisabled: boolean;
 }) {
     const fileInput = useRef<HTMLInputElement>(null);
-    const [addMenuOpen, setAddMenuOpen] = useState(false);
     const [attachmentState, setAttachmentState] = useState<
         { readonly kind: "idle" } | { readonly kind: "reading" } | { readonly kind: "failed"; readonly message: string }
     >({ kind: "idle" });
@@ -204,48 +202,22 @@ export function BotChatComposer({
                 />
                 <div className="mt-1 flex min-h-10 items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-1">
-                        <Popover.Root onOpenChange={setAddMenuOpen} open={addMenuOpen}>
-                            <Popover.Trigger asChild>
-                                <button
-                                    aria-label="Add"
-                                    className="flex size-11 items-center justify-center rounded-full text-copy-secondary outline-none transition-colors duration-150 hover:bg-black/[0.045] focus-visible:ring-2 focus-visible:ring-ring/60 data-[state=open]:bg-black/[0.045] sm:size-10 motion-reduce:transition-none"
-                                    title="Add"
-                                    type="button"
-                                >
-                                    {attachmentState.kind === "reading" ? (
-                                        <LoaderCircle className="size-5 animate-spin motion-reduce:animate-none" />
-                                    ) : (
-                                        <Plus className="size-5" />
-                                    )}
-                                </button>
-                            </Popover.Trigger>
-                            <Popover.Portal>
-                                <Popover.Content
-                                    align="start"
-                                    className="z-50 w-56 rounded-2xl border border-[#d5d9dc] bg-white p-1.5 shadow-[0_16px_42px_rgba(0,0,0,0.14)]"
-                                    role="menu"
-                                    side="top"
-                                    sideOffset={10}
-                                >
-                                    <button
-                                        className="flex min-h-10 w-full items-center gap-3 rounded-xl bg-black/[0.035] px-3 text-left text-sm hover:bg-black/[0.06] focus-visible:ring-2 focus-visible:ring-ring/60"
-                                        disabled={
-                                            disabled || attachmentState.kind === "reading" || attachments.length >= 8
-                                        }
-                                        onClick={() => {
-                                            setAddMenuOpen(false);
-                                            fileInput.current?.click();
-                                        }}
-                                        role="menuitem"
-                                        type="button"
-                                    >
-                                        <Paperclip aria-hidden="true" className="size-4 text-copy-secondary" />
-                                        Add attachment
-                                    </button>
-                                </Popover.Content>
-                            </Popover.Portal>
-                        </Popover.Root>
+                        <button
+                            aria-label="Add attachment"
+                            className="flex size-11 items-center justify-center rounded-full text-copy-secondary outline-none transition-colors duration-150 hover:bg-black/[0.045] focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50 sm:size-10 motion-reduce:transition-none"
+                            disabled={disabled || attachmentState.kind === "reading" || attachments.length >= 8}
+                            onClick={() => fileInput.current?.click()}
+                            title="Add attachment"
+                            type="button"
+                        >
+                            {attachmentState.kind === "reading" ? (
+                                <LoaderCircle className="size-5 animate-spin motion-reduce:animate-none" />
+                            ) : (
+                                <Plus className="size-5" />
+                            )}
+                        </button>
                         <input
+                            aria-label="Choose attachments"
                             accept="image/png,image/jpeg,image/gif,image/webp,text/*,.md,.json,.csv,.yaml,.yml,.xml"
                             className="sr-only"
                             disabled={disabled}
