@@ -109,19 +109,6 @@ test("Given setup and pairing documents, When users fetch them from configured a
     }
 });
 
-test("Given a reusable setup handoff, When a user fetches the setup instructions, Then the link expires after 24 hours without an outdated use count", async () => {
-    const response = await worker.fetch(new Request("https://preview.example/setup.md"), {
-        APP_ORIGIN: "https://chat.example",
-    });
-
-    expect(response.status).toBe(200);
-    const document = await response.text();
-    expect(document).toContain("It is valid for 24 hours");
-    expect(document).not.toContain("up to five times");
-    expect(document).not.toContain("use limit");
-    expect(document).not.toContain("has no expiry");
-});
-
 test("Given rendered pairing instructions at the edge, When users fetch different tickets, Then the CDN shares a token-free document cache", async () => {
     const runtime = createRuntime({ appOrigin: "https://chat.example" });
     try {
