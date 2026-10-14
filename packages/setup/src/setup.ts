@@ -1,7 +1,9 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { constants } from "node:fs";
 import { mkdir, open, readFile, realpath, rename, rm } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -252,16 +254,43 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function acquireLock(directory: string) {
-        const lock = join(directory, ".setup-lock");
+        // The kernel releases this exclusive listener even after a forced process exit.
+        // A hash collision conservatively rejects setup instead of allowing concurrent writes.
+        const canonical = process.platform === "win32" ? directory.toLowerCase() : directory;
+        const digest = createHash("sha256").update(canonical).digest();
+        const address =
+            process.platform === "win32"
+                ? { path: `\\\\.\\pipe\\morty-setup-${digest.toString("hex")}`, exclusive: true }
+                : process.platform === "linux"
+                  ? { path: `\0morty-setup-${digest.toString("hex")}`, exclusive: true }
+                  : { host: "127.0.0.1", port: 20000 + (digest.readUInt32BE(0) % 40000), exclusive: true };
+        const server = createServer((socket) => socket.destroy());
         try {
-            await mkdir(lock, { mode: 0o700 });
+            await new Promise<void>((resolve, reject) => {
+                const abort = () => reject(signal.reason);
+                signal.addEventListener("abort", abort, { once: true });
+                server.once("error", (cause) => {
+                    signal.removeEventListener("abort", abort);
+                    reject(cause);
+                });
+                server.listen(address, () => {
+                    signal.removeEventListener("abort", abort);
+                    resolve();
+                });
+                if (signal.aborted) {
+                    abort();
+                }
+            });
         } catch (cause) {
-            if (errorCode(cause) === "EEXIST") {
+            server.close();
+            if (errorCode(cause) === "EADDRINUSE") {
                 fail("SETUP_BUSY");
             }
             throw cause;
         }
-        return lock;
+        return async () => {
+            await new Promise<void>((resolve, reject) => server.close((cause) => (cause ? reject(cause) : resolve())));
+        };
     }
 
     async function readPrivateJson(path: string) {
@@ -846,7 +875,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const base = options.base;
         const cwd = await resolveWorkingDirectory(options.cwd);
         const directory = await prepareDirectory(await resolveDocumentsDirectory(host.documents, signal));
-        const lock = await acquireLock(directory);
+        const releaseLock = await acquireLock(directory);
         try {
             let context: Context =
                 options.mode === "setup" ? await loadConfiguration(directory, base) : { directory, base, config: {} };
@@ -862,7 +891,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             context = await bindAgent(context, runtime, options.harness);
             await finishSetup(context, runtime, options);
         } finally {
-            await rm(lock, { recursive: true, force: true });
+            await releaseLock();
         }
     }
 

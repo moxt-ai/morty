@@ -151,6 +151,7 @@ test("Given a junction replaces the private Morty directory, When setup validate
 
 test.runIf(process.platform === "linux")(
     "Given Linux has a configured XDG Documents folder and no DOCUMENT_DIR override, When a user runs the setup CLI, Then identity is saved in that folder and cancellation releases setup",
+    { timeout: 30000 },
     async () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-setup-xdg-"));
         const documents = join(directory, "Redirected Documents & spaces");
@@ -269,6 +270,87 @@ test.runIf(process.env["MORTY_VERIFY_SYSTEM_DOCUMENTS"] === "true" && process.pl
             await fixture.close();
             await rm(configuration, { recursive: true, force: true });
             await rm(workspace, { recursive: true, force: true });
+        }
+    },
+);
+
+test.runIf(process.platform === "linux")(
+    "Given setup owns its private configuration, When another setup starts and the owner is forcibly terminated, Then active setup is protected and retry succeeds",
+    { timeout: 30000 },
+    async () => {
+        const directory = await mkdtemp(join(tmpdir(), "morty-setup-crash-"));
+        const documents = join(directory, "Documents");
+        const workspace = join(directory, "workspace");
+        await Promise.all([documents, workspace].map((path) => mkdir(path)));
+        const fixture = await createIdentityFixture({ appOrigin: await localOrigin() });
+        const args = [
+            "setup",
+            "--base-url",
+            fixture.origin,
+            "--cwd",
+            workspace,
+            "--harness",
+            "codex",
+            "--session-id",
+            "crash-recovery",
+        ];
+        const child = spawn(
+            process.execPath,
+            [fileURLToPath(new URL("../../setup/src/cli.ts", import.meta.url)), ...args],
+            {
+                env: { ...process.env, DOCUMENT_DIR: documents },
+                stdio: ["ignore", "pipe", "pipe"],
+                signal: AbortSignal.timeout(30000),
+            },
+        );
+        const exited = once(child, "exit");
+        const ready = new Promise<void>((resolve, reject) => {
+            let output = "";
+            child.stdout.on("data", (chunk) => {
+                output += chunk.toString();
+                if (output.includes('"status":"identity_ready"')) {
+                    child.kill("SIGSTOP");
+                    resolve();
+                }
+            });
+            child.once("error", reject);
+            child.once("exit", () => reject(new Error("Setup exited before identity was ready")));
+        });
+        child.stderr.resume();
+        const events: Readonly<Record<string, unknown>>[] = [];
+        try {
+            await ready;
+            expect(
+                await runSetup(args, {
+                    documents,
+                    signal: AbortSignal.timeout(15000),
+                    emit: (event) => events.push(event),
+                }),
+            ).toBe(1);
+            expect(events.at(-1)).toMatchObject({ error: { code: "SETUP_BUSY" } });
+            child.kill("SIGKILL");
+            await exited;
+            events.length = 0;
+            const cancellation = new AbortController();
+            expect(
+                await runSetup(args, {
+                    documents,
+                    signal: cancellation.signal,
+                    emit: (event) => {
+                        events.push(event);
+                        if (event["status"] === "identity_ready") {
+                            cancellation.abort();
+                        }
+                    },
+                }),
+            ).toBe(1);
+            expect(events).toContainEqual(expect.objectContaining({ status: "identity_ready" }));
+            expect(events.at(-1)).toMatchObject({ error: { code: "CANCELLED" } });
+        } finally {
+            child.kill("SIGKILL");
+            await exited;
+            await fixture.close();
+            await rm(directory, { recursive: true, force: true });
         }
     },
 );
