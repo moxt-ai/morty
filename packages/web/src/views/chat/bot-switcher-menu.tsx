@@ -1,4 +1,4 @@
-import { Bot, Check, ChevronDown, Link, Pencil, Plus, Trash2 } from "lucide-react";
+import { Bot, Check, ChevronDown, Link, Pencil, Plus, Settings, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
@@ -33,6 +33,7 @@ export function BotSwitcherMenu({
     readonly onSelect: (botId: string) => void;
 }) {
     const [open, setOpen] = useState(false);
+    const [settingsOpen, setSettingsOpen] = useState(false);
     const [dialog, setDialog] = useState<BotDialog>({ kind: "closed" });
     const [name, setName] = useState("");
     const operationController = useRef<AbortController | null>(null);
@@ -62,134 +63,179 @@ export function BotSwitcherMenu({
               : "bg-muted-foreground/60";
     return (
         <>
-            <Popover.Root onOpenChange={setOpen} open={open}>
-                <Popover.Trigger asChild>
-                    <button
-                        aria-label={`Select Machine. ${activeBot.displayName}, ${connectionStatus.label}`}
-                        className="relative flex size-10 justify-self-end items-center justify-center gap-2 rounded-lg text-left outline-none hover:bg-white/70 focus-visible:ring-2 focus-visible:ring-ring/60 data-[state=open]:bg-white/70 sm:mb-6 sm:h-auto sm:w-full sm:justify-self-auto sm:justify-start sm:px-1.5 sm:py-1.5"
-                        data-testid={dataTestId.botMenuTrigger}
-                        type="button"
-                    >
-                        <Bot aria-hidden="true" className="size-5 text-muted-foreground sm:hidden" />
-                        <span
-                            aria-hidden="true"
-                            className={`absolute top-1 right-1 size-2 rounded-full ring-2 ring-sidebar sm:hidden ${statusDot}`}
-                        />
-                        <span
-                            aria-hidden="true"
-                            className={`hidden size-1.5 shrink-0 rounded-full sm:block ${statusDot}`}
-                        />
-                        <span className="hidden min-w-0 flex-1 sm:block">
-                            <span className="block truncate text-xs font-medium text-foreground">
-                                {activeBot.displayName}
-                            </span>
+            <div className="flex items-center justify-self-end gap-1 sm:mb-6 sm:w-full">
+                <Popover.Root
+                    onOpenChange={(value) => {
+                        setOpen(value);
+                        if (value) {
+                            setSettingsOpen(false);
+                        }
+                    }}
+                    open={open}
+                >
+                    <Popover.Trigger asChild>
+                        <button
+                            aria-label={`Select Machine. ${activeBot.displayName}, ${connectionStatus.label}`}
+                            className="relative flex size-10 justify-self-end items-center justify-center gap-2 rounded-lg text-left outline-none hover:bg-white/70 focus-visible:ring-2 focus-visible:ring-ring/60 data-[state=open]:bg-white/70 sm:h-auto sm:min-w-0 sm:flex-1 sm:justify-self-auto sm:justify-start sm:px-1.5 sm:py-1.5"
+                            data-testid={dataTestId.botMenuTrigger}
+                            type="button"
+                        >
+                            <Bot aria-hidden="true" className="size-5 text-muted-foreground sm:hidden" />
                             <span
-                                className="block text-[11px] leading-4 text-muted-foreground"
-                                data-connection-status={connectionStatus.kind}
-                                data-testid={dataTestId.botConnectionStatus}
-                            >
-                                {connectionStatus.label}
+                                aria-hidden="true"
+                                className={`absolute top-1 right-1 size-2 rounded-full ring-2 ring-sidebar sm:hidden ${statusDot}`}
+                            />
+                            <span
+                                aria-hidden="true"
+                                className={`hidden size-1.5 shrink-0 rounded-full sm:block ${statusDot}`}
+                            />
+                            <span className="hidden min-w-0 flex-1 sm:block">
+                                <span className="block truncate text-xs font-medium text-foreground">
+                                    {activeBot.displayName}
+                                </span>
+                                <span
+                                    className="block text-[11px] leading-4 text-muted-foreground"
+                                    data-connection-status={connectionStatus.kind}
+                                    data-testid={dataTestId.botConnectionStatus}
+                                >
+                                    {connectionStatus.label}
+                                </span>
                             </span>
-                        </span>
-                        <ChevronDown
-                            aria-hidden="true"
-                            className="hidden size-3.5 shrink-0 text-muted-foreground sm:block"
-                        />
-                    </button>
-                </Popover.Trigger>
-                <Popover.Portal>
-                    <Popover.Content
-                        align="start"
-                        aria-label="Machines"
-                        className="z-[100] w-[min(calc(100vw-1.5rem),260px)] rounded-xl border border-border bg-background p-1.5 text-sm shadow-xl"
-                        side="bottom"
-                        sideOffset={6}
-                    >
-                        <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                            Machines
-                        </p>
-                        {bots.map((bot) => (
-                            <button
-                                className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
-                                key={bot.botId}
-                                onClick={() => {
-                                    onSelect(bot.botId);
-                                    setOpen(false);
-                                }}
-                                type="button"
-                            >
-                                <Bot aria-hidden="true" className="size-4 text-muted-foreground" />
-                                <span className="min-w-0 flex-1 truncate">{bot.displayName}</span>
-                                {bot.botId === activeBot.botId && (
-                                    <Check aria-hidden="true" className="size-4 text-primary" />
-                                )}
-                            </button>
-                        ))}
-                        <div className="my-1 border-t border-border" />
-                        {connectionStatus.kind === "unpaired" && (
-                            <button
-                                className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
-                                data-testid={dataTestId.pairBotAgain}
-                                onClick={() => {
-                                    setOpen(false);
-                                    onPairAgain();
-                                }}
-                                type="button"
-                            >
-                                <Link aria-hidden="true" className="size-4" />
-                                Pair the machine
-                            </button>
-                        )}
-                        <button
-                            className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
-                            onClick={() => {
-                                setOpen(false);
-                                setName(activeBot.displayName);
-                                onResetOperation();
-                                setDialog({ kind: "rename" });
-                            }}
-                            type="button"
-                        >
-                            <Pencil aria-hidden="true" className="size-4" />
-                            Rename machine
+                            <ChevronDown
+                                aria-hidden="true"
+                                className="hidden size-3.5 shrink-0 text-muted-foreground sm:block"
+                            />
                         </button>
-                        <button
-                            className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
-                            data-testid={dataTestId.createBot}
-                            onClick={() => {
-                                setOpen(false);
-                                onConnectAgent();
-                            }}
-                            type="button"
+                    </Popover.Trigger>
+                    <Popover.Portal>
+                        <Popover.Content
+                            align="start"
+                            aria-label="Machines"
+                            className="z-[100] w-[min(calc(100vw-1.5rem),260px)] rounded-xl border border-border bg-background p-1.5 text-sm shadow-xl"
+                            side="bottom"
+                            sideOffset={6}
                         >
-                            <Plus aria-hidden="true" className="size-4" />
-                            Connect another agent
-                        </button>
-                        {operation.kind === "failed" && dialog.kind === "closed" && (
-                            <p className="px-2 py-1.5 text-sm text-destructive" role="alert">
-                                {operation.message}
+                            <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                                Machines
                             </p>
-                        )}
-                        {bots.length >= 2 && (
+                            {bots.map((bot) => (
+                                <button
+                                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
+                                    key={bot.botId}
+                                    onClick={() => {
+                                        onSelect(bot.botId);
+                                        setOpen(false);
+                                    }}
+                                    type="button"
+                                >
+                                    <Bot aria-hidden="true" className="size-4 text-muted-foreground" />
+                                    <span className="min-w-0 flex-1 truncate">{bot.displayName}</span>
+                                    {bot.botId === activeBot.botId && (
+                                        <Check aria-hidden="true" className="size-4 text-primary" />
+                                    )}
+                                </button>
+                            ))}
+                            <div className="my-1 border-t border-border" />
+                            {connectionStatus.kind === "unpaired" && (
+                                <button
+                                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
+                                    data-testid={dataTestId.pairBotAgain}
+                                    onClick={() => {
+                                        setOpen(false);
+                                        onPairAgain();
+                                    }}
+                                    type="button"
+                                >
+                                    <Link aria-hidden="true" className="size-4" />
+                                    Pair the machine
+                                </button>
+                            )}
                             <button
-                                className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-destructive outline-none hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-ring/60"
-                                data-testid={dataTestId.removeBot}
+                                className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
+                                data-testid={dataTestId.createBot}
                                 onClick={() => {
                                     setOpen(false);
-                                    onResetOperation();
-                                    setDialog({ kind: "remove" });
+                                    onConnectAgent();
                                 }}
                                 type="button"
                             >
-                                <Trash2 aria-hidden="true" className="size-4" />
-                                Remove Machine
+                                <Plus aria-hidden="true" className="size-4" />
+                                Connect another agent
                             </button>
-                        )}
-                    </Popover.Content>
-                </Popover.Portal>
-            </Popover.Root>
+                            {operation.kind === "failed" && dialog.kind === "closed" && (
+                                <p className="px-2 py-1.5 text-sm text-destructive" role="alert">
+                                    {operation.message}
+                                </p>
+                            )}
+                        </Popover.Content>
+                    </Popover.Portal>
+                </Popover.Root>
+                <Popover.Root
+                    open={settingsOpen}
+                    onOpenChange={(value) => {
+                        setSettingsOpen(value);
+                        if (value) {
+                            setOpen(false);
+                        }
+                    }}
+                >
+                    <Popover.Trigger asChild>
+                        <button
+                            type="button"
+                            aria-label={`Configure ${activeBot.displayName}`}
+                            title={`Configure ${activeBot.displayName}`}
+                            className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground outline-none hover:bg-white/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 data-[state=open]:bg-white/70"
+                        >
+                            <Settings aria-hidden="true" className="size-4" />
+                        </button>
+                    </Popover.Trigger>
+                    <Popover.Portal>
+                        <Popover.Content
+                            align="end"
+                            side="bottom"
+                            sideOffset={6}
+                            aria-label={`Settings for ${activeBot.displayName}`}
+                            className="z-[100] w-[min(calc(100vw-1.5rem),260px)] rounded-xl border border-border bg-background p-1.5 text-sm shadow-xl"
+                        >
+                            <p className="truncate px-2 py-1.5 text-xs font-semibold">{activeBot.displayName}</p>
+                            <button
+                                className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
+                                onClick={() => {
+                                    setSettingsOpen(false);
+                                    setName(activeBot.displayName);
+                                    onResetOperation();
+                                    setDialog({ kind: "rename" });
+                                }}
+                                type="button"
+                            >
+                                <Pencil aria-hidden="true" className="size-4" />
+                                Rename machine
+                            </button>
+                            {bots.length >= 2 && (
+                                <button
+                                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-destructive outline-none hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-ring/60"
+                                    data-testid={dataTestId.removeBot}
+                                    onClick={() => {
+                                        setSettingsOpen(false);
+                                        onResetOperation();
+                                        setDialog({ kind: "remove" });
+                                    }}
+                                    type="button"
+                                >
+                                    <Trash2 aria-hidden="true" className="size-4" />
+                                    Remove Machine
+                                </button>
+                            )}
+                        </Popover.Content>
+                    </Popover.Portal>
+                </Popover.Root>
+            </div>
             {dialog.kind === "rename" && (
-                <Dialog description="Choose a new name for this Machine." onClose={closeDialog} title="Rename machine">
+                <Dialog
+                    description={`Choose a new name for ${activeBot.displayName}.`}
+                    onClose={closeDialog}
+                    title="Rename machine"
+                >
                     <form
                         className="mt-5 grid gap-4"
                         onSubmit={(event) => {

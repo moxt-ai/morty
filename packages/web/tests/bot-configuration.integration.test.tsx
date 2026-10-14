@@ -5,7 +5,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given a Machine, When a user renames it, Then the new name is visible in the Machine selector", {
+test("Given a selected Machine, When a user opens its settings and renames it, Then the new name is visible in the selector", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp();
@@ -13,6 +13,9 @@ test("Given a Machine, When a user renames it, Then the new name is visible in t
     await app.user.click(await app.queryElementByTestId(dataTestId.botMenuTrigger));
 
     expect(getByRole(document.body, "button", { name: "Connect another agent" })).toBeDefined();
+    expect(queryByRole(document.body, "button", { name: "Rename machine" })).toBeNull();
+    await app.user.keyboard("{Escape}");
+    await app.user.click(getByRole(document.body, "button", { name: "Configure My Machine" }));
     await app.user.click(getByRole(document.body, "button", { name: "Rename machine" }));
 
     const name = getByRole(document.body, "textbox", { name: "Machine name" });
