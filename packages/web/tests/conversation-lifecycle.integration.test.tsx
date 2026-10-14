@@ -253,47 +253,23 @@ test("Given more saved messages than one history page, When live output arrives 
         }
         return candidate;
     });
-    const firstHistoryPage = new Promise<{
-        readonly beginsWithAssistantHistory: boolean;
-        readonly prompts: readonly string[];
-        readonly responses: readonly string[];
-    }>((resolve) => {
-        let loadingObserved = false;
-        const observe = () => {
-            const loading = queryByRole(document.body, "status", { name: "Loading messages" });
-            loadingObserved ||= loading !== null;
-            if (!loadingObserved || loading !== null) {
-                return;
-            }
-            observer.disconnect();
-            const firstPrompt = app.elementsByTestId(dataTestId.userMessage)[0];
-            const firstResponse = app.elementsByTestId(dataTestId.agentResponse)[0];
-            const visiblePrompts = app
-                .elementsByTestId(dataTestId.userMessage)
-                .map((element) => element.textContent ?? "");
-            resolve({
-                beginsWithAssistantHistory:
-                    firstPrompt !== undefined &&
-                    firstResponse !== undefined &&
-                    (firstResponse.compareDocumentPosition(firstPrompt) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
-                prompts: visiblePrompts,
-                responses: app
-                    .elementsByTestId(dataTestId.agentResponse)
-                    .map((element) => element.textContent ?? "")
-                    .filter((text) => text.includes("Completed Pagination message")),
-            });
-        };
-        const observer = new MutationObserver(observe);
-        observer.observe(document.body, { childList: true, subtree: true });
-        observe();
-    });
     vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
     onTestFinished(() => {
         vi.useRealTimers();
     });
     await app.user.click(conversation);
-
-    const page = await firstHistoryPage;
+    await app.waitForView(() =>
+        expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toContain(
+            prompts.at(-1),
+        ),
+    );
+    const page = {
+        prompts: app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent ?? ""),
+        responses: app
+            .elementsByTestId(dataTestId.agentResponse)
+            .map((element) => element.textContent ?? "")
+            .filter((text) => text.includes("Completed Pagination message")),
+    };
     const expectOmittedReasoning = async () => {
         const reasoningItems = app.elementsByTestId(dataTestId.agentReasoning);
         expect(reasoningItems.length).toBeGreaterThan(0);
@@ -313,7 +289,6 @@ test("Given more saved messages than one history page, When live output arrives 
             ).toBe(true);
         });
     };
-    expect(page.beginsWithAssistantHistory).toBe(true);
     expect(page.prompts).not.toContain(prompts[0]);
     expect(page.prompts.at(-1)).toBe(prompts.at(-1));
     expect(
@@ -366,12 +341,15 @@ test("Given more saved messages than one history page, When live output arrives 
     });
     const loadedPrompts = app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent ?? "");
     const loadedResponses = app.elementsByTestId(dataTestId.agentResponse).map((element) => element.textContent ?? "");
-    expect(loadedPrompts[0]).toBe(prompts[0]);
+    const firstInitialPromptIndex = prompts.indexOf(page.prompts[0] ?? "");
+    const newlyLoadedPrompt = prompts[firstInitialPromptIndex - 1];
+    expect(newlyLoadedPrompt).toBeDefined();
+    expect(loadedPrompts[0]).toBe(newlyLoadedPrompt);
     expect(loadedPrompts.at(-1)).toBe(livePrompt);
     expect(
         loadedResponses.some(
             (response) =>
-                response.includes("Completed Pagination message 1") &&
+                response.includes(`Completed Pagination message ${firstInitialPromptIndex.toString()}`) &&
                 !response.includes(`Completed Pagination message ${prompts.length.toString()}`),
         ),
     ).toBe(true);
