@@ -31,6 +31,30 @@ jobs:
           codex --version
           claude --version
           opencode --version
+      - name: Reproduce native Claude discovery outside the shell PATH
+        run: |
+          claude_path="$(command -v claude)"
+          node_path="$(command -v node)"
+          isolated_bin="$RUNNER_TEMP/morty-discovery-bin"
+          native_bin="$HOME/.local/bin"
+          mkdir -p "$isolated_bin" "$native_bin"
+          ln -sf "$node_path" "$isolated_bin/node"
+          ln -sf "$claude_path" "$native_bin/claude"
+          pnpm --dir third-party/mobius --filter @moxt-ai/mobius build
+          PATH="$isolated_bin:/usr/bin:/bin" \
+            MOBIUS_STATE_DIRECTORY="$RUNNER_TEMP/morty-discovery-state" \
+            "$node_path" third-party/mobius/packages/cli/dist/cli.js agents --json \
+            > "$RUNNER_TEMP/morty-agent-inventory.json"
+          "$node_path" --input-type=module - "$RUNNER_TEMP/morty-agent-inventory.json" <<'NODE'
+          import { readFile } from "node:fs/promises";
+
+          const inventory = JSON.parse(await readFile(process.argv[2], "utf8"));
+          const claude = inventory.available.find((agent) => agent.id === "claude");
+          if (claude === undefined) {
+              const diagnostic = inventory.unavailable.find((agent) => agent.id === "claude");
+              throw new Error(`Installed native Claude Code was not discovered: ${JSON.stringify(diagnostic)}`);
+          }
+          NODE
       - name: Verify instruction delivery and native Documents resolution
         env:
           MORTY_VERIFY_SYSTEM_DOCUMENTS: 'true'
