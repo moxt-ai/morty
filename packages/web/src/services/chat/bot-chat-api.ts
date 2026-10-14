@@ -21,7 +21,7 @@ import {
 } from "@moxt-ai/mobius-sdk";
 import * as v from "valibot";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
-import { CloudApiError, ManagementApi } from "../management/management-api.ts";
+import { CloudApiError, type ManagedBot, ManagementApi } from "../management/management-api.ts";
 
 const identifier = v.custom<Identifier>(isIdentifier);
 const accessSchema = v.pipe(
@@ -437,10 +437,14 @@ export class BotChatApi {
         this.#agentSettingsCache.set(cacheKey, settings);
         return settings;
     };
-    readonly createPairingInstruction = async (botId: string, signal: AbortSignal) => {
+    readonly createPairingInstruction = async (botId: string | null, signal: AbortSignal) => {
         const ticket = v.parse(
-            v.object({ url: v.pipe(v.string(), v.url()), expiresAt: v.pipe(v.string(), v.isoTimestamp()) }),
-            await this.#request(botId, "pairing-instruction", { botId }, signal),
+            v.object({
+                url: v.pipe(v.string(), v.url()),
+                expiresAt: v.pipe(v.string(), v.isoTimestamp()),
+                botId: identifier,
+            }),
+            await this.#request(botId, "pairing-instruction", botId === null ? {} : { botId }, signal),
         );
         const url = new URL(ticket.url);
         if (
@@ -451,6 +455,32 @@ export class BotChatApi {
             throw new CloudApiError("INVALID_PAIRING_INSTRUCTION", "Pairing instruction is invalid.");
         }
         return ticket;
+    };
+    readonly waitForPairedBot = async (botId: string, parent: AbortSignal): Promise<ManagedBot> => {
+        const signal = AbortSignal.any([parent, AbortSignal.timeout(10 * 60 * 1000)]);
+        while (!signal.aborted) {
+            try {
+                const bot = await this.readBot(botId, signal);
+                if (bot.configured) {
+                    return { botId: bot.botId, displayName: bot.displayName };
+                }
+            } catch (cause) {
+                signal.throwIfAborted();
+                if (!(cause instanceof CloudApiError && cause.code === "BOT_NOT_FOUND")) {
+                    throw cause;
+                }
+            }
+            const watchDeadline = AbortSignal.timeout(15_000);
+            try {
+                await this.waitForSetupChange(botId, AbortSignal.any([signal, watchDeadline]));
+            } catch (cause) {
+                signal.throwIfAborted();
+                if (!watchDeadline.aborted) {
+                    throw cause;
+                }
+            }
+        }
+        throw signal.reason;
     };
     readonly runtimeConfiguration = async (botId: string, parent: AbortSignal): Promise<BotRuntimeConfiguration> =>
         v.parse(runtimeConfigurationSchema, await this.#request(botId, "workspace", undefined, parent));
@@ -592,7 +622,7 @@ export class BotChatApi {
         });
     };
     readonly #request = async (
-        botId: string,
+        botId: string | null,
         operation: string,
         body: unknown,
         parent: AbortSignal,
@@ -603,7 +633,7 @@ export class BotChatApi {
                 operation.startsWith("native-session") || operation === "agent-settings" ? 120000 : 45000,
             ),
         ]);
-        const requestedBotId = v.parse(identifier, botId);
+        const requestedBotId = operation === "pairing-instruction" ? "" : v.parse(identifier, botId);
         const token = await this.#getToken(signal);
         if (token === null) {
             throw new CloudApiError("UNAUTHENTICATED", "Your session is unavailable.");

@@ -110,7 +110,7 @@ export function ConversationSidebar({
     bots,
     botOperation,
     connectionStatus,
-    onCreateBot,
+    onConnectAgent,
     onPairAgain,
     onRenameBot,
     onRemoveBot,
@@ -133,7 +133,7 @@ export function ConversationSidebar({
     readonly bots: readonly ManagedBot[];
     readonly botOperation: BotOperation;
     readonly connectionStatus: BotConnectionStatus;
-    readonly onCreateBot: (displayName: string, signal: AbortSignal) => Promise<boolean>;
+    readonly onConnectAgent: () => void;
     readonly onPairAgain: () => void;
     readonly onRenameBot: (displayName: string, signal: AbortSignal) => Promise<boolean>;
     readonly onRemoveBot: (signal: AbortSignal) => Promise<boolean>;
@@ -243,7 +243,7 @@ export function ConversationSidebar({
                 bots={bots}
                 connectionStatus={connectionStatus}
                 operation={botOperation}
-                onCreate={onCreateBot}
+                onConnectAgent={onConnectAgent}
                 onPairAgain={onPairAgain}
                 onRename={onRenameBot}
                 onRemove={onRemoveBot}

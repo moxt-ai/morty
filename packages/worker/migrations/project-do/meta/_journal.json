@@ -127,6 +127,13 @@
             "when": 1791626143135,
             "tag": "0029_late_hammerhead",
             "breakpoints": true
+        },
+        {
+            "idx": 30,
+            "version": "6",
+            "when": 1791951825129,
+            "tag": "0030_tough_speedball",
+            "breakpoints": true
         }
     ]
 }

@@ -447,6 +447,17 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (mode === "pair" && context.config.entry !== "pair") {
             fail("PAIRING_TICKET_REQUIRED");
         }
+        if (mode === "pair" && context.config.bot_id !== undefined) {
+            const botId = identifier(context.config.bot_id);
+            const detail = await request(context, `/management/bots/${encodeURIComponent(botId)}/runtime-binding`);
+            if (identifier(detail.botId) !== botId) {
+                fail("INVALID_RESPONSE");
+            }
+            return {
+                context: await saveConfiguration(context, { user_id: session.userId }),
+                expectedRuntimeId: detail.runtimeId === null ? null : identifier(detail.runtimeId),
+            };
+        }
         const listed = await request(context, "/management/bots");
         if (!Array.isArray(listed.bots)) {
             fail("INVALID_RESPONSE");

@@ -89,7 +89,7 @@ export class AuthenticationService {
 
     readonly createPairing = async (
         userId: string,
-        botId: string,
+        botId: string | null,
         expectedRuntimeId: string | null,
         signal: AbortSignal,
     ) => {
