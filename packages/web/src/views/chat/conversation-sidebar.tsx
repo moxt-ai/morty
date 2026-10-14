@@ -244,7 +244,6 @@ export function ConversationSidebar({
                 connectionStatus={connectionStatus}
                 operation={botOperation}
                 onConnectAgent={onConnectAgent}
-                onPairAgain={onPairAgain}
                 onRename={onRenameBot}
                 onRemove={onRemoveBot}
                 onResetOperation={onResetBotOperation}

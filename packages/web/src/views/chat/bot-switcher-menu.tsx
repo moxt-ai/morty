@@ -1,4 +1,4 @@
-import { Bot, Check, ChevronDown, Link, Plus, Settings, Trash2 } from "lucide-react";
+import { Bot, Check, ChevronDown, Plus, Settings, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
@@ -15,7 +15,6 @@ export function BotSwitcherMenu({
     connectionStatus,
     operation,
     onConnectAgent,
-    onPairAgain,
     onRename,
     onRemove,
     onResetOperation,
@@ -26,7 +25,6 @@ export function BotSwitcherMenu({
     readonly connectionStatus: BotConnectionStatus;
     readonly operation: BotOperation;
     readonly onConnectAgent: () => void;
-    readonly onPairAgain: () => void;
     readonly onRename: (displayName: string, signal: AbortSignal) => Promise<boolean>;
     readonly onRemove: (signal: AbortSignal) => Promise<boolean>;
     readonly onResetOperation: () => void;
@@ -131,33 +129,23 @@ export function BotSwitcherMenu({
                                     )}
                                 </button>
                             ))}
-                            <div className="my-1 border-t border-border" />
-                            {connectionStatus.kind === "unpaired" && (
-                                <button
-                                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
-                                    data-testid={dataTestId.pairBotAgain}
-                                    onClick={() => {
-                                        setOpen(false);
-                                        onPairAgain();
-                                    }}
-                                    type="button"
-                                >
-                                    <Link aria-hidden="true" className="size-4" />
-                                    Pair the machine
-                                </button>
+                            {(bots.length > 1 || connectionStatus.kind !== "unpaired") && (
+                                <>
+                                    <div className="my-1 border-t border-border" />
+                                    <button
+                                        className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
+                                        data-testid={dataTestId.createBot}
+                                        onClick={() => {
+                                            setOpen(false);
+                                            onConnectAgent();
+                                        }}
+                                        type="button"
+                                    >
+                                        <Plus aria-hidden="true" className="size-4" />
+                                        Connect another agent
+                                    </button>
+                                </>
                             )}
-                            <button
-                                className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
-                                data-testid={dataTestId.createBot}
-                                onClick={() => {
-                                    setOpen(false);
-                                    onConnectAgent();
-                                }}
-                                type="button"
-                            >
-                                <Plus aria-hidden="true" className="size-4" />
-                                Connect another agent
-                            </button>
                             {operation.kind === "failed" && dialog.kind === "closed" && (
                                 <p className="px-2 py-1.5 text-sm text-destructive" role="alert">
                                     {operation.message}
