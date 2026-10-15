@@ -467,7 +467,22 @@ export class ChatService {
             return {};
         }
         const runtime = await this.localRuntime(scope);
-        await this.#platform.closeChatSession(scope.projectId, runtime.runtimeId, sessionId, scope.signal);
+        try {
+            await this.#platform.closeChatSession(scope.projectId, runtime.runtimeId, sessionId, scope.signal);
+        } catch (cause) {
+            scope.signal.throwIfAborted();
+            this.#logger.info(
+                {
+                    event: "chat-managed-session-close-failed",
+                    userId: scope.userId,
+                    projectId: scope.projectId,
+                    botId: scope.botId,
+                    sessionId,
+                    failureCode: cause instanceof PlatformProjectError ? cause.code : "unexpected_failure",
+                },
+                "Chat audit event",
+            );
+        }
         await this.#chatSessions.archive(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal);
         this.#logger.info(
             {

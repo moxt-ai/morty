@@ -307,3 +307,29 @@ test("Given an idle managed Chat session, When its owner archives it, Then Chat 
         await fixture.close();
     }
 });
+
+test("Given a Runtime cannot complete Session close, When its owner archives a managed Chat session, Then Chat removes it after the best-effort close", async () => {
+    const fixture = await createChatFixture();
+    try {
+        const runtimeId = fixture.runtime.runtimeId;
+        expect(
+            (await fixture.request(`chat/bots/${fixture.botId}/setup`, { runtimeId, agentRef: "codex" })).status,
+        ).toBe(202);
+        const opened = await fixture.request(`chat/bots/${fixture.botId}/access`, {
+            agentRef: "codex",
+            configurations: [],
+            conversationKey: "unavailable-close-archive",
+            workspaceRef: "default",
+        });
+        const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
+        await fixture.runtime[Symbol.asyncDispose]();
+
+        const archived = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId });
+
+        expect(archived.status).toBe(200);
+        const managed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
+        expect(await managed.json()).toEqual({ sessions: [] });
+    } finally {
+        await fixture.close();
+    }
+});
