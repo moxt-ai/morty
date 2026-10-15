@@ -622,7 +622,7 @@ export function ConversationSidebar({
                 <Dialog
                     busy={access.state.kind === "ending"}
                     title="End remote access?"
-                    description="This will sign out every browser using this access link and prevent the link from being used again. Your local Runtime and task will keep running."
+                    description="This will sign out only this browser. The sharing link remains usable until it expires. Your local Runtime and task will keep running."
                     testId={dataTestId.endRemoteAccessDialog}
                     onClose={access.cancel}
                 >
