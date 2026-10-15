@@ -206,6 +206,32 @@ test("Given a file-change tool includes a rich diff, When the user views it, The
     expect(queryByText(edit, "Response")).toBeNull();
 });
 
+test("Given a file tool reports a rich diff, When the user opens it, Then Chat presents it as an edit without raw protocol payloads", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, "show generic file edit");
+
+    const edit = await app.waitForView(() =>
+        getByRole(document.body, "group", { name: "Edit: Write /workspace/style.css" }),
+    );
+    await app.user.click(getByRole(edit, "button", { name: "Write /workspace/style.css Tool succeeded" }));
+
+    expect(edit.textContent).toContain("body { color: green; }");
+    expect(edit.textContent).not.toContain("File created successfully");
+    expect(queryByText(edit, "Request")).toBeNull();
+    expect(queryByText(edit, "Response")).toBeNull();
+});
+
 test("Given Pi reports write and edit tool results, When the user opens them, Then Chat presents their content without protocol metadata", {
     timeout: 30_000,
 }, async () => {

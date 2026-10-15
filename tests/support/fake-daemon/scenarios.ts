@@ -295,6 +295,26 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     },
                 ],
             };
+        case "show generic file edit":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        content: [
+                            {
+                                newText: "body { color: green; }\n",
+                                oldText: "",
+                                path: "/workspace/style.css",
+                                type: "diff",
+                            },
+                        ],
+                        title: "Write /workspace/style.css",
+                        output: "File created successfully at: /workspace/style.css",
+                    },
+                ],
+            };
         case "show pi file tools":
             return {
                 outcome: "complete",

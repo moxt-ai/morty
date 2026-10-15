@@ -13,6 +13,7 @@ import { matchesPatchEditToolCall, PatchEditToolCall } from "./patch-edit-tool-c
 import { matchesPathReadToolCall, PathReadToolCall } from "./path-read-tool-call.tsx";
 import { matchesPiFileToolCall, PiFileToolCall } from "./pi-file-tool-call.tsx";
 import { matchesQuestionToolCall, QuestionToolCall } from "./question-tool-call.tsx";
+import { matchesRichContentEditToolCall, RichContentEditToolCall } from "./rich-content-edit-tool-call.tsx";
 import { matchesSkillToolCall, SkillToolCall } from "./skill-tool-call.tsx";
 import type { ToolRendererProps, ToolThinkingEntry } from "./tool-renderer.ts";
 import { matchesViewImageToolCall, ViewImageToolCall } from "./view-image-tool-call.tsx";
@@ -67,6 +68,10 @@ const TOOL_RENDERERS: readonly ToolRenderer[] = [
     {
         Component: PatchEditToolCall,
         matches: matchesPatchEditToolCall,
+    },
+    {
+        Component: RichContentEditToolCall,
+        matches: matchesRichContentEditToolCall,
     },
     {
         Component: CwdShellCommandToolCall,
