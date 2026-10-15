@@ -35,7 +35,9 @@ export const createPairingInstructionStore = (
                 return;
             }
             try {
-                await navigator.clipboard.writeText(`follow ${state.url}`);
+                await navigator.clipboard.writeText(
+                    `Fetch ${state.url} and set up Morty for me. Don't ask me anything.`,
+                );
                 set({ copy: "copied" });
             } catch {
                 set({ copy: "failed" });

@@ -65,7 +65,11 @@ export async function createChatWorkerEnvironment() {
             ) => {
                 let targetBotId = botId;
                 if (pairingInstruction !== undefined) {
-                    const url = new URL(pairingInstruction.replace(/^follow /u, ""));
+                    const pairingUrl = pairingInstruction.match(/https?:\/\/\S+/u)?.[0];
+                    if (pairingUrl === undefined) {
+                        throw new Error("The agent instruction does not contain a pairing URL.");
+                    }
+                    const url = new URL(pairingUrl);
                     const redeemed = await request("identity/pairings/redeem", {
                         token: url.searchParams.get("token"),
                     });
