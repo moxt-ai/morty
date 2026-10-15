@@ -440,6 +440,9 @@ importers:
       commander:
         specifier: 15.0.0
         version: 15.0.0
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
       undici:
         specifier: 8.10.2
         version: 8.10.2
@@ -462,6 +465,9 @@ importers:
       '@types/node':
         specifier: ^24.13.5
         version: 24.13.6
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
@@ -3460,6 +3466,9 @@ packages:
 
   '@types/react@19.2.18':
     resolution: {integrity: sha512-AnzbBERsrLKtk2XSfTbYRLjQPdy116Sty4q+T+Bp3IC4l6jNBvreVPAHmpq9qhXQM7CXZPjLVmGMw9sy+hxQ3w==}
+
+  '@types/semver@7.8.0':
+    resolution: {integrity: sha512-1mAINjtQCXXeLkJ9ehXkwOcBpqtLxiVtKhpUf83DdRNdQKV0iXZpaHYqRr7nj+wvxuJzoAmAwXI+sCNMv1CzLQ==}
 
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
@@ -8696,6 +8705,8 @@ snapshots:
   '@types/react@19.2.18':
     dependencies:
       csstype: 3.2.3
+
+  '@types/semver@7.8.0': {}
 
   '@types/trusted-types@2.0.7':
     optional: true
