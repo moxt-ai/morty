@@ -1,4 +1,4 @@
-import { and, eq, gt, notExists, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, notExists, or, sql } from "drizzle-orm";
 import * as v from "valibot";
 import {
     agentPairingTicket,
@@ -38,6 +38,7 @@ export type BindingResult =
 
 export type EndRemoteAccessResult =
     | { readonly kind: "ended-credential"; readonly credentialId: string; readonly userId: string }
+    | { readonly kind: "ended-transfer"; readonly transferId: string; readonly userId: string }
     | { readonly kind: "unauthenticated" };
 
 export class IdentityStorage {
@@ -83,11 +84,13 @@ export class IdentityStorage {
             .select({ userId: anonymousCredential.userId })
             .from(anonymousCredential)
             .innerJoin(platformProjectMapping, eq(platformProjectMapping.userId, anonymousCredential.userId))
+            .leftJoin(continueLink, eq(continueLink.id, anonymousCredential.remoteTransferId))
             .where(
                 and(
                     eq(anonymousCredential.tokenHash, await digest(parsed.output)),
                     eq(anonymousCredential.status, "active"),
                     eq(platformProjectMapping.projectId, this.#projectId),
+                    or(isNull(anonymousCredential.remoteTransferId), isNull(continueLink.revokedAt)),
                 ),
             )
             .get();
@@ -146,21 +149,25 @@ export class IdentityStorage {
         const claimNonce = crypto.randomUUID();
         const credentialId = `cred_${crypto.randomUUID()}`;
         const token = `mobius_anon_v2_${randomSecret()}`;
-        const unexpiredLink = and(
-            eq(continueLink.codeHash, codeHash),
-            or(
-                gt(continueLink.expiresAt, now),
-                and(eq(continueLink.expiresAt, 0), gt(sql`${continueLink.createdAt} + ${continueLinkLifetime}`, now)),
-            ),
-        );
         const results = await database.batch([
             database
                 .update(continueLink)
                 .set({
                     claimNonce,
-                    revokedAt: null,
                 })
-                .where(unexpiredLink),
+                .where(
+                    and(
+                        eq(continueLink.codeHash, codeHash),
+                        isNull(continueLink.revokedAt),
+                        or(
+                            gt(continueLink.expiresAt, now),
+                            and(
+                                eq(continueLink.expiresAt, 0),
+                                gt(sql`${continueLink.createdAt} + ${continueLinkLifetime}`, now),
+                            ),
+                        ),
+                    ),
+                ),
             database.insert(anonymousCredential).select(
                 database
                     .select({
@@ -203,15 +210,18 @@ export class IdentityStorage {
         const credential = await database
             .select({
                 credentialId: anonymousCredential.id,
+                transferId: anonymousCredential.remoteTransferId,
                 userId: anonymousCredential.userId,
             })
             .from(anonymousCredential)
             .innerJoin(platformProjectMapping, eq(platformProjectMapping.userId, anonymousCredential.userId))
+            .leftJoin(continueLink, eq(continueLink.id, anonymousCredential.remoteTransferId))
             .where(
                 and(
                     eq(anonymousCredential.tokenHash, await digest(parsed.output)),
                     eq(anonymousCredential.status, "active"),
                     eq(platformProjectMapping.projectId, this.#projectId),
+                    or(isNull(anonymousCredential.remoteTransferId), isNull(continueLink.revokedAt)),
                 ),
             )
             .get();
@@ -219,24 +229,40 @@ export class IdentityStorage {
         if (credential === undefined) {
             return { kind: "unauthenticated" };
         }
+        if (credential.transferId === null) {
+            const revoked = await database
+                .update(anonymousCredential)
+                .set({ status: "revoked", revokedAt: now })
+                .where(
+                    and(
+                        eq(anonymousCredential.id, credential.credentialId),
+                        eq(anonymousCredential.userId, credential.userId),
+                        eq(anonymousCredential.status, "active"),
+                    ),
+                )
+                .run();
+            signal.throwIfAborted();
+            return revoked.meta.changes === 1
+                ? {
+                      kind: "ended-credential",
+                      credentialId: credential.credentialId,
+                      userId: credential.userId,
+                  }
+                : { kind: "unauthenticated" };
+        }
         const revoked = await database
             .update(anonymousCredential)
             .set({ status: "revoked", revokedAt: now })
             .where(
                 and(
-                    eq(anonymousCredential.id, credential.credentialId),
-                    eq(anonymousCredential.userId, credential.userId),
+                    eq(anonymousCredential.remoteTransferId, credential.transferId),
                     eq(anonymousCredential.status, "active"),
                 ),
             )
             .run();
         signal.throwIfAborted();
-        return revoked.meta.changes === 1
-            ? {
-                  kind: "ended-credential",
-                  credentialId: credential.credentialId,
-                  userId: credential.userId,
-              }
+        return revoked.meta.changes > 0
+            ? { kind: "ended-transfer", transferId: credential.transferId, userId: credential.userId }
             : { kind: "unauthenticated" };
     };
 

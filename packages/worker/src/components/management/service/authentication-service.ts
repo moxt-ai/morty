@@ -164,6 +164,7 @@ export class AuthenticationService {
                 event: "remote-access-ended",
                 outcome: result.kind,
                 userId: result.kind === "unauthenticated" ? undefined : result.userId,
+                transferId: result.kind === "ended-transfer" ? result.transferId : undefined,
                 credentialId: result.kind === "ended-credential" ? result.credentialId : undefined,
             },
             "Identity audit event",

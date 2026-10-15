@@ -304,7 +304,7 @@ test("Given a user with a draft Bot on a Project-scoped Platform, When setup lis
     expect(await response.json()).toEqual({ runtimes: [] });
 });
 
-test("Given an anonymous user, When one shared browser ends remote access, Then only that browser is revoked and the continue URL remains reusable until expiry", async () => {
+test("Given an anonymous user, When one shared browser ends remote access, Then every issued credential is revoked and the continue URL remains reusable until expiry", async () => {
     const environment = fixture.environment();
     const owner = await fixture.createAnonymousUser();
     const createTransfer = async () => {
@@ -359,10 +359,13 @@ test("Given an anonymous user, When one shared browser ends remote access, Then 
         environment,
     );
     expect(ended.status).toBe(204);
-    expect((await worker.fetch(accountRequest(remoteTokens[0], owner.projectId), environment)).status).toBe(401);
-    expect((await worker.fetch(accountRequest(remoteTokens[1], owner.projectId), environment)).status).toBe(200);
+    for (const token of remoteTokens) {
+        expect((await worker.fetch(accountRequest(token, owner.projectId), environment)).status).toBe(401);
+    }
     expect((await redeem(remoteTransfer.code)).status).toBe(200);
-    expect((await worker.fetch(accountRequest(remoteTokens[0], owner.projectId), environment)).status).toBe(401);
+    for (const token of remoteTokens) {
+        expect((await worker.fetch(accountRequest(token, owner.projectId), environment)).status).toBe(401);
+    }
     expect((await worker.fetch(accountRequest(recoveryToken, owner.projectId), environment)).status).toBe(200);
     expect((await worker.fetch(accountRequest(owner.token, owner.projectId), environment)).status).toBe(200);
 
