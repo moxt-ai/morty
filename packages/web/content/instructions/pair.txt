@@ -11,8 +11,8 @@ Chat origin: {{BASE_URL}}
    Keep Node, the Agent, and working directory in the same operating system. WSL is Linux;
    do not mix its executables or paths with native Windows ones.
 2. Ensure Node.js 22.13.0 or newer, npm, and the latest `@moxt-ai/mobius` are installed.
-   Choose your own harness: Codex = `codex`, Claude Code = `claude`,
-   OpenCode = `opencode`, Oh My Pi = `oh-my-pi`. Honor an explicit user choice.
+   Choose your own harness: Codex = `codex`, Claude Code = `claude`, Pi = `pi`.
+   Honor an explicit user choice.
    Complete its installation/authentication if needed; do not silently select another.
 3. Take the one-use ticket from the supplied instruction URL. Download
    {{BASE_URL}}/setup.mjs to a private temporary directory, with a finite timeout

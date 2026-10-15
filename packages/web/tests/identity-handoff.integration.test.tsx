@@ -36,7 +36,7 @@ test("Given a native session handoff, When the choice page loads, Then a QR code
 }, async () => {
     const app = await createTestApp({
         page: {
-            harness: "opencode",
+            harness: "pi",
             kind: "continue",
             sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
         },
@@ -97,7 +97,7 @@ test("Given a native session handoff, When importing fails, Then the choice page
 }, async () => {
     const app = await createTestApp({
         page: {
-            harness: "opencode",
+            harness: "pi",
             kind: "continue",
             sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
         },

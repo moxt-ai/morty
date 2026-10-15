@@ -367,7 +367,7 @@ test("Given a paired Bot, When the composer controls are visible, Then the confi
 test("Given a Bot paired with an unlisted harness, When the user opens its settings, Then a generic mark labels the harness tab without renaming it", {
     timeout: 30_000,
 }, async () => {
-    const app = await createTestApp({ connectAgent: true, agent: { id: "workbuddy", label: "WorkBuddy" } });
+    const app = await createTestApp({ connectAgent: true, agent: { id: "unlisted-agent", label: "Unlisted Agent" } });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
         (element) => element.textContent?.includes("Connected") === true,
@@ -381,7 +381,7 @@ test("Given a Bot paired with an unlisted harness, When the user opens its setti
 
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
     const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
-    const tab = getByRole(configuration, "tab", { name: "WorkBuddy" });
+    const tab = getByRole(configuration, "tab", { name: "Unlisted Agent" });
     expect(app.elementByTestId(dataTestId.harnessMark, tab).getAttribute("data-harness-product")).toBe("generic");
     expect(getAllByRole(configuration, "tab")).toHaveLength(1);
 });

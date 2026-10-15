@@ -19,18 +19,15 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
-      - name: Install real Agents and production adapter
+      - name: Install real Agents
         run: >-
           npm install --global
           @openai/codex@latest
           @anthropic-ai/claude-code@2.1.273
-          @agentclientprotocol/claude-agent-acp@0.73.0
-          opencode-ai@1.18.29
       - name: Record versions
         run: |
           codex --version
           claude --version
-          opencode --version
       - name: Verify instruction delivery and native Documents resolution
         env:
           MORTY_VERIFY_SYSTEM_DOCUMENTS: 'true'
@@ -50,6 +47,4 @@ jobs:
           tests/agents/codex-native-recovery.integration.test.ts
           tests/agents/claude-live-turn.integration.test.ts
           tests/agents/claude-native-recovery.integration.test.ts
-          tests/agents/opencode-live-turn.integration.test.ts
-          tests/agents/opencode-native-recovery.integration.test.ts
           --maxWorkers=1
