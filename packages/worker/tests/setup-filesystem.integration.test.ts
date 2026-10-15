@@ -158,7 +158,7 @@ test.runIf(process.platform !== "win32")(
         const redirectedDocuments = join(directory, "Redirected Documents & spaces");
         const configuration = join(directory, "xdg-config");
         const workspace = join(directory, "workspace");
-        await Promise.all([documents, redirectedDocuments, configuration, workspace].map((path) => mkdir(path)));
+        await Promise.all([redirectedDocuments, configuration, workspace].map((path) => mkdir(path)));
         await writeFile(join(configuration, "user-dirs.dirs"), `XDG_DOCUMENTS_DIR="${redirectedDocuments}"\n`);
         const fixture = await createIdentityFixture({ appOrigin: await localOrigin() });
         const environment = Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== "DOCUMENT_DIR"));
@@ -197,6 +197,7 @@ test.runIf(process.platform !== "win32")(
             const [code] = await exited;
             expect(code, output).toBe(1);
             expect(output).toContain('"status":"identity_ready"');
+            expect((await stat(documents)).isDirectory()).toBe(true);
             const saved: unknown = JSON.parse(await readFile(join(documents, "morty/config.json"), "utf8"));
             expect(saved).toMatchObject({ base_url: fixture.origin });
             await expect(stat(join(redirectedDocuments, "morty/config.json"))).rejects.toMatchObject({

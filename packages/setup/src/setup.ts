@@ -3,7 +3,7 @@ import { once } from "node:events";
 import { constants } from "node:fs";
 import { mkdir, open, readFile, realpath, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import { validateLocalPath } from "@moxt-ai/mobius/filesystem";
@@ -208,9 +208,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return url.origin;
     }
 
-    async function privatePath(path: string, directory: boolean) {
+    async function safeLocalPath(path: string, directory: boolean, privateAccess: boolean) {
         try {
-            await validateLocalPath(path, directory, true, signal);
+            await validateLocalPath(path, directory, privateAccess, signal);
         } catch (cause) {
             if (signal.aborted) {
                 signal.throwIfAborted();
@@ -223,12 +223,40 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function prepareDirectory(documents: string) {
-        if (!isAbsolute(text(documents))) {
+        const requested = text(documents);
+        if (!isAbsolute(requested)) {
             fail("DOCUMENT_DIR_REQUIRED");
         }
-        const directory = join(await realpath(documents), "morty");
+        const normalized = resolve(requested);
+        let resolvedDocuments: string;
+        try {
+            await safeLocalPath(normalized, true, false);
+            resolvedDocuments = await realpath(normalized);
+        } catch (cause) {
+            if (errorCode(cause) !== "ENOENT") {
+                throw cause;
+            }
+            const requestedParent = dirname(normalized);
+            await safeLocalPath(requestedParent, true, false);
+            const resolvedParent = await realpath(requestedParent);
+            await safeLocalPath(resolvedParent, true, false);
+            const creatable = join(resolvedParent, basename(normalized));
+            signal.throwIfAborted();
+            try {
+                await mkdir(creatable, { mode: 0o700 });
+            } catch (createCause) {
+                if (errorCode(createCause) !== "EEXIST") {
+                    throw createCause;
+                }
+            }
+            signal.throwIfAborted();
+            await safeLocalPath(creatable, true, false);
+            resolvedDocuments = await realpath(creatable);
+        }
+        await safeLocalPath(resolvedDocuments, true, false);
+        const directory = join(resolvedDocuments, "morty");
         await mkdir(directory, { mode: 0o700, recursive: true });
-        await privatePath(directory, true);
+        await safeLocalPath(directory, true, true);
         return directory;
     }
 
@@ -252,7 +280,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function readPrivateJson(path: string) {
-        await privatePath(path, false);
+        await safeLocalPath(path, false, true);
         return object(JSON.parse(await readFile(path, "utf8")));
     }
 
@@ -263,7 +291,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             0o600,
         );
         try {
-            await privatePath(path, false);
+            await safeLocalPath(path, false, true);
             await file.writeFile(value);
             await file.sync();
         } finally {
@@ -480,7 +508,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         );
         let child: ChildProcess | undefined;
         try {
-            await privatePath(logPath, false);
+            await safeLocalPath(logPath, false, true);
             const executable = await findExecutableOnPath("mobius", process.env);
             if (executable === null) {
                 fail("RUNTIME_NOT_INSTALLED");
@@ -781,7 +809,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const qrPath = join(tmpdir(), `morty-handoff-${crypto.randomUUID()}.png`);
         try {
             await writePrivateFile(qrPath, image);
-            await privatePath(qrPath, false);
+            await safeLocalPath(qrPath, false, true);
         } catch (cause) {
             await rm(qrPath, { force: true });
             throw cause;
