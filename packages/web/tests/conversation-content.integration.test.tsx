@@ -206,6 +206,37 @@ test("Given a file-change tool includes a rich diff, When the user views it, The
     expect(queryByText(edit, "Response")).toBeNull();
 });
 
+test("Given Pi reports write and edit tool results, When the user opens them, Then Chat presents their content without protocol metadata", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, "show pi file tools");
+
+    const write = await app.waitForView(() => getByRole(document.body, "group", { name: "Edit: write" }));
+    const edit = getByRole(document.body, "group", { name: "Edit: edit" });
+    expect(write.textContent).not.toContain("toolResult");
+    expect(edit.textContent).not.toContain("toolResult");
+
+    await app.user.click(getByRole(write, "button", { name: "write Tool succeeded" }));
+    await app.user.click(getByRole(edit, "button", { name: "edit Tool succeeded" }));
+
+    expect(write.textContent).toContain("Successfully wrote to /workspace/package.json");
+    expect(edit.textContent).toContain("const status = 'after';");
+    expect(write.textContent).not.toContain("toolCallId");
+    expect(edit.textContent).not.toContain("firstChangedLine");
+    expect(queryByText(write, "Response")).toBeNull();
+    expect(queryByText(edit, "Response")).toBeNull();
+});
+
 test("Given a changed-file summary repeats the rich diff path, When the user opens the edit, Then Chat omits the duplicate path row", {
     timeout: 30_000,
 }, async () => {

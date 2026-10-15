@@ -295,6 +295,57 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     },
                 ],
             };
+        case "show pi file tools":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        content: [],
+                        title: "write",
+                        output: JSON.stringify({
+                            role: "toolResult",
+                            toolCallId: "call_write",
+                            toolName: "write",
+                            content: [
+                                {
+                                    type: "text",
+                                    text: "Successfully wrote to /workspace/package.json",
+                                },
+                            ],
+                            isError: false,
+                            durationMs: 8,
+                            timestamp: 1_791_946_673_971,
+                        }),
+                    },
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        content: [],
+                        title: "edit",
+                        output: JSON.stringify({
+                            role: "toolResult",
+                            toolCallId: "call_edit",
+                            toolName: "edit",
+                            content: [
+                                {
+                                    type: "text",
+                                    text: "Successfully replaced 1 block(s) in /workspace/src/view.js.",
+                                },
+                            ],
+                            details: {
+                                diff: " 1 const before = true;\n-2 const status = 'before';\n+2 const status = 'after';",
+                                patch: "--- /workspace/src/view.js\n+++ /workspace/src/view.js",
+                                firstChangedLine: 2,
+                            },
+                            isError: false,
+                            durationMs: 6,
+                            timestamp: 1_791_946_727_966,
+                        }),
+                    },
+                ],
+            };
         case "change one file with a rich diff summary":
             return {
                 outcome: "complete",
