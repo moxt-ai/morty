@@ -75,6 +75,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
         const claim = await jsonRequest(origin, `/mobius/api/v1/runtime-pairings/${option("--pairing")}/redeem`, {
             body: {
                 agents: daemon.catalog,
+                installableAgents: [],
                 machineName: "Browser test Runtime",
                 pairingCode: option("--code"),
                 workspaceName: "Test project",
