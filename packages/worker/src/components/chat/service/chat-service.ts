@@ -461,6 +461,13 @@ export class ChatService {
     };
 
     readonly archiveManagedSession = async (scope: ChatScope, sessionId: string): Promise<Record<string, never>> => {
+        if (
+            !(await this.#chatSessions.ownsSession(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal))
+        ) {
+            return {};
+        }
+        const runtime = await this.localRuntime(scope);
+        await this.#platform.closeChatSession(scope.projectId, runtime.runtimeId, sessionId, scope.signal);
         await this.#chatSessions.archive(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal);
         this.#logger.info(
             {

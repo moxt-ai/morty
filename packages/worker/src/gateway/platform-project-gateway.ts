@@ -574,6 +574,16 @@ export class PlatformProjectGateway {
             120000,
         );
 
+    readonly closeChatSession = async (
+        projectId: string,
+        runtimeId: string,
+        sessionId: string,
+        signal: AbortSignal,
+    ): Promise<void> =>
+        await this.#withProject(projectId, signal, async (client) => {
+            await client.sessions.close(runtimeId, sessionId, signal);
+        });
+
     readonly nativeSessionAccess = async (
         projectId: string,
         runtimeId: string,

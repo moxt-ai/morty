@@ -240,3 +240,71 @@ test("Given an imported native session, When its owner imports it again, Then Ch
         await fixture.close();
     }
 });
+
+test("Given a managed Chat session is still running, When its owner archives it, Then Chat keeps the session because its Agent writer cannot be closed yet", async () => {
+    const fixture = await createChatFixture();
+    try {
+        const runtimeId = fixture.runtime.runtimeId;
+        expect(
+            (await fixture.request(`chat/bots/${fixture.botId}/setup`, { runtimeId, agentRef: "codex" })).status,
+        ).toBe(202);
+        const opened = await fixture.request(`chat/bots/${fixture.botId}/access`, {
+            agentRef: "codex",
+            configurations: [],
+            conversationKey: "busy-archive",
+            workspaceRef: "default",
+        });
+        const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
+        await fixture.runtime.client.turns.submitToRuntime(
+            runtimeId,
+            sessionId,
+            {
+                additionalDirectoryIds: [],
+                agentId: "codex",
+                content: "wait for steering",
+                directoryId: "default",
+                idempotencyKey: crypto.randomUUID(),
+                images: [],
+                resources: [],
+            },
+            AbortSignal.timeout(10_000),
+        );
+
+        const archived = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId });
+
+        expect(archived.status).toBe(409);
+        expect(await archived.json()).toMatchObject({ error: { code: "session_busy" } });
+        const managed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
+        expect(await managed.json()).toMatchObject({ sessions: [{ id: sessionId }] });
+    } finally {
+        await fixture.close();
+    }
+});
+
+test("Given an idle managed Chat session, When its owner archives it, Then Chat removes it after closing its Agent session", async () => {
+    const fixture = await createChatFixture();
+    try {
+        const runtimeId = fixture.runtime.runtimeId;
+        expect(
+            (await fixture.request(`chat/bots/${fixture.botId}/setup`, { runtimeId, agentRef: "codex" })).status,
+        ).toBe(202);
+        const opened = await fixture.request(`chat/bots/${fixture.botId}/access`, {
+            agentRef: "codex",
+            configurations: [],
+            conversationKey: "idle-archive",
+            workspaceRef: "default",
+        });
+        const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
+
+        const archived = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId });
+
+        expect(archived.status).toBe(200);
+        const managed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
+        expect(await managed.json()).toEqual({ sessions: [] });
+        await expect(
+            fixture.runtime.client.sessions.restore(runtimeId, sessionId, AbortSignal.timeout(10_000)),
+        ).resolves.toMatchObject({ ready: { sessionId } });
+    } finally {
+        await fixture.close();
+    }
+});
