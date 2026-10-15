@@ -169,7 +169,7 @@ test("Given connected shared Morty access, When the user refreshes Network laten
     });
 });
 
-test("Given shared Morty access, When the user chooses to end remote access from the user menu, Then they confirm the transfer-wide revocation without a recovery code", {
+test("Given shared Morty access, When the user chooses to end remote access from the user menu, Then they confirm only this browser will be signed out", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp();
@@ -184,7 +184,8 @@ test("Given shared Morty access, When the user chooses to end remote access from
 
     const dialog = await app.queryElementByTestId(dataTestId.endRemoteAccessDialog);
     expect(dialog.textContent).toContain("End remote access?");
-    expect(dialog.textContent).toContain("every browser using this access link");
+    expect(dialog.textContent).toContain("only this browser");
+    expect(dialog.textContent).toContain("sharing link remains usable until it expires");
     expect(dialog.textContent).toContain("Your local Runtime and task will keep running");
     expect(dialog.textContent).not.toContain("Back up this token");
     expect(queryByRole(dialog, "textbox", { name: "Current user token" })).toBeNull();

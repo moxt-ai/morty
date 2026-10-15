@@ -179,11 +179,7 @@ export function createAuthenticationRoutes() {
                     context.req.raw.signal,
                 );
                 if (identity === null) {
-                    throw new ManagementError(
-                        "TRANSFER_UNAVAILABLE",
-                        "This transfer link has expired or been revoked.",
-                        410,
-                    );
+                    throw new ManagementError("TRANSFER_UNAVAILABLE", "This transfer link has expired.", 410);
                 }
                 return json(identity);
             },
@@ -195,7 +191,6 @@ export function createAuthenticationRoutes() {
             );
             switch (result.kind) {
                 case "ended-credential":
-                case "ended-transfer":
                     return new Response(null, { status: 204 });
                 case "unauthenticated":
                     throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);

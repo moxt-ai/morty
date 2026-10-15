@@ -31,6 +31,7 @@ export const cloudRoutes = new Hono<CloudHttpEnvironment>()
 export const publicCloudRoutes = new Hono<{ readonly Bindings: CloudBindings }>()
     .post("/identity/anonymous-users", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .post("/identity/pairings/redeem", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .post("/identity/transfers/redeem", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .get("/projects/:projectId/session", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .get("/projects/:projectId/management/bots", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .get("/projects/:projectId/management/bots/:botId/runtime-binding", (context) =>
@@ -45,6 +46,7 @@ export const publicCloudRoutes = new Hono<{ readonly Bindings: CloudBindings }>(
     )
     .post("/projects/:projectId/identity/pairings", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .post("/projects/:projectId/identity/transfers", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .delete("/projects/:projectId/identity/remote-access", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .post("/projects/:projectId/identity/recovery-token", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .post("/chat/projects/:projectId/bots/:botId/setup", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .post("/chat/projects/:projectId/bots/:botId/setup/runtimes", (context) =>

@@ -304,11 +304,11 @@ test("Given a user with a draft Bot on a Project-scoped Platform, When setup lis
     expect(await response.json()).toEqual({ runtimes: [] });
 });
 
-test("Given an anonymous user, When machine access is shared, Then its expiring continue URL remains reusable beyond five uses and issued access remains available until revoked", async () => {
+test("Given an anonymous user, When one shared browser ends remote access, Then only that browser is revoked and the continue URL remains reusable until expiry", async () => {
     const environment = fixture.environment();
     const owner = await fixture.createAnonymousUser();
     const createTransfer = async () => {
-        const response = await worker.fetch(
+        const response = await fetchPublicApplication(
             new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/transfers`, {
                 method: "POST",
                 headers: { authorization: `Bearer ${owner.token}` },
@@ -323,7 +323,7 @@ test("Given an anonymous user, When machine access is shared, Then its expiring 
         return { ...transfer, code: new URL(transfer.url).hash.slice("#code=".length) };
     };
     const redeem = (code: string) =>
-        worker.fetch(
+        fetchPublicApplication(
             new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
                 method: "POST",
                 headers: { "content-type": "application/json" },
@@ -351,7 +351,7 @@ test("Given an anonymous user, When machine access is shared, Then its expiring 
         v.object({ token: v.pipe(v.string(), v.startsWith("mobius_recovery_v1.")) }),
         await recoveryResponse.json(),
     ).token;
-    const ended = await worker.fetch(
+    const ended = await fetchPublicApplication(
         new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/remote-access`, {
             method: "DELETE",
             headers: { authorization: `Bearer ${remoteTokens[0]}` },
@@ -359,10 +359,9 @@ test("Given an anonymous user, When machine access is shared, Then its expiring 
         environment,
     );
     expect(ended.status).toBe(204);
-    for (const token of remoteTokens) {
-        expect((await worker.fetch(accountRequest(token, owner.projectId), environment)).status).toBe(401);
-    }
-    expect((await redeem(remoteTransfer.code)).status).toBe(410);
+    expect((await worker.fetch(accountRequest(remoteTokens[0], owner.projectId), environment)).status).toBe(401);
+    expect((await worker.fetch(accountRequest(remoteTokens[1], owner.projectId), environment)).status).toBe(200);
+    expect((await redeem(remoteTransfer.code)).status).toBe(200);
     expect((await worker.fetch(accountRequest(recoveryToken, owner.projectId), environment)).status).toBe(200);
     expect((await worker.fetch(accountRequest(owner.token, owner.projectId), environment)).status).toBe(200);
 
