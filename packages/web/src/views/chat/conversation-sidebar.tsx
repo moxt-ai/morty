@@ -437,7 +437,7 @@ export function ConversationSidebar({
                                                 }
                                             }}
                                         >
-                                            Archive session
+                                            Close session
                                         </ContextMenu.Item>
                                     </ContextMenu.Content>
                                 </ContextMenu.Portal>

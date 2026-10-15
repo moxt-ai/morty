@@ -137,6 +137,34 @@ test("Given a completed turn, When the user leaves and reopens it, Then daemon h
     expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull();
 });
 
+test("Given a saved Session, When the user opens its context menu, Then the Session can be closed", {
+    timeout: 30_000,
+}, async () => {
+    const prompt = "Show the close Session action";
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, prompt);
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    const conversation = await app.queryElementByTestId(
+        dataTestId.managedConversation,
+        (element) => element.textContent?.includes(prompt) === true,
+    );
+
+    await app.user.pointer({ keys: "[MouseRight]", target: conversation });
+
+    await app.waitForView(() => {
+        expect(queryByRole(document.body, "menuitem", { name: "Close session" })).not.toBeNull();
+        expect(queryByRole(document.body, "menuitem", { name: "Archive session" })).toBeNull();
+    });
+});
+
 test("Given a named conversation, When the user opens it, Then the Session title heads the conversation", {
     timeout: 30_000,
 }, async () => {
