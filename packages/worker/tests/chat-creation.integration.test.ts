@@ -241,7 +241,7 @@ test("Given an imported native session, When its owner imports it again, Then Ch
     }
 });
 
-test("Given a managed Chat session is still running, When its owner archives it, Then Chat keeps the session because its Agent writer cannot be closed yet", async () => {
+test("Given a managed Chat session is still running, When its owner archives it, Then Chat stops the Agent process and removes the session", async () => {
     const fixture = await createChatFixture();
     try {
         const runtimeId = fixture.runtime.runtimeId;
@@ -272,10 +272,9 @@ test("Given a managed Chat session is still running, When its owner archives it,
 
         const archived = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId });
 
-        expect(archived.status).toBe(409);
-        expect(await archived.json()).toMatchObject({ error: { code: "session_busy" } });
+        expect(archived.status).toBe(200);
         const managed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
-        expect(await managed.json()).toMatchObject({ sessions: [{ id: sessionId }] });
+        expect(await managed.json()).toEqual({ sessions: [] });
     } finally {
         await fixture.close();
     }
