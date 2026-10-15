@@ -80,6 +80,9 @@ test("Given setup and pairing documents, When users fetch them from configured a
     expect(documents.get("setup")).toContain("--session-id <exact-current-session-id>");
     expect(documents.get("setup")).toContain("--harness <own-harness-id>");
     expect(documents.get("setup")).toContain("Never guess");
+    expect(documents.get("setup")).toContain("current user's `~/Documents` directory");
+    expect(documents.get("setup")).toContain("Do not ask the user for a Documents path");
+    expect(documents.get("setup")).not.toContain("On `DOCUMENT_DIR_REQUIRED`, ask");
 
     for (const origin of ["https://custom.example", "http://localhost:5173"]) {
         for (const name of ["setup", "pair"]) {
