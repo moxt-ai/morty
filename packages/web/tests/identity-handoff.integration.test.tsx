@@ -148,6 +148,7 @@ test("Given connected shared Morty access, When the user refreshes Network laten
 
     const dialog = getByRole(document.body, "dialog", { name: "Network latency" });
     await app.waitForView(() => {
+        expect(dialog.textContent).toContain("Mobius location: Western North America");
         expect(dialog.textContent).toContain("Browser ↔ Morty");
         expect(dialog.textContent).toContain("Browser ↔ Mobius");
         expect(dialog.textContent).toContain("Morty ↔ Mobius");

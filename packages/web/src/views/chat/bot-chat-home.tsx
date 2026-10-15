@@ -276,6 +276,7 @@ export function BotChatHome({
                     activeId={activeConversationId}
                     directoryRevision={model.directoryRevision}
                     optimisticTitles={model.optimisticTitles}
+                    projectId={projectId}
                     bots={model.bots}
                     botOperation={model.botOperation}
                     connectionStatus={connectionStatus}

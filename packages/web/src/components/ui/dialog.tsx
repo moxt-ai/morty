@@ -14,7 +14,7 @@ export function Dialog({
     children,
 }: {
     readonly title: string;
-    readonly description: string;
+    readonly description: ReactNode;
     readonly onClose: () => void;
     readonly busy?: boolean;
     readonly wide?: boolean;

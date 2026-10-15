@@ -3,20 +3,20 @@ import { useStore } from "zustand";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { DataRegion } from "../../services/identity/anonymous-identity-api.ts";
-import { createDataRegionStore } from "../../view-models/chat/data-region-store.ts";
+import { createDataRegionStore, dataRegionLabel } from "../../view-models/chat/data-region-store.ts";
 
-const locations: readonly { readonly label: string; readonly value: DataRegion }[] = [
-    { label: "Western North America", value: "wnam" },
-    { label: "Eastern North America", value: "enam" },
-    { label: "South America", value: "sam" },
-    { label: "Western Europe", value: "weur" },
-    { label: "Eastern Europe", value: "eeur" },
-    { label: "Asia Pacific", value: "apac" },
-    { label: "Northeast Asia", value: "apac-ne" },
-    { label: "Southeast Asia", value: "apac-se" },
-    { label: "Oceania", value: "oc" },
-    { label: "Africa", value: "afr" },
-    { label: "Middle East", value: "me" },
+const locations: readonly DataRegion[] = [
+    "wnam",
+    "enam",
+    "sam",
+    "weur",
+    "eeur",
+    "apac",
+    "apac-ne",
+    "apac-se",
+    "oc",
+    "afr",
+    "me",
 ];
 
 export function DataRegionSelector({
@@ -51,14 +51,14 @@ export function DataRegionSelector({
                 disabled={replacement.kind === "replacing"}
                 value={location}
                 onValueChange={(value) => {
-                    const selected = locations.find((option) => option.value === value);
+                    const selected = locations.find((option) => option === value);
                     if (selected === undefined) {
                         return;
                     }
                     operation.current?.abort();
                     const controller = new AbortController();
                     operation.current = controller;
-                    void select(selected.value, controller.signal);
+                    void select(selected, controller.signal);
                 }}
             >
                 <SelectTrigger id="data-region" className="w-full" data-testid={dataTestId.dataRegion}>
@@ -66,8 +66,8 @@ export function DataRegionSelector({
                 </SelectTrigger>
                 <SelectContent>
                     {locations.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                            {option.label}
+                        <SelectItem key={option} value={option}>
+                            {dataRegionLabel(option)}
                         </SelectItem>
                     ))}
                 </SelectContent>
