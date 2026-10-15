@@ -58,7 +58,7 @@ export function PairingInstruction({
                         disabled={disabled}
                         readOnly
                         rows={3}
-                        value={`Fetch ${state.url} and set up Morty for me. Don't ask me anything.`}
+                        value={state.instruction}
                         onFocus={(event) => event.currentTarget.select()}
                         className="min-w-0 flex-1 resize-none rounded-lg border border-border bg-muted/30 p-3 font-mono text-[11px] leading-4 outline-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-ring"
                     />
