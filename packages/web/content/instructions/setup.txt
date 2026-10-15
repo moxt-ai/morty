@@ -27,10 +27,9 @@ Chat origin: {{BASE_URL}}
 node <downloaded-setup.mjs> setup --base-url {{BASE_URL}} --cwd <absolute-current-working-directory> --harness <own-harness-id> --session-id <exact-current-session-id>
 ```
 
-Set `DOCUMENT_DIR` to the current user's `~/Documents` directory using the current
-shell's native syntax, expanding it to an absolute path before running the command.
-Do not ask the user for a Documents path or use a repository as a substitute. The
-script protects its configuration using the operating system's filesystem permissions.
+The script stores its configuration under the current user's `~/Documents` directory
+and protects it using the operating system's filesystem permissions. Do not use a
+repository as a substitute.
 The script reuses the saved identity and Machine for this origin, reconnects an
 active managed connection when possible, and otherwise pairs a new Runtime.
 Mobius owns Runtime connection state and identifiers; do not save or back them up yourself.

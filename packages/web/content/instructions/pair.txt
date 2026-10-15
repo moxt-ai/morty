@@ -26,10 +26,9 @@ Chat origin: {{BASE_URL}}
 node <downloaded-setup.mjs> pair --base-url {{BASE_URL}} --cwd <absolute-current-working-directory> --token=<one-use-ticket> --harness <own-harness-id>
 ```
 
-The script resolves Documents and protects its configuration using the operating
-system's filesystem permissions. Preserve `DOCUMENT_DIR` if supplied; otherwise
-leave it unset. On `DOCUMENT_DIR_REQUIRED`, ask for an existing absolute Documents
-path and retry with that environment variable. Do not use a repository as a substitute.
+The script stores its configuration under the current user's `~/Documents` directory
+and protects it using the operating system's filesystem permissions. Do not use a
+repository as a substitute.
 Pair always redeems its ticket and creates a fresh Runtime for that ticket's
 Project and Machine; an expired or consumed ticket needs a new web instruction.
 Mobius owns Runtime connection state and identifiers. Do not replace other

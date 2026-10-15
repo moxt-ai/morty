@@ -2,7 +2,7 @@ import { execFile, spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -149,16 +149,17 @@ test("Given a junction replaces the private Morty directory, When setup validate
     }
 });
 
-test.runIf(process.platform === "linux")(
-    "Given Linux has a configured XDG Documents folder and no DOCUMENT_DIR override, When a user runs the setup CLI, Then identity is saved in that folder and cancellation releases setup",
+test.runIf(process.platform !== "win32")(
+    "Given HOME and a redirected XDG Documents folder with no override, When a user runs the setup CLI, Then identity is saved under HOME/Documents and cancellation releases setup",
     { timeout: 30000 },
     async () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-setup-xdg-"));
-        const documents = join(directory, "Redirected Documents & spaces");
+        const documents = join(directory, "Documents");
+        const redirectedDocuments = join(directory, "Redirected Documents & spaces");
         const configuration = join(directory, "xdg-config");
         const workspace = join(directory, "workspace");
-        await Promise.all([documents, configuration, workspace].map((path) => mkdir(path)));
-        await writeFile(join(configuration, "user-dirs.dirs"), `XDG_DOCUMENTS_DIR="${documents}"\n`);
+        await Promise.all([documents, redirectedDocuments, configuration, workspace].map((path) => mkdir(path)));
+        await writeFile(join(configuration, "user-dirs.dirs"), `XDG_DOCUMENTS_DIR="${redirectedDocuments}"\n`);
         const fixture = await createIdentityFixture({ appOrigin: await localOrigin() });
         const environment = Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== "DOCUMENT_DIR"));
         const child = spawn(
@@ -198,6 +199,9 @@ test.runIf(process.platform === "linux")(
             expect(output).toContain('"status":"identity_ready"');
             const saved: unknown = JSON.parse(await readFile(join(documents, "morty/config.json"), "utf8"));
             expect(saved).toMatchObject({ base_url: fixture.origin });
+            await expect(stat(join(redirectedDocuments, "morty/config.json"))).rejects.toMatchObject({
+                code: "ENOENT",
+            });
             expect(output).toContain('"code":"CANCELLED"');
         } finally {
             child.kill();
@@ -208,20 +212,12 @@ test.runIf(process.platform === "linux")(
 );
 
 test.runIf(process.env["MORTY_VERIFY_SYSTEM_DOCUMENTS"] === "true" && process.platform === "darwin")(
-    "Given macOS provides its Documents folder and DOCUMENT_DIR is unset, When setup connects and the user cancels, Then the private identity is saved in the system Documents folder",
+    "Given DOCUMENT_DIR is unset on macOS, When setup connects and the user cancels, Then the private identity is saved under ~/Documents",
     async () => {
         if (process.env["CI"] !== "true" || process.env["DOCUMENT_DIR"] !== undefined) {
             throw new Error("System Documents verification requires an isolated CI runner without DOCUMENT_DIR");
         }
-        const { stdout } = await promisify(execFile)(
-            "/usr/bin/osascript",
-            ["-e", "POSIX path of (path to documents folder)"],
-            {
-                timeout: 10000,
-                signal: AbortSignal.timeout(10000),
-            },
-        );
-        const documents = stdout.trim();
+        const documents = join(homedir(), "Documents");
         const configuration = join(documents, "morty");
         try {
             await stat(configuration);

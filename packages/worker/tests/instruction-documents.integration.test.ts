@@ -68,7 +68,8 @@ test("Given setup and pairing documents, When users fetch them from configured a
         expect(document).toContain("Chat origin: https://chat.example");
         expect(document).toContain("https://chat.example/setup.mjs");
         expect(document).not.toContain("/setup-help/");
-        expect(document).toContain("DOCUMENT_DIR");
+        expect(document).toContain("`~/Documents`");
+        expect(document).not.toContain("DOCUMENT_DIR");
         expect(document).not.toContain("```powershell");
         expect(document).not.toContain("```sh");
         expect(document.length).toBeLessThan(4000);
@@ -80,9 +81,6 @@ test("Given setup and pairing documents, When users fetch them from configured a
     expect(documents.get("setup")).toContain("--session-id <exact-current-session-id>");
     expect(documents.get("setup")).toContain("--harness <own-harness-id>");
     expect(documents.get("setup")).toContain("Never guess");
-    expect(documents.get("setup")).toContain("current user's `~/Documents` directory");
-    expect(documents.get("setup")).toContain("Do not ask the user for a Documents path");
-    expect(documents.get("setup")).not.toContain("On `DOCUMENT_DIR_REQUIRED`, ask");
 
     for (const origin of ["https://custom.example", "http://localhost:5173"]) {
         for (const name of ["setup", "pair"]) {
