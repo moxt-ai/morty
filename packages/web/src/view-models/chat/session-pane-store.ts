@@ -762,6 +762,12 @@ export function createSessionPaneModel(options: {
                                 sessionIdentity,
                                 signal,
                             );
+                            // Reconciliation may abandon this speculative read when the
+                            // subscription tears down; keep its aborted rejection awaited.
+                            void executionPromise.then(
+                                () => undefined,
+                                () => undefined,
+                            );
                             await dispatchProjection({ kind: "reconcile" }, connected, signal);
                             signal.throwIfAborted();
                             const execution = await executionPromise;
