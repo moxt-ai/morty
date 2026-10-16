@@ -47,9 +47,6 @@ export async function createTestRuntime(harness: E2EHarness) {
             },
             failure: runtime.failure,
             continueReply: runtime.continueReply,
-            pairWithInstallingAgent: runtime.pairWithInstallingAgent,
-            pairWithStalledInstallingAgent: runtime.pairWithStalledInstallingAgent,
-            setupElapsedMilliseconds: () => setupClockTime - setupClockStart,
             page,
             openChat,
             createPairInstruction: async () => text((await chat.createAgentPairing()).url, "pair instruction URL"),
@@ -135,7 +132,6 @@ export async function createTestRuntime(harness: E2EHarness) {
                             ) {
                                 throw new Error("Controlled setup exceeded its deterministic wait limit");
                             }
-                            await runtime.advanceInstallation(signal);
                         },
                     },
                     runtime,

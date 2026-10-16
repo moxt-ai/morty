@@ -5,6 +5,19 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
+test("Given Morty has no paired agent, When the connect dialog opens, Then the pairing instruction is a read-only multiline field with an icon refresh control", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp();
+    const pairing = await app.queryElementByTestId(dataTestId.pairingInstruction);
+    const refresh = getByRole(document.body, "button", { name: "Refresh pairing instruction" });
+
+    expect(pairing).toBeInstanceOf(HTMLTextAreaElement);
+    expect(pairing).toHaveProperty("readOnly", true);
+    expect(pairing.getAttribute("rows")).toBe("3");
+    expect(refresh.textContent).toBe("");
+});
+
 test("Given a selected Machine, When a user opens its settings and renames it, Then the new name is visible in the selector", {
     timeout: 30_000,
 }, async () => {
@@ -47,7 +60,7 @@ test("Given an existing Machine, When the user opens another agent instruction a
     for (const leave of ["close", "reload"] as const) {
         await app.user.click(await app.queryElementByTestId(dataTestId.botMenuTrigger));
         await app.user.click(getByRole(document.body, "button", { name: "Connect another agent" }));
-        expect(await app.queryElementByTestId(dataTestId.pairingInstruction)).toBeInstanceOf(HTMLInputElement);
+        expect(await app.queryElementByTestId(dataTestId.pairingInstruction)).toBeInstanceOf(HTMLTextAreaElement);
         expect(queryByRole(document.body, "textbox", { name: "Machine name" })).toBeNull();
         expect(queryByRole(document.body, "textbox", { name: "Connection name" })).toBeNull();
         if (leave === "reload") {
@@ -80,7 +93,7 @@ test("Given an additional-agent instruction, When the agent redeems it and conne
     await app.user.click(await app.queryElementByTestId(dataTestId.botMenuTrigger));
     await app.user.click(getByRole(document.body, "button", { name: "Connect another agent" }));
     const instruction = await app.queryElementByTestId(dataTestId.pairingInstruction);
-    if (!(instruction instanceof HTMLInputElement)) {
+    if (!(instruction instanceof HTMLTextAreaElement)) {
         throw new Error("Expected the pairing instruction");
     }
     await app.connectAgent({ id: "codex", label: "Codex" }, undefined, instruction.value);
@@ -105,7 +118,7 @@ test("Given Morty has no paired agent, When its data region is changing, Then it
     const pairing = await app.queryElementByTestId(dataTestId.pairingInstruction);
     const copy = getByRole(document.body, "button", { name: "Copy pairing instruction" });
     const region = getByRole(document.body, "combobox", { name: "Data region" });
-    if (!(pairing instanceof HTMLInputElement) || !(copy instanceof HTMLButtonElement)) {
+    if (!(pairing instanceof HTMLTextAreaElement) || !(copy instanceof HTMLButtonElement)) {
         throw new Error("Expected pairing instruction controls");
     }
     expect(pairing.disabled).toBe(false);
@@ -354,7 +367,7 @@ test("Given a paired Bot, When the composer controls are visible, Then the confi
 test("Given a Bot paired with an unlisted harness, When the user opens its settings, Then a generic mark labels the harness tab without renaming it", {
     timeout: 30_000,
 }, async () => {
-    const app = await createTestApp({ connectAgent: true, agent: { id: "workbuddy", label: "WorkBuddy" } });
+    const app = await createTestApp({ connectAgent: true, agent: { id: "unlisted-agent", label: "Unlisted Agent" } });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
         (element) => element.textContent?.includes("Connected") === true,
@@ -368,7 +381,7 @@ test("Given a Bot paired with an unlisted harness, When the user opens its setti
 
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
     const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
-    const tab = getByRole(configuration, "tab", { name: "WorkBuddy" });
+    const tab = getByRole(configuration, "tab", { name: "Unlisted Agent" });
     expect(app.elementByTestId(dataTestId.harnessMark, tab).getAttribute("data-harness-product")).toBe("generic");
     expect(getAllByRole(configuration, "tab")).toHaveLength(1);
 });

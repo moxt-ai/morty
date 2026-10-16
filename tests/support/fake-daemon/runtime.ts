@@ -102,7 +102,6 @@ export async function connectControlledAgentRuntime(options: {
             relayUrl,
         },
         harness.agents,
-        [],
         new DaemonLocalContext(directory, process.env),
     );
     const engine = new MobiusRuntimeEngine(config, {

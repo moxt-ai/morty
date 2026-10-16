@@ -78,6 +78,45 @@ test("Given the agent sends separate adjacent messages, When the user reads the 
     });
 });
 
+test("Given an open code block, When the agent appends code, Then the visible block updates before the response completes", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected a controlled Agent Runtime");
+    }
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, "hold after first delta");
+    await app.waitForView(() => expect(document.body.textContent).toContain("Partial reply"));
+    await daemon.continueReply("hold after first delta", {
+        outcome: "hold",
+        output: [{ kind: "text", text: "\n\n```typescript\n" }],
+    });
+    await app.waitForView(() => expect(getByRole(document.body, "button", { name: "Copy code" })).toBeDefined());
+
+    await daemon.continueReply("hold after first delta", {
+        outcome: "hold",
+        output: [{ kind: "text", text: 'const answer = 42;\nconst label = "complete";\n' }],
+    });
+
+    await app.waitForView(() => expect(document.body.textContent).toContain("const answer = 42;"));
+    expect(document.body.textContent).toContain('const label = "complete";');
+    expect(getByRole(document.body, "button", { name: "Stop agent output" })).toBeDefined();
+
+    await daemon.continueReply("hold after first delta", {
+        outcome: "complete",
+        output: [{ kind: "text", text: "```\n" }],
+    });
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    expect(document.body.textContent).toContain("const answer = 42;");
+    expect(document.body.textContent).toContain('const label = "complete";');
+});
+
 test("Given the agent sends separate reasoning messages, When the user reads the intermediate steps, Then they form paragraphs in one thinking block", {
     timeout: 30_000,
 }, async () => {
@@ -380,6 +419,8 @@ test("Given a response links to a TypeScript file, When the user opens it, Then 
         throw new Error("Expected the message composer");
     }
     await sendPrompt(app, composer, "show source file");
+    await app.queryElementByTestId(dataTestId.localFileLink);
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
     await app.user.click(await app.queryElementByTestId(dataTestId.localFileLink));
     const preview = await app.queryElementByTestId(dataTestId.filePreview);
     const content = await app.queryElementByTestId(dataTestId.filePreviewContent);

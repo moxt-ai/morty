@@ -26,9 +26,6 @@ export class ControlledSetupRuntime implements SetupRuntime {
     readonly failure = this.#failed.promise;
 
     readonly #options: ControlledAgentBehavior;
-    #pairWithInstallingAgent = false;
-    #installationAdvances = true;
-    #pendingConnection: Connection | null = null;
     constructor(options: ControlledAgentBehavior) {
         this.#options = options;
         // The fixture races failures against the browser scenario; retain early failures too.
@@ -75,20 +72,10 @@ export class ControlledSetupRuntime implements SetupRuntime {
         }
         const origin = option("--url");
         const daemon = createMortyFakeDaemon(this.#options);
-        const pairWithInstallingAgent = this.#pairWithInstallingAgent;
-        this.#pairWithInstallingAgent = false;
         const claim = await jsonRequest(origin, `/mobius/api/v1/runtime-pairings/${option("--pairing")}/redeem`, {
             body: {
-                agents: pairWithInstallingAgent ? [] : daemon.catalog,
-                installableAgents: pairWithInstallingAgent
-                    ? daemon.catalog.map((agent) => ({
-                          agentPath: `/controlled/${agent.id}`,
-                          agentVersion: "1.0.0",
-                          id: agent.id,
-                          label: agent.label,
-                          status: "integration_not_installed",
-                      }))
-                    : [],
+                agents: daemon.catalog,
+                installableAgents: [],
                 machineName: "Browser test Runtime",
                 pairingCode: option("--code"),
                 workspaceName: "Test project",
@@ -104,31 +91,8 @@ export class ControlledSetupRuntime implements SetupRuntime {
             origin,
         };
         this.#saved.set(connection.connection_id, connection);
-        if (pairWithInstallingAgent) {
-            this.#pendingConnection = connection;
-            return result;
-        }
         await this.#connect(connection, signal);
         return result;
-    };
-
-    readonly pairWithInstallingAgent = (): void => {
-        this.#pairWithInstallingAgent = true;
-        this.#installationAdvances = true;
-    };
-
-    readonly pairWithStalledInstallingAgent = (): void => {
-        this.#pairWithInstallingAgent = true;
-        this.#installationAdvances = false;
-    };
-
-    readonly advanceInstallation = async (signal: AbortSignal): Promise<void> => {
-        const connection = this.#pendingConnection;
-        if (connection === null || !this.#installationAdvances) {
-            return;
-        }
-        this.#pendingConnection = null;
-        await this.#connect(connection, signal);
     };
 
     async #connect(connection: Connection, signal: AbortSignal): Promise<void> {

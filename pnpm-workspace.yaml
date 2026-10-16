@@ -45,6 +45,7 @@ catalog:
   katex: 0.16.47
   knip: ^6.32.2
   lucide-react: 1.42.0
+  marked: 18.1.1
   miniflare: 5.20260903.0-alpha
   pino: ^10.3.1
   playwright-core: ^1.63.0
@@ -55,7 +56,7 @@ catalog:
   react-dom: 19.2.8
   simple-git-hooks: ^2.13.1
   shiki: 3.23.0
-  streamdown: 2.6.0
+  streamdown: 2.7.0
   tailwind-merge: ^3.6.0
   tailwindcss: 4.3.3
   typescript: ^7.0.2

@@ -24,6 +24,7 @@ import type { ManagedBot } from "../../services/management/management-api.ts";
 import type { BotConnectionStatus, BotOperation } from "../../view-models/chat/bot-chat-home-store.ts";
 import { createConversationDirectoryStore } from "../../view-models/chat/conversation-directory-store.ts";
 import type { ConversationListStatus } from "../../view-models/chat/conversation-status-store.ts";
+import { projectLocationLabel } from "../../view-models/chat/data-region-store.ts";
 import { createNetworkDiagnosticStore } from "../../view-models/chat/network-diagnostic-store.ts";
 import { createRemoteAccessStore } from "../../view-models/chat/remote-access-store.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
@@ -128,6 +129,7 @@ export function ConversationSidebar({
     sessionStatuses,
     directoryRevision,
     optimisticTitles,
+    projectId,
 }: {
     readonly activeBot: ManagedBot;
     readonly bots: readonly ManagedBot[];
@@ -152,6 +154,7 @@ export function ConversationSidebar({
     readonly activeId: string;
     readonly directoryRevision: number;
     readonly optimisticTitles: ReadonlyMap<string, string>;
+    readonly projectId: string;
     readonly onOpen: (session: ManagedChatSession) => void;
     readonly onOpenSession: (session: OpenMobiusSession) => void;
     readonly onNewConversation: () => void;
@@ -434,7 +437,7 @@ export function ConversationSidebar({
                                                 }
                                             }}
                                         >
-                                            Archive session
+                                            Close session
                                         </ContextMenu.Item>
                                     </ContextMenu.Content>
                                 </ContextMenu.Portal>
@@ -534,7 +537,14 @@ export function ConversationSidebar({
             {diagnostic.state.kind !== "closed" && (
                 <Dialog
                     title="Network latency"
-                    description="Round-trip latency for this browser and its connected Runtime."
+                    description={
+                        <>
+                            <span className="block">
+                                Round-trip latency for this browser and its connected Runtime.
+                            </span>
+                            <span className="mt-1 block">Mobius location: {projectLocationLabel(projectId)}</span>
+                        </>
+                    }
                     headerAction={
                         <Button
                             aria-label="Refresh network latency"

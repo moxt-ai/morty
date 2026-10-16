@@ -155,7 +155,7 @@ function parseArguments(argv) {
 
 async function localLaunch(command, args) {
     const { executableLaunch, findExecutableOnPath, resolveExecutablePath } = await import(
-        pathToFileURL(path.join(MOBIUS_ROOT, "packages/cli/src/process/executable.ts")).href
+        pathToFileURL(path.join(MOBIUS_ROOT, "packages/cli/src/util/process/executable.ts")).href
     );
     const executable = path.isAbsolute(command)
         ? await resolveExecutablePath(command)
@@ -652,7 +652,7 @@ async function pair(options) {
         `#!/usr/bin/env node
 const { spawnSync } = require("node:child_process");
 const args = process.argv.slice(2);
-const result = spawnSync(process.execPath, [${JSON.stringify(path.join(MOBIUS_ROOT, "packages/cli/src/cli.ts"))}, ...args], {
+const result = spawnSync(process.execPath, [${JSON.stringify(path.join(MOBIUS_ROOT, "packages/cli/src/entrypoint/cli.ts"))}, ...args], {
     stdio: "inherit",
 });
 process.exit(result.status ?? 1);
@@ -717,7 +717,7 @@ process.exit(result.status ?? 1);
     try {
         await run(
             process.execPath,
-            [path.join(MOBIUS_ROOT, "packages/cli/src/cli.ts"), "pair", "list", `--output-json=${pairList}`],
+            [path.join(MOBIUS_ROOT, "packages/cli/src/entrypoint/cli.ts"), "pair", "list", `--output-json=${pairList}`],
             { env: { MOBIUS_STATE_DIRECTORY: mobiusStateDirectory } },
         );
         const listed = JSON.parse(fs.readFileSync(pairList, "utf8"));
@@ -878,7 +878,7 @@ async function stopRecorded(stack) {
                 await run(
                     process.execPath,
                     [
-                        path.join(MOBIUS_ROOT, "packages/cli/src/cli.ts"),
+                        path.join(MOBIUS_ROOT, "packages/cli/src/entrypoint/cli.ts"),
                         "pair",
                         "stop",
                         "--connection",

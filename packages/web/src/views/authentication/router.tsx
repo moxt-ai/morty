@@ -71,7 +71,7 @@ function ContinuePage() {
     }, [redeem, state.kind]);
     return (
         <Page navigation={qrCodeUrl === null ? undefined : <ContinueQrButton url={qrCodeUrl} />}>
-            <div className="mx-auto flex w-full max-w-4xl items-center justify-center gap-8">
+            <div className="mx-auto flex w-full max-w-4xl items-start justify-center gap-8">
                 {qrCodeUrl === null ? null : <ContinueQrPanel url={qrCodeUrl} />}
                 <section className="min-w-0 max-w-xl flex-1 rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
                     <h1 className="text-2xl font-semibold">

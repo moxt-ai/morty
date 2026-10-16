@@ -195,6 +195,15 @@ export class ManagementService {
         );
     };
 
+    readonly redeemTransfer = async (code: string, signal: AbortSignal) => {
+        const identity = await this.#authentication.redeemTransfer(code, signal);
+        if (identity === null) {
+            return null;
+        }
+        const bot = await this.provisionUserBot(identity.userId, undefined, signal);
+        return { ...identity, botId: bot.botId };
+    };
+
     readonly redeemAgentPairing = async (token: string, signal: AbortSignal) => {
         const identity = await this.#authentication.redeemPairing(token, signal);
         if (identity === null) {

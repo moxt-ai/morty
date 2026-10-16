@@ -1,4 +1,4 @@
-import { Copy } from "lucide-react";
+import { Copy, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
@@ -52,14 +52,15 @@ export function PairingInstruction({
         <div className="mt-5 space-y-3">
             <div className="flex items-center gap-2">
                 {state.kind === "ready" ? (
-                    <input
+                    <textarea
                         aria-label="Agent pairing instruction"
                         data-testid={dataTestId.pairingInstruction}
                         disabled={disabled}
                         readOnly
-                        value={`follow ${state.url}`}
+                        rows={3}
+                        value={state.instruction}
                         onFocus={(event) => event.currentTarget.select()}
-                        className="min-w-0 flex-1 rounded-lg border border-border bg-muted/30 p-3 font-mono text-xs outline-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-ring"
+                        className="min-w-0 flex-1 resize-none rounded-lg border border-border bg-muted/30 p-3 font-mono text-[11px] leading-4 outline-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-ring"
                     />
                 ) : (
                     <p role="status" className="flex-1">
@@ -88,21 +89,26 @@ export function PairingInstruction({
                     <Copy aria-hidden="true" className="size-4" />
                 </Button>
             </div>
-            {state.kind === "ready" && (
-                <p className="text-xs text-muted-foreground">
-                    One-time instruction. Expires {new Date(state.expiresAt).toLocaleString()}. Return to this page
-                    after your agent connects.
-                </p>
-            )}
-            <button
-                type="button"
-                className="cursor-pointer rounded-sm text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                title="Get a fresh pairing token"
-                disabled={state.kind === "loading"}
-                onClick={() => refresh((value) => value + 1)}
-            >
-                Refresh pairing instruction
-            </button>
+            <div className="flex items-start gap-2">
+                {state.kind === "ready" && (
+                    <p className="flex-1 text-xs text-muted-foreground">
+                        One-time instruction. Expires {new Date(state.expiresAt).toLocaleString()}. Return to this page
+                        after your agent connects.
+                    </p>
+                )}
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="ml-auto"
+                    aria-label="Refresh pairing instruction"
+                    title="Get a fresh pairing token"
+                    disabled={state.kind === "loading"}
+                    onClick={() => refresh((value) => value + 1)}
+                >
+                    <RefreshCw aria-hidden="true" className="size-4" />
+                </Button>
+            </div>
         </div>
     );
 }

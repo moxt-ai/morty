@@ -5,7 +5,7 @@ import { formatError } from "../format-error.ts";
 
 type PairingInstructionState =
     | { readonly kind: "loading" }
-    | { readonly kind: "ready"; readonly url: string; readonly expiresAt: string }
+    | { readonly kind: "ready"; readonly instruction: string; readonly expiresAt: string }
     | { readonly kind: "paired"; readonly bot: ManagedBot }
     | { readonly kind: "failed"; readonly message: string };
 
@@ -36,7 +36,7 @@ export const createPairingInstructionStore = (
                 return;
             }
             try {
-                await navigator.clipboard.writeText(`follow ${state.url}`);
+                await navigator.clipboard.writeText(state.instruction);
                 set({ copy: "copied" });
             } catch {
                 set({ copy: "failed" });
@@ -47,7 +47,13 @@ export const createPairingInstructionStore = (
             try {
                 const ticket = await requests.createPairingInstruction(botId, signal);
                 signal.throwIfAborted();
-                set({ state: { kind: "ready", ...ticket } });
+                set({
+                    state: {
+                        kind: "ready",
+                        expiresAt: ticket.expiresAt,
+                        instruction: `Fetch ${ticket.url} and set up Morty for me. Don't ask me anything.`,
+                    },
+                });
                 if (botId === null) {
                     const bot = await requests.waitForPairedBot(ticket.botId, signal);
                     signal.throwIfAborted();

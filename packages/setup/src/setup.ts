@@ -85,10 +85,6 @@ interface PairIdentity {
 
 type PreparedIdentity = SetupIdentity | PairIdentity;
 
-type HarnessReadinessWait = { readonly kind: "pairing" } | { readonly kind: "installing"; readonly deadline: number };
-
-const HARNESS_INSTALL_TIMEOUT_MILLISECONDS = 60_000;
-
 type Options =
     | {
           readonly mode: "pair";
@@ -671,7 +667,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const runtimeId = runtime.runtimeId;
         let attempts = 0;
         if (runtime.kind === "pairing") {
-            let readiness: HarnessReadinessWait = { kind: "pairing" };
             while (true) {
                 signal.throwIfAborted();
                 const status = await request(context, `/management/runtime-pairings/${runtime.pairingId}`);
@@ -693,23 +688,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                         emit({ status: "runtime_paired", runtimeId, harness });
                         break;
                     }
-                    if (!status.installableAgents.some((agent) => object(agent).id === harness)) {
-                        emit({
-                            status: "harness_unavailable",
-                            harness,
-                            available: status.agents.map((agent) => identifier(object(agent).id)),
-                        });
-                        fail("HARNESS_UNAVAILABLE");
-                    }
-                    if (readiness.kind === "pairing") {
-                        readiness = {
-                            kind: "installing",
-                            deadline: clock.now().getTime() + HARNESS_INSTALL_TIMEOUT_MILLISECONDS,
-                        };
-                        progress("runtime", `Waiting for ${harness} to finish installing.`);
-                    } else if (clock.now().getTime() >= readiness.deadline) {
-                        fail("HARNESS_INSTALL_TIMEOUT");
-                    }
+                    emit({
+                        status: "harness_unavailable",
+                        harness,
+                        available: status.agents.map((agent) => identifier(object(agent).id)),
+                    });
+                    fail("HARNESS_UNAVAILABLE");
                 }
                 await clock.wait(1000, signal);
             }

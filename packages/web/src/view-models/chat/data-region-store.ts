@@ -41,6 +41,37 @@ function dataRegionFromProjectId(projectId: string): DataRegion {
     }
 }
 
+export function projectLocationLabel(projectId: string): string {
+    return dataRegionLabel(dataRegionFromProjectId(projectId));
+}
+
+export function dataRegionLabel(dataRegion: DataRegion): string {
+    switch (dataRegion) {
+        case "wnam":
+            return "Western North America";
+        case "enam":
+            return "Eastern North America";
+        case "sam":
+            return "South America";
+        case "weur":
+            return "Western Europe";
+        case "eeur":
+            return "Eastern Europe";
+        case "apac":
+            return "Asia Pacific";
+        case "apac-ne":
+            return "Northeast Asia";
+        case "apac-se":
+            return "Southeast Asia";
+        case "oc":
+            return "Oceania";
+        case "afr":
+            return "Africa";
+        case "me":
+            return "Middle East";
+    }
+}
+
 export const createDataRegionStore = (
     projectId: string,
     replaceIdentity: (location: DataRegion, signal: AbortSignal) => Promise<void>,

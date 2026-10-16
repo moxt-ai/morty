@@ -36,7 +36,7 @@ test("Given a native session handoff, When the choice page loads, Then a QR code
 }, async () => {
     const app = await createTestApp({
         page: {
-            harness: "opencode",
+            harness: "pi",
             kind: "continue",
             sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
         },
@@ -97,7 +97,7 @@ test("Given a native session handoff, When importing fails, Then the choice page
 }, async () => {
     const app = await createTestApp({
         page: {
-            harness: "opencode",
+            harness: "pi",
             kind: "continue",
             sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
         },
@@ -172,6 +172,7 @@ test("Given connected shared Morty access, When the user refreshes Network laten
 
     const dialog = getByRole(document.body, "dialog", { name: "Network latency" });
     await app.waitForView(() => {
+        expect(dialog.textContent).toContain("Mobius location: Western North America");
         expect(dialog.textContent).toContain("Browser ↔ Morty");
         expect(dialog.textContent).toContain("Browser ↔ Mobius");
         expect(dialog.textContent).toContain("Morty ↔ Mobius");

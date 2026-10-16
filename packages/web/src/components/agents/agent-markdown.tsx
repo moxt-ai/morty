@@ -1,4 +1,5 @@
-import { defaultRemarkPlugins, type MathPlugin, Streamdown } from "streamdown";
+import { Lexer } from "marked";
+import { defaultRemarkPlugins, type MathPlugin, parseMarkdownIntoBlocks, Streamdown } from "streamdown";
 import { isDisplayableImageType } from "../../services/chat/image-media-type.ts";
 import "streamdown/styles.css";
 import { type ComponentProps, lazy, Suspense, useEffect, useMemo, useState } from "react";
@@ -19,6 +20,12 @@ const STREAMDOWN_TRANSLATIONS = Object.freeze({ copyCode: "Copy code" });
 const LOCAL_FILE_URL_ORIGIN = "https://local-file.morty.invalid";
 const LATEX_DELIMITER_PATTERN = /(^|[^\\$])(?:\$\$[\s\S]+?\$\$|\$(?!\$)[^\n$]+\$)/u;
 export const MAX_MARKDOWN_CHARACTERS = 32 * 1024;
+
+function parseStreamingMarkdownIntoBlocks(markdown: string): string[] {
+    const lexer = new Lexer({ gfm: true });
+    lexer.blockTokens(markdown);
+    return Object.keys(lexer.tokens.links).length > 0 ? [markdown] : parseMarkdownIntoBlocks(markdown);
+}
 
 const AgentMarkdownWithLatex = lazy(() =>
     import("./agent-markdown-with-latex.tsx").catch(() => ({ default: AgentMarkdownContent })),
@@ -287,7 +294,8 @@ export function AgentMarkdownContent({
             controls={STREAMDOWN_CONTROLS}
             isAnimating={streaming}
             lineNumbers={false}
-            mode="static"
+            mode={streaming ? "streaming" : "static"}
+            parseMarkdownIntoBlocksFn={parseStreamingMarkdownIntoBlocks}
             plugins={plugins}
             remarkPlugins={remarkPlugins}
             translations={STREAMDOWN_TRANSLATIONS}
