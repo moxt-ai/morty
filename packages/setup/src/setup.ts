@@ -677,11 +677,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     progress("runtime", "Waiting for Runtime pairing to complete.");
                 }
                 if (status.status === "paired") {
-                    if (
-                        status.runtimeId !== runtimeId ||
-                        !Array.isArray(status.agents) ||
-                        !Array.isArray(status.installableAgents)
-                    ) {
+                    if (status.runtimeId !== runtimeId || !Array.isArray(status.agents)) {
                         fail("INVALID_RESPONSE");
                     }
                     if (status.agents.some((agent) => object(agent).id === harness)) {
