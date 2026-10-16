@@ -57,6 +57,30 @@ test("Given a native session handoff, When the choice page loads, Then a QR code
     expect(dialogQrCode.getAttribute("src")).toBe(qrCode.getAttribute("src"));
 });
 
+test("Given a native session handoff, When the Continue page loads and the user reloads, Then the address keeps the transfer code and the native session choices remain", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({
+        page: {
+            harness: "pi",
+            kind: "continue",
+            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
+        },
+    });
+    await vi.waitFor(() => getByRole(document.body, "button", { name: "Import session" }));
+
+    expect(window.location.hash).toMatch(/^#code=\S+$/u);
+
+    app.remount();
+
+    expect(await vi.waitFor(() => getByRole(document.body, "button", { name: "Import session" }))).toBeInstanceOf(
+        HTMLButtonElement,
+    );
+    expect(window.location.hash).toMatch(/^#code=\S+$/u);
+    expect(getByRole(document.body, "heading", { name: "Continue native session" })).toBeInstanceOf(HTMLElement);
+    expect(queryByRole(document.body, "alert")).toBeNull();
+});
+
 test("Given a new browser, When Morty loads, Then Morty opens without presenting a workspace concept", {
     timeout: 30_000,
 }, async () => {

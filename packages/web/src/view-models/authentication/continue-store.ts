@@ -55,7 +55,6 @@ function initialState(): ContinueState {
     const query = new URLSearchParams(window.location.search);
     const harness = query.get("harness");
     const sessionId = query.get("sessionId");
-    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
     if (
         code === null ||
         code.length === 0 ||
