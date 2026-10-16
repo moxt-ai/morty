@@ -1,3 +1,4 @@
+import { type Identifier, isIdentifier } from "@moxt-ai/mobius-protocol";
 import * as v from "valibot";
 import {
     anonymousCredentialEntry,
@@ -16,11 +17,22 @@ const recoveryTokenSchema = v.pipe(
     v.regex(/^mobius_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43}$/u),
 );
 const projectIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u));
+const botIdSchema = v.custom<Identifier>(isIdentifier);
 const projectScopeSchema = v.object({
     userId: v.string(),
     projectId: projectIdSchema,
 });
-const identitySchema = v.pipe(v.object({ token: tokenSchema, ...projectScopeSchema.entries }), v.readonly());
+const identityFields = { token: tokenSchema, botId: botIdSchema, ...projectScopeSchema.entries };
+const identitySchema = v.pipe(v.object(identityFields), v.readonly());
+/** Response of creating an anonymous user, whose Bot is nested under `bot`. */
+const createdIdentitySchema = v.pipe(
+    v.object({
+        token: tokenSchema,
+        bot: v.pipe(v.object({ botId: botIdSchema }), v.readonly()),
+        ...projectScopeSchema.entries,
+    }),
+    v.readonly(),
+);
 
 /** Stored key name for the anonymous credential, shared with browser tests. */
 export const ANONYMOUS_CREDENTIAL_KEY_NAME = anonymousCredentialEntry.key;
@@ -89,8 +101,7 @@ export class AnonymousIdentityApi {
         if (existing !== null) {
             return existing;
         }
-        const created = v.parse(
-            identitySchema,
+        const created = this.#createdIdentity(
             await this.#request("/identity/anonymous-users", { method: "POST" }, requestSignal),
         );
         const concurrent = centralLocalStorage.read(anonymousCredentialEntry);
@@ -110,8 +121,7 @@ export class AnonymousIdentityApi {
         locationHint: DataRegion,
         requestSignal: AbortSignal,
     ): Promise<AnonymousIdentity> => {
-        const created = v.parse(
-            identitySchema,
+        const created = this.#createdIdentity(
             await this.#request(
                 "/identity/anonymous-users",
                 {
@@ -179,29 +189,23 @@ export class AnonymousIdentityApi {
         return result.token;
     };
 
-    readonly resolveIdentity = async (token: string, signal: AbortSignal): Promise<AnonymousIdentity> => {
-        const parsedToken = v.safeParse(recoveryTokenSchema, token);
-        if (!parsedToken.success) {
-            throw new Error("Enter a valid recovery token.");
-        }
-        const projectPart = parsedToken.output.split(".")[1];
-        const parsedProjectId = v.parse(projectIdSchema, projectPart);
-        const session = await this.#anonymousSession(
-            { token: parsedToken.output, projectId: parsedProjectId, userId: "" },
-            signal,
-        );
-        if (session === null) {
-            throw new Error("This user token is invalid or no longer active.");
-        }
-        return { token: parsedToken.output, projectId: parsedProjectId, userId: session.userId };
-    };
-
     readonly saveIdentity = (identity: AnonymousIdentity): void =>
         this.#saveIdentity(v.parse(identitySchema, identity));
 
     readonly #saveIdentity = (identity: AnonymousIdentity) => {
         centralLocalStorage.write(anonymousCredentialEntry, identity);
         centralLocalStorage.write(projectScopeEntry, { userId: identity.userId, projectId: identity.projectId });
+    };
+
+    /** Maps the nested `bot` of an anonymous-user creation response onto the identity. */
+    readonly #createdIdentity = (response: unknown): AnonymousIdentity => {
+        const created = v.parse(createdIdentitySchema, response);
+        return {
+            botId: created.bot.botId,
+            projectId: created.projectId,
+            token: created.token,
+            userId: created.userId,
+        };
     };
 
     readonly #anonymousSession = async (
