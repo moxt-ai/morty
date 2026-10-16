@@ -1,10 +1,8 @@
 import { isIdentifier } from "@moxt-ai/mobius-protocol";
 import { createStore } from "zustand/vanilla";
-import { createSelectedBotPreference } from "@/services/bots/selected-bot-preference";
 import { BotChatApi } from "@/services/chat/bot-chat-api";
 import { recordBrowserError, registerDaemonDiagnostics } from "@/services/diagnostics/browser-diagnostics";
 import { AnonymousIdentityApi, hasStoredAnonymousCredential } from "@/services/identity/anonymous-identity-api";
-import { ManagementApi } from "@/services/management/management-api";
 import { formatError } from "@/view-models/format-error";
 
 export type NativeSessionImportAvailability =
@@ -147,19 +145,6 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     window.location.replace("/");
                     return;
                 }
-                const management = new ManagementApi({
-                    fetchRequest,
-                    origin: window.location.origin,
-                    projectId: identity.projectId,
-                    getToken: async () => identity.token,
-                });
-                operation = "bots";
-                const bots = await management.listBots(signal);
-                const preferredBot = createSelectedBotPreference(identity.projectId).read();
-                const bot = bots.find((candidate) => candidate.botId === preferredBot) ?? bots[0];
-                if (bot === undefined) {
-                    throw new Error("Your Machine is unavailable.");
-                }
                 const chat = new BotChatApi({
                     fetchRequest,
                     origin: window.location.origin,
@@ -173,14 +158,14 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     },
                 });
                 releaseDiagnostics = registerDaemonDiagnostics({
-                    botId: bot.botId,
+                    botId: identity.botId,
                     sessionId: null,
                     nativeSessionId: state.handoff.sessionId,
-                    read: (parent) => chat.daemonDiagnostics(bot.botId, parent),
+                    read: (parent) => chat.daemonDiagnostics(identity.botId, parent),
                 });
                 operation = "continue-native-session";
                 const session = await chat.continueNativeSession(
-                    bot.botId,
+                    identity.botId,
                     state.handoff.harness,
                     state.handoff.sessionId,
                     choice,

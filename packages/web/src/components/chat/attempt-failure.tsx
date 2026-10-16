@@ -27,10 +27,10 @@ export function AttemptFailure({
             {code.length > 0 && <p className="mt-2 font-mono text-xs text-muted-foreground">{code}</p>}
             {command.length > 0 && (
                 <div className="mt-4 border-t border-destructive/20 pt-4">
-                    <p>Run this command in a terminal on your Machine:</p>
+                    <p>Run this command in a terminal on your computer:</p>
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                         <input
-                            aria-label="Machine approval command"
+                            aria-label="Agent approval command"
                             className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             onFocus={(event) => event.currentTarget.select()}
                             readOnly
@@ -60,7 +60,7 @@ export function AttemptFailure({
                     <p className="mt-2 text-xs text-muted-foreground" role="status">
                         {copy === "failed"
                             ? "Select the command above and copy it manually."
-                            : "After approval, resend your message here. Your Machine and this session stay the same."}
+                            : "After approval, resend your message here. Your agent and this session stay the same."}
                     </p>
                 </div>
             )}

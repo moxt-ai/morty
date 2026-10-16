@@ -4,29 +4,19 @@ import { createApplicationRouter } from "../../index.ts";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import { createAnonymousSessionStore } from "../../view-models/authentication/anonymous-session-store.ts";
 import { App } from "../application/app.tsx";
-import { MobiusManagement, userBotConnection } from "../applications/mobius-management.tsx";
+import { MobiusManagement } from "../applications/mobius-management.tsx";
 import { type ActiveIdentity, ActiveIdentityProvider } from "./identity-context.tsx";
 import { router as continuationRouter } from "./router.tsx";
 
-type MortyApplicationProps = {
+export function MortyApplication(props: {
     readonly activeIdentity: ActiveIdentity;
     readonly authorize: (signal: AbortSignal) => Promise<void>;
-    readonly userId: string;
-};
-
-export function MortyApplication(props: MortyApplicationProps) {
-    const transport = useApiTransport();
-    const { activeIdentity, authorize, userId } = props;
+}) {
+    const { activeIdentity, authorize } = props;
     const router = useMemo(() => {
         const Standard = ({ children }: { readonly children: ReactNode }) => <>{children}</>;
-        return createApplicationRouter(
-            authorize,
-            userId,
-            MobiusManagement,
-            userBotConnection(userId, activeIdentity.projectId, activeIdentity.getToken, transport.fetch),
-            { Application: Standard, Standard },
-        );
-    }, [activeIdentity, authorize, transport.fetch, userId]);
+        return createApplicationRouter(authorize, MobiusManagement, { Application: Standard, Standard });
+    }, [authorize]);
     return (
         <ActiveIdentityProvider value={activeIdentity}>
             <App state={{ kind: "signed-in", router }} />
@@ -57,11 +47,12 @@ export function SessionApplication() {
         return <App state={{ kind: "failed" }} />;
     }
     const activeIdentity: ActiveIdentity = {
+        botId: state.identity.botId,
         getToken: async (signal) => {
             signal.throwIfAborted();
             return state.identity.token;
         },
         projectId: state.identity.projectId,
     };
-    return <MortyApplication activeIdentity={activeIdentity} userId={state.identity.userId} authorize={authorize} />;
+    return <MortyApplication activeIdentity={activeIdentity} authorize={authorize} />;
 }

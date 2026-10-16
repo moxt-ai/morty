@@ -356,7 +356,7 @@ export function createSessionPaneModel(options: {
                 : [
                       {
                           mimeType: "text/plain",
-                          name: "Machine instructions",
+                          name: "Agent instructions",
                           text: session.instructions ?? "",
                           type: "embedded" as const,
                           uri: instructionUri,

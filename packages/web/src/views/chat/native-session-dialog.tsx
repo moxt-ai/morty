@@ -116,7 +116,7 @@ export function NativeSessionDialog({
                             disabled={model.operation !== "idle"}
                             options={model.agents.map((agent) => ({
                                 value: `${agent.runtimeId}:${agent.agentRef}`,
-                                label: `${agent.label} · ${agent.machineName}`,
+                                label: agent.label,
                             }))}
                             onValueChange={store.getState().selectAgent}
                         />

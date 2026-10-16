@@ -37,7 +37,12 @@ export async function createChatWorkerEnvironment() {
             throw new Error(`Could not create an anonymous Morty identity: ${identityResponse.status}`);
         }
         const identity = v.parse(
-            v.object({ token: v.string(), userId: v.string(), projectId: v.string() }),
+            v.object({
+                token: v.string(),
+                userId: v.string(),
+                projectId: v.string(),
+                bot: v.object({ botId: v.string() }),
+            }),
             await identityResponse.json(),
         );
         const request = async (path: string, body?: object, method = body === undefined ? "GET" : "POST") =>
@@ -49,11 +54,7 @@ export async function createChatWorkerEnvironment() {
                 },
                 ...(body === undefined ? {} : { body: JSON.stringify(body) }),
             });
-        const bots = v.parse(
-            v.object({ bots: v.array(v.object({ botId: v.string() })) }),
-            await (await request(`projects/${identity.projectId}/management/bots`)).json(),
-        );
-        const botId = v.parse(v.string(), bots.bots[0]?.botId);
+        const botId = identity.bot.botId;
         const transport = new WebSocketApiTransport(origin);
         transport.open();
         return {
@@ -84,7 +85,7 @@ export async function createChatWorkerEnvironment() {
                     agentRef: agent.id,
                 });
                 if (setup.status !== 202) {
-                    throw new Error(`Could not prepare the test Machine: ${setup.status} ${await setup.text()}`);
+                    throw new Error(`Could not prepare the test Runtime: ${setup.status} ${await setup.text()}`);
                 }
                 return {
                     failure: runtime.failure,
@@ -104,6 +105,7 @@ export async function createChatWorkerEnvironment() {
                 return v.parse(v.object({ url: v.string() }), await response.json()).url;
             },
             identity: {
+                botId,
                 getToken: async (signal: AbortSignal): Promise<string> => {
                     signal.throwIfAborted();
                     return identity.token;

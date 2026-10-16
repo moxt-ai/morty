@@ -1,13 +1,11 @@
 import { isIdentifier } from "@moxt-ai/mobius-protocol";
 import { createStore } from "zustand/vanilla";
-import type { SelectedBotPreference } from "../../services/bots/selected-bot-preference.ts";
 import type {
     BotChatApi,
     BotRuntimeConfiguration,
     ChatAccess,
     ChatDraftConfiguration,
 } from "../../services/chat/bot-chat-api.ts";
-import type { ManagedBot } from "../../services/management/management-api.ts";
 import { CloudApiError, isRuntimeConnectionFailure } from "../../services/management/management-api.ts";
 import {
     centralSessionStorage,
@@ -25,14 +23,18 @@ import { createConversationSessionStore } from "./conversation-session-store.ts"
 
 export type SetupReason = "unconfigured" | "agent-missing" | "runtime-offline" | "agent-required";
 
-type ActiveView = { readonly kind: "active"; readonly bot: ManagedBot };
+/**
+ * A page serves exactly one Bot: the one provisioned with the active
+ * identity. Views carry its identifier; the Bot has no user-facing name.
+ */
+type BotView = { readonly botId: string };
 export type BotChatHomeView =
     | { readonly kind: "loading" }
-    | { readonly kind: "connecting"; readonly bot: ManagedBot }
-    | ActiveView
-    | { readonly kind: "setup"; readonly bot: ManagedBot; readonly reason: SetupReason }
-    | { readonly kind: "runtime-disconnected"; readonly bot: ManagedBot; readonly message: string }
-    | { readonly kind: "connection-failed"; readonly bot: ManagedBot; readonly message: string }
+    | ({ readonly kind: "connecting" } & BotView)
+    | ({ readonly kind: "active" } & BotView)
+    | ({ readonly kind: "setup"; readonly reason: SetupReason } & BotView)
+    | ({ readonly kind: "runtime-disconnected"; readonly message: string } & BotView)
+    | ({ readonly kind: "connection-failed"; readonly message: string } & BotView)
     | { readonly kind: "failed"; readonly message: string };
 
 export type BotConnectionStatus =
@@ -40,11 +42,6 @@ export type BotConnectionStatus =
     | { readonly kind: "connected"; readonly label: "Connected" }
     | { readonly kind: "unpaired"; readonly label: "Disconnected" }
     | { readonly kind: "disconnected"; readonly label: "Disconnected" };
-export type BotOperation =
-    | { readonly kind: "idle" }
-    | { readonly kind: "renaming" }
-    | { readonly kind: "removing" }
-    | { readonly kind: "failed"; readonly message: string };
 
 export type DisconnectedBotNotice =
     | { readonly kind: "hidden" }
@@ -63,16 +60,16 @@ export function disconnectedBotNotice(
         case "connection-failed":
             return {
                 kind: "visible",
-                title: "Your Machine is disconnected",
-                description: "Start your local Runtime to reconnect this Machine and use its Sessions.",
+                title: "Your agent is disconnected",
+                description: "Start your local agent to reconnect it and use its sessions.",
             };
         case "setup":
             return view.reason === "unconfigured"
                 ? { kind: "hidden" }
                 : {
                       kind: "visible",
-                      title: "Your Machine is disconnected",
-                      description: "Start your local Runtime to reconnect this Machine and use its Sessions.",
+                      title: "Your agent is disconnected",
+                      description: "Start your local agent to reconnect it and use its sessions.",
                   };
         case "loading":
         case "connecting":
@@ -95,8 +92,6 @@ export interface BotChatNavigation {
 }
 
 export interface BotChatHomeStore {
-    readonly bots: readonly ManagedBot[];
-    readonly botOperation: BotOperation;
     readonly view: BotChatHomeView;
     readonly connectionStatus: BotConnectionStatus;
     readonly selection: ConversationSelectionState;
@@ -107,11 +102,6 @@ export interface BotChatHomeStore {
     readonly draftSettings: ChatDraftConfiguration | null;
     readonly optimisticTitles: ReadonlyMap<string, string>;
     readonly load: (signal: AbortSignal) => Promise<void>;
-    readonly selectBot: (botId: string) => void;
-    readonly selectPairedBot: (bot: ManagedBot) => void;
-    readonly renameBot: (displayName: string, signal: AbortSignal) => Promise<boolean>;
-    readonly removeBot: (signal: AbortSignal) => Promise<boolean>;
-    readonly resetBotOperation: () => void;
     readonly newConversation: () => void;
     readonly openManaged: (isExternal: boolean, id: string) => void;
     readonly retry: () => void;
@@ -155,33 +145,6 @@ function setupReason(configuration: BotRuntimeConfiguration): SetupReason | null
     return configuration.runtime.online ? null : "runtime-offline";
 }
 
-export function setupDescription(reason: SetupReason): string {
-    switch (reason) {
-        case "unconfigured":
-            return "Morty is ready. Paste this instruction into your local agent to connect it.";
-        case "agent-missing":
-            return "The connected Runtime no longer reports any agents. Start the paired Runtime, or use the instruction below to pair it again.";
-        case "runtime-offline":
-            return "The connected Runtime is offline. Start the paired Runtime and check its internet connection, or use the instruction below to pair it again.";
-        case "agent-required":
-            return "Morty could not connect Chat to an available agent. Check that your local agent is running, or use the instruction below to pair it again.";
-    }
-}
-
-function replaceViewBot(view: BotChatHomeView, bot: ManagedBot): BotChatHomeView {
-    switch (view.kind) {
-        case "connecting":
-        case "active":
-        case "setup":
-        case "runtime-disconnected":
-        case "connection-failed":
-            return view.bot.botId === bot.botId ? { ...view, bot } : view;
-        case "loading":
-        case "failed":
-            return view;
-    }
-}
-
 export const createBotChatHomeStore = (
     requests: Pick<
         BotChatApi,
@@ -189,28 +152,24 @@ export const createBotChatHomeStore = (
         | "conversationSession"
         | "continueNativeSession"
         | "createConversation"
-        | "deleteBot"
-        | "listBots"
         | "managedSession"
         | "readBot"
-        | "updateBot"
         | "waitForSetupChange"
         | "waitForRuntimeConfigurationChange"
         | "runtimeConfiguration"
         | "directory"
     >,
     options: {
+        readonly botId: string;
         readonly url: string;
         readonly createId: () => string;
         readonly navigation: BotChatNavigation;
-        readonly selectedBotPreference: SelectedBotPreference;
     },
 ) => {
+    const botId = options.botId;
     const conversations = createConversationSessionStore(requests);
     const selection = initialSelection(options.url, options.createId);
     return createStore<BotChatHomeStore>()((set, get) => ({
-        bots: [],
-        botOperation: { kind: "idle" },
         view: { kind: "loading" },
         connectionStatus: { kind: "connecting", label: "Connecting" },
         selection,
@@ -221,12 +180,12 @@ export const createBotChatHomeStore = (
         draftSettings: null,
         optimisticTitles: new Map(),
         load: async (signal) => {
-            set((current) => ({ view: "bot" in current.view ? current.view : { kind: "loading" } }));
-            let openedBot: ManagedBot | null = null;
-            const watchRuntimeConfigurationChanges = async (bot: ManagedBot): Promise<void> => {
+            set((current) => ({ view: "botId" in current.view ? current.view : { kind: "loading" } }));
+            let opened = false;
+            const watchRuntimeConfigurationChanges = async (): Promise<void> => {
                 while (true) {
                     try {
-                        await requests.waitForRuntimeConfigurationChange(bot.botId, signal);
+                        await requests.waitForRuntimeConfigurationChange(botId, signal);
                     } catch (cause) {
                         if (cause instanceof DOMException && cause.name === "TimeoutError") {
                             continue;
@@ -234,7 +193,7 @@ export const createBotChatHomeStore = (
                         throw cause;
                     }
                     signal.throwIfAborted();
-                    const changedConfiguration = await requests.runtimeConfiguration(bot.botId, signal);
+                    const changedConfiguration = await requests.runtimeConfiguration(botId, signal);
                     signal.throwIfAborted();
                     const changedReason = setupReason(changedConfiguration);
                     set((current) =>
@@ -243,8 +202,8 @@ export const createBotChatHomeStore = (
                                   connectionStatus: runtimeConnectionStatus(changedConfiguration),
                                   view:
                                       changedReason === null
-                                          ? { kind: "active", bot }
-                                          : { kind: "setup", bot, reason: changedReason },
+                                          ? { kind: "active", botId }
+                                          : { kind: "setup", botId, reason: changedReason },
                               }
                             : { connectionStatus: runtimeConnectionStatus(changedConfiguration) },
                     );
@@ -257,10 +216,9 @@ export const createBotChatHomeStore = (
                     current.selection.kind === "loading" &&
                     current.selection.target.kind === "session"
                 ) {
-                    const bot = current.view.bot;
                     const target = current.selection.target;
-                    openedBot = bot;
-                    const session = await requests.managedSession(bot.botId, target.sessionId, signal);
+                    opened = true;
+                    const session = await requests.managedSession(botId, target.sessionId, signal);
                     signal.throwIfAborted();
                     set((state) => ({
                         selection: transitionConversationSelection(state.selection, {
@@ -269,27 +227,21 @@ export const createBotChatHomeStore = (
                             target,
                         }),
                     }));
-                    await watchRuntimeConfigurationChanges(bot);
+                    await watchRuntimeConfigurationChanges();
                     return;
                 }
-                const bots = await requests.listBots(signal);
-                const preferredBotId = options.selectedBotPreference.read();
-                const bot = bots.find((candidate) => candidate.botId === preferredBotId) ?? bots[0];
-                if (bot === undefined) {
-                    throw new Error("Your Machine is unavailable.");
-                }
-                options.selectedBotPreference.write(bot.botId);
-                openedBot = bot;
-                set({
-                    bots,
-                    ...(get().selection.kind === "draft"
-                        ? { draft: centralSessionStorage.read(newConversationDraftEntry(bot.botId)) ?? "" }
-                        : {}),
-                });
-                if (get().view.kind === "loading") {
-                    set({ view: { kind: "connecting", bot } });
-                }
-                const detail = await requests.readBot(bot.botId, signal);
+                set((current) =>
+                    current.view.kind === "loading"
+                        ? {
+                              view: { kind: "connecting", botId },
+                              ...(current.selection.kind === "draft"
+                                  ? { draft: centralSessionStorage.read(newConversationDraftEntry(botId)) ?? "" }
+                                  : {}),
+                          }
+                        : current,
+                );
+                opened = true;
+                const detail = await requests.readBot(botId, signal);
                 signal.throwIfAborted();
                 if (!detail.configured) {
                     set((current) => ({
@@ -298,13 +250,13 @@ export const createBotChatHomeStore = (
                             current.selection.kind === "loading"
                                 ? transitionConversationSelection(current.selection, {
                                       kind: "session-load-failed",
-                                      message: "Connect your local agent to load this Session.",
+                                      message: "Connect your local agent to load this session.",
                                       target: current.selection.target,
                                   })
                                 : current.selection,
-                        view: { kind: "setup", bot, reason: "unconfigured" },
+                        view: { kind: "setup", botId, reason: "unconfigured" },
                     }));
-                    await requests.waitForSetupChange(bot.botId, signal);
+                    await requests.waitForSetupChange(botId, signal);
                     signal.throwIfAborted();
                     set((current) => ({
                         selection: transitionConversationSelection(current.selection, { kind: "retry-requested" }),
@@ -312,14 +264,14 @@ export const createBotChatHomeStore = (
                     }));
                     return;
                 }
-                const configuration = await requests.runtimeConfiguration(bot.botId, signal);
+                const configuration = await requests.runtimeConfiguration(botId, signal);
                 signal.throwIfAborted();
                 set({ connectionStatus: runtimeConnectionStatus(configuration) });
                 const currentSelection = get().selection;
                 const currentTarget = currentSelection.kind === "draft" ? null : currentSelection.target;
                 if (currentTarget?.kind === "continue") {
                     const session = await requests.continueNativeSession(
-                        bot.botId,
+                        botId,
                         currentTarget.harness,
                         currentTarget.sessionId,
                         currentTarget.action,
@@ -328,58 +280,62 @@ export const createBotChatHomeStore = (
                     signal.throwIfAborted();
                     options.navigation.showContinuedSession(session.result.ready.sessionId);
                     set({
-                        view: { kind: "active", bot },
+                        view: { kind: "active", botId },
                         selection: transitionConversationSelection(get().selection, {
                             kind: "continued-session-loaded",
                             session,
                             target: currentTarget,
                         }),
                     });
-                    await watchRuntimeConfigurationChanges(bot);
+                    await watchRuntimeConfigurationChanges();
                     return;
                 }
                 if (currentTarget?.kind === "session") {
-                    const session = await requests.managedSession(bot.botId, currentTarget.sessionId, signal);
+                    const session = await requests.managedSession(botId, currentTarget.sessionId, signal);
                     signal.throwIfAborted();
                     set((current) => ({
-                        view: { kind: "active", bot },
+                        view: { kind: "active", botId },
                         selection: transitionConversationSelection(current.selection, {
                             kind: "session-loaded",
                             session,
                             target: currentTarget,
                         }),
                     }));
-                    await watchRuntimeConfigurationChanges(bot);
+                    await watchRuntimeConfigurationChanges();
                     return;
                 }
                 const reason = currentTarget === null ? setupReason(configuration) : null;
                 if (reason !== null) {
-                    set({ view: { kind: "setup", bot, reason } });
-                    await watchRuntimeConfigurationChanges(bot);
+                    set({ view: { kind: "setup", botId, reason } });
+                    await watchRuntimeConfigurationChanges();
                     return;
                 }
                 if (currentTarget === null) {
-                    set({ view: { kind: "active", bot } });
-                    await watchRuntimeConfigurationChanges(bot);
+                    set({ view: { kind: "active", botId } });
+                    await watchRuntimeConfigurationChanges();
                     return;
                 }
-                await conversations.getState().open(bot.botId, currentTarget.conversationId, signal);
-                const opened = conversations.getState().state;
-                if (opened.kind !== "ready") {
-                    if (opened.kind === "failed" && opened.code !== null) {
-                        throw new CloudApiError(opened.code, opened.message);
+                await conversations.getState().open(botId, currentTarget.conversationId, signal);
+                const openedConversation = conversations.getState().state;
+                if (openedConversation.kind !== "ready") {
+                    if (openedConversation.kind === "failed" && openedConversation.code !== null) {
+                        throw new CloudApiError(openedConversation.code, openedConversation.message);
                     }
-                    throw new Error(opened.kind === "failed" ? opened.message : "The Session could not be opened.");
+                    throw new Error(
+                        openedConversation.kind === "failed"
+                            ? openedConversation.message
+                            : "The Session could not be opened.",
+                    );
                 }
                 set((current) => ({
-                    view: { kind: "active", bot },
+                    view: { kind: "active", botId },
                     selection: transitionConversationSelection(current.selection, {
                         kind: "session-loaded",
-                        session: opened.session,
+                        session: openedConversation.session,
                         target: currentTarget,
                     }),
                 }));
-                await watchRuntimeConfigurationChanges(bot);
+                await watchRuntimeConfigurationChanges();
             } catch (cause) {
                 if (signal.aborted) {
                     return;
@@ -398,18 +354,11 @@ export const createBotChatHomeStore = (
                                   target: currentSelection.target,
                               })
                             : currentSelection;
-                    if (openedBot === null) {
-                        set({
-                            selection: failedSelection,
-                            view: { kind: "failed", message: "Your Machine is unavailable." },
-                        });
-                        return;
-                    }
                     set({
                         selection: failedSelection,
-                        view: { kind: "setup", bot: openedBot, reason: "agent-required" },
+                        view: { kind: "setup", botId, reason: "agent-required" },
                     });
-                    await requests.waitForRuntimeConfigurationChange(openedBot.botId, signal);
+                    await requests.waitForRuntimeConfigurationChange(botId, signal);
                     signal.throwIfAborted();
                     set((current) => ({
                         selection: transitionConversationSelection(current.selection, { kind: "retry-requested" }),
@@ -427,25 +376,24 @@ export const createBotChatHomeStore = (
                             message,
                             target: failedSelection.target,
                         }),
-                        view:
-                            openedBot === null
-                                ? { kind: "failed", message }
-                                : runtimeFailure
-                                  ? { kind: "runtime-disconnected", bot: openedBot, message }
-                                  : { kind: "active", bot: openedBot },
+                        view: opened
+                            ? runtimeFailure
+                                ? { kind: "runtime-disconnected", botId, message }
+                                : { kind: "active", botId }
+                            : { kind: "failed", message },
                         ...(runtimeFailure
                             ? { connectionStatus: { kind: "disconnected" as const, label: "Disconnected" as const } }
                             : {}),
                     });
                     return;
                 }
-                if (openedBot !== null && runtimeFailure) {
+                if (opened && runtimeFailure) {
                     set({
                         connectionStatus: { kind: "disconnected", label: "Disconnected" },
-                        view: { kind: "runtime-disconnected", bot: openedBot, message },
+                        view: { kind: "runtime-disconnected", botId, message },
                     });
                     try {
-                        await requests.waitForRuntimeConfigurationChange(openedBot.botId, signal);
+                        await requests.waitForRuntimeConfigurationChange(botId, signal);
                         signal.throwIfAborted();
                         set((current) => ({ revision: current.revision + 1 }));
                     } catch (watchCause) {
@@ -465,131 +413,14 @@ export const createBotChatHomeStore = (
                         current.connectionStatus.kind === "connecting" || runtimeFailure
                             ? { kind: "disconnected", label: "Disconnected" }
                             : current.connectionStatus,
-                    view:
-                        openedBot === null
-                            ? { kind: "failed", message }
-                            : { kind: "connection-failed", bot: openedBot, message },
+                    view: opened ? { kind: "connection-failed", botId, message } : { kind: "failed", message },
                 }));
             }
         },
-        selectBot: (botId) => {
-            const current = get();
-            const selected = current.bots.find((bot) => bot.botId === botId);
-            const activeBot = "bot" in current.view ? current.view.bot : null;
-            if (selected === undefined || selected.botId === activeBot?.botId) {
-                return;
-            }
-            options.selectedBotPreference.write(selected.botId);
-            options.navigation.showDraft();
-            set((state) => ({
-                botOperation: { kind: "idle" },
-                connectionStatus: { kind: "connecting", label: "Connecting" },
-                creation: transitionConversationCreation(state.creation, { kind: "reset" }),
-                draft: centralSessionStorage.read(newConversationDraftEntry(selected.botId)) ?? "",
-                draftSettings: null,
-                optimisticTitles: new Map(),
-                revision: state.revision + 1,
-                selection: transitionConversationSelection(state.selection, {
-                    kind: "draft-selected",
-                    key: options.createId(),
-                }),
-                view: { kind: "connecting", bot: selected },
-            }));
-        },
-        selectPairedBot: (bot) => {
-            set((state) => ({ bots: [...state.bots.filter((candidate) => candidate.botId !== bot.botId), bot] }));
-            get().selectBot(bot.botId);
-        },
-        renameBot: async (displayName, signal) => {
-            const name = displayName.trim();
-            if (name.length === 0 || name.length > 80) {
-                set({ botOperation: { kind: "failed", message: "Enter a Machine name between 1 and 80 characters." } });
-                return false;
-            }
-            const current = get();
-            const activeBot = "bot" in current.view ? current.view.bot : null;
-            if (activeBot === null) {
-                return false;
-            }
-            set({ botOperation: { kind: "renaming" } });
-            try {
-                const detail = await requests.readBot(activeBot.botId, signal);
-                const updated = await requests.updateBot(
-                    activeBot.botId,
-                    { displayName: name, instructions: detail.instructions },
-                    signal,
-                );
-                signal.throwIfAborted();
-                const renamedBot = { botId: updated.botId, displayName: updated.displayName };
-                set((state) => ({
-                    bots: state.bots.map((bot) => (bot.botId === renamedBot.botId ? renamedBot : bot)),
-                    botOperation: { kind: "idle" },
-                    view: replaceViewBot(state.view, renamedBot),
-                }));
-                return true;
-            } catch (cause) {
-                if (!signal.aborted) {
-                    set({
-                        botOperation: {
-                            kind: "failed",
-                            message: formatError(cause, "The Machine could not be renamed."),
-                        },
-                    });
-                }
-                return false;
-            }
-        },
-        removeBot: async (signal) => {
-            const current = get();
-            const activeBot = "bot" in current.view ? current.view.bot : null;
-            if (activeBot === null || current.bots.length < 2) {
-                return false;
-            }
-            set({ botOperation: { kind: "removing" } });
-            try {
-                await requests.deleteBot(activeBot.botId, signal);
-                signal.throwIfAborted();
-                const bots = get().bots.filter((bot) => bot.botId !== activeBot.botId);
-                const selected = bots[0];
-                if (selected === undefined) {
-                    throw new Error("Keep at least one Machine in Morty.");
-                }
-                options.selectedBotPreference.write(selected.botId);
-                options.navigation.showDraft();
-                set((state) => ({
-                    bots,
-                    botOperation: { kind: "idle" },
-                    connectionStatus: { kind: "connecting", label: "Connecting" },
-                    creation: transitionConversationCreation(state.creation, { kind: "reset" }),
-                    draft: centralSessionStorage.read(newConversationDraftEntry(selected.botId)) ?? "",
-                    draftSettings: null,
-                    optimisticTitles: new Map(),
-                    revision: state.revision + 1,
-                    selection: transitionConversationSelection(state.selection, {
-                        kind: "draft-selected",
-                        key: options.createId(),
-                    }),
-                    view: { kind: "connecting", bot: selected },
-                }));
-                return true;
-            } catch (cause) {
-                if (!signal.aborted) {
-                    set({
-                        botOperation: {
-                            kind: "failed",
-                            message: formatError(cause, "The Machine could not be removed."),
-                        },
-                    });
-                }
-                return false;
-            }
-        },
-        resetBotOperation: () => set({ botOperation: { kind: "idle" } }),
         newConversation: () => {
             const current = get();
-            const activeBot = "bot" in current.view ? current.view.bot : null;
-            if (activeBot !== null) {
-                centralSessionStorage.remove(newConversationDraftEntry(activeBot.botId));
+            if (current.view.kind !== "loading" && current.view.kind !== "failed") {
+                centralSessionStorage.remove(newConversationDraftEntry(current.view.botId));
             }
             options.navigation.showDraft();
             set((state) => ({
@@ -633,9 +464,8 @@ export const createBotChatHomeStore = (
         },
         setDraft: (draft) => {
             const current = get();
-            const activeBot = "bot" in current.view ? current.view.bot : null;
-            if (activeBot !== null) {
-                const entry = newConversationDraftEntry(activeBot.botId);
+            if (current.view.kind !== "loading" && current.view.kind !== "failed") {
+                const entry = newConversationDraftEntry(current.view.botId);
                 if (draft === "") {
                     centralSessionStorage.remove(entry);
                 } else {
@@ -663,7 +493,7 @@ export const createBotChatHomeStore = (
             ) {
                 return false;
             }
-            const botId = current.view.bot.botId;
+            const activeBotId = current.view.botId;
             const commandId = current.selection.key;
             const settings = current.draftSettings;
             const content = draft.trim();
@@ -701,7 +531,7 @@ export const createBotChatHomeStore = (
                     }),
                 }));
                 try {
-                    access = await requests.createConversation(botId, commandId, settings, signal, title);
+                    access = await requests.createConversation(activeBotId, commandId, settings, signal, title);
                     signal.throwIfAborted();
                     set((state) => ({
                         creation: transitionConversationCreation(state.creation, {
@@ -752,7 +582,7 @@ export const createBotChatHomeStore = (
                     directoryRevision: state.directoryRevision + 1,
                     optimisticTitles: new Map(state.optimisticTitles).set(sent.conversationId, sent.message.summary),
                 }));
-                centralSessionStorage.remove(newConversationDraftEntry(botId));
+                centralSessionStorage.remove(newConversationDraftEntry(activeBotId));
                 return true;
             } catch (cause) {
                 signal.throwIfAborted();

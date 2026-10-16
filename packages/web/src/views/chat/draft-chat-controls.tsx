@@ -105,7 +105,7 @@ export function DraftChatControls({
                         options: connectedChatRuntimeAgents(settings.configuration.runtime).map((agent) => ({
                             agentRef: agent.agentRef,
                             value: `${agent.runtimeId}:${agent.agentRef}`,
-                            label: `${agent.label} · ${agent.machineName}`,
+                            label: agent.label,
                             tabLabel: agent.label,
                         })),
                         value: selectedHarness,

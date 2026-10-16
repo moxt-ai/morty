@@ -137,7 +137,7 @@ export function CwdSelector({
             </Popover.Root>
             {browser.kind !== "closed" && (
                 <Dialog
-                    description="Browse folders on the paired machine or enter an absolute folder path."
+                    description="Browse folders on your local machine or enter an absolute folder path."
                     onClose={viewModel.closeCwd}
                     title="Choose working directory"
                 >

@@ -120,16 +120,6 @@ const identifierSchema = v.custom<Identifier>(isIdentifier);
 const settingIdentifierSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(128));
 
 // ---------------------------------------------------------------------------
-// Selected Bot per project
-// ---------------------------------------------------------------------------
-
-export const selectedBotEntry = (projectId: string): SessionStorageEntry<string> =>
-    stringSessionStorageEntry({
-        key: scopedKey("mobius.chat.selectedBot.v1:", projectId),
-        schema: identifierSchema,
-    });
-
-// ---------------------------------------------------------------------------
 // Last agent settings per Bot and agent
 // ---------------------------------------------------------------------------
 
@@ -247,16 +237,6 @@ const _sidebarLayoutEntry = customSessionStorageEntry<StoredSidebarLayout>({
         }
     },
 });
-
-// ---------------------------------------------------------------------------
-// Saved channel (Bot) connection per user
-// ---------------------------------------------------------------------------
-
-export const userChannelEntry = (userId: string): SessionStorageEntry<string> =>
-    stringSessionStorageEntry({
-        key: scopedKey("morty:user-channel:", userId),
-        schema: identifierSchema,
-    });
 
 // ---------------------------------------------------------------------------
 // Anonymous identity credentials

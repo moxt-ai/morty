@@ -21,7 +21,7 @@ import {
 } from "@moxt-ai/mobius-sdk";
 import * as v from "valibot";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
-import { CloudApiError, type ManagedBot, ManagementApi } from "../management/management-api.ts";
+import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 
 const identifier = v.custom<Identifier>(isIdentifier);
 const accessSchema = v.pipe(
@@ -235,11 +235,7 @@ export class BotChatApi {
     readonly #sessionTransports = new Map<string, BrowserSessionTransport>();
     readonly #subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
     readonly #waitForChange: (request: Request) => Promise<void>;
-    readonly listBots: ManagementApi["listBots"];
     readonly readBot: ManagementApi["readBot"];
-    readonly createBot: ManagementApi["createBot"];
-    readonly updateBot: ManagementApi["updateBot"];
-    readonly deleteBot: ManagementApi["deleteBot"];
     constructor(options: {
         readonly fetchRequest: (request: Request) => Promise<Response>;
         readonly origin: string;
@@ -255,11 +251,7 @@ export class BotChatApi {
         this.#subscribe = options.subscribe;
         this.#waitForChange = options.waitForChange;
         const management = new ManagementApi(options);
-        this.listBots = management.listBots;
         this.readBot = management.readBot;
-        this.createBot = management.createBot;
-        this.updateBot = management.updateBot;
-        this.deleteBot = management.deleteBot;
     }
     readonly close = (): void => {
         for (const transport of this.#sessionTransports.values()) {
@@ -455,32 +447,6 @@ export class BotChatApi {
             throw new CloudApiError("INVALID_PAIRING_INSTRUCTION", "Pairing instruction is invalid.");
         }
         return ticket;
-    };
-    readonly waitForPairedBot = async (botId: string, parent: AbortSignal): Promise<ManagedBot> => {
-        const signal = AbortSignal.any([parent, AbortSignal.timeout(10 * 60 * 1000)]);
-        while (!signal.aborted) {
-            try {
-                const bot = await this.readBot(botId, signal);
-                if (bot.configured) {
-                    return { botId: bot.botId, displayName: bot.displayName };
-                }
-            } catch (cause) {
-                signal.throwIfAborted();
-                if (!(cause instanceof CloudApiError && cause.code === "BOT_NOT_FOUND")) {
-                    throw cause;
-                }
-            }
-            const watchDeadline = AbortSignal.timeout(15_000);
-            try {
-                await this.waitForSetupChange(botId, AbortSignal.any([signal, watchDeadline]));
-            } catch (cause) {
-                signal.throwIfAborted();
-                if (!watchDeadline.aborted) {
-                    throw cause;
-                }
-            }
-        }
-        throw signal.reason;
     };
     readonly runtimeConfiguration = async (botId: string, parent: AbortSignal): Promise<BotRuntimeConfiguration> =>
         v.parse(runtimeConfigurationSchema, await this.#request(botId, "workspace", undefined, parent));

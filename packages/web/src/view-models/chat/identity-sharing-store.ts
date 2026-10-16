@@ -2,18 +2,18 @@ import QRCode from "qrcode";
 import { createStore } from "zustand/vanilla";
 import type { IdentityTransfer } from "@/services/identity/anonymous-identity-api";
 
-type MachineSharingState =
+type IdentitySharingState =
     | { readonly kind: "loading" }
     | { readonly kind: "ready"; readonly image: string; readonly transfer: IdentityTransfer }
     | { readonly kind: "failed" };
 
-export interface MachineSharingStore {
-    readonly state: MachineSharingState;
+export interface IdentitySharingStore {
+    readonly state: IdentitySharingState;
     readonly load: (signal: AbortSignal) => Promise<void>;
 }
 
-export const createMachineSharingStore = (createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>) =>
-    createStore<MachineSharingStore>()((set) => ({
+export const createIdentitySharingStore = (createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>) =>
+    createStore<IdentitySharingStore>()((set) => ({
         state: { kind: "loading" },
         load: async (signal) => {
             set({ state: { kind: "loading" } });

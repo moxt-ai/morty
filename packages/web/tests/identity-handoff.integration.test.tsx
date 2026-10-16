@@ -100,7 +100,7 @@ test("Given shared Morty access, When the user opens Continue your work, Then th
     const actions = [
         { element: reportBug, tooltip: "Report a bug" },
         { element: await app.queryElementByTestId(dataTestId.userMenu), tooltip: "User menu" },
-        { element: await app.queryElementByTestId(dataTestId.shareMachine), tooltip: "Continue your work" },
+        { element: await app.queryElementByTestId(dataTestId.shareIdentity), tooltip: "Continue your work" },
     ];
 
     for (const { element, tooltip } of actions) {
@@ -222,11 +222,11 @@ test("Given shared Morty access, When the user chooses to end remote access from
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp();
-    const shareMachine = await app.queryElementByTestId(dataTestId.shareMachine);
+    const shareIdentity = await app.queryElementByTestId(dataTestId.shareIdentity);
 
     await app.user.click(await app.queryElementByTestId(dataTestId.closeDialog));
     const userMenu = await app.queryElementByTestId(dataTestId.userMenu);
-    expect(userMenu.parentElement).toBe(shareMachine.parentElement);
+    expect(userMenu.parentElement).toBe(shareIdentity.parentElement);
     await app.user.click(userMenu);
     const endAccess = await app.queryElementByTestId(dataTestId.endRemoteAccess);
     await app.user.click(endAccess);

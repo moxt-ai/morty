@@ -89,7 +89,6 @@ export async function createTestApp(
                         <MortyApplication
                             activeIdentity={current.identity}
                             authorize={async (signal) => signal.throwIfAborted()}
-                            userId={current.userId}
                         />
                     )}
                 </ToastProvider>
