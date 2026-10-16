@@ -267,6 +267,20 @@ function displayContent(update: ToolCallUpdateV2): readonly AgentDisplayContent[
                     type: "resource",
                     uri: externalContentPath(content),
                 };
+            case "unsupported":
+                return {
+                    artifactId: "",
+                    data: "",
+                    mimeType: "",
+                    name: content.originalType,
+                    newText: "",
+                    oldText: "",
+                    path: "",
+                    terminalId: "",
+                    text: `Unsupported content type: ${content.originalType}`,
+                    type: "text",
+                    uri: "",
+                };
             default:
                 return exhaustive(content);
         }

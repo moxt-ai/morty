@@ -180,6 +180,8 @@ function ContentBlock({
         case "external_audio":
         case "external_resource":
             return <ExternalContent content={content} readContent={readImage} speaker={speaker} />;
+        case "unsupported":
+            return <p className="text-sm text-muted-foreground">Unsupported content ({content.originalType}).</p>;
     }
 }
 
