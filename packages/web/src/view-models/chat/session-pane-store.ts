@@ -58,6 +58,10 @@ type Operation =
     | { readonly kind: "sending"; readonly commandId: string }
     | { readonly kind: "configuring" }
     | { readonly kind: "failed"; readonly message: string };
+type TitleEdit =
+    | { readonly kind: "closed" }
+    | { readonly kind: "editing"; readonly draft: string }
+    | { readonly kind: "saving"; readonly draft: string };
 type Connection =
     | { readonly kind: "loading" }
     | { readonly kind: "ready"; readonly client: MobiusClient }
@@ -139,6 +143,7 @@ function resolvePermission(
 export interface SessionPaneStore {
     readonly connection: Connection;
     readonly title: string;
+    readonly titleEdit: TitleEdit;
     readonly messages: readonly SessionMessage[];
     readonly historyLoading: boolean;
     readonly historyRevision: number;
@@ -165,6 +170,10 @@ export interface SessionPaneStore {
         booleanValue: boolean,
         signal: AbortSignal,
     ) => Promise<void>;
+    readonly openTitleEdit: () => void;
+    readonly setTitleDraft: (draft: string) => void;
+    readonly confirmTitleEdit: (signal: AbortSignal) => Promise<void>;
+    readonly cancelTitleEdit: () => void;
     readonly refreshSettings: (signal: AbortSignal) => Promise<void>;
     readonly respondToPermission: (response: PermissionInteractionResponse, signal: AbortSignal) => Promise<void>;
     readonly respondToElicitation: (response: ElicitationInteractionResponse, signal: AbortSignal) => Promise<void>;
@@ -533,6 +542,7 @@ export function createSessionPaneModel(options: {
         return {
             connection: { kind: "loading" },
             title: sessionTitle,
+            titleEdit: { kind: "closed" },
             messages: initialTimeline.messages,
             historyLoading: false,
             historyRevision: 0,
@@ -1104,6 +1114,54 @@ export function createSessionPaneModel(options: {
                         operation: {
                             kind: "failed",
                             message: formatError(cause, "The selection could not be applied."),
+                        },
+                    });
+                }
+            },
+            openTitleEdit: () => {
+                set({ titleEdit: { draft: get().title, kind: "editing" } });
+            },
+            setTitleDraft: (draft) => {
+                if (get().titleEdit.kind === "editing") {
+                    set({ titleEdit: { draft, kind: "editing" } });
+                }
+            },
+            cancelTitleEdit: () => {
+                set({ titleEdit: { kind: "closed" } });
+            },
+            confirmTitleEdit: async (signal) => {
+                const edit = get().titleEdit;
+                if (edit.kind !== "editing") {
+                    return;
+                }
+                const trimmed = edit.draft.trim();
+                if (
+                    trimmed.length === 0 ||
+                    trimmed === sessionTitle ||
+                    client === null ||
+                    get().connection.kind !== "ready"
+                ) {
+                    set({ titleEdit: { kind: "closed" } });
+                    return;
+                }
+                set({ titleEdit: { draft: trimmed, kind: "saving" } });
+                try {
+                    const result = await client.sessions.rename(
+                        sessionId,
+                        trimmed,
+                        AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
+                    );
+                    signal.throwIfAborted();
+                    sessionTitle = result.title;
+                    set({ title: sessionTitle, titleEdit: { kind: "closed" } });
+                    options.onTitleChange(sessionId, sessionTitle);
+                } catch (cause) {
+                    signal.throwIfAborted();
+                    set({
+                        titleEdit: { kind: "closed" },
+                        operation: {
+                            kind: "failed",
+                            message: cause instanceof Error ? cause.message : "The conversation could not be renamed.",
                         },
                     });
                 }

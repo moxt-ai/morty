@@ -1,4 +1,5 @@
 import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
+import { Check, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
@@ -185,6 +186,14 @@ export function MobiusSessionPane({
     const taskControls = useStore(pane.tasks);
     const lifetime = useRef<AbortController | null>(null);
     const messageList = useRef<HTMLDivElement | null>(null);
+    const titleInput = useRef<HTMLInputElement | null>(null);
+    const titleEditorOpen = model.titleEdit.kind !== "closed";
+    useEffect(() => {
+        if (titleEditorOpen) {
+            titleInput.current?.focus();
+            titleInput.current?.select();
+        }
+    }, [titleEditorOpen]);
     const [harnesses, setHarnesses] = useState<
         readonly { readonly agentRef?: string; readonly label: string; readonly value: string }[]
     >([{ agentRef: session.agentRef, label: session.agentRef, value: session.agentRef }]);
@@ -301,10 +310,64 @@ export function MobiusSessionPane({
     return (
         <>
             <section className="flex min-h-0 min-w-0 flex-1 animate-cloud-enter flex-col motion-reduce:animate-none">
-                <header className="flex h-12 shrink-0 items-center border-b border-border/80 px-4 sm:px-8 lg:px-12">
-                    <h2 className="min-w-0 truncate text-sm font-semibold" title={model.title || "Untitled session"}>
-                        {model.title || "Untitled session"}
-                    </h2>
+                <header className="flex h-12 shrink-0 items-center gap-1 border-b border-border/80 px-4 sm:px-8 lg:px-12">
+                    {model.titleEdit.kind === "closed" ? (
+                        <h2
+                            className="min-w-0 truncate text-sm font-semibold"
+                            title={model.title || "Untitled session"}
+                        >
+                            <button
+                                type="button"
+                                aria-label={model.title || "Untitled session"}
+                                className="max-w-full cursor-pointer truncate rounded-md text-left outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/70"
+                                title="Rename conversation"
+                                onClick={() => pane.store.getState().openTitleEdit()}
+                            >
+                                {model.title || "Untitled session"}
+                            </button>
+                        </h2>
+                    ) : (
+                        <>
+                            <input
+                                aria-label="Conversation title"
+                                className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                                disabled={model.titleEdit.kind === "saving"}
+                                maxLength={500}
+                                ref={titleInput}
+                                value={model.titleEdit.draft}
+                                onChange={(event) => pane.store.getState().setTitleDraft(event.target.value)}
+                                onKeyDown={(event) => {
+                                    if (event.key === "Enter") {
+                                        event.preventDefault();
+                                        run(async (signal) => await pane.store.getState().confirmTitleEdit(signal));
+                                    }
+                                    if (event.key === "Escape") {
+                                        pane.store.getState().cancelTitleEdit();
+                                    }
+                                }}
+                            />
+                            <Button
+                                aria-label="Save title"
+                                disabled={model.titleEdit.kind === "saving"}
+                                size="icon"
+                                variant="ghost"
+                                onClick={() =>
+                                    run(async (signal) => await pane.store.getState().confirmTitleEdit(signal))
+                                }
+                            >
+                                <Check className="size-4" />
+                            </Button>
+                            <Button
+                                aria-label="Cancel rename"
+                                disabled={model.titleEdit.kind === "saving"}
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => pane.store.getState().cancelTitleEdit()}
+                            >
+                                <X className="size-4" />
+                            </Button>
+                        </>
+                    )}
                 </header>
                 <FollowLatestScrollArea
                     role="log"

@@ -214,6 +214,78 @@ test("Given a new conversation titled from its prompt, When the Agent generates 
     });
 });
 
+test("Given an open conversation, When the user renames it from the header, Then the new title heads the conversation and its directory entry", {
+    timeout: 30_000,
+}, async () => {
+    const prompt = "Rename this conversation from the header";
+    const renamed = "Renamed from the header";
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, prompt);
+    await app.waitForView(() =>
+        expect(queryByRole(document.body, "heading", { level: 2, name: prompt })).not.toBeNull(),
+    );
+
+    await app.user.click(getByRole(document.body, "button", { name: prompt }));
+    await app.waitForView(() =>
+        expect(queryByRole(document.body, "textbox", { name: "Conversation title" })).not.toBeNull(),
+    );
+    const input = getByRole(document.body, "textbox", { name: "Conversation title" });
+    await app.user.clear(input);
+    await app.user.type(input, renamed);
+    await app.user.click(getByRole(document.body, "button", { name: "Save title" }));
+
+    await app.waitForView(() => {
+        expect(queryByRole(document.body, "heading", { level: 2, name: renamed })).not.toBeNull();
+        expect(queryByRole(document.body, "heading", { level: 2, name: prompt })).toBeNull();
+        expect(
+            app
+                .elementsByTestId(dataTestId.managedConversation)
+                .some((conversation) => conversation.textContent?.includes(renamed) === true),
+        ).toBe(true);
+    });
+});
+
+test("Given the header title editor is open, When the user cancels, Then the conversation keeps its title", {
+    timeout: 30_000,
+}, async () => {
+    const prompt = "Keep this title when the rename is cancelled";
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, prompt);
+    await app.waitForView(() =>
+        expect(queryByRole(document.body, "heading", { level: 2, name: prompt })).not.toBeNull(),
+    );
+
+    await app.user.click(getByRole(document.body, "button", { name: prompt }));
+    await app.waitForView(() =>
+        expect(queryByRole(document.body, "textbox", { name: "Conversation title" })).not.toBeNull(),
+    );
+    const input = getByRole(document.body, "textbox", { name: "Conversation title" });
+    await app.user.clear(input);
+    await app.user.type(input, "Discarded title");
+    await app.user.click(getByRole(document.body, "button", { name: "Cancel rename" }));
+
+    await app.waitForView(() => {
+        expect(queryByRole(document.body, "heading", { level: 2, name: prompt })).not.toBeNull();
+        expect(queryByRole(document.body, "textbox", { name: "Conversation title" })).toBeNull();
+    });
+});
+
 test("Given Claude Code does not echo the submitted prompt, When the response starts, Then my message is visible once", {
     timeout: 30_000,
 }, async () => {
