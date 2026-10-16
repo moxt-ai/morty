@@ -229,7 +229,7 @@ async function closeTestEnvironment(): Promise<void> {
 afterEach(async () => {
     await closeTestApps();
     document.body.replaceChildren();
-    window.localStorage.clear();
+    window.sessionStorage.clear();
     window.history.replaceState(null, "", "/");
 });
 

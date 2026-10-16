@@ -16,7 +16,7 @@ import {
     type SessionLastSentMessage,
     sessionLastSentMessageEntry,
 } from "../../services/indexed-db/central-indexed-db.ts";
-import { centralLocalStorage, sessionDraftEntry } from "../../services/local-storage/central-local-storage.ts";
+import { centralSessionStorage, sessionDraftEntry } from "../../services/session-storage/central-session-storage.ts";
 import { formatError } from "../format-error.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
@@ -548,7 +548,7 @@ export function createSessionPaneModel(options: {
             historyRevision: 0,
             hasOlderHistory: false,
             options: session.result.ready.configOptions,
-            draft: options.initialMessage?.content ?? centralLocalStorage.read(draftEntry) ?? "",
+            draft: options.initialMessage?.content ?? centralSessionStorage.read(draftEntry) ?? "",
             attachments: options.initialMessage?.attachments ?? [],
             interactions: [],
             operation: { kind: "idle" },
@@ -902,9 +902,9 @@ export function createSessionPaneModel(options: {
                 tasks.getState().dismissFailure();
                 messageQueue.getState().dismissFailure();
                 if (draft === "") {
-                    centralLocalStorage.remove(draftEntry);
+                    centralSessionStorage.remove(draftEntry);
                 } else {
-                    centralLocalStorage.write(draftEntry, draft);
+                    centralSessionStorage.write(draftEntry, draft);
                 }
                 set({ draft });
             },
@@ -937,7 +937,7 @@ export function createSessionPaneModel(options: {
                 const images = current.attachments.flatMap((attachment) =>
                     attachment.kind === "image" ? [attachment.image] : [],
                 );
-                centralLocalStorage.remove(draftEntry);
+                centralSessionStorage.remove(draftEntry);
                 const activity = startSessionWork({ commandId, startedAt: lastSentMessage.sentAt });
                 const pending = deriveTimeline();
                 set({
@@ -1063,7 +1063,7 @@ export function createSessionPaneModel(options: {
                     lastSentMessageRevision += 1;
                     lastSentMessage = { commandId: queued.commandId, sentAt: Date.now() };
                     void centralIndexedDB.set(lastSentMessageEntry, lastSentMessage, signal);
-                    centralLocalStorage.remove(draftEntry);
+                    centralSessionStorage.remove(draftEntry);
                     set({ draft: "", attachments: [] });
                 }
             },

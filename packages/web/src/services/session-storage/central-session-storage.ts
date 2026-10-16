@@ -3,17 +3,17 @@ import * as v from "valibot";
 
 /**
  * Central management of every value the web application persists in browser
- * local storage. Business modules never touch `window.localStorage` directly;
- * they read and write through `centralLocalStorage` with an entry registered
- * here. Each entry owns its stored key name, its value schema, and its
- * encode/decode contract:
+ * session storage. Business modules never touch `window.sessionStorage`
+ * directly; they read and write through `centralSessionStorage` with an entry
+ * registered here. Each entry owns its stored key name, its value schema, and
+ * its encode/decode contract:
  *
  * - `decode` returns `null` for anything it cannot represent; callers treat
  *   that value as absent.
  * - `encode` failure skips the write entirely.
  */
 
-export interface LocalStorageEntry<T> {
+export interface SessionStorageEntry<T> {
     readonly key: string;
     readonly schema: v.GenericSchema<T>;
     readonly encode: (value: T) => string;
@@ -30,10 +30,10 @@ function decodeJsonWith<T>(schema: v.GenericSchema<T>, raw: string): T | null {
 }
 
 /** Entry whose value is stored as JSON, encoded with `JSON.stringify`. */
-function jsonLocalStorageEntry<T>(options: {
+function jsonSessionStorageEntry<T>(options: {
     readonly key: string;
     readonly schema: v.GenericSchema<T>;
-}): LocalStorageEntry<T> {
+}): SessionStorageEntry<T> {
     return {
         key: options.key,
         schema: options.schema,
@@ -43,10 +43,10 @@ function jsonLocalStorageEntry<T>(options: {
 }
 
 /** Entry whose value is stored as the raw string itself. */
-function stringLocalStorageEntry(options: {
+function stringSessionStorageEntry(options: {
     readonly key: string;
     readonly schema: v.GenericSchema<string>;
-}): LocalStorageEntry<string> {
+}): SessionStorageEntry<string> {
     return {
         key: options.key,
         schema: options.schema,
@@ -59,12 +59,12 @@ function stringLocalStorageEntry(options: {
 }
 
 /** Entry with a fully custom encode/decode contract. */
-function customLocalStorageEntry<T>(options: {
+function customSessionStorageEntry<T>(options: {
     readonly key: string;
     readonly schema: v.GenericSchema<T>;
     readonly encode: (value: T) => string;
     readonly decode: (raw: string) => T | null;
-}): LocalStorageEntry<T> {
+}): SessionStorageEntry<T> {
     return {
         key: options.key,
         schema: options.schema,
@@ -73,33 +73,33 @@ function customLocalStorageEntry<T>(options: {
     };
 }
 
-export const centralLocalStorage = {
+export const centralSessionStorage = {
     /** Whether a raw value exists under the entry's key, without decoding it. */
-    has: (entry: LocalStorageEntry<never> | { readonly key: string }): boolean => {
+    has: (entry: SessionStorageEntry<never> | { readonly key: string }): boolean => {
         try {
-            return window.localStorage.getItem(entry.key) !== null;
+            return window.sessionStorage.getItem(entry.key) !== null;
         } catch {
             return false;
         }
     },
     /** Reads and decodes; null when absent, undecodable, or storage is unavailable. */
-    read: <T>(entry: LocalStorageEntry<T>): T | null => {
+    read: <T>(entry: SessionStorageEntry<T>): T | null => {
         let raw: string | null;
         try {
-            raw = window.localStorage.getItem(entry.key);
+            raw = window.sessionStorage.getItem(entry.key);
         } catch {
             return null;
         }
         return raw === null ? null : entry.decode(raw);
     },
     /** Removes the stored value. */
-    remove: (entry: LocalStorageEntry<never> | { readonly key: string }): void => {
+    remove: (entry: SessionStorageEntry<never> | { readonly key: string }): void => {
         try {
-            window.localStorage.removeItem(entry.key);
+            window.sessionStorage.removeItem(entry.key);
         } catch {}
     },
     /** Encodes and stores; a failed encode or unavailable storage skips the write. */
-    write: <T>(entry: LocalStorageEntry<T>, value: T): void => {
+    write: <T>(entry: SessionStorageEntry<T>, value: T): void => {
         let raw: string;
         try {
             raw = entry.encode(value);
@@ -107,7 +107,7 @@ export const centralLocalStorage = {
             return;
         }
         try {
-            window.localStorage.setItem(entry.key, raw);
+            window.sessionStorage.setItem(entry.key, raw);
         } catch {}
     },
 };
@@ -123,8 +123,8 @@ const settingIdentifierSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(1
 // Selected Bot per project
 // ---------------------------------------------------------------------------
 
-export const selectedBotEntry = (projectId: string): LocalStorageEntry<string> =>
-    stringLocalStorageEntry({
+export const selectedBotEntry = (projectId: string): SessionStorageEntry<string> =>
+    stringSessionStorageEntry({
         key: scopedKey("mobius.chat.selectedBot.v1:", projectId),
         schema: identifierSchema,
     });
@@ -151,7 +151,7 @@ const agentSettingPreferenceSchema = v.pipe(
 export type AgentSettingPreference = v.InferOutput<typeof agentSettingPreferenceSchema>;
 
 export const lastAgentSettingsEntry = (botId: string, agentRef: string) =>
-    jsonLocalStorageEntry({
+    jsonSessionStorageEntry({
         key: scopedKey("mobius:last-agent-settings:v1:", botId, agentRef),
         schema: v.pipe(
             v.array(agentSettingPreferenceSchema),
@@ -172,8 +172,8 @@ export const lastAgentSettingsEntry = (botId: string, agentRef: string) =>
 const directoryIdSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(1_000));
 const directoryLabelSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(4_000));
 
-export const lastCwdEntry = (botId: string, runtimeId: string, agentRef: string): LocalStorageEntry<string> =>
-    stringLocalStorageEntry({
+export const lastCwdEntry = (botId: string, runtimeId: string, agentRef: string): SessionStorageEntry<string> =>
+    stringSessionStorageEntry({
         key: scopedKey("mobius:last-cwd:", botId, runtimeId, agentRef),
         schema: directoryIdSchema,
     });
@@ -185,7 +185,7 @@ const recentCwdPreferenceSchema = v.pipe(
 export type RecentCwdPreference = v.InferOutput<typeof recentCwdPreferenceSchema>;
 
 export const recentCwdEntry = (botId: string) =>
-    jsonLocalStorageEntry({
+    jsonSessionStorageEntry({
         key: scopedKey("mobius:recent-cwd:", botId),
         schema: v.pipe(
             v.array(recentCwdPreferenceSchema),
@@ -204,14 +204,14 @@ export const recentCwdEntry = (botId: string) =>
 
 const messageDraftSchema = v.pipe(v.string(), v.maxLength(100_000));
 
-export const newConversationDraftEntry = (botId: string): LocalStorageEntry<string> =>
-    stringLocalStorageEntry({
+export const newConversationDraftEntry = (botId: string): SessionStorageEntry<string> =>
+    stringSessionStorageEntry({
         key: scopedKey("morty:message-draft:new:v1:", botId),
         schema: messageDraftSchema,
     });
 
-export const sessionDraftEntry = (sessionId: string): LocalStorageEntry<string> =>
-    stringLocalStorageEntry({
+export const sessionDraftEntry = (sessionId: string): SessionStorageEntry<string> =>
+    stringSessionStorageEntry({
         key: scopedKey("morty:message-draft:session:v1:", sessionId),
         schema: messageDraftSchema,
     });
@@ -234,7 +234,7 @@ const sidebarLayoutValueSchema = v.pipe(
 type StoredSidebarLayout = v.InferOutput<typeof sidebarLayoutValueSchema>;
 
 /** Falls back to null for values the layout state cannot represent. */
-const _sidebarLayoutEntry = customLocalStorageEntry<StoredSidebarLayout>({
+const _sidebarLayoutEntry = customSessionStorageEntry<StoredSidebarLayout>({
     key: "mobius:conversation-sidebar-layout",
     schema: sidebarLayoutValueSchema,
     encode: (value) => JSON.stringify(value),
@@ -252,8 +252,8 @@ const _sidebarLayoutEntry = customLocalStorageEntry<StoredSidebarLayout>({
 // Saved channel (Bot) connection per user
 // ---------------------------------------------------------------------------
 
-export const userChannelEntry = (userId: string): LocalStorageEntry<string> =>
-    stringLocalStorageEntry({
+export const userChannelEntry = (userId: string): SessionStorageEntry<string> =>
+    stringSessionStorageEntry({
         key: scopedKey("morty:user-channel:", userId),
         schema: identifierSchema,
     });
@@ -280,14 +280,14 @@ const storedAnonymousCredentialSchema = v.pipe(
     v.readonly(),
 );
 
-export const anonymousCredentialEntry = jsonLocalStorageEntry({
+export const anonymousCredentialEntry = jsonSessionStorageEntry({
     key: "mobius.anonymous-credential.v2",
     schema: storedAnonymousCredentialSchema,
 });
 
 const storedProjectScopeSchema = v.pipe(v.object({ projectId: projectIdSchema, userId: v.string() }), v.readonly());
 
-export const projectScopeEntry = jsonLocalStorageEntry({
+export const projectScopeEntry = jsonSessionStorageEntry({
     key: "mobius.workspace.v2",
     schema: storedProjectScopeSchema,
 });

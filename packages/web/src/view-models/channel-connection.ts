@@ -1,5 +1,5 @@
 import { decodeIdentifier } from "@moxt-ai/mobius-protocol";
-import { centralLocalStorage, userChannelEntry } from "@/services/local-storage/central-local-storage";
+import { centralSessionStorage, userChannelEntry } from "@/services/session-storage/central-session-storage";
 
 export interface ChannelReference {
     readonly channelId: string;
@@ -31,7 +31,7 @@ export class BrowserChannelConnection<TConnection extends ChannelReference> {
         this.#readChannel = readChannel;
     }
     readonly save = (connection: TConnection): void => {
-        centralLocalStorage.write(userChannelEntry(this.#userId), decodeIdentifier(connection.channelId));
+        centralSessionStorage.write(userChannelEntry(this.#userId), decodeIdentifier(connection.channelId));
     };
     readonly load = async (
         requestedChannelId: unknown,
@@ -39,7 +39,7 @@ export class BrowserChannelConnection<TConnection extends ChannelReference> {
     ): Promise<SavedChannel<TConnection>> => {
         const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(15_000)]);
         try {
-            const candidate = requestedChannelId ?? centralLocalStorage.read(userChannelEntry(this.#userId));
+            const candidate = requestedChannelId ?? centralSessionStorage.read(userChannelEntry(this.#userId));
             if (candidate === null) {
                 return { kind: "unpaired" };
             }

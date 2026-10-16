@@ -1,9 +1,9 @@
 import {
-    centralLocalStorage,
+    centralSessionStorage,
     lastCwdEntry,
     type RecentCwdPreference,
     recentCwdEntry,
-} from "@/services/local-storage/central-local-storage";
+} from "@/services/session-storage/central-session-storage";
 
 const MAXIMUM_DIRECTORY_IDENTIFIER_LENGTH = 1_000;
 const MAXIMUM_DIRECTORY_LABEL_LENGTH = 4_000;
@@ -11,7 +11,7 @@ const MAXIMUM_DIRECTORY_LABEL_LENGTH = 4_000;
 export type { RecentCwdPreference };
 
 export function readRecentCwdPreferences(botId: string): readonly RecentCwdPreference[] | null {
-    return centralLocalStorage.read(recentCwdEntry(botId));
+    return centralSessionStorage.read(recentCwdEntry(botId));
 }
 
 export function saveRecentCwdPreference(
@@ -31,7 +31,7 @@ export function saveRecentCwdPreference(
         directory,
         ...existing.filter((preference) => preference.directoryId !== directory.directoryId),
     ].slice(0, 10);
-    centralLocalStorage.write(recentCwdEntry(botId), recent);
+    centralSessionStorage.write(recentCwdEntry(botId), recent);
     return recent;
 }
 
@@ -41,17 +41,17 @@ export function forgetRecentCwdPreference(
     existing: readonly RecentCwdPreference[],
 ): readonly RecentCwdPreference[] {
     const recent = existing.filter((preference) => preference.directoryId !== directoryId);
-    centralLocalStorage.write(recentCwdEntry(botId), recent);
+    centralSessionStorage.write(recentCwdEntry(botId), recent);
     return recent;
 }
 
 export function readLastCwdPreference(botId: string, runtimeId: string, agentRef: string): string | null {
-    return centralLocalStorage.read(lastCwdEntry(botId, runtimeId, agentRef));
+    return centralSessionStorage.read(lastCwdEntry(botId, runtimeId, agentRef));
 }
 
 export function saveLastCwdPreference(botId: string, runtimeId: string, agentRef: string, directoryId: string): void {
     if (directoryId.length === 0 || directoryId.length > MAXIMUM_DIRECTORY_IDENTIFIER_LENGTH) {
         return;
     }
-    centralLocalStorage.write(lastCwdEntry(botId, runtimeId, agentRef), directoryId);
+    centralSessionStorage.write(lastCwdEntry(botId, runtimeId, agentRef), directoryId);
 }

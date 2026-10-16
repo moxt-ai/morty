@@ -2,9 +2,9 @@ import { type Identifier, isIdentifier } from "@moxt-ai/mobius-protocol";
 import * as v from "valibot";
 import {
     anonymousCredentialEntry,
-    centralLocalStorage,
+    centralSessionStorage,
     projectScopeEntry,
-} from "../local-storage/central-local-storage.ts";
+} from "../session-storage/central-session-storage.ts";
 
 const tokenSchema = v.pipe(
     v.string(),
@@ -38,7 +38,7 @@ const createdIdentitySchema = v.pipe(
 export const ANONYMOUS_CREDENTIAL_KEY_NAME = anonymousCredentialEntry.key;
 
 function readStoredProjectScope() {
-    return centralLocalStorage.read(projectScopeEntry);
+    return centralSessionStorage.read(projectScopeEntry);
 }
 const anonymousSessionSchema = v.pipe(
     v.object({ authentication: v.object({ kind: v.literal("anonymous") }), userId: v.string() }),
@@ -53,7 +53,7 @@ export type IdentityTransfer = v.InferOutput<typeof transferSchema>;
 
 /** Whether this browser already holds an anonymous credential, without validating it. */
 export function hasStoredAnonymousCredential(): boolean {
-    return centralLocalStorage.has(anonymousCredentialEntry);
+    return centralSessionStorage.has(anonymousCredentialEntry);
 }
 export type DataRegion =
     | "wnam"
@@ -83,7 +83,7 @@ export class AnonymousIdentityApi {
     }
 
     readonly loadExisting = async (requestSignal: AbortSignal): Promise<AnonymousIdentity | null> => {
-        const stored = centralLocalStorage.read(anonymousCredentialEntry);
+        const stored = centralSessionStorage.read(anonymousCredentialEntry);
         if (stored !== null) {
             const session = await this.#anonymousSession(stored, requestSignal);
             if (session !== null) {
@@ -91,7 +91,7 @@ export class AnonymousIdentityApi {
                     return stored;
                 }
             }
-            centralLocalStorage.remove(anonymousCredentialEntry);
+            centralSessionStorage.remove(anonymousCredentialEntry);
         }
         return null;
     };
@@ -104,7 +104,7 @@ export class AnonymousIdentityApi {
         const created = this.#createdIdentity(
             await this.#request("/identity/anonymous-users", { method: "POST" }, requestSignal),
         );
-        const concurrent = centralLocalStorage.read(anonymousCredentialEntry);
+        const concurrent = centralSessionStorage.read(anonymousCredentialEntry);
         if (concurrent !== null) {
             const session = await this.#anonymousSession(concurrent, requestSignal);
             if (session !== null) {
@@ -169,8 +169,8 @@ export class AnonymousIdentityApi {
             { method: "DELETE", headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
             signal,
         );
-        centralLocalStorage.remove(anonymousCredentialEntry);
-        centralLocalStorage.remove(projectScopeEntry);
+        centralSessionStorage.remove(anonymousCredentialEntry);
+        centralSessionStorage.remove(projectScopeEntry);
     };
 
     readonly createRecoveryToken = async (
@@ -193,8 +193,8 @@ export class AnonymousIdentityApi {
         this.#saveIdentity(v.parse(identitySchema, identity));
 
     readonly #saveIdentity = (identity: AnonymousIdentity) => {
-        centralLocalStorage.write(anonymousCredentialEntry, identity);
-        centralLocalStorage.write(projectScopeEntry, { userId: identity.userId, projectId: identity.projectId });
+        centralSessionStorage.write(anonymousCredentialEntry, identity);
+        centralSessionStorage.write(projectScopeEntry, { userId: identity.userId, projectId: identity.projectId });
     };
 
     /** Maps the nested `bot` of an anonymous-user creation response onto the identity. */

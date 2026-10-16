@@ -7,9 +7,12 @@ import type {
     ChatAccess,
     ChatDraftConfiguration,
 } from "../../services/chat/bot-chat-api.ts";
-import { centralLocalStorage, newConversationDraftEntry } from "../../services/local-storage/central-local-storage.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
 import { CloudApiError, isRuntimeConnectionFailure } from "../../services/management/management-api.ts";
+import {
+    centralSessionStorage,
+    newConversationDraftEntry,
+} from "../../services/session-storage/central-session-storage.ts";
 import { formatError } from "../format-error.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 import { type ConversationCreationState, transitionConversationCreation } from "./conversation-creation-machine.ts";
@@ -280,7 +283,7 @@ export const createBotChatHomeStore = (
                 set({
                     bots,
                     ...(get().selection.kind === "draft"
-                        ? { draft: centralLocalStorage.read(newConversationDraftEntry(bot.botId)) ?? "" }
+                        ? { draft: centralSessionStorage.read(newConversationDraftEntry(bot.botId)) ?? "" }
                         : {}),
                 });
                 if (get().view.kind === "loading") {
@@ -482,7 +485,7 @@ export const createBotChatHomeStore = (
                 botOperation: { kind: "idle" },
                 connectionStatus: { kind: "connecting", label: "Connecting" },
                 creation: transitionConversationCreation(state.creation, { kind: "reset" }),
-                draft: centralLocalStorage.read(newConversationDraftEntry(selected.botId)) ?? "",
+                draft: centralSessionStorage.read(newConversationDraftEntry(selected.botId)) ?? "",
                 draftSettings: null,
                 optimisticTitles: new Map(),
                 revision: state.revision + 1,
@@ -558,7 +561,7 @@ export const createBotChatHomeStore = (
                     botOperation: { kind: "idle" },
                     connectionStatus: { kind: "connecting", label: "Connecting" },
                     creation: transitionConversationCreation(state.creation, { kind: "reset" }),
-                    draft: centralLocalStorage.read(newConversationDraftEntry(selected.botId)) ?? "",
+                    draft: centralSessionStorage.read(newConversationDraftEntry(selected.botId)) ?? "",
                     draftSettings: null,
                     optimisticTitles: new Map(),
                     revision: state.revision + 1,
@@ -586,7 +589,7 @@ export const createBotChatHomeStore = (
             const current = get();
             const activeBot = "bot" in current.view ? current.view.bot : null;
             if (activeBot !== null) {
-                centralLocalStorage.remove(newConversationDraftEntry(activeBot.botId));
+                centralSessionStorage.remove(newConversationDraftEntry(activeBot.botId));
             }
             options.navigation.showDraft();
             set((state) => ({
@@ -634,9 +637,9 @@ export const createBotChatHomeStore = (
             if (activeBot !== null) {
                 const entry = newConversationDraftEntry(activeBot.botId);
                 if (draft === "") {
-                    centralLocalStorage.remove(entry);
+                    centralSessionStorage.remove(entry);
                 } else {
-                    centralLocalStorage.write(entry, draft);
+                    centralSessionStorage.write(entry, draft);
                 }
             }
             set({ draft });
@@ -749,7 +752,7 @@ export const createBotChatHomeStore = (
                     directoryRevision: state.directoryRevision + 1,
                     optimisticTitles: new Map(state.optimisticTitles).set(sent.conversationId, sent.message.summary),
                 }));
-                centralLocalStorage.remove(newConversationDraftEntry(botId));
+                centralSessionStorage.remove(newConversationDraftEntry(botId));
                 return true;
             } catch (cause) {
                 signal.throwIfAborted();

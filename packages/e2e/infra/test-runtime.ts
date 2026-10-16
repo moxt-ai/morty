@@ -32,7 +32,7 @@ export async function createTestRuntime(harness: E2EHarness) {
         const openChat = async () => {
             await page.goto(stack.chatOrigin);
             const stored = await page.waitForFunction(
-                (key) => localStorage.getItem(key),
+                (key) => sessionStorage.getItem(key),
                 ANONYMOUS_CREDENTIAL_KEY_NAME,
             );
             const user = await chat.useBrowserIdentity(

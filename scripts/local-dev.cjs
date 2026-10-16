@@ -758,7 +758,7 @@ process.exit(result.status ?? 1);
     const previous = Array.isArray(stack.runtimes) ? stack.runtimes : [];
     writeStack({ ...stack, runtimes: [...previous, record] });
     process.stdout.write(`${JSON.stringify(record)}\n`);
-    log("pair is ready; inject browserIdentity into localStorage to open Chat as this user");
+    log("pair is ready; inject browserIdentity into sessionStorage to open Chat as this user");
 }
 
 async function status(options) {
