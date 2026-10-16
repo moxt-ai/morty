@@ -311,6 +311,15 @@ function isBotInstructions(content: ContentBlockV2): boolean {
     return content.type === "resource" && content.resource.uri === BOT_INSTRUCTIONS_URI;
 }
 
+function userDisplayContent(content: ContentBlockV2): ContentBlockV2 {
+    if (content.type !== "text") {
+        return content;
+    }
+    const context =
+        /^\s*<in-app-browser-context\s+source="ambient-ui-state">[\s\S]*?<\/in-app-browser-context>\s*## My request:\s*\r?\n/u;
+    return { ...content, text: content.text.replace(context, "") };
+}
+
 function messageFromAcpUpdate(event: SessionEventV2, update: AcpSessionUpdateV2): SessionMessage | null {
     switch (update.sessionUpdate) {
         case "user_message_chunk": {
@@ -319,7 +328,7 @@ function messageFromAcpUpdate(event: SessionEventV2, update: AcpSessionUpdateV2)
             }
             return {
                 commandId: null,
-                contents: [update.content],
+                contents: [userDisplayContent(update.content)],
                 firstEvent: event,
                 role: "user",
             };
@@ -430,7 +439,7 @@ function consumeSessionEvent(
     if (event.type === "lifecycle-metadata") {
         const lifecycle = event.payload;
         if (lifecycle.kind === "prompt.requested") {
-            const contents = lifecycle.content.filter((content) => !isBotInstructions(content));
+            const contents = lifecycle.content.filter((content) => !isBotInstructions(content)).map(userDisplayContent);
             return contents.length === 0
                 ? { kind: "skipped" }
                 : {

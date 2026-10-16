@@ -38,7 +38,8 @@ function isSafeLink(href: string): boolean {
 }
 
 function withoutSourceLocation(path: string): string {
-    return path.replace(/:\d+(?::\d+)?$/u, "");
+    const value = path.replace(/:\d+(?::\d+)?$/u, "");
+    return /^[A-Za-z]:[\\/]/u.test(value) ? value.replaceAll("/", "\\") : value;
 }
 
 function fileSystemPath(href: string): string | null {

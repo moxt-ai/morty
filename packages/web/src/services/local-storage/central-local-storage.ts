@@ -272,6 +272,7 @@ const projectIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|en|sa|we|ee|ap|an|a
 
 const storedAnonymousCredentialSchema = v.pipe(
     v.object({
+        botId: identifierSchema,
         projectId: projectIdSchema,
         token: anonymousTokenSchema,
         userId: v.string(),
