@@ -64,37 +64,46 @@ export function createSessionProjection(): SessionProjection {
 function sessionConfigOptionsFromAcp(
     update: Extract<AcpSessionUpdateV2, { readonly sessionUpdate: "config_option_update" }>,
 ): readonly SessionConfigOption[] {
-    return update.configOptions.map((option) => ({
-        booleanValue: option.type === "boolean" ? option.currentValue : false,
-        category: option.category ?? "",
-        currentValue: option.type === "select" ? option.currentValue : "",
-        description: option.description ?? "",
-        id: option.id,
-        name: option.name,
-        type: option.type,
-        values:
-            option.type === "boolean"
-                ? []
-                : option.options.flatMap((item) =>
-                      "group" in item
-                          ? item.options.map((value) => ({
-                                description: value.description ?? "",
-                                groupId: item.group,
-                                groupName: item.name,
-                                name: value.name,
-                                value: value.value,
-                            }))
-                          : [
-                                {
-                                    description: item.description ?? "",
-                                    groupId: "",
-                                    groupName: "",
-                                    name: item.name,
-                                    value: item.value,
-                                },
-                            ],
-                  ),
-    }));
+    return update.configOptions.flatMap((option): readonly SessionConfigOption[] => {
+        // An option type this build does not know cannot be rendered as a
+        // control; the remaining options still project.
+        if (option.type === "unsupported") {
+            return [];
+        }
+        return [
+            {
+                booleanValue: option.type === "boolean" ? option.currentValue : false,
+                category: option.category ?? "",
+                currentValue: option.type === "select" ? option.currentValue : "",
+                description: option.description ?? "",
+                id: option.id,
+                name: option.name,
+                type: option.type,
+                values:
+                    option.type === "boolean"
+                        ? []
+                        : option.options.flatMap((item) =>
+                              "group" in item
+                                  ? item.options.map((value) => ({
+                                        description: value.description ?? "",
+                                        groupId: item.group,
+                                        groupName: item.name,
+                                        name: value.name,
+                                        value: value.value,
+                                    }))
+                                  : [
+                                        {
+                                            description: item.description ?? "",
+                                            groupId: "",
+                                            groupName: "",
+                                            name: item.name,
+                                            value: item.value,
+                                        },
+                                    ],
+                          ),
+            },
+        ];
+    });
 }
 
 function mergeSessionEvents(

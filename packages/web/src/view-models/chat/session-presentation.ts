@@ -153,8 +153,37 @@ function displayContent(update: ToolCallUpdateV2): readonly AgentDisplayContent[
                 uri: "",
             };
         }
+        if (item.type === "unsupported") {
+            return {
+                artifactId: "",
+                data: "",
+                mimeType: "",
+                name: item.originalType,
+                newText: "",
+                oldText: "",
+                path: "",
+                terminalId: "",
+                text: `Unsupported tool content type: ${item.originalType}`,
+                type: "text",
+                uri: "",
+            };
+        }
         const content = item.content;
         switch (content.type) {
+            case "unsupported":
+                return {
+                    artifactId: "",
+                    data: "",
+                    mimeType: "",
+                    name: content.originalType,
+                    newText: "",
+                    oldText: "",
+                    path: "",
+                    terminalId: "",
+                    text: `Unsupported content type: ${content.originalType}`,
+                    type: "text",
+                    uri: "",
+                };
             case "text":
                 return {
                     artifactId: "",
@@ -267,20 +296,6 @@ function displayContent(update: ToolCallUpdateV2): readonly AgentDisplayContent[
                     type: "resource",
                     uri: externalContentPath(content),
                 };
-            case "unsupported":
-                return {
-                    artifactId: "",
-                    data: "",
-                    mimeType: "",
-                    name: content.originalType,
-                    newText: "",
-                    oldText: "",
-                    path: "",
-                    terminalId: "",
-                    text: `Unsupported content type: ${content.originalType}`,
-                    type: "text",
-                    uri: "",
-                };
             default:
                 return exhaustive(content);
         }
@@ -382,6 +397,7 @@ function messageFromAcpUpdate(event: SessionEventV2, update: AcpSessionUpdateV2)
         case "plan_removed":
         case "plan_update":
         case "session_info_update":
+        case "unsupported":
         case "usage_update":
             return null;
         default:
@@ -450,7 +466,13 @@ function consumeSessionEvent(
     event: SessionEventV2,
     leadingEvent: "known" | "possibly-before-page",
 ): SessionEventResult {
-    if (event.type === "lifecycle-metadata") {
+    if (event.type !== "acp") {
+        // Lifecycle metadata is handled below; an event type this build does
+        // not know carries no presentation and is skipped without dropping the
+        // surrounding history.
+        if (event.type !== "lifecycle-metadata") {
+            return { kind: "skipped" };
+        }
         const lifecycle = event.payload;
         if (lifecycle.kind === "prompt.requested") {
             const contents = lifecycle.content.filter((content) => !isBotInstructions(content)).map(userDisplayContent);
@@ -470,6 +492,9 @@ function consumeSessionEvent(
         return { kind: "skipped" };
     }
     const update = event.payload;
+    if (update.sessionUpdate === "unsupported") {
+        return { kind: "skipped" };
+    }
     if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update") {
         const message = messageFromAcpUpdate(event, update);
         if (message === null) {
@@ -607,10 +632,7 @@ export function sessionEventLogPresentation(events: readonly SessionEventV2[]): 
 export function sessionEventCommandIds(events: readonly SessionEventV2[]): readonly string[] {
     const commandIds: string[] = [];
     for (const event of events) {
-        if (event.type === "lifecycle-metadata") {
-            if ("commandId" in event.payload && !commandIds.includes(event.payload.commandId)) {
-                commandIds.push(event.payload.commandId);
-            }
+        if (event.type !== "acp") {
             continue;
         }
         const update = event.payload;

@@ -859,7 +859,7 @@ export function createSessionPaneModel(options: {
                                         historyLoads.push(loadProjectionHistory(effect, connected, signal));
                                     }
                                 }
-                                if (event.type !== "acp") {
+                                if (event.type === "lifecycle-metadata") {
                                     await receiveLifecycle(event.payload);
                                 }
                                 await new Promise<void>((resolve) => queueMicrotask(resolve));
