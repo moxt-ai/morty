@@ -20,16 +20,14 @@ import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import { registerDaemonDiagnostics } from "../../services/diagnostics/browser-diagnostics.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
-import type { ManagedBot } from "../../services/management/management-api.ts";
-import type { BotConnectionStatus, BotOperation } from "../../view-models/chat/bot-chat-home-store.ts";
+import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
 import { createConversationDirectoryStore } from "../../view-models/chat/conversation-directory-store.ts";
 import type { ConversationListStatus } from "../../view-models/chat/conversation-status-store.ts";
 import { projectLocationLabel } from "../../view-models/chat/data-region-store.ts";
 import { createNetworkDiagnosticStore } from "../../view-models/chat/network-diagnostic-store.ts";
 import { createRemoteAccessStore } from "../../view-models/chat/remote-access-store.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
-import { BotSwitcherMenu } from "./bot-switcher-menu.tsx";
-import { MachineSharing } from "./machine-sharing.tsx";
+import { IdentitySharing } from "./identity-sharing.tsx";
 import { NativeSessionDialog, type OpenMobiusSession } from "./native-session-dialog.tsx";
 
 function SidebarActionTooltip({
@@ -106,17 +104,32 @@ function groupConversationsByUpdatedAt(
     return groups;
 }
 
+function ConnectionStatus({ status }: { readonly status: BotConnectionStatus }) {
+    const dot =
+        status.kind === "connected"
+            ? "bg-primary"
+            : status.kind === "connecting"
+              ? "animate-pulse bg-amber-500 motion-reduce:animate-none"
+              : "bg-muted-foreground/60";
+    return (
+        <div
+            className="flex min-h-10 flex-1 items-center gap-2 rounded-lg px-1.5 py-1.5 sm:mb-6 sm:w-full"
+            data-testid={dataTestId.botConnectionStatus}
+            data-connection-status={status.kind}
+        >
+            <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${dot}`} />
+            <span className="hidden min-w-0 flex-1 truncate text-xs font-medium text-foreground sm:block">
+                {status.label}
+            </span>
+            <span className="sr-only sm:hidden">Agent {status.label.toLowerCase()}</span>
+        </div>
+    );
+}
+
 export function ConversationSidebar({
-    activeBot,
-    bots,
-    botOperation,
+    botId,
     connectionStatus,
     onConnectAgent,
-    onPairAgain,
-    onRenameBot,
-    onRemoveBot,
-    onResetBotOperation,
-    onSelectBot,
     requests,
     activeId,
     onOpen,
@@ -131,16 +144,9 @@ export function ConversationSidebar({
     optimisticTitles,
     projectId,
 }: {
-    readonly activeBot: ManagedBot;
-    readonly bots: readonly ManagedBot[];
-    readonly botOperation: BotOperation;
+    readonly botId: string;
     readonly connectionStatus: BotConnectionStatus;
-    readonly onConnectAgent: () => void;
-    readonly onPairAgain: () => void;
-    readonly onRenameBot: (displayName: string, signal: AbortSignal) => Promise<boolean>;
-    readonly onRemoveBot: (signal: AbortSignal) => Promise<boolean>;
-    readonly onResetBotOperation: () => void;
-    readonly onSelectBot: (botId: string) => void;
+    readonly onConnectAgent: (() => void) | null;
     readonly requests: Pick<
         BotChatApi,
         | "archiveManagedSession"
@@ -164,7 +170,6 @@ export function ConversationSidebar({
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
     readonly sessionStatuses: ReadonlyMap<string, ConversationListStatus>;
 }) {
-    const botId = activeBot.botId;
     const transport = useApiTransport();
     const [store] = useState(() => createConversationDirectoryStore(botId, requests));
     const { archive, archiveSession, load, state: directory } = useStore(store);
@@ -225,9 +230,9 @@ export function ConversationSidebar({
     }, [directoryRevision, load, revision]);
     useEffect(() => {
         if (directory.kind === "ready") {
-            onSessionsLoaded(activeBot.botId, directory.sessions);
+            onSessionsLoaded(botId, directory.sessions);
         }
-    }, [activeBot.botId, directory, onSessionsLoaded]);
+    }, [botId, directory, onSessionsLoaded]);
     return (
         <aside
             aria-label="Morty navigation"
@@ -241,17 +246,7 @@ export function ConversationSidebar({
                     <h1 className="truncate text-[15px] leading-5 font-semibold tracking-[-0.015em]">Morty</h1>
                 </span>
             </div>
-            <BotSwitcherMenu
-                activeBot={activeBot}
-                bots={bots}
-                connectionStatus={connectionStatus}
-                operation={botOperation}
-                onConnectAgent={onConnectAgent}
-                onRename={onRenameBot}
-                onRemove={onRemoveBot}
-                onResetOperation={onResetBotOperation}
-                onSelect={onSelectBot}
-            />
+            <ConnectionStatus status={connectionStatus} />
             <div className="col-start-1 row-start-2 flex min-w-0 items-center justify-between px-1 sm:col-auto sm:row-auto sm:mb-2">
                 <h2 className="hidden text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground sm:block">
                     Recent sessions
@@ -346,11 +341,13 @@ export function ConversationSidebar({
                         </span>
                         <p className="text-sm font-medium text-foreground">No sessions yet</p>
                         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                            Connect this Machine to start chatting.
+                            Connect your local agent to start chatting.
                         </p>
-                        <Button className="mt-3" onClick={onPairAgain} size="sm" variant="outline">
-                            Connect Machine
-                        </Button>
+                        {onConnectAgent !== null && (
+                            <Button className="mt-3" onClick={onConnectAgent} size="sm" variant="outline">
+                                Connect agent
+                            </Button>
+                        )}
                     </div>
                 )}
                 {archive.kind === "failed" && (
@@ -505,7 +502,7 @@ export function ConversationSidebar({
                             aria-label="Continue your work"
                             variant="ghost"
                             className="size-10 shrink-0 justify-center rounded-full px-0 text-copy-secondary hover:bg-white/70"
-                            data-testid={dataTestId.shareMachine}
+                            data-testid={dataTestId.shareIdentity}
                             onClick={() => setSharing(true)}
                         >
                             <Share2 className="size-4" aria-hidden="true" />
@@ -531,7 +528,7 @@ export function ConversationSidebar({
                     description="Scan the QR code or open the link on another device to use Morty."
                     onClose={() => setSharing(false)}
                 >
-                    <MachineSharing createTransfer={createTransfer} />
+                    <IdentitySharing createTransfer={createTransfer} />
                 </Dialog>
             )}
             {diagnostic.state.kind !== "closed" && (

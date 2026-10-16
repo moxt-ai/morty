@@ -283,7 +283,7 @@ export function MobiusSessionPane({
                 setHarnesses(
                     connectedChatRuntimeAgents(configuration.runtime).map((agent) => ({
                         agentRef: agent.agentRef,
-                        label: `${agent.label} · ${agent.machineName}`,
+                        label: agent.label,
                         value: `${agent.runtimeId}:${agent.agentRef}`,
                     })),
                 );

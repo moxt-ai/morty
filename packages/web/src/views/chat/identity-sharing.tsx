@@ -2,14 +2,14 @@ import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "../../data-testid.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
-import { createMachineSharingStore } from "../../view-models/chat/machine-sharing-store.ts";
+import { createIdentitySharingStore } from "../../view-models/chat/identity-sharing-store.ts";
 
-export function MachineSharing({
+export function IdentitySharing({
     createTransfer,
 }: {
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
 }) {
-    const [store] = useState(() => createMachineSharingStore(createTransfer));
+    const [store] = useState(() => createIdentitySharingStore(createTransfer));
     const { load, state } = useStore(store);
     useEffect(() => {
         const controller = new AbortController();
@@ -24,8 +24,8 @@ export function MachineSharing({
         return <p role="alert">Could not create a sharing link.</p>;
     }
     return (
-        <div className="space-y-4 text-center" data-testid={dataTestId.machineSharing}>
-            <img className="mx-auto size-56" src={state.image} alt="Machine sharing QR code" />
+        <div className="space-y-4 text-center" data-testid={dataTestId.identitySharing}>
+            <img className="mx-auto size-56" src={state.image} alt="Continue your work QR code" />
             <a
                 className="block break-all font-mono text-xs text-primary underline underline-offset-4"
                 href={state.transfer.url}

@@ -171,7 +171,7 @@ function BugReportDialog({ onClose }: { readonly onClose: () => void }) {
                         </p>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                        Daemon diagnostics may take up to 10 seconds. You can still send a report when your machine is
+                        Daemon diagnostics may take up to 10 seconds. You can still send a report when your Runtime is
                         offline.
                     </p>
                     {state.kind === "failed" && <p role="alert">{state.message}</p>}

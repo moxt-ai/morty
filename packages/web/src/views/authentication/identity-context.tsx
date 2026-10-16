@@ -1,6 +1,7 @@
 import { createContext, type ReactNode, useContext } from "react";
 
 export type ActiveIdentity = {
+    readonly botId: string;
     readonly getToken: (signal: AbortSignal) => Promise<string>;
     readonly projectId: string;
 };

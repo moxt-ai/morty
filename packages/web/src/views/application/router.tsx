@@ -3,12 +3,6 @@ import { createRootRoute, createRoute, createRouter, Outlet, useRouter, useRoute
 import type { ComponentType, ReactNode } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
-import type {
-    ApplicationConnectionProps,
-    BrowserChannelConnection,
-    ChannelReference,
-    SavedChannel,
-} from "../../view-models/channel-connection.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
 
 export interface ApplicationShellProps {
@@ -46,11 +40,9 @@ function RouteFailure({ error, reset }: { readonly error: Error; readonly reset:
     );
 }
 
-export function createApplicationRouter<TConnection extends ChannelReference>(
+export function createApplicationRouter(
     authorize: (signal: AbortSignal) => Promise<void>,
-    userId: string,
-    Content: ComponentType<ApplicationConnectionProps<TConnection>>,
-    connection: BrowserChannelConnection<TConnection>,
+    Content: ComponentType<{ readonly view: "overview" | "chat" }>,
     layouts: {
         readonly Standard: ComponentType<ApplicationShellProps>;
         readonly Application: ComponentType<ApplicationShellProps>;
@@ -65,28 +57,18 @@ export function createApplicationRouter<TConnection extends ChannelReference>(
             </layouts.Standard>
         ),
     });
-    function page(path: "/" | "/chat", view: ApplicationConnectionProps<TConnection>["view"]) {
+    function page(path: "/" | "/chat", view: "overview" | "chat") {
         const route = createRoute({
             getParentRoute: () => root,
             path,
             validateSearch: (search) => {
                 const sessionId = Reflect.get(search, "sessionId");
                 return {
-                    channel: Reflect.get(search, "channel"),
                     sessionId: isIdentifier(sessionId) ? sessionId : undefined,
                 };
             },
-            loaderDeps: ({ search }) => ({ channel: search.channel }),
-            loader: async ({ abortController, deps }) => {
-                const saved: SavedChannel<TConnection> =
-                    view === "chat" || deps.channel !== undefined
-                        ? await connection.load(deps.channel, abortController.signal)
-                        : { kind: "unpaired" };
-                return saved;
-            },
             component: function ApplicationRoute() {
-                const saved = route.useLoaderData();
-                const body = <Content userId={userId} view={view} initialConnection={saved} />;
+                const body = <Content view={view} />;
                 return view === "overview" ? (
                     <layouts.Standard>{body}</layouts.Standard>
                 ) : (
