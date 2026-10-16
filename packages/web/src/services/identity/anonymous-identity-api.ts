@@ -51,10 +51,6 @@ const transferSchema = v.pipe(
 export type AnonymousIdentity = v.InferOutput<typeof identitySchema>;
 export type IdentityTransfer = v.InferOutput<typeof transferSchema>;
 
-/** Whether this browser already holds an anonymous credential, without validating it. */
-export function hasStoredAnonymousCredential(): boolean {
-    return centralSessionStorage.has(anonymousCredentialEntry);
-}
 export type DataRegion =
     | "wnam"
     | "enam"

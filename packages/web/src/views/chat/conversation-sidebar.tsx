@@ -113,7 +113,7 @@ function ConnectionStatus({ status }: { readonly status: BotConnectionStatus }) 
               : "bg-muted-foreground/60";
     return (
         <div
-            className="flex min-h-10 flex-1 items-center gap-2 rounded-lg px-1.5 py-1.5 sm:mb-6 sm:w-full"
+            className="flex min-h-10 items-center justify-self-end gap-2 px-1.5 py-1.5 sm:mb-6 sm:min-h-0 sm:self-start"
             data-testid={dataTestId.botConnectionStatus}
             data-connection-status={status.kind}
         >
