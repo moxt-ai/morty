@@ -174,7 +174,7 @@ export function createAuthenticationRoutes() {
             bodyParser<ManagementHttpEnvironment, typeof transferInput>(transferInput),
             async (context) => {
                 const input = context.req.valid("json");
-                const identity = await context.env.services.authentication.redeemTransfer(
+                const identity = await context.env.services.management.redeemTransfer(
                     input.code,
                     context.req.raw.signal,
                 );
