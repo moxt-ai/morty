@@ -57,7 +57,7 @@ function ImportSessionButton({
 function ContinuePage() {
     const transport = useApiTransport();
     const [store] = useState(() => createContinueStore(transport.fetch));
-    const { continueIdentity, continueSession, redeem, state } = useStore(store);
+    const { continueSession, redeem, state } = useStore(store);
     const code = continueCode(state);
     const qrCodeUrl = code === null ? null : continueUrl(code);
     useEffect(() => () => store.getState().dispose(), [store]);
@@ -98,11 +98,6 @@ function ContinuePage() {
                                     <dd className="break-all font-mono text-xs">{state.handoff.sessionId}</dd>
                                 </div>
                             </dl>
-                            {state.replacesIdentity ? (
-                                <p className="mt-4 text-sm leading-6 text-amber-700">
-                                    Continuing replaces the anonymous Morty identity currently stored on this device.
-                                </p>
-                            ) : null}
                             {state.kind === "session-failed" ? (
                                 <p role="alert" className="mt-4 text-sm text-red-700">
                                     {state.message}
@@ -139,15 +134,6 @@ function ContinuePage() {
                                 {state.kind === "session-redeeming" && state.choice === "skip" ? (
                                     <Spinner label="Skipping session" />
                                 ) : null}
-                            </Button>
-                        </>
-                    ) : state.kind === "identity-confirm" ? (
-                        <>
-                            <p className="mt-4 leading-7 text-muted-foreground">
-                                Continuing replaces the anonymous Morty identity currently stored on this device.
-                            </p>
-                            <Button className="mt-6" onClick={continueIdentity}>
-                                Replace and continue
                             </Button>
                         </>
                     ) : state.kind === "identity-redeeming" ? (
