@@ -382,6 +382,46 @@ test("Given an anonymous user, When machine access is shared, Then its expiring 
     expect((await worker.fetch(accountRequest(issuedTokens[0] ?? "", owner.projectId), environment)).status).toBe(200);
 });
 
+test("Given an anonymous user with a Machine, When a transfer link is redeemed, Then the redemption returns the user's Bot", async () => {
+    const environment = fixture.environment();
+    const identity = await fixture.createAnonymousUser();
+    const botsResponse = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bots`, {
+            headers: { authorization: `Bearer ${identity.token}` },
+        }),
+        environment,
+    );
+    expect(botsResponse.status).toBe(200);
+    const { bots } = v.parse(
+        v.object({ bots: v.array(v.object({ botId: v.string(), displayName: v.string() })) }),
+        await botsResponse.json(),
+    );
+    const transfer = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/identity/transfers`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${identity.token}` },
+        }),
+        environment,
+    );
+    expect(transfer.status).toBe(201);
+    const { url } = v.parse(v.object({ url: v.string() }), await transfer.json());
+    const code = new URL(url).hash.slice("#code=".length);
+    const redeemed = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ code }),
+        }),
+        environment,
+    );
+    expect(redeemed.status).toBe(200);
+    expect(await redeemed.json()).toMatchObject({
+        userId: identity.userId,
+        projectId: identity.projectId,
+        botId: bots[0]?.botId,
+    });
+});
+
 test("Given the first browser for Morty, When remote access ends after a recovery token is created, Then the browser credential is revoked and recovery remains available", async () => {
     const environment = fixture.environment();
     const identity = await fixture.createAnonymousUser();
