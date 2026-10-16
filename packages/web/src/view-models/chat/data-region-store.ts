@@ -1,5 +1,6 @@
 import { createStore } from "zustand/vanilla";
 import type { DataRegion } from "../../services/identity/anonymous-identity-api.ts";
+import { formatError } from "../format-error.ts";
 
 type ReplacementState =
     | { readonly kind: "idle" }
@@ -61,7 +62,7 @@ export const createDataRegionStore = (
                 set({
                     replacement: {
                         kind: "failed",
-                        message: cause instanceof Error ? cause.message : "The data region could not be changed.",
+                        message: formatError(cause, "The data region could not be changed."),
                     },
                 });
             }

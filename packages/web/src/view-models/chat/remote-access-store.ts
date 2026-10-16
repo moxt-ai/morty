@@ -1,4 +1,5 @@
 import { createStore } from "zustand/vanilla";
+import { formatError } from "../format-error.ts";
 
 type RemoteAccessState =
     | { readonly kind: "available" }
@@ -21,7 +22,6 @@ export interface RemoteAccessStore {
 }
 
 const operationSignal = (signal: AbortSignal) => AbortSignal.any([signal, AbortSignal.timeout(15_000)]);
-const failureMessage = (cause: unknown, fallback: string) => (cause instanceof Error ? cause.message : fallback);
 
 export const createRemoteAccessStore = (operations: RemoteAccessOperations) =>
     createStore<RemoteAccessStore>()((set, get) => ({
@@ -54,7 +54,7 @@ export const createRemoteAccessStore = (operations: RemoteAccessOperations) =>
                     state: {
                         kind: "failed",
                         accessToken: state.accessToken,
-                        message: failureMessage(cause, "Remote access could not be ended."),
+                        message: formatError(cause, "Remote access could not be ended."),
                     },
                 });
             }

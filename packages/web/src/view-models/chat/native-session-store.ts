@@ -5,6 +5,7 @@ import {
     type ChatAgentSelection,
     connectedChatRuntimeAgents,
 } from "../../services/chat/bot-chat-api.ts";
+import { formatError } from "../format-error.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { type SessionMessage, sessionEventLogPresentation } from "./session-presentation.ts";
 
@@ -111,9 +112,9 @@ export const createNativeSessionStore = (
                     set({
                         directory: {
                             kind: "failed",
-                            message: cause instanceof Error ? cause.message : "Native sessions are unavailable.",
+                            message: formatError(cause, "Native sessions are unavailable."),
                         },
-                        error: cause instanceof Error ? cause.message : "Native sessions are unavailable.",
+                        error: formatError(cause, "Native sessions are unavailable."),
                     });
                 }
             }
@@ -159,9 +160,9 @@ export const createNativeSessionStore = (
                         preview: {
                             kind: "failed",
                             entry,
-                            message: cause instanceof Error ? cause.message : "The preview could not be loaded.",
+                            message: formatError(cause, "The preview could not be loaded."),
                         },
-                        error: cause instanceof Error ? cause.message : "The preview could not be loaded.",
+                        error: formatError(cause, "The preview could not be loaded."),
                     });
                 }
             }
@@ -197,7 +198,7 @@ export const createNativeSessionStore = (
                 });
             } catch (cause) {
                 if (!signal.aborted) {
-                    set({ error: cause instanceof Error ? cause.message : `The session could not be ${action}ed.` });
+                    set({ error: formatError(cause, `The session could not be ${action}ed.`) });
                 }
             } finally {
                 if (!signal.aborted) {
@@ -243,7 +244,7 @@ export const createNativeSessionStore = (
                 });
             } catch (cause) {
                 if (!signal.aborted) {
-                    set({ error: cause instanceof Error ? cause.message : "More sessions could not be loaded." });
+                    set({ error: formatError(cause, "More sessions could not be loaded.") });
                 }
             } finally {
                 if (!signal.aborted) {

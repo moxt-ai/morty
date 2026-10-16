@@ -1,6 +1,7 @@
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ManagedChatSession } from "@/services/chat/bot-chat-api";
 import { CloudApiError } from "@/services/management/management-api";
+import { formatError } from "../format-error.ts";
 
 type ConversationDirectoryState =
     | { readonly kind: "loading" }
@@ -74,7 +75,7 @@ export const createConversationDirectoryStore = (
                         archive: {
                             kind: "failed",
                             sessionId,
-                            message: cause instanceof Error ? cause.message : "The session could not be archived.",
+                            message: formatError(cause, "The session could not be archived."),
                         },
                     });
                 }
@@ -97,7 +98,7 @@ export const createConversationDirectoryStore = (
                         set({ state: { kind: "setup-required" } });
                         return;
                     }
-                    const message = cause instanceof Error ? cause.message : "Sessions are unavailable.";
+                    const message = formatError(cause, "Sessions are unavailable.");
                     set({
                         state:
                             cached === null

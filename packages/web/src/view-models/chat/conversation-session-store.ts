@@ -1,6 +1,7 @@
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
+import { formatError } from "../format-error.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 
 type ConversationSessionState =
@@ -44,7 +45,7 @@ export function createConversationSessionStore(
                     state: {
                         kind: "failed",
                         code: cause instanceof CloudApiError ? cause.code : null,
-                        message: cause instanceof Error ? cause.message : "Session unavailable.",
+                        message: formatError(cause, "Session unavailable."),
                     },
                 });
             }

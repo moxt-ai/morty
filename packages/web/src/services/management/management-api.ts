@@ -131,3 +131,9 @@ export class CloudApiError extends Error {
         this.name = "CloudApiError";
     }
 }
+
+const runtimeConnectionCodes = new Set(["connection_closed", "runtime_offline"]);
+
+export function isRuntimeConnectionFailure(cause: unknown): boolean {
+    return cause instanceof CloudApiError && runtimeConnectionCodes.has(cause.code.toLowerCase());
+}

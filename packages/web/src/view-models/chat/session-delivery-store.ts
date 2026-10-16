@@ -1,6 +1,7 @@
 import { MobiusApiError, MobiusCancellationError, type MobiusClient } from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
 import { CloudApiError } from "../../services/management/management-api.ts";
+import { formatError } from "../format-error.ts";
 
 type SubmitRequest = Parameters<MobiusClient["turns"]["submit"]>[1];
 type AcceptedTurn = { readonly turnId: string };
@@ -71,7 +72,7 @@ export const createSessionDeliveryStore = (options: {
                 set({
                     state: {
                         kind: "failed",
-                        message: cause instanceof Error ? cause.message : "The message was rejected.",
+                        message: formatError(cause, "The message was rejected."),
                     },
                 });
                 return null;

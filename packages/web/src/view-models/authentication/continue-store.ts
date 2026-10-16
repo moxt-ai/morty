@@ -5,6 +5,7 @@ import { BotChatApi } from "@/services/chat/bot-chat-api";
 import { recordBrowserError, registerDaemonDiagnostics } from "@/services/diagnostics/browser-diagnostics";
 import { AnonymousIdentityApi, hasStoredAnonymousCredential } from "@/services/identity/anonymous-identity-api";
 import { ManagementApi } from "@/services/management/management-api";
+import { formatError } from "@/view-models/format-error";
 
 export type NativeSessionImportAvailability =
     | { readonly kind: "available" }
@@ -193,7 +194,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
             } catch (cause) {
                 if (!signal.aborted) {
                     recordBrowserError(operation, cause);
-                    const message = cause instanceof Error ? cause.message : "This transfer link is unavailable.";
+                    const message = formatError(cause, "This transfer link is unavailable.");
                     set({
                         state:
                             state.kind === "session-redeeming"

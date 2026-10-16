@@ -1,6 +1,7 @@
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi } from "@/services/chat/bot-chat-api";
 import type { ManagedBot } from "../../services/management/management-api.ts";
+import { formatError } from "../format-error.ts";
 
 type PairingInstructionState =
     | { readonly kind: "loading" }
@@ -57,7 +58,7 @@ export const createPairingInstructionStore = (
                     set({
                         state: {
                             kind: "failed",
-                            message: cause instanceof Error ? cause.message : "Pairing is unavailable.",
+                            message: formatError(cause, "Pairing is unavailable."),
                         },
                     });
                 }

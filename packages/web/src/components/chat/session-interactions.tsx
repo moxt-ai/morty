@@ -10,6 +10,7 @@ import type {
     PermissionInteraction,
     PermissionInteractionResponse,
 } from "@/view-models/chat/session-pane-types";
+import { formatError } from "@/view-models/format-error";
 
 export type {
     ElicitationInteraction,
@@ -419,7 +420,7 @@ export function SessionInteractionCards({
                 setOperation({
                     kind: "failed",
                     interactionId,
-                    message: cause instanceof Error ? cause.message : "The response could not be submitted.",
+                    message: formatError(cause, "The response could not be submitted."),
                 }),
         );
     };

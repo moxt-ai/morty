@@ -2,6 +2,7 @@ import type { NativeSessionResult } from "@moxt-ai/mobius-protocol";
 import type { MobiusTurn, PromptImage, SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
 import { SessionPromptDisposition } from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
+import { formatError } from "../format-error.ts";
 
 interface QueuedMessageValue {
     readonly commandId: string;
@@ -39,10 +40,6 @@ export interface SessionMessageQueueStore {
     readonly steerMessage: (commandId: string, signal: AbortSignal) => Promise<ChatQueuedMessage | null>;
     readonly replace: (messages: Extract<NativeSessionResult, { readonly action: "active-turn" }>["queued"]) => void;
     readonly takeStarted: (commandId: string) => ChatQueuedMessage | null;
-}
-
-function failureMessage(cause: unknown, fallback: string): string {
-    return cause instanceof Error ? cause.message : fallback;
 }
 
 function updateMessage(
@@ -83,7 +80,7 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
                 set((state) => ({
                     feedback: {
                         kind: "failed",
-                        message: failureMessage(cause, "The queued message could not be deleted."),
+                        message: formatError(cause, "The queued message could not be deleted."),
                     },
                     messages: updateMessage(state.messages, commandId, "queued"),
                 }));
@@ -123,7 +120,7 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
                     throw cause;
                 }
                 set({
-                    feedback: { kind: "failed", message: failureMessage(cause, "The message could not be queued.") },
+                    feedback: { kind: "failed", message: formatError(cause, "The message could not be queued.") },
                     operation: { kind: "idle" },
                 });
                 return null;
@@ -154,7 +151,7 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
                 set((state) => ({
                     feedback: {
                         kind: "failed",
-                        message: failureMessage(cause, "The queued message could not steer the task."),
+                        message: formatError(cause, "The queued message could not steer the task."),
                     },
                     messages: updateMessage(state.messages, commandId, "queued"),
                 }));

@@ -125,6 +125,30 @@ test("Given a native session handoff, When importing fails, Then the choice page
     expect(getByRole(forkSession, "status", { name: "Forking session" })).toBeInstanceOf(HTMLElement);
 });
 
+test("Given a native session handoff whose Runtime went offline, When the user forks, Then the page reports Mobius is disconnected instead of a transfer-link problem", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({
+        prepare: async (application) => {
+            const runtime = await application.connectAgent({ id: "claude", label: "Claude" });
+            await runtime.disconnect();
+        },
+        page: {
+            harness: "claude",
+            kind: "continue",
+            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
+        },
+    });
+    const forkSession = await vi.waitFor(() => getByRole(document.body, "button", { name: "Fork session" }));
+
+    await app.user.click(forkSession);
+
+    const alert = await vi.waitFor(() => getByRole(document.body, "alert"));
+    expect(alert.textContent).toContain("Your Mobius is disconnected");
+    expect(alert.textContent).toContain("Start your Mobius");
+    expect(alert.textContent?.toLowerCase()).not.toContain("transfer link");
+});
+
 test("Given shared Morty access, When the user opens the user menu, Then replacing the current user is unavailable", {
     timeout: 30_000,
 }, async () => {

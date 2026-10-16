@@ -1,6 +1,7 @@
 import type { MobiusTurn, SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
 import { SessionPromptDisposition } from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
+import { formatError } from "../format-error.ts";
 
 interface ActiveTurn {
     readonly commandId: string;
@@ -34,10 +35,6 @@ export interface SessionTaskControlsStore {
         signal: AbortSignal,
     ) => Promise<{ readonly commandId: string } | null>;
     readonly stop: (signal: AbortSignal) => Promise<void>;
-}
-
-function errorMessage(cause: unknown, fallback: string): string {
-    return cause instanceof Error ? cause.message : fallback;
 }
 
 export const createSessionTaskControlsStore = (options: {
@@ -93,7 +90,7 @@ export const createSessionTaskControlsStore = (options: {
                     throw cause;
                 }
                 set({
-                    feedback: { kind: "failed", message: errorMessage(cause, "The active task could not be steered.") },
+                    feedback: { kind: "failed", message: formatError(cause, "The active task could not be steered.") },
                     operation: { active, kind: "running" },
                 });
                 return null;
@@ -116,7 +113,7 @@ export const createSessionTaskControlsStore = (options: {
                 set({
                     feedback: {
                         kind: "failed",
-                        message: errorMessage(cause, "The agent output could not be stopped."),
+                        message: formatError(cause, "The agent output could not be stopped."),
                     },
                     operation: { active, kind: "running" },
                 });

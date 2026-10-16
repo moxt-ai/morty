@@ -9,7 +9,8 @@ import type {
 } from "../../services/chat/bot-chat-api.ts";
 import { centralLocalStorage, newConversationDraftEntry } from "../../services/local-storage/central-local-storage.ts";
 import type { ManagedBot } from "../../services/management/management-api.ts";
-import { CloudApiError } from "../../services/management/management-api.ts";
+import { CloudApiError, isRuntimeConnectionFailure } from "../../services/management/management-api.ts";
+import { formatError } from "../format-error.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 import { type ConversationCreationState, transitionConversationCreation } from "./conversation-creation-machine.ts";
 import {
@@ -81,14 +82,6 @@ function runtimeConnectionStatus(configuration: BotRuntimeConfiguration): BotCon
     return configuration.runtime.online
         ? { kind: "connected", label: "Connected" }
         : { kind: "disconnected", label: "Disconnected" };
-}
-
-function isRuntimeConnectionFailure(cause: unknown): boolean {
-    return cause instanceof CloudApiError && isRuntimeConnectionCode(cause.code);
-}
-
-function isRuntimeConnectionCode(code: string | null): boolean {
-    return code !== null && ["connection_closed", "runtime_offline"].includes(code.toLowerCase());
 }
 
 export interface BotChatNavigation {
@@ -421,7 +414,7 @@ export const createBotChatHomeStore = (
                     }));
                     return;
                 }
-                const message = cause instanceof Error ? cause.message : "Chat is unavailable.";
+                const message = formatError(cause, "Chat is unavailable.");
                 const runtimeFailure = isRuntimeConnectionFailure(cause);
                 const failedSelection = get().selection;
                 if (failedSelection.kind === "loading") {
@@ -536,7 +529,7 @@ export const createBotChatHomeStore = (
                     set({
                         botOperation: {
                             kind: "failed",
-                            message: cause instanceof Error ? cause.message : "The Machine could not be renamed.",
+                            message: formatError(cause, "The Machine could not be renamed."),
                         },
                     });
                 }
@@ -581,7 +574,7 @@ export const createBotChatHomeStore = (
                     set({
                         botOperation: {
                             kind: "failed",
-                            message: cause instanceof Error ? cause.message : "The Machine could not be removed.",
+                            message: formatError(cause, "The Machine could not be removed."),
                         },
                     });
                 }
@@ -719,7 +712,7 @@ export const createBotChatHomeStore = (
                     set((state) => ({
                         creation: transitionConversationCreation(state.creation, {
                             commandId,
-                            error: cause instanceof Error ? cause.message : "The Session could not be created.",
+                            error: formatError(cause, "The Session could not be created."),
                             kind: "session-create-failed",
                         }),
                     }));
@@ -763,7 +756,7 @@ export const createBotChatHomeStore = (
                 set((state) => ({
                     creation: transitionConversationCreation(state.creation, {
                         commandId,
-                        error: cause instanceof Error ? cause.message : "The message could not be sent.",
+                        error: formatError(cause, "The message could not be sent."),
                         kind: "draft-message-send-failed",
                     }),
                 }));

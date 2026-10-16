@@ -16,6 +16,7 @@ import {
     saveLastCwdPreference,
     saveRecentCwdPreference,
 } from "@/services/chat/last-cwd-preference";
+import { formatError } from "../format-error.ts";
 
 type DraftSettingsState =
     | { readonly kind: "loading" }
@@ -94,7 +95,7 @@ function pathDirectoryId(path: string): string {
 }
 
 function failureMessage(cause: unknown): string {
-    return cause instanceof Error ? cause.message : "The working directory is unavailable.";
+    return formatError(cause, "The working directory is unavailable.");
 }
 
 function wait(signal: AbortSignal): Promise<void> {
@@ -338,7 +339,7 @@ export const createDraftControlsStore = (
                     set({
                         settings: {
                             kind: "failed",
-                            message: cause instanceof Error ? cause.message : "Harness settings are unavailable.",
+                            message: formatError(cause, "Harness settings are unavailable."),
                         },
                     });
                 }
@@ -395,7 +396,7 @@ export const createDraftControlsStore = (
                         set({
                             settings: {
                                 kind: "failed",
-                                message: cause instanceof Error ? cause.message : "Harness settings are unavailable.",
+                                message: formatError(cause, "Harness settings are unavailable."),
                             },
                         });
                     }
@@ -512,7 +513,7 @@ export const createDraftControlsStore = (
                         set({
                             settings: {
                                 kind: "failed",
-                                message: cause instanceof Error ? cause.message : "The harness could not be selected.",
+                                message: formatError(cause, "The harness could not be selected."),
                             },
                         });
                     }

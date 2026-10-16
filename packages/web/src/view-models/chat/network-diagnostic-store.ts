@@ -1,4 +1,5 @@
 import { createStore } from "zustand/vanilla";
+import { formatError } from "../format-error.ts";
 
 type NetworkDiagnosticState =
     | { readonly kind: "closed" }
@@ -67,7 +68,7 @@ export const createNetworkDiagnosticStore = (operations: NetworkDiagnosticOperat
                     set({
                         state: {
                             kind: "failed",
-                            message: cause instanceof Error ? cause.message : "The network diagnostic failed.",
+                            message: formatError(cause, "The network diagnostic failed."),
                         },
                     });
                 }
