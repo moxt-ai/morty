@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
+import { projectObject } from "../../../gateway/project-object-routing.ts";
 import { json } from "../../../infra/http.ts";
 import { bodyParser } from "../../../middleware/body-parser.ts";
 import { ManagementError } from "../entity/management-error.ts";
@@ -31,6 +32,21 @@ export function createPlatformProjectRoutes() {
                     AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(15000)]),
                 ),
             });
+        })
+        .post("/project/replacement", authenticatedSession, async (context) => {
+            const session = context.get("session");
+            const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]);
+            const project = await context.env.services.management.replaceProject(session.userId, signal);
+            const response = await projectObject(context.env.config.bindings, project.projectId).fetch(
+                new Request("https://project.internal/__project/bootstrap", {
+                    body: JSON.stringify({ project, userId: session.userId }),
+                    headers: { "content-type": "application/json" },
+                    method: "POST",
+                    signal,
+                }),
+            );
+            signal.throwIfAborted();
+            return response;
         })
         .post(
             "/project",

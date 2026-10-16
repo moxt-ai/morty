@@ -78,6 +78,7 @@ export async function createTestRuntime(harness: E2EHarness) {
                 await page.reload();
             },
             disconnectRuntime: async () => await runtime.disconnect(),
+            forgetRuntimeConnections: async () => await runtime.forgetConnections(),
             connectUnrelatedRuntime: async () => {
                 const unrelated = new ChatApi(stack.chatOrigin, harness.signal);
                 await unrelated.useBrowserIdentity(

@@ -122,6 +122,12 @@ export class ControlledSetupRuntime implements SetupRuntime {
         await Promise.all(active.map((daemon) => daemon[Symbol.asyncDispose]()));
     };
 
+    /** Simulates the manager forgetting every saved Runtime connection. */
+    readonly forgetConnections = async (): Promise<void> => {
+        await this.disconnect();
+        this.#saved.clear();
+    };
+
     readonly continueReply = async (prompt: string, plan: HarnessReplyPlan): Promise<void> => {
         for (const daemon of this.#active.values()) {
             await daemon.continueReply(prompt, plan);

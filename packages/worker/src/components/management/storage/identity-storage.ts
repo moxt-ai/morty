@@ -61,7 +61,7 @@ export class IdentityStorage {
         const token = `mobius_anon_v2_${randomSecret()}`;
         const database = requireIdentityDatabase(this.#database);
         await database.batch([
-            database.insert(appUser).values({ id: userId, createdAt: now }),
+            database.insert(appUser).values({ id: userId, createdAt: now }).onConflictDoNothing(),
             database.insert(anonymousCredential).values({
                 id: credentialId,
                 userId,

@@ -1,6 +1,7 @@
 import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { type PlatformProject, PlatformProjectError } from "../entity/platform-project.ts";
+import { projectRegion } from "../entity/project-region.ts";
 import type { ManagedBotStorage } from "../storage/managed-bot-storage.ts";
 import type { PlatformProjectStorage } from "../storage/platform-project-storage.ts";
 import type { ProjectLocationHint } from "../util/project-location.ts";
@@ -154,6 +155,36 @@ export class ManagementService {
             "Project audit event",
         );
         return (await scoped.#platformProjects.read(userId, origin, appId, signal)) ?? project;
+    };
+
+    /** Creates the successor Project for a user whose Project must be replaced, keeping the user. */
+    readonly replaceProject = async (userId: string, signal: AbortSignal) => {
+        const { origin, appId } = this.#platform.configuration();
+        const previous = await this.#platformProjects.read(userId, origin, appId, signal);
+        if (previous === null) {
+            throw new PlatformProjectError("PROJECT_REQUIRED", "Finish Morty setup before replacing.", 409);
+        }
+        // A successor needs its own Platform reference: clientReference is unique per (app, reference)
+        // and the primary reference is already bound to the previous Project. Keying the reference on
+        // the previous Project keeps replacement retries idempotent, as does reusing its placement.
+        const reference = `${userId}.${previous.projectId}`;
+        const project = await this.#platform.create(
+            userId,
+            "Morty",
+            signal,
+            projectRegion(previous.projectId),
+            reference,
+        );
+        this.#logger.info(
+            {
+                event: "platform-project-replaced",
+                userId,
+                previousProjectId: previous.projectId,
+                projectId: project.projectId,
+            },
+            "Project audit event",
+        );
+        return project;
     };
 
     readonly createRuntimePairing = async (userId: string, idempotencyKey: string, signal: AbortSignal) => {

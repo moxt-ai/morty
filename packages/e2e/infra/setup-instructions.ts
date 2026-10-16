@@ -64,6 +64,7 @@ export async function followSetupInstructions(options: {
         identity: {
             botId: text(configuration.bot_id, "saved Bot"),
             projectId: text(configuration.project_id, "saved project"),
+            userId: text(configuration.user_id, "saved user"),
         },
     };
 }

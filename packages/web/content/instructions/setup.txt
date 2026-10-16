@@ -30,8 +30,10 @@ node <downloaded-setup.mjs> setup --base-url {{BASE_URL}} --cwd <absolute-curren
 The script stores its configuration under the current user's `~/Documents` directory
 and protects it using the operating system's filesystem permissions. Do not use a
 repository as a substitute.
-The script reuses the saved identity and Machine for this origin, reconnects an
-active managed connection when possible, and otherwise pairs a new Runtime.
+The script reuses the saved identity and Machine for this origin and reconnects an
+active managed connection when possible. When the saved Machine's Runtime is no
+longer managed here, it keeps the user, replaces the Project and Machine, and pairs
+a new Runtime.
 Mobius owns Runtime connection state and identifiers; do not save or back them up yourself.
 No registration, separate bind command, or replacement confirmation is needed.
 

@@ -47,6 +47,22 @@ test("Given a saved setup handoff, When its Runtime reconnects, Then setup retur
     expect(connected.qrPath).toMatch(/morty-handoff-[0-9a-f-]+\.png$/u);
 });
 
+test("Given a saved Machine whose Runtime the manager no longer manages, When setup reconnects, Then it replaces the Project, pairs a fresh Runtime, and keeps the user", async ({
+    runtime,
+}) => {
+    const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    await runtime.forgetRuntimeConnections();
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+
+    expect(connected.events).not.toContainEqual(expect.objectContaining({ status: "runtime_reused" }));
+    expect(connected.identity.userId).toBe(original.identity.userId);
+    expect(connected.identity.projectId).not.toBe(original.identity.projectId);
+    expect(connected.botId).not.toBe(original.botId);
+    const statuses = connected.events.map((event) => event.status);
+    expect(statuses).toContain("prepared");
+    expect(statuses).toContain("ready");
+});
+
 test("Given a saved Machine and another same-App connection, When its Runtime reconnects, Then setup reuses the Machine's bound Runtime", async ({
     runtime,
 }) => {

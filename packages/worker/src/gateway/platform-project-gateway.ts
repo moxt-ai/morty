@@ -750,10 +750,12 @@ export class PlatformProjectGateway {
         displayName: string,
         signal: AbortSignal,
         requestedLocationHint?: ProjectLocationHint,
+        clientReference?: string,
     ) => {
         signal.throwIfAborted();
         const configuration = this.configuration();
         const locationHint = requestedLocationHint ?? "apac";
+        const reference = clientReference ?? userId;
         const client = new MobiusPlatformAppClient({
             endpoint: configuration.origin,
             credentialProvider: new MobiusAppCredentialProvider(
@@ -766,8 +768,8 @@ export class PlatformProjectGateway {
             const project = await client.createProject(
                 configuration.appId,
                 {
-                    clientReference: userId,
-                    idempotencyKey: `cloud-${userId}`,
+                    clientReference: reference,
+                    idempotencyKey: `cloud-${reference}`,
                     displayName,
                     locationHint,
                 },
@@ -775,7 +777,7 @@ export class PlatformProjectGateway {
             );
             if (
                 project.appId !== configuration.appId ||
-                project.clientReference !== userId ||
+                project.clientReference !== reference ||
                 project.lifecycle !== "active"
             ) {
                 throw new PlatformProjectError(

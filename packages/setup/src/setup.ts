@@ -583,33 +583,53 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return selection;
     }
 
+    async function replaceProject(context: Context): Promise<Context> {
+        progress("identity", "Replacing the Project to pair a new Runtime for the same user.");
+        const replacement = await request(context, "/management/project/replacement", {});
+        const saved = await saveConfiguration(context, {
+            user_token: credential(replacement.token),
+            user_id: identifier(replacement.userId),
+            bot_id: identifier(object(replacement.bot).botId),
+            project_id: identifier(replacement.projectId),
+            // The replacement Machine starts unbound; drop the previous Machine's Agent binding.
+            agent_ref: undefined,
+            agent_config_revision: undefined,
+            entry: "setup",
+        });
+        emit({ status: "project_replaced", botId: saved.config.bot_id, projectId: saved.config.project_id });
+        return saved;
+    }
+
     async function prepareRuntime(
         context: Context,
         cwd: string,
         mode: Options["mode"],
         expectedRuntimeId: string | null,
-    ): Promise<RuntimeSelection> {
+    ): Promise<{ readonly context: Context; readonly runtime: RuntimeSelection }> {
         progress("pairing", "Preparing the Runtime connection.");
         const project = await request(context, "/management/project");
         const appId = identifier(project.appId);
         if (mode === "pair") {
-            return await createRuntimePairing(context, appId);
+            return { context, runtime: await createRuntimePairing(context, appId) };
         }
         if (expectedRuntimeId !== null) {
             const existing = (await listManagedConnections(context, cwd)).find(
                 (connection) => connection.appId === appId && connection.runtimeId === expectedRuntimeId,
             );
-            if (existing === undefined) {
-                fail("RUNTIME_CONNECTION_UNAVAILABLE");
+            if (existing !== undefined) {
+                emit({
+                    status: "runtime_reused",
+                    runtimeId: existing.runtimeId,
+                    connectionId: existing.connectionId,
+                });
+                return { context, runtime: { kind: "existing", ...existing } };
             }
-            emit({
-                status: "runtime_reused",
-                runtimeId: existing.runtimeId,
-                connectionId: existing.connectionId,
-            });
-            return { kind: "existing", ...existing };
+            // The saved Machine's Runtime is not managed here anymore: keep the user, but
+            // continue on a fresh Project with a fresh Machine and a new Runtime pairing.
+            const replaced = await replaceProject(context);
+            return { context: replaced, runtime: await createRuntimePairing(replaced, appId) };
         }
-        return await createRuntimePairing(context, appId);
+        return { context, runtime: await createRuntimePairing(context, appId) };
     }
 
     function runtimeArguments(runtime: RuntimeSelection, cwd: string): readonly string[] {
@@ -848,12 +868,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const verified = await verifyIdentityAndBot(context, options.mode);
         context = verified.context;
         emit({ status: "identity_ready", userId: context.config.user_id, botId: context.config.bot_id });
-        const runtime = await prepareRuntime(context, cwd, options.mode, verified.expectedRuntimeId);
-        validateExpectedRuntime(identity, runtime);
-        context = await startRuntime(context, runtime, cwd);
-        await waitForRuntime(context, runtime, options.harness);
-        context = await bindAgent(context, runtime, options.harness);
-        await finishSetup(context, runtime, options);
+        const prepared = await prepareRuntime(context, cwd, options.mode, verified.expectedRuntimeId);
+        validateExpectedRuntime(identity, prepared.runtime);
+        context = prepared.context;
+        context = await startRuntime(context, prepared.runtime, cwd);
+        await waitForRuntime(context, prepared.runtime, options.harness);
+        context = await bindAgent(context, prepared.runtime, options.harness);
+        await finishSetup(context, prepared.runtime, options);
     }
 
     try {
