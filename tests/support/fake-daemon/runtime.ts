@@ -177,7 +177,6 @@ export async function createControlledAgentRuntime(options: {
                 new Request(`${options.origin}/mobius/api/v1/runtime-pairings/${pairing.pairingId}/redeem`, {
                     body: JSON.stringify({
                         agents: harness.catalog,
-                        installableAgents: [],
                         machineName: "Controlled Agent Runtime",
                         pairingCode: pairing.pairingCode,
                         workspaceName: "Controlled workspace",
