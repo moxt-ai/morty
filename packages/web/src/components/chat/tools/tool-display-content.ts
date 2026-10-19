@@ -1,4 +1,4 @@
-import type { AgentDisplayContent } from "@moxt-ai/mobius-sdk";
+import type { AgentDisplayContent } from "@/view-models/chat/display-content";
 
 export function toolTextContent(content: readonly AgentDisplayContent[]): string | null {
     let text: string | null = null;

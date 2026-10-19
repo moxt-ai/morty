@@ -67,6 +67,7 @@
         "wrangler": "catalog:",
         "@moxt-ai/mobius": "workspace:*",
         "@moxt-ai/mobius-sdk": "workspace:*",
+
         "@moxt-ai/mobius-test-support": "workspace:*"
     },
     "dependencies": {

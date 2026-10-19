@@ -1,12 +1,12 @@
-import type { AgentDisplayContent } from "@moxt-ai/mobius-sdk";
 import { ExternalLink, FileText, Image as ImageIcon, Terminal, Video } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { MarkdownImageReader } from "@/components/agents/agent-markdown";
 import { AgentMarkdown } from "@/components/agents/agent-markdown";
 import { ToolTextPreview } from "@/components/chat/tools/tool-text-preview";
+import type { AgentDisplayContent } from "@/view-models/chat/display-content";
 
 const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/;
-const SAFE_VIDEO_MIME = /^video\/(?:mp4|webm)$/;
+const VIDEO_CONTENT_MIME = /^video\//;
 
 function safeLink(value: string): string {
     try {
@@ -18,15 +18,58 @@ function safeLink(value: string): string {
     return "";
 }
 
+function displayLabel(content: AgentDisplayContent): string {
+    switch (content.type) {
+        case "text":
+            return content.type;
+        case "image":
+            return content.name || content.uri || content.type;
+        case "resource":
+            return content.name || content.uri || content.type;
+        case "resource_link":
+            return content.name || content.uri || content.type;
+        case "diff":
+            return content.path || content.type;
+        case "terminal":
+            return content.terminalId.length > 0 ? content.terminalId : content.type;
+    }
+}
+
+function displayKey(content: AgentDisplayContent, index: number): string {
+    const identity =
+        content.type === "text"
+            ? ""
+            : content.type === "diff"
+              ? content.path
+              : content.type === "terminal"
+                ? content.terminalId
+                : `${content.name}:${content.uri}`;
+    return `${content.type}:${identity}:${index.toString()}`;
+}
+
+function isVideoResource(content: Extract<AgentDisplayContent, { readonly type: "resource" }>): boolean {
+    return VIDEO_CONTENT_MIME.test(content.mimeType);
+}
+
+type ImageContent = Extract<AgentDisplayContent, { readonly type: "image" }>;
+
 function ContentHeader({ content }: { readonly content: AgentDisplayContent }) {
-    const label = content.name || content.path || content.uri || content.type;
+    const label = displayLabel(content);
+    const media =
+        content.type === "terminal"
+            ? "terminal"
+            : content.type === "image"
+              ? "image"
+              : content.type === "resource" && isVideoResource(content)
+                ? "video"
+                : "file";
     return (
         <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold tracking-[0.04em] text-[#7d8590] uppercase">
-            {content.type === "image" ? (
+            {media === "image" ? (
                 <ImageIcon className="size-3" />
-            ) : content.type === "video" ? (
+            ) : media === "video" ? (
                 <Video className="size-3" />
-            ) : content.type === "terminal" ? (
+            ) : media === "terminal" ? (
                 <Terminal className="size-3" />
             ) : (
                 <FileText className="size-3" />
@@ -43,7 +86,7 @@ function LocalImage({
     mediaTestId,
     readImage,
 }: {
-    readonly content: AgentDisplayContent;
+    readonly content: ImageContent;
     readonly mediaTestId?: string | undefined;
     readonly readImage?: MarkdownImageReader | undefined;
 }) {
@@ -128,30 +171,12 @@ function AgentRichContentItem({
             </div>
         );
     }
-    if (content.type === "image" || content.type === "video") {
-        const safeMime = content.type === "image" ? SAFE_IMAGE_MIME : SAFE_VIDEO_MIME;
-        if (!safeMime.test(content.mimeType) || content.data.length === 0) {
+    if (content.type === "image") {
+        if (!SAFE_IMAGE_MIME.test(content.mimeType) || content.data.length === 0) {
             return (
                 <div className="rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
                     Media content could not be displayed safely.
                 </div>
-            );
-        }
-        if (content.type === "video") {
-            return (
-                <figure className="m-0 overflow-hidden rounded-xl border-[0.5px] border-black/9 bg-white p-2">
-                    <ContentHeader content={content} />
-                    <video
-                        aria-label={content.name.length > 0 ? content.name : "Agent-provided video"}
-                        className="max-h-[480px] w-auto max-w-full rounded-lg bg-black object-contain"
-                        controls
-                        data-testid={mediaTestId}
-                        muted
-                        playsInline
-                        preload="metadata"
-                        src={`data:${content.mimeType};base64,${content.data}`}
-                    />
-                </figure>
             );
         }
         return (
@@ -215,7 +240,7 @@ function AgentRichContentItem({
                 </div>
                 <ToolTextPreview
                     className="max-h-80 bg-transparent px-3 pb-3 font-mono text-[11px] leading-[18px]"
-                    text={content.text}
+                    text={content.terminalId}
                 />
             </section>
         );
@@ -262,7 +287,7 @@ export function AgentRichContent({
             {contents.map((content, index) => (
                 <AgentRichContentItem
                     content={content}
-                    key={`${content.type}:${content.name}:${content.uri}:${index.toString()}`}
+                    key={displayKey(content, index)}
                     mediaTestId={mediaTestId}
                     readImage={readImage}
                     openLocalFile={openLocalFile}

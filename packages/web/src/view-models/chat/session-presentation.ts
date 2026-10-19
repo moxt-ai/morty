@@ -1,6 +1,6 @@
-import type { AgentDisplayContent } from "@moxt-ai/mobius-sdk";
 import { externalContentPath } from "@moxt-ai/mobius-sdk";
 import type { AcpSessionUpdate, ContentBlock, SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
+import type { AgentDisplayContent } from "./display-content.ts";
 
 type ToolCallUpdate = Extract<AcpSessionUpdate, { readonly sessionUpdate: "tool_call" | "tool_call_update" }>;
 const BOT_INSTRUCTIONS_URI = "morty://bot/instructions";
@@ -125,144 +125,81 @@ function displayContent(update: ToolCallUpdate): readonly AgentDisplayContent[] 
     return (update.content ?? []).map((item): AgentDisplayContent => {
         if (item.type === "diff") {
             return {
-                artifactId: "",
-                data: "",
-                mimeType: "",
-                name: item.path,
                 newText: item.newText,
                 oldText: item.oldText ?? "",
                 path: item.path,
-                terminalId: "",
-                text: "",
                 type: "diff",
-                uri: "",
             };
         }
         if (item.type === "terminal") {
             return {
-                artifactId: "",
-                data: "",
-                mimeType: "",
-                name: "Terminal",
-                newText: "",
-                oldText: "",
-                path: "",
                 terminalId: item.terminalId,
-                text: "",
                 type: "terminal",
-                uri: "",
             };
         }
         const content = item.content;
         switch (content.type) {
             case "text":
                 return {
-                    artifactId: "",
-                    data: "",
-                    mimeType: "text/plain",
-                    name: "",
-                    newText: "",
-                    oldText: "",
-                    path: "",
-                    terminalId: "",
                     text: content.text,
                     type: "text",
-                    uri: "",
                 };
             case "image":
                 return {
-                    artifactId: "",
                     data: content.data,
                     mimeType: content.mimeType,
                     name: "",
-                    newText: "",
-                    oldText: "",
-                    path: "",
-                    terminalId: "",
-                    text: "",
                     type: "image",
                     uri: content.uri ?? "",
                 };
             case "audio":
                 return {
-                    artifactId: "",
                     data: content.data,
                     mimeType: content.mimeType,
                     name: "Audio",
-                    newText: "",
-                    oldText: "",
-                    path: "",
-                    terminalId: "",
                     text: "",
                     type: "resource",
                     uri: "",
                 };
             case "resource_link":
                 return {
-                    artifactId: "",
-                    data: "",
                     mimeType: content.mimeType ?? "",
                     name: content.name,
-                    newText: "",
-                    oldText: "",
-                    path: "",
-                    terminalId: "",
                     text: content.description ?? "",
                     type: "resource_link",
                     uri: content.uri,
                 };
             case "resource":
                 return {
-                    artifactId: "",
                     data: "blob" in content.resource ? content.resource.blob : "",
                     mimeType: content.resource.mimeType ?? "",
                     name: content.resource.uri,
-                    newText: "",
-                    oldText: "",
-                    path: "",
-                    terminalId: "",
                     text: "text" in content.resource ? content.resource.text : "",
                     type: "resource",
                     uri: content.resource.uri,
                 };
             case "external_image":
                 return {
-                    artifactId: "",
                     data: "",
                     mimeType: content.mimeType,
                     name: "Image",
-                    newText: "",
-                    oldText: "",
-                    path: "",
-                    terminalId: "",
-                    text: "",
                     type: "image",
                     uri: externalContentPath(content),
                 };
             case "external_audio":
                 return {
-                    artifactId: "",
                     data: "",
                     mimeType: content.mimeType,
                     name: "Audio",
-                    newText: "",
-                    oldText: "",
-                    path: "",
-                    terminalId: "",
                     text: "",
                     type: "resource",
                     uri: externalContentPath(content),
                 };
             case "external_resource":
                 return {
-                    artifactId: "",
                     data: "",
                     mimeType: content.mimeType ?? "",
                     name: content.uri,
-                    newText: "",
-                    oldText: "",
-                    path: "",
-                    terminalId: "",
                     text: "",
                     type: "resource",
                     uri: externalContentPath(content),
