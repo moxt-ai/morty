@@ -39,6 +39,22 @@ test("Given a native session handoff, When the page loads, Then it tells the use
     expect(queryByRole(document.body, "button", { name: "Show QR code" })).toBeNull();
 });
 
+test("Given a native session handoff, When the page loads, Then it shows no site header and no entry back to Morty home", {
+    timeout: 30_000,
+}, async () => {
+    const sessionId = "01a0d270-0d62-7003-98df-22a5d11dc644";
+    await createTestApp({
+        agent: { id: "pi", label: "Pi" },
+        connectAgent: true,
+        nativeSessionIds: new Set([sessionId]),
+        page: { harness: "pi", kind: "continue", sessionId },
+    });
+
+    expect(document.body.textContent).not.toContain("Your agents. Connected.");
+    expect(document.body.querySelector("header")).toBeNull();
+    expect(queryByRole(document.body, "link")).toBeNull();
+});
+
 test("Given a native session handoff, When the Continue page succeeds and the user reloads, Then it reopens the same session from the retained transfer code", {
     timeout: 30_000,
 }, async () => {
