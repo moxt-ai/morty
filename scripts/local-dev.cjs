@@ -6,7 +6,7 @@
 // Dependency-free CommonJS. Requires the repository's pinned Node.js (>= 24).
 //
 //   node scripts/local-dev.cjs prepare [options]
-//   node scripts/local-dev.cjs pair    --state-dir <dir> [options]
+//   node scripts/local-dev.cjs setup  --state-dir <dir> [options]
 //   node scripts/local-dev.cjs status  --state-dir <dir>
 //   node scripts/local-dev.cjs logs    --state-dir <dir> [options]
 //   node scripts/local-dev.cjs remove  --state-dir <dir> [options]
@@ -117,6 +117,10 @@ function parseArguments(argv) {
                 break;
             case "--harness":
                 options.harness = requireValue(index, token);
+                index += 1;
+                break;
+            case "--session-id":
+                options.sessionId = requireValue(index, token);
                 index += 1;
                 break;
             case "--workspace":
@@ -576,9 +580,9 @@ async function prepare(options) {
     }
 }
 
-const PAIR_READY_TIMEOUT_MILLISECONDS = 300_000;
+const SETUP_READY_TIMEOUT_MILLISECONDS = 300_000;
 
-function readPairRecord(line) {
+function readSetupRecord(line) {
     if (line.length === 0) {
         return null;
     }
@@ -594,12 +598,19 @@ function readPairRecord(line) {
 }
 
 /**
- * Runs the Chat-served setup bundle's `pair` flow with Morty's writable
+ * Runs the Chat-served setup bundle's `setup` flow with Morty's writable
  * location isolated under the stack's state directory. `documents/` isolates
  * Morty's saved setup files, `mobius/` isolates its CLI manager and connection
- * state, and `workspace/` is the paired default workspace.
+ * state, and `workspace/` is the default working directory. On success prints
+ * one JSON record whose `handoffUrl` continues the setup identity in the
+ * browser.
  */
-async function _pair(options) {
+async function setup(options) {
+    const harness = options.harness ?? "codex";
+    const sessionId = options.sessionId ?? "local-dev";
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(sessionId)) {
+        fail("--session-id must be a harness session identifier");
+    }
     const stack = options.stateDir === undefined ? null : readStack(options.stateDir);
     if (stack === null) {
         fail("pass --state-dir for a stack created by prepare");
@@ -607,7 +618,6 @@ async function _pair(options) {
     if (!isAlive(stack.chatPid)) {
         fail("the stack's Chat Worker is not running; run prepare first");
     }
-    const harness = options.harness ?? "codex";
     const documents = path.join(stack.stateDir, "documents");
     const mobiusStateDirectory = path.join(stack.stateDir, "mobius");
     const workspace = path.resolve(options.workspace ?? path.join(stack.stateDir, "workspace"));
@@ -615,24 +625,6 @@ async function _pair(options) {
         fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     }
     const origin = new URL(stack.chatOrigin).origin;
-
-    log("minting a browser identity and pairing ticket");
-    const identity = await httpJson(`${origin}/morty/api/identity/anonymous-users`, { body: {} });
-    const token = typeof identity.token === "string" ? identity.token : "";
-    const projectId = typeof identity.projectId === "string" ? identity.projectId : "";
-    const botId = typeof identity.bot === "object" && identity.bot !== null ? identity.bot.botId : undefined;
-    if (token.length === 0 || projectId.length === 0 || typeof botId !== "string" || botId.length === 0) {
-        fail("the Chat Worker did not return a usable anonymous identity");
-    }
-    const pairing = await httpJson(`${origin}/morty/api/projects/${encodeURIComponent(projectId)}/identity/pairings`, {
-        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-        body: { botId },
-    });
-    const ticket = new URL(typeof pairing.url === "string" ? pairing.url : "about:invalid");
-    const pairingToken = ticket.searchParams.get("token") ?? "";
-    if (pairingToken.length === 0) {
-        fail("the Chat Worker did not return a pairing instruction URL");
-    }
 
     log(`downloading the setup bundle from ${origin}`);
     const setupBundle = path.join(stack.stateDir, "setup.mjs");
@@ -642,8 +634,8 @@ async function _pair(options) {
     }
     fs.writeFileSync(setupBundle, Buffer.from(await setupResponse.arrayBuffer()), { mode: 0o600 });
 
-    const pairLog = path.join(stack.stateDir, "pair.log");
-    fs.writeFileSync(pairLog, "", { mode: 0o600 });
+    const setupLog = path.join(stack.stateDir, "setup.log");
+    fs.writeFileSync(setupLog, "", { mode: 0o600 });
     const shimDirectory = path.join(stack.stateDir, "local-cli-bin");
     fs.mkdirSync(shimDirectory, { recursive: true, mode: 0o700 });
     const shim = path.join(shimDirectory, hostPlatform.cliShimName);
@@ -660,11 +652,22 @@ process.exit(result.status ?? 1);
         { mode: 0o700 },
     );
     hostPlatform.writeCommandShim(shimDirectory);
-    log(`pairing harness "${harness}" against workspace ${workspace}`);
+    log(`running setup for harness "${harness}" against workspace ${workspace}`);
     const runtimePid = await startProcess(
-        "pair runtime",
-        [setupBundle, "pair", "--base-url", origin, "--cwd", workspace, "--token", pairingToken, "--harness", harness],
-        pairLog,
+        "setup runtime",
+        [
+            setupBundle,
+            "setup",
+            "--base-url",
+            origin,
+            "--cwd",
+            workspace,
+            "--harness",
+            harness,
+            "--session-id",
+            sessionId,
+        ],
+        setupLog,
         process.execPath,
         {
             DOCUMENT_DIR: documents,
@@ -674,25 +677,31 @@ process.exit(result.status ?? 1);
         workspace,
     );
 
-    const deadline = Date.now() + PAIR_READY_TIMEOUT_MILLISECONDS;
+    const deadline = Date.now() + SETUP_READY_TIMEOUT_MILLISECONDS;
     let ready = null;
     let runtimeId = null;
+    let reusedConnectionId = null;
     for (;;) {
         const records = fs
-            .readFileSync(pairLog, "utf8")
+            .readFileSync(setupLog, "utf8")
             .split("\n")
             .filter((line) => line.length > 0)
-            .map(readPairRecord);
+            .map(readSetupRecord);
         const failure = records.findLast((record) => record !== null && record.error !== undefined);
         if (failure !== undefined && failure !== null) {
             await stopProcess(runtimePid);
-            fail(`pair failed: ${JSON.stringify(failure.error)}`);
+            fail(`setup failed: ${JSON.stringify(failure.error)}`);
         }
-        const selected = records.findLast(
-            (record) => record !== null && (record.status === "runtime_reused" || record.status === "runtime_paired"),
-        );
-        if (selected !== undefined && selected !== null && typeof selected.runtimeId === "string") {
-            runtimeId = selected.runtimeId;
+        const reused = records.findLast((record) => record !== null && record.status === "runtime_reused");
+        if (reused !== undefined && reused !== null && typeof reused.runtimeId === "string") {
+            runtimeId = reused.runtimeId;
+            if (typeof reused.connectionId === "string") {
+                reusedConnectionId = reused.connectionId;
+            }
+        }
+        const paired = records.findLast((record) => record !== null && record.status === "runtime_paired");
+        if (paired !== undefined && paired !== null && typeof paired.runtimeId === "string") {
+            runtimeId = paired.runtimeId;
         }
         const completed = records.findLast((record) => record !== null && record.status === "ready");
         if (completed !== undefined && completed !== null) {
@@ -706,59 +715,73 @@ process.exit(result.status ?? 1);
     }
     if (ready === null) {
         await stopProcess(runtimePid);
-        fail(`the pair runtime did not report ready within ${PAIR_READY_TIMEOUT_MILLISECONDS / 1000}s; see ${pairLog}`);
+        fail(
+            `the setup runtime did not report ready within ${SETUP_READY_TIMEOUT_MILLISECONDS / 1000}s; see ${setupLog}`,
+        );
     }
     if (runtimeId === null) {
-        fail("the pair runtime did not report its Runtime ID");
+        fail("the setup runtime did not report its Runtime ID");
     }
-    const pairList = path.join(stack.stateDir, `.pair-list-${crypto.randomUUID()}.json`);
-    fs.writeFileSync(pairList, "", { mode: 0o600, flag: "wx" });
-    let connectionId;
-    try {
-        await run(
-            process.execPath,
-            [path.join(MOBIUS_ROOT, "packages/cli/src/entrypoint/cli.ts"), "pair", "list", `--output-json=${pairList}`],
-            { env: { MOBIUS_STATE_DIRECTORY: mobiusStateDirectory } },
-        );
-        const listed = JSON.parse(fs.readFileSync(pairList, "utf8"));
-        if (!Array.isArray(listed)) {
-            fail("Mobius returned an invalid connection list");
+    const handoffUrl = typeof ready.url === "string" ? ready.url : "";
+    if (handoffUrl.length === 0) {
+        fail("the setup runtime did not return a handoff URL");
+    }
+
+    let connectionId = reusedConnectionId;
+    if (connectionId === null) {
+        const pairList = path.join(stack.stateDir, `.pair-list-${crypto.randomUUID()}.json`);
+        fs.writeFileSync(pairList, "", { mode: 0o600, flag: "wx" });
+        try {
+            await run(
+                process.execPath,
+                [
+                    path.join(MOBIUS_ROOT, "packages/cli/src/entrypoint/cli.ts"),
+                    "pair",
+                    "list",
+                    `--output-json=${pairList}`,
+                ],
+                { env: { MOBIUS_STATE_DIRECTORY: mobiusStateDirectory } },
+            );
+            const listed = JSON.parse(fs.readFileSync(pairList, "utf8"));
+            if (!Array.isArray(listed)) {
+                fail("Mobius returned an invalid connection list");
+            }
+            const connection = listed.find(
+                (item) =>
+                    item !== null &&
+                    typeof item === "object" &&
+                    item.app_id === stack.appId &&
+                    item.runtime_id === runtimeId,
+            );
+            if (
+                connection === undefined ||
+                typeof connection.connection_id !== "string" ||
+                !/^mcn_[a-f0-9]{32}$/u.test(connection.connection_id)
+            ) {
+                fail("Mobius did not report the setup connection");
+            }
+            connectionId = connection.connection_id;
+        } finally {
+            fs.rmSync(pairList, { force: true });
         }
-        const connection = listed.find(
-            (item) =>
-                item !== null &&
-                typeof item === "object" &&
-                item.app_id === stack.appId &&
-                item.runtime_id === runtimeId,
-        );
-        if (
-            connection === undefined ||
-            typeof connection.connection_id !== "string" ||
-            !/^mcn_[a-f0-9]{32}$/u.test(connection.connection_id)
-        ) {
-            fail("Mobius did not report the paired connection");
-        }
-        connectionId = connection.connection_id;
-    } finally {
-        fs.rmSync(pairList, { force: true });
     }
 
     const record = {
         chatOrigin: stack.chatOrigin,
-        pairLog,
-        runtimePid,
-        browserIdentity: { token, userId: identity.userId, projectId },
-        botId,
         connectionId,
-        harness,
         documents,
+        handoffUrl,
+        harness,
         mobiusStateDirectory,
+        runtimePid,
+        sessionId,
+        setupLog,
         workspace,
     };
     const previous = Array.isArray(stack.runtimes) ? stack.runtimes : [];
     writeStack({ ...stack, runtimes: [...previous, record] });
     process.stdout.write(`${JSON.stringify(record)}\n`);
-    log("pair is ready; inject browserIdentity into sessionStorage to open Chat as this user");
+    log("setup is ready; open handoffUrl in the browser to continue as this user");
 }
 
 async function status(options) {
@@ -807,7 +830,7 @@ async function logs(options) {
         fail("pass --state-dir for a stack created by prepare");
     }
     const worker = options.worker ?? "chat";
-    const runtimeLogs = (Array.isArray(stack.runtimes) ? stack.runtimes : []).map((runtime) => runtime.pairLog);
+    const runtimeLogs = (Array.isArray(stack.runtimes) ? stack.runtimes : []).map((runtime) => runtime.setupLog);
     const uniqueRuntimeLogs = [...new Set(runtimeLogs.filter((file) => typeof file === "string"))];
     const files =
         worker === "all"
@@ -892,6 +915,17 @@ async function stopRecorded(stack) {
         }
         await stopProcess(runtime.runtimePid);
     }
+    const mobiusStateDirectory = path.join(stack.stateDir, "mobius");
+    if (fs.existsSync(mobiusStateDirectory)) {
+        log(`stopping the Mobius manager at ${mobiusStateDirectory}`);
+        try {
+            await run(process.execPath, [path.join(MOBIUS_ROOT, "packages/cli/src/entrypoint/cli.ts"), "quit"], {
+                env: { MOBIUS_STATE_DIRECTORY: mobiusStateDirectory },
+            });
+        } catch (cause) {
+            log(`could not stop the Mobius manager: ${cause instanceof Error ? cause.message : String(cause)}`);
+        }
+    }
     if (stack.chatPid !== undefined) {
         log(`stopping Chat Worker (pid ${stack.chatPid})`);
         await stopProcess(stack.chatPid);
@@ -929,6 +963,7 @@ function usage() {
         [
             "Usage:",
             "  node scripts/local-dev.cjs prepare <web|web-server|web-server-mobius|web-server-mobius-cli> [--state-dir DIR] [--platform-port N] [--chat-port N] [--app-id ID --app-secret SECRET] [--force] [--no-build] [--background]",
+            "  node scripts/local-dev.cjs setup  --state-dir DIR [--harness ID] [--session-id ID] [--workspace DIR]",
             "  node scripts/local-dev.cjs status --state-dir DIR",
             "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|platform|runtime|all] [--lines N] [--filter REGEX] [--follow]",
             "  node scripts/local-dev.cjs remove --state-dir DIR [--keep-state]",
@@ -942,6 +977,9 @@ async function main() {
     switch (options.command) {
         case "prepare":
             await prepare(options);
+            break;
+        case "setup":
+            await setup(options);
             break;
         case "status":
             await status(options);

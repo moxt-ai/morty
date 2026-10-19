@@ -1,4 +1,4 @@
-import type { ContentBlockV2 } from "@moxt-ai/mobius-protocol";
+import type { ContentBlock } from "@moxt-ai/mobius-protocol";
 import { externalContentPath, type MobiusExternalContentBlock } from "@moxt-ai/mobius-sdk";
 import { CircleAlert, X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -111,13 +111,13 @@ function ExternalContent({
     }
 }
 
-function ContentBlock({
+function MessageContentBlock({
     content,
     openLocalFile,
     readImage,
     speaker,
 }: {
-    readonly content: ContentBlockV2;
+    readonly content: ContentBlock;
     readonly openLocalFile: (path: string) => void;
     readonly readImage?: MarkdownImageReader | undefined;
     readonly speaker: "assistant" | "user";
@@ -203,7 +203,7 @@ function UserMessage({
         <div className="min-w-0 space-y-2">
             <div className="ml-auto grid max-w-[82%] gap-2">
                 {message.contents.map((content, index) => (
-                    <ContentBlock
+                    <MessageContentBlock
                         content={content}
                         key={`${message.firstEvent.eventId}:${index.toString()}`}
                         openLocalFile={openLocalFile}
@@ -309,7 +309,7 @@ export function MobiusSessionMessage({
         }
         return (
             <div className="min-w-0" data-testid={dataTestId.agentResponse}>
-                <ContentBlock
+                <MessageContentBlock
                     content={presentation.content}
                     openLocalFile={openLocalFile}
                     readImage={readImage}
@@ -337,7 +337,7 @@ export function MobiusSessionMessage({
             );
         }
         return (
-            <ContentBlock
+            <MessageContentBlock
                 content={presentation.content}
                 openLocalFile={openLocalFile}
                 readImage={readImage}

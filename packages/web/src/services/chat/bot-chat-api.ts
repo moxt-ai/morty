@@ -1,6 +1,6 @@
 import {
     decodeAgentSettingsDiscoveredEvent,
-    decodeNativeSessionEventsV2,
+    decodeNativeSessionEvents,
     decodeNativeSessionResult,
     decodeRuntimeDiagnosticsResult,
     decodeSessionReadyEvent,
@@ -190,7 +190,7 @@ class BrowserSessionTransport implements MobiusHttpTransport, MobiusLiveEventTra
         }
     };
 
-    readonly openLiveSessionEvents = async (request: Request): Promise<ReadableStream<MobiusTransportSessionEvent>> => {
+    readonly openSessionLiveEvents = async (request: Request): Promise<ReadableStream<MobiusTransportSessionEvent>> => {
         recordBrowserDiagnostic({
             at: new Date().toISOString(),
             component: "relay",
@@ -200,7 +200,7 @@ class BrowserSessionTransport implements MobiusHttpTransport, MobiusLiveEventTra
             elapsedMs: 0,
         });
         try {
-            const stream = await this.#webSocket.openLiveSessionEvents(request);
+            const stream = await this.#webSocket.openSessionLiveEvents(request);
             recordBrowserDiagnostic({
                 at: new Date().toISOString(),
                 component: "relay",
@@ -498,7 +498,7 @@ export class BotChatApi {
         signal: AbortSignal,
     ) => {
         const { entryId, ...identity } = input;
-        return decodeNativeSessionEventsV2(
+        return decodeNativeSessionEvents(
             await this.#request(
                 botId,
                 `native-session/${encodeURIComponent(v.parse(identifier, entryId))}`,

@@ -610,19 +610,19 @@ export class PlatformProjectGateway {
             120000,
         );
 
-    readonly previewRuntimeNativeEventsV2 = async (
+    readonly previewRuntimeNativeEvents = async (
         projectId: string,
         runtimeId: string,
         sessionId: string,
-        identity: Parameters<MobiusClient["sessions"]["previewRuntimeNativeEventsV2"]>[2],
-        page: Parameters<MobiusClient["sessions"]["previewRuntimeNativeEventsV2"]>[3],
+        identity: Parameters<MobiusClient["sessions"]["previewRuntimeNativeEvents"]>[2],
+        page: Parameters<MobiusClient["sessions"]["previewRuntimeNativeEvents"]>[3],
         signal: AbortSignal,
     ) =>
         await this.#withProject(
             projectId,
             signal,
             async (client) =>
-                await client.sessions.previewRuntimeNativeEventsV2(runtimeId, sessionId, identity, page, signal),
+                await client.sessions.previewRuntimeNativeEvents(runtimeId, sessionId, identity, page, signal),
             120000,
         );
 
