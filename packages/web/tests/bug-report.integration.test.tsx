@@ -247,10 +247,8 @@ test("Given a native handoff cannot find its Agent, When the user reports the di
     const inbox = await createReportInbox();
     try {
         const app = await createTestApp({ page: { kind: "continue", harness: "pi", sessionId: "native-session" } });
-        const importButton = await app.waitForView(() =>
-            getByRole(document.body, "button", { name: "Import session" }),
-        );
-        await app.user.click(importButton);
+        const openButton = await app.waitForView(() => getByRole(document.body, "button", { name: "Open session" }));
+        await app.user.click(openButton);
         await app.waitForView(() => {
             expect(getByRole(document.body, "alert").textContent).toContain("handoff harness is unavailable");
         });

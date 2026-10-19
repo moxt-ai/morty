@@ -5,9 +5,7 @@ import { recordBrowserError, registerDaemonDiagnostics } from "@/services/diagno
 import { AnonymousIdentityApi } from "@/services/identity/anonymous-identity-api";
 import { formatError } from "@/view-models/format-error";
 
-export type NativeSessionImportAvailability =
-    | { readonly kind: "available" }
-    | { readonly kind: "unavailable"; readonly reason: string };
+export type NativeSessionImportAvailability = { readonly kind: "available" } | { readonly kind: "unavailable" };
 type SessionHandoff = {
     readonly harness: string;
     readonly importAvailability: NativeSessionImportAvailability;
@@ -58,12 +56,7 @@ function initialState(): ContinueState {
     }
     if (harness !== null && sessionId !== null) {
         const importAvailability: NativeSessionImportAvailability =
-            harness === "codex"
-                ? {
-                      kind: "unavailable",
-                      reason: `${harness} doesn't support importing sessions`,
-                  }
-                : { kind: "available" };
+            harness === "codex" ? { kind: "unavailable" } : { kind: "available" };
         return {
             code,
             handoff: { harness, importAvailability, sessionId },

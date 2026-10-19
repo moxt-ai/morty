@@ -3,32 +3,26 @@ import { expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given a Codex native session handoff, When the user hovers over import, Then import is disabled and explains that Codex does not support it", {
+test("Given a Codex native session handoff, When the choice page loads, Then only forking is offered because Codex cannot open the original session", {
     timeout: 30_000,
 }, async () => {
-    const app = await createTestApp({
+    await createTestApp({
         page: {
             harness: "codex",
             kind: "continue",
             sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
         },
     });
-    const importSession = await vi.waitFor(() => getByRole(document.body, "button", { name: "Import session" }));
-    const forkSession = getByRole(document.body, "button", { name: "Fork session" });
-    if (!(importSession instanceof HTMLButtonElement) || !(forkSession instanceof HTMLButtonElement)) {
-        throw new Error("The native session actions are not buttons.");
+
+    const forkSession = await vi.waitFor(() => getByRole(document.body, "button", { name: "Fork session" }));
+    if (!(forkSession instanceof HTMLButtonElement)) {
+        throw new Error("The fork action is not a button.");
     }
 
-    expect(importSession.disabled).toBe(true);
     expect(forkSession.disabled).toBe(false);
-
-    await app.user.hover(getByRole(document.body, "group", { name: "Why import is unavailable" }));
-
-    expect(
-        await vi.waitFor(() =>
-            getByRole(document.body, "tooltip", { name: "codex doesn't support importing sessions" }),
-        ),
-    ).toBeInstanceOf(HTMLElement);
+    expect(queryByRole(document.body, "button", { name: "Open session" })).toBeNull();
+    expect(document.body.textContent).toContain("Fork creates an independent copy.");
+    expect(document.body.textContent).not.toContain("Open continues the original session");
 });
 
 test("Given a native session handoff, When the choice page loads, Then a QR code of the same page is offered for another device", {
@@ -67,13 +61,13 @@ test("Given a native session handoff, When the Continue page loads and the user 
             sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
         },
     });
-    await vi.waitFor(() => getByRole(document.body, "button", { name: "Import session" }));
+    await vi.waitFor(() => getByRole(document.body, "button", { name: "Open session" }));
 
     expect(window.location.hash).toMatch(/^#code=\S+$/u);
 
     app.remount();
 
-    expect(await vi.waitFor(() => getByRole(document.body, "button", { name: "Import session" }))).toBeInstanceOf(
+    expect(await vi.waitFor(() => getByRole(document.body, "button", { name: "Open session" }))).toBeInstanceOf(
         HTMLButtonElement,
     );
     expect(window.location.hash).toMatch(/^#code=\S+$/u);
@@ -118,7 +112,7 @@ test("Given shared Morty access, When the user opens Continue your work, Then th
     expect(getByRole(document.body, "dialog", { name: "Continue your work" })).toBeInstanceOf(HTMLElement);
 });
 
-test("Given a native session handoff, When importing fails, Then the choice page shows progress and allows a fork retry", {
+test("Given a native session handoff, When opening fails, Then the choice page shows progress and allows a fork retry", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({
@@ -128,22 +122,22 @@ test("Given a native session handoff, When importing fails, Then the choice page
             sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
         },
     });
-    const importSession = await vi.waitFor(() => getByRole(document.body, "button", { name: "Import session" }));
+    const openSession = await vi.waitFor(() => getByRole(document.body, "button", { name: "Open session" }));
     const forkSession = getByRole(document.body, "button", { name: "Fork session" });
-    if (!(importSession instanceof HTMLButtonElement) || !(forkSession instanceof HTMLButtonElement)) {
+    if (!(openSession instanceof HTMLButtonElement) || !(forkSession instanceof HTMLButtonElement)) {
         throw new Error("The native session actions are not buttons.");
     }
 
-    await app.user.click(importSession);
+    await app.user.click(openSession);
 
-    expect(importSession.disabled).toBe(true);
+    expect(openSession.disabled).toBe(true);
     expect(forkSession.disabled).toBe(true);
-    expect(getByRole(importSession, "status", { name: "Importing session" })).toBeInstanceOf(HTMLElement);
+    expect(getByRole(openSession, "status", { name: "Opening session" })).toBeInstanceOf(HTMLElement);
     expect(queryByRole(document.body, "status", { name: "Securely transferring Morty access" })).toBeNull();
 
     await vi.waitFor(() => expect(getByRole(document.body, "alert")).toBeInstanceOf(HTMLElement));
     expect(getByRole(document.body, "heading", { name: "Continue native session" })).toBeInstanceOf(HTMLElement);
-    expect(importSession.disabled).toBe(false);
+    expect(openSession.disabled).toBe(false);
     expect(forkSession.disabled).toBe(false);
 
     await app.user.click(forkSession);

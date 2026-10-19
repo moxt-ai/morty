@@ -1,65 +1,21 @@
 import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/react-router";
-import { Tooltip } from "radix-ui";
 import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import { Button, reportApplicationError, Spinner } from "../../index.ts";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
-import {
-    continueCode,
-    continueUrl,
-    createContinueStore,
-    type NativeSessionImportAvailability,
-} from "../../view-models/authentication/continue-store.ts";
+import { continueCode, continueUrl, createContinueStore } from "../../view-models/authentication/continue-store.ts";
 import { Page } from "../application/app.tsx";
 import { ContinueQrButton, ContinueQrPanel } from "./continue-qr.tsx";
 
-function ImportSessionButton({
-    importAvailability,
-    importing,
-    redeeming,
-    select,
-}: {
-    readonly importAvailability: NativeSessionImportAvailability;
-    readonly importing: boolean;
-    readonly redeeming: boolean;
-    readonly select: () => void;
-}) {
-    const button = (
-        <Button className="w-full" disabled={redeeming || importAvailability.kind === "unavailable"} onClick={select}>
-            Import session
-            {importing ? <Spinner label="Importing session" /> : null}
-        </Button>
-    );
-    if (importAvailability.kind === "available") {
-        return button;
-    }
-    return (
-        <Tooltip.Provider delayDuration={150}>
-            <Tooltip.Root>
-                <Tooltip.Trigger asChild>
-                    <fieldset aria-label="Why import is unavailable" className="m-0 min-w-0 rounded-md border-0 p-0">
-                        {button}
-                    </fieldset>
-                </Tooltip.Trigger>
-                <Tooltip.Portal>
-                    <Tooltip.Content
-                        className="z-50 max-w-72 rounded-md bg-foreground px-3 py-2 text-xs leading-5 text-background shadow-md"
-                        sideOffset={6}
-                    >
-                        {importAvailability.reason}
-                        <Tooltip.Arrow className="fill-foreground" />
-                    </Tooltip.Content>
-                </Tooltip.Portal>
-            </Tooltip.Root>
-        </Tooltip.Provider>
-    );
-}
 function ContinuePage() {
     const transport = useApiTransport();
     const [store] = useState(() => createContinueStore(transport.fetch));
     const { continueSession, redeem, state } = useStore(store);
     const code = continueCode(state);
     const qrCodeUrl = code === null ? null : continueUrl(code);
+    const canOpenSession =
+        (state.kind === "session-confirm" || state.kind === "session-redeeming" || state.kind === "session-failed") &&
+        state.handoff.importAvailability.kind === "available";
     useEffect(() => () => store.getState().dispose(), [store]);
     useEffect(() => {
         if (state.kind !== "session-redeeming" && state.kind !== "identity-redeeming") {
@@ -103,13 +59,19 @@ function ContinuePage() {
                                     {state.message}
                                 </p>
                             ) : null}
-                            <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                                <ImportSessionButton
-                                    importAvailability={state.handoff.importAvailability}
-                                    importing={state.kind === "session-redeeming" && state.choice === "import"}
-                                    redeeming={state.kind === "session-redeeming"}
-                                    select={() => continueSession("import")}
-                                />
+                            <div className={canOpenSession ? "mt-6 grid gap-3 sm:grid-cols-2" : "mt-6 grid gap-3"}>
+                                {canOpenSession ? (
+                                    <Button
+                                        className="w-full"
+                                        disabled={state.kind === "session-redeeming"}
+                                        onClick={() => continueSession("import")}
+                                    >
+                                        Open session
+                                        {state.kind === "session-redeeming" && state.choice === "import" ? (
+                                            <Spinner label="Opening session" />
+                                        ) : null}
+                                    </Button>
+                                ) : null}
                                 <Button
                                     disabled={state.kind === "session-redeeming"}
                                     variant="outline"
@@ -122,7 +84,9 @@ function ContinuePage() {
                                 </Button>
                             </div>
                             <p className="mt-3 text-sm text-muted-foreground">
-                                Import continues the original session. Fork creates an independent copy.
+                                {canOpenSession
+                                    ? "Open continues the original session. Fork creates an independent copy."
+                                    : "Fork creates an independent copy."}
                             </p>
                             <Button
                                 className="mt-3 px-0"
