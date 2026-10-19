@@ -22,6 +22,10 @@ type Application = Awaited<ReturnType<Environment["createApplication"]>>;
 const environment = createChatWorkerEnvironment();
 const activeApps = new Set<TestApp>();
 
+// Match the longest per-scenario test timeout used by integration tests; the
+// surrounding test still fails first through its own vitest timeout.
+const VIEW_WAIT_TIMEOUT_MILLISECONDS = 90_000;
+
 export interface TestApp extends Application {
     readonly daemon: Awaited<ReturnType<Application["connectAgent"]>> | null;
     readonly agentFailure: Promise<never> | null;
@@ -125,10 +129,13 @@ export async function createTestApp(
                         }
                     };
                     const observer = new MutationObserver(check);
+                    // The view wait must honor the test's own timeout budget (each
+                    // file sets it per scenario) instead of a fixed wall-clock
+                    // deadline that slow CI runners exceed before the test does.
                     const deadline = setTimeout(() => {
                         cleanup();
                         reject(lastFailure ?? new Error("The expected view did not appear."));
-                    }, 12_000);
+                    }, VIEW_WAIT_TIMEOUT_MILLISECONDS);
                     if (lifetime.signal.aborted) {
                         abort();
                         return;
