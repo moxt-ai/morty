@@ -78,7 +78,6 @@ function SetupApplication() {
                     </p>
                     <PairingInstruction />
                 </div>
-                <p className="mt-6 text-center text-sm text-muted-foreground">Your workspace stays on this device.</p>
             </section>
         </main>
     );

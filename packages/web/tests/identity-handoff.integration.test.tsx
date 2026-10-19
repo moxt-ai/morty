@@ -84,9 +84,11 @@ test("Given a native session handoff, When the Continue page loads and the user 
 test("Given a new browser, When Morty loads, Then Morty opens without presenting a workspace concept", {
     timeout: 30_000,
 }, async () => {
-    const app = await createTestApp({ page: { kind: "bootstrap" } });
+    await createTestApp({ page: { kind: "bootstrap" } });
 
-    expect(await app.queryElementByTestId(dataTestId.closeDialog)).toBeInstanceOf(HTMLElement);
+    expect(
+        await vi.waitFor(() => getByRole(document.body, "heading", { name: "Connect your local agent" })),
+    ).toBeInstanceOf(HTMLElement);
     expect(document.body.textContent).not.toContain("Local agents");
     expect(document.body.textContent?.toLowerCase()).not.toContain("workspace");
 });
