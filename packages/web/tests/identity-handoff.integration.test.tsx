@@ -3,75 +3,63 @@ import { expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given a Codex native session handoff, When the choice page loads, Then opening the original session is offered because Codex supports import", {
+test("Given a Codex native session handoff, When the page loads, Then it opens the original session and lands in Chat", {
     timeout: 30_000,
 }, async () => {
+    const sessionId = "01a0d270-0d62-7003-98df-22a5d11dc644";
     await createTestApp({
-        page: {
-            harness: "codex",
-            kind: "continue",
-            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
-        },
+        agent: { id: "codex", label: "Codex" },
+        connectAgent: true,
+        nativeSessionIds: new Set([sessionId]),
+        page: { harness: "codex", kind: "continue", sessionId },
     });
 
-    const openSession = await vi.waitFor(() => getByRole(document.body, "button", { name: "Open session" }));
-    const forkSession = getByRole(document.body, "button", { name: "Fork session" });
-    if (!(openSession instanceof HTMLButtonElement) || !(forkSession instanceof HTMLButtonElement)) {
-        throw new Error("The native session actions are not buttons.");
-    }
-
-    expect(openSession.disabled).toBe(false);
-    expect(forkSession.disabled).toBe(false);
-    expect(document.body.textContent).toContain("Open continues the original session");
+    await vi.waitFor(() => expect(window.location.pathname).toBe("/chat"));
+    expect(new URL(window.location.href).searchParams.get("sessionId")).not.toBeNull();
+    expect(queryByRole(document.body, "button", { name: "Open session" })).toBeNull();
+    expect(queryByRole(document.body, "button", { name: "Fork session" })).toBeNull();
 });
 
-test("Given a native session handoff, When the choice page loads, Then a QR code of the same page is offered for another device", {
+test("Given a native session handoff, When the page loads, Then it tells the user the session is opening instead of offering choices and a QR code", {
     timeout: 30_000,
 }, async () => {
-    const app = await createTestApp({
-        page: {
-            harness: "pi",
-            kind: "continue",
-            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
-        },
+    const sessionId = "01a0d270-0d62-7003-98df-22a5d11dc644";
+    await createTestApp({
+        agent: { id: "pi", label: "Pi" },
+        connectAgent: true,
+        nativeSessionIds: new Set([sessionId]),
+        page: { harness: "pi", kind: "continue", sessionId },
     });
-    const qrCode = await vi.waitFor(() =>
-        getByRole(document.body, "img", { name: "QR code to continue on another device" }),
-    );
 
-    expect(qrCode.getAttribute("src")).toMatch(/^data:image\/png/u);
-
-    await app.user.click(getByRole(document.body, "button", { name: "Show QR code" }));
-
-    const dialog = await vi.waitFor(() => getByRole(document.body, "dialog", { name: "Continue on another device" }));
-    const dialogQrCode = await vi.waitFor(() =>
-        getByRole(dialog, "img", { name: "QR code to continue on another device" }),
-    );
-
-    expect(dialogQrCode.getAttribute("src")).toBe(qrCode.getAttribute("src"));
+    expect(getByRole(document.body, "status", { name: "Opening session" })).toBeInstanceOf(HTMLElement);
+    expect(document.body.textContent).toContain("Opening the original session in Morty.");
+    expect(queryByRole(document.body, "button", { name: "Open session" })).toBeNull();
+    expect(queryByRole(document.body, "button", { name: "Fork session" })).toBeNull();
+    expect(queryByRole(document.body, "img", { name: "QR code to continue on another device" })).toBeNull();
+    expect(queryByRole(document.body, "button", { name: "Show QR code" })).toBeNull();
 });
 
-test("Given a native session handoff, When the Continue page loads and the user reloads, Then the address keeps the transfer code and the native session choices remain", {
+test("Given a native session handoff, When the Continue page succeeds and the user reloads, Then it reopens the same session from the retained transfer code", {
     timeout: 30_000,
 }, async () => {
+    const sessionId = "01a0d270-0d62-7003-98df-22a5d11dc644";
     const app = await createTestApp({
-        page: {
-            harness: "pi",
-            kind: "continue",
-            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
-        },
+        agent: { id: "pi", label: "Pi" },
+        connectAgent: true,
+        nativeSessionIds: new Set([sessionId]),
+        page: { harness: "pi", kind: "continue", sessionId },
     });
-    await vi.waitFor(() => getByRole(document.body, "button", { name: "Open session" }));
+    const transferUrl = window.location.href;
+    expect(new URL(transferUrl).hash).toMatch(/^#code=\S+$/u);
 
-    expect(window.location.hash).toMatch(/^#code=\S+$/u);
+    await vi.waitFor(() => expect(window.location.pathname).toBe("/chat"));
+    expect(new URL(window.location.href).searchParams.get("sessionId")).not.toBeNull();
 
+    window.location.href = transferUrl;
     app.remount();
 
-    expect(await vi.waitFor(() => getByRole(document.body, "button", { name: "Open session" }))).toBeInstanceOf(
-        HTMLButtonElement,
-    );
-    expect(window.location.hash).toMatch(/^#code=\S+$/u);
-    expect(getByRole(document.body, "heading", { name: "Continue native session" })).toBeInstanceOf(HTMLElement);
+    await vi.waitFor(() => expect(window.location.pathname).toBe("/chat"));
+    expect(new URL(window.location.href).searchParams.get("sessionId")).not.toBeNull();
     expect(queryByRole(document.body, "alert")).toBeNull();
 });
 
@@ -112,7 +100,24 @@ test("Given shared Morty access, When the user opens Continue your work, Then th
     expect(getByRole(document.body, "dialog", { name: "Continue your work" })).toBeInstanceOf(HTMLElement);
 });
 
-test("Given a native session handoff, When opening fails, Then the choice page shows progress and allows a fork retry", {
+test("Given a native session handoff without a matching Agent, When the page loads, Then opening fails with the reason", {
+    timeout: 30_000,
+}, async () => {
+    await createTestApp({
+        page: {
+            harness: "pi",
+            kind: "continue",
+            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
+        },
+    });
+
+    const alert = await vi.waitFor(() => getByRole(document.body, "alert"));
+    expect(alert.textContent).toContain("handoff harness is unavailable");
+    expect(getByRole(document.body, "heading", { name: "Continue native session" })).toBeInstanceOf(HTMLElement);
+    expect(queryByRole(document.body, "button", { name: "Fork session" })).toBeNull();
+});
+
+test("Given opening a native session fails, When the user tries again, Then the page re-runs the same open-session request", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({
@@ -122,33 +127,21 @@ test("Given a native session handoff, When opening fails, Then the choice page s
             sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
         },
     });
-    const openSession = await vi.waitFor(() => getByRole(document.body, "button", { name: "Open session" }));
-    const forkSession = getByRole(document.body, "button", { name: "Fork session" });
-    if (!(openSession instanceof HTMLButtonElement) || !(forkSession instanceof HTMLButtonElement)) {
-        throw new Error("The native session actions are not buttons.");
-    }
+    await vi.waitFor(() => getByRole(document.body, "alert"));
 
-    await app.user.click(openSession);
+    await app.user.click(getByRole(document.body, "button", { name: "Try again" }));
 
-    expect(openSession.disabled).toBe(true);
-    expect(forkSession.disabled).toBe(true);
-    expect(getByRole(openSession, "status", { name: "Opening session" })).toBeInstanceOf(HTMLElement);
-    expect(queryByRole(document.body, "status", { name: "Securely transferring Morty access" })).toBeNull();
-
-    await vi.waitFor(() => expect(getByRole(document.body, "alert")).toBeInstanceOf(HTMLElement));
-    expect(getByRole(document.body, "heading", { name: "Continue native session" })).toBeInstanceOf(HTMLElement);
-    expect(openSession.disabled).toBe(false);
-    expect(forkSession.disabled).toBe(false);
-
-    await app.user.click(forkSession);
-
-    expect(getByRole(forkSession, "status", { name: "Forking session" })).toBeInstanceOf(HTMLElement);
+    expect(getByRole(document.body, "status", { name: "Opening session" })).toBeInstanceOf(HTMLElement);
+    await vi.waitFor(() => {
+        expect(getByRole(document.body, "alert").textContent).toContain("handoff harness is unavailable");
+    });
+    expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
 });
 
-test("Given a native session handoff whose Runtime went offline, When the user forks, Then the page reports Mobius is disconnected instead of a transfer-link problem", {
+test("Given a native session handoff whose Runtime went offline, When the page loads, Then the page reports Mobius is disconnected instead of a transfer-link problem", {
     timeout: 30_000,
 }, async () => {
-    const app = await createTestApp({
+    await createTestApp({
         prepare: async (application) => {
             const runtime = await application.connectAgent({ id: "claude", label: "Claude" });
             await runtime.disconnect();
@@ -159,14 +152,12 @@ test("Given a native session handoff whose Runtime went offline, When the user f
             sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
         },
     });
-    const forkSession = await vi.waitFor(() => getByRole(document.body, "button", { name: "Fork session" }));
-
-    await app.user.click(forkSession);
 
     const alert = await vi.waitFor(() => getByRole(document.body, "alert"));
     expect(alert.textContent).toContain("Your Mobius is disconnected");
     expect(alert.textContent).toContain("Start your Mobius");
     expect(alert.textContent?.toLowerCase()).not.toContain("transfer link");
+    expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
 });
 
 test("Given shared Morty access, When the user opens the user menu, Then replacing the current user is unavailable", {

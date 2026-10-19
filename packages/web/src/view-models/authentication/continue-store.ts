@@ -9,18 +9,11 @@ type SessionHandoff = {
     readonly harness: string;
     readonly sessionId: string;
 };
-type NativeSessionChoice = "fork" | "import" | "skip";
 type ContinueState =
     | {
-          readonly kind: "session-confirm";
+          readonly kind: "session-opening";
           readonly code: string;
           readonly handoff: SessionHandoff;
-      }
-    | {
-          readonly kind: "session-redeeming";
-          readonly code: string;
-          readonly handoff: SessionHandoff;
-          readonly choice: NativeSessionChoice;
       }
     | {
           readonly kind: "session-failed";
@@ -34,8 +27,8 @@ type ContinueState =
 
 export interface ContinueStore {
     readonly state: ContinueState;
-    readonly continueSession: (choice: NativeSessionChoice) => void;
     readonly redeem: (signal: AbortSignal) => Promise<void>;
+    readonly retry: () => void;
     readonly dispose: () => void;
 }
 
@@ -56,20 +49,10 @@ function initialState(): ContinueState {
         return {
             code,
             handoff: { harness, sessionId },
-            kind: "session-confirm",
+            kind: "session-opening",
         };
     }
     return { code, kind: "identity-redeeming" };
-}
-
-export function continueCode(state: ContinueState): string | null {
-    return state.kind === "invalid" || state.kind === "failed" ? null : state.code;
-}
-
-export function continueUrl(code: string): string {
-    const url = new URL(window.location.href);
-    url.hash = new URLSearchParams({ code }).toString();
-    return url.toString();
 }
 
 export const createContinueStore = (fetchRequest: (request: Request) => Promise<Response>) => {
@@ -80,23 +63,22 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
     };
     return createStore<ContinueStore>()((set, get) => ({
         dispose,
-        state: initialState(),
-        continueSession: (choice) => {
+        retry: () => {
             const state = get().state;
-            if (state.kind === "session-confirm" || state.kind === "session-failed") {
+            if (state.kind === "session-failed") {
                 set({
                     state: {
-                        choice,
                         code: state.code,
                         handoff: state.handoff,
-                        kind: "session-redeeming",
+                        kind: "session-opening",
                     },
                 });
             }
         },
+        state: initialState(),
         redeem: async (signal) => {
             const state = get().state;
-            if (state.kind !== "session-redeeming" && state.kind !== "identity-redeeming") {
+            if (state.kind !== "session-opening" && state.kind !== "identity-redeeming") {
                 return;
             }
             const api = new AnonymousIdentityApi({
@@ -109,11 +91,6 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 const identity = await api.redeemTransfer(state.code, signal);
                 signal.throwIfAborted();
                 if (state.kind === "identity-redeeming") {
-                    window.location.replace("/");
-                    return;
-                }
-                const choice = state.choice;
-                if (choice === "skip") {
                     window.location.replace("/");
                     return;
                 }
@@ -140,7 +117,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     identity.botId,
                     state.handoff.harness,
                     state.handoff.sessionId,
-                    choice,
+                    "import",
                     signal,
                 );
                 signal.throwIfAborted();
@@ -153,7 +130,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     const message = formatError(cause, "This transfer link is unavailable.");
                     set({
                         state:
-                            state.kind === "session-redeeming"
+                            state.kind === "session-opening"
                                 ? {
                                       code: state.code,
                                       handoff: state.handoff,

@@ -563,7 +563,7 @@ export class ChatService {
             throw new PlatformProjectError(
                 action === "import" ? "IMPORT_UNAVAILABLE" : "CONTINUATION_UNAVAILABLE",
                 action === "import"
-                    ? "The original session could not be imported. You can choose Fork session instead."
+                    ? "The original session could not be opened."
                     : "The handoff session could not be forked.",
                 409,
             );
