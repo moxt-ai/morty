@@ -190,7 +190,7 @@ class BrowserSessionTransport implements MobiusHttpTransport, MobiusLiveEventTra
         }
     };
 
-    readonly openLiveSessionEvents = async (request: Request): Promise<ReadableStream<MobiusTransportSessionEvent>> => {
+    readonly openSessionLiveEvents = async (request: Request): Promise<ReadableStream<MobiusTransportSessionEvent>> => {
         recordBrowserDiagnostic({
             at: new Date().toISOString(),
             component: "relay",
@@ -200,7 +200,7 @@ class BrowserSessionTransport implements MobiusHttpTransport, MobiusLiveEventTra
             elapsedMs: 0,
         });
         try {
-            const stream = await this.#webSocket.openLiveSessionEvents(request);
+            const stream = await this.#webSocket.openSessionLiveEvents(request);
             recordBrowserDiagnostic({
                 at: new Date().toISOString(),
                 component: "relay",

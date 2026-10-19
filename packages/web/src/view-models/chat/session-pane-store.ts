@@ -2,9 +2,9 @@ import { decodeIdentifier, type SessionEvent } from "@moxt-ai/mobius-protocol";
 import {
     type MobiusClient,
     MobiusElicitationResponseRequest,
-    type MobiusLiveSessionEventObserver,
     MobiusPageRequest,
     MobiusPermissionResponseRequest,
+    type MobiusSessionEventObserver,
     type PromptResource,
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
@@ -754,7 +754,7 @@ export function createSessionPaneModel(options: {
                         }
                         return true;
                     };
-                    const observer: MobiusLiveSessionEventObserver = {
+                    const observer: MobiusSessionEventObserver = {
                         reconcile: async (connection) => {
                             const reconcilingTurn = activeTurn.current();
                             const reconciliation =
