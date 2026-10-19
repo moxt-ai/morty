@@ -232,6 +232,14 @@ test("Given an open conversation, When the user renames it from the header, Then
     await app.waitForView(() =>
         expect(queryByRole(document.body, "heading", { level: 2, name: prompt })).not.toBeNull(),
     );
+    await app.waitForView(() =>
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes(`Codex turn 1: ${prompt}`) === true),
+        ).toBe(true),
+    );
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
 
     await app.user.click(getByRole(document.body, "button", { name: prompt }));
     await app.waitForView(() =>
