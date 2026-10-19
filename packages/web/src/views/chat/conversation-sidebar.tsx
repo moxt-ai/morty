@@ -23,8 +23,8 @@ import type { IdentityTransfer } from "../../services/identity/anonymous-identit
 import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
 import { createConversationDirectoryStore } from "../../view-models/chat/conversation-directory-store.ts";
 import type { ConversationListStatus } from "../../view-models/chat/conversation-status-store.ts";
-import { projectLocationLabel } from "../../view-models/chat/data-region-store.ts";
 import { createNetworkDiagnosticStore } from "../../view-models/chat/network-diagnostic-store.ts";
+import { projectLocationLabel } from "../../view-models/chat/project-location-label.ts";
 import { createRemoteAccessStore } from "../../view-models/chat/remote-access-store.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import { IdentitySharing } from "./identity-sharing.tsx";

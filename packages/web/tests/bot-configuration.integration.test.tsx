@@ -1,59 +1,22 @@
-import { fireEvent, getAllByRole, getByRole } from "@testing-library/dom";
-import { act } from "@testing-library/react";
+import { getAllByRole, getByRole, queryByRole } from "@testing-library/dom";
 import { expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given Morty has no paired agent, When the connect dialog opens, Then the pairing instruction is a read-only multiline field with an icon refresh control", {
+test("Given Morty has no paired agent, When the connect dialog opens, Then it offers the fixed setup instruction without a data region selector", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp();
     const pairing = await app.queryElementByTestId(dataTestId.pairingInstruction);
-    const refresh = getByRole(document.body, "button", { name: "Refresh pairing instruction" });
 
     expect(pairing).toBeInstanceOf(HTMLTextAreaElement);
     expect(pairing).toHaveProperty("readOnly", true);
-    expect(pairing.getAttribute("rows")).toBe("3");
-    expect(refresh.textContent).toBe("");
-});
-
-test("Given Morty has no paired agent, When the connect dialog opens, Then the pairing instruction is a read-only multiline field with an icon refresh control", {
-    timeout: 30_000,
-}, async () => {
-    const app = await createTestApp();
-    const pairing = await app.queryElementByTestId(dataTestId.pairingInstruction);
-    const refresh = getByRole(document.body, "button", { name: "Refresh pairing instruction" });
-
-    expect(pairing).toBeInstanceOf(HTMLTextAreaElement);
-    expect(pairing).toHaveProperty("readOnly", true);
-    expect(pairing.getAttribute("rows")).toBe("3");
-    expect(refresh.textContent).toBe("");
-});
-
-test("Given Morty has no paired agent, When its data region is changing, Then its pairing instruction cannot be used", {
-    timeout: 30_000,
-}, async () => {
-    const app = await createTestApp();
-    const pairing = await app.queryElementByTestId(dataTestId.pairingInstruction);
-    const copy = getByRole(document.body, "button", { name: "Copy pairing instruction" });
-    const region = getByRole(document.body, "combobox", { name: "Data region" });
-    if (!(pairing instanceof HTMLTextAreaElement) || !(copy instanceof HTMLButtonElement)) {
-        throw new Error("Expected pairing instruction controls");
-    }
-    expect(pairing.disabled).toBe(false);
-    expect(copy.disabled).toBe(false);
-
-    await app.user.click(region);
-    act(() => fireEvent.click(getByRole(document.body, "option", { name: "Eastern North America" })));
-    expect(document.body.textContent).toContain("Moving Morty data");
-
-    expect(pairing.disabled).toBe(true);
-    expect(copy.disabled).toBe(true);
-    await vi.waitFor(() => {
-        expect(region).toHaveProperty("disabled", false);
-        expect(document.body.textContent).toContain("Changing region resets Morty data");
-    });
+    expect((pairing as HTMLTextAreaElement).value).toBe(
+        "Fetch https://morty.build/setup.md and set up Morty for me. Don't ask me anything.",
+    );
+    expect(queryByRole(document.body, "combobox", { name: "Data region" })).toBeNull();
+    expect(queryByRole(document.body, "button", { name: "Refresh pairing instruction" })).toBeNull();
 });
 
 test("Given a paired Bot, When its Runtime disconnects, Then the disconnected status is visible", {

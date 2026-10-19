@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import { BotChatApi } from "../../services/chat/bot-chat-api.ts";
-import type { DataRegion } from "../../services/identity/anonymous-identity-api.ts";
 import { AnonymousIdentityApi } from "../../services/identity/anonymous-identity-api.ts";
 import { useActiveIdentity } from "../authentication/identity-context.tsx";
 import { BotChatHome } from "../chat/bot-chat-home.tsx";
@@ -61,25 +60,12 @@ export function MobiusManagement() {
         },
         [transport.fetch],
     );
-    const replaceIdentity = useCallback(
-        async (location: DataRegion, signal: AbortSignal) => {
-            const api = new AnonymousIdentityApi({
-                fetchRequest: transport.fetch,
-                origin: window.location.origin,
-            });
-            await api.replaceIdentity(location, signal);
-            signal.throwIfAborted();
-            window.location.reload();
-        },
-        [transport.fetch],
-    );
     return (
         <BotChatHome
             requests={requests}
             createTransfer={createTransfer}
             currentAccessToken={currentAccessToken}
             endRemoteAccess={endRemoteAccess}
-            replaceIdentity={replaceIdentity}
             botId={identity.botId}
             projectId={identity.projectId}
         />

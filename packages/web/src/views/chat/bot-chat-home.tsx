@@ -8,7 +8,7 @@ import { Dialog } from "../../components/ui/dialog.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
-import type { DataRegion, IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
+import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import { createBotChatHomeStore, disconnectedBotNotice } from "../../view-models/chat/bot-chat-home-store.ts";
 import {
     conversationComposerLocked,
@@ -22,7 +22,6 @@ import { createConversationStatusStore } from "../../view-models/chat/conversati
 import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
-import { DataRegionSelector } from "./data-region-selector.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
 import { MobiusSessionPane } from "./mobius-session-pane.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
@@ -34,7 +33,6 @@ export function BotChatHome({
     endRemoteAccess,
     botId,
     projectId,
-    replaceIdentity,
 }: {
     readonly requests: Pick<
         BotChatApi,
@@ -52,7 +50,6 @@ export function BotChatHome({
         | "subscribeManagedSessionStatuses"
         | "continueNativeSession"
         | "connectSession"
-        | "createPairingInstruction"
         | "createConversation"
         | "conversationSession"
         | "agentSettings"
@@ -64,9 +61,7 @@ export function BotChatHome({
     readonly endRemoteAccess: (token: string, signal: AbortSignal) => Promise<void>;
     readonly botId: string;
     readonly projectId: string;
-    readonly replaceIdentity?: (location: DataRegion, signal: AbortSignal) => Promise<void>;
 }) {
-    const [identityReplacing, setIdentityReplacing] = useState(false);
     const [store] = useState(() =>
         createBotChatHomeStore(requests, {
             botId,
@@ -412,14 +407,7 @@ export function BotChatHome({
                     description="Morty is ready. Paste this instruction into your local agent to connect it."
                     onClose={() => setPairingDialogOpen(false)}
                 >
-                    {setupView?.reason === "unconfigured" && replaceIdentity !== undefined && (
-                        <DataRegionSelector
-                            onReplacementChange={setIdentityReplacing}
-                            projectId={projectId}
-                            replaceIdentity={replaceIdentity}
-                        />
-                    )}
-                    <PairingInstruction botId={active.botId} disabled={identityReplacing} requests={requests} />
+                    <PairingInstruction />
                 </Dialog>
             )}
             {failureDialogOpen && model.view.kind === "connection-failed" && (

@@ -3,6 +3,7 @@ import { type AnonymousIdentity, AnonymousIdentityApi } from "../../services/ide
 
 type AnonymousSessionState =
     | { readonly kind: "loading" }
+    | { readonly kind: "setup" }
     | { readonly kind: "active"; readonly identity: AnonymousIdentity }
     | { readonly kind: "failed" };
 
@@ -32,7 +33,11 @@ export const createAnonymousSessionStore = (fetchRequest: (request: Request) => 
                 try {
                     const existing = await api.loadExisting(signal);
                     signal.throwIfAborted();
-                    const identity = existing ?? (await api.loadOrCreate(signal));
+                    if (existing === null) {
+                        set({ state: { kind: "setup" } });
+                        return;
+                    }
+                    const identity = existing;
                     signal.throwIfAborted();
                     set({ state: { identity, kind: "active" } });
                 } catch {
