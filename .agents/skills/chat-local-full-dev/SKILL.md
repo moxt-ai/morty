@@ -54,8 +54,9 @@ Use `node scripts/local-dev.cjs ...` for status, logs, and removal. The
 relay and is non-cloud-only; `local-dev.cjs` does not launch a separate standalone
 Mobius Worker.
 
-`prepare` stays attached in the foreground after it prints its ready record.
-For agent-driven development, start the wrapper in the background and poll
+`prepare` stays attached in the foreground after it prints its ready record;
+pass `--background` to exit after the ready record while the Workers keep
+running. For agent-driven development, start it with `--background` and poll
 `node scripts/local-dev.cjs status --state-dir <stateDir>`; the record contains
 the Chat URL and, for server modes, the local Platform URL. Stop it
 with Ctrl-C or use `remove` when finished.
@@ -65,8 +66,8 @@ stays parseable. Read these fields instead of assuming defaults:
 
 | Field | Meaning |
 | --- | --- |
-| `chatOrigin` | Chat Worker and browser origin. Default `http://localhost:5173`. |
-| `platformOrigin` | Local Platform the Chat Worker calls. Default `http://127.0.0.1:8788`. |
+| `chatOrigin` | Chat Worker and browser origin, `http://localhost:<port>` from a free local port unless `--chat-port` is passed. |
+| `platformOrigin` | Local Platform the Chat Worker calls, `http://127.0.0.1:<port>` from a free local port unless `--platform-port` is passed. |
 | `stateDir` | Everything this run created: logs, persistence, the stack record. |
 | `chatLog`, `platformLog` | Captured Worker output. |
 | `chatPersist`, `platformPersist` | Wrangler persistence roots (D1, Durable Objects, R2, KV). |
@@ -78,7 +79,7 @@ own D1, Durable Objects, R2, and KV data. Wrangler still keeps a small per-proje
 registry under `<repo>/.wrangler/state`, so run one stack per checkout at a time.
 Omit `--state-dir` for `prepare`: the CLI generates a fresh temporary directory so
 concurrent checkouts do not share local state or Mobius CLI managers. Use the
-returned `stateDir` for all later `pair`, `status`, `logs`, and `remove` commands.
+returned `stateDir` for all later `status`, `logs`, and `remove` commands.
 
 Check health before debugging:
 
@@ -86,7 +87,7 @@ Check health before debugging:
 node scripts/local-dev.cjs status --state-dir <stateDir>
 ```
 
-Before pairing an agent Runtime, verify the `third-party/mobius` submodule
+Before connecting an agent Runtime, verify the `third-party/mobius` submodule
 matches the commit recorded by the branch
 (`git submodule status third-party/mobius`); a stale checkout speaks an older
 relay protocol than the published CLI daemon and fails with WebSocket close
@@ -122,7 +123,7 @@ specific tool.
    `test-results/<journey>-before.png` and
    `test-results/<journey>-after.png`; capture the smallest set that demonstrates
    the behavior. Drive every captured state through normal mouse or keyboard
-   interactions. Never capture credentials, pairing tickets, private configuration,
+   interactions. Never capture credentials, handoff transfer codes, private configuration,
    or other secrets. Treat these screenshots as local verification artifacts and
    report their repository-relative paths. Retain the PNG files after stack
    teardown; cleanup must never remove verification artifacts from
@@ -150,49 +151,48 @@ node scripts/local-dev.cjs remove --state-dir <stateDir>
   arguments instead of writing `.dev.vars`, so the checkout is never modified and
   no credentials land on disk. Treat the generated values as local-only secrets.
 
-## Pairing a local agent Runtime
+## Connecting a local agent Runtime
 
 `prepare` only starts the web and relay services. To exercise a real agent
 (for example Codex or Claude Code) through the local stack, run:
 
 ```sh
-node scripts/local-dev.cjs pair --state-dir <stateDir> [--harness codex] [--workspace DIR]
+node scripts/local-dev.cjs setup --state-dir <stateDir> [--harness codex] [--session-id ID] [--workspace DIR]
 ```
 
-`pair` mints a fresh browser identity and one-time pairing ticket against the
-local Chat Worker, downloads the served `setup.mjs`, and runs its `pair` flow
-with Morty's files isolated under the state directory:
+`setup` downloads the served `setup.mjs` and runs its `setup` flow - the same
+boundary a user's agent follows from `/setup.md` - with Morty's files isolated
+under the state directory and `mobius` shimmed to this checkout's CLI (so a
+globally installed CLI cannot speak a different relay protocol than the local
+Platform):
 
 - `DOCUMENT_DIR` is set to `<stateDir>/documents`, so the setup script writes
   its private configuration there instead of the user's documents directory.
 - Mobius receives `MOBIUS_STATE_DIRECTORY=<stateDir>/mobius`, so every generated
   stack uses an isolated CLI manager and connection state. This prevents another
   checkout with a different CLI version from restarting or replacing its manager.
-- `--workspace` defaults to `<stateDir>/workspace`, the paired default
-  workspace.
+- `--workspace` defaults to `<stateDir>/workspace`, the default working
+  directory.
+- `--session-id` defaults to `local-dev`; pass the harness's exact current
+  session ID when the handoff should offer forking or importing that native
+  session.
 
-The command waits until the Runtime reports ready (up to five minutes), then
-prints one JSON record on stdout with `browserIdentity`
-(`token`, `userId`, `projectId`), `botId`, `workspace`, `pairLog`, and
-`runtimePid`. Inject the identity into the browser before opening the app:
+The command waits until setup reports ready (up to five minutes), then prints
+one JSON record with `handoffUrl`, `connectionId`, `workspace`, `sessionId`,
+`setupLog`, and `runtimePid`. Open `handoffUrl` in the
+browser; never preview or redeem it from the setup side. The Continue page
+redeems the transfer code and saves the identity into browser session storage
+(keys `mobius.anonymous-credential.v2` and `mobius.workspace.v2`), so the
+identity lives in that tab's session rather than persistently: a fresh browser
+profile starts anonymous again. Any browser automation that needs an identity
+directly must seed `sessionStorage`, not `localStorage`, before opening the app.
 
-```js
-localStorage.setItem(
-    "mobius.anonymous-credential.v2",
-    JSON.stringify({ token, userId, projectId }),
-);
-localStorage.setItem(
-    "mobius.workspace.v2",
-    JSON.stringify({ userId, projectId }),
-);
-```
-
-Paired setup commands and their Connection IDs are recorded in the stack record.
-`remove` stops those connections by Connection ID without stopping the shared
-Mobius manager or its other connections. The pairing ticket binds to the freshly
-minted identity, so a browser that already holds another identity must clear or
-overwrite the two localStorage keys above. Runtime setup output is written to
-`pairLog` and is available through `logs --worker runtime`.
+The connection is recorded in the stack record; `remove` stops it by Connection
+ID, stops the state directory's isolated Mobius manager, and then deletes the
+state directory. Runtime setup output is written to `setupLog` and is available
+through `logs --worker runtime`; the manager's `daemon.log` lives at a
+versioned installation path under `<stateDir>/mobius`, so locate it with
+`find <stateDir>/mobius -name daemon.log`.
 
 ## Debugging
 
@@ -232,16 +232,17 @@ Details, inspection commands, and a failure-mode table are in
 
 `scripts/local-dev.cjs` is a dependency-free CommonJS CLI:
 
-- `prepare [--state-dir DIR] [--platform-port N] [--chat-port N] [--force] [--no-build]`
+- `prepare [--state-dir DIR] [--platform-port N] [--chat-port N] [--force] [--no-build] [--background]`
   - provision Platform, seed R2, start both Workers, verify readiness, print the
     JSON descriptor. Idempotent: a live stack is reused, a dead one is replaced.
     The local Platform App is provisioned automatically.
-- `pair --state-dir DIR [--harness ID] [--workspace DIR]`
-  - pair a local agent Runtime through the served setup bundle with
-    `DOCUMENT_DIR` isolated under the state directory while using the normal
-    singleton Mobius manager; prints the browser identity to adopt.
+- `setup --state-dir DIR [--harness ID] [--session-id ID] [--workspace DIR]`
+  - connect a local agent Runtime through the served setup bundle with
+    `DOCUMENT_DIR`, the Mobius state directory, and the CLI shim isolated under
+    the state directory; prints the handoff URL to continue as this user in the
+    browser.
 - `status --state-dir DIR` - report process and HTTP health for a stack.
 - `logs --state-dir DIR [--worker chat|platform|runtime|all] [--lines N] [--filter REGEX] [--follow]`
-  - read or follow captured Worker and paired Runtime logs.
+  - read or follow captured Worker and Runtime setup logs.
 - `remove --state-dir DIR [--keep-state]` - stop both process groups and delete the
   state directory.

@@ -17,7 +17,7 @@ Durable Objects, so most deployed failure modes reproduce locally.
 | --- | --- |
 | Chat Worker output | `chatLog` from `prepare` |
 | Platform fixture output | `platformLog` from `prepare` |
-| Paired Runtime output | `pairLog` and `<cliState>/logs/daemon.log` from each stack `runtimes` record (`logs --worker runtime`) |
+| Runtime manager diagnostics | `setupLog` from the stack `runtimes` record (`logs --worker runtime`) and the manager's `daemon.log` at a versioned installation path under `<stateDir>/mobius` (`find <stateDir>/mobius -name daemon.log`) |
 | Chat D1 / Durable Objects / R2 / KV | `chatPersist` |
 | Platform D1 / Durable Objects / R2 / KV | `platformPersist` |
 | Stack record (pids, origins, paths) | `<stateDir>/stack.json` |
@@ -44,7 +44,8 @@ Chat emits JSON lines, one per event. Common `event` values:
 - `anonymous-user-request-timing`, `chat-request-timing` - per-request timings.
 - `chat-workspace-listed`, `chat-agent-settings-discovered`,
   `bot-chat-access-issued`, `session-access-issued` - audit events.
-- `runtime-pairing-issued`, `agent-pairing-issued` - management audit events.
+- `runtime-pairing-issued` - management audit event; `bot-setup-requested` -
+  the browser-triggered Machine binding request.
 
 Errors are logged as an object with `err.code`, `httpStatus`, and a sanitized
 `msg`. Branch on the code, never the message text.
@@ -76,7 +77,7 @@ part of the live state.
 
 | Symptom | Likely cause | Check |
 | --- | --- | --- |
-| Agent Runtime reconnect loop, close code 1008 `Invalid protocol message` | `third-party/mobius` checkout is older than the published CLI daemon the setup bundle starts | `git submodule status third-party/mobius`; run `git submodule update --init third-party/mobius`, then `prepare --force` |
+| Agent Runtime reconnect loop, close code 1008 `Invalid protocol message` | `third-party/mobius` checkout is older than the relay protocol the local Platform speaks | `git submodule status third-party/mobius`; run `git submodule update --init third-party/mobius`, then `prepare --force`; for a hand-run setup, make `mobius` on `PATH` resolve to this checkout's CLI |
 | Platform Worker process exits after `Can't call WebSocket send() after close()` | Relay sent to a replaced/closing daemon socket without a readyState guard | `platformLog`; the uncaught TypeError is a relay bug - fix it in `third-party/mobius` rather than retrying |
 | `PLATFORM_UNAVAILABLE` (502) on first request | Platform D1 schema is older than the code | `platformLog`; re-run `prepare --force` to recreate the state directory |
 | `SETUP_ARTIFACT_UNAVAILABLE` (503) on `/setup.mjs` | R2 seed missing in this state directory | Re-run `prepare --force`; confirm the seed step logged success |
