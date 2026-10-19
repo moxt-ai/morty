@@ -2,21 +2,6 @@ import { tmpdir } from "node:os";
 import { dirname } from "node:path";
 import { expect, test } from "./infra/test.ts";
 
-test("Given another Project has a managed Runtime, When pair redeems a Bot ticket, Then it creates a fresh Runtime for the ticket Project", async ({
-    runtime,
-}) => {
-    await runtime.openChat();
-    await runtime.connectUnrelatedRuntime();
-    const instructionUrl = await runtime.createPairInstruction();
-
-    const connected = await runtime.followInstructions(instructionUrl);
-    const statuses = connected.events.map((event) => event.status);
-
-    expect(statuses).toContain("prepared");
-    expect(statuses).not.toContain("runtime_reused");
-    expect(statuses).toContain("ready");
-});
-
 test("Given a saved setup handoff, When its Runtime reconnects, Then setup returns a concise QR image reference", async ({
     runtime,
 }) => {
@@ -68,8 +53,7 @@ test("Given a saved Machine and another same-App connection, When its Runtime re
 }) => {
     await runtime.openChat();
     await runtime.connectUnrelatedRuntime();
-    const instructionUrl = await runtime.createPairInstruction();
-    const original = await runtime.followInstructions(instructionUrl, "setup-reconnect-session");
+    const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
     await runtime.disconnectRuntime();
 
     const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session", 5_000);

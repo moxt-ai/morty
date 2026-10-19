@@ -1,4 +1,3 @@
-import { type Identifier, isIdentifier } from "@moxt-ai/mobius-protocol";
 import { Hono } from "hono";
 import * as v from "valibot";
 import { projectObject } from "../../../gateway/project-object-routing.ts";
@@ -15,8 +14,6 @@ const anonymousUserInput = v.strictObject({
         v.picklist(["wnam", "enam", "sam", "weur", "eeur", "apac", "apac-ne", "apac-se", "oc", "afr", "me"]),
     ),
 });
-const pairingInput = v.object({ botId: v.optional(v.custom<Identifier>(isIdentifier)) });
-const pairingRedemptionInput = v.object({ token: v.string() });
 const bindingInput = v.pipe(
     v.object({
         action: v.picklist(["bind", "discard-local", "override"]),
@@ -133,42 +130,6 @@ export function createAuthenticationRoutes() {
             }
             return json({ token }, 201, { "Cache-Control": "no-store" });
         })
-        .post(
-            "/identity/pairings",
-            bodyParser<ManagementHttpEnvironment, typeof pairingInput>(pairingInput),
-            async (context) => {
-                const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(15000)]);
-                const input = context.req.valid("json");
-                const ticket = await context.env.services.management.createAgentPairing(
-                    context.get("bearerToken"),
-                    input.botId ?? null,
-                    signal,
-                );
-                const url = new URL(
-                    "/pair.md",
-                    v.parse(v.pipe(v.string(), v.url()), context.env.config.bindings.APP_ORIGIN),
-                );
-                url.searchParams.set("token", ticket.code);
-                return json(
-                    { url: url.toString(), expiresAt: new Date(ticket.expiresAt).toISOString(), botId: ticket.botId },
-                    201,
-                    {
-                        "Cache-Control": "no-store",
-                    },
-                );
-            },
-        )
-        .post(
-            "/identity/pairings/redeem",
-            bodyParser<ManagementHttpEnvironment, typeof pairingRedemptionInput>(pairingRedemptionInput),
-            async (context) => {
-                const input = context.req.valid("json");
-                const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(15000)]);
-                return json(await context.env.services.management.redeemAgentPairing(input.token, signal), 200, {
-                    "Cache-Control": "no-store",
-                });
-            },
-        )
         .post(
             "/identity/transfers/redeem",
             bodyParser<ManagementHttpEnvironment, typeof transferInput>(transferInput),

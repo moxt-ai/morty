@@ -20,6 +20,6 @@ function response(document: InstructionDocument, requestUrl: string, configuredO
     });
 }
 
-export const instructionDocumentRoutes = new Hono<{ readonly Bindings: CloudBindings }>()
-    .get("/setup.md", (context) => response("setup", context.req.url, context.env.APP_ORIGIN))
-    .get("/pair.md", (context) => response("pair", context.req.url, context.env.APP_ORIGIN));
+export const instructionDocumentRoutes = new Hono<{ readonly Bindings: CloudBindings }>().get("/setup.md", (context) =>
+    response("setup", context.req.url, context.env.APP_ORIGIN),
+);

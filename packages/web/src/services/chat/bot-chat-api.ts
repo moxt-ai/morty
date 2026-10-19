@@ -429,25 +429,6 @@ export class BotChatApi {
         this.#agentSettingsCache.set(cacheKey, settings);
         return settings;
     };
-    readonly createPairingInstruction = async (botId: string | null, signal: AbortSignal) => {
-        const ticket = v.parse(
-            v.object({
-                url: v.pipe(v.string(), v.url()),
-                expiresAt: v.pipe(v.string(), v.isoTimestamp()),
-                botId: identifier,
-            }),
-            await this.#request(botId, "pairing-instruction", botId === null ? {} : { botId }, signal),
-        );
-        const url = new URL(ticket.url);
-        if (
-            url.origin !== new URL(this.#origin).origin ||
-            url.pathname !== "/pair.md" ||
-            !/^mobius_pair_v2\.[A-Za-z0-9_-]{1,128}\.[A-Za-z0-9_-]{43}$/u.test(url.searchParams.get("token") ?? "")
-        ) {
-            throw new CloudApiError("INVALID_PAIRING_INSTRUCTION", "Pairing instruction is invalid.");
-        }
-        return ticket;
-    };
     readonly runtimeConfiguration = async (botId: string, parent: AbortSignal): Promise<BotRuntimeConfiguration> =>
         v.parse(runtimeConfigurationSchema, await this.#request(botId, "workspace", undefined, parent));
     readonly directory = async (botId: string, directoryId: string, signal: AbortSignal) =>
@@ -599,7 +580,7 @@ export class BotChatApi {
                 operation.startsWith("native-session") || operation === "agent-settings" ? 120000 : 45000,
             ),
         ]);
-        const requestedBotId = operation === "pairing-instruction" ? "" : v.parse(identifier, botId);
+        const requestedBotId = v.parse(identifier, botId);
         const token = await this.#getToken(signal);
         if (token === null) {
             throw new CloudApiError("UNAUTHENTICATED", "Your session is unavailable.");
@@ -607,9 +588,7 @@ export class BotChatApi {
         const response = await this.#fetchRequest(
             new Request(
                 new URL(
-                    operation === "pairing-instruction"
-                        ? `/morty/api/projects/${encodeURIComponent(this.#projectId)}/identity/pairings`
-                        : `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(requestedBotId)}/${operation}`,
+                    `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(requestedBotId)}/${operation}`,
                     this.#origin,
                 ),
                 {

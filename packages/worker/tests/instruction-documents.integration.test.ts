@@ -52,45 +52,36 @@ test("Given a published setup artifact, When a user downloads the setup URL, The
     }
 });
 
-test("Given setup and pairing documents, When users fetch them from configured and standalone origins, Then every rendered command is safe and current", async () => {
-    const documents = new Map<string, string>();
-    for (const name of ["setup", "pair"]) {
-        const response = await worker.fetch(new Request(`https://preview.example/${name}.md?token=ticket`), {
-            APP_ORIGIN: "https://chat.example",
-        });
-        expect(response.status).toBe(200);
-        expect(response.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
-        expect(response.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
-        const document = await response.text();
-        documents.set(name, document);
-        expect(document).toMatch(/^# (?:Set up|Pair) Morty\n/);
-        expect(document).not.toContain("change-policy");
-        expect(document).toContain("Chat origin: https://chat.example");
-        expect(document).toContain("https://chat.example/setup.mjs");
-        expect(document).not.toContain("/setup-help/");
-        expect(document).toContain("`~/Documents`");
-        expect(document).not.toContain("DOCUMENT_DIR");
-        expect(document).not.toContain("```powershell");
-        expect(document).not.toContain("```sh");
-        expect(document.length).toBeLessThan(4000);
-        expect(document).not.toMatch(/\{\{.*\}\}|preview\.example|paradev\.biz|paraflow\.biz|token=ticket/);
-    }
-    expect(documents.get("pair")).toContain("existing Morty user and Machine");
-    expect(documents.get("pair")).toContain("--token=<one-use-ticket>");
-    expect(documents.get("pair")).toContain("--harness <own-harness-id>");
-    expect(documents.get("setup")).toContain("--session-id <exact-current-session-id>");
-    expect(documents.get("setup")).toContain("--harness <own-harness-id>");
-    expect(documents.get("setup")).toContain("Never guess");
+test("Given the setup document, When users fetch it from configured and standalone origins, Then the rendered command is safe and current", async () => {
+    const response = await worker.fetch(new Request("https://preview.example/setup.md?token=ticket"), {
+        APP_ORIGIN: "https://chat.example",
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
+    expect(response.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=300");
+    const document = await response.text();
+    expect(document).toMatch(/^# Set up Morty\n/);
+    expect(document).not.toContain("change-policy");
+    expect(document).toContain("Chat origin: https://chat.example");
+    expect(document).toContain("https://chat.example/setup.mjs");
+    expect(document).not.toContain("/setup-help/");
+    expect(document).toContain("`~/Documents`");
+    expect(document).not.toContain("DOCUMENT_DIR");
+    expect(document).not.toContain("```powershell");
+    expect(document).not.toContain("```sh");
+    expect(document.length).toBeLessThan(4000);
+    expect(document).not.toMatch(/\{\{.*\}\}|preview\.example|paradev\.biz|paraflow\.biz|token=ticket/);
+    expect(document).toContain("--session-id <exact-current-session-id>");
+    expect(document).toContain("--harness <own-harness-id>");
+    expect(document).toContain("Never guess");
 
     for (const origin of ["https://custom.example", "http://localhost:5173"]) {
-        for (const name of ["setup", "pair"]) {
-            const response = await worker.fetch(
-                new Request(`${origin}/${name}.md`, { headers: { "X-Forwarded-Host": "other.example" } }),
-                {},
-            );
-            expect(response.status).toBe(200);
-            expect(await response.text()).toContain(`Chat origin: ${origin}`);
-        }
+        const response = await worker.fetch(
+            new Request(`${origin}/setup.md`, { headers: { "X-Forwarded-Host": "other.example" } }),
+            {},
+        );
+        expect(response.status).toBe(200);
+        expect(await response.text()).toContain(`Chat origin: ${origin}`);
     }
 
     for (const appOrigin of [
@@ -110,21 +101,21 @@ test("Given setup and pairing documents, When users fetch them from configured a
     }
 });
 
-test("Given rendered pairing instructions at the edge, When users fetch different tickets, Then the CDN shares a token-free document cache", async () => {
+test("Given rendered setup instructions at the edge, When users fetch different query strings, Then the CDN shares a query-free document cache", async () => {
     const runtime = createRuntime({ appOrigin: "https://chat.example" });
     try {
-        const first = await runtime.dispatchFetch("https://preview.example/pair.md?token=first");
+        const first = await runtime.dispatchFetch("https://preview.example/setup.md?token=first");
         expect(first.status).toBe(200);
         expect(first.headers.get("X-Instruction-Cache")).toBe("MISS");
         const document = await first.text();
 
-        const second = await runtime.dispatchFetch("https://preview.example/pair.md?token=second");
+        const second = await runtime.dispatchFetch("https://preview.example/setup.md?token=second");
         expect(second.headers.get("X-Instruction-Cache")).toBe("HIT");
         expect(await second.text()).toBe(document);
         expect(document).toContain("Chat origin: https://chat.example");
         expect(document).not.toMatch(/token=first|token=second/);
 
-        const otherHost = await runtime.dispatchFetch("https://other.example/pair.md?token=third");
+        const otherHost = await runtime.dispatchFetch("https://other.example/setup.md?token=third");
         expect(otherHost.headers.get("X-Instruction-Cache")).toBe("MISS");
     } finally {
         await runtime.dispose();

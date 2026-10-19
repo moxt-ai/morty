@@ -202,30 +202,6 @@ export class ManagementService {
         return await this.#platform.readPairing(project.projectId, pairingId, signal);
     };
 
-    readonly createAgentPairing = async (token: string | undefined, botId: string | null, signal: AbortSignal) => {
-        const session = await this.#authentication.session(token, signal);
-        if (session.kind === "unavailable") {
-            throw new ManagementError("AUTH_UNAVAILABLE", "Sign-in is temporarily unavailable.", 503);
-        }
-        if (session.kind === "unauthenticated") {
-            throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
-        }
-        if (botId === null) {
-            await this.#requireProject(session.session.userId, signal);
-            return await this.#authentication.createPairing(session.session.userId, null, null, signal);
-        }
-        const bot = await this.#managedBots.readBot(session.session.userId, botId, signal);
-        if (bot === null) {
-            throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
-        }
-        return await this.#authentication.createPairing(
-            session.session.userId,
-            botId,
-            bot.configuration?.runtimeId ?? null,
-            signal,
-        );
-    };
-
     readonly redeemTransfer = async (code: string, signal: AbortSignal) => {
         const identity = await this.#authentication.redeemTransfer(code, signal);
         if (identity === null) {
@@ -233,22 +209,6 @@ export class ManagementService {
         }
         const bot = await this.provisionUserBot(identity.userId, undefined, signal);
         return { ...identity, botId: bot.botId };
-    };
-
-    readonly redeemAgentPairing = async (token: string, signal: AbortSignal) => {
-        const identity = await this.#authentication.redeemPairing(token, signal);
-        if (identity === null) {
-            throw new ManagementError(
-                "PAIRING_TICKET_UNAVAILABLE",
-                "Copy a fresh pairing instruction from your Chat page.",
-                410,
-            );
-        }
-        const project = await this.readProject(identity.userId, signal);
-        if (project === null) {
-            throw new ManagementError("PROJECT_REQUIRED", "The Machine is unavailable in Morty.", 409);
-        }
-        return { ...identity, projectId: project.projectId };
     };
 
     readonly #requireProject = async (userId: string, signal: AbortSignal) => {

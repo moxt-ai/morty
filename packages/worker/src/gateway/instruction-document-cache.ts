@@ -6,14 +6,13 @@ type WorkerFetch = (request: Request, bindings: CloudBindings, context?: Executi
 export function withInstructionDocumentCache(next: WorkerFetch): WorkerFetch {
     return async (request, bindings, context) => {
         const url = new URL(request.url);
-        if (request.method !== "GET" || (url.pathname !== "/setup.md" && url.pathname !== "/pair.md")) {
+        if (request.method !== "GET" || url.pathname !== "/setup.md") {
             return next(request, bindings, context);
         }
         const origin = instructionOrigin(bindings.APP_ORIGIN === undefined ? url.origin : bindings.APP_ORIGIN);
         if (origin === null) {
             return next(request, bindings, context);
         }
-        // Tickets never affect the document. Keep them out of the edge cache key.
         url.search = "";
         url.searchParams.set("origin", origin);
         const cacheKey = new Request(url, { method: "GET" });

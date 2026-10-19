@@ -599,7 +599,7 @@ function readPairRecord(line) {
  * Morty's saved setup files, `mobius/` isolates its CLI manager and connection
  * state, and `workspace/` is the paired default workspace.
  */
-async function pair(options) {
+async function _pair(options) {
     const stack = options.stateDir === undefined ? null : readStack(options.stateDir);
     if (stack === null) {
         fail("pass --state-dir for a stack created by prepare");
@@ -929,7 +929,6 @@ function usage() {
         [
             "Usage:",
             "  node scripts/local-dev.cjs prepare <web|web-server|web-server-mobius|web-server-mobius-cli> [--state-dir DIR] [--platform-port N] [--chat-port N] [--app-id ID --app-secret SECRET] [--force] [--no-build] [--background]",
-            "  node scripts/local-dev.cjs pair    --state-dir DIR [--harness ID] [--workspace DIR]",
             "  node scripts/local-dev.cjs status --state-dir DIR",
             "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|platform|runtime|all] [--lines N] [--filter REGEX] [--follow]",
             "  node scripts/local-dev.cjs remove --state-dir DIR [--keep-state]",
@@ -943,9 +942,6 @@ async function main() {
     switch (options.command) {
         case "prepare":
             await prepare(options);
-            break;
-        case "pair":
-            await pair(options);
             break;
         case "status":
             await status(options);

@@ -44,18 +44,12 @@ export async function cloudProjectId(request: Request): Promise<string | null> {
     if (path === "/morty/api/identity/anonymous-users") {
         return null;
     }
-    const inputKey =
-        path === "/morty/api/identity/transfers/redeem"
-            ? "code"
-            : path === "/morty/api/identity/pairings/redeem"
-              ? "token"
-              : null;
+    const inputKey = path === "/morty/api/identity/transfers/redeem" ? "code" : null;
     if (request.method === "POST" && inputKey !== null) {
         const input = await readJsonBody(request.clone());
         const parsed = v.safeParse(v.record(v.string(), v.unknown()), input);
         const ticket = parsed.success ? readProjectCredential(parsed.output[inputKey]) : null;
-        const expectedKind = inputKey === "code" ? "mobius_transfer_v2" : "mobius_pair_v2";
-        if (ticket?.kind === expectedKind) {
+        if (ticket?.kind === "mobius_transfer_v2") {
             return ticket.projectId;
         }
     }

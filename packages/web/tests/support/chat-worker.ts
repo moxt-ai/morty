@@ -62,25 +62,9 @@ export async function createChatWorkerEnvironment() {
             connectAgent: async (
                 agent: { readonly id: string; readonly label: string } = { id: "claude", label: "Codex" },
                 nativeSessionIds?: ReadonlySet<string>,
-                pairingInstruction?: string,
             ) => {
-                let targetBotId = botId;
-                if (pairingInstruction !== undefined) {
-                    const pairingUrl = pairingInstruction.match(/https?:\/\/\S+/u)?.[0];
-                    if (pairingUrl === undefined) {
-                        throw new Error("The agent instruction does not contain a pairing URL.");
-                    }
-                    const url = new URL(pairingUrl);
-                    const redeemed = await request("identity/pairings/redeem", {
-                        token: url.searchParams.get("token"),
-                    });
-                    if (redeemed.status !== 200) {
-                        throw new Error(`Could not redeem the agent instruction: ${redeemed.status}`);
-                    }
-                    targetBotId = v.parse(v.object({ botId: v.string() }), await redeemed.json()).botId;
-                }
                 const runtime = await cloud.connectAgent(identity.projectId, [agent], nativeSessionIds);
-                const setup = await request(`chat/projects/${identity.projectId}/bots/${targetBotId}/setup`, {
+                const setup = await request(`chat/projects/${identity.projectId}/bots/${botId}/setup`, {
                     runtimeId: runtime.runtimeId,
                     agentRef: agent.id,
                 });

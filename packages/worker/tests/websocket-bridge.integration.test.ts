@@ -100,7 +100,7 @@ test("Given a browser API request, When the Chat web application uses the WebSoc
             kind: "request",
             requestId: "request-2",
             method: "GET",
-            path: "/pair.md?token=secret",
+            path: "/setup.md?token=secret",
             headers: [],
             body: null,
         }),

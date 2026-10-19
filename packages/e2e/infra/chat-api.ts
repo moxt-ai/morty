@@ -100,13 +100,6 @@ export class ChatApi {
         });
     }
 
-    async createAgentPairing() {
-        const identity = this.#requireIdentity();
-        return await this.#request("/morty/api/identity/pairings", {
-            body: { botId: identity.botId },
-        });
-    }
-
     async waitForAgent(harness: E2EHarness, pairingId: string, agentId: string, agentLabel: string) {
         const paired = await harness.waitFor(
             `Mobius pairing with ${agentLabel}`,

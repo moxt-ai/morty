@@ -49,7 +49,6 @@ export async function createTestRuntime(harness: E2EHarness) {
             continueReply: runtime.continueReply,
             page,
             openChat,
-            createPairInstruction: async () => text((await chat.createAgentPairing()).url, "pair instruction URL"),
             openPairedChat: async () => {
                 await openChat();
                 const pairing = await chat.createPairing();

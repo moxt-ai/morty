@@ -77,29 +77,12 @@ interface SetupIdentity {
     readonly context: Context;
 }
 
-interface PairIdentity {
-    readonly kind: "pair";
-    readonly context: Context;
-    readonly expectedRuntimeId: string | null;
+interface Options {
+    readonly base: string;
+    readonly cwd: string;
+    readonly harness: string;
+    readonly sessionId: string;
 }
-
-type PreparedIdentity = SetupIdentity | PairIdentity;
-
-type Options =
-    | {
-          readonly mode: "pair";
-          readonly base: string;
-          readonly cwd: string;
-          readonly harness: string;
-          readonly token: string;
-      }
-    | {
-          readonly mode: "setup";
-          readonly base: string;
-          readonly cwd: string;
-          readonly harness: string;
-          readonly sessionId: string;
-      };
 
 function errorCode(cause: unknown): unknown {
     return cause !== null && typeof cause === "object" && "code" in cause ? cause.code : undefined;
@@ -379,7 +362,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 "session-id": { type: "string" },
             },
         });
-        if (positionals.length !== 1 || !["pair", "setup"].includes(positionals[0])) {
+        if (positionals.length !== 1 || positionals[0] !== "setup") {
             fail("INVALID_ARGUMENTS");
         }
         if (values.harness === undefined) {
@@ -394,48 +377,16 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const base = origin(values["base-url"]);
         const cwd = text(values.cwd);
         const harness = identifier(values.harness);
-        if (positionals[0] === "pair") {
-            if (values.token === undefined) {
-                fail("PAIRING_TICKET_REQUIRED");
-            }
-            if (values["session-id"] !== undefined) {
-                fail("INVALID_ARGUMENTS");
-            }
-            return {
-                mode: "pair",
-                base,
-                cwd,
-                harness,
-                token: text(values.token, /^mobius_pair_v2\.[A-Za-z0-9_-]{1,128}\.[A-Za-z0-9_-]{43}$/u),
-            };
-        }
         if (values.token !== undefined) {
             fail("INVALID_ARGUMENTS");
         }
         if (values["session-id"] === undefined) {
             fail("SESSION_ID_REQUIRED");
         }
-        return { mode: "setup", base, cwd, harness, sessionId: identifier(values["session-id"]) };
+        return { base, cwd, harness, sessionId: identifier(values["session-id"]) };
     }
 
-    async function preparePairIdentity(context: Context, ticket: string): Promise<PairIdentity> {
-        progress("identity", "Exchanging the one-time ticket for the existing user and Machine.");
-        const identity = await request(context, "/identity/pairings/redeem", { token: ticket }, false);
-        const expectedRuntimeId = identity.expectedRuntimeId === null ? null : identifier(identity.expectedRuntimeId);
-        const saved = await saveConfiguration(context, {
-            user_token: credential(identity.token),
-            user_id: identifier(identity.userId),
-            bot_id: identifier(identity.botId),
-            project_id: identifier(identity.projectId),
-            entry: "pair",
-        });
-        return { kind: "pair", context: saved, expectedRuntimeId };
-    }
-
-    async function prepareIdentity(context: Context, options: Options): Promise<PreparedIdentity> {
-        if (options.mode === "pair") {
-            return await preparePairIdentity(context, options.token);
-        }
+    async function prepareIdentity(context: Context): Promise<SetupIdentity> {
         if (context.config.user_token !== undefined) {
             progress("identity", "Reusing the saved identity.");
             return { kind: "setup", context };
@@ -452,23 +403,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return { kind: "setup", context: saved };
     }
 
-    async function verifyIdentityAndBot(context: Context, mode: Options["mode"]): Promise<VerifiedIdentity> {
+    async function verifyIdentityAndBot(context: Context): Promise<VerifiedIdentity> {
         const session = await request(context, "/session");
         identifier(session.userId);
-        if (mode === "pair" && context.config.entry !== "pair") {
-            fail("PAIRING_TICKET_REQUIRED");
-        }
-        if (mode === "pair" && context.config.bot_id !== undefined) {
-            const botId = identifier(context.config.bot_id);
-            const detail = await request(context, `/management/bots/${encodeURIComponent(botId)}/runtime-binding`);
-            if (identifier(detail.botId) !== botId) {
-                fail("INVALID_RESPONSE");
-            }
-            return {
-                context: await saveConfiguration(context, { user_id: session.userId }),
-                expectedRuntimeId: detail.runtimeId === null ? null : identifier(detail.runtimeId),
-            };
-        }
         const listed = await request(context, "/management/bots");
         if (!Array.isArray(listed.bots)) {
             fail("INVALID_RESPONSE");
@@ -603,15 +540,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     async function prepareRuntime(
         context: Context,
         cwd: string,
-        mode: Options["mode"],
         expectedRuntimeId: string | null,
     ): Promise<{ readonly context: Context; readonly runtime: RuntimeSelection }> {
         progress("pairing", "Preparing the Runtime connection.");
         const project = await request(context, "/management/project");
         const appId = identifier(project.appId);
-        if (mode === "pair") {
-            return { context, runtime: await createRuntimePairing(context, appId) };
-        }
         if (expectedRuntimeId !== null) {
             const existing = (await listManagedConnections(context, cwd)).find(
                 (connection) => connection.appId === appId && connection.runtimeId === expectedRuntimeId,
@@ -647,18 +580,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             "--workspace",
             cwd,
         ];
-    }
-
-    function validateExpectedRuntime(identity: PreparedIdentity, runtime: RuntimeSelection): void {
-        switch (identity.kind) {
-            case "setup":
-                return;
-            case "pair":
-                if (identity.expectedRuntimeId !== null && identity.expectedRuntimeId !== runtime.runtimeId) {
-                    fail("RUNTIME_MISMATCH");
-                }
-                return;
-        }
     }
 
     async function startRuntime(context: Context, runtime: RuntimeSelection, cwd: string): Promise<Context> {
@@ -822,16 +743,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         await waitForReadiness(context, runtime);
         const botId = context.config.bot_id;
         const workingDirectory = text(context.config.workspace);
-        if (options.mode === "pair") {
-            emit({
-                status: "ready",
-                botId,
-                url: context.base,
-                workspace: workingDirectory,
-                message: "Return to your Morty page to start chatting. Keep the Runtime online.",
-            });
-            return;
-        }
         const transfer = await request(context, "/identity/transfers", {});
         const url = new URL(text(transfer.url));
         if (
@@ -861,15 +772,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const base = options.base;
         const cwd = await resolveWorkingDirectory(options.cwd);
         const directory = await prepareDirectory(await resolveDocumentsDirectory(host.documents, signal));
-        let context: Context =
-            options.mode === "setup" ? await loadConfiguration(directory, base) : { directory, base, config: {} };
-        const identity = await prepareIdentity(context, options);
+        let context: Context = await loadConfiguration(directory, base);
+        const identity = await prepareIdentity(context);
         context = identity.context;
-        const verified = await verifyIdentityAndBot(context, options.mode);
+        const verified = await verifyIdentityAndBot(context);
         context = verified.context;
         emit({ status: "identity_ready", userId: context.config.user_id, botId: context.config.bot_id });
-        const prepared = await prepareRuntime(context, cwd, options.mode, verified.expectedRuntimeId);
-        validateExpectedRuntime(identity, prepared.runtime);
+        const prepared = await prepareRuntime(context, cwd, verified.expectedRuntimeId);
         context = prepared.context;
         context = await startRuntime(context, prepared.runtime, cwd);
         await waitForRuntime(context, prepared.runtime, options.harness);

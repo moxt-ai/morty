@@ -237,7 +237,7 @@ export class AnonymousIdentityApi {
         const scopedPath =
             projectScope !== null &&
             !path.startsWith("/projects/") &&
-            !["/identity/anonymous-users", "/identity/transfers/redeem", "/identity/pairings/redeem"].includes(path)
+            !["/identity/anonymous-users", "/identity/transfers/redeem"].includes(path)
                 ? `/projects/${encodeURIComponent(projectScope.projectId)}${path}`
                 : path;
         const response = await this.#fetchRequest(

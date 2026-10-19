@@ -1,6 +1,5 @@
 import type { ClerkGateway } from "../../../gateway/clerk-gateway.ts";
 import type { Session } from "../entity/authentication/session.ts";
-import type { AgentPairingStorage } from "../storage/agent-pairing-storage.ts";
 import type { ConfigurationStorage } from "../storage/configuration-storage.ts";
 import type { BindingResult, IdentityStorage, IdentityTransfer } from "../storage/identity-storage.ts";
 import type { AnonymousIdentity } from "../storage/identity-storage-common.ts";
@@ -18,7 +17,6 @@ export class AuthenticationService {
     private readonly configuration: ConfigurationStorage;
     private readonly clerk: ClerkGateway;
     private readonly identities: IdentityStorage;
-    private readonly agentPairings: AgentPairingStorage;
     private readonly logger: AuditLogger;
     private readonly projectId: string | undefined;
 
@@ -26,7 +24,6 @@ export class AuthenticationService {
         readonly storages: {
             readonly configuration: ConfigurationStorage;
             readonly identities: IdentityStorage;
-            readonly agentPairings: AgentPairingStorage;
         };
         readonly gateways: { readonly clerk: ClerkGateway };
         readonly logger: AuditLogger;
@@ -35,7 +32,6 @@ export class AuthenticationService {
         this.configuration = cx.storages.configuration;
         this.clerk = cx.gateways.clerk;
         this.identities = cx.storages.identities;
-        this.agentPairings = cx.storages.agentPairings;
         this.logger = cx.logger;
         this.projectId = cx.config.bindings.CHAT_PROJECT_ID;
     }
@@ -84,31 +80,6 @@ export class AuthenticationService {
     ): Promise<AnonymousIdentity> => {
         const identity = await this.identities.createAnonymous(userId, projectId, Date.now(), signal);
         this.logger.info({ event: "anonymous-user-created", userId: identity.userId }, "Identity audit event");
-        return identity;
-    };
-
-    readonly createPairing = async (
-        userId: string,
-        botId: string | null,
-        expectedRuntimeId: string | null,
-        signal: AbortSignal,
-    ) => {
-        const ticket = await this.agentPairings.createPairing(userId, botId, expectedRuntimeId, Date.now(), signal);
-        this.logger.info({ event: "agent-pairing-issued", userId, botId, expectedRuntimeId }, "Identity audit event");
-        return ticket;
-    };
-
-    readonly redeemPairing = async (token: string, signal: AbortSignal) => {
-        const identity = await this.agentPairings.redeemPairing(token, Date.now(), signal);
-        this.logger.info(
-            {
-                event: "agent-pairing-redeemed",
-                outcome: identity === null ? "rejected" : "accepted",
-                userId: identity?.userId,
-                botId: identity?.botId,
-            },
-            "Identity audit event",
-        );
         return identity;
     };
 
