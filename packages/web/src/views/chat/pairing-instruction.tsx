@@ -7,18 +7,18 @@ import { dataTestId } from "../../data-testid.ts";
 export function PairingInstruction() {
     const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
     const showToast = useToast();
-    const setupInstruction = `Fetch ${window.location.host}/setup.md and set up Morty for me. Don't ask me anything.`;
+    const setupInstruction = `Fetch ${window.location.origin}/setup.md and set up Morty for me. Don't ask me anything.`;
     return (
-        <div className="mt-5 space-y-3">
+        <div className="mt-8 space-y-3">
             <div className="flex items-center gap-2">
                 <textarea
                     aria-label="Agent setup instruction"
                     data-testid={dataTestId.pairingInstruction}
                     readOnly
-                    rows={3}
+                    rows={2}
                     value={setupInstruction}
                     onFocus={(event) => event.currentTarget.select()}
-                    className="min-w-0 flex-1 resize-none rounded-lg border border-border bg-muted/30 p-3 font-mono text-[11px] leading-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="min-w-0 flex-1 resize-none rounded-xl border border-border bg-muted/40 p-4 font-mono text-sm leading-6 outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
                 <Button
                     type="button"

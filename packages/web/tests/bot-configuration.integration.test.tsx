@@ -4,7 +4,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given Morty has no paired agent, When the connect dialog opens, Then it offers the fixed setup instruction without a data region selector", {
+test("Given Morty has no paired agent, When the setup page opens, Then it offers the current-origin setup instruction without a data region selector", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp();
@@ -13,7 +13,7 @@ test("Given Morty has no paired agent, When the connect dialog opens, Then it of
     expect(pairing).toBeInstanceOf(HTMLTextAreaElement);
     expect(pairing).toHaveProperty("readOnly", true);
     expect((pairing as HTMLTextAreaElement).value).toBe(
-        `Fetch ${window.location.host}/setup.md and set up Morty for me. Don't ask me anything.`,
+        `Fetch ${window.location.origin}/setup.md and set up Morty for me. Don't ask me anything.`,
     );
     expect(queryByRole(document.body, "combobox", { name: "Data region" })).toBeNull();
     expect(queryByRole(document.body, "button", { name: "Refresh pairing instruction" })).toBeNull();

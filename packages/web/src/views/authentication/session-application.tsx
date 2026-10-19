@@ -1,6 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useStore } from "zustand";
-import { Dialog } from "../../components/ui/dialog.tsx";
 import { createApplicationRouter } from "../../index.ts";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import { createAnonymousSessionStore } from "../../view-models/authentication/anonymous-session-store.ts";
@@ -63,21 +62,24 @@ export function SessionApplication() {
 }
 
 function SetupApplication() {
-    const [open, setOpen] = useState(true);
     return (
-        <main className="fixed inset-0 flex min-h-0 overflow-hidden bg-background text-foreground" aria-label="Chat">
-            <div className="m-auto max-w-lg px-6 text-center">
-                <h1 className="text-[28px] leading-9 font-semibold tracking-[-0.025em]">Morty</h1>
-            </div>
-            {open && (
-                <Dialog
-                    title="Connect agent"
-                    description="Morty is ready. Paste this instruction into your local agent to connect it."
-                    onClose={() => setOpen(false)}
-                >
+        <main className="flex min-h-screen items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_top,_hsl(var(--muted))_0%,_hsl(var(--background))_48%)] px-6 py-12 text-foreground">
+            <section aria-labelledby="setup-title" className="w-full max-w-2xl">
+                <div className="rounded-3xl border border-border/70 bg-card/90 p-8 shadow-2xl shadow-black/10 backdrop-blur sm:p-12">
+                    <div className="mb-10 flex size-12 items-center justify-center rounded-2xl bg-primary text-xl font-bold text-primary-foreground shadow-lg shadow-primary/20">
+                        M
+                    </div>
+                    <p className="text-sm font-medium text-primary">Welcome to Morty</p>
+                    <h1 id="setup-title" className="mt-2 text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">
+                        Connect your local agent
+                    </h1>
+                    <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground">
+                        Copy this instruction into your agent. It will connect itself and finish the setup for you.
+                    </p>
                     <PairingInstruction />
-                </Dialog>
-            )}
+                </div>
+                <p className="mt-6 text-center text-sm text-muted-foreground">Your workspace stays on this device.</p>
+            </section>
         </main>
     );
 }
