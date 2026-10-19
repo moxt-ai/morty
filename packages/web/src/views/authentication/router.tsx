@@ -1,12 +1,26 @@
-import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/react-router";
+import { createRootRoute, createRoute, createRouter, Link, Outlet, useParams } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useStore } from "zustand";
-import { Button, reportApplicationError, Spinner } from "../../index.ts";
+import { reportApplicationError } from "../../index.ts";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import { createContinueStore } from "../../view-models/authentication/continue-store.ts";
-import { Page } from "../application/app.tsx";
+import { setupPageClassName, setupSectionClassName } from "../setup/setup-card-shell.tsx";
+import { ContinuePageContent } from "./continue-page-content.tsx";
+import {
+    CONTINUE_PREVIEW_STATE_LABELS,
+    CONTINUE_PREVIEW_STATES,
+    type ContinuePreviewStateId,
+    continuePreviewState,
+    getContinuePreviewStateId,
+    isContinuePreviewStateId,
+} from "./continue-preview.ts";
 
-function ContinuePage() {
+function ContinuePagePreview({ previewId }: { readonly previewId: ContinuePreviewStateId }) {
+    const state = continuePreviewState(previewId);
+    return <ContinuePageContent retry={() => {}} state={state} />;
+}
+
+function ContinuePageLive() {
     const transport = useApiTransport();
     const [store] = useState(() => createContinueStore(transport.fetch));
     const { redeem, retry, state } = useStore(store);
@@ -19,60 +33,74 @@ function ContinuePage() {
         void redeem(controller.signal);
         return () => controller.abort();
     }, [redeem, state.kind]);
+
+    return <ContinuePageContent retry={retry} state={state} />;
+}
+
+function ContinuePage() {
+    // TEMP style-tuning preview: `?continuePreview=<state>` on /continue forces one UI state. Remove with continue-preview.ts.
+    const previewId = getContinuePreviewStateId(new URLSearchParams(window.location.search));
+    if (previewId !== null) {
+        return <ContinuePagePreview previewId={previewId} />;
+    }
+    return <ContinuePageLive />;
+}
+
+function ContinuePreviewIndexPage() {
     return (
-        <Page>
-            <div className="mx-auto flex w-full max-w-xl items-start justify-center">
-                <section className="min-w-0 flex-1 rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
-                    {state.kind === "session-opening" ? (
-                        <>
-                            <h1 className="text-2xl font-semibold">Continue native session</h1>
-                            <p className="mt-3 leading-7 text-muted-foreground">
-                                Opening the original session in Morty.
-                            </p>
-                            <div className="mt-6 flex items-center gap-3">
-                                <Spinner label="Opening session" />
-                                <span className="text-sm text-muted-foreground">Opening session…</span>
-                            </div>
-                        </>
-                    ) : state.kind === "session-failed" ? (
-                        <>
-                            <h1 className="text-2xl font-semibold">Continue native session</h1>
-                            <p role="alert" className="mt-4 text-red-700">
-                                {state.message}
-                            </p>
-                            <div className="mt-6 flex flex-wrap items-center gap-3">
-                                <Button onClick={retry}>Try again</Button>
-                                <Button asChild variant="ghost" className="px-0">
-                                    <a href="/">Return to Morty</a>
-                                </Button>
-                            </div>
-                        </>
-                    ) : state.kind === "identity-redeeming" ? (
-                        <>
-                            <h1 className="text-2xl font-semibold">Continue in Morty</h1>
-                            <p
-                                role="status"
-                                aria-label="Securely transferring Morty access"
-                                className="mt-4 text-muted-foreground"
+        <main className={setupPageClassName}>
+            <section
+                aria-labelledby="continue-preview-index-title"
+                className={`${setupSectionClassName} md:max-w-[640px]`}
+            >
+                <h1 id="continue-preview-index-title" className="text-24 font-semibold tracking-[-0.03em]">
+                    Continue link page preview
+                </h1>
+                <p className="mt-2 text-14 leading-[22px] text-muted-foreground">
+                    Temporary routes for tuning Agent handoff / continue UI. Remove before shipping.
+                </p>
+                <ul className="mt-6 grid gap-2">
+                    {CONTINUE_PREVIEW_STATES.map((id) => (
+                        <li key={id}>
+                            <Link
+                                className="block rounded-lg border border-border/60 bg-card px-4 py-3 text-14 transition-colors hover:bg-muted/40"
+                                to="/continue/preview/$stateId"
+                                params={{ stateId: id }}
                             >
-                                Securely transferring Morty access…
-                            </p>
-                        </>
-                    ) : (
-                        <>
-                            <h1 className="text-2xl font-semibold">Continue in Morty</h1>
-                            <p role="alert" className="mt-4 text-red-700">
-                                {state.kind === "failed" ? state.message : "This transfer link is invalid."}
-                            </p>
-                            <Button asChild variant="ghost" className="mt-5 px-0">
-                                <a href="/">Return to Morty</a>
-                            </Button>
-                        </>
-                    )}
-                </section>
-            </div>
-        </Page>
+                                <span className="font-medium">{CONTINUE_PREVIEW_STATE_LABELS[id]}</span>
+                                <span className="mt-0.5 block font-mono text-xs text-muted-foreground">
+                                    /continue/preview/{id}
+                                </span>
+                            </Link>
+                        </li>
+                    ))}
+                </ul>
+            </section>
+        </main>
     );
+}
+
+function ContinuePreviewStatePage() {
+    const { stateId } = useParams({ from: "/continue/preview/$stateId" });
+    if (!isContinuePreviewStateId(stateId)) {
+        return (
+            <main className={setupPageClassName}>
+                <section className={setupSectionClassName}>
+                    <p role="alert" className="text-destructive">
+                        Unknown preview state: {stateId}
+                    </p>
+                    <Link
+                        className="mt-4 inline-block text-primary underline underline-offset-4"
+                        to="/continue/preview"
+                    >
+                        Back to preview index
+                    </Link>
+                </section>
+            </main>
+        );
+    }
+    const state = continuePreviewState(stateId);
+    return <ContinuePageContent retry={() => {}} state={state} />;
 }
 
 const rootRoute = createRootRoute({ component: Outlet });
@@ -81,9 +109,19 @@ const continueRoute = createRoute({
     path: "/continue",
     component: ContinuePage,
 });
+const continuePreviewIndexRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/continue/preview",
+    component: ContinuePreviewIndexPage,
+});
+const continuePreviewStateRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/continue/preview/$stateId",
+    component: ContinuePreviewStatePage,
+});
 
 export const router = createRouter({
-    routeTree: rootRoute.addChildren([continueRoute]),
+    routeTree: rootRoute.addChildren([continueRoute, continuePreviewIndexRoute, continuePreviewStateRoute]),
     defaultOnCatch: (error) => reportApplicationError(error, "continuation-route"),
     scrollRestoration: true,
 });

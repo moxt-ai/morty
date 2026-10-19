@@ -6,6 +6,7 @@ import { createAnonymousSessionStore } from "../../view-models/authentication/an
 import { App } from "../application/app.tsx";
 import { MobiusManagement } from "../applications/mobius-management.tsx";
 import { PairingInstruction } from "../chat/pairing-instruction.tsx";
+import { SetupCardDescription, SetupCardShell, SetupCardTitle } from "../setup/setup-card-shell.tsx";
 import { type ActiveIdentity, ActiveIdentityProvider } from "./identity-context.tsx";
 import { router as continuationRouter } from "./router.tsx";
 
@@ -63,22 +64,12 @@ export function SessionApplication() {
 
 function SetupApplication() {
     return (
-        <main className="flex min-h-screen items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_top,_hsl(var(--muted))_0%,_hsl(var(--background))_48%)] px-6 py-12 text-foreground">
-            <section aria-labelledby="setup-title" className="w-full max-w-2xl">
-                <div className="rounded-3xl border border-border/70 bg-card/90 p-8 shadow-2xl shadow-black/10 backdrop-blur sm:p-12">
-                    <div className="mb-10 flex size-12 items-center justify-center rounded-2xl bg-primary text-xl font-bold text-primary-foreground shadow-lg shadow-primary/20">
-                        M
-                    </div>
-                    <p className="text-sm font-medium text-primary">Welcome to Morty</p>
-                    <h1 id="setup-title" className="mt-2 text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">
-                        Connect your local agent
-                    </h1>
-                    <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground">
-                        Copy this instruction into your agent. It will connect itself and finish the setup for you.
-                    </p>
-                    <PairingInstruction />
-                </div>
-            </section>
-        </main>
+        <SetupCardShell titleId="setup-title">
+            <SetupCardTitle id="setup-title">Connect your local agent</SetupCardTitle>
+            <SetupCardDescription>
+                Copy this instruction into your agent. It will connect itself and finish the setup for you.
+            </SetupCardDescription>
+            <PairingInstruction />
+        </SetupCardShell>
     );
 }

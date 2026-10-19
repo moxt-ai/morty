@@ -10,7 +10,7 @@ type SessionHandoff = {
     readonly harness: string;
     readonly sessionId: string;
 };
-type ContinueState =
+export type ContinueState =
     | {
           readonly kind: "session-opening";
           readonly code: string;

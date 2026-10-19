@@ -403,8 +403,9 @@ export function BotChatHome({
             )}
             {pairingDialogOpen && setupView?.reason === "unconfigured" && active !== null && (
                 <Dialog
-                    title="Connect agent"
-                    description="Morty is ready. Paste this instruction into your local agent to connect it."
+                    appearance="setup"
+                    title="Connect your local agent"
+                    description="Copy this instruction into your agent. It will connect itself and finish the setup for you."
                     onClose={() => setPairingDialogOpen(false)}
                 >
                     <PairingInstruction />

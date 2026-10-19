@@ -2,6 +2,7 @@ import { type AnyRouter, RouterProvider } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { Spinner } from "../../index.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
+import { SetupCardAlert, SetupCardSection, SetupCardShell, SetupCardTitle } from "../setup/setup-card-shell.tsx";
 
 export type AppState =
     | { readonly kind: "loading" }
@@ -64,19 +65,19 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
     switch (state.kind) {
         case "loading":
             return (
-                <main className="grid min-h-dvh place-items-center bg-background">
-                    <div className="flex min-h-40 items-center justify-center">
+                <SetupCardShell titleId="bootstrap-loading">
+                    <SetupCardTitle id="bootstrap-loading">Loading Morty</SetupCardTitle>
+                    <SetupCardSection className="flex justify-center">
                         <Spinner label="Loading Morty" />
-                    </div>
-                </main>
+                    </SetupCardSection>
+                </SetupCardShell>
             );
         case "failed":
             return (
-                <main className="grid min-h-dvh place-items-center bg-background">
-                    <p role="alert" className="text-red-700">
-                        Morty is temporarily unavailable. Please reload to try again.
-                    </p>
-                </main>
+                <SetupCardShell titleId="bootstrap-failed">
+                    <SetupCardTitle id="bootstrap-failed">Morty is unavailable</SetupCardTitle>
+                    <SetupCardAlert>Morty is temporarily unavailable. Please reload to try again.</SetupCardAlert>
+                </SetupCardShell>
             );
         case "authentication":
             return <RouterProvider router={state.router} />;
