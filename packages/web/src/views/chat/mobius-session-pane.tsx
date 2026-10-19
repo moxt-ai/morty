@@ -25,7 +25,11 @@ import { createBrowserFilePreviewStore } from "../../view-models/chat/file-previ
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
 import { sessionDebugBlocks } from "../../view-models/chat/session-debug-blocks.ts";
-import { createSessionPaneModel, sessionPanePresentation } from "../../view-models/chat/session-pane-store.ts";
+import {
+    createSessionPaneModel,
+    type SessionConnection,
+    sessionPanePresentation,
+} from "../../view-models/chat/session-pane-store.ts";
 import { type SessionMessage, sessionTextValue } from "../../view-models/chat/session-presentation.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
 import { MobiusAssistantText, MobiusSessionMessage } from "./mobius-session-message.tsx";
@@ -129,6 +133,55 @@ function MessageListSkeleton() {
             </div>
         </div>
     );
+}
+
+function useCountdownSeconds(retryAtEpochMs: number): number {
+    const [remaining, setRemaining] = useState(() => Math.max(0, Math.ceil((retryAtEpochMs - Date.now()) / 1000)));
+    useEffect(() => {
+        setRemaining(Math.max(0, Math.ceil((retryAtEpochMs - Date.now()) / 1000)));
+        const intervalId = setInterval(() => {
+            setRemaining(Math.max(0, Math.ceil((retryAtEpochMs - Date.now()) / 1000)));
+        }, 1000);
+        return () => clearInterval(intervalId);
+    }, [retryAtEpochMs]);
+    return remaining;
+}
+
+function DisconnectedNotice({
+    message,
+    retryAtEpochMs,
+}: {
+    readonly message: string;
+    readonly retryAtEpochMs: number;
+}) {
+    const remaining = useCountdownSeconds(retryAtEpochMs);
+    return (
+        <div data-testid={dataTestId.sessionReconnectNotice} className="mx-auto w-full max-w-[920px] px-3 sm:px-5">
+            <p role="alert" className="text-sm text-destructive">
+                {message}
+            </p>
+            <p role="status" className="text-sm text-muted-foreground">
+                Retrying in {remaining} s
+            </p>
+        </div>
+    );
+}
+
+function ReconnectingNotice() {
+    return (
+        <div data-testid={dataTestId.sessionReconnectNotice} className="mx-auto w-full max-w-[920px] px-3 sm:px-5">
+            <p role="status" className="text-sm text-muted-foreground">
+                Mobius is reconnecting…
+            </p>
+        </div>
+    );
+}
+
+function SessionReconnectNotice({ connection }: { readonly connection: SessionConnection }) {
+    if (connection.kind === "disconnected") {
+        return <DisconnectedNotice message={connection.message} retryAtEpochMs={connection.retryAtEpochMs} />;
+    }
+    return <ReconnectingNotice />;
 }
 
 /**
@@ -376,6 +429,9 @@ export function MobiusSessionPane({
                     aria-label="Messages"
                     className="min-h-0 flex-1 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10 lg:px-12"
                 >
+                    {(model.connection.kind === "disconnected" || model.connection.kind === "reconnecting") && (
+                        <SessionReconnectNotice connection={model.connection} />
+                    )}
                     {model.messages.length === 0 && model.connection.kind === "loading" && <MessageListSkeleton />}
                     {model.messages.length === 0 && model.connection.kind === "failed" && (
                         <div className="flex min-h-full items-center justify-center">

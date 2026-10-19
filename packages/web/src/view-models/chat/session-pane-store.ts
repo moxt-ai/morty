@@ -17,7 +17,7 @@ import {
     sessionLastSentMessageEntry,
 } from "../../services/indexed-db/central-indexed-db.ts";
 import { centralSessionStorage, sessionDraftEntry } from "../../services/session-storage/central-session-storage.ts";
-import { formatError } from "../format-error.ts";
+import { formatError, isRetryableRuntimeConnectionFailure } from "../format-error.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
@@ -65,13 +65,37 @@ type TitleEdit =
 type Connection =
     | { readonly kind: "loading" }
     | { readonly kind: "ready"; readonly client: MobiusClient }
+    | { readonly kind: "reconnecting" }
+    | { readonly kind: "disconnected"; readonly message: string; readonly retryAtEpochMs: number }
     | { readonly kind: "failed"; readonly message: string };
+
+export type SessionConnection = Connection;
 type LocalInteraction =
     | { readonly kind: "permission"; readonly permission: PermissionInteraction }
     | { readonly kind: "elicitation"; readonly elicitation: ElicitationInteraction };
 
 const SESSION_EVENT_PAGE_LIMIT = 30;
 const HISTORY_MESSAGE_TARGET = 20;
+const SESSION_RECONNECT_DELAYS_MS = [5_000, 10_000, 20_000] as const;
+const SESSION_RECONNECT_DELAY_CAP_MS = 30_000;
+
+function sleepAbortably(milliseconds: number, signal: AbortSignal): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+        const timeoutId = globalThis.setTimeout(() => {
+            signal.removeEventListener("abort", abort);
+            resolve();
+        }, milliseconds);
+        const abort = (): void => {
+            globalThis.clearTimeout(timeoutId);
+            reject(signal.reason);
+        };
+        if (signal.aborted) {
+            abort();
+            return;
+        }
+        signal.addEventListener("abort", abort, { once: true });
+    });
+}
 
 function interactionId(interaction: LocalInteraction): string {
     return interaction.kind === "permission"
@@ -588,7 +612,7 @@ export function createSessionPaneModel(options: {
                 }
             },
             connect: async (signal) => {
-                try {
+                const readStoredLastSentMessage = (): void => {
                     const revision = lastSentMessageRevision;
                     void centralIndexedDB.get(lastSentMessageEntry, signal).then((stored) => {
                         if (stored === null || revision !== lastSentMessageRevision) {
@@ -605,6 +629,8 @@ export function createSessionPaneModel(options: {
                             });
                         }
                     });
+                };
+                const observeSession = async (): Promise<void> => {
                     client = await requests.connectSession(
                         botId,
                         sessionId,
@@ -879,13 +905,50 @@ export function createSessionPaneModel(options: {
                     await subscription.completed;
                     signal.throwIfAborted();
                     throw new Error("Session updates disconnected. Reopen the Session to continue.");
-                } catch (cause) {
-                    client?.close();
-                    client = null;
-                    if (!signal.aborted) {
+                };
+                readStoredLastSentMessage();
+                let nextDelayIndex = 0;
+                for (;;) {
+                    if (nextDelayIndex > 0) {
+                        set({ connection: { kind: "reconnecting" } });
+                    }
+                    try {
+                        await observeSession();
+                        nextDelayIndex = 0;
+                    } catch (cause) {
+                        client?.close();
+                        client = null;
+                        if (signal.aborted) {
+                            return;
+                        }
+                        if (!isRetryableRuntimeConnectionFailure(cause)) {
+                            const message = formatError(cause, "The Session could not be opened.");
+                            set({
+                                connection: { kind: "failed", message },
+                                activity: transitionSessionActivity(get().activity, {
+                                    kind: "session-failed",
+                                    message,
+                                }),
+                                operation: {
+                                    kind: "failed",
+                                    message,
+                                },
+                            });
+                            return;
+                        }
+                        const delay = Math.min(
+                            SESSION_RECONNECT_DELAYS_MS[nextDelayIndex] ?? SESSION_RECONNECT_DELAY_CAP_MS,
+                            SESSION_RECONNECT_DELAY_CAP_MS,
+                        );
+                        nextDelayIndex += 1;
+                        const retryAtEpochMs = Date.now() + delay;
                         const message = formatError(cause, "The Session could not be opened.");
                         set({
-                            connection: { kind: "failed", message },
+                            connection: {
+                                kind: "disconnected",
+                                message,
+                                retryAtEpochMs,
+                            },
                             activity: transitionSessionActivity(get().activity, {
                                 kind: "session-failed",
                                 message,
@@ -895,6 +958,10 @@ export function createSessionPaneModel(options: {
                                 message,
                             },
                         });
+                        await sleepAbortably(delay, signal).catch(() => undefined);
+                        if (signal.aborted) {
+                            return;
+                        }
                     }
                 }
             },
