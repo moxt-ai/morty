@@ -915,6 +915,17 @@ async function stopRecorded(stack) {
         }
         await stopProcess(runtime.runtimePid);
     }
+    const mobiusStateDirectory = path.join(stack.stateDir, "mobius");
+    if (fs.existsSync(mobiusStateDirectory)) {
+        log(`stopping the Mobius manager at ${mobiusStateDirectory}`);
+        try {
+            await run(process.execPath, [path.join(MOBIUS_ROOT, "packages/cli/src/entrypoint/cli.ts"), "quit"], {
+                env: { MOBIUS_STATE_DIRECTORY: mobiusStateDirectory },
+            });
+        } catch (cause) {
+            log(`could not stop the Mobius manager: ${cause instanceof Error ? cause.message : String(cause)}`);
+        }
+    }
     if (stack.chatPid !== undefined) {
         log(`stopping Chat Worker (pid ${stack.chatPid})`);
         await stopProcess(stack.chatPid);
