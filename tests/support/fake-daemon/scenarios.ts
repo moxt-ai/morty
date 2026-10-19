@@ -119,6 +119,14 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
             };
         case "wait for steering":
             return { outcome: "hold", output: [{ kind: "text", text: "Waiting for steering" }] };
+        case "compact the conversation":
+            return {
+                outcome: "complete",
+                output: [
+                    { kind: "compaction", summary: "The user explored the session timeline.\nContext was summarized." },
+                    { kind: "text", text: "Context compacted; continuing with the summary." },
+                ],
+            };
         case "hold after first delta":
             return {
                 outcome: "hold",

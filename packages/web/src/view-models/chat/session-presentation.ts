@@ -24,6 +24,7 @@ export interface SessionToolPresentation {
 }
 
 export const REASONING_CHARACTER_LIMIT = 16 * 1024;
+export const COMPACTION_CHARACTER_LIMIT = 16 * 1024;
 
 export type SessionText =
     | {
@@ -65,6 +66,13 @@ export type SessionMessage =
                     readonly omitted: boolean;
                 }
               | { readonly kind: "tool"; readonly entry: SessionToolPresentation }
+              | {
+                    readonly kind: "compaction";
+                    readonly compactionId: string;
+                    readonly error: string | null;
+                    readonly status: "in_progress" | "completed" | "failed" | "cancelled";
+                    readonly summary: SessionText | null;
+                }
               | { readonly kind: "completed"; readonly stopReason: string }
               | { readonly kind: "failure"; readonly code: string; readonly message: string };
       };
@@ -257,6 +265,78 @@ function userDisplayContent(content: ContentBlock): ContentBlock {
     return { ...content, text: content.text.replace(context, "") };
 }
 
+type CompactionPresentation = Extract<SessionMessage, { role: "assistant" }>["presentation"] & {
+    readonly kind: "compaction";
+};
+type CompactionUpdateVariant = Extract<AcpSessionUpdate, { readonly sessionUpdate: "compaction_update" }>;
+type CompactionChunkVariant = Extract<AcpSessionUpdate, { readonly sessionUpdate: "compaction_summary_chunk" }>;
+
+/** Applies ACP compaction patch semantics: chunks append to the streamed summary;
+ *  a terminal update patches status/error, and its `summary` (when concrete)
+ *  replaces the streamed one. */
+function mergeCompactionPresentation(
+    previous: CompactionPresentation | null,
+    update: CompactionUpdateVariant | CompactionChunkVariant,
+): CompactionPresentation {
+    if (update.sessionUpdate === "compaction_summary_chunk") {
+        const text = update.content.type === "text" ? update.content.text : "";
+        const summary =
+            previous !== null && text.length > 0
+                ? appendSessionText(
+                      previous.summary ?? initialSessionText(""),
+                      initialSessionText(text, COMPACTION_CHARACTER_LIMIT),
+                      "",
+                      COMPACTION_CHARACTER_LIMIT,
+                  )
+                : text.length > 0
+                  ? initialSessionText(text, COMPACTION_CHARACTER_LIMIT)
+                  : (previous?.summary ?? null);
+        return {
+            compactionId: update.compactionId,
+            error: previous?.error ?? null,
+            kind: "compaction",
+            status: previous?.status ?? "in_progress",
+            summary,
+        };
+    }
+    const replacement =
+        update.summary === undefined || update.summary === null
+            ? (previous?.summary ?? null)
+            : compactionSummary(update.summary);
+    return {
+        compactionId: update.compactionId,
+        error: Object.hasOwn(update, "error") ? (update.error ?? null) : (previous?.error ?? null),
+        kind: "compaction",
+        status: compactionStatus(update.status, previous?.status ?? "in_progress"),
+        summary: replacement,
+    };
+}
+
+function compactionSummary(summary: readonly ContentBlock[]): SessionText | null {
+    for (let index = summary.length - 1; index >= 0; index -= 1) {
+        const block = summary[index];
+        if (block?.type === "text" && block.text.length > 0) {
+            return initialSessionText(block.text, COMPACTION_CHARACTER_LIMIT);
+        }
+    }
+    return null;
+}
+
+function compactionStatus(
+    status: string,
+    fallback: NonNullable<CompactionPresentation["status"]>,
+): NonNullable<CompactionPresentation["status"]> {
+    switch (status) {
+        case "in_progress":
+        case "completed":
+        case "failed":
+        case "cancelled":
+            return status;
+        default:
+            return fallback;
+    }
+}
+
 function messageFromAcpUpdate(event: SessionEvent, update: AcpSessionUpdate): SessionMessage | null {
     switch (update.sessionUpdate) {
         case "user_message_chunk": {
@@ -296,9 +376,10 @@ function messageFromAcpUpdate(event: SessionEvent, update: AcpSessionUpdate): Se
         case "tool_call":
         case "tool_call_update":
             return null;
-        case "available_commands_update":
-        case "compaction_summary_chunk":
         case "compaction_update":
+        case "compaction_summary_chunk":
+            return null;
+        case "available_commands_update":
         case "config_option_update":
         case "current_mode_update":
         case "plan":
@@ -393,6 +474,28 @@ function consumeSessionEvent(
         return { kind: "skipped" };
     }
     const update = event.payload;
+    if (update.sessionUpdate === "compaction_update" || update.sessionUpdate === "compaction_summary_chunk") {
+        const existingIndex = entries.findIndex(
+            (entry) =>
+                entry.message.role === "assistant" &&
+                entry.message.presentation.kind === "compaction" &&
+                entry.message.presentation.compactionId === update.compactionId,
+        );
+        const existing = existingIndex === -1 ? undefined : entries[existingIndex]?.message;
+        const previous =
+            existing?.role === "assistant" && existing.presentation.kind === "compaction"
+                ? existing.presentation
+                : null;
+        const message: SessionMessage = {
+            commandId: null,
+            firstEvent: existing?.firstEvent ?? event,
+            presentation: mergeCompactionPresentation(previous, update),
+            role: "assistant",
+        };
+        return existingIndex === -1
+            ? { firstEvent: "known", kind: "constructed", message }
+            : { index: existingIndex, kind: "consumed", message };
+    }
     if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update") {
         const message = messageFromAcpUpdate(event, update);
         if (message === null) {

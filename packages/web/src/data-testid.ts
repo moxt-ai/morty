@@ -33,6 +33,7 @@ export const dataTestId = Object.freeze({
     agentNotice: "chat-agent-notice",
     agentReasoning: "chat-agent-reasoning",
     agentToolCall: "chat-agent-tool-call",
+    agentCompaction: "chat-agent-compaction",
     ansiShellOutput: "chat-ansi-shell-output",
     recognizedReadToolCall: "chat-recognized-read-tool-call",
     pairingInstruction: "chat-pairing-instruction",
