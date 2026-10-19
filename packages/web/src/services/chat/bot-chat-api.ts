@@ -1,6 +1,6 @@
 import {
     decodeAgentSettingsDiscoveredEvent,
-    decodeNativeSessionEventsV2,
+    decodeNativeSessionEvents,
     decodeNativeSessionResult,
     decodeRuntimeDiagnosticsResult,
     decodeSessionReadyEvent,
@@ -498,7 +498,7 @@ export class BotChatApi {
         signal: AbortSignal,
     ) => {
         const { entryId, ...identity } = input;
-        return decodeNativeSessionEventsV2(
+        return decodeNativeSessionEvents(
             await this.#request(
                 botId,
                 `native-session/${encodeURIComponent(v.parse(identifier, entryId))}`,

@@ -1,4 +1,4 @@
-import type { AcpSessionUpdateV2, SessionEventV2 } from "@moxt-ai/mobius-protocol";
+import type { AcpSessionUpdate, SessionEvent } from "@moxt-ai/mobius-protocol";
 import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
 import {
     appendSessionMessageEvent,
@@ -10,14 +10,14 @@ import {
 } from "./session-presentation.ts";
 
 export interface SessionEventHistory {
-    readonly events: readonly SessionEventV2[];
+    readonly events: readonly SessionEvent[];
     readonly nextCursor: string | null;
     readonly sessionGenerationId: string;
 }
 
 interface PendingEvents {
     readonly generation: string | null;
-    readonly buffer: readonly SessionEventV2[];
+    readonly buffer: readonly SessionEvent[];
 }
 
 interface ObservedConfig {
@@ -39,7 +39,7 @@ export type SessionProjection =
       };
 
 export type SessionProjectionInput =
-    | { readonly event: SessionEventV2; readonly kind: "live-event" }
+    | { readonly event: SessionEvent; readonly kind: "live-event" }
     | { readonly kind: "reconcile" }
     | { readonly history: SessionEventHistory; readonly kind: "history-loaded"; readonly revision: number }
     | { readonly kind: "older-page"; readonly page: SessionEventHistory; readonly revision: number };
@@ -62,7 +62,7 @@ export function createSessionProjection(): SessionProjection {
 }
 
 function sessionConfigOptionsFromAcp(
-    update: Extract<AcpSessionUpdateV2, { readonly sessionUpdate: "config_option_update" }>,
+    update: Extract<AcpSessionUpdate, { readonly sessionUpdate: "config_option_update" }>,
 ): readonly SessionConfigOption[] {
     return update.configOptions.map((option) => ({
         booleanValue: option.type === "boolean" ? option.currentValue : false,
@@ -97,10 +97,7 @@ function sessionConfigOptionsFromAcp(
     }));
 }
 
-function mergeSessionEvents(
-    first: readonly SessionEventV2[],
-    second: readonly SessionEventV2[],
-): readonly SessionEventV2[] {
+function mergeSessionEvents(first: readonly SessionEvent[], second: readonly SessionEvent[]): readonly SessionEvent[] {
     const events = new Map(first.map((event) => [event.eventId, event]));
     for (const event of second) {
         events.set(event.eventId, event);
@@ -108,7 +105,7 @@ function mergeSessionEvents(
     return [...events.values()];
 }
 
-function newestConfig(events: readonly SessionEventV2[]): ObservedConfig | null {
+function newestConfig(events: readonly SessionEvent[]): ObservedConfig | null {
     for (let index = events.length - 1; index >= 0; index -= 1) {
         const event = events[index];
         if (event?.type === "acp" && event.payload.sessionUpdate === "config_option_update") {
@@ -118,7 +115,7 @@ function newestConfig(events: readonly SessionEventV2[]): ObservedConfig | null 
     return null;
 }
 
-function newestTitle(events: readonly SessionEventV2[]): string | undefined {
+function newestTitle(events: readonly SessionEvent[]): string | undefined {
     for (let index = events.length - 1; index >= 0; index -= 1) {
         const event = events[index];
         if (
@@ -135,7 +132,7 @@ function newestTitle(events: readonly SessionEventV2[]): string | undefined {
 }
 
 function adoptionEffect(
-    events: readonly SessionEventV2[],
+    events: readonly SessionEvent[],
     clearMissingConfig: boolean,
 ): readonly SessionProjectionEffect[] {
     const config = newestConfig(events);
@@ -155,7 +152,7 @@ function adoptionEffect(
 function adoptGeneration(
     state: SessionProjection,
     history: SessionEventHistory,
-    events: readonly SessionEventV2[],
+    events: readonly SessionEvent[],
 ): SessionProjection {
     return {
         config: newestConfig(events),
@@ -172,9 +169,9 @@ function adoptGeneration(
 function applyNewerEvents(
     state: Extract<SessionProjection, { readonly kind: "established" }>,
     history: SessionEventHistory,
-): { readonly events: readonly SessionEventV2[]; readonly state: SessionProjection } {
+): { readonly events: readonly SessionEvent[]; readonly state: SessionProjection } {
     let next = { ...state, pending: null };
-    const applied: SessionEventV2[] = [];
+    const applied: SessionEvent[] = [];
     for (const event of history.events) {
         if (next.eventIds.has(event.eventId)) {
             continue;

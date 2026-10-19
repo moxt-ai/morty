@@ -1,8 +1,8 @@
-import { decodeIdentifier, type SessionEventV2 } from "@moxt-ai/mobius-protocol";
+import { decodeIdentifier, type SessionEvent } from "@moxt-ai/mobius-protocol";
 import {
     type MobiusClient,
     MobiusElicitationResponseRequest,
-    type MobiusLiveSessionEventObserverV2,
+    type MobiusLiveSessionEventObserver,
     MobiusPageRequest,
     MobiusPermissionResponseRequest,
     type PromptResource,
@@ -265,21 +265,21 @@ interface SessionIdentity {
     readonly directoryId: string;
 }
 
-async function readSessionHistoryV2(
+async function readSessionHistory(
     client: MobiusClient,
     sessionId: string,
     initialCursor: string | null,
-    newerEvents: readonly SessionEventV2[],
+    newerEvents: readonly SessionEvent[],
     expectedSessionGenerationId: string | null,
     signal: AbortSignal,
 ): Promise<SessionEventHistory> {
-    let events: readonly SessionEventV2[] = newerEvents;
+    let events: readonly SessionEvent[] = newerEvents;
     let nextCursor = initialCursor;
     let sessionGenerationId = expectedSessionGenerationId;
     let renderableMessages = sessionReductionMessages(createSessionMessageReduction({ events, nextCursor }));
     do {
         const requestedCursor = nextCursor;
-        const page = await client.events.listV2(
+        const page = await client.events.list(
             sessionId,
             new MobiusPageRequest(SESSION_EVENT_PAGE_LIMIT, requestedCursor ?? ""),
             signal,
@@ -304,9 +304,9 @@ async function readSessionHistoryV2(
 }
 
 function mergeSessionEvents(
-    current: readonly SessionEventV2[],
-    incoming: readonly SessionEventV2[],
-): readonly SessionEventV2[] {
+    current: readonly SessionEvent[],
+    incoming: readonly SessionEvent[],
+): readonly SessionEvent[] {
     const byId = new Map(current.map((event) => [event.eventId, event]));
     for (const event of incoming) {
         byId.set(event.eventId, event);
@@ -501,7 +501,7 @@ export function createSessionPaneModel(options: {
             historyLoadController = controller;
             const revision = projection.revision;
             try {
-                const history = await readSessionHistoryV2(
+                const history = await readSessionHistory(
                     connected,
                     sessionId,
                     null,
@@ -561,7 +561,7 @@ export function createSessionPaneModel(options: {
                 loadingOlderHistory = true;
                 set({ historyLoading: true });
                 try {
-                    const page = await readSessionHistoryV2(
+                    const page = await readSessionHistory(
                         client,
                         sessionId,
                         pagination.nextCursor,
@@ -613,7 +613,7 @@ export function createSessionPaneModel(options: {
                     );
                     const connected = client;
                     const receiveLifecycle = async (
-                        payload: Extract<SessionEventV2, { readonly type: "lifecycle-metadata" }>["payload"],
+                        payload: Extract<SessionEvent, { readonly type: "lifecycle-metadata" }>["payload"],
                     ): Promise<boolean> => {
                         if ("event" in payload) {
                             const event = payload.event;
@@ -754,7 +754,7 @@ export function createSessionPaneModel(options: {
                         }
                         return true;
                     };
-                    const observer: MobiusLiveSessionEventObserverV2 = {
+                    const observer: MobiusLiveSessionEventObserver = {
                         reconcile: async (connection) => {
                             const reconcilingTurn = activeTurn.current();
                             const reconciliation =
@@ -869,7 +869,7 @@ export function createSessionPaneModel(options: {
                             return true;
                         },
                     };
-                    const subscription = await connected.events.subscribeLiveV2(sessionId, observer, signal);
+                    const subscription = await connected.events.subscribeLive(sessionId, observer, signal);
                     signal.throwIfAborted();
                     set({ connection: { kind: "ready", client: connected } });
                     if (initialCommandId !== null) {

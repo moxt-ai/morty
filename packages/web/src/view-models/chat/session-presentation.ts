@@ -1,8 +1,8 @@
-import type { AcpSessionUpdateV2, ContentBlockV2, SessionEventV2 } from "@moxt-ai/mobius-protocol";
+import type { AcpSessionUpdate, ContentBlock, SessionEvent } from "@moxt-ai/mobius-protocol";
 import type { AgentDisplayContent } from "@moxt-ai/mobius-sdk";
 import { externalContentPath } from "@moxt-ai/mobius-sdk";
 
-type ToolCallUpdateV2 = Extract<AcpSessionUpdateV2, { readonly sessionUpdate: "tool_call" | "tool_call_update" }>;
+type ToolCallUpdate = Extract<AcpSessionUpdate, { readonly sessionUpdate: "tool_call" | "tool_call_update" }>;
 const BOT_INSTRUCTIONS_URI = "morty://bot/instructions";
 
 type SessionToolCallState =
@@ -40,21 +40,21 @@ export type SessionText =
           readonly value: string;
       };
 
-type TextContentBlock = Extract<ContentBlockV2, { readonly type: "text" }>;
+type TextContentBlock = Extract<ContentBlock, { readonly type: "text" }>;
 type SessionContentBlock =
     | (Omit<TextContentBlock, "text"> & { readonly text: SessionText })
-    | Exclude<ContentBlockV2, TextContentBlock>;
+    | Exclude<ContentBlock, TextContentBlock>;
 
 export type SessionMessage =
     | {
           readonly role: "user";
-          readonly firstEvent: SessionEventV2;
+          readonly firstEvent: SessionEvent;
           readonly commandId: string | null;
-          readonly contents: readonly ContentBlockV2[];
+          readonly contents: readonly ContentBlock[];
       }
     | {
           readonly role: "assistant";
-          readonly firstEvent: SessionEventV2;
+          readonly firstEvent: SessionEvent;
           readonly commandId: string | null;
           readonly presentation:
               | { readonly kind: "message"; readonly content: SessionContentBlock; readonly messageId: string | null }
@@ -90,7 +90,7 @@ function initialSessionText(value: string, limit?: number): SessionText {
     return { kind: "initial", length: retained.length, truncated, value: retained };
 }
 
-function sessionContent(content: ContentBlockV2, textLimit?: number): SessionContentBlock {
+function sessionContent(content: ContentBlock, textLimit?: number): SessionContentBlock {
     return content.type === "text" ? { ...content, text: initialSessionText(content.text, textLimit) } : content;
 }
 
@@ -121,7 +121,7 @@ function appendSessionText(previous: SessionText, incoming: SessionText, prefix:
     return { kind: "initial", length: retained.length, truncated: true, value: retained };
 }
 
-function displayContent(update: ToolCallUpdateV2): readonly AgentDisplayContent[] {
+function displayContent(update: ToolCallUpdate): readonly AgentDisplayContent[] {
     return (update.content ?? []).map((item): AgentDisplayContent => {
         if (item.type === "diff") {
             return {
@@ -273,7 +273,7 @@ function displayContent(update: ToolCallUpdateV2): readonly AgentDisplayContent[
     });
 }
 
-function toolState(status: ToolCallUpdateV2["status"]): SessionToolCallState {
+function toolState(status: ToolCallUpdate["status"]): SessionToolCallState {
     switch (status) {
         case "pending":
         case "in_progress":
@@ -292,7 +292,7 @@ function toolState(status: ToolCallUpdateV2["status"]): SessionToolCallState {
 
 function mergeToolPresentation(
     previous: SessionToolPresentation | null,
-    update: ToolCallUpdateV2,
+    update: ToolCallUpdate,
 ): SessionToolPresentation {
     return {
         content: update.content === undefined ? (previous?.content ?? []) : displayContent(update),
@@ -307,11 +307,11 @@ function mergeToolPresentation(
     };
 }
 
-function isBotInstructions(content: ContentBlockV2): boolean {
+function isBotInstructions(content: ContentBlock): boolean {
     return content.type === "resource" && content.resource.uri === BOT_INSTRUCTIONS_URI;
 }
 
-function userDisplayContent(content: ContentBlockV2): ContentBlockV2 {
+function userDisplayContent(content: ContentBlock): ContentBlock {
     if (content.type !== "text") {
         return content;
     }
@@ -320,7 +320,7 @@ function userDisplayContent(content: ContentBlockV2): ContentBlockV2 {
     return { ...content, text: content.text.replace(context, "") };
 }
 
-function messageFromAcpUpdate(event: SessionEventV2, update: AcpSessionUpdateV2): SessionMessage | null {
+function messageFromAcpUpdate(event: SessionEvent, update: AcpSessionUpdate): SessionMessage | null {
     switch (update.sessionUpdate) {
         case "user_message_chunk": {
             if (isBotInstructions(update.content)) {
@@ -424,7 +424,7 @@ function mergeAdjacentText(previous: SessionMessage | undefined, incoming: Sessi
 interface ReducedSessionMessage {
     readonly complete: boolean;
     readonly message: SessionMessage;
-    readonly unresolvedEvents: readonly SessionEventV2[];
+    readonly unresolvedEvents: readonly SessionEvent[];
 }
 
 export interface SessionMessageReduction {
@@ -433,7 +433,7 @@ export interface SessionMessageReduction {
 
 function consumeSessionEvent(
     entries: readonly ReducedSessionMessage[],
-    event: SessionEventV2,
+    event: SessionEvent,
     leadingEvent: "known" | "possibly-before-page",
 ): SessionEventResult {
     if (event.type === "lifecycle-metadata") {
@@ -497,7 +497,7 @@ function consumeSessionEvent(
 
 function applySessionEvent(
     entries: readonly ReducedSessionMessage[],
-    event: SessionEventV2,
+    event: SessionEvent,
     result: SessionEventResult,
 ): readonly ReducedSessionMessage[] {
     switch (result.kind) {
@@ -531,7 +531,7 @@ function applySessionEvent(
 }
 
 function reduceSessionEvents(
-    events: readonly SessionEventV2[],
+    events: readonly SessionEvent[],
     leadingEvent: "known" | "possibly-before-page",
 ): SessionMessageReduction {
     let entries: readonly ReducedSessionMessage[] = [];
@@ -542,16 +542,16 @@ function reduceSessionEvents(
 }
 
 export function createSessionMessageReduction(history: {
-    readonly events: readonly SessionEventV2[];
+    readonly events: readonly SessionEvent[];
     readonly nextCursor: string | null;
 }): SessionMessageReduction {
     return reduceSessionEvents(history.events, history.nextCursor === null ? "known" : "possibly-before-page");
 }
 
 function mergeSessionEventSequences(
-    first: readonly SessionEventV2[],
-    second: readonly SessionEventV2[],
-): readonly SessionEventV2[] {
+    first: readonly SessionEvent[],
+    second: readonly SessionEvent[],
+): readonly SessionEvent[] {
     const events = new Map(first.map((event) => [event.eventId, event]));
     for (const event of second) {
         events.set(event.eventId, event);
@@ -561,7 +561,7 @@ function mergeSessionEventSequences(
 
 export function appendSessionMessageEvent(
     reduction: SessionMessageReduction,
-    event: SessionEventV2,
+    event: SessionEvent,
 ): SessionMessageReduction {
     return {
         entries: applySessionEvent(reduction.entries, event, consumeSessionEvent(reduction.entries, event, "known")),
@@ -570,7 +570,7 @@ export function appendSessionMessageEvent(
 
 export function prependSessionMessageEvents(
     reduction: SessionMessageReduction,
-    history: { readonly events: readonly SessionEventV2[]; readonly nextCursor: string | null },
+    history: { readonly events: readonly SessionEvent[]; readonly nextCursor: string | null },
 ): SessionMessageReduction {
     const unresolvedEvents = reduction.entries.flatMap((entry) => entry.unresolvedEvents);
     const older = createSessionMessageReduction({
@@ -586,11 +586,11 @@ export function sessionReductionMessages(reduction: SessionMessageReduction): re
     return reduction.entries.flatMap((entry) => (entry.complete ? [entry.message] : []));
 }
 
-export function sessionEventLogPresentation(events: readonly SessionEventV2[]): SessionTimeline {
+export function sessionEventLogPresentation(events: readonly SessionEvent[]): SessionTimeline {
     return { messages: sessionReductionMessages(reduceSessionEvents(events, "known")) };
 }
 
-export function sessionEventCommandIds(events: readonly SessionEventV2[]): readonly string[] {
+export function sessionEventCommandIds(events: readonly SessionEvent[]): readonly string[] {
     const commandIds: string[] = [];
     for (const event of events) {
         if (event.type === "lifecycle-metadata") {
