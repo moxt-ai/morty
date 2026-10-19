@@ -4,7 +4,7 @@ import {
     decodeRuntimeStatusEvent,
     decodeSessionStatusChangedEvent,
     type SessionStatusChangedEvent,
-} from "@moxt-ai/mobius-protocol";
+} from "@moxt-ai/mobius-sdk/protocol";
 import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
 import type { OperationTiming } from "../../../infra/operation-timing.ts";
 import { PlatformProjectError } from "../../management/entity/platform-project.ts";

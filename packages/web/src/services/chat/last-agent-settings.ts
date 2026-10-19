@@ -1,4 +1,4 @@
-import type { SessionConfigOption } from "@moxt-ai/mobius-protocol";
+import type { SessionConfigOption } from "@moxt-ai/mobius-sdk/protocol";
 import {
     type AgentSettingPreference,
     centralSessionStorage,

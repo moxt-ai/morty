@@ -1,4 +1,4 @@
-import type { RuntimeDiagnosticsResult } from "@moxt-ai/mobius-protocol";
+import type { RuntimeDiagnosticsResult } from "@moxt-ai/mobius-sdk/protocol";
 
 export interface BrowserDiagnostic {
     readonly at: string;

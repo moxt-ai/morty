@@ -1,4 +1,4 @@
-import { type Identifier, isIdentifier } from "@moxt-ai/mobius-protocol";
+import { type Identifier, isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import * as v from "valibot";
 import type { HttpError } from "../../../infra/http-error.ts";
 

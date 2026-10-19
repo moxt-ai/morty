@@ -1,5 +1,5 @@
-import type { ContentBlock } from "@moxt-ai/mobius-protocol";
 import { externalContentPath, type MobiusExternalContentBlock } from "@moxt-ai/mobius-sdk";
+import type { ContentBlock } from "@moxt-ai/mobius-sdk/protocol";
 import { CircleAlert, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AgentMarkdown, type MarkdownImageReader } from "../../components/agents/agent-markdown.tsx";

@@ -1,4 +1,4 @@
-import { isIdentifier } from "@moxt-ai/mobius-protocol";
+import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { Button } from "../ui/cloud-button.tsx";

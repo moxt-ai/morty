@@ -1,4 +1,4 @@
-import type { RuntimeDiagnosticsResult } from "@moxt-ai/mobius-protocol";
+import type { RuntimeDiagnosticsResult } from "@moxt-ai/mobius-sdk/protocol";
 import { captureFeedback, getClient, lastEventId } from "@sentry/react";
 import { browserDiagnosticsSnapshot, currentDaemonDiagnostics } from "./browser-diagnostics.ts";
 

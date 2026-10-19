@@ -1,4 +1,4 @@
-import { encodeSessionStatusChangedEvent } from "@moxt-ai/mobius-protocol";
+import { encodeSessionStatusChangedEvent } from "@moxt-ai/mobius-sdk/protocol";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { createMiddleware } from "hono/factory";

@@ -1,4 +1,4 @@
-import { isIdentifier } from "@moxt-ai/mobius-protocol";
+import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
 import { BotChatApi } from "@/services/chat/bot-chat-api";
 import { recordBrowserError, registerDaemonDiagnostics } from "@/services/diagnostics/browser-diagnostics";

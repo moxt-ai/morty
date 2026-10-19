@@ -1,4 +1,4 @@
-import { isIdentifier } from "@moxt-ai/mobius-protocol";
+import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import { and, count, eq, exists, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
 import * as v from "valibot";
 import type { HttpError } from "../../../infra/http-error.ts";

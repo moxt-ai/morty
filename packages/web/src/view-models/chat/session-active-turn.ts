@@ -1,4 +1,4 @@
-import { decodeIdentifier } from "@moxt-ai/mobius-protocol";
+import { decodeIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 
 export type SessionActiveTurn =
     | { readonly kind: "idle" }

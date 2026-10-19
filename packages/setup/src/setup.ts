@@ -8,7 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import { validateLocalPath } from "@moxt-ai/mobius/filesystem";
 import { executableLaunch, findExecutableOnPath } from "@moxt-ai/mobius/process";
-import { decodeIdentifier } from "@moxt-ai/mobius-protocol";
+import { decodeIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
 import QRCode from "qrcode";

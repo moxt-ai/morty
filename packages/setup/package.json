@@ -10,7 +10,7 @@
     },
     "dependencies": {
         "@moxt-ai/mobius": "workspace:*",
-        "@moxt-ai/mobius-protocol": "workspace:*",
+        "@moxt-ai/mobius-sdk": "workspace:*",
         "jsqr": "catalog:",
         "pngjs": "catalog:",
         "qrcode": "catalog:"

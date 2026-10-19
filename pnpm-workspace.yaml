@@ -1,13 +1,9 @@
 engineStrict: true
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
-  - '@moxt-ai/mobius-protocol@0.0.25'
-  - '@moxt-ai/mobius-protocol@0.0.26'
-  - '@moxt-ai/mobius-protocol@0.0.27'
   - '@moxt-ai/mobius-sdk@0.0.35'
   - '@moxt-ai/mobius-sdk@0.0.36'
   - '@moxt-ai/mobius-sdk@0.0.38'
-  - '@moxt-ai/mobius-protocol@0.0.28'
   - '@moxt-ai/mobius-sdk@0.0.39'
 
 overrides:
@@ -81,7 +77,6 @@ packages:
   - packages/setup
   - packages/web
   - packages/worker
-  - third-party/mobius/packages/protocol
   - third-party/mobius/packages/mobius-sdk
   - third-party/mobius/packages/cli
   - third-party/mobius/packages/mobius-test-support

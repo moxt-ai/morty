@@ -1,5 +1,5 @@
-import type { AcpSessionUpdate, SessionEvent } from "@moxt-ai/mobius-protocol";
 import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
+import type { AcpSessionUpdate, SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
 import {
     appendSessionMessageEvent,
     createSessionMessageReduction,

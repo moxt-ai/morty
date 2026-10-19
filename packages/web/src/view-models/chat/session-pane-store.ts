@@ -1,4 +1,3 @@
-import { decodeIdentifier, type SessionEvent } from "@moxt-ai/mobius-protocol";
 import {
     type MobiusClient,
     MobiusElicitationResponseRequest,
@@ -8,6 +7,7 @@ import {
     type PromptResource,
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
+import { decodeIdentifier, type SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";

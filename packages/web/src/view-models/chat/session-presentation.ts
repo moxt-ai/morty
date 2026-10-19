@@ -1,6 +1,6 @@
-import type { AcpSessionUpdate, ContentBlock, SessionEvent } from "@moxt-ai/mobius-protocol";
 import type { AgentDisplayContent } from "@moxt-ai/mobius-sdk";
 import { externalContentPath } from "@moxt-ai/mobius-sdk";
+import type { AcpSessionUpdate, ContentBlock, SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
 
 type ToolCallUpdate = Extract<AcpSessionUpdate, { readonly sessionUpdate: "tool_call" | "tool_call_update" }>;
 const BOT_INSTRUCTIONS_URI = "morty://bot/instructions";

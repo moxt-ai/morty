@@ -1,4 +1,12 @@
 import {
+    HttpTransport,
+    MobiusClient,
+    type MobiusHttpTransport,
+    type MobiusLiveEventTransport,
+    type MobiusTransportSessionEvent,
+    WsTransport,
+} from "@moxt-ai/mobius-sdk";
+import {
     decodeAgentSettingsDiscoveredEvent,
     decodeNativeSessionEvents,
     decodeNativeSessionResult,
@@ -10,15 +18,7 @@ import {
     isIdentifier,
     type SessionConfigOption,
     type SessionConfigurationSelection,
-} from "@moxt-ai/mobius-protocol";
-import {
-    HttpTransport,
-    MobiusClient,
-    type MobiusHttpTransport,
-    type MobiusLiveEventTransport,
-    type MobiusTransportSessionEvent,
-    WsTransport,
-} from "@moxt-ai/mobius-sdk";
+} from "@moxt-ai/mobius-sdk/protocol";
 import * as v from "valibot";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";

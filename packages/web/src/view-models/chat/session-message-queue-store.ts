@@ -1,6 +1,6 @@
-import type { NativeSessionResult } from "@moxt-ai/mobius-protocol";
 import type { MobiusTurn, PromptImage, SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
 import { SessionPromptDisposition } from "@moxt-ai/mobius-sdk";
+import type { NativeSessionResult } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
 import { formatError } from "../format-error.ts";
 

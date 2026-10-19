@@ -1,4 +1,4 @@
-import { isIdentifier } from "@moxt-ai/mobius-protocol";
+import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
 import type {
     BotChatApi,
