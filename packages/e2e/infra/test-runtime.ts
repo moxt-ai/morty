@@ -1,7 +1,8 @@
 import { chromium } from "playwright-core";
 import { mortyFiles, mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../web/src/services/identity/anonymous-identity-api.ts";
-import { ChatApi, jsonRequest, text } from "./chat-api.ts";
+import { encodeIdentityScope } from "../../web/src/services/identity/identity-scope-url.ts";
+import { ChatApi, jsonRequest, object, text } from "./chat-api.ts";
 import type { E2EHarness } from "./harness.ts";
 import { LocalStack } from "./local-stack.ts";
 import { ControlledSetupRuntime } from "./setup-daemon.ts";
@@ -30,14 +31,25 @@ export async function createTestRuntime(harness: E2EHarness) {
         const chat = new ChatApi(stack.chatOrigin, harness.signal);
 
         const openChat = async () => {
-            await page.goto(stack.chatOrigin);
-            const stored = await page.waitForFunction(
-                (key) => sessionStorage.getItem(key),
-                ANONYMOUS_CREDENTIAL_KEY_NAME,
+            const identity = object(
+                await jsonRequest(stack.chatOrigin, "/morty/api/identity/anonymous-users", {
+                    body: {},
+                    signal: harness.signal,
+                }),
+                "anonymous identity",
             );
-            const user = await chat.useBrowserIdentity(
-                JSON.parse(text(await stored.jsonValue(), "stored browser identity")),
-            );
+            const token = text(identity.token, "anonymous token");
+            const projectId = text(identity.projectId, "projectId");
+            const userId = text(identity.userId, "userId");
+            const botId = text(object(identity.bot, "anonymous bot").botId, "botId");
+            const url = new URL(stack.chatOrigin);
+            url.searchParams.set("identity", encodeIdentityScope({ botId, projectId, userId }));
+            await page.addInitScript(({ key, raw }) => window.localStorage.setItem(key, raw), {
+                key: ANONYMOUS_CREDENTIAL_KEY_NAME,
+                raw: JSON.stringify({ [userId]: token }),
+            });
+            await page.goto(url.href);
+            const user = await chat.useBrowserIdentity({ projectId, token });
             return { botId: user.botId, projectId: user.projectId };
         };
 

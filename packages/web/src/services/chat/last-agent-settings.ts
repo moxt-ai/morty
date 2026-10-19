@@ -1,16 +1,16 @@
 import type { SessionConfigOption } from "@moxt-ai/mobius-sdk/protocol";
 import {
     type AgentSettingPreference,
-    centralSessionStorage,
+    centralLocalStorage,
     lastAgentSettingsEntry,
-} from "@/services/session-storage/central-session-storage";
+} from "@/services/local-storage/central-local-storage";
 
 export function restoreLastAgentSettings(
     botId: string,
     agentRef: string,
     options: readonly SessionConfigOption[],
 ): { readonly options: readonly SessionConfigOption[]; readonly restoredIds: ReadonlySet<string> } {
-    const preferences = centralSessionStorage.read(lastAgentSettingsEntry(botId, agentRef)) ?? [];
+    const preferences = centralLocalStorage.read(lastAgentSettingsEntry(botId, agentRef)) ?? [];
     const restoredIds = new Set<string>();
     const restored = options.map((option) => {
         const preference = preferences.find((candidate) => candidate.configId === option.id);
@@ -37,5 +37,5 @@ export function saveLastAgentSettings(botId: string, agentRef: string, options: 
             ? { configId: option.id, kind: "boolean", value: option.booleanValue }
             : { configId: option.id, kind: "select", value: option.currentValue },
     );
-    centralSessionStorage.write(lastAgentSettingsEntry(botId, agentRef), preferences);
+    centralLocalStorage.write(lastAgentSettingsEntry(botId, agentRef), preferences);
 }

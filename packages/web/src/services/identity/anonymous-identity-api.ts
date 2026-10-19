@@ -1,10 +1,7 @@
 import { type Identifier, isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import * as v from "valibot";
-import {
-    anonymousCredentialEntry,
-    centralSessionStorage,
-    projectScopeEntry,
-} from "../session-storage/central-session-storage.ts";
+import { anonymousCredentialsEntry, centralLocalStorage } from "../local-storage/central-local-storage.ts";
+import { clearIdentityScope, type IdentityScope, readIdentityScope, writeIdentityScope } from "./identity-scope-url.ts";
 
 const tokenSchema = v.pipe(
     v.string(),
@@ -18,28 +15,23 @@ const recoveryTokenSchema = v.pipe(
 );
 const projectIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u));
 const botIdSchema = v.custom<Identifier>(isIdentifier);
-const projectScopeSchema = v.object({
-    userId: v.string(),
-    projectId: projectIdSchema,
-});
-const identityFields = { token: tokenSchema, botId: botIdSchema, ...projectScopeSchema.entries };
+const userIdSchema = v.pipe(v.string(), v.minLength(8), v.maxLength(128));
+const identityFields = { token: tokenSchema, botId: botIdSchema, userId: userIdSchema, projectId: projectIdSchema };
 const identitySchema = v.pipe(v.object(identityFields), v.readonly());
 /** Response of creating an anonymous user, whose Bot is nested under `bot`. */
 const createdIdentitySchema = v.pipe(
     v.object({
         token: tokenSchema,
         bot: v.pipe(v.object({ botId: botIdSchema }), v.readonly()),
-        ...projectScopeSchema.entries,
+        userId: userIdSchema,
+        projectId: projectIdSchema,
     }),
     v.readonly(),
 );
 
-/** Stored key name for the anonymous credential, shared with browser tests. */
-export const ANONYMOUS_CREDENTIAL_KEY_NAME = anonymousCredentialEntry.key;
+/** Stored key name of the anonymous credential map, shared with browser tests. */
+export const ANONYMOUS_CREDENTIAL_KEY_NAME = anonymousCredentialsEntry.key;
 
-function readStoredProjectScope() {
-    return centralSessionStorage.read(projectScopeEntry);
-}
 const anonymousSessionSchema = v.pipe(
     v.object({ authentication: v.object({ kind: v.literal("anonymous") }), userId: v.string() }),
     v.readonly(),
@@ -79,16 +71,27 @@ export class AnonymousIdentityApi {
     }
 
     readonly loadExisting = async (requestSignal: AbortSignal): Promise<AnonymousIdentity | null> => {
-        const stored = centralSessionStorage.read(anonymousCredentialEntry);
-        if (stored !== null) {
-            const session = await this.#anonymousSession(stored, requestSignal);
-            if (session !== null) {
-                if (session.userId === stored.userId) {
-                    return stored;
-                }
+        const scope = readIdentityScope();
+        const token = scope === null ? null : readStoredToken(scope.userId);
+        if (scope === null || token === null) {
+            if (scope !== null) {
+                this.#forgetScope(scope);
             }
-            centralSessionStorage.remove(anonymousCredentialEntry);
+            return null;
         }
+        const identity: AnonymousIdentity = {
+            botId: scope.botId,
+            projectId: scope.projectId,
+            token,
+            userId: scope.userId,
+        };
+        const session = await this.#anonymousSession(identity, requestSignal);
+        if (session !== null) {
+            if (session.userId === identity.userId) {
+                return identity;
+            }
+        }
+        this.#forgetScope(scope);
         return null;
     };
 
@@ -100,15 +103,6 @@ export class AnonymousIdentityApi {
         const created = this.#createdIdentity(
             await this.#request("/identity/anonymous-users", { method: "POST" }, requestSignal),
         );
-        const concurrent = centralSessionStorage.read(anonymousCredentialEntry);
-        if (concurrent !== null) {
-            const session = await this.#anonymousSession(concurrent, requestSignal);
-            if (session !== null) {
-                if (session.userId === concurrent.userId) {
-                    return concurrent;
-                }
-            }
-        }
         this.#saveIdentity(created);
         return created;
     };
@@ -165,8 +159,11 @@ export class AnonymousIdentityApi {
             { method: "DELETE", headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
             signal,
         );
-        centralSessionStorage.remove(anonymousCredentialEntry);
-        centralSessionStorage.remove(projectScopeEntry);
+        const scope = readIdentityScope();
+        if (scope !== null) {
+            removeStoredToken(scope.userId);
+        }
+        clearIdentityScope();
     };
 
     readonly createRecoveryToken = async (
@@ -189,8 +186,13 @@ export class AnonymousIdentityApi {
         this.#saveIdentity(v.parse(identitySchema, identity));
 
     readonly #saveIdentity = (identity: AnonymousIdentity) => {
-        centralSessionStorage.write(anonymousCredentialEntry, identity);
-        centralSessionStorage.write(projectScopeEntry, { userId: identity.userId, projectId: identity.projectId });
+        writeStoredToken(identity.userId, identity.token);
+        writeIdentityScope({ botId: identity.botId, projectId: identity.projectId, userId: identity.userId });
+    };
+
+    readonly #forgetScope = (scope: IdentityScope) => {
+        removeStoredToken(scope.userId);
+        clearIdentityScope();
     };
 
     /** Maps the nested `bot` of an anonymous-user creation response onto the identity. */
@@ -233,12 +235,12 @@ export class AnonymousIdentityApi {
     readonly #request = async (path: string, init: RequestInit, requestSignal: AbortSignal): Promise<unknown> => {
         const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(15_000)]);
         const headers = new Headers(init.headers);
-        const projectScope = readStoredProjectScope();
+        const scope = readIdentityScope();
         const scopedPath =
-            projectScope !== null &&
+            scope !== null &&
             !path.startsWith("/projects/") &&
             !["/identity/anonymous-users", "/identity/transfers/redeem"].includes(path)
-                ? `/projects/${encodeURIComponent(projectScope.projectId)}${path}`
+                ? `/projects/${encodeURIComponent(scope.projectId)}${path}`
                 : path;
         const response = await this.#fetchRequest(
             new Request(new URL(`/morty/api${scopedPath}`, this.#origin), { ...init, headers, signal }),
@@ -254,6 +256,36 @@ export class AnonymousIdentityApi {
         }
         return value;
     };
+}
+
+function readStoredToken(userId: string): string | null {
+    return centralLocalStorage.read(anonymousCredentialsEntry)?.[userId] ?? null;
+}
+
+function writeStoredToken(userId: string, token: string): void {
+    const existing = centralLocalStorage.read(anonymousCredentialsEntry) ?? {};
+    const updated: Record<string, string> = {};
+    for (const [storedUserId, storedToken] of Object.entries(existing)) {
+        if (storedUserId !== userId) {
+            updated[storedUserId] = storedToken;
+        }
+    }
+    updated[userId] = token;
+    const kept = Object.entries(updated).slice(-10);
+    centralLocalStorage.write(anonymousCredentialsEntry, Object.fromEntries(kept));
+}
+
+function removeStoredToken(userId: string): void {
+    const existing = centralLocalStorage.read(anonymousCredentialsEntry);
+    if (existing === null || !(userId in existing)) {
+        return;
+    }
+    const kept = Object.fromEntries(Object.entries(existing).filter(([storedUserId]) => storedUserId !== userId));
+    if (Object.keys(kept).length === 0) {
+        centralLocalStorage.remove(anonymousCredentialsEntry);
+        return;
+    }
+    centralLocalStorage.write(anonymousCredentialsEntry, kept);
 }
 
 class IdentityApiError extends Error {

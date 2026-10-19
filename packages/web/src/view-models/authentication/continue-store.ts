@@ -2,7 +2,8 @@ import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
 import { BotChatApi } from "@/services/chat/bot-chat-api";
 import { recordBrowserError, registerDaemonDiagnostics } from "@/services/diagnostics/browser-diagnostics";
-import { AnonymousIdentityApi } from "@/services/identity/anonymous-identity-api";
+import { type AnonymousIdentity, AnonymousIdentityApi } from "@/services/identity/anonymous-identity-api";
+import { encodeIdentityScope } from "@/services/identity/identity-scope-url";
 import { formatError } from "@/view-models/format-error";
 
 type SessionHandoff = {
@@ -55,6 +56,16 @@ function initialState(): ContinueState {
     return { code, kind: "identity-redeeming" };
 }
 
+/** A same-origin destination that carries the redeemed identity in its query string. */
+function identityDestination(path: "/" | "/chat", identity: AnonymousIdentity): URL {
+    const url = new URL(path, window.location.origin);
+    url.searchParams.set(
+        "identity",
+        encodeIdentityScope({ botId: identity.botId, projectId: identity.projectId, userId: identity.userId }),
+    );
+    return url;
+}
+
 export const createContinueStore = (fetchRequest: (request: Request) => Promise<Response>) => {
     let releaseDiagnostics: (() => void) | null = null;
     const dispose = () => {
@@ -91,7 +102,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 const identity = await api.redeemTransfer(state.code, signal);
                 signal.throwIfAborted();
                 if (state.kind === "identity-redeeming") {
-                    window.location.replace("/");
+                    window.location.replace(identityDestination("/", identity));
                     return;
                 }
                 const chat = new BotChatApi({
@@ -121,7 +132,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     signal,
                 );
                 signal.throwIfAborted();
-                const destination = new URL("/chat", window.location.origin);
+                const destination = identityDestination("/chat", identity);
                 destination.searchParams.set("sessionId", session.result.ready.sessionId);
                 window.location.replace(destination);
             } catch (cause) {

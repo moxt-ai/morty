@@ -116,7 +116,7 @@ test("Given a Bot has a recent directory from another harness, When its Runtime 
     const created = await createTestApp({
         connectAgent: true,
         prepare: (current) =>
-            window.sessionStorage.setItem(
+            window.localStorage.setItem(
                 `mobius:recent-cwd:${encodeURIComponent(current.botId)}`,
                 JSON.stringify([{ directoryId: "saved-directory", directoryLabel: "/saved-by-another-harness" }]),
             ),

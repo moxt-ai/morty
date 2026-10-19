@@ -75,6 +75,17 @@ test("Given a new browser, When Morty loads, Then Morty opens without presenting
     expect(document.body.textContent?.toLowerCase()).not.toContain("workspace");
 });
 
+test("Given Morty access from a finished setup, When the user reopens Morty in a fresh browser session, Then the chat opens directly with the identity kept in the address", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ page: { kind: "bootstrap", identity: true }, connectAgent: true });
+
+    expect(await app.queryElementByTestId(dataTestId.chatLanding)).toBeInstanceOf(HTMLElement);
+    expect(queryByRole(document.body, "heading", { name: "Connect your local agent" })).toBeNull();
+    expect(window.location.search).toContain("identity=");
+    expect(window.sessionStorage.getItem("mobius.anonymous-credential.v2")).toBeNull();
+});
+
 test("Given shared Morty access, When the user opens Continue your work, Then the icon-only action and dialog use that name", {
     timeout: 30_000,
 }, async () => {

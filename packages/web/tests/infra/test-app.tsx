@@ -5,6 +5,8 @@ import { afterAll, afterEach } from "vitest";
 import { ToastProvider } from "../../src/components/ui/toast.tsx";
 import { ApiTransportProvider } from "../../src/services/api/api-transport-context.tsx";
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
+import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../src/services/identity/anonymous-identity-api.ts";
+import { encodeIdentityScope } from "../../src/services/identity/identity-scope-url.ts";
 import { App } from "../../src/views/application/app.tsx";
 import { Bootstrap } from "../../src/views/application/bootstrap.tsx";
 import { router as authenticationRouter } from "../../src/views/authentication/router.tsx";
@@ -47,7 +49,7 @@ export async function createTestApp(
         readonly nativeSessionIds?: ReadonlySet<string>;
         readonly page?:
             | { readonly kind: "continue"; readonly harness: string; readonly sessionId: string }
-            | { readonly kind: "bootstrap" }
+            | { readonly kind: "bootstrap"; readonly identity?: boolean }
             | { readonly kind: "managed-session"; readonly sessionId: string }
             | { readonly kind: "morty" };
         readonly prepare?: (application: Application) => void | Promise<void>;
@@ -66,7 +68,24 @@ export async function createTestApp(
         window.location.href = transfer.href;
         authenticationRouter.history.replace(`${transfer.pathname}${transfer.search}${transfer.hash}`);
     } else if (page.kind === "bootstrap") {
-        window.location.href = new URL("/", current.origin).href;
+        const destination = new URL("/", current.origin);
+        if (page.identity === true) {
+            destination.searchParams.set(
+                "identity",
+                encodeIdentityScope({
+                    botId: current.botId,
+                    projectId: current.identity.projectId,
+                    userId: current.userId,
+                }),
+            );
+            window.localStorage.setItem(
+                ANONYMOUS_CREDENTIAL_KEY_NAME,
+                JSON.stringify({
+                    [current.userId]: await current.identity.getToken(new AbortController().signal),
+                }),
+            );
+        }
+        window.location.href = destination.href;
     } else if (options.application === undefined) {
         const destination = new URL("/chat", current.origin);
         if (page.kind === "managed-session") {
@@ -229,6 +248,7 @@ afterEach(async () => {
     await closeTestApps();
     document.body.replaceChildren();
     window.sessionStorage.clear();
+    window.localStorage.clear();
     window.history.replaceState(null, "", "/");
 });
 
