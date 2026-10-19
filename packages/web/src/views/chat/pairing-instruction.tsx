@@ -4,11 +4,10 @@ import { Button } from "../../components/ui/cloud-button.tsx";
 import { useToast } from "../../components/ui/toast.tsx";
 import { dataTestId } from "../../data-testid.ts";
 
-const setupInstruction = "Fetch https://morty.build/setup.md and set up Morty for me. Don't ask me anything.";
-
 export function PairingInstruction() {
     const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
     const showToast = useToast();
+    const setupInstruction = `Fetch ${window.location.host}/setup.md and set up Morty for me. Don't ask me anything.`;
     return (
         <div className="mt-5 space-y-3">
             <div className="flex items-center gap-2">
