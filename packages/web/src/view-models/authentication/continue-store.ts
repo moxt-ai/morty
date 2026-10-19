@@ -5,10 +5,8 @@ import { recordBrowserError, registerDaemonDiagnostics } from "@/services/diagno
 import { AnonymousIdentityApi } from "@/services/identity/anonymous-identity-api";
 import { formatError } from "@/view-models/format-error";
 
-export type NativeSessionImportAvailability = { readonly kind: "available" } | { readonly kind: "unavailable" };
 type SessionHandoff = {
     readonly harness: string;
-    readonly importAvailability: NativeSessionImportAvailability;
     readonly sessionId: string;
 };
 type NativeSessionChoice = "fork" | "import" | "skip";
@@ -55,11 +53,9 @@ function initialState(): ContinueState {
         return { kind: "invalid" };
     }
     if (harness !== null && sessionId !== null) {
-        const importAvailability: NativeSessionImportAvailability =
-            harness === "codex" ? { kind: "unavailable" } : { kind: "available" };
         return {
             code,
-            handoff: { harness, importAvailability, sessionId },
+            handoff: { harness, sessionId },
             kind: "session-confirm",
         };
     }
@@ -88,9 +84,6 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
         continueSession: (choice) => {
             const state = get().state;
             if (state.kind === "session-confirm" || state.kind === "session-failed") {
-                if (choice === "import" && state.handoff.importAvailability.kind === "unavailable") {
-                    return;
-                }
                 set({
                     state: {
                         choice,

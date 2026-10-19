@@ -13,9 +13,6 @@ function ContinuePage() {
     const { continueSession, redeem, state } = useStore(store);
     const code = continueCode(state);
     const qrCodeUrl = code === null ? null : continueUrl(code);
-    const canOpenSession =
-        (state.kind === "session-confirm" || state.kind === "session-redeeming" || state.kind === "session-failed") &&
-        state.handoff.importAvailability.kind === "available";
     useEffect(() => () => store.getState().dispose(), [store]);
     useEffect(() => {
         if (state.kind !== "session-redeeming" && state.kind !== "identity-redeeming") {
@@ -59,19 +56,17 @@ function ContinuePage() {
                                     {state.message}
                                 </p>
                             ) : null}
-                            <div className={canOpenSession ? "mt-6 grid gap-3 sm:grid-cols-2" : "mt-6 grid gap-3"}>
-                                {canOpenSession ? (
-                                    <Button
-                                        className="w-full"
-                                        disabled={state.kind === "session-redeeming"}
-                                        onClick={() => continueSession("import")}
-                                    >
-                                        Open session
-                                        {state.kind === "session-redeeming" && state.choice === "import" ? (
-                                            <Spinner label="Opening session" />
-                                        ) : null}
-                                    </Button>
-                                ) : null}
+                            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                                <Button
+                                    className="w-full"
+                                    disabled={state.kind === "session-redeeming"}
+                                    onClick={() => continueSession("import")}
+                                >
+                                    Open session
+                                    {state.kind === "session-redeeming" && state.choice === "import" ? (
+                                        <Spinner label="Opening session" />
+                                    ) : null}
+                                </Button>
                                 <Button
                                     disabled={state.kind === "session-redeeming"}
                                     variant="outline"
@@ -84,9 +79,7 @@ function ContinuePage() {
                                 </Button>
                             </div>
                             <p className="mt-3 text-sm text-muted-foreground">
-                                {canOpenSession
-                                    ? "Open continues the original session. Fork creates an independent copy."
-                                    : "Fork creates an independent copy."}
+                                Open continues the original session. Fork creates an independent copy.
                             </p>
                             <Button
                                 className="mt-3 px-0"

@@ -3,7 +3,7 @@ import { expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given a Codex native session handoff, When the choice page loads, Then only forking is offered because Codex cannot open the original session", {
+test("Given a Codex native session handoff, When the choice page loads, Then opening the original session is offered because Codex supports import", {
     timeout: 30_000,
 }, async () => {
     await createTestApp({
@@ -14,15 +14,15 @@ test("Given a Codex native session handoff, When the choice page loads, Then onl
         },
     });
 
-    const forkSession = await vi.waitFor(() => getByRole(document.body, "button", { name: "Fork session" }));
-    if (!(forkSession instanceof HTMLButtonElement)) {
-        throw new Error("The fork action is not a button.");
+    const openSession = await vi.waitFor(() => getByRole(document.body, "button", { name: "Open session" }));
+    const forkSession = getByRole(document.body, "button", { name: "Fork session" });
+    if (!(openSession instanceof HTMLButtonElement) || !(forkSession instanceof HTMLButtonElement)) {
+        throw new Error("The native session actions are not buttons.");
     }
 
+    expect(openSession.disabled).toBe(false);
     expect(forkSession.disabled).toBe(false);
-    expect(queryByRole(document.body, "button", { name: "Open session" })).toBeNull();
-    expect(document.body.textContent).toContain("Fork creates an independent copy.");
-    expect(document.body.textContent).not.toContain("Open continues the original session");
+    expect(document.body.textContent).toContain("Open continues the original session");
 });
 
 test("Given a native session handoff, When the choice page loads, Then a QR code of the same page is offered for another device", {
