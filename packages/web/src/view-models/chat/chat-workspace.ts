@@ -1,5 +1,4 @@
 import type { BotChatApi, ChatDraftConfiguration } from "../../services/chat/bot-chat-api.ts";
-import { registerDaemonDiagnostics } from "../../services/diagnostics/browser-diagnostics.ts";
 import { reportApplicationError } from "../report-error.ts";
 import { createBotChatHomeStore } from "./bot-chat-home-store.ts";
 import { createConversationDirectoryStore } from "./conversation-directory-store.ts";
@@ -102,7 +101,6 @@ export function createChatWorkspace(options: {
     directoryLifetime.abort(new Error("The chat workspace has not loaded yet."));
     const operationsLifetime = new AbortController();
     const statusLifetime = new AbortController();
-    let releaseDaemonDiagnostics: (() => void) | null = null;
 
     const startHomeLoad = (): void => {
         chatLifetime.abort(new Error("Chat loading restarted."));
@@ -129,16 +127,6 @@ export function createChatWorkspace(options: {
             .load(directoryLifetime.signal)
             .catch(() => undefined);
     };
-    const registerSelectionDiagnostics = (sessionId: string): void => {
-        releaseDaemonDiagnostics?.();
-        releaseDaemonDiagnostics = registerDaemonDiagnostics({
-            botId,
-            nativeSessionId: null,
-            sessionId,
-            read: (signal) => requests.daemonDiagnostics(botId, signal),
-        });
-    };
-
     const announcedViews = new WeakSet<HTMLElement>();
     const loadSelectedSession = (target: SelectedConversationTarget): void => {
         const sessionId = target.kind === "conversation" ? target.conversationId : target.sessionId;
@@ -191,7 +179,6 @@ export function createChatWorkspace(options: {
     const initialSelection = home.getState().selection;
     const initialSelectionId = selectedConversationId(initialSelection);
     statuses.getState().selectionChanged(initialSelectionId.length > 0 ? initialSelectionId : null);
-    registerSelectionDiagnostics(initialSelectionId);
     let selectionKey: string | null = initialSelection.kind === "draft" ? initialSelection.key : null;
 
     const unsubscribeHome = home.subscribe((state, previous) => {
@@ -204,7 +191,6 @@ export function createChatWorkspace(options: {
         const selectionId = selectedConversationId(state.selection);
         if (selectionId !== selectedConversationId(previous.selection)) {
             statuses.getState().selectionChanged(selectionId.length > 0 ? selectionId : null);
-            registerSelectionDiagnostics(selectionId);
         }
         // A new draft (New Session) clears the home draft settings; the draft
         // controls republish them when their load restarts for the new draft.
@@ -252,8 +238,6 @@ export function createChatWorkspace(options: {
             statusLifetime.abort(new Error("Conversation status lifetime ended."));
             operationsLifetime.abort(new Error("The chat workspace was disposed."));
             statuses.getState().close();
-            releaseDaemonDiagnostics?.();
-            releaseDaemonDiagnostics = null;
         },
     };
 }
