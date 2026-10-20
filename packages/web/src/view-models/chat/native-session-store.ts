@@ -65,12 +65,14 @@ export const createNativeSessionStore = (
     onOpen: (session: OpenMobiusSession) => void,
 ) => {
     let selection: AbortController | null = null;
+    let discovery: AbortController | null = null;
     const lifetime = new AbortController();
     return createStore<NativeSessionStore>()((set, get) => ({
         start: () => {
             void get().load(lifetime.signal);
         },
-        lifetimeSignal: () => lifetime.signal,
+        lifetimeSignal: () =>
+            discovery === null ? lifetime.signal : AbortSignal.any([lifetime.signal, discovery.signal]),
         stop: () => {
             lifetime.abort(new Error("The native session dialog closed."));
             get().dispose();
@@ -81,7 +83,11 @@ export const createNativeSessionStore = (
         preview: { kind: "empty" },
         operation: "idle",
         error: "",
-        load: async (signal) => {
+        load: async (parent) => {
+            const attempt = new AbortController();
+            discovery?.abort(new Error("Native session discovery restarted."));
+            discovery = attempt;
+            const signal = AbortSignal.any([parent, attempt.signal]);
             set({ directory: { kind: "loading" }, preview: { kind: "empty" }, error: "" });
             try {
                 const configuration = await requests.runtimeConfiguration(botId, signal);
