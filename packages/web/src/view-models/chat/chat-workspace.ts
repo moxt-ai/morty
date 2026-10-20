@@ -1,4 +1,5 @@
 import type { BotChatApi, ChatDraftConfiguration } from "../../services/chat/bot-chat-api.ts";
+import { formatError } from "../format-error.ts";
 import { reportApplicationError } from "../report-error.ts";
 import { createBotChatHomeStore } from "./bot-chat-home-store.ts";
 import { createConversationDirectoryStore } from "./conversation-directory-store.ts";
@@ -149,7 +150,28 @@ export function createChatWorkspace(options: {
                     }));
                 }
             })
-            .catch(() => undefined);
+            .catch((cause: unknown) => {
+                if (chatLifetime.signal.aborted) {
+                    return;
+                }
+                const current = home.getState().selection;
+                if (
+                    current.kind === "loading" &&
+                    current.target.kind !== "continue" &&
+                    selectedConversationId(current) === sessionId
+                ) {
+                    // Surface the failure so the Reconnect control renders; its
+                    // retry transitions to loading and bumps the revision,
+                    // which restarts the full home load.
+                    home.setState((state) => ({
+                        selection: transitionConversationSelection(state.selection, {
+                            kind: "session-load-failed",
+                            message: formatError(cause, "The Session could not be loaded."),
+                            target: current.target,
+                        }),
+                    }));
+                }
+            });
     };
     const announceChatViewAttached = (node: HTMLElement): (() => void) => {
         if (announcedViews.has(node)) {

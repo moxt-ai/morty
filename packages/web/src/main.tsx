@@ -24,7 +24,20 @@ const application = createMortyApplication({
     origin: window.location.origin,
     transport: new WebSocketApiTransport(window.location.origin),
 });
-window.addEventListener("pagehide", () => application.dispose());
+// The browser may hide the page into the back/forward cache instead of
+// discarding it. Disposing there would strand a restored page with a closed
+// transport, so only release the application when the page is truly going
+// away; a restored page reloads itself below to rebuild live connections.
+window.addEventListener("pagehide", (event) => {
+    if (!event.persisted) {
+        application.dispose();
+    }
+});
+window.addEventListener("pageshow", (event) => {
+    if (event.persisted) {
+        window.location.reload();
+    }
+});
 
 createRoot(rootElement, {
     onUncaughtError: (error, info) => reactErrorHandler()(error, { componentStack: info.componentStack ?? null }),
