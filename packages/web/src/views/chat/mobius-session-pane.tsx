@@ -16,6 +16,7 @@ import {
 } from "../../components/chat/session-interactions.tsx";
 import { WorkingIndicator } from "../../components/chat/working-indicator.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
+import { LinkButton } from "../../components/ui/link-button.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
@@ -25,7 +26,11 @@ import { createBrowserFilePreviewStore } from "../../view-models/chat/file-previ
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
 import { sessionDebugBlocks } from "../../view-models/chat/session-debug-blocks.ts";
-import { createSessionPaneModel, sessionPanePresentation } from "../../view-models/chat/session-pane-store.ts";
+import {
+    createSessionPaneModel,
+    type SessionConnection,
+    sessionPanePresentation,
+} from "../../view-models/chat/session-pane-store.ts";
 import { type SessionMessage, sessionTextValue } from "../../view-models/chat/session-presentation.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
 import { MobiusAssistantText, MobiusSessionMessage } from "./mobius-session-message.tsx";
@@ -129,6 +134,74 @@ function MessageListSkeleton() {
             </div>
         </div>
     );
+}
+
+function useCountdownSeconds(retryAtEpochMs: number): number {
+    const [remaining, setRemaining] = useState(() => Math.max(0, Math.ceil((retryAtEpochMs - Date.now()) / 1000)));
+    useEffect(() => {
+        setRemaining(Math.max(0, Math.ceil((retryAtEpochMs - Date.now()) / 1000)));
+        const intervalId = setInterval(() => {
+            setRemaining(Math.max(0, Math.ceil((retryAtEpochMs - Date.now()) / 1000)));
+        }, 1000);
+        return () => clearInterval(intervalId);
+    }, [retryAtEpochMs]);
+    return remaining;
+}
+
+function DisconnectedNotice({
+    onRetryNow,
+    retry,
+}: {
+    readonly onRetryNow: () => void;
+    readonly retry: { readonly kind: "scheduled"; readonly retryAtEpochMs: number } | { readonly kind: "exhausted" };
+}) {
+    return (
+        <div data-testid={dataTestId.sessionReconnectNotice} className="mb-2 px-1 text-sm text-muted-foreground">
+            {retry.kind === "scheduled" ? (
+                <ScheduledRetryNotice onRetryNow={onRetryNow} retryAtEpochMs={retry.retryAtEpochMs} />
+            ) : (
+                <p role="status">
+                    Automatic retries stopped. <LinkButton onClick={onRetryNow}>Retry now</LinkButton>
+                </p>
+            )}
+        </div>
+    );
+}
+
+function ScheduledRetryNotice({
+    onRetryNow,
+    retryAtEpochMs,
+}: {
+    readonly onRetryNow: () => void;
+    readonly retryAtEpochMs: number;
+}) {
+    const remaining = useCountdownSeconds(retryAtEpochMs);
+    return (
+        <p role="status">
+            Retrying in {remaining} s <LinkButton onClick={onRetryNow}>Retry now</LinkButton>
+        </p>
+    );
+}
+
+function ReconnectingNotice() {
+    return (
+        <div data-testid={dataTestId.sessionReconnectNotice} className="mb-2 px-1 text-sm text-muted-foreground">
+            <p role="status">Mobius is reconnecting…</p>
+        </div>
+    );
+}
+
+function SessionReconnectNotice({
+    connection,
+    onRetryNow,
+}: {
+    readonly connection: SessionConnection;
+    readonly onRetryNow: () => void;
+}) {
+    if (connection.kind === "disconnected") {
+        return <DisconnectedNotice onRetryNow={onRetryNow} retry={connection.retry} />;
+    }
+    return <ReconnectingNotice />;
 }
 
 /**
@@ -489,6 +562,14 @@ export function MobiusSessionPane({
                     disabled={presentation.composerDisabled}
                     draft={model.draft}
                     error={presentation.composerError}
+                    errorStatus={
+                        model.connection.kind === "disconnected" || model.connection.kind === "reconnecting" ? (
+                            <SessionReconnectNotice
+                                connection={model.connection}
+                                onRetryNow={() => pane.store.getState().retryNow()}
+                            />
+                        ) : undefined
+                    }
                     onAttachmentsChange={pane.store.getState().setAttachments}
                     onDraftChange={pane.store.getState().setDraft}
                     onStop={() => run(pane.store.getState().stop)}

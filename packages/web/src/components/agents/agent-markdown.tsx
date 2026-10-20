@@ -2,7 +2,7 @@ import { Lexer } from "marked";
 import { defaultRemarkPlugins, type MathPlugin, parseMarkdownIntoBlocks, Streamdown } from "streamdown";
 import { isDisplayableImageType } from "../../services/chat/image-media-type.ts";
 import "streamdown/styles.css";
-import { type ComponentProps, lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { type ComponentProps, useEffect, useMemo, useState } from "react";
 import { dataTestId } from "@/data-testid";
 import { cn } from "@/lib/utils";
 import { boundedCodeHighlighter } from "./bounded-code-highlighter.ts";
@@ -26,10 +26,6 @@ function parseStreamingMarkdownIntoBlocks(markdown: string): string[] {
     lexer.blockTokens(markdown);
     return Object.keys(lexer.tokens.links).length > 0 ? [markdown] : parseMarkdownIntoBlocks(markdown);
 }
-
-const AgentMarkdownWithLatex = lazy(() =>
-    import("./agent-markdown-with-latex.tsx").catch(() => ({ default: AgentMarkdownContent })),
-);
 
 function isSafeLink(href: string): boolean {
     return (
@@ -311,9 +307,39 @@ export function AgentMarkdown(properties: AgentMarkdownProps) {
     if (sourceCharacters > MAX_MARKDOWN_CHARACTERS || !LATEX_DELIMITER_PATTERN.test(properties.markdown)) {
         return <AgentMarkdownContent {...properties} />;
     }
-    return (
-        <Suspense fallback={<AgentMarkdownContent {...properties} />}>
-            <AgentMarkdownWithLatex {...properties} />
-        </Suspense>
-    );
+    return <AgentMarkdownWithLatexWhenReady {...properties} />;
+}
+
+type LatexRenderer = typeof import("./agent-markdown-with-latex.tsx")["AgentMarkdownWithLatex"];
+let latexRenderer: Promise<LatexRenderer> | null = null;
+
+/**
+ * Loads the LaTeX renderer as an explicit state transition. The Suspense
+ * fallback swap can drop the resolved component's DOM commit under load,
+ * which leaves the interim non-math render stuck; rendering from resolved
+ * state commits deterministically.
+ */
+export function loadLatexRenderer(): Promise<LatexRenderer> {
+    latexRenderer ??= import("./agent-markdown-with-latex.tsx").then((module) => module.AgentMarkdownWithLatex);
+    return latexRenderer;
+}
+
+function AgentMarkdownWithLatexWhenReady(properties: AgentMarkdownProps) {
+    const [renderer, setRenderer] = useState<LatexRenderer | null>(null);
+    useEffect(() => {
+        let active = true;
+        void loadLatexRenderer().then((component) => {
+            if (active) {
+                setRenderer(() => component);
+            }
+        });
+        return () => {
+            active = false;
+        };
+    }, []);
+    if (renderer === null) {
+        return <AgentMarkdownContent {...properties} />;
+    }
+    const Latex = renderer;
+    return <Latex {...properties} />;
 }
