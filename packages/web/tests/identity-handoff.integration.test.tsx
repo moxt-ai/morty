@@ -1,6 +1,8 @@
 import { getByRole, queryByRole } from "@testing-library/dom";
 import { expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
+import { router as authenticationRouter } from "../src/views/authentication/router.tsx";
+import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
 test("Given a Codex native session handoff, When the page loads, Then it opens the original session and lands in Chat", {
@@ -253,4 +255,37 @@ test("Given shared Morty access, When the user chooses to end remote access from
     expect(queryByRole(dialog, "textbox", { name: "Current user token" })).toBeNull();
     expect(dialog.textContent).toContain("Cancel");
     expect(dialog.textContent).toContain("End remote access");
+});
+
+test("Given an open Morty session, When the user opens Continue your work, Then one sharing link supports both the QR code and an agent handoff prompt", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true, page: { kind: "bootstrap", identity: true } });
+    const composer = await app.waitForView(() => getByRole(document.body, "textbox", { name: "Message" }));
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Message composer is unavailable");
+    }
+    await sendPrompt(app, composer, "Continue this task");
+    await app.waitForView(() => expect(new URL(window.location.href).searchParams.get("sessionId")).not.toBeNull());
+    const share = await app.waitForView(() => getByRole(document.body, "button", { name: "Continue your work" }));
+    const originalSessionId = new URL(window.location.href).searchParams.get("sessionId");
+    await app.user.click(share);
+    const link = await app.waitForView(() => getByRole(document.body, "link", { name: "Open sharing link" }));
+    const sharingUrl = link.getAttribute("href");
+    expect(sharingUrl).not.toBeNull();
+    const url = new URL(sharingUrl ?? "");
+    expect(url.searchParams.get("harness")).toBeNull();
+    expect(url.searchParams.get("sessionId")).toBe(originalSessionId);
+    expect(url.hash).toMatch(/^#code=\S+$/u);
+    const prompt = getByRole(document.body, "textbox", { name: "Agent handoff prompt" });
+    expect(prompt).toHaveProperty("readOnly", true);
+    expect(prompt).toHaveProperty("value", expect.stringContaining(`Use curl to open this link: ${sharingUrl}`));
+    expect(prompt).toHaveProperty("value", expect.stringContaining("[your goals]"));
+    expect(getByRole(document.body, "img", { name: "Continue your work QR code" })).toBeInstanceOf(HTMLImageElement);
+
+    window.location.href = sharingUrl ?? "";
+    authenticationRouter.history.replace(url.pathname + url.search + url.hash);
+    app.remount();
+    await vi.waitFor(() => expect(window.location.pathname).toBe("/chat"));
+    expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(originalSessionId);
 });

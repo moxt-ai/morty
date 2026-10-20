@@ -3,13 +3,16 @@ import { useStore } from "zustand";
 import { dataTestId } from "../../data-testid.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import { createIdentitySharingStore } from "../../view-models/chat/identity-sharing-store.ts";
+import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 
 export function IdentitySharing({
     createTransfer,
+    session,
 }: {
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
+    readonly session: OpenMobiusSession | null;
 }) {
-    const [store] = useState(() => createIdentitySharingStore(createTransfer));
+    const [store] = useState(() => createIdentitySharingStore(createTransfer, session));
     const { load, state } = useStore(store);
     useEffect(() => {
         const controller = new AbortController();
@@ -35,6 +38,27 @@ export function IdentitySharing({
             >
                 {state.transfer.url}
             </a>
+            {state.handoff.kind === "available" ? (
+                <div className="space-y-2 text-left">
+                    <p className="text-sm font-medium">Let another agent take over</p>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                        Give another agent this prompt with your goals. It can use curl to read the instructions and
+                        continue this session through the same link.
+                    </p>
+                    <textarea
+                        aria-label="Agent handoff prompt"
+                        readOnly
+                        value={state.handoff.prompt}
+                        rows={5}
+                        className="w-full resize-none rounded-md border border-border bg-muted/40 p-3 text-xs leading-5"
+                        onFocus={(event) => event.currentTarget.select()}
+                    />
+                </div>
+            ) : (
+                <p className="text-xs leading-5 text-muted-foreground">
+                    Open a conversation to generate a link that another agent can use to take it over.
+                </p>
+            )}
             <p className="text-xs leading-5 text-muted-foreground">
                 This link expires {new Date(state.transfer.expiresAt).toLocaleString()}. Remote access remains active
                 until you end it.

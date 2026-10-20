@@ -22,7 +22,7 @@ type ContinueState =
           readonly handoff: SessionHandoff;
           readonly message: string;
       }
-    | { readonly kind: "identity-redeeming"; readonly code: string }
+    | { readonly kind: "identity-redeeming"; readonly code: string; readonly sessionId: string | null }
     | { readonly kind: "failed"; readonly message: string }
     | { readonly kind: "invalid" };
 
@@ -41,7 +41,8 @@ function initialState(): ContinueState {
     if (
         code === null ||
         code.length === 0 ||
-        (harness === null) !== (sessionId === null) ||
+        (harness !== null && sessionId === null) ||
+        (sessionId !== null && !isIdentifier(sessionId)) ||
         (harness !== null && (!isIdentifier(harness) || sessionId === null || !isIdentifier(sessionId)))
     ) {
         return { kind: "invalid" };
@@ -53,7 +54,7 @@ function initialState(): ContinueState {
             kind: "session-opening",
         };
     }
-    return { code, kind: "identity-redeeming" };
+    return { code, kind: "identity-redeeming", sessionId };
 }
 
 /** A same-origin destination that carries the redeemed identity in its query string. */
@@ -102,7 +103,11 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 const identity = await api.redeemTransfer(state.code, signal);
                 signal.throwIfAborted();
                 if (state.kind === "identity-redeeming") {
-                    window.location.replace(identityDestination("/", identity));
+                    const destination = identityDestination(state.sessionId === null ? "/" : "/chat", identity);
+                    if (state.sessionId !== null) {
+                        destination.searchParams.set("sessionId", state.sessionId);
+                    }
+                    window.location.replace(destination);
                     return;
                 }
                 const chat = new BotChatApi({
