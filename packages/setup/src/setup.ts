@@ -763,7 +763,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             url: handoffUrl,
             workspace: workingDirectory,
             qrPath,
-            message: "Open the link or scan the QR code to chat. Keep the Runtime online.",
+            message:
+                "Open the link or scan the QR code to chat. You can also give this same complete Continue URL to another coding agent and ask it to use curl to read the embedded instructions and remotely message this agent. Keep the Runtime online.",
         });
     }
 

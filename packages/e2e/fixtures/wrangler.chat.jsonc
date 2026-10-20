@@ -7,7 +7,7 @@
         "binding": "ASSETS",
         "directory": "../../../dist/client",
         "not_found_handling": "single-page-application",
-        "run_worker_first": ["/morty/api/*", "/morty/ws", "/setup.md", "/setup.mjs"]
+        "run_worker_first": ["/morty/api/*", "/morty/ws", "/setup.md", "/connect.md", "/setup.mjs"]
     },
     "r2_buckets": [{ "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-local-e2e-attachments" }],
     "durable_objects": {

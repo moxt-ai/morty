@@ -260,6 +260,7 @@ export function BotChatHome({
                     onConnectAgent={setupView?.reason === "unconfigured" ? () => setPairingDialogOpen(true) : null}
                     requests={requests}
                     createTransfer={createTransfer}
+                    sharingSession={model.selection.kind === "ready" ? model.selection.session : null}
                     currentAccessToken={currentAccessToken}
                     onOpen={(session) => openManaged(session.isExternal, session.id)}
                     onOpenSession={(session) =>

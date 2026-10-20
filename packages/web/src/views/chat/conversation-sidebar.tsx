@@ -139,6 +139,7 @@ export function ConversationSidebar({
     currentAccessToken,
     endRemoteAccess,
     createTransfer,
+    sharingSession,
     sessionStatuses,
     directoryRevision,
     optimisticTitles,
@@ -168,6 +169,7 @@ export function ConversationSidebar({
     readonly currentAccessToken: (signal: AbortSignal) => Promise<string>;
     readonly endRemoteAccess: (token: string, signal: AbortSignal) => Promise<void>;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
+    readonly sharingSession: OpenMobiusSession | null;
     readonly sessionStatuses: ReadonlyMap<string, ConversationListStatus>;
 }) {
     const transport = useApiTransport();
@@ -525,10 +527,10 @@ export function ConversationSidebar({
             {sharing && (
                 <Dialog
                     title="Continue your work"
-                    description="Scan the QR code or open the link on another device to use Morty."
+                    description="Scan the QR code, open the link on another device, or let another agent continue your work."
                     onClose={() => setSharing(false)}
                 >
-                    <IdentitySharing createTransfer={createTransfer} />
+                    <IdentitySharing createTransfer={createTransfer} session={sharingSession} />
                 </Dialog>
             )}
             {diagnostic.state.kind !== "closed" && (
