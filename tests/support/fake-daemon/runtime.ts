@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { createDaemonConfig, DaemonLocalContext, MobiusRuntimeEngine } from "@moxt-ai/mobius/runtime";
+import { createRuntimeConfig, MobiusRuntimeEngine, RuntimeLocalContext } from "@moxt-ai/mobius/runtime";
 import { MobiusClient, StaticMobiusCredentialProvider } from "@moxt-ai/mobius-sdk/server";
 import {
     createFakeDaemon,
@@ -95,14 +95,14 @@ export async function connectControlledAgentRuntime(options: {
     relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
     relayUrl.searchParams.set("token", options.connection.runtimeCredential);
     const ready = Promise.withResolvers<void>();
-    const config = createDaemonConfig(
+    const config = createRuntimeConfig(
         {
             channelId: options.connection.channelId,
             defaultWorkspace: workspace,
             relayUrl,
         },
         harness.agents,
-        new DaemonLocalContext(directory, process.env),
+        new RuntimeLocalContext(directory, process.env),
     );
     const engine = new MobiusRuntimeEngine(config, {
         onConnectionStatus: (status) => {
