@@ -1,4 +1,4 @@
-import { lazy, memo, Suspense } from "react";
+import { memo, useEffect, useState } from "react";
 import { CodeBlock, CodeBlockCopyButton, type CustomRendererProps } from "streamdown";
 import { MAX_MERMAID_CHARACTERS } from "./mermaid-options.ts";
 import { INCOMPLETE_MERMAID_META } from "./remark-mermaid-completion.ts";
@@ -16,13 +16,44 @@ function MermaidSource({ code, message }: { readonly code: string; readonly mess
     );
 }
 
-const MermaidDiagram = lazy(() =>
-    import("./mermaid-diagram.tsx").catch(() => ({
-        default: memo(({ code }: { readonly code: string }) => (
-            <MermaidSource code={code} message="Diagram could not be loaded. You can still copy its source." />
-        )),
-    })),
-);
+type DiagramComponent = typeof import("./mermaid-diagram.tsx")["default"];
+let diagramComponent: Promise<DiagramComponent> | null = null;
+
+/** Starts (once) loading the diagram renderer; safe to call eagerly. */
+export function loadDiagramRenderer(): Promise<DiagramComponent> {
+    return loadDiagramComponent();
+}
+
+function loadDiagramComponent(): Promise<DiagramComponent> {
+    diagramComponent ??= import("./mermaid-diagram.tsx").then(
+        (module) => module.default,
+        () =>
+            memo(({ code }: { readonly code: string }) => (
+                <MermaidSource code={code} message="Diagram could not be loaded. You can still copy its source." />
+            )) as DiagramComponent,
+    );
+    return diagramComponent;
+}
+
+function MermaidDiagramWhenReady({ code }: { readonly code: string }) {
+    const [diagram, setDiagram] = useState<DiagramComponent | null>(null);
+    useEffect(() => {
+        let active = true;
+        void loadDiagramComponent().then((component) => {
+            if (active) {
+                setDiagram(() => component);
+            }
+        });
+        return () => {
+            active = false;
+        };
+    }, []);
+    if (diagram === null) {
+        return <MermaidSource code={code} message="Loading diagram…" />;
+    }
+    const Diagram = diagram;
+    return <Diagram code={code} />;
+}
 
 export const MermaidCodeBlock = memo(function MermaidCodeBlock({ code, meta }: Readonly<CustomRendererProps>) {
     if (meta === INCOMPLETE_MERMAID_META) {
@@ -31,9 +62,5 @@ export const MermaidCodeBlock = memo(function MermaidCodeBlock({ code, meta }: R
     if (code.length > MAX_MERMAID_CHARACTERS) {
         return <MermaidSource code={code} message="Diagram is too large to display. You can still copy its source." />;
     }
-    return (
-        <Suspense fallback={<MermaidSource code={code} message="Loading diagram…" />}>
-            <MermaidDiagram code={code} />
-        </Suspense>
-    );
+    return <MermaidDiagramWhenReady code={code} />;
 });

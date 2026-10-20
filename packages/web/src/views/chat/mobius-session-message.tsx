@@ -2,14 +2,21 @@ import { externalContentPath, type MobiusExternalContentBlock } from "@moxt-ai/m
 import type { ContentBlock } from "@moxt-ai/mobius-sdk/protocol";
 import { CircleAlert, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { AgentMarkdown, type MarkdownImageReader } from "../../components/agents/agent-markdown.tsx";
+import { AgentMarkdown, loadLatexRenderer, type MarkdownImageReader } from "../../components/agents/agent-markdown.tsx";
 import { AgentResponseText } from "../../components/agents/agent-response-text.tsx";
+import { loadDiagramRenderer } from "../../components/agents/mermaid-code-block.tsx";
 import { AgentThinking } from "../../components/chat/agent-thinking.tsx";
 import { AttemptFailure } from "../../components/chat/attempt-failure.tsx";
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { isDisplayableImageType } from "../../services/chat/image-media-type.ts";
 import { type SessionMessage, sessionTextValue } from "../../view-models/chat/session-presentation.ts";
+
+// Warm the lazily loaded rich renderers as soon as a conversation renders, so
+// the first LaTeX or Mermaid content resolves its renderer without a visible
+// fallback swap.
+void loadLatexRenderer().catch(() => undefined);
+void loadDiagramRenderer().catch(() => undefined);
 
 const SAFE_AUDIO_MIME = /^audio\/(?:aac|mpeg|mp4|ogg|wav|webm)$/u;
 
