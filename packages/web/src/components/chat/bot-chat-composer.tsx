@@ -134,7 +134,7 @@ export function BotChatComposer({
                 </p>
             )}
             {errorStatus}
-            <div className="rounded-[24px] border-[0.5px] border-border bg-surface-elevated px-3 pt-3 pb-2.5 shadow-[0_8px_28px_rgba(23,30,36,0.06)] sm:min-h-[128px] sm:px-4 sm:pt-3.5 sm:pb-3">
+            <div className="rounded-[24px] border-[0.5px] border-border bg-surface-elevated px-3 pt-3 pb-2.5 shadow-[0_8px_28px_rgba(23,30,36,0.06)] sm:min-h-[128px] sm:pb-3">
                 {attachments.length > 0 && (
                     <ul aria-label="Attachments" className="mb-2 flex list-none flex-wrap gap-2 p-0">
                         {attachments.map((attachment, index) => (
@@ -158,11 +158,11 @@ export function BotChatComposer({
                     placeholder={placeholder}
                     value={draft}
                 />
-                <div className="mt-1 flex min-h-10 items-center justify-between gap-2">
+                <div className="mt-1 flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-1">
                         <button
                             aria-label="Add attachment"
-                            className="flex size-11 items-center justify-center rounded-full text-copy-secondary outline-none transition-colors duration-150 hover:bg-black/[0.045] focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50 sm:size-10 motion-reduce:transition-none"
+                            className="flex size-9 items-center justify-center rounded-full text-copy-secondary outline-none transition-colors duration-150 hover:bg-black/[0.045] focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50 motion-reduce:transition-none"
                             disabled={disabled || !canAttach}
                             onClick={() => fileInput.current?.click()}
                             title="Add attachment"
@@ -203,7 +203,7 @@ export function BotChatComposer({
                                         ? submitLabel
                                         : "Stop agent output"
                             }
-                            className={`size-11 rounded-full text-white sm:size-10 ${submitAction || outputState === "sending" ? "bg-primary hover:bg-primary/90" : "bg-destructive hover:bg-destructive/90"}`}
+                            className={`size-9 rounded-full text-white ${submitAction || outputState === "sending" ? "bg-primary hover:bg-primary/90" : "bg-destructive hover:bg-destructive/90"}`}
                             data-testid={dataTestId.sendMessage}
                             disabled={
                                 (submitAction && attachmentState.kind === "reading") ||
