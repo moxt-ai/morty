@@ -226,6 +226,50 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     { kind: "compaction", summary: "The older history was compacted.\nKeep this text." },
                 ],
             };
+        case "interleaved compaction hold":
+            // Opens a compaction, emits a message between the start and the
+            // settle, then holds the turn so the test can settle separately.
+            return {
+                outcome: "hold",
+                output: [
+                    { kind: "text", text: "Reply before the interleaved compaction." },
+                    { kind: "compaction-start" },
+                    { kind: "text", text: "Message between compaction start and settle." },
+                ],
+            };
+        case "interleaved compaction finish":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "compaction-finish",
+                        summary: "First half of the interleaved summary.\nSecond half of the interleaved summary.",
+                    },
+                ],
+            };
+        case "interleave padding one":
+        case "interleave padding two":
+            return {
+                outcome: "complete",
+                output: Array.from(
+                    { length: 5 },
+                    (_, index): HarnessOutput => ({
+                        kind: "text",
+                        text: `Interleave reply ${index.toString()}.`,
+                    }),
+                ),
+            };
+        case "interleave padding three":
+            return {
+                outcome: "complete",
+                output: Array.from(
+                    { length: 4 },
+                    (_, index): HarnessOutput => ({
+                        kind: "text",
+                        text: `Interleave reply tail ${index.toString()}.`,
+                    }),
+                ),
+            };
         case "show generated picture":
             return {
                 outcome: "complete",

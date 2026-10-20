@@ -493,11 +493,16 @@ function consumeSessionEvent(
         };
         return existingIndex === -1
             ? {
-                  // A compaction whose first observed event might not be its start
-                  // (a page boundary can fall mid-compaction) stays unresolved so
-                  // prependSessionMessageEvents can merge the older page's earlier
-                  // events under the same id.
-                  firstEvent: entries.length === 0 ? leadingEvent : "known",
+                  // Completeness is decided by the compaction's own first event, not
+                  // by position: a leading in_progress is the entity's start (chunks
+                  // and terminal updates may only follow it per the ACP contract), so
+                  // the entry is complete. Any other first-observed event means the
+                  // start may live on an older page, and the entry stays unresolved so
+                  // prependSessionMessageEvents can merge that page under this id.
+                  firstEvent:
+                      update.sessionUpdate === "compaction_update" && update.status === "in_progress"
+                          ? "known"
+                          : "possibly-before-page",
                   kind: "constructed",
                   message,
               }

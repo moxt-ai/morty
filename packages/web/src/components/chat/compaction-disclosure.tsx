@@ -11,10 +11,13 @@ const STATUS_LABEL: Readonly<Record<CompactionStatusState, string>> = {
     in_progress: "compacting",
 };
 
+/** The user's disclosure choice. "unset" follows the status default: an
+ *  in-progress compaction expands so the streaming summary is visible, a
+ *  terminal one collapses. An explicit choice overrides both defaults. */
+type DisclosureChoice = "collapsed" | "expanded" | "unset";
+
 /** Renders one ID-addressed context compaction: a status disclosure whose body is
- *  the retained summary the Agent streamed while compacting. An in-progress
- *  compaction is expanded; the user's close is kept across status-driven
- *  re-renders, and a newly opening compaction re-expands. */
+ *  the retained summary the Agent streamed while compacting. */
 export function CompactionDisclosure({
     error,
     status,
@@ -24,8 +27,8 @@ export function CompactionDisclosure({
     readonly status: CompactionStatusState;
     readonly summary: string;
 }) {
-    const [collapsedByUser, setCollapsedByUser] = useState(false);
-    const open = status === "in_progress" || !collapsedByUser;
+    const [choice, setChoice] = useState<DisclosureChoice>("unset");
+    const open = choice === "expanded" || (choice === "unset" && status === "in_progress");
     return (
         <fieldset
             aria-label="Context compaction"
@@ -35,7 +38,7 @@ export function CompactionDisclosure({
             <button
                 aria-expanded={open}
                 className="flex min-h-10 w-fit cursor-pointer list-none items-center gap-2 rounded-lg px-1 text-muted-foreground outline-none hover:text-copy-secondary focus-visible:ring-2 focus-visible:ring-ring"
-                onClick={() => setCollapsedByUser((current) => !current)}
+                onClick={() => setChoice(open ? "collapsed" : "expanded")}
                 type="button"
             >
                 <ChevronDown
