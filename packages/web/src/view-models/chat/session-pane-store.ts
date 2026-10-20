@@ -9,7 +9,7 @@ import {
 } from "@moxt-ai/mobius-sdk";
 import { decodeIdentifier, type SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
-import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import { type BotChatApi, connectedChatRuntimeAgents } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
 import {
     centralIndexedDB,
@@ -18,6 +18,7 @@ import {
 } from "../../services/indexed-db/central-indexed-db.ts";
 import { centralSessionStorage, sessionDraftEntry } from "../../services/session-storage/central-session-storage.ts";
 import { formatError, isRetryableRuntimeConnectionFailure } from "../format-error.ts";
+import { reportApplicationError } from "../report-error.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
@@ -186,6 +187,8 @@ export interface SessionPaneStore {
     readonly interactions: readonly LocalInteraction[];
     readonly operation: Operation;
     readonly activity: SessionActivityState;
+    /** Display-only harness list; loading failures leave the current harness. */
+    readonly harnesses: readonly { readonly agentRef?: string; readonly label: string; readonly value: string }[];
     readonly connect: (signal: AbortSignal) => Promise<void>;
     readonly retryNow: () => void;
     readonly loadOlderMessages: (signal: AbortSignal) => Promise<void>;
@@ -367,7 +370,7 @@ function mergeSessionEvents(
 export function createSessionPaneModel(options: {
     readonly session: OpenMobiusSession;
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "connectSession">;
+    readonly requests: Pick<BotChatApi, "connectSession" | "runtimeConfiguration">;
     readonly initialMessage?: QueuedDraftMessage | undefined;
     /**
      * A previous pane's unconfirmed first-message submission. Adopted as the
@@ -381,6 +384,8 @@ export function createSessionPaneModel(options: {
     readonly onInitialMessageRecoveryCleared?: ((commandId: string) => void) | undefined;
     /** Invoked when the submission of the queued first message was not confirmed. */
     readonly onInitialMessageUnconfirmed?: ((journal: Journal) => void) | undefined;
+    /** Reports session activity transitions, such as a running turn, to the owner. */
+    readonly onStatusChange?: ((status: SessionActivityState) => void) | undefined;
     readonly onTitleChange: (sessionId: string, title: string) => void;
 }) {
     const { session, botId, requests } = options;
@@ -619,6 +624,7 @@ export function createSessionPaneModel(options: {
             options: session.result.ready.configOptions,
             draft: options.initialMessage?.content ?? centralSessionStorage.read(draftEntry) ?? "",
             attachments: options.initialMessage?.attachments ?? [],
+            harnesses: [{ agentRef: session.agentRef, label: session.agentRef, value: session.agentRef }],
             interactions: [],
             operation: { kind: "idle" },
             activity: initialActivity,
@@ -1373,11 +1379,71 @@ export function createSessionPaneModel(options: {
             stop: async (signal) => await tasks.getState().stop(signal),
         };
     });
+    // Report activity transitions to the owner without a component effect;
+    // the subscription lives exactly as long as this pane model.
+    let reportedStatus: SessionActivityState | null = null;
+    store.subscribe((state) => {
+        if (state.activity !== reportedStatus) {
+            reportedStatus = state.activity;
+            options.onStatusChange?.(state.activity);
+        }
+    });
+    // The pane's connection lifetime: attach starts connecting with its own
+    // signal, detach aborts it. The view drives this through a ref callback,
+    // so no component effect owns the session connection and nothing starts
+    // during render.
+    const connection = new AbortController();
+    let attached = false;
+    void 0;
+    // The harness list is display-only in an existing conversation: every
+    // entry is disabled, so a failed load just leaves the current harness.
+    const harnessController = new AbortController();
+    requests
+        .runtimeConfiguration(botId, harnessController.signal)
+        .then((configuration) => {
+            store.setState({
+                harnesses: connectedChatRuntimeAgents(configuration.runtime).map((agent) => ({
+                    agentRef: agent.agentRef,
+                    label: agent.label,
+                    value: `${agent.runtimeId}:${agent.agentRef}`,
+                })),
+            });
+        })
+        .catch((cause: unknown) => {
+            if (!harnessController.signal.aborted) {
+                reportApplicationError(cause, "session-pane-harnesses");
+            }
+        });
     return {
         store,
         delivery,
         messageQueue,
         tasks,
+        attach: () => {
+            if (attached) {
+                return;
+            }
+            attached = true;
+            void store
+                .getState()
+                .connect(connection.signal)
+                .catch((cause: unknown) => {
+                    if (!connection.signal.aborted) {
+                        reportApplicationError(cause, "session-pane-connect");
+                    }
+                });
+        },
+        /** Stops the session connection when the pane's view detaches. */
+        detach: () => {
+            if (!attached) {
+                return;
+            }
+            attached = false;
+            harnessController.abort(new Error("The session pane detached."));
+            connection.abort(new Error("The session pane detached."));
+        },
+        /** The signal for view-triggered operations while the pane is attached. */
+        operationsSignal: () => connection.signal,
         readFile: async (path: string, signal: AbortSignal) => {
             signal.throwIfAborted();
             if (client === null) {

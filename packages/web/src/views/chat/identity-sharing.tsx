@@ -1,22 +1,11 @@
-import { useEffect, useState } from "react";
+import type { StoreApi } from "zustand";
 import { useStore } from "zustand";
 import { dataTestId } from "../../data-testid.ts";
-import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
-import { createIdentitySharingStore } from "../../view-models/chat/identity-sharing-store.ts";
+import type { IdentitySharingStore } from "../../view-models/chat/identity-sharing-store.ts";
 
-export function IdentitySharing({
-    createTransfer,
-}: {
-    readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
-}) {
-    const [store] = useState(() => createIdentitySharingStore(createTransfer));
-    const { load, state } = useStore(store);
-    useEffect(() => {
-        const controller = new AbortController();
-        void load(controller.signal);
-        return () => controller.abort();
-    }, [load]);
-
+/** Renders the sharing dialog's transfer, whose store is created when the dialog opens. */
+export function IdentitySharing({ store }: { readonly store: StoreApi<IdentitySharingStore> }) {
+    const state = useStore(store, (state) => state.state);
     if (state.kind === "loading") {
         return <p role="status">Creating secure QR code…</p>;
     }

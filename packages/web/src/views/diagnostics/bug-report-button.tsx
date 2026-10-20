@@ -104,12 +104,14 @@ function BugReportDialog({
     const [store] = useState(() => createBugReportStore(sentryBugReportSink, transport, daemonSource));
     const { state, description, images, addImages, removeImage, describe, send, close } = useStore(store);
     const fileInput = useRef<HTMLInputElement>(null);
-    useEffect(() => close, [close]);
     return (
         <Dialog
             title="Report a bug"
             description="Send a description, optional images and recent technical and network diagnostics to the Morty team. Session text, other files and credentials are not collected automatically."
-            onClose={onClose}
+            onClose={() => {
+                close();
+                onClose();
+            }}
         >
             {state.kind === "sent" ? (
                 <div role="status" className="break-all">

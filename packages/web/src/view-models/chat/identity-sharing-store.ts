@@ -9,23 +9,31 @@ type IdentitySharingState =
 
 export interface IdentitySharingStore {
     readonly state: IdentitySharingState;
-    readonly load: (signal: AbortSignal) => Promise<void>;
+    /** Aborts the in-flight transfer creation when the sharing dialog closes. */
+    readonly dispose: () => void;
 }
 
-export const createIdentitySharingStore = (createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>) =>
-    createStore<IdentitySharingStore>()((set) => ({
+/**
+ * Starts loading the sharing transfer immediately. The store lives exactly as
+ * long as the sharing dialog, so the dialog's close path owns cancellation.
+ */
+export const createIdentitySharingStore = (createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>) => {
+    const controller = new AbortController();
+    const store = createStore<IdentitySharingStore>()(() => ({
+        dispose: () => controller.abort(new Error("Identity sharing closed.")),
         state: { kind: "loading" },
-        load: async (signal) => {
-            set({ state: { kind: "loading" } });
-            try {
-                const transfer = await createTransfer(signal);
-                const image = await QRCode.toDataURL(transfer.url, { margin: 1, width: 224 });
-                signal.throwIfAborted();
-                set({ state: { image, kind: "ready", transfer } });
-            } catch {
-                if (!signal.aborted) {
-                    set({ state: { kind: "failed" } });
-                }
-            }
-        },
     }));
+    void (async () => {
+        try {
+            const transfer = await createTransfer(controller.signal);
+            const image = await QRCode.toDataURL(transfer.url, { margin: 1, width: 224 });
+            controller.signal.throwIfAborted();
+            store.setState({ state: { image, kind: "ready", transfer } });
+        } catch {
+            if (!controller.signal.aborted) {
+                store.setState({ state: { kind: "failed" } });
+            }
+        }
+    })();
+    return store;
+};

@@ -21,6 +21,7 @@ import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-cha
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
+import { createIdentitySharingStore } from "../../view-models/chat/identity-sharing-store.ts";
 import { createNetworkDiagnosticStore } from "../../view-models/chat/network-diagnostic-store.ts";
 import { projectLocationLabel } from "../../view-models/chat/project-location-label.ts";
 import { createRemoteAccessStore } from "../../view-models/chat/remote-access-store.ts";
@@ -171,7 +172,7 @@ export function ConversationSidebar({
     const sessionStatuses = useStore(workspace.statuses, (state) => state.statuses);
     const [expanded, setExpanded] = useState(false);
     const [dialog, setDialog] = useState(false);
-    const [sharing, setSharing] = useState(false);
+    const [sharingStore, setSharingStore] = useState<ReturnType<typeof createIdentitySharingStore> | null>(null);
     const [remoteAccess] = useState(() => createRemoteAccessStore({ currentAccessToken, endRemoteAccess }));
     const access = useStore(remoteAccess);
     const [networkDiagnostic] = useState(() =>
@@ -467,7 +468,7 @@ export function ConversationSidebar({
                             variant="ghost"
                             className="size-10 shrink-0 justify-center rounded-full px-0 text-copy-secondary hover:bg-white/70"
                             data-testid={dataTestId.shareIdentity}
-                            onClick={() => setSharing(true)}
+                            onClick={() => setSharingStore(createIdentitySharingStore(createTransfer))}
                         >
                             <Share2 className="size-4" aria-hidden="true" />
                         </Button>
@@ -486,13 +487,16 @@ export function ConversationSidebar({
                     }}
                 />
             )}
-            {sharing && (
+            {sharingStore !== null && (
                 <Dialog
                     title="Continue your work"
                     description="Scan the QR code or open the link on another device to use Morty."
-                    onClose={() => setSharing(false)}
+                    onClose={() => {
+                        sharingStore.getState().dispose();
+                        setSharingStore(null);
+                    }}
                 >
-                    <IdentitySharing createTransfer={createTransfer} />
+                    <IdentitySharing store={sharingStore} />
                 </Dialog>
             )}
             {diagnostic.state.kind !== "closed" && (

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
@@ -68,27 +68,16 @@ export function NativeSessionDialog({
     readonly onOpen: (session: OpenMobiusSession) => void;
     readonly onClose: () => void;
 }) {
-    const [store] = useState(() => createNativeSessionStore(botId, requests, onOpen));
+    // The dialog's own lifetime owns discovery: it starts when the dialog
+    // renders and stops through the close path, never from a mount effect.
+    const [store] = useState(() => {
+        const model = createNativeSessionStore(botId, requests, onOpen);
+        model.getState().start();
+        return model;
+    });
     const model = useStore(store);
-    const lifetime = useRef<AbortController | null>(null);
-    // biome-ignore lint/correctness/useExhaustiveDependencies: Selecting an agent explicitly restarts discovery.
-    useEffect(() => {
-        const controller = new AbortController();
-        lifetime.current = controller;
-        void store.getState().load(controller.signal);
-        return () => {
-            controller.abort();
-            store.getState().dispose();
-            if (lifetime.current === controller) {
-                lifetime.current = null;
-            }
-        };
-    }, [model.selected, store]);
     const withSignal = (action: (signal: AbortSignal) => Promise<void>) => {
-        const controller = lifetime.current;
-        if (controller !== null) {
-            void action(controller.signal);
-        }
+        void action(store.getState().lifetimeSignal());
     };
     const fallback = model.agents[0];
     const selectedEntryId = model.preview.kind === "empty" ? "" : model.preview.entry.entryId;
@@ -96,7 +85,10 @@ export function NativeSessionDialog({
         <Dialog
             title="Open Session"
             description="Select a local agent session to preview it, then open it or fork it as a Mobius Session."
-            onClose={onClose}
+            onClose={() => {
+                store.getState().stop();
+                onClose();
+            }}
             busy={model.operation === "import" || model.operation === "fork"}
             wide
         >
