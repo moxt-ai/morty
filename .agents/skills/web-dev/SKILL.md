@@ -24,9 +24,9 @@ skill needs no `.dev.vars`, no local Worker, and no Platform credential.
 
 | Requirement | Detail |
 | --- | --- |
-| Checkout | This repository with `package.json`, `vite.config.ts` at its root; locked dependencies installed. |
+| Checkout | This repository with `package.json`, `vite.config.ts`, and `vite.web-dev.config.ts` at its root; locked dependencies installed. |
 | Toolchain | The pinned Node.js (>= 24) and pnpm from `package.json` `engines`. |
-| Deployed origin | The Worker origin to proxy to. Default `https://morty.build`; use the origin the user names. |
+| Deployed origin | The Worker origin to proxy to. Default `https://morty.build`; when the user names another, set it via `WEB_DEV_ORIGIN`. |
 | Continue URL | A `https://<deployed>/continue#code=…` link from the user for sign-in. The code is a one-time secret: never print, log, or commit it. |
 
 Stop and ask if there is no continue link; do not invent credentials or redeem
@@ -34,56 +34,24 @@ links from any other source. A link without `harness`/`sessionId` parameters
 redeems the identity and lands on the Chat page; one with them also imports that
 native session and requires its Runtime to be online.
 
-## Create the proxy configuration
+## Proxy configuration
 
 The SPA sends every API call and the bridge WebSocket to its own origin, and the
-deployed Worker rejects foreign origins, so a dev-server proxy must forward
-both and rewrite the `Origin` header. Write this config to a gitignored path
-under `.wrangler/` (create the directory; it is already ignored):
+deployed Worker rejects foreign origins, so the dev-server proxy must forward
+both and rewrite the `Origin` header. The repository ships this proxy as
+`vite.web-dev.config.ts`, committed next to `vite.config.ts` — use it as-is and
+do not write a per-session config under `.wrangler/` or anywhere else.
+
+The committed config defaults to `https://morty.build`. When the user names a
+different deployed origin, override it through the environment instead of
+editing the file — never substitute an origin the user did not name:
 
 ```sh
-mkdir -p .wrangler/web-dev
+WEB_DEV_ORIGIN=<deployed-origin> NODE_OPTIONS=--use-env-proxy pnpm exec vite --config vite.web-dev.config.ts
 ```
 
-Write `.wrangler/web-dev/vite.proxy.config.ts` with `<deployed-origin>` replaced:
-
-```ts
-import { fileURLToPath } from "node:url";
-import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
-
-const deployed = "<deployed-origin>";
-// Same-origin forwarding: the deployed Worker rejects requests whose Origin
-// differs from its own, so the proxy rewrites it. The agent reuses Node's
-// environment-aware global agent; without it the proxy dials the origin
-// directly, which is slow or reset on proxy-dependent networks.
-const forward = {
-    target: deployed,
-    changeOrigin: true,
-    secure: true,
-    headers: { origin: deployed },
-    agent: (await import("node:https")).globalAgent,
-};
-
-export default defineConfig({
-    plugins: [react(), tailwindcss()],
-    resolve: {
-        alias: [{ find: "@", replacement: fileURLToPath(new URL("../../packages/web/src", import.meta.url)) }],
-    },
-    server: {
-        host: "localhost",
-        port: 5173,
-        strictPort: true,
-        proxy: {
-            "/morty/api": forward,
-            "/morty/ws": { ...forward, ws: true },
-        },
-    },
-});
-```
-
-Why each non-obvious part exists, from verified failures:
+Why each non-obvious part of the committed config exists, from verified
+failures:
 
 - `headers: { origin: deployed }` — without it the bridge upgrade fails and the
   page shows "The Chat WebSocket bridge could not connect"
@@ -96,21 +64,24 @@ Why each non-obvious part exists, from verified failures:
 
 ## Start the dev server
 
-Run with Node's environment-proxy support so `globalAgent` honors
-`HTTPS_PROXY`/`HTTP_PROXY` when they are set:
+Run the committed config with Node's environment-proxy support so `globalAgent`
+honors `HTTPS_PROXY`/`HTTP_PROXY` when they are set, setting `WEB_DEV_ORIGIN`
+only when targeting an origin other than the default:
 
 ```sh
-NODE_OPTIONS=--use-env-proxy pnpm exec vite --config .wrangler/web-dev/vite.proxy.config.ts
+NODE_OPTIONS=--use-env-proxy pnpm exec vite --config vite.web-dev.config.ts
 ```
 
-Port 5173 is strict. If it is taken, stop the process that owns it rather than
-reusing it: it may proxy a different deployed origin.
+The committed config asks the OS for a free random port above 10000, so
+concurrent web-dev servers never collide. Read the actual port from the start
+output's `Local: http://localhost:<port>/` line and use it for every later URL
+and check; the port changes on every start.
 
 ## Verify the topology before opening the app
 
 ```sh
-curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:5173/
-curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:5173/morty/api
+curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:<port>/
+curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:<port>/morty/api
 ```
 
 Expect `200` for the SPA and `200` from the proxied deployed Worker. The second
@@ -123,7 +94,7 @@ Rewrite the user's continue URL to the local origin, keeping the hash intact,
 without printing it. Given `https://morty.build/continue#code=…`, open:
 
 ```text
-http://localhost:5173/continue#code=…
+http://localhost:<port>/continue#code=…
 ```
 
 The Continue page redeems the transfer code through the proxy, stores the
@@ -144,22 +115,23 @@ user's real data.
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| "The Chat WebSocket bridge could not connect" / `WEBSOCKET_ORIGIN_FORBIDDEN` | The proxy forwarded the browser's `Origin: http://localhost:5173` to the deployed Worker | Confirm `headers: { origin: deployed }` on both proxy entries |
-| Bridge opens but takes many seconds, then "Morty is temporarily unavailable" | Direct (non-proxy) egress to the origin is slow or reset; the session load missed its 15 s deadline | Set `agent: globalAgent` in the config and start with `NODE_OPTIONS=--use-env-proxy` |
+| "The Chat WebSocket bridge could not connect" / `WEBSOCKET_ORIGIN_FORBIDDEN` | The proxy forwarded the browser's `Origin: http://localhost:<port>` to the deployed Worker | Confirm `headers: { origin: deployed }` on both proxy entries of the committed config |
+| Bridge opens but takes many seconds, then "Morty is temporarily unavailable" | Direct (non-proxy) egress to the origin is slow or reset; the session load missed its 15 s deadline | Start with `NODE_OPTIONS=--use-env-proxy` so the config's `agent: globalAgent` routes through the environment proxy |
 | "Morty is temporarily unavailable" on **every** reload with a signed-in identity | Dev entry still double-mounts components (StrictMode) that terminal-close the transport mid-load | Requires the application-root fix that renders without StrictMode |
-| `503`/`502` from `/morty/api` through the proxy | Wrong `target` origin, or the deployed Worker is down | Verify the origin with `curl` directly, then fix `target` |
+| `503`/`502` from `/morty/api` through the proxy | Wrong `target` origin, or the deployed Worker is down | Verify the origin with `curl` directly, then check `WEB_DEV_ORIGIN` and the config's `target` |
 | Continue page rejects the code | The one-time code was already redeemed, or it expired | Ask the user for a fresh continue link |
-| `Port 5173 is already in use` | Another dev server owns the port | Stop that process; it may target a different origin |
 
 ## Constraints
 
 - Never deploy, publish, or mutate the deployed Worker from this flow.
 - Treat the continue code and the redeemed identity as secrets: never print,
   screenshot, or commit them.
-- Do not point the proxy at an origin the user did not name.
+- Do not point the proxy at an origin the user did not name. The default in
+  `vite.web-dev.config.ts` is `https://morty.build`; override it only with
+  `WEB_DEV_ORIGIN` set to an origin the user named.
 
 ## Cleanup
 
-Stop the dev server with Ctrl-C. The config under `.wrangler/web-dev/` is
-gitignored and safe to keep for the next session. Browser evidence under
+Stop the dev server with Ctrl-C. The committed `vite.web-dev.config.ts` is
+shared, so do not edit or delete it during cleanup. Browser evidence under
 `test-results/` is retained.
