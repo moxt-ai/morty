@@ -74,6 +74,10 @@ test("Given the setup document, When users fetch it from configured and standalo
     expect(document).toContain("--session-id <exact-current-session-id>");
     expect(document).toContain("--harness <own-harness-id>");
     expect(document).toContain("Never guess");
+    expect(document).toContain("Agent A");
+    expect(document).toContain("Agent B");
+    expect(document).toContain("same complete Continue URL");
+    expect(document).toContain("curl");
 
     for (const origin of ["https://custom.example", "http://localhost:5173"]) {
         const response = await worker.fetch(
@@ -117,6 +121,32 @@ test("Given rendered setup instructions at the edge, When users fetch different 
 
         const otherHost = await runtime.dispatchFetch("https://other.example/setup.md?token=third");
         expect(otherHost.headers.get("X-Instruction-Cache")).toBe("MISS");
+    } finally {
+        await runtime.dispose();
+    }
+});
+
+test("Given a continue link opened without JavaScript, When an agent fetches connection instructions, Then it can discover the authenticated non-browser workflow without redeeming access", async () => {
+    const runtime = createRuntime({ appOrigin: "https://chat.example" });
+    try {
+        const response = await runtime.dispatchFetch("https://preview.example/connect.md?code=not-a-credential");
+        expect(response.status).toBe(200);
+        expect(response.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
+        const instructions = await response.text();
+        expect(instructions).toContain("https://chat.example");
+        expect(instructions).toContain("/morty/ws");
+        expect(instructions).toContain("/morty/api/identity/transfers/redeem");
+        expect(instructions).toContain("continue-native-session");
+        expect(instructions).toContain("session-access");
+        expect(instructions).toContain("subscribeLive");
+        expect(instructions).toContain("turns.submit");
+        expect(instructions).toContain("Origin:");
+        expect(instructions).toContain("WsTransport");
+        expect(instructions).toContain("targetCommandId");
+        expect(instructions).toContain("transport.close()");
+        expect(instructions).toContain("fragment");
+        expect(instructions).toContain("does not grant access");
+        expect(instructions).not.toMatch(/not-a-credential|preview\.example|\{\{.*\}\}/u);
     } finally {
         await runtime.dispose();
     }

@@ -1,6 +1,7 @@
 # Set up Morty
 
-Connect this coding Agent to Morty so the user can continue the work in their browser.
+Connect this coding Agent (Agent A) to Morty so a human can continue the work in
+their browser, or another coding agent (Agent B) can operate this same session remotely.
 Stop the original task; complete only this setup in the current session.
 
 Chat origin: {{BASE_URL}}
@@ -47,7 +48,11 @@ Return the exact clickable `url` and the working directory from the `workspace` 
 `qrPath` if inline images are supported; otherwise return the URL. Never open,
 preview, or redeem the handoff URL yourself. Tell the user: **Open this link or
 scan the QR code to chat. It is valid for 24 hours and
-opens the same user and Machine. Keep the Runtime online. You can bind an account later.**
+opens the same user and Machine. You can also give this same complete Continue URL
+to Agent B and ask it to use curl to open the URL. The returned HTML head contains
+the full instructions for authenticating, sending messages to Agent A, and receiving
+its replies without a browser. Preserve the #code fragment in the URL supplied to
+Agent B. Keep the Runtime online. You can bind an account later.**
 
 On failure, use `error.code` and the private Runtime log. Fix installation or
 authentication for the selected harness; do not silently choose another.

@@ -1,10 +1,11 @@
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import * as v from "valibot";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 
 const sentry = v.parse(
     v.object({
@@ -23,6 +24,25 @@ const assetOrigin =
           ? "https://assets.morty.build"
           : undefined;
 
+const agentConnectionInstructions: Plugin = {
+    name: "morty-agent-connection-instructions",
+    transformIndexHtml() {
+        const instructions = readFileSync(
+            new URL("./packages/web/content/instructions/connect.txt", import.meta.url),
+            "utf8",
+        )
+            .replaceAll("{{BASE_URL}}", "the origin of the complete Morty URL supplied by the user")
+            .replace(/<\/script/giu, "<\\/script");
+        return [
+            {
+                tag: "script",
+                attrs: { type: "text/plain", id: "morty-agent-instructions" },
+                children: instructions,
+                injectTo: "head",
+            },
+        ];
+    },
+};
 export default defineConfig({
     ...(assetOrigin === undefined
         ? {}
@@ -32,6 +52,7 @@ export default defineConfig({
               },
           }),
     plugins: [
+        agentConnectionInstructions,
         react(),
         tailwindcss(),
         cloudflare(),

@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import connectTemplate from "../../../../../web/content/instructions/connect.txt?raw";
 import setupTemplate from "../../../../../web/content/instructions/setup.txt?raw";
 
 const instructionOriginSchema = v.pipe(
@@ -8,7 +9,7 @@ const instructionOriginSchema = v.pipe(
     v.check((value) => URL.canParse(value) && new URL(value).origin === value),
 );
 
-const templates = { setup: setupTemplate };
+const templates = { setup: setupTemplate, connect: connectTemplate };
 
 export type InstructionDocument = keyof typeof templates;
 
