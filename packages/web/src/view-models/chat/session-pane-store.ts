@@ -920,6 +920,10 @@ export function createSessionPaneModel(options: {
                             options.onInitialMessageDelivered?.();
                         }
                     }
+                    // A detach between submit and the delivery report can still
+                    // re-send the queued message on re-attach. That is safe:
+                    // the command id is the turn submit's idempotency key, so
+                    // the service deduplicates the repeated submission.
                     await subscription.completed;
                     signal.throwIfAborted();
                     throw new Error("Session updates disconnected. Reopen the Session to continue.");

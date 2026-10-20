@@ -13,6 +13,11 @@ export function MobiusManagement() {
     // Memoizing on the identity object keeps acquisition pure across renders:
     // the factory's dispose-and-recreate only runs when the active identity
     // actually changes, never as a side effect of a re-render.
+    // Constraint: acquisition still happens during render. The application
+    // mounts without StrictMode and the active identity object is stable for
+    // as long as the anonymous session stays active, so a concurrent render
+    // cannot be discarded between an identity change and its commit; if that
+    // ever changes, move acquisition to an event/owner scope.
     const workspace = useMemo(
         () =>
             application.chatWorkspace({

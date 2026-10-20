@@ -137,12 +137,20 @@ export function createChatWorkspace(options: {
     const announcedViews = new WeakSet<HTMLElement>();
     const loadSelectedSession = (target: SelectedConversationTarget): void => {
         const sessionId = target.kind === "conversation" ? target.conversationId : target.sessionId;
+        // Capture this attempt's signal: a navigation bumps the revision and
+        // replaces chatLifetime with a fresh controller while this request is
+        // still in flight. Both callbacks must validate the attempt they were
+        // issued with, so a superseded read can never publish state — least of
+        // all a failure — for the newer attempt that replaced it.
+        const attempt = chatLifetime.signal;
         void requests
-            .managedSession(botId, sessionId, chatLifetime.signal)
+            .managedSession(botId, sessionId, attempt)
             .then((session) => {
+                if (attempt.aborted) {
+                    return;
+                }
                 const current = home.getState().selection;
                 if (
-                    !chatLifetime.signal.aborted &&
                     current.kind === "loading" &&
                     current.target.kind !== "continue" &&
                     selectedConversationId(current) === sessionId
@@ -157,7 +165,7 @@ export function createChatWorkspace(options: {
                 }
             })
             .catch((cause: unknown) => {
-                if (chatLifetime.signal.aborted) {
+                if (attempt.aborted) {
                     return;
                 }
                 const current = home.getState().selection;

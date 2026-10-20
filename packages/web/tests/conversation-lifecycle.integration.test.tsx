@@ -80,6 +80,43 @@ test("Given an open conversation, When the chat view detaches and re-attaches, T
     );
 });
 
+test("Given a remounted conversation whose re-read is in flight, When the user re-selects it from the directory, Then the superseded read cannot fail the new attempt", {
+    timeout: 30_000,
+}, async () => {
+    const prompt = "Re-select during re-read";
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, prompt);
+    await app.waitForView(() =>
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes(`Codex turn 1: ${prompt}`)),
+        ).toBe(true),
+    );
+    // The remount starts a re-read of the released selection; selecting the
+    // same conversation from the directory again immediately supersedes that
+    // read with a fresh home load. The superseded read's cancellation must
+    // not surface as a failure for the newer attempt.
+    app.remount();
+    const conversation = await app.queryElementByTestId(dataTestId.managedConversation);
+    await app.user.click(conversation);
+    await app.waitForView(() => {
+        expect(queryByRole(document.body, "alert")).toBeNull();
+        expect(app.elementsByTestId(dataTestId.userMessage).some((element) => element.textContent === prompt)).toBe(
+            true,
+        );
+    });
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionLoadFailure)).toBeNull());
+});
+
 test("Given conversations updated across recent dates, When the directory loads, Then conversations are grouped by latest activity", {
     timeout: 60_000,
 }, async () => {
