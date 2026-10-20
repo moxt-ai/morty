@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
@@ -6,7 +5,7 @@ import { Dialog } from "../../components/ui/dialog.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
-import { createNativeSessionStore } from "../../view-models/chat/native-session-store.ts";
+import type { createNativeSessionStore } from "../../view-models/chat/native-session-store.ts";
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 import { MobiusSessionMessage } from "./mobius-session-message.tsx";
 
@@ -58,37 +57,28 @@ function NativeSessionPreviewSkeleton() {
 }
 
 export function NativeSessionDialog({
-    botId,
-    requests,
-    onOpen,
+    store,
     onClose,
 }: {
-    readonly botId: string;
-    readonly requests: Pick<BotChatApi, "runtimeConfiguration" | "nativeSessions" | "nativeSession">;
-    readonly onOpen: (session: OpenMobiusSession) => void;
+    /** Created by the owner when the dialog opens; it starts discovery itself. */
+    readonly store: ReturnType<typeof createNativeSessionStore>;
     readonly onClose: () => void;
 }) {
-    // The dialog's own lifetime owns discovery: it starts when the dialog
-    // renders and stops through the close path, never from a mount effect.
-    const [store] = useState(() => {
-        const model = createNativeSessionStore(botId, requests, onOpen);
-        model.getState().start();
-        return model;
-    });
     const model = useStore(store);
     const withSignal = (action: (signal: AbortSignal) => Promise<void>) => {
         void action(store.getState().lifetimeSignal());
     };
     const fallback = model.agents[0];
     const selectedEntryId = model.preview.kind === "empty" ? "" : model.preview.entry.entryId;
+    const closeDialog = () => {
+        store.getState().stop();
+        onClose();
+    };
     return (
         <Dialog
             title="Open Session"
             description="Select a local agent session to preview it, then open it or fork it as a Mobius Session."
-            onClose={() => {
-                store.getState().stop();
-                onClose();
-            }}
+            onClose={closeDialog}
             busy={model.operation === "import" || model.operation === "fork"}
             wide
         >
@@ -229,7 +219,7 @@ export function NativeSessionDialog({
                 <Button
                     variant="outline"
                     disabled={model.operation === "import" || model.operation === "fork"}
-                    onClick={onClose}
+                    onClick={closeDialog}
                 >
                     Cancel
                 </Button>
