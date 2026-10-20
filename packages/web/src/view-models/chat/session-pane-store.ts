@@ -911,14 +911,12 @@ export function createSessionPaneModel(options: {
                     signal.throwIfAborted();
                     set({ connection: { kind: "ready", client: connected } });
                     if (initialCommandId !== null) {
+                        // Send reports delivery itself, so an uncertain or
+                        // rejected submission leaves the queued message and its
+                        // idempotent command id in the home store for a remount
+                        // to recover.
                         await get().send(signal);
                         signal.throwIfAborted();
-                        // Only report delivery when the queued message was
-                        // actually submitted; a skipped send keeps the home
-                        // store's queued message intact for the next attempt.
-                        if (initialCommandId === null) {
-                            options.onInitialMessageDelivered?.();
-                        }
                     }
                     // A detach between submit and the delivery report can still
                     // re-send the queued message on re-attach. That is safe:
@@ -1020,6 +1018,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 const commandId = initialCommandId ?? crypto.randomUUID();
+                const isQueuedInitialMessage = commandId === initialCommandId;
                 initialCommandId = null;
                 command = commandId;
                 lastSentMessageRevision += 1;
@@ -1062,21 +1061,32 @@ export function createSessionPaneModel(options: {
                         signal,
                     );
                     signal.throwIfAborted();
+                    // Report delivery as soon as the service accepts the turn,
+                    // independently of `command`: a live event may clear it
+                    // while the submission is in flight. An uncertain
+                    // (delivery-unknown) or rejected submission leaves
+                    // `accepted` null, so the home store keeps the queued
+                    // message and its command id and a remount re-sends it
+                    // under the same idempotency key instead of losing the
+                    // user's input and attachments.
+                    if (accepted !== null && isQueuedInitialMessage) {
+                        options.onInitialMessageDelivered?.();
+                    }
                     if (accepted !== null && command === commandId) {
                         tasks.getState().start(commandId, accepted.turnId);
                         activeTurn.submissionAccepted(commandId, accepted.turnId);
                         set({ operation: { kind: "idle" } });
-                    } else {
-                        activeTurn.turnCleared(commandId);
-                        command = "";
-                        const idle = { kind: "idle" } as const;
-                        const restored = deriveTimeline();
-                        set({
-                            activity: idle,
-                            messages: restored.messages,
-                            operation: { kind: "idle" },
-                        });
+                        return;
                     }
+                    activeTurn.turnCleared(commandId);
+                    command = "";
+                    const idle = { kind: "idle" } as const;
+                    const restored = deriveTimeline();
+                    set({
+                        activity: idle,
+                        messages: restored.messages,
+                        operation: { kind: "idle" },
+                    });
                 } catch (cause) {
                     signal.throwIfAborted();
                     set((current) => ({
