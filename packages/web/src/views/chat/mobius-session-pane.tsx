@@ -1,5 +1,5 @@
-import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
-import { Check, X } from "lucide-react";
+import type { PromptImage, PromptResource, SessionConfigOption } from "@moxt-ai/mobius-sdk";
+import { Check, CircleAlert, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
@@ -14,6 +14,7 @@ import {
     type PermissionInteractionResponse,
     SessionInteractionCards,
 } from "../../components/chat/session-interactions.tsx";
+import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { WorkingIndicator } from "../../components/chat/working-indicator.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { LinkButton } from "../../components/ui/link-button.tsx";
@@ -181,6 +182,52 @@ function ScheduledRetryNotice({
         <p role="status">
             Retrying in {remaining} s <LinkButton onClick={onRetryNow}>Retry now</LinkButton>
         </p>
+    );
+}
+
+/**
+ * Shows a recovered submission whose delivery was never confirmed. The service
+ * does not hold this message, so no projected user message carries the retry
+ * and remove controls; the journal's own prompt stands in for it until the
+ * service confirms the turn.
+ */
+function UnconfirmedDeliveryCard({
+    delivery,
+    onRemove,
+    onRetry,
+}: {
+    readonly delivery: {
+        readonly commandId: string;
+        readonly displayPrompt: string;
+        readonly images: readonly PromptImage[];
+        readonly resources: readonly PromptResource[];
+    };
+    readonly onRemove: () => void;
+    readonly onRetry: () => void;
+}) {
+    return (
+        <div className="my-8 first:mt-0 last:mb-0" data-testid={dataTestId.unconfirmedDelivery}>
+            <UserPromptMessage images={delivery.images} resources={delivery.resources} text={delivery.displayPrompt} />
+            <div
+                className="ml-auto flex max-w-[85%] items-center gap-3 rounded-lg border border-destructive/15 bg-destructive/5 py-2 pr-2 pl-3 text-xs leading-5 text-destructive"
+                role="alert"
+            >
+                <button
+                    aria-label="Retry message with unknown delivery"
+                    className="inline-flex size-7 items-center justify-center rounded-full"
+                    onClick={onRetry}
+                    type="button"
+                >
+                    <CircleAlert aria-hidden="true" className="size-4.5" />
+                </button>
+                <span className="min-w-0 flex-1">
+                    Delivery wasn’t confirmed. This message won’t be sent again unless you retry it.
+                </span>
+                <button aria-label="Remove failed message" onClick={onRemove} type="button">
+                    <X aria-hidden="true" className="size-4" />
+                </button>
+            </div>
+        </div>
     );
 }
 
@@ -526,6 +573,13 @@ export function MobiusSessionPane({
                                 )}
                             </div>
                         ))}
+                        {presentation.unconfirmedDelivery !== null && (
+                            <UnconfirmedDeliveryCard
+                                delivery={presentation.unconfirmedDelivery}
+                                onRemove={() => pane.store.getState().removeUnknownDelivery()}
+                                onRetry={() => run(pane.store.getState().retryUnknownDelivery)}
+                            />
+                        )}
                         {presentation.workingIndicatorVisible &&
                             presentation.outputState !== "idle" &&
                             model.activity.kind === "working" && (

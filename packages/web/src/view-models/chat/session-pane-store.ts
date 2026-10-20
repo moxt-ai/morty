@@ -251,6 +251,22 @@ export function sessionPanePresentation(
     const deliveryUnknownCommandId =
         delivery.state.kind === "delivery-unknown" ? delivery.state.journal.commandId : null;
     const deliveryUnknownUserMessageId = deliveryUnknownCommandId === null ? null : deliveryUnknownCommandId;
+    // A recovered journal was never accepted by the service, so the projection
+    // has no user message for it. Expose the submission itself so the view can
+    // render an independent recovery card with retry and remove controls. Once
+    // the service confirms the turn, history supplies the message and the card
+    // disappears.
+    const unconfirmed = delivery.state.kind === "delivery-unknown" ? delivery.state.journal : null;
+    const unconfirmedDelivery =
+        unconfirmed === null ||
+        model.messages.some((message) => message.role === "user" && message.commandId === unconfirmed.commandId)
+            ? null
+            : {
+                  commandId: unconfirmed.commandId,
+                  displayPrompt: unconfirmed.displayPrompt,
+                  images: unconfirmed.request.images,
+                  resources: unconfirmed.request.resources,
+              };
     return {
         activeMessageId,
         activeCommandId,
@@ -289,6 +305,7 @@ export function sessionPanePresentation(
         submitDisabled:
             (tasks.operation.kind === "running" ? queue.operation.kind !== "idle" : busy) ||
             (model.draft.trim() === "" && model.attachments.length === 0),
+        unconfirmedDelivery,
     } as const;
 }
 
