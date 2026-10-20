@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
+import { useOptionalApiTransport } from "../../services/api/api-transport-context.tsx";
 import { sentryBugReportSink } from "../../services/diagnostics/bug-report.ts";
 import { type BugReportImage, bugReportImageAccept, createBugReportStore } from "../../view-models/bug-report-store.ts";
 
@@ -86,7 +87,8 @@ function ReportImage({
 }
 
 function BugReportDialog({ onClose }: { readonly onClose: () => void }) {
-    const [store] = useState(() => createBugReportStore(sentryBugReportSink));
+    const transport = useOptionalApiTransport();
+    const [store] = useState(() => createBugReportStore(sentryBugReportSink, transport));
     const { state, description, images, addImages, removeImage, describe, send, close } = useStore(store);
     const fileInput = useRef<HTMLInputElement>(null);
     useEffect(() => close, [close]);

@@ -1,5 +1,9 @@
+import { getClient, lastEventId } from "@sentry/react";
 import { createStore } from "zustand/vanilla";
-import { BugReportError, type BugReportSink, collectBugReport } from "../services/diagnostics/bug-report.ts";
+import { browserDiagnosticsSnapshot, currentDaemonDiagnostics } from "../services/diagnostics/browser-diagnostics.ts";
+import { type BugReport, BugReportError, type BugReportSink } from "../services/diagnostics/bug-report.ts";
+import type { BrowserNetworkOperations } from "../services/diagnostics/network-diagnostics.ts";
+import { collectNetworkDiagnostics } from "./bug-report-network.ts";
 
 type ReportState =
     | { readonly kind: "editing" }
@@ -13,7 +17,7 @@ export interface BugReportImage {
     readonly file: File;
 }
 
-export function createBugReportStore(sink: BugReportSink) {
+export function createBugReportStore(sink: BugReportSink, browserNetwork: BrowserNetworkOperations | null) {
     let active: AbortController | null = null;
     return createStore<{
         readonly state: ReportState;
@@ -77,7 +81,7 @@ export function createBugReportStore(sink: BugReportSink) {
             active = controller;
             set({ state: { kind: "sending" } });
             try {
-                const report = await collectBugReport(get().description, signal);
+                const report = await collectBugReport(get().description, browserNetwork, signal);
                 const id = await sink.submit(
                     report,
                     signal,
@@ -116,4 +120,53 @@ export function createBugReportStore(sink: BugReportSink) {
             }
         },
     }));
+}
+
+async function collectBugReport(
+    description: string,
+    browserNetwork: BrowserNetworkOperations | null,
+    signal: AbortSignal,
+): Promise<BugReport> {
+    signal.throwIfAborted();
+    const source = currentDaemonDiagnostics();
+    async function collectDaemon(): Promise<BugReport["daemon"]> {
+        if (source === null) {
+            return { kind: "unavailable", code: "NO_ACTIVE_RUNTIME" };
+        }
+        const deadline = AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
+        try {
+            return { kind: "available", diagnostics: await source.read(deadline) };
+        } catch (cause) {
+            signal.throwIfAborted();
+            const code: unknown = cause instanceof Error ? Reflect.get(cause, "code") : undefined;
+            return {
+                kind: "unavailable",
+                code: deadline.aborted
+                    ? "DIAGNOSTIC_TIMEOUT"
+                    : typeof code === "string" && /^[A-Z_a-z0-9]{1,64}$/u.test(code)
+                      ? code
+                      : "DIAGNOSTIC_UNAVAILABLE",
+            };
+        }
+    }
+    const [daemon, network] = await Promise.all([
+        collectDaemon(),
+        collectNetworkDiagnostics(browserNetwork, source, signal),
+    ]);
+    signal.throwIfAborted();
+    return {
+        id: crypto.randomUUID().replaceAll("-", ""),
+        createdAt: new Date().toISOString(),
+        description: description.trim().slice(0, 2000),
+        page: window.location.pathname.slice(0, 512),
+        relatedEventId: lastEventId() ?? null,
+        browser: navigator.userAgent.slice(0, 512),
+        release: (getClient()?.getOptions().release ?? "development").slice(0, 128),
+        botId: source?.botId ?? null,
+        sessionId: source?.sessionId ?? null,
+        nativeSessionId: source?.nativeSessionId ?? null,
+        web: browserDiagnosticsSnapshot(),
+        network,
+        daemon,
+    };
 }
