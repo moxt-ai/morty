@@ -6,7 +6,7 @@
 // Dependency-free CommonJS. Requires the repository's pinned Node.js (>= 24).
 //
 //   node scripts/local-dev.cjs prepare [options]
-//   node scripts/local-dev.cjs setup  --state-dir <dir> [options]
+//   node scripts/local-dev.cjs setup  --state-dir <dir> --harness <id> --session-id <id> [options]
 //   node scripts/local-dev.cjs status  --state-dir <dir>
 //   node scripts/local-dev.cjs logs    --state-dir <dir> [options]
 //   node scripts/local-dev.cjs remove  --state-dir <dir> [options]
@@ -33,6 +33,8 @@ const MOBIUS_LOCKFILE = path.join(MOBIUS_ROOT, "pnpm-lock.yaml");
 const MOBIUS_INSTALLED_LOCKFILE = path.join(MOBIUS_ROOT, "node_modules", ".pnpm", "lock.yaml");
 const SETUP_BUNDLE = "packages/setup/dist/setup.mjs";
 const CHAT_ATTACHMENTS_BUCKET = "morty-local-e2e-attachments";
+/** An identifier the setup bundle and Platform accept for a harness or native session. */
+const HARNESS_IDENTIFIER_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u;
 const PLATFORM_AUTH_HEADERS = {
     "content-type": "application/json",
     authorization: "Bearer morty-local-e2e",
@@ -606,11 +608,20 @@ function readSetupRecord(line) {
  * browser.
  */
 async function setup(options) {
-    const harness = options.harness ?? "codex";
-    const sessionId = options.sessionId ?? "local-dev";
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(sessionId)) {
+    if (options.harness === undefined) {
+        fail("--harness is required; pass the selected harness identifier, for example codex or claude");
+    }
+    if (!HARNESS_IDENTIFIER_PATTERN.test(options.harness)) {
+        fail("--harness must be a harness identifier");
+    }
+    const harness = options.harness;
+    if (options.sessionId === undefined) {
+        fail("--session-id is required; pass the selected harness's exact current session identifier");
+    }
+    if (!HARNESS_IDENTIFIER_PATTERN.test(options.sessionId)) {
         fail("--session-id must be a harness session identifier");
     }
+    const sessionId = options.sessionId;
     const stack = options.stateDir === undefined ? null : readStack(options.stateDir);
     if (stack === null) {
         fail("pass --state-dir for a stack created by prepare");
@@ -958,12 +969,12 @@ async function remove(options) {
     }
 }
 
-function usage() {
-    process.stdout.write(
+function usage(stream = process.stdout) {
+    stream.write(
         [
             "Usage:",
             "  node scripts/local-dev.cjs prepare <web|web-server|web-server-mobius|web-server-mobius-cli> [--state-dir DIR] [--platform-port N] [--chat-port N] [--app-id ID --app-secret SECRET] [--force] [--no-build] [--background]",
-            "  node scripts/local-dev.cjs setup  --state-dir DIR [--harness ID] [--session-id ID] [--workspace DIR]",
+            "  node scripts/local-dev.cjs setup  --state-dir DIR --harness ID --session-id ID [--workspace DIR]",
             "  node scripts/local-dev.cjs status --state-dir DIR",
             "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|platform|runtime|all] [--lines N] [--filter REGEX] [--follow]",
             "  node scripts/local-dev.cjs remove --state-dir DIR [--keep-state]",
@@ -972,8 +983,19 @@ function usage() {
     );
 }
 
+const COMMANDS = new Set(["prepare", "setup", "status", "logs", "remove"]);
+const HELP_COMMANDS = new Set(["help", "--help", "-h"]);
+
 async function main() {
     const options = parseArguments(process.argv.slice(2));
+    if (HELP_COMMANDS.has(options.command)) {
+        usage();
+        return;
+    }
+    if (!COMMANDS.has(options.command)) {
+        usage(process.stderr);
+        fail(`unknown command "${options.command}"`);
+    }
     switch (options.command) {
         case "prepare":
             await prepare(options);
@@ -989,9 +1011,6 @@ async function main() {
             break;
         case "remove":
             await remove(options);
-            break;
-        default:
-            usage();
             break;
     }
 }
