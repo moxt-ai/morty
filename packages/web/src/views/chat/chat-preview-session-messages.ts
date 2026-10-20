@@ -8,14 +8,14 @@ import type {
     SessionToolPresentation,
 } from "../../view-models/chat/session-presentation.ts";
 
-export const PREVIEW_FIXTURE_GENERATION_ID = "preview-fixture-generation";
+const PREVIEW_FIXTURE_GENERATION_ID = "preview-fixture-generation";
 const PREVIEW_RECORDED_AT = "2026-10-20T02:30:00.000+00:00";
 
 /** 1×1 PNG */
-export const PREVIEW_TINY_PNG_BASE64 =
+const PREVIEW_TINY_PNG_BASE64 =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
-export function previewSessionEvent(eventId: string, sessionId: string): SessionEvent {
+function previewSessionEvent(eventId: string, sessionId: string): SessionEvent {
     return {
         eventId,
         payload: {
@@ -30,11 +30,11 @@ export function previewSessionEvent(eventId: string, sessionId: string): Session
     };
 }
 
-export function previewSessionText(value: string, truncated = false): SessionText {
+function previewSessionText(value: string, truncated = false): SessionText {
     return { kind: "initial", length: value.length, truncated, value };
 }
 
-export function previewUserMessage(
+function previewUserMessage(
     eventId: string,
     sessionId: string,
     contents: readonly ContentBlock[],
@@ -52,7 +52,7 @@ export function previewUserText(eventId: string, sessionId: string, text: string
     return previewUserMessage(eventId, sessionId, [{ text, type: "text" }]);
 }
 
-export function previewAssistantMessage(
+function previewAssistantMessage(
     eventId: string,
     sessionId: string,
     presentation: Extract<SessionMessage, { readonly role: "assistant" }>["presentation"],
@@ -78,7 +78,7 @@ export function previewAssistantText(
     });
 }
 
-export function previewAssistantThought(
+function previewAssistantThought(
     eventId: string,
     sessionId: string,
     text: string,
@@ -96,11 +96,7 @@ export function previewAssistantThought(
     });
 }
 
-export function previewAssistantTool(
-    eventId: string,
-    sessionId: string,
-    entry: SessionToolPresentation,
-): SessionMessage {
+function previewAssistantTool(eventId: string, sessionId: string, entry: SessionToolPresentation): SessionMessage {
     return previewAssistantMessage(eventId, sessionId, { entry, kind: "tool" });
 }
 

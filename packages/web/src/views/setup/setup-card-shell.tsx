@@ -1,14 +1,14 @@
 import type { ReactNode } from "react";
 
-export const setupPageBackgroundClassName = "bg-[radial-gradient(circle_at_top,_#f6f7f9_0%,_#f0f1f4_48%)]";
+const setupPageBackgroundClassName = "bg-[radial-gradient(circle_at_top,_#f6f7f9_0%,_#f0f1f4_48%)]";
 
 export const setupPageClassName = `flex min-h-screen flex-col items-center justify-center overflow-y-auto ${setupPageBackgroundClassName} px-6 py-12 text-foreground`;
 
 export const setupSectionClassName = "mx-auto w-full max-w-[560px]";
 
-export const setupSectionWideClassName = `${setupSectionClassName} md:max-w-[960px]`;
+const setupSectionWideClassName = `${setupSectionClassName} md:max-w-[960px]`;
 
-export const setupCardClassName =
+const setupCardClassName =
     "overflow-hidden rounded-3xl border-[1px] border-white bg-card/90 p-8 shadow-module backdrop-blur sm:p-12";
 
 /** Vertical rhythm below title or description (24px top, 12px between children). */
@@ -18,13 +18,6 @@ export const setupMonoFieldClassName =
     "w-full resize-none overflow-hidden rounded-lg border-[0.5px] border-border/50 bg-morty-fill-opacity-2 px-4 py-3 font-mono text-14 leading-[22px] text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export const setupPrimaryButtonClassName = "w-full min-h-11 !rounded-xl text-16";
-
-export const setupSecondaryTextClassName = "text-13 leading-[22px] text-muted-foreground";
-
-export const setupFootnoteClassName = "text-13 leading-[22px] text-morty-text-3";
-
-export const setupDetailsListClassName =
-    "grid gap-3 rounded-lg border-[0.5px] border-border/50 bg-morty-fill-opacity-2 px-4 py-4 text-14";
 
 export const setupDialogContentClassName = `max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-[560px] ${setupCardClassName} fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 overflow-y-auto outline-none motion-safe:animate-cloud-enter`;
 
@@ -98,10 +91,6 @@ export function SetupCardOpeningStatus({
             {children}
         </p>
     );
-}
-
-export function SetupCardDetailsList({ children }: { readonly children: ReactNode }) {
-    return <dl className={`mt-6 ${setupDetailsListClassName}`}>{children}</dl>;
 }
 
 export function SetupCardShell({

@@ -8,7 +8,7 @@ export const ToolCallSupplementalContent = createContext<ReactNode>(null);
 export const agentThinkStepTriggerClassName =
     "flex min-h-9 w-full min-w-0 cursor-pointer items-start gap-2 rounded-md px-0.5 py-1 text-[13px] leading-[22px] text-morty-text-3 outline-none hover:text-copy-secondary focus-visible:ring-2 focus-visible:ring-ring/60";
 
-export const agentThinkStepTitleClassName = "min-w-0 truncate text-left";
+const agentThinkStepTitleClassName = "min-w-0 truncate text-left";
 
 export const agentThinkStepInlineLabelClassName = "flex min-w-0 flex-1 max-w-full items-start gap-2";
 

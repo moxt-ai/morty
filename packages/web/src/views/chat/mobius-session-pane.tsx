@@ -43,6 +43,7 @@ import { type SessionMessage, sessionTextValue } from "../../view-models/chat/se
 import { reportApplicationError } from "../../view-models/report-error.ts";
 import { useMortyApplication } from "../application/application-context.tsx";
 import { MobiusAssistantText, MobiusSessionMessage } from "./mobius-session-message.tsx";
+import { useDesktopChatLayout } from "./use-desktop-chat-layout.ts";
 
 type SessionRenderItem =
     | {
@@ -128,7 +129,6 @@ export {
     chatSessionMessageColumnClassName as mobiusSessionMessageColumnClassName,
     chatSessionMessageItemClassName as mobiusSessionMessageItemClassName,
     chatSessionMessageScrollClassName as mobiusSessionMessageScrollClassName,
-    chatSessionPaneSectionClassName as mobiusSessionPaneSectionClassName,
 } from "../../components/chat/chat-session-layout.ts";
 
 export function SessionMessageListSkeleton() {
@@ -308,16 +308,19 @@ export function MobiusSessionPaneShell({
 }
 
 export function MobiusSessionPaneLoading() {
+    const desktop = useDesktopChatLayout();
     return (
         <>
-            <MobiusSessionPaneShell mobileTitlePortaled titleLoading>
+            <MobiusSessionPaneShell mobileTitlePortaled={!desktop} titleLoading={desktop}>
                 <div aria-label="Messages" className={chatSessionMessageScrollClassName} role="log">
                     <SessionMessageListSkeleton />
                 </div>
             </MobiusSessionPaneShell>
-            <MobileSessionTitlePortal>
-                <SessionTitleSkeleton centered />
-            </MobileSessionTitlePortal>
+            {desktop ? null : (
+                <MobileSessionTitlePortal>
+                    <SessionTitleSkeleton centered />
+                </MobileSessionTitlePortal>
+            )}
         </>
     );
 }
@@ -548,6 +551,7 @@ export function MobiusSessionPane({
         void pane.filePreview.getState().reload(pane.operationsSignal());
     }, [pane]);
 
+    const desktop = useDesktopChatLayout();
     const titleBarProps = {
         title: model.title,
         titleEdit: model.titleEdit,
@@ -562,9 +566,11 @@ export function MobiusSessionPane({
     return (
         <>
             <section className={chatSessionPaneSectionClassName} ref={pane.onAttach}>
-                <header className="hidden h-12 shrink-0 items-center gap-1 px-6 sm:flex">
-                    <SessionConversationTitleBar {...titleBarProps} centered={false} />
-                </header>
+                {desktop ? (
+                    <header className="flex h-12 shrink-0 items-center gap-1 px-6">
+                        <SessionConversationTitleBar {...titleBarProps} centered={false} />
+                    </header>
+                ) : null}
                 <FollowLatestScrollArea
                     role="log"
                     container={messageList}
@@ -786,9 +792,11 @@ export function MobiusSessionPane({
                     )}
                 </BotChatComposer>
             </section>
-            <MobileSessionTitlePortal>
-                <SessionConversationTitleBar {...titleBarProps} centered />
-            </MobileSessionTitlePortal>
+            {desktop ? null : (
+                <MobileSessionTitlePortal>
+                    <SessionConversationTitleBar {...titleBarProps} centered />
+                </MobileSessionTitlePortal>
+            )}
             <FilePreview
                 onClose={preview.close}
                 layout={preview.layout}

@@ -1,5 +1,5 @@
 /** Shared horizontal rhythm for the Mobius session pane (messages, composer, cards). */
-export const chatSessionContentInsetClassName = "px-3 sm:px-6";
+const chatSessionContentInsetClassName = "px-3 sm:px-6";
 
 export const chatSessionColumnClassName = `mx-auto w-full min-w-0 max-w-[920px] ${chatSessionContentInsetClassName}`;
 

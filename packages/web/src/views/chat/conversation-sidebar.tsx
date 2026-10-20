@@ -35,6 +35,7 @@ import { createSidebarDialogs } from "../../view-models/chat/sidebar-dialogs.ts"
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import { IdentitySharing } from "./identity-sharing.tsx";
 import { NativeSessionDialog, type OpenMobiusSession } from "./native-session-dialog.tsx";
+import { useDesktopChatLayout } from "./use-desktop-chat-layout.ts";
 
 function SidebarSessionOption({
     label,
@@ -201,6 +202,7 @@ function ManagedSessionDirectoryList({
                             <button
                                 data-testid={dataTestId.managedConversation}
                                 type="button"
+                                aria-label={`Open ${session.title}`}
                                 aria-current={activeId === session.id ? "page" : undefined}
                                 disabled={connectionStatus.kind !== "connected"}
                                 onClick={() => onOpen(session)}
@@ -438,6 +440,7 @@ export function ConversationSidebar({
     const [mobileSessionsOpen, setMobileSessionsOpen] = useState(false);
     const navigationMotion = usePanelPresence(mobileNavOpen);
     const sessionsMotion = usePanelPresence(mobileSessionsOpen);
+    const desktop = useDesktopChatLayout();
     const [dialogs] = useState(() =>
         createSidebarDialogs({
             botId,
@@ -570,31 +573,33 @@ export function ConversationSidebar({
                     />
                     <div className="flex shrink-0 items-center justify-end gap-0.5">
                         <Tooltip.Provider delayDuration={150}>
-                            <div className="flex items-center gap-3 sm:hidden">
-                                <SidebarActionTooltip label="New Session">
-                                    <Button
-                                        aria-label="New Session"
-                                        className="size-10 shrink-0 justify-center rounded-lg px-0 text-copy-secondary"
-                                        data-testid={dataTestId.newConversation}
-                                        onClick={onNewConversation}
-                                        size="icon"
-                                        variant="ghost"
-                                    >
-                                        <SquarePen aria-hidden="true" className="size-5" />
-                                    </Button>
-                                </SidebarActionTooltip>
-                                <SidebarActionTooltip label="Open Session">
-                                    <Button
-                                        aria-label="Open Session"
-                                        className="size-10 shrink-0 justify-center rounded-lg px-0 text-copy-secondary"
-                                        onClick={dialogs.openNativeDialog}
-                                        size="icon"
-                                        variant="ghost"
-                                    >
-                                        <Laptop aria-hidden="true" className="size-5" />
-                                    </Button>
-                                </SidebarActionTooltip>
-                            </div>
+                            {!desktop && (
+                                <div className="flex items-center gap-3 sm:hidden">
+                                    <SidebarActionTooltip label="New Session">
+                                        <Button
+                                            aria-label="New Session"
+                                            className="size-10 shrink-0 justify-center rounded-lg px-0 text-copy-secondary"
+                                            data-testid={dataTestId.newConversation}
+                                            onClick={onNewConversation}
+                                            size="icon"
+                                            variant="ghost"
+                                        >
+                                            <SquarePen aria-hidden="true" className="size-5" />
+                                        </Button>
+                                    </SidebarActionTooltip>
+                                    <SidebarActionTooltip label="Open Session">
+                                        <Button
+                                            aria-label="Open Session"
+                                            className="size-10 shrink-0 justify-center rounded-lg px-0 text-copy-secondary"
+                                            onClick={dialogs.openNativeDialog}
+                                            size="icon"
+                                            variant="ghost"
+                                        >
+                                            <Laptop aria-hidden="true" className="size-5" />
+                                        </Button>
+                                    </SidebarActionTooltip>
+                                </div>
+                            )}
                         </Tooltip.Provider>
                         <ConnectionStatus
                             className="max-sm:hidden pr-[10px]"
@@ -627,148 +632,154 @@ export function ConversationSidebar({
                         </span>
                         <ConnectionStatus status={connectionStatus} />
                     </div>
-                    <nav
-                        aria-label="Session actions"
-                        className="box-border hidden min-w-0 w-full shrink-0 flex-col gap-0.5 sm:mt-2 sm:mb-6 sm:flex"
-                    >
-                        <SidebarSessionOption
-                            icon={SquarePen}
-                            label="New Session"
-                            testId={dataTestId.newConversation}
-                            onClick={onNewConversation}
-                        />
-                        <SidebarSessionOption icon={Laptop} label="Open Session" onClick={dialogs.openNativeDialog} />
-                    </nav>
-                    <div className="hidden min-h-0 flex-1 sm:flex sm:min-h-0 sm:flex-col sm:gap-0">
-                        <Tooltip.Provider delayDuration={150}>
-                            <div className="flex min-w-0 items-center justify-between gap-2 pl-2 sm:mb-0 sm:w-full">
-                                <h2 className="font-inter text-13 font-semibold tracking-normal text-morty-text-3">
-                                    Recent sessions
-                                </h2>
-                                <SidebarActionTooltip label={refreshing ? "Refreshing sessions" : "Refresh sessions"}>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="size-8 shrink-0 rounded-lg text-morty-text-3 hover:text-foreground"
-                                        aria-label={refreshing ? "Refreshing sessions" : "Refresh sessions"}
-                                        aria-busy={refreshing}
-                                        disabled={refreshing}
-                                        onClick={() => workspace.refreshDirectory()}
-                                    >
-                                        <RefreshCw
-                                            className={`size-3.5 ${refreshing ? "animate-spin motion-reduce:animate-none" : ""}`}
-                                        />
-                                    </Button>
-                                </SidebarActionTooltip>
-                            </div>
-                            <div
-                                id="chat-conversations"
-                                className="col-span-2 box-border block min-h-0 w-full min-w-0 flex-1 space-y-1 overflow-y-auto max-sm:row-start-2 max-sm:max-h-none sm:max-h-none"
-                            >
-                                <ManagedSessionDirectoryList {...sessionListProps} />
-                            </div>
-                        </Tooltip.Provider>
-                    </div>
+                    {desktop && (
+                        <nav
+                            aria-label="Session actions"
+                            className="box-border hidden min-w-0 w-full shrink-0 flex-col gap-0.5 sm:mt-2 sm:mb-6 sm:flex"
+                        >
+                            <SidebarSessionOption
+                                icon={SquarePen}
+                                label="New Session"
+                                testId={dataTestId.newConversation}
+                                onClick={onNewConversation}
+                            />
+                            <SidebarSessionOption icon={Laptop} label="Open Session" onClick={dialogs.openNativeDialog} />
+                        </nav>
+                    )}
+                    {desktop && (
+                        <div className="hidden min-h-0 flex-1 sm:flex sm:min-h-0 sm:flex-col sm:gap-0">
+                            <Tooltip.Provider delayDuration={150}>
+                                <div className="flex min-w-0 items-center justify-between gap-2 pl-2 sm:mb-0 sm:w-full">
+                                    <h2 className="font-inter text-13 font-semibold tracking-normal text-morty-text-3">
+                                        Recent sessions
+                                    </h2>
+                                    <SidebarActionTooltip label={refreshing ? "Refreshing sessions" : "Refresh sessions"}>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="size-8 shrink-0 rounded-lg text-morty-text-3 hover:text-foreground"
+                                            aria-label={refreshing ? "Refreshing sessions" : "Refresh sessions"}
+                                            aria-busy={refreshing}
+                                            disabled={refreshing}
+                                            onClick={() => workspace.refreshDirectory()}
+                                        >
+                                            <RefreshCw
+                                                className={`size-3.5 ${refreshing ? "animate-spin motion-reduce:animate-none" : ""}`}
+                                            />
+                                        </Button>
+                                    </SidebarActionTooltip>
+                                </div>
+                                <div
+                                    id="chat-conversations"
+                                    className="col-span-2 box-border block min-h-0 w-full min-w-0 flex-1 space-y-1 overflow-y-auto max-sm:row-start-2 max-sm:max-h-none sm:max-h-none"
+                                >
+                                    <ManagedSessionDirectoryList {...sessionListProps} />
+                                </div>
+                            </Tooltip.Provider>
+                        </div>
+                    )}
                     <Tooltip.Provider delayDuration={150} disableHoverableContent>
                         <div className="col-span-2 flex w-full min-w-0 shrink-0 flex-col gap-0.5 pt-3 sm:mt-auto sm:flex-row sm:items-center sm:justify-between sm:gap-1 sm:border-t sm:border-black/[0.06]">
-                            <nav aria-label="Account actions" className="flex flex-col gap-0.5 sm:hidden">
-                                <SidebarSessionOption
-                                    icon={Share2}
-                                    label="Continue your work"
-                                    onClick={dialogs.openSharing}
-                                />
-                                <BugReportButton appearance="option" daemonSource={sessionDiagnostics} />
-                                {access.state.kind !== "ended" ? (
-                                    <>
-                                        <div aria-hidden="true" className="my-2 h-px bg-black/[0.06]" />
-                                        <SidebarSessionOption
-                                            disabled={access.state.kind === "loading"}
-                                            icon={Wifi}
-                                            label="Network latency"
-                                            onClick={measureNetwork}
-                                        />
-                                        <SidebarSessionOption
-                                            destructive
-                                            disabled={access.state.kind === "loading"}
-                                            icon={LogOut}
-                                            label="End remote access"
-                                            onClick={() => {
-                                                void access.requestEnd(workspace.operationsSignal());
-                                            }}
-                                        />
-                                    </>
-                                ) : null}
-                            </nav>
-                            {access.state.kind !== "ended" ? (
-                                <div className="hidden sm:block">
-                                    <DropdownMenu.Root>
-                                        <SidebarActionTooltip label="User menu" side="top">
-                                            <DropdownMenu.Trigger asChild>
-                                                <Button
-                                                    aria-label="User menu"
-                                                    className="shrink-0 rounded-full border border-white bg-black/[0.08] text-copy-secondary hover:bg-black/[0.12] active:bg-black/[0.16] data-[state=open]:bg-black/[0.16]"
-                                                    data-testid={dataTestId.userMenu}
-                                                    disabled={access.state.kind === "loading"}
-                                                    size="icon"
-                                                    variant="ghost"
-                                                >
-                                                    {access.state.kind === "loading" ? (
-                                                        <LoaderCircle
-                                                            aria-hidden="true"
-                                                            className="size-4 animate-spin"
-                                                        />
-                                                    ) : (
-                                                        <UserRound aria-hidden="true" className="size-4" />
-                                                    )}
-                                                </Button>
-                                            </DropdownMenu.Trigger>
-                                        </SidebarActionTooltip>
-                                        <DropdownMenu.Portal>
-                                            <DropdownMenu.Content
-                                                align="start"
-                                                className="z-[110] min-w-52 rounded-lg border border-border bg-background p-1 text-sm text-foreground shadow-lg"
-                                                side="top"
-                                                sideOffset={6}
-                                            >
-                                                <DropdownMenu.Item
-                                                    className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 outline-none data-[highlighted]:bg-accent"
-                                                    onSelect={measureNetwork}
-                                                >
-                                                    <Wifi aria-hidden="true" className="size-4" />
-                                                    Network latency
-                                                </DropdownMenu.Item>
-                                                <DropdownMenu.Item
-                                                    className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-destructive outline-none data-[highlighted]:bg-destructive/10"
-                                                    data-testid={dataTestId.endRemoteAccess}
-                                                    onSelect={() => {
-                                                        void access.requestEnd(workspace.operationsSignal());
-                                                    }}
-                                                >
-                                                    <LogOut aria-hidden="true" className="size-4" />
-                                                    End remote access
-                                                </DropdownMenu.Item>
-                                            </DropdownMenu.Content>
-                                        </DropdownMenu.Portal>
-                                    </DropdownMenu.Root>
-                                </div>
-                            ) : (
-                                <span aria-hidden="true" className="hidden size-9 shrink-0 sm:block" />
-                            )}
-                            <div className="hidden shrink-0 items-center gap-0.5 sm:flex">
-                                <SidebarActionTooltip label="Continue your work" side="top">
-                                    <Button
-                                        aria-label="Continue your work"
-                                        className="size-10 shrink-0 justify-center rounded-full px-0 text-copy-secondary hover:bg-white/70"
-                                        data-testid={dataTestId.shareIdentity}
+                            {!desktop && (
+                                <nav aria-label="Account actions" className="flex flex-col gap-0.5 sm:hidden">
+                                    <SidebarSessionOption
+                                        icon={Share2}
+                                        label="Continue your work"
                                         onClick={dialogs.openSharing}
-                                        size="icon"
-                                        variant="ghost"
-                                    >
-                                        <Share2 aria-hidden="true" className="size-4" />
-                                    </Button>
-                                </SidebarActionTooltip>
-                                <BugReportButton appearance="icon" daemonSource={sessionDiagnostics} />
-                            </div>
+                                    />
+                                    <BugReportButton appearance="option" daemonSource={sessionDiagnostics} />
+                                    {access.state.kind !== "ended" ? (
+                                        <>
+                                            <div aria-hidden="true" className="my-2 h-px bg-black/[0.06]" />
+                                            <SidebarSessionOption
+                                                disabled={access.state.kind === "loading"}
+                                                icon={Wifi}
+                                                label="Network latency"
+                                                onClick={measureNetwork}
+                                            />
+                                            <SidebarSessionOption
+                                                destructive
+                                                disabled={access.state.kind === "loading"}
+                                                icon={LogOut}
+                                                label="End remote access"
+                                                onClick={() => {
+                                                    void access.requestEnd(workspace.operationsSignal());
+                                                }}
+                                            />
+                                        </>
+                                    ) : null}
+                                </nav>
+                            )}
+                            {desktop && (
+                                <div className="flex shrink-0 items-center gap-0.5">
+                                    {access.state.kind !== "ended" ? (
+                                        <DropdownMenu.Root>
+                                            <SidebarActionTooltip label="User menu" side="top">
+                                                <DropdownMenu.Trigger asChild>
+                                                    <Button
+                                                        aria-label="User menu"
+                                                        className="shrink-0 rounded-full border border-white bg-black/[0.08] text-copy-secondary hover:bg-black/[0.12] active:bg-black/[0.16] data-[state=open]:bg-black/[0.16]"
+                                                        data-testid={dataTestId.userMenu}
+                                                        disabled={access.state.kind === "loading"}
+                                                        size="icon"
+                                                        variant="ghost"
+                                                    >
+                                                        {access.state.kind === "loading" ? (
+                                                            <LoaderCircle
+                                                                aria-hidden="true"
+                                                                className="size-4 animate-spin"
+                                                            />
+                                                        ) : (
+                                                            <UserRound aria-hidden="true" className="size-4" />
+                                                        )}
+                                                    </Button>
+                                                </DropdownMenu.Trigger>
+                                            </SidebarActionTooltip>
+                                            <DropdownMenu.Portal>
+                                                <DropdownMenu.Content
+                                                    align="start"
+                                                    className="z-[110] min-w-52 rounded-lg border border-border bg-background p-1 text-sm text-foreground shadow-lg"
+                                                    side="top"
+                                                    sideOffset={6}
+                                                >
+                                                    <DropdownMenu.Item
+                                                        className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 outline-none data-[highlighted]:bg-accent"
+                                                        onSelect={measureNetwork}
+                                                    >
+                                                        <Wifi aria-hidden="true" className="size-4" />
+                                                        Network latency
+                                                    </DropdownMenu.Item>
+                                                    <DropdownMenu.Item
+                                                        className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-destructive outline-none data-[highlighted]:bg-destructive/10"
+                                                        data-testid={dataTestId.endRemoteAccess}
+                                                        onSelect={() => {
+                                                            void access.requestEnd(workspace.operationsSignal());
+                                                        }}
+                                                    >
+                                                        <LogOut aria-hidden="true" className="size-4" />
+                                                        End remote access
+                                                    </DropdownMenu.Item>
+                                                </DropdownMenu.Content>
+                                            </DropdownMenu.Portal>
+                                        </DropdownMenu.Root>
+                                    ) : (
+                                        <span aria-hidden="true" className="size-9 shrink-0" />
+                                    )}
+                                    <SidebarActionTooltip label="Continue your work" side="top">
+                                        <Button
+                                            aria-label="Continue your work"
+                                            className="h-10 shrink-0 gap-2 rounded-full px-3 text-copy-secondary hover:bg-white/70"
+                                            data-testid={dataTestId.shareIdentity}
+                                            onClick={dialogs.openSharing}
+                                            variant="ghost"
+                                        >
+                                            <Share2 aria-hidden="true" className="size-4" />
+                                            Continue your work
+                                        </Button>
+                                    </SidebarActionTooltip>
+                                    <BugReportButton appearance="icon" daemonSource={sessionDiagnostics} />
+                                </div>
+                            )}
                         </div>
                     </Tooltip.Provider>
                 </div>

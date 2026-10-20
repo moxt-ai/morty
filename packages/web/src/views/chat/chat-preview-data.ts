@@ -109,7 +109,7 @@ function localCalendarDay(date: Date): number {
     return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-export function previewSessionGroupLabel(updatedAt: Date, reference: Date): string {
+function previewSessionGroupLabel(updatedAt: Date, reference: Date): string {
     const daysAgo = Math.floor((localCalendarDay(reference) - localCalendarDay(updatedAt)) / DAY_MS);
     if (daysAgo <= 0) {
         return "Today";
