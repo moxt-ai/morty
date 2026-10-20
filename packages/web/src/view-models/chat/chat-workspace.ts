@@ -169,19 +169,12 @@ export function createChatWorkspace(options: {
         }
         announcedViews.add(node);
         const selection = home.getState().selection;
-        console.error("ATTACH-DEBUG selection:", selection.kind);
         if (selection.kind === "loading" && selection.target.kind !== "continue") {
             // The previous view released this selection when it detached; the
             // re-attached view re-reads it exactly like a fresh page load.
-            console.error("ATTACH-DEBUG loading target -> re-read");
             loadSelectedSession(selection.target);
         }
         return () => {
-            console.error(
-                "DETACH-DEBUG cleanup; selection:",
-                home.getState().selection.kind,
-                new Error("trace").stack?.split("\n").slice(1, 4).join(" | "),
-            );
             announcedViews.delete(node);
             // A chat view detaching releases its ready selection so the next
             // attached view re-reads the session instead of rendering the
