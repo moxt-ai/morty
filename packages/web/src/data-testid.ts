@@ -57,4 +57,6 @@ export const dataTestId = Object.freeze({
     filePreviewContent: "chat-file-preview-content",
     filePreviewLineNumbers: "chat-file-preview-line-numbers",
     closeFilePreview: "chat-close-file-preview",
+    mobileSessionTitleSlot: "mobile-session-title-slot",
+    mobileRecentSessionsSheet: "chat-recent-sessions-mobile-sheet",
 });

@@ -4,6 +4,7 @@ import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
 import { CwdSelector } from "../../components/chat/cwd-selector.tsx";
+import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { connectedChatRuntimeAgents } from "../../services/chat/bot-chat-api.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
@@ -51,14 +52,10 @@ export function DraftChatControls({
                             </button>
                         </Tooltip.Trigger>
                         <Tooltip.Portal>
-                            <Tooltip.Content
-                                className="z-[70] max-w-80 rounded-lg bg-foreground px-3 py-2 text-xs leading-5 text-background shadow-lg"
-                                side="top"
-                                sideOffset={8}
-                            >
+                            <MortyTooltipContent className="max-w-80 px-3 py-2 leading-5" side="top" sideOffset={8}>
                                 {settings.message}
                                 <Tooltip.Arrow className="fill-foreground" />
-                            </Tooltip.Content>
+                            </MortyTooltipContent>
                         </Tooltip.Portal>
                     </Tooltip.Root>
                 </Tooltip.Provider>

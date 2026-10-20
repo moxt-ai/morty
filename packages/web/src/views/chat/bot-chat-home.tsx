@@ -2,10 +2,14 @@ import { MessageSquare, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
+import {
+    chatSessionColumnClassName,
+    chatSessionMessageScrollClassName,
+    chatSessionPaneSectionClassName,
+} from "../../components/chat/chat-session-layout.ts";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
-import { Spinner } from "../../components/ui/spinner.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
@@ -23,7 +27,7 @@ import { selectedConversationId } from "../../view-models/chat/conversation-sele
 import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
-import { MobiusSessionPane } from "./mobius-session-pane.tsx";
+import { MobiusSessionPane, MobiusSessionPaneLoading, SessionMessageListSkeleton } from "./mobius-session-pane.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
 
 export function BotChatHome({
@@ -115,7 +119,7 @@ export function BotChatHome({
         <main
             aria-label="Chat"
             data-chat-state={model.selection.kind === "ready" ? "connected" : "disconnected"}
-            className="fixed inset-0 flex min-h-0 overflow-hidden bg-background text-foreground max-sm:flex-col sm:flex-row"
+            className="fixed inset-0 flex min-h-0 overflow-hidden bg-card/90 text-foreground max-sm:flex-col sm:flex-row sm:bg-sidebar"
             ref={workspace.onAttach}
         >
             {active !== null && (
@@ -164,27 +168,21 @@ export function BotChatHome({
                     onStatusChange={onStatusChange}
                     onTitleChange={store.getState().updateConversationTitle}
                 />
+            ) : model.selection.kind === "loading" && active !== null ? (
+                <MobiusSessionPaneLoading />
             ) : (
-                <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <section className={chatSessionPaneSectionClassName}>
                     <FollowLatestScrollArea
                         container={messageList}
                         followThreshold={80}
                         followRevision={followRevision}
-                        className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-4 py-6 [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10 lg:px-12"
+                        className={`flex flex-col gap-8 ${chatSessionMessageScrollClassName}`}
                         role="log"
                         aria-label="Messages"
                     >
                         <div className="flex min-h-full flex-col gap-8">
                             {model.selection.kind === "loading" || model.view.kind === "loading" ? (
-                                <div className="m-auto">
-                                    <Spinner
-                                        label={
-                                            model.selection.kind === "loading"
-                                                ? "Loading session"
-                                                : "Connecting to your agent"
-                                        }
-                                    />
-                                </div>
+                                <SessionMessageListSkeleton />
                             ) : model.view.kind === "failed" || model.selection.kind === "failed" ? (
                                 <div className="m-auto grid justify-items-center gap-4 text-center">
                                     <p data-testid={dataTestId.sessionLoadFailure} role="alert">
@@ -205,7 +203,7 @@ export function BotChatHome({
                                     )}
                                 </div>
                             ) : queuedInitialMessage !== null && creationStatus !== null ? (
-                                <div className="mx-auto flex w-full min-w-0 max-w-[920px] flex-col gap-2">
+                                <div className={`${chatSessionColumnClassName} flex flex-col gap-2`}>
                                     <div data-testid={dataTestId.queuedMessage}>
                                         <UserPromptMessage
                                             images={queuedInitialMessage.attachments.flatMap((attachment) =>
@@ -286,8 +284,9 @@ export function BotChatHome({
             )}
             {pairingNotice && setupView?.reason === "unconfigured" && active !== null && (
                 <Dialog
-                    title="Connect agent"
-                    description="Morty is ready. Paste this instruction into your local agent to connect it."
+                    appearance="setup"
+                    title="Connect your local agent"
+                    description="Copy this instruction into your agent. It will connect itself and finish the setup for you."
                     onClose={() => {
                         setPairingDialogOpen(false);
                         store.getState().dismissNotice("pairing");

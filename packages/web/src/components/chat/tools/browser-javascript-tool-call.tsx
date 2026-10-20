@@ -72,7 +72,7 @@ export function BrowserJavascriptToolCall({ autoOpen, entry }: ToolRendererProps
             state={entry.state}
             title={title}
         >
-            <div className="mt-1 ml-5 grid min-w-0 gap-2 text-xs">
+            <div className="grid min-w-0 gap-2 text-xs">
                 {request !== null && (
                     <div className="overflow-hidden rounded-lg bg-black/[0.035]">
                         <HighlightedCode code={request.code} language="javascript" />

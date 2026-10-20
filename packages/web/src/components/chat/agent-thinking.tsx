@@ -8,7 +8,14 @@ import {
 import type { MarkdownImageReader } from "../agents/agent-markdown.tsx";
 import { AgentRichContent } from "../agents/agent-rich-content.tsx";
 import { FollowLatestScrollArea } from "../utils/follow-latest-scroll-area.tsx";
-import { ToolCallDisclosure, ToolCallSupplementalContent } from "./tools/tool-call-status.tsx";
+import {
+    agentThinkStepChevronClassName,
+    agentThinkStepExpandedPanelClassName,
+    agentThinkStepInlineLabelClassName,
+    agentThinkStepTriggerClassName,
+    ToolCallDisclosure,
+    ToolCallSupplementalContent,
+} from "./tools/tool-call-status.tsx";
 import { toolRichContent } from "./tools/tool-display-content.ts";
 import { renderRegisteredTool } from "./tools/tool-renderer-registry.tsx";
 import { ToolTextPreview } from "./tools/tool-text-preview.tsx";
@@ -33,13 +40,13 @@ function ReasoningContent({ entry }: { readonly entry: ReasoningEntry }) {
     const content = useRef<HTMLDivElement>(null);
     return (
         <FollowLatestScrollArea
-            className="overscroll-contain [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin]"
+            className="overscroll-contain [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]"
             container={content}
             followThreshold={24}
             followRevision={null}
             style={{ maxHeight: "10.5rem", overflowY: "auto" }}
         >
-            <pre className="m-0 whitespace-pre-wrap font-sans text-[15px] leading-6 text-muted-foreground">
+            <pre className="m-0 whitespace-pre-wrap font-sans text-15 leading-[1.75] text-muted-foreground">
                 {entry.text}
             </pre>
         </FollowLatestScrollArea>
@@ -63,27 +70,32 @@ function ReasoningDisclosure({ active, entry }: { readonly active: boolean; read
             onToggle={(event) => setContentVisible(event.currentTarget.open)}
             ref={disclosure}
         >
-            <summary className="flex min-h-10 w-fit cursor-pointer list-none items-center gap-2 rounded-lg px-1 text-muted-foreground outline-none hover:text-copy-secondary focus-visible:ring-2 focus-visible:ring-ring">
-                <ChevronDown
-                    aria-hidden="true"
-                    className="size-3.5 -rotate-90 transition-transform group-open/thinking:rotate-0 motion-reduce:transition-none"
-                />
-                <span>Show Thinking</span>
+            <summary
+                className={`${agentThinkStepTriggerClassName} group/summary list-none [&::-webkit-details-marker]:hidden`}
+            >
+                <span className={agentThinkStepInlineLabelClassName}>
+                    <span className="mt-0.5 shrink-0 [&>svg]:size-3.5">
+                        <Brain aria-hidden="true" className="size-3.5 shrink-0" />
+                    </span>
+                    <span className="min-w-0 text-left leading-snug [overflow-wrap:anywhere]">Show Thinking</span>
+                    <ChevronDown
+                        aria-hidden="true"
+                        className={`${agentThinkStepChevronClassName} group-focus-visible/summary:inline group-hover/summary:inline group-open/thinking:inline group-open/thinking:rotate-0`}
+                    />
+                </span>
             </summary>
             {contentVisible && (
-                <div className="mt-1 ml-1 grid min-w-0 gap-4 border-l border-[#d9dde1] py-2 pl-5 [overflow-wrap:anywhere]">
+                <div className={agentThinkStepExpandedPanelClassName}>
                     <section className="grid min-w-0 gap-2">
-                        <div className="flex items-center gap-2 text-sm text-copy-secondary">
-                            <Brain aria-hidden="true" className="size-4" />
-                            <span>Thinking</span>
-                        </div>
                         {entry.truncated && (
-                            <p className="m-0 text-xs text-copy-secondary">
+                            <p className="m-0 text-xs leading-5 text-copy-secondary">
                                 Earlier reasoning was truncated to the most recent 16K characters.
                             </p>
                         )}
                         {entry.omitted && (
-                            <p className="m-0 text-xs text-copy-secondary">(Reasoning details were omitted.)</p>
+                            <p className="m-0 text-xs leading-5 text-copy-secondary">
+                                (Reasoning details were omitted.)
+                            </p>
                         )}
                         {entry.text.trim().length > 0 && <ReasoningContent entry={entry} />}
                     </section>
@@ -110,12 +122,12 @@ function ToolCall({
             <ToolCallDisclosure
                 ariaLabel={`Tool: ${entry.title}`}
                 autoOpen={false}
-                icon={<Wrench aria-hidden="true" className="size-4 shrink-0" />}
+                icon={<Wrench aria-hidden="true" className="size-3.5 shrink-0" />}
                 state={entry.state}
                 testId={dataTestId.agentToolCall}
                 title={entry.title}
             >
-                <div className="mt-1 ml-5 grid min-w-0 gap-2 text-xs">
+                <div className="grid min-w-0 gap-2 text-xs">
                     {entry.input.length > 0 && (
                         <div className="grid gap-1">
                             <span className="font-medium text-copy-tertiary">Request</span>
@@ -185,7 +197,7 @@ export function AgentThinking({
     flushReasoning();
     const currentEntry = timeline.at(-1);
     return (
-        <div className="grid min-w-0 gap-3 text-sm text-muted-foreground">
+        <div className="grid min-w-0 gap-0 py-0.5 text-[13px] leading-[22px] text-morty-text-3">
             {timeline.map((item) =>
                 item.kind === "reasoning" ? (
                     <ReasoningDisclosure

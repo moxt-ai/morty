@@ -5,6 +5,7 @@ import { dataTestId } from "@/data-testid";
 import type { DraftControlsStore } from "@/view-models/chat/draft-controls-store";
 import { Button } from "../ui/cloud-button.tsx";
 import { Dialog } from "../ui/dialog.tsx";
+import { MortyTooltipContent } from "../ui/morty-tooltip-content.tsx";
 import { Popover } from "../ui/popover.tsx";
 
 // Clips the start of the path so its leaf stays visible, fading the cut edge out
@@ -63,14 +64,14 @@ export function CwdSelector({
                             </Popover.Trigger>
                         </Tooltip.Trigger>
                         <Tooltip.Portal>
-                            <Tooltip.Content
-                                className="z-[70] max-w-80 break-all rounded-lg bg-foreground px-3 py-2 text-xs leading-5 text-background shadow-lg"
+                            <MortyTooltipContent
+                                className="max-w-80 break-all px-3 py-2 leading-5"
                                 side="top"
                                 sideOffset={8}
                             >
                                 {workingDirectory}
                                 <Tooltip.Arrow className="fill-foreground" />
-                            </Tooltip.Content>
+                            </MortyTooltipContent>
                         </Tooltip.Portal>
                     </Tooltip.Root>
                 </Tooltip.Provider>

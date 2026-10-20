@@ -4,6 +4,21 @@ import type { ToolCallState } from "./tool-renderer.ts";
 
 export const ToolCallSupplementalContent = createContext<ReactNode>(null);
 
+/** Shared trigger row for intermediate agent steps (thinking rail + tool calls). */
+export const agentThinkStepTriggerClassName =
+    "flex min-h-9 w-full min-w-0 cursor-pointer items-start gap-2 rounded-md px-0.5 py-1 text-[13px] leading-[22px] text-morty-text-3 outline-none hover:text-copy-secondary focus-visible:ring-2 focus-visible:ring-ring/60";
+
+export const agentThinkStepTitleClassName = "min-w-0 truncate text-left";
+
+export const agentThinkStepInlineLabelClassName = "flex min-w-0 flex-1 max-w-full items-start gap-2";
+
+/** Chevron hidden until hover, focus, or open; does not occupy width while hidden. */
+export const agentThinkStepChevronClassName =
+    "mt-0.5 hidden size-3.5 shrink-0 -rotate-90 transition-transform motion-reduce:transition-none";
+
+export const agentThinkStepExpandedPanelClassName =
+    "mb-1 ml-2 grid min-w-0 gap-2 border-l border-[#d9dde1] py-2 pl-5 [overflow-wrap:anywhere]";
+
 export function ToolCallDisclosure({
     ariaLabel,
     autoOpen,
@@ -32,21 +47,25 @@ export function ToolCallDisclosure({
         <fieldset aria-label={ariaLabel} className="group/tool m-0 min-w-0 border-0 p-0" data-testid={testId}>
             <button
                 aria-expanded={open}
-                className="flex min-h-8 w-full min-w-0 cursor-pointer items-center gap-2 rounded-lg px-1 text-sm text-muted-foreground outline-none hover:text-copy-secondary focus-visible:ring-2 focus-visible:ring-ring"
+                className={`${agentThinkStepTriggerClassName} group/trigger`}
                 onClick={() => setOpen((current) => !current)}
                 title={title}
                 type="button"
             >
-                <ChevronDown
-                    aria-hidden="true"
-                    className={`size-4 shrink-0 transition-transform motion-reduce:transition-none ${open ? "rotate-0" : "-rotate-90"}`}
-                />
-                {icon}
-                <span className="min-w-0 flex-1 truncate text-left whitespace-nowrap">{title}</span>
-                <ToolCallStatus state={state} />
+                <span className="mt-0.5 shrink-0 [&>svg]:size-3.5">{icon}</span>
+                <span className="flex min-w-0 flex-1 items-start gap-0.5 overflow-hidden">
+                    <span className={agentThinkStepTitleClassName}>{title}</span>
+                    <ChevronDown
+                        aria-hidden="true"
+                        className={`${agentThinkStepChevronClassName} group-focus-visible/trigger:inline group-hover/trigger:inline ${open ? "inline rotate-0" : ""}`}
+                    />
+                </span>
+                <span className="mt-0.5 shrink-0">
+                    <ToolCallStatus state={state} />
+                </span>
             </button>
             {open && (
-                <div className="grid min-w-0 gap-2">
+                <div className={agentThinkStepExpandedPanelClassName}>
                     {children}
                     {supplementalContent}
                 </div>

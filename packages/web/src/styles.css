@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./text.css";
 @source "./";
 @source "../node_modules/streamdown/dist/*.js";
 @source "../node_modules/@streamdown/math/dist/*.js";
@@ -9,25 +10,67 @@
 }
 
 :root {
+    /* shadcn (Morty light) */
     --background: #fafafb;
     --foreground: #0e0f11;
-    --primary: #227b4e;
+    --card: #fafafb;
+    --card-foreground: #0e0f11;
+    --popover: #ffffff;
+    --popover-foreground: #0e0f11;
+    --primary: #2fb872;
     --primary-foreground: #ffffff;
+    --secondary: rgba(11, 26, 57, 0.08);
+    --secondary-foreground: #1c1e22;
     --muted: rgba(11, 26, 57, 0.05);
-    --muted-foreground: #68707d;
-    --border: #e1e4e7;
+    --muted-foreground: #454b55;
+    --accent: rgba(11, 26, 57, 0.05);
+    --accent-foreground: #0e0f11;
+    --accent-active: rgba(11, 26, 57, 0.08);
+    --destructive: oklch(0.58 0.22 27);
+    --border: #c8cdd1;
     --input: #c8cdd1;
-    --ring: #227b4e;
-    --destructive: #b4232a;
-    --success: #227b4e;
-    --copy-secondary: #454959;
+    --ring: #2fb872;
+
+    /* Morty interaction layer */
+    --morty-brand-1: #eefaf3;
+    --morty-brand-6: #2fb872;
+    --morty-brand-7: #279a60;
+    --morty-text-2: #454959;
+    --morty-text-3: #828a99;
+    --morty-text-4: #bfc3c9;
+    --morty-fill-white: #ffffff;
+    --morty-fill-opacity-1: rgba(11, 26, 57, 0.03);
+    --morty-fill-opacity-2: rgba(11, 26, 57, 0.05);
+    --morty-fill-opacity-3: rgba(11, 26, 57, 0.08);
+    --morty-fill-opacity-4: rgba(11, 26, 57, 0.12);
+
+    /* Morty semantic tokens */
+    --success: var(--primary);
+    --copy-secondary: var(--morty-text-2);
     --surface-subtle: #f7f8f9;
-    --sidebar: #f1f4f2;
-    --surface-elevated: #ffffff;
-    --primary-subtle: #eaf5ef;
+    --user-message-surface: #e6e8eb;
+    --sidebar: #f4f5f7;
+    --surface-elevated: var(--popover);
+    --primary-subtle: var(--morty-brand-1);
+
+    /* radius (mirrors @theme) */
+    --radius: 1.25rem;
+    --radius-xs: calc(var(--radius) * 0.4);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+
+    /* module surfaces (chat pane, setup card, …) */
+    --morty-shadow-module: 0 6px 56px rgba(0, 0, 0, 0.06);
 }
 
 @theme inline {
+    --default-border-width: 0.5px;
+    --default-divide-width: 0.5px;
     --animate-cloud-enter: cloud-enter 160ms ease-out both;
     @keyframes cloud-enter {
         from {
@@ -37,15 +80,31 @@
             opacity: 1;
         }
     }
-    --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    --color-card: #ffffff;
-    --color-accent: #f7f8f9;
+    /* radius */
+    --radius: 1.25rem;
+    --radius-xs: calc(var(--radius) * 0.4);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
     --color-background: var(--background);
     --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
     --color-primary: var(--primary);
     --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
     --color-muted: var(--muted);
     --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent-active: var(--accent-active);
     --color-border: var(--border);
     --color-input: var(--input);
     --color-ring: var(--ring);
@@ -53,13 +112,55 @@
     --color-success: var(--success);
     --color-copy-secondary: var(--copy-secondary);
     --color-surface-subtle: var(--surface-subtle);
+    --color-user-message-surface: var(--user-message-surface);
     --color-sidebar: var(--sidebar);
     --color-surface-elevated: var(--surface-elevated);
     --color-primary-subtle: var(--primary-subtle);
+    --color-morty-brand-1: var(--morty-brand-1);
+    --color-morty-brand-6: var(--morty-brand-6);
+    --color-morty-brand-7: var(--morty-brand-7);
+    --color-morty-text-2: var(--morty-text-2);
+    --color-morty-text-3: var(--morty-text-3);
+    --color-morty-text-4: var(--morty-text-4);
+    --color-morty-fill-white: var(--morty-fill-white);
+    --color-morty-fill-opacity-1: var(--morty-fill-opacity-1);
+    --color-morty-fill-opacity-2: var(--morty-fill-opacity-2);
+    --color-morty-fill-opacity-3: var(--morty-fill-opacity-3);
+    --color-morty-fill-opacity-4: var(--morty-fill-opacity-4);
+    --shadow-module: var(--morty-shadow-module);
+}
+
+@layer base {
+    html,
+    body {
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+    }
+
+    button,
+    input,
+    textarea {
+        font-family: var(--font-sans);
+    }
+
+    code {
+        font-family: var(--font-mono);
+    }
 }
 
 .pairing-card {
     box-shadow:
         inset 0 0 0 0.5px rgba(0, 0, 0, 0.1),
         0 18px 55px rgba(18, 24, 32, 0.08);
+}
+
+@keyframes message-enter {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }

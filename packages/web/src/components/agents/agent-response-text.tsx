@@ -66,7 +66,7 @@ export function AgentResponseText({ text, openLocalFile, readImage, streaming }:
                         Load more text
                     </button>
                     <p>Latest output (text preview)</p>
-                    <pre className="whitespace-pre-wrap break-words font-sans text-[15px] leading-6 text-foreground">
+                    <pre className="whitespace-pre-wrap break-words font-sans text-base leading-6 text-foreground">
                         {text.slice(tailStart)}
                     </pre>
                 </div>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
+import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.tsx";
 import { useOptionalApiTransport } from "../../services/api/api-transport-context.tsx";
 import type { DaemonDiagnosticsSource } from "../../services/diagnostics/browser-diagnostics.ts";
 import { sentryBugReportSink } from "../../services/diagnostics/bug-report.ts";
@@ -19,20 +20,31 @@ export function BugReportButton({
     appearance = "labelled",
     daemonSource = null,
 }: {
-    readonly appearance?: keyof typeof appearances;
+    readonly appearance?: keyof typeof appearances | "option";
     readonly daemonSource?: DaemonDiagnosticsSource | null;
 }) {
     const [open, setOpen] = useState(false);
-    const trigger = (
-        <Button
-            aria-label="Report a bug"
-            className={appearances[appearance]}
-            onClick={() => setOpen(true)}
-            variant="ghost"
-        >
-            {appearance === "icon" ? <Bug aria-hidden="true" className="size-4" /> : "Report a bug"}
-        </Button>
-    );
+    const trigger =
+        appearance === "option" ? (
+            <button
+                type="button"
+                aria-label="Report a bug"
+                className="flex w-full items-center gap-2.5 rounded-lg px-[10px] py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transition-none"
+                onClick={() => setOpen(true)}
+            >
+                <Bug aria-hidden="true" className="size-4 shrink-0" />
+                Report a bug
+            </button>
+        ) : (
+            <Button
+                aria-label="Report a bug"
+                className={appearances[appearance]}
+                onClick={() => setOpen(true)}
+                variant="ghost"
+            >
+                {appearance === "icon" ? <Bug aria-hidden="true" className="size-4" /> : "Report a bug"}
+            </Button>
+        );
     return (
         <>
             {appearance === "icon" ? (
@@ -40,14 +52,10 @@ export function BugReportButton({
                     <Tooltip.Root>
                         <Tooltip.Trigger asChild>{trigger}</Tooltip.Trigger>
                         <Tooltip.Portal>
-                            <Tooltip.Content
-                                className="z-[70] rounded-lg bg-foreground px-2.5 py-1.5 text-xs text-background shadow-lg"
-                                side="top"
-                                sideOffset={6}
-                            >
+                            <MortyTooltipContent side="top" sideOffset={6}>
                                 Report a bug
                                 <Tooltip.Arrow className="fill-foreground" />
-                            </Tooltip.Content>
+                            </MortyTooltipContent>
                         </Tooltip.Portal>
                     </Tooltip.Root>
                 </Tooltip.Provider>

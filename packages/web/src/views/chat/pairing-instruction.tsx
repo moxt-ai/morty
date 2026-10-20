@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { useToast } from "../../components/ui/toast.tsx";
 import { dataTestId } from "../../data-testid.ts";
+import { setupMonoFieldClassName, setupPrimaryButtonClassName } from "../setup/setup-card-shell.tsx";
 
 export function PairingInstruction() {
     const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
@@ -17,11 +18,12 @@ export function PairingInstruction() {
                 rows={3}
                 value={setupInstruction}
                 onFocus={(event) => event.currentTarget.select()}
-                className="field-sizing-content w-full resize-none rounded-xl border border-border bg-muted/40 p-4 font-mono text-sm leading-6 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className={`${setupMonoFieldClassName} field-sizing-content`}
             />
             <Button
                 type="button"
-                className="w-full sm:w-auto"
+                variant="primary"
+                className={setupPrimaryButtonClassName}
                 onClick={() => {
                     if (navigator.clipboard === undefined) {
                         setCopy("failed");

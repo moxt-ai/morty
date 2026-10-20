@@ -65,6 +65,7 @@ const application: Hono<{ readonly Bindings: CloudBindings }> = new Hono<{ reado
                 logger,
             }),
             logger,
+            typeof context.env.APP_ORIGIN === "string" ? context.env.APP_ORIGIN : undefined,
         );
     })
     .post("/__project/bootstrap", (context) => bootstrapProject(context.req.raw, context.env))

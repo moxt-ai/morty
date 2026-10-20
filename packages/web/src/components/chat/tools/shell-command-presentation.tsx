@@ -16,8 +16,11 @@ export function ShellCommandPresentation({
             state={entry.state}
             title={entry.title}
         >
+            <pre className="m-0 whitespace-pre-wrap font-sans text-xs leading-5 text-copy-secondary [overflow-wrap:anywhere]">
+                {entry.title}
+            </pre>
             {response.length > 0 && (
-                <div className="mt-1 ml-5 overflow-hidden rounded-lg bg-black/[0.035]">
+                <div className="overflow-hidden rounded-lg bg-black/[0.035]">
                     <AnsiShellOutput output={response} />
                 </div>
             )}

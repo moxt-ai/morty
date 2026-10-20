@@ -1,4 +1,13 @@
-import { type ComponentPropsWithoutRef, type RefObject, useEffect, useLayoutEffect, useRef } from "react";
+import {
+    type ComponentPropsWithoutRef,
+    type RefObject,
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState,
+} from "react";
+import { cn } from "@/lib/utils";
 
 type FollowLatestScrollAreaProps = Omit<ComponentPropsWithoutRef<"div">, "ref"> & {
     readonly container: RefObject<HTMLDivElement | null>;
@@ -10,6 +19,8 @@ type FollowLatestScrollAreaProps = Omit<ComponentPropsWithoutRef<"div">, "ref"> 
      * re-arms.
      */
     readonly followRevision: number | null;
+    readonly showTopFade?: boolean;
+    readonly topFadeClassName?: string;
 };
 
 /**
@@ -20,10 +31,24 @@ export function FollowLatestScrollArea({
     container,
     followThreshold = 1,
     followRevision = null,
+    showTopFade = false,
+    topFadeClassName = "from-card/90",
+    className,
     onScroll,
     ...props
 }: FollowLatestScrollAreaProps) {
     const following = useRef(true);
+    const [topFadeVisible, setTopFadeVisible] = useState(false);
+
+    const syncTopFade = useCallback(
+        (element: HTMLDivElement) => {
+            if (!showTopFade) {
+                return;
+            }
+            setTopFadeVisible(element.scrollTop > 4);
+        },
+        [showTopFade],
+    );
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: followRevision is the deliberate re-arm trigger.
     useLayoutEffect(() => {
@@ -31,12 +56,16 @@ export function FollowLatestScrollArea({
         const element = container.current;
         if (element !== null) {
             element.scrollTop = element.scrollHeight;
+            syncTopFade(element);
         }
     }, [container, followRevision]);
     useLayoutEffect(() => {
         const element = container.current;
         if (following.current && element !== null) {
             element.scrollTop = element.scrollHeight;
+        }
+        if (element !== null) {
+            syncTopFade(element);
         }
     });
 
@@ -49,6 +78,7 @@ export function FollowLatestScrollArea({
             if (following.current) {
                 element.scrollTop = element.scrollHeight;
             }
+            syncTopFade(element);
         };
         // Content changes (streaming, replacing branches) and pure layout
         // changes (window resizing, images loading, reflowed text) both move
@@ -64,17 +94,37 @@ export function FollowLatestScrollArea({
             mutations.disconnect();
             resizes.disconnect();
         };
-    }, [container]);
+    }, [container, syncTopFade]);
 
-    return (
+    const scrollArea = (
         <div
             {...props}
+            className={className}
             ref={container}
             onScroll={(event) => {
                 const element = event.currentTarget;
                 following.current = element.scrollHeight - element.scrollTop - element.clientHeight < followThreshold;
+                syncTopFade(element);
                 onScroll?.(event);
             }}
         />
+    );
+
+    if (!showTopFade) {
+        return scrollArea;
+    }
+
+    return (
+        <div className="relative flex min-h-0 flex-1 flex-col">
+            {scrollArea}
+            <div
+                aria-hidden="true"
+                className={cn(
+                    "pointer-events-none absolute inset-x-0 top-0 z-10 h-10 bg-gradient-to-b to-transparent transition-opacity duration-150 motion-reduce:transition-none",
+                    topFadeClassName,
+                    topFadeVisible ? "opacity-100" : "opacity-0",
+                )}
+            />
+        </div>
     );
 }
