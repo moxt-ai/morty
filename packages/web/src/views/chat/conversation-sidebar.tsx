@@ -59,7 +59,7 @@ function SidebarSessionOption({
                 "flex w-full items-center gap-2.5 rounded-lg px-[10px] py-2 text-left text-[13px] font-medium outline-none transition-[background-color,color] duration-150 focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50",
                 destructive
                     ? "text-destructive hover:bg-destructive/10 active:bg-destructive/15"
-                    : "text-copy-secondary hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3",
+                    : "text-copy-secondary hover:bg-morty-fill-opacity-2 hover:text-foreground active:bg-morty-fill-opacity-3 active:text-foreground disabled:hover:text-copy-secondary disabled:active:text-copy-secondary",
             )}
             data-testid={testId}
             disabled={disabled}
@@ -195,8 +195,8 @@ function ManagedSessionDirectoryList({
                 <p className="py-3 text-xs text-muted-foreground sm:py-2">Your Chat sessions will appear here.</p>
             )}
             {conversationGroups?.map((group) => (
-                <section className="mb-0 min-w-0 space-y-0" key={group.label}>
-                    <h3 className="mb-0 pb-1 pl-2 pt-2 text-11 font-semibold text-morty-text-3">{group.label}</h3>
+                <section className="min-w-0 space-y-0" key={group.label}>
+                    <h3 className="mb-0 pb-1 pl-2 pt-1 text-11 font-normal text-morty-text-3">{group.label}</h3>
                     {group.sessions.map((session) => {
                         const sessionButton = (
                             <button
@@ -206,13 +206,13 @@ function ManagedSessionDirectoryList({
                                 aria-current={activeId === session.id ? "page" : undefined}
                                 disabled={connectionStatus.kind !== "connected"}
                                 onClick={() => onOpen(session)}
-                                className="box-border mb-0 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-2.5 py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent aria-[current=page]:bg-morty-fill-opacity-3 aria-[current=page]:text-foreground aria-[current=page]:hover:bg-morty-fill-opacity-4 motion-reduce:transition-none"
+                                className="box-border mb-0 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-2.5 py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-[current=page]:bg-morty-fill-opacity-3 aria-[current=page]:text-foreground aria-[current=page]:hover:bg-morty-fill-opacity-4 aria-[current=page]:hover:text-foreground aria-[current=page]:disabled:hover:text-foreground motion-reduce:transition-none"
                             >
                                 <span className="min-w-0 truncate">{session.title}</span>
                                 {(sessionStatuses.get(session.id) ?? session.status).kind === "working" ? (
                                     <span
                                         aria-label="Session working"
-                                        className="inline-flex text-primary"
+                                        className="inline-flex text-copy-secondary"
                                         data-testid={dataTestId.sessionStatus}
                                         role="status"
                                     >
@@ -273,9 +273,9 @@ function ManagedSessionDirectoryList({
                                                 className="cursor-pointer rounded-md px-3 py-2 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-accent"
                                                 data-testid={dataTestId.archiveConversation}
                                                 disabled={archive.kind === "archiving"}
-                                            onSelect={() => {
-                                                void archiveSession(session.id, operationsSignal());
-                                            }}
+                                                onSelect={() => {
+                                                    void archiveSession(session.id, operationsSignal());
+                                                }}
                                             >
                                                 Close session
                                             </ContextMenu.Item>
@@ -635,7 +635,7 @@ export function ConversationSidebar({
                     {desktop && (
                         <nav
                             aria-label="Session actions"
-                            className="box-border hidden min-w-0 w-full shrink-0 flex-col gap-0.5 sm:mt-2 sm:mb-6 sm:flex"
+                            className="box-border hidden min-w-0 w-full shrink-0 flex-col gap-0.5 sm:mt-2 sm:mb-2 sm:flex"
                         >
                             <SidebarSessionOption
                                 icon={SquarePen}
@@ -650,14 +650,16 @@ export function ConversationSidebar({
                         <div className="hidden min-h-0 flex-1 sm:flex sm:min-h-0 sm:flex-col sm:gap-0">
                             <Tooltip.Provider delayDuration={150}>
                                 <div className="flex min-w-0 items-center justify-between gap-2 pl-2 sm:mb-0 sm:w-full">
-                                    <h2 className="font-inter text-13 font-semibold tracking-normal text-morty-text-3">
+                                    <h2 className="font-inter text-13 font-semibold tracking-normal text-foreground">
                                         Recent sessions
                                     </h2>
-                                    <SidebarActionTooltip label={refreshing ? "Refreshing sessions" : "Refresh sessions"}>
+                                    <SidebarActionTooltip
+                                        label={refreshing ? "Refreshing sessions" : "Refresh sessions"}
+                                    >
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="size-8 shrink-0 rounded-lg text-morty-text-3 hover:text-foreground"
+                                            className="size-8! min-h-8! shrink-0 rounded-lg text-morty-text-3 hover:text-foreground"
                                             aria-label={refreshing ? "Refreshing sessions" : "Refresh sessions"}
                                             aria-busy={refreshing}
                                             disabled={refreshing}
@@ -671,7 +673,7 @@ export function ConversationSidebar({
                                 </div>
                                 <div
                                     id="chat-conversations"
-                                    className="col-span-2 box-border block min-h-0 w-full min-w-0 flex-1 space-y-1 overflow-y-auto max-sm:row-start-2 max-sm:max-h-none sm:max-h-none"
+                                    className="col-span-2 box-border block min-h-0 w-full min-w-0 flex-1 space-y-2 overflow-y-auto max-sm:row-start-2 max-sm:max-h-none sm:max-h-none"
                                 >
                                     <ManagedSessionDirectoryList {...sessionListProps} />
                                 </div>
@@ -710,71 +712,65 @@ export function ConversationSidebar({
                                     ) : null}
                                 </nav>
                             )}
+                            {desktop && access.state.kind !== "ended" ? (
+                                <DropdownMenu.Root>
+                                    <SidebarActionTooltip label="User menu" side="top">
+                                        <DropdownMenu.Trigger asChild>
+                                            <Button
+                                                aria-label="User menu"
+                                                className="shrink-0 rounded-full border border-white bg-black/[0.08] text-copy-secondary hover:bg-black/[0.12] active:bg-black/[0.16] data-[state=open]:bg-black/[0.16]"
+                                                data-testid={dataTestId.userMenu}
+                                                disabled={access.state.kind === "loading"}
+                                                size="icon"
+                                                variant="ghost"
+                                            >
+                                                {access.state.kind === "loading" ? (
+                                                    <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                                                ) : (
+                                                    <UserRound aria-hidden="true" className="size-4" />
+                                                )}
+                                            </Button>
+                                        </DropdownMenu.Trigger>
+                                    </SidebarActionTooltip>
+                                    <DropdownMenu.Portal>
+                                        <DropdownMenu.Content
+                                            align="start"
+                                            className="z-[110] min-w-52 rounded-lg border border-border bg-background p-1 text-sm text-foreground shadow-lg"
+                                            side="top"
+                                            sideOffset={6}
+                                        >
+                                            <DropdownMenu.Item
+                                                className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 outline-none data-[highlighted]:bg-accent"
+                                                onSelect={measureNetwork}
+                                            >
+                                                <Wifi aria-hidden="true" className="size-4" />
+                                                Network latency
+                                            </DropdownMenu.Item>
+                                            <DropdownMenu.Item
+                                                className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-destructive outline-none data-[highlighted]:bg-destructive/10"
+                                                data-testid={dataTestId.endRemoteAccess}
+                                                onSelect={() => {
+                                                    void access.requestEnd(workspace.operationsSignal());
+                                                }}
+                                            >
+                                                <LogOut aria-hidden="true" className="size-4" />
+                                                End remote access
+                                            </DropdownMenu.Item>
+                                        </DropdownMenu.Content>
+                                    </DropdownMenu.Portal>
+                                </DropdownMenu.Root>
+                            ) : null}
                             {desktop && (
-                                <div className="flex shrink-0 items-center gap-0.5">
-                                    {access.state.kind !== "ended" ? (
-                                        <DropdownMenu.Root>
-                                            <SidebarActionTooltip label="User menu" side="top">
-                                                <DropdownMenu.Trigger asChild>
-                                                    <Button
-                                                        aria-label="User menu"
-                                                        className="shrink-0 rounded-full border border-white bg-black/[0.08] text-copy-secondary hover:bg-black/[0.12] active:bg-black/[0.16] data-[state=open]:bg-black/[0.16]"
-                                                        data-testid={dataTestId.userMenu}
-                                                        disabled={access.state.kind === "loading"}
-                                                        size="icon"
-                                                        variant="ghost"
-                                                    >
-                                                        {access.state.kind === "loading" ? (
-                                                            <LoaderCircle
-                                                                aria-hidden="true"
-                                                                className="size-4 animate-spin"
-                                                            />
-                                                        ) : (
-                                                            <UserRound aria-hidden="true" className="size-4" />
-                                                        )}
-                                                    </Button>
-                                                </DropdownMenu.Trigger>
-                                            </SidebarActionTooltip>
-                                            <DropdownMenu.Portal>
-                                                <DropdownMenu.Content
-                                                    align="start"
-                                                    className="z-[110] min-w-52 rounded-lg border border-border bg-background p-1 text-sm text-foreground shadow-lg"
-                                                    side="top"
-                                                    sideOffset={6}
-                                                >
-                                                    <DropdownMenu.Item
-                                                        className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 outline-none data-[highlighted]:bg-accent"
-                                                        onSelect={measureNetwork}
-                                                    >
-                                                        <Wifi aria-hidden="true" className="size-4" />
-                                                        Network latency
-                                                    </DropdownMenu.Item>
-                                                    <DropdownMenu.Item
-                                                        className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-destructive outline-none data-[highlighted]:bg-destructive/10"
-                                                        data-testid={dataTestId.endRemoteAccess}
-                                                        onSelect={() => {
-                                                            void access.requestEnd(workspace.operationsSignal());
-                                                        }}
-                                                    >
-                                                        <LogOut aria-hidden="true" className="size-4" />
-                                                        End remote access
-                                                    </DropdownMenu.Item>
-                                                </DropdownMenu.Content>
-                                            </DropdownMenu.Portal>
-                                        </DropdownMenu.Root>
-                                    ) : (
-                                        <span aria-hidden="true" className="size-9 shrink-0" />
-                                    )}
+                                <div className="ml-auto flex shrink-0 items-center gap-0.5">
                                     <SidebarActionTooltip label="Continue your work" side="top">
                                         <Button
                                             aria-label="Continue your work"
-                                            className="h-10 shrink-0 gap-2 rounded-full px-3 text-copy-secondary hover:bg-white/70"
+                                            className="size-8! min-h-8! shrink-0 justify-center rounded-full px-0 text-copy-secondary hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3"
                                             data-testid={dataTestId.shareIdentity}
                                             onClick={dialogs.openSharing}
                                             variant="ghost"
                                         >
                                             <Share2 aria-hidden="true" className="size-4" />
-                                            Continue your work
                                         </Button>
                                     </SidebarActionTooltip>
                                     <BugReportButton appearance="icon" daemonSource={sessionDiagnostics} />
@@ -986,7 +982,7 @@ export function ConversationSidebar({
                               </header>
                               <div
                                   id="chat-conversations-mobile"
-                                  className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-2 pb-2"
+                                  className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-2 pb-2"
                               >
                                   <ManagedSessionDirectoryList {...sessionListProps} />
                               </div>

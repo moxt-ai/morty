@@ -1,5 +1,6 @@
 import { ChevronDown, CircleCheck, CircleMinus, CircleX, LoaderCircle } from "lucide-react";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
+import { cn } from "../../../lib/utils.ts";
 import type { ToolCallState } from "./tool-renderer.ts";
 
 export const ToolCallSupplementalContent = createContext<ReactNode>(null);
@@ -47,20 +48,24 @@ export function ToolCallDisclosure({
         <fieldset aria-label={ariaLabel} className="group/tool m-0 min-w-0 border-0 p-0" data-testid={testId}>
             <button
                 aria-expanded={open}
-                className={`${agentThinkStepTriggerClassName} group/trigger`}
+                className={cn(agentThinkStepTriggerClassName, "group/trigger items-center")}
                 onClick={() => setOpen((current) => !current)}
                 title={title}
                 type="button"
             >
-                <span className="mt-0.5 shrink-0 [&>svg]:size-3.5">{icon}</span>
-                <span className="flex min-w-0 flex-1 items-start gap-0.5 overflow-hidden">
+                <span className="shrink-0 [&>svg]:size-3.5">{icon}</span>
+                <span className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden">
                     <span className={agentThinkStepTitleClassName}>{title}</span>
                     <ChevronDown
                         aria-hidden="true"
-                        className={`${agentThinkStepChevronClassName} group-focus-visible/trigger:inline group-hover/trigger:inline ${open ? "inline rotate-0" : ""}`}
+                        className={cn(
+                            agentThinkStepChevronClassName,
+                            "mt-0 group-focus-visible/trigger:inline group-hover/trigger:inline",
+                            open && "inline rotate-0",
+                        )}
                     />
                 </span>
-                <span className="mt-0.5 shrink-0">
+                <span className="shrink-0">
                     <ToolCallStatus state={state} />
                 </span>
             </button>
