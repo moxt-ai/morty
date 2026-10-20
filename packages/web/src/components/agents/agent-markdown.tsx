@@ -320,7 +320,12 @@ let latexRenderer: Promise<LatexRenderer> | null = null;
  * state commits deterministically.
  */
 export function loadLatexRenderer(): Promise<LatexRenderer> {
-    latexRenderer ??= import("./agent-markdown-with-latex.tsx").then((module) => module.AgentMarkdownWithLatex);
+    latexRenderer ??= import("./agent-markdown-with-latex.tsx").then(
+        (module) => module.AgentMarkdownWithLatex,
+        // A failed chunk import degrades to the non-math render instead of an
+        // unhandled rejection; consumers render markdown either way.
+        () => AgentMarkdownContent,
+    );
     return latexRenderer;
 }
 
