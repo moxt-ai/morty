@@ -7,7 +7,7 @@ export const ToolCallSupplementalContent = createContext<ReactNode>(null);
 
 /** Shared trigger row for intermediate agent steps (thinking rail + tool calls). */
 export const agentThinkStepTriggerClassName =
-    "flex min-h-9 w-full min-w-0 cursor-pointer items-start gap-2 rounded-md px-0.5 py-1 text-[13px] leading-[22px] text-morty-text-3 outline-none hover:text-copy-secondary focus-visible:ring-2 focus-visible:ring-ring/60";
+    "flex w-full min-w-0 cursor-pointer items-start gap-2 rounded-md px-0.5 py-1 text-[13px] leading-[22px] text-morty-text-3 outline-none hover:text-copy-secondary focus-visible:ring-2 focus-visible:ring-ring/60";
 
 const agentThinkStepTitleClassName = "min-w-0 truncate text-left";
 
