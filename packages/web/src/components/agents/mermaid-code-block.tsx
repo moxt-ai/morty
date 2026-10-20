@@ -21,16 +21,14 @@ let diagramComponent: Promise<DiagramComponent> | null = null;
 
 /** Starts (once) loading the diagram renderer; safe to call eagerly. */
 export function loadDiagramRenderer(): Promise<DiagramComponent> {
-    return loadDiagramComponent();
-}
-
-function loadDiagramComponent(): Promise<DiagramComponent> {
     diagramComponent ??= import("./mermaid-diagram.tsx").then(
         (module) => module.default,
+        // A failed chunk import degrades to the diagram source render instead
+        // of an unhandled rejection; consumers keep the source visible.
         () =>
             memo(({ code }: { readonly code: string }) => (
                 <MermaidSource code={code} message="Diagram could not be loaded. You can still copy its source." />
-            )) as DiagramComponent,
+            )),
     );
     return diagramComponent;
 }
@@ -39,7 +37,7 @@ function MermaidDiagramWhenReady({ code }: { readonly code: string }) {
     const [diagram, setDiagram] = useState<DiagramComponent | null>(null);
     useEffect(() => {
         let active = true;
-        void loadDiagramComponent().then((component) => {
+        void loadDiagramRenderer().then((component) => {
             if (active) {
                 setDiagram(() => component);
             }

@@ -12,11 +12,20 @@ import { dataTestId } from "../../data-testid.ts";
 import { isDisplayableImageType } from "../../services/chat/image-media-type.ts";
 import { type SessionMessage, sessionTextValue } from "../../view-models/chat/session-presentation.ts";
 
-// Warm the lazily loaded rich renderers as soon as a conversation renders, so
-// the first LaTeX or Mermaid content resolves its renderer without a visible
-// fallback swap.
-void loadLatexRenderer().catch(() => undefined);
-void loadDiagramRenderer().catch(() => undefined);
+// Warm the lazily loaded rich renderers once the page settles, so the first
+// LaTeX or Mermaid content resolves its renderer without a visible fallback
+// swap. Deferred to idle because the chunks add ~244 kB gzip; agent replies
+// arrive seconds later, well after idle has fired.
+function warmRichRenderers(): void {
+    void loadLatexRenderer();
+    void loadDiagramRenderer();
+}
+
+if (typeof requestIdleCallback === "function") {
+    requestIdleCallback(() => warmRichRenderers());
+} else {
+    setTimeout(warmRichRenderers, 2_000);
+}
 
 const SAFE_AUDIO_MIME = /^audio\/(?:aac|mpeg|mp4|ogg|wav|webm)$/u;
 
