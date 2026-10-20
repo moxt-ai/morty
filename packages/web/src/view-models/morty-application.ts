@@ -32,6 +32,7 @@ export interface MortyApplication {
 export function createMortyApplication(options: {
     readonly origin: string;
     readonly transport: ApiTransport;
+    readonly url?: string;
 }): MortyApplication {
     const lifetime = new AbortController();
     const transport = options.transport;
@@ -39,10 +40,24 @@ export function createMortyApplication(options: {
     const anonymousSession = createAnonymousSessionStore(transport.fetch, options.origin);
     void anonymousSession.getState().load(lifetime.signal);
     let workspace: ChatWorkspace | null = null;
+    let workspaceRequests: BotChatApi | null = null;
     let workspaceIdentity: ChatIdentity | null = null;
+    let disposed = false;
+    const releaseWorkspace = (): void => {
+        workspace?.dispose();
+        // The workspace receives the chat API by injection; the application
+        // owns it, so it closes the pooled session transports here.
+        workspaceRequests?.close();
+        workspace = null;
+        workspaceRequests = null;
+        workspaceIdentity = null;
+    };
     return {
         anonymousSession,
         chatWorkspace: (identity) => {
+            if (disposed) {
+                throw new Error("The Morty application was disposed.");
+            }
             if (
                 workspace !== null &&
                 workspaceIdentity?.botId === identity.botId &&
@@ -50,28 +65,32 @@ export function createMortyApplication(options: {
             ) {
                 return workspace;
             }
-            workspace?.dispose();
+            releaseWorkspace();
+            const requests = new BotChatApi({
+                fetchRequest: transport.fetch,
+                getToken: identity.getToken,
+                origin: options.origin,
+                projectId: identity.projectId,
+                subscribe: transport.subscribe,
+                waitForChange: transport.waitForChange,
+            });
             workspace = createChatWorkspace({
                 botId: identity.botId,
-                requests: new BotChatApi({
-                    fetchRequest: transport.fetch,
-                    getToken: identity.getToken,
-                    origin: options.origin,
-                    projectId: identity.projectId,
-                    subscribe: transport.subscribe,
-                    waitForChange: transport.waitForChange,
-                }),
-                url: window.location.href,
+                requests,
+                url: options.url ?? window.location.href,
             });
+            workspaceRequests = requests;
             workspaceIdentity = identity;
             return workspace;
         },
         transport,
         dispose: () => {
+            if (disposed) {
+                return;
+            }
+            disposed = true;
             lifetime.abort(new DOMException("The Morty application was disposed.", "AbortError"));
-            workspace?.dispose();
-            workspace = null;
-            workspaceIdentity = null;
+            releaseWorkspace();
             transport.close();
         },
     };

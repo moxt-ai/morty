@@ -913,7 +913,12 @@ export function createSessionPaneModel(options: {
                     if (initialCommandId !== null) {
                         await get().send(signal);
                         signal.throwIfAborted();
-                        options.onInitialMessageDelivered?.();
+                        // Only report delivery when the queued message was
+                        // actually submitted; a skipped send keeps the home
+                        // store's queued message intact for the next attempt.
+                        if (initialCommandId === null) {
+                            options.onInitialMessageDelivered?.();
+                        }
                     }
                     await subscription.completed;
                     signal.throwIfAborted();

@@ -92,11 +92,10 @@ export interface BotChatNavigation {
 }
 
 /**
- * One-shot entry notices. `pending` marks a notice the workflow wants to
- * surface; resolving transitions it to `visible` exactly once, and dismissal
- * or a successful connection clears it for the rest of the entry.
+ * One-shot entry notices. The workflow marks a notice `visible` exactly once
+ * when it resolves; dismissal hides it for the rest of the entry.
  */
-type ChatEntryNotice = { readonly kind: "hidden" } | { readonly kind: "pending" } | { readonly kind: "visible" };
+type ChatEntryNotice = { readonly kind: "hidden" } | { readonly kind: "visible" };
 
 interface ChatEntryNotices {
     readonly connectionFailed: ChatEntryNotice;

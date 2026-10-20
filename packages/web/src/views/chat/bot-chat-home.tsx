@@ -64,7 +64,6 @@ export function BotChatHome({
     const store = workspace.home;
     const model = useStore(store);
     const [pairingDialogOpen, setPairingDialogOpen] = useState(false);
-    const [failureDialogOpen, setFailureDialogOpen] = useState(false);
     const [disconnectedNotificationDismissed, setDisconnectedNotificationDismissed] = useState(false);
     const [attachments, setAttachments] = useState<readonly ComposerAttachment[]>([]);
     const followLatest = useRef(true);
@@ -80,7 +79,7 @@ export function BotChatHome({
     const draft = model.draft;
     const setupView = model.view.kind === "setup" ? model.view : null;
     const pairingNotice = model.notices.pairing.kind === "visible" || pairingDialogOpen;
-    const failureNotice = model.notices.connectionFailed.kind === "visible" || failureDialogOpen;
+    const failureNotice = model.notices.connectionFailed.kind === "visible";
 
     useLayoutEffect(() => {
         if (model.view.kind === "active" && followLatest.current && messageList.current !== null) {
@@ -296,8 +295,6 @@ export function BotChatHome({
                             <DraftChatControls
                                 key={model.selection.key}
                                 workspace={workspace}
-                                botId={model.view.botId}
-                                requests={requests}
                                 disabled={composerLocked}
                             />
                         </BotChatComposer>
@@ -321,14 +318,12 @@ export function BotChatHome({
                     title="Runtime connection unavailable"
                     description={model.view.message}
                     onClose={() => {
-                        setFailureDialogOpen(false);
                         store.getState().dismissNotice("connection-failed");
                     }}
                     testId={dataTestId.runtimeSetupFailure}
                 >
                     <Button
                         onClick={() => {
-                            setFailureDialogOpen(false);
                             store.getState().dismissNotice("connection-failed");
                             store.getState().retry();
                         }}

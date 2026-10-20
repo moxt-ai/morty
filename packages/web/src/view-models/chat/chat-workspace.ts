@@ -115,10 +115,16 @@ export function createChatWorkspace(options: {
                     reportApplicationError(cause, "chat-home-load");
                 }
             });
-        void draftControls
-            .getState()
-            .load(signal)
-            .catch(() => undefined);
+        // Harness settings belong to the draft composer; skip the
+        // configuration burst when the entry targets an existing session. A
+        // later new draft triggers the load through the draft-key
+        // subscription.
+        if (home.getState().selection.kind === "draft") {
+            void draftControls
+                .getState()
+                .load(signal)
+                .catch(() => undefined);
+        }
     };
     const startDirectoryLoad = (): void => {
         directoryLifetime.abort(new Error("Directory loading restarted."));
@@ -173,15 +179,26 @@ export function createChatWorkspace(options: {
                 }
             });
     };
+    // A loading selection at attach time means a previous view released it on
+    // detach — the initial entry load is owned by home.load, so only a
+    // re-attach re-reads the session itself. This gates the second read so a
+    // fresh entry performs exactly one managedSession request.
+    let releasedByDetach = false;
     const announceChatViewAttached = (node: HTMLElement): (() => void) => {
         if (announcedViews.has(node)) {
             return () => {};
         }
         announcedViews.add(node);
         const selection = home.getState().selection;
-        if (selection.kind === "loading" && selection.target.kind !== "continue") {
+        if (releasedByDetach && selection.kind === "loading" && selection.target.kind !== "continue") {
             // The previous view released this selection when it detached; the
-            // re-attached view re-reads it exactly like a fresh page load.
+            // re-attached view re-reads the saved session so it does not render
+            // the snapshot captured by the view instance that just went away.
+            // Session targets take the same path as a fresh page load; a
+            // conversation target re-reads the saved session record, which
+            // omits the creation-time access envelope — the pane's live
+            // reconciliation restores running-turn state from the service.
+            releasedByDetach = false;
             loadSelectedSession(selection.target);
         }
         return () => {
@@ -191,6 +208,7 @@ export function createChatWorkspace(options: {
             // snapshot captured by the view instance that just went away.
             const current = home.getState().selection;
             if (current.kind === "ready") {
+                releasedByDetach = true;
                 home.setState((state) => ({
                     selection: transitionConversationSelection(state.selection, { kind: "reload-requested" }),
                 }));

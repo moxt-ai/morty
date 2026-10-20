@@ -5,18 +5,14 @@ import { dataTestId } from "@/data-testid";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
 import { CwdSelector } from "../../components/chat/cwd-selector.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
-import { type BotChatApi, connectedChatRuntimeAgents } from "../../services/chat/bot-chat-api.ts";
+import { connectedChatRuntimeAgents } from "../../services/chat/bot-chat-api.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 
 export function DraftChatControls({
     workspace,
-    botId: _botId,
-    requests: _requests,
     disabled,
 }: {
     readonly workspace: ChatWorkspace;
-    readonly botId: string;
-    readonly requests: Pick<BotChatApi, "runtimeConfiguration" | "directory" | "agentSettings">;
     readonly disabled: boolean;
 }) {
     const viewModel = useStore(workspace.draftControls);

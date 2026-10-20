@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import { AnonymousIdentityApi } from "../../services/identity/anonymous-identity-api.ts";
 import { useMortyApplication } from "../application/application-context.tsx";
@@ -9,14 +9,19 @@ export function MobiusManagement() {
     const transport = useApiTransport();
     const application = useMortyApplication();
     const identity = useActiveIdentity();
-    // The workspace and its chat API are owned by the application factory, so
-    // view remounts re-render the same stores and no mount effect manages
-    // their loading lifetime.
-    const workspace = application.chatWorkspace({
-        botId: identity.botId,
-        getToken: identity.getToken,
-        projectId: identity.projectId,
-    });
+    // The workspace and its chat API are owned by the application factory.
+    // Memoizing on the identity object keeps acquisition pure across renders:
+    // the factory's dispose-and-recreate only runs when the active identity
+    // actually changes, never as a side effect of a re-render.
+    const workspace = useMemo(
+        () =>
+            application.chatWorkspace({
+                botId: identity.botId,
+                getToken: identity.getToken,
+                projectId: identity.projectId,
+            }),
+        [application, identity],
+    );
     const requests = workspace.requests;
     const createTransfer = useCallback(
         async (signal: AbortSignal) => {

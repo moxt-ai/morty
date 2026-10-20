@@ -213,8 +213,10 @@ export async function createTestApp(
             closed = true;
             lifetime.abort(new DOMException("The test application closed", "AbortError"));
             rendered.unmount();
-            // The factory owns the identity lifetime and the chat API; the
-            // harness keeps the borrowed transport open for other viewers.
+            // The factory owns the identity lifetime, the chat API, and the
+            // transport; disposing it also closes the shared transport, which
+            // is fine here because current.close() closes it anyway and
+            // viewers own their own transports.
             application?.dispose();
             await current.close();
             container.remove();
