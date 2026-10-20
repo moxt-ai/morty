@@ -157,7 +157,7 @@ node scripts/local-dev.cjs remove --state-dir <stateDir>
 (for example Codex or Claude Code) through the local stack, run:
 
 ```sh
-node scripts/local-dev.cjs setup --state-dir <stateDir> [--harness codex] [--session-id ID] [--workspace DIR]
+node scripts/local-dev.cjs setup --state-dir <stateDir> --harness ID --session-id ID [--workspace DIR]
 ```
 
 `setup` downloads the served `setup.mjs` and runs its `setup` flow - the same
@@ -173,19 +173,24 @@ Platform):
   checkout with a different CLI version from restarting or replacing its manager.
 - `--workspace` defaults to `<stateDir>/workspace`, the default working
   directory.
-- `--session-id` defaults to `local-dev`; pass the harness's exact current
-  session ID when the handoff should offer forking or importing that native
-  session.
+- `--harness` and `--session-id` are required and have no defaults. Pass the
+  harness the user selected and its exact current session ID, so the handoff
+  offers to import that native session; `setup` rejects a missing value rather
+  than substituting one.
 
 The command waits until setup reports ready (up to five minutes), then prints
 one JSON record with `handoffUrl`, `connectionId`, `workspace`, `sessionId`,
 `setupLog`, and `runtimePid`. Open `handoffUrl` in the
-browser; never preview or redeem it from the setup side. The Continue page
-redeems the transfer code and saves the identity into browser session storage
-(keys `mobius.anonymous-credential.v2` and `mobius.workspace.v2`), so the
-identity lives in that tab's session rather than persistently: a fresh browser
-profile starts anonymous again. Any browser automation that needs an identity
-directly must seed `sessionStorage`, not `localStorage`, before opening the app.
+browser; never preview or redeem it from the setup side. The URL carries
+`harness` and `sessionId`, so the Continue page redeems the transfer code and
+imports that native session before opening the Chat page; because the import
+requires the session to exist, an identifier the harness does not know fails on
+that page instead of continuing. The redeemed identity lives in local storage
+under the `mobius.anonymous-credentials.v1` key and in the page URL's `identity`
+query parameter, so a browser that completes the redemption keeps the identity
+across restarts. Browser automation that needs an identity without redeeming a
+link must reproduce both: the `identity` query parameter, and a local-storage
+map from user ID to access token.
 
 The connection is recorded in the stack record; `remove` stops it by Connection
 ID, stops the state directory's isolated Mobius manager, and then deletes the
@@ -236,7 +241,7 @@ Details, inspection commands, and a failure-mode table are in
   - provision Platform, seed R2, start both Workers, verify readiness, print the
     JSON descriptor. Idempotent: a live stack is reused, a dead one is replaced.
     The local Platform App is provisioned automatically.
-- `setup --state-dir DIR [--harness ID] [--session-id ID] [--workspace DIR]`
+- `setup --state-dir DIR --harness ID --session-id ID [--workspace DIR]`
   - connect a local agent Runtime through the served setup bundle with
     `DOCUMENT_DIR`, the Mobius state directory, and the CLI shim isolated under
     the state directory; prints the handoff URL to continue as this user in the

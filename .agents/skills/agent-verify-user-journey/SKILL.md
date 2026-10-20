@@ -16,8 +16,9 @@ must receive the task through the paired Runtime and Morty Session flow so this
 journey verifies the local Workers, Platform relay, live events, and UI as well
 as the agent itself.
 
-Load and follow `chat-local-full-dev` for local-stack setup, pairing, identity
-injection, logs, and teardown. Its safety constraints are part of this skill.
+Load and follow `chat-local-full-dev` for local-stack setup, Runtime connection,
+identity handoff, logs, and teardown. Its safety constraints are part of this
+skill.
 
 ## Resolve the request
 
@@ -26,6 +27,7 @@ Resolve these inputs before starting:
 | Input | Default | Selection rule |
 | --- | --- | --- |
 | Harness | `codex` | Use the harness the user names; otherwise use `codex`. |
+| Native session ID | none, required | Read the exact current session ID from the selected harness's own session metadata. Never guess, reuse a default, or substitute another harness's session. |
 | Model | `gpt 5.6 terra` | Use the model the user names; otherwise use `gpt 5.6 terra`. |
 | Browser | session-attached browser, then headed `agent-browser` CLI | Honor a user-specified browser first. Otherwise use the browser attached to the current session when one exists; fall back to an installed `agent-browser` CLI running in the foreground. |
 | App | to-do-list web app | Preserve any app or journey requirements supplied by the user. |
@@ -60,10 +62,10 @@ Create these locations without overwriting existing content:
 - Evidence: `<original-cwd>/test-results/agent-verify-user-journey/<run-name>/`.
 
 Never initialize or modify the generated app inside the repository. Do not
-include credentials, user data, pairing tickets, or private configuration in
-the app or screenshots.
+include credentials, user data, handoff links, or private configuration in the
+app or screenshots.
 
-## Start and pair the local stack
+## Start the local stack and connect the Runtime
 
 Use `chat-local-full-dev` to:
 
@@ -74,33 +76,46 @@ Use `chat-local-full-dev` to:
    Platform fixture. Read `chatOrigin`, `platformOrigin`, and `stateDir` from
    the ready/status record; do not assume ports.
 3. Check stack health before opening the browser.
-4. Pair the selected harness with:
+4. Connect the selected harness as a Runtime with the required harness and
+   session identifiers:
 
    ```sh
-   node scripts/local-dev.cjs pair \
+   node scripts/local-dev.cjs setup \
      --state-dir <stateDir> \
      --harness <selected-harness> \
+     --session-id <exact-native-session-id> \
      --workspace <app-workspace>
    ```
 
-5. Capture the pair result to a protected temporary file rather than printing
-   it into the conversation. Treat `browserIdentity.token` as a secret.
+   Both `--harness` and `--session-id` are required; `setup` rejects a missing
+   value instead of falling back to one. Resolve the harness from the request
+   and never substitute another harness. `--session-id` must name a native
+   session that already exists for that harness, because the Continue page opens
+   it by importing it; a fabricated identifier fails there instead of opening
+   the Chat page. Resolve it from the selected harness's own current session
+   metadata; do not ask the user for it, guess, or reuse a default.
 
-Pairing launches the harness Runtime; it does not authorize calling the harness
-CLI directly for generation.
+5. Capture the setup result to a protected temporary file rather than printing
+   it into the conversation. `handoffUrl` carries a one-time transfer code, so
+   treat it as a secret.
+
+Connecting the harness launches it as a Runtime; it does not authorize calling
+the harness CLI directly for generation.
 
 ## Ask the agent through Morty
 
-Open `chatOrigin` with the selected browser. Before loading the application,
-inject the paired browser identity exactly as documented by
-`chat-local-full-dev`. This setup-only localStorage injection is allowed; do
-not use browser internals to manipulate application state after setup.
+Open `handoffUrl` from the setup result in the selected browser; never preview
+or redeem it from the setup side. The Continue page redeems the transfer code,
+keeps the identity, and opens the native session named by `sessionId` in Morty,
+so do not seed storage or use browser internals to manipulate application state
+after setup.
 
 Through visible Morty controls:
 
-1. Select the paired Bot/harness.
+1. Confirm the agent configuration shows the paired harness; the page serves the
+   Bot bound to it, so there is no Bot selector.
 2. Select the exact requested model in the Session configuration.
-3. Start a new conversation.
+3. Start a new conversation with the **New Session** control.
 4. Send an outcome-focused build request that names the already-paired app
    workspace and asks the agent to provide exact local install and loopback-only
    start commands when it finishes.
@@ -197,8 +212,8 @@ test-results/agent-verify-user-journey/<run-name>/
 
 Use the smallest set that proves the requested journey, but retain multiple
 screenshots when states differ. Do not place evidence in the generated app
-workspace or local-stack state directory. Never capture credentials, pairing
-tickets, or private configuration.
+workspace or local-stack state directory. Never capture credentials, handoff
+links, or private configuration.
 
 ## Cleanup
 
@@ -219,7 +234,7 @@ Return:
 1. Selected harness, exact model identifier shown in Morty, and browser.
 2. Local Chat and Platform origins, whether the paired Runtime connected, and
    whether the stack was stopped or intentionally left running. Never report
-   identity tokens or pairing tickets.
+   identity tokens or handoff links.
 3. Randomized app workspace path and validated install/start commands.
 4. Pass or fail for the Morty generation turn, queue, steer, queued-message
    deletion, and every app journey step.
