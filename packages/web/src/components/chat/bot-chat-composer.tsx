@@ -59,6 +59,7 @@ export function BotChatComposer({
     disabled,
     draft,
     error,
+    errorStatus,
     onAttachmentsChange,
     onDraftChange,
     onStop,
@@ -74,6 +75,7 @@ export function BotChatComposer({
     readonly disabled: boolean;
     readonly draft: string;
     readonly error: string;
+    readonly errorStatus?: ReactNode;
     readonly onAttachmentsChange: (attachments: readonly ComposerAttachment[]) => void;
     readonly onDraftChange: (draft: string) => void;
     readonly onStop: () => void;
@@ -176,6 +178,7 @@ export function BotChatComposer({
                     {error.length > 0 ? error : attachmentState.kind === "failed" ? attachmentState.message : ""}
                 </p>
             )}
+            {errorStatus}
             <div className="rounded-[22px] border border-border bg-surface-elevated px-3 pt-3 pb-2.5 shadow-[0_8px_28px_rgba(23,30,36,0.06)] transition-[border-color,box-shadow] focus-within:border-primary/35 focus-within:shadow-[0_10px_32px_rgba(23,30,36,0.08),0_0_0_3px_rgba(34,123,78,0.06)] sm:min-h-[128px] sm:px-4 sm:pt-3.5 sm:pb-3 motion-reduce:transition-none">
                 {attachments.length > 0 && (
                     <ul aria-label="Attachments" className="mb-2 flex list-none flex-wrap gap-2 p-0">

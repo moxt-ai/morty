@@ -149,23 +149,18 @@ function useCountdownSeconds(retryAtEpochMs: number): number {
 }
 
 function DisconnectedNotice({
-    message,
     onRetryNow,
     retry,
 }: {
-    readonly message: string;
     readonly onRetryNow: () => void;
     readonly retry: { readonly kind: "scheduled"; readonly retryAtEpochMs: number } | { readonly kind: "exhausted" };
 }) {
     return (
-        <div data-testid={dataTestId.sessionReconnectNotice} className="mx-auto w-full max-w-[920px] px-3 sm:px-5">
-            <p role="alert" className="text-sm text-destructive">
-                {message}
-            </p>
+        <div data-testid={dataTestId.sessionReconnectNotice} className="mb-2 px-1 text-sm text-muted-foreground">
             {retry.kind === "scheduled" ? (
                 <ScheduledRetryNotice onRetryNow={onRetryNow} retryAtEpochMs={retry.retryAtEpochMs} />
             ) : (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status">
                     Automatic retries stopped. <LinkButton onClick={onRetryNow}>Retry now</LinkButton>
                 </p>
             )}
@@ -182,7 +177,7 @@ function ScheduledRetryNotice({
 }) {
     const remaining = useCountdownSeconds(retryAtEpochMs);
     return (
-        <p role="status" className="text-sm text-muted-foreground">
+        <p role="status">
             Retrying in {remaining} s <LinkButton onClick={onRetryNow}>Retry now</LinkButton>
         </p>
     );
@@ -190,10 +185,8 @@ function ScheduledRetryNotice({
 
 function ReconnectingNotice() {
     return (
-        <div data-testid={dataTestId.sessionReconnectNotice} className="mx-auto w-full max-w-[920px] px-3 sm:px-5">
-            <p role="status" className="text-sm text-muted-foreground">
-                Mobius is reconnecting…
-            </p>
+        <div data-testid={dataTestId.sessionReconnectNotice} className="mb-2 px-1 text-sm text-muted-foreground">
+            <p role="status">Mobius is reconnecting…</p>
         </div>
     );
 }
@@ -206,7 +199,7 @@ function SessionReconnectNotice({
     readonly onRetryNow: () => void;
 }) {
     if (connection.kind === "disconnected") {
-        return <DisconnectedNotice message={connection.message} onRetryNow={onRetryNow} retry={connection.retry} />;
+        return <DisconnectedNotice onRetryNow={onRetryNow} retry={connection.retry} />;
     }
     return <ReconnectingNotice />;
 }
@@ -456,12 +449,6 @@ export function MobiusSessionPane({
                     aria-label="Messages"
                     className="min-h-0 flex-1 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10 lg:px-12"
                 >
-                    {(model.connection.kind === "disconnected" || model.connection.kind === "reconnecting") && (
-                        <SessionReconnectNotice
-                            connection={model.connection}
-                            onRetryNow={() => pane.store.getState().retryNow()}
-                        />
-                    )}
                     {model.messages.length === 0 && model.connection.kind === "loading" && <MessageListSkeleton />}
                     {model.messages.length === 0 && model.connection.kind === "failed" && (
                         <div className="flex min-h-full items-center justify-center">
@@ -575,6 +562,14 @@ export function MobiusSessionPane({
                     disabled={presentation.composerDisabled}
                     draft={model.draft}
                     error={presentation.composerError}
+                    errorStatus={
+                        model.connection.kind === "disconnected" || model.connection.kind === "reconnecting" ? (
+                            <SessionReconnectNotice
+                                connection={model.connection}
+                                onRetryNow={() => pane.store.getState().retryNow()}
+                            />
+                        ) : undefined
+                    }
                     onAttachmentsChange={pane.store.getState().setAttachments}
                     onDraftChange={pane.store.getState().setDraft}
                     onStop={() => run(pane.store.getState().stop)}
