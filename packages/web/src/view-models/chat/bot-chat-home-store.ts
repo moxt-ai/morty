@@ -20,6 +20,7 @@ import {
     transitionConversationSelection,
 } from "./conversation-selection-machine.ts";
 import { createConversationSessionStore } from "./conversation-session-store.ts";
+import type { UnconfirmedSubmission } from "./session-delivery-store.ts";
 
 export type SetupReason = "unconfigured" | "agent-missing" | "runtime-offline" | "agent-required";
 
@@ -125,6 +126,10 @@ export interface BotChatHomeStore {
     readonly updateConversationTitle: (sessionId: string, title: string) => void;
     /** Clears the queued first message once the pane has sent it. */
     readonly initialMessageDelivered: (conversationId: string) => void;
+    /** Drops the recovery copy after the user removed the uncertain first message. */
+    readonly initialMessageRecoveryCleared: (conversationId: string, commandId: string) => void;
+    /** Marks the queued first message unconfirmed after an uncertain submission. */
+    readonly initialMessageUnconfirmed: (conversationId: string, journal: UnconfirmedSubmission) => void;
     readonly createConversation: (
         draft: string,
         attachments: readonly ComposerAttachment[],
@@ -531,6 +536,24 @@ export const createBotChatHomeStore = (
                     kind: "initial-message-delivered",
                 }),
             })),
+        initialMessageRecoveryCleared: (conversationId, commandId) =>
+            set((state) => ({
+                creation: transitionConversationCreation(state.creation, {
+                    commandId,
+                    conversationId,
+                    kind: "initial-message-discarded",
+                }),
+            })),
+        initialMessageUnconfirmed: (conversationId, journal) =>
+            set((state) => {
+                const creation = transitionConversationCreation(state.creation, {
+                    journal,
+                    kind: "initial-message-unconfirmed",
+                });
+                return creation.kind === "initial-message-unconfirmed" && creation.conversationId === conversationId
+                    ? { creation }
+                    : {};
+            }),
         createConversation: async (draft, attachments, signal) => {
             const current = get();
             if (
@@ -610,12 +633,12 @@ export const createBotChatHomeStore = (
                     creation: transitionConversationCreation(state.creation, {
                         commandId,
                         conversationId: access.conversationId,
-                        kind: "draft-message-sent",
+                        kind: "initial-message-pending",
                         session,
                     }),
                 }));
                 const sent = get().creation;
-                if (sent.kind !== "draft-message-sent") {
+                if (sent.kind !== "initial-message-pending") {
                     return false;
                 }
                 options.navigation.showManaged(false, sent.conversationId);

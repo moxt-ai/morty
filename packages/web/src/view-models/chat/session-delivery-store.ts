@@ -4,12 +4,14 @@ import { CloudApiError } from "../../services/management/management-api.ts";
 import { formatError } from "../format-error.ts";
 
 type SubmitRequest = Parameters<MobiusClient["turns"]["submit"]>[1];
-type AcceptedTurn = { readonly turnId: string };
-type Journal = {
+export type AcceptedTurn = { readonly turnId: string };
+export type Journal = {
     readonly commandId: string;
     readonly displayPrompt: string;
     readonly request: Omit<SubmitRequest, "idempotencyKey">;
 };
+/** A Journal that can cross into the home store and back on remount. */
+export type UnconfirmedSubmission = Journal;
 
 type DeliveryState =
     | { readonly kind: "idle" }
@@ -39,6 +41,12 @@ function isAuthoritativeFailure(cause: unknown): boolean {
 
 export const createSessionDeliveryStore = (options: {
     readonly submit: (request: SubmitRequest, signal: AbortSignal) => Promise<AcceptedTurn>;
+    /**
+     * A submission whose outcome the previous pane could not confirm. It is
+     * adopted as `delivery-unknown` so the user can retry or discard it, and
+     * nothing is resubmitted without that decision.
+     */
+    readonly initialUnknown?: Journal | undefined;
 }) => {
     const send = async (
         journal: Journal,
@@ -82,7 +90,10 @@ export const createSessionDeliveryStore = (options: {
         }
     };
     return createStore<SessionDeliveryStore>()((set, get) => ({
-        state: { kind: "idle" },
+        state:
+            options.initialUnknown === undefined
+                ? { kind: "idle" }
+                : { journal: options.initialUnknown, kind: "delivery-unknown" },
         discardUnknown: () => {
             const state = get().state;
             if (state.kind !== "delivery-unknown") {

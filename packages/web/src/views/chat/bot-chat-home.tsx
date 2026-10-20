@@ -175,9 +175,22 @@ export function BotChatHome({
                     requests={requests}
                     key={model.selection.session.result.ready.sessionId}
                     session={model.selection.session}
-                    initialMessage={model.creation.kind === "draft-message-sent" ? model.creation.message : undefined}
+                    initialMessage={
+                        model.creation.kind === "initial-message-pending" ? model.creation.message : undefined
+                    }
+                    unconfirmedMessage={
+                        model.creation.kind === "initial-message-unconfirmed" ? model.creation.journal : undefined
+                    }
                     onInitialMessageDelivered={() =>
                         store.getState().initialMessageDelivered(selectedConversationId(model.selection))
+                    }
+                    onInitialMessageRecoveryCleared={(commandId) =>
+                        store
+                            .getState()
+                            .initialMessageRecoveryCleared(selectedConversationId(model.selection), commandId)
+                    }
+                    onInitialMessageUnconfirmed={(commandId) =>
+                        store.getState().initialMessageUnconfirmed(selectedConversationId(model.selection), commandId)
                     }
                     onStatusChange={onStatusChange}
                     onTitleChange={store.getState().updateConversationTitle}

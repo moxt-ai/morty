@@ -26,6 +26,7 @@ import { createBrowserFilePreviewStore } from "../../view-models/chat/file-previ
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
 import { sessionDebugBlocks } from "../../view-models/chat/session-debug-blocks.ts";
+import type { UnconfirmedSubmission } from "../../view-models/chat/session-delivery-store.ts";
 import {
     createSessionPaneModel,
     type SessionConnection,
@@ -229,17 +230,23 @@ function OlderHistorySkeleton() {
 export function MobiusSessionPane({
     session,
     initialMessage,
+    unconfirmedMessage,
     botId,
     requests,
     onInitialMessageDelivered,
+    onInitialMessageRecoveryCleared,
+    onInitialMessageUnconfirmed,
     onStatusChange,
     onTitleChange,
 }: {
     readonly session: OpenMobiusSession;
     readonly initialMessage?: QueuedDraftMessage | undefined;
+    readonly unconfirmedMessage?: UnconfirmedSubmission | undefined;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession" | "runtimeConfiguration">;
     readonly onInitialMessageDelivered?: (() => void) | undefined;
+    readonly onInitialMessageRecoveryCleared?: ((commandId: string) => void) | undefined;
+    readonly onInitialMessageUnconfirmed?: ((journal: UnconfirmedSubmission) => void) | undefined;
     readonly onStatusChange: (sessionId: string, status: SessionActivityState) => void;
     readonly onTitleChange: (sessionId: string, title: string) => void;
 }) {
@@ -250,7 +257,10 @@ export function MobiusSessionPane({
             botId,
             requests,
             initialMessage,
+            unconfirmedMessage,
             onInitialMessageDelivered,
+            onInitialMessageRecoveryCleared,
+            onInitialMessageUnconfirmed,
             onTitleChange,
         }),
     );
