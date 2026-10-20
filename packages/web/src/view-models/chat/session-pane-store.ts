@@ -352,6 +352,8 @@ export function createSessionPaneModel(options: {
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession">;
     readonly initialMessage?: QueuedDraftMessage | undefined;
+    /** Invoked once after the queued first message has been sent. */
+    readonly onInitialMessageDelivered?: (() => void) | undefined;
     readonly onTitleChange: (sessionId: string, title: string) => void;
 }) {
     const { session, botId, requests } = options;
@@ -911,6 +913,7 @@ export function createSessionPaneModel(options: {
                     if (initialCommandId !== null) {
                         await get().send(signal);
                         signal.throwIfAborted();
+                        options.onInitialMessageDelivered?.();
                     }
                     await subscription.completed;
                     signal.throwIfAborted();

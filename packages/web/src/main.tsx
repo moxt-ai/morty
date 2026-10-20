@@ -3,6 +3,8 @@ import { ErrorBoundary, reactErrorHandler } from "@sentry/react";
 import { createRoot } from "react-dom/client";
 import { ToastProvider } from "./components/ui/toast.tsx";
 import { installMortyDebugBridge } from "./debug-bridge.ts";
+import { WebSocketApiTransport } from "./services/api/websocket-api-transport.ts";
+import { createMortyApplication } from "./view-models/morty-application.ts";
 import { Page } from "./views/application/app.tsx";
 import { Bootstrap } from "./views/application/bootstrap.tsx";
 import { BugReportButton } from "./views/diagnostics/bug-report-button.tsx";
@@ -15,11 +17,15 @@ if (rootElement === null) {
     throw new Error("Missing application root");
 }
 
-// React StrictMode intentionally mounts, unmounts, and remounts every component.
-// That cycle closes the Chat API transport while the session store is still
-// loading, and the remounted load starts before Bootstrap can reopen it, so every
-// reload with an existing identity lands on the failure page. The transport's
-// close() is terminal by design, so the application root does not use StrictMode.
+// Application-scoped workflows — the Chat API transport and the anonymous
+// identity session — are owned outside React's mount and unmount cycle. They
+// start with the page and end with it, so no component effect manages them.
+const application = createMortyApplication({
+    origin: window.location.origin,
+    transport: new WebSocketApiTransport(window.location.origin),
+});
+window.addEventListener("pagehide", () => application.dispose());
+
 createRoot(rootElement, {
     onUncaughtError: (error, info) => reactErrorHandler()(error, { componentStack: info.componentStack ?? null }),
     onRecoverableError: (error, info) => reactErrorHandler()(error, { componentStack: info.componentStack ?? null }),
@@ -33,7 +39,7 @@ createRoot(rootElement, {
                 </Page>
             }
         >
-            <Bootstrap />
+            <Bootstrap application={application} />
         </ErrorBoundary>
     </ToastProvider>,
 );

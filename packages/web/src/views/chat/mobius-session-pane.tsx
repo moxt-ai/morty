@@ -231,6 +231,7 @@ export function MobiusSessionPane({
     initialMessage,
     botId,
     requests,
+    onInitialMessageDelivered,
     onStatusChange,
     onTitleChange,
 }: {
@@ -238,6 +239,7 @@ export function MobiusSessionPane({
     readonly initialMessage?: QueuedDraftMessage | undefined;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession" | "runtimeConfiguration">;
+    readonly onInitialMessageDelivered?: (() => void) | undefined;
     readonly onStatusChange: (sessionId: string, status: SessionActivityState) => void;
     readonly onTitleChange: (sessionId: string, title: string) => void;
 }) {
@@ -248,6 +250,7 @@ export function MobiusSessionPane({
             botId,
             requests,
             initialMessage,
+            onInitialMessageDelivered,
             onTitleChange,
         }),
     );

@@ -91,6 +91,18 @@ export interface BotChatNavigation {
     readonly showForkInstead: () => void;
 }
 
+/**
+ * One-shot entry notices. `pending` marks a notice the workflow wants to
+ * surface; resolving transitions it to `visible` exactly once, and dismissal
+ * or a successful connection clears it for the rest of the entry.
+ */
+type ChatEntryNotice = { readonly kind: "hidden" } | { readonly kind: "pending" } | { readonly kind: "visible" };
+
+interface ChatEntryNotices {
+    readonly connectionFailed: ChatEntryNotice;
+    readonly pairing: ChatEntryNotice;
+}
+
 export interface BotChatHomeStore {
     readonly view: BotChatHomeView;
     readonly connectionStatus: BotConnectionStatus;
@@ -101,6 +113,9 @@ export interface BotChatHomeStore {
     readonly draft: string;
     readonly draftSettings: ChatDraftConfiguration | null;
     readonly optimisticTitles: ReadonlyMap<string, string>;
+    /** Entry notices that surface a dialog once when the workflow resolves. */
+    readonly notices: ChatEntryNotices;
+    readonly dismissNotice: (notice: "connection-failed" | "pairing") => void;
     readonly load: (signal: AbortSignal) => Promise<void>;
     readonly newConversation: () => void;
     readonly openManaged: (isExternal: boolean, id: string) => void;
@@ -109,6 +124,8 @@ export interface BotChatHomeStore {
     readonly setDraft: (draft: string) => void;
     readonly setDraftSettings: (settings: ChatDraftConfiguration | null) => void;
     readonly updateConversationTitle: (sessionId: string, title: string) => void;
+    /** Clears the queued first message once the pane has sent it. */
+    readonly initialMessageDelivered: (conversationId: string) => void;
     readonly createConversation: (
         draft: string,
         attachments: readonly ComposerAttachment[],
@@ -179,6 +196,14 @@ export const createBotChatHomeStore = (
         draft: "",
         draftSettings: null,
         optimisticTitles: new Map(),
+        notices: { connectionFailed: { kind: "hidden" }, pairing: { kind: "hidden" } },
+        dismissNotice: (notice) =>
+            set((current) => ({
+                notices:
+                    notice === "connection-failed"
+                        ? { ...current.notices, connectionFailed: { kind: "hidden" } }
+                        : { ...current.notices, pairing: { kind: "hidden" } },
+            })),
         load: async (signal) => {
             set((current) => ({ view: "botId" in current.view ? current.view : { kind: "loading" } }));
             let opened = false;
@@ -255,6 +280,9 @@ export const createBotChatHomeStore = (
                                   })
                                 : current.selection,
                         view: { kind: "setup", botId, reason: "unconfigured" },
+                        ...(current.notices.pairing.kind === "hidden"
+                            ? { notices: { ...current.notices, pairing: { kind: "visible" as const } } }
+                            : {}),
                     }));
                     await requests.waitForSetupChange(botId, signal);
                     signal.throwIfAborted();
@@ -306,12 +334,22 @@ export const createBotChatHomeStore = (
                 }
                 const reason = currentTarget === null ? setupReason(configuration) : null;
                 if (reason !== null) {
-                    set({ view: { kind: "setup", botId, reason } });
+                    set((current) => ({
+                        view: { kind: "setup", botId, reason },
+                        ...(current.notices.pairing.kind === "visible"
+                            ? { notices: { ...current.notices, pairing: { kind: "hidden" as const } } }
+                            : {}),
+                    }));
                     await watchRuntimeConfigurationChanges();
                     return;
                 }
                 if (currentTarget === null) {
-                    set({ view: { kind: "active", botId } });
+                    set((current) => ({
+                        view: { kind: "active", botId },
+                        ...(current.notices.pairing.kind === "visible"
+                            ? { notices: { ...current.notices, pairing: { kind: "hidden" as const } } }
+                            : {}),
+                    }));
                     await watchRuntimeConfigurationChanges();
                     return;
                 }
@@ -414,6 +452,9 @@ export const createBotChatHomeStore = (
                             ? { kind: "disconnected", label: "Disconnected" }
                             : current.connectionStatus,
                     view: opened ? { kind: "connection-failed", botId, message } : { kind: "failed", message },
+                    ...(opened && current.notices.connectionFailed.kind === "hidden"
+                        ? { notices: { ...current.notices, connectionFailed: { kind: "visible" as const } } }
+                        : {}),
                 }));
             }
         },
@@ -482,6 +523,13 @@ export const createBotChatHomeStore = (
                     kind: "session-title-updated",
                     sessionId,
                     title,
+                }),
+            })),
+        initialMessageDelivered: (conversationId) =>
+            set((state) => ({
+                creation: transitionConversationCreation(state.creation, {
+                    conversationId,
+                    kind: "initial-message-delivered",
                 }),
             })),
         createConversation: async (draft, attachments, signal) => {

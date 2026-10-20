@@ -1,41 +1,30 @@
 import { CircleAlert, CircleHelp, RefreshCw } from "lucide-react";
 import { Tooltip } from "radix-ui";
-import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
 import { CwdSelector } from "../../components/chat/cwd-selector.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
-import {
-    type BotChatApi,
-    type ChatDraftConfiguration,
-    connectedChatRuntimeAgents,
-} from "../../services/chat/bot-chat-api.ts";
-import { createDraftControlsStore } from "../../view-models/chat/draft-controls-store.ts";
+import { type BotChatApi, connectedChatRuntimeAgents } from "../../services/chat/bot-chat-api.ts";
+import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 
 export function DraftChatControls({
-    botId,
-    requests,
+    workspace,
+    botId: _botId,
+    requests: _requests,
     disabled,
-    onSettings,
 }: {
+    readonly workspace: ChatWorkspace;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "runtimeConfiguration" | "directory" | "agentSettings">;
     readonly disabled: boolean;
-    readonly onSettings: (settings: ChatDraftConfiguration | null) => void;
 }) {
-    const [store] = useState(() => createDraftControlsStore(botId, requests, onSettings));
-    const viewModel = useStore(store);
+    const viewModel = useStore(workspace.draftControls);
+    const signal = workspace.chatSignal();
     const { settings } = viewModel;
-    const [revision, retry] = useState(0);
-    const operation = useRef<AbortController | null>(null);
-    // biome-ignore lint/correctness/useExhaustiveDependencies: Retry explicitly reloads harness settings.
-    useEffect(() => {
-        const controller = new AbortController();
-        operation.current = controller;
-        void viewModel.load(controller.signal);
-        return () => controller.abort();
-    }, [revision, viewModel.load]);
+    const retry = () => {
+        workspace.retryDraftControls();
+    };
     if (settings.kind === "loading") {
         return <Spinner label="Loading harness and model settings" />;
     }
@@ -47,7 +36,7 @@ export function DraftChatControls({
                 </span>
                 <button
                     className="flex h-9 min-w-0 max-w-48 items-center gap-1.5 rounded-lg px-2 text-[13px] text-destructive outline-none transition-colors hover:bg-destructive/8 focus-visible:ring-2 focus-visible:ring-destructive/30 motion-reduce:transition-none"
-                    onClick={() => retry((value) => value + 1)}
+                    onClick={retry}
                     type="button"
                 >
                     <CircleAlert aria-hidden="true" className="size-4 shrink-0" />
@@ -97,10 +86,7 @@ export function DraftChatControls({
                         kind: "select" as const,
                         label: "Harness",
                         onValueChange: (value) => {
-                            const controller = operation.current;
-                            if (controller !== null) {
-                                void viewModel.selectHarness(value, disabled, controller.signal);
-                            }
+                            void viewModel.selectHarness(value, disabled, signal);
                         },
                         options: connectedChatRuntimeAgents(settings.configuration.runtime).map((agent) => ({
                             agentRef: agent.agentRef,
@@ -136,11 +122,7 @@ export function DraftChatControls({
                 ]}
                 settingsLoading={settingsLoading}
             />
-            <CwdSelector
-                disabled={disabled || settingsLoading}
-                signal={operation.current?.signal ?? AbortSignal.abort()}
-                viewModel={viewModel}
-            />
+            <CwdSelector disabled={disabled || settingsLoading} signal={signal} viewModel={viewModel} />
             {!switching && model === undefined && (
                 <span className="sr-only">This harness has not reported any model choices.</span>
             )}

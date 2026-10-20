@@ -1,15 +1,14 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useMemo } from "react";
 import { useStore } from "zustand";
 import { createApplicationRouter } from "../../index.ts";
-import { useApiTransport } from "../../services/api/api-transport-context.tsx";
-import { createAnonymousSessionStore } from "../../view-models/authentication/anonymous-session-store.ts";
+import type { MortyApplication } from "../../view-models/morty-application.ts";
 import { App } from "../application/app.tsx";
 import { MobiusManagement } from "../applications/mobius-management.tsx";
 import { PairingInstruction } from "../chat/pairing-instruction.tsx";
 import { type ActiveIdentity, ActiveIdentityProvider } from "./identity-context.tsx";
 import { router as continuationRouter } from "./router.tsx";
 
-export function MortyApplication(props: {
+export function SignedInApplication(props: {
     readonly activeIdentity: ActiveIdentity;
     readonly authorize: (signal: AbortSignal) => Promise<void>;
 }) {
@@ -25,19 +24,9 @@ export function MortyApplication(props: {
     );
 }
 
-export function SessionApplication() {
-    const transport = useApiTransport();
-    const [store] = useState(() => createAnonymousSessionStore(transport.fetch, window.location.origin));
-    const { authorize, load, state } = useStore(store);
+export function SessionApplication({ application }: { readonly application: MortyApplication }) {
+    const { authorize, state } = useStore(application.anonymousSession);
     const continuationPath = window.location.pathname.startsWith("/continue");
-    useEffect(() => {
-        if (continuationPath) {
-            return;
-        }
-        const controller = new AbortController();
-        void load(controller.signal);
-        return () => controller.abort();
-    }, [continuationPath, load]);
     if (continuationPath) {
         return <App state={{ kind: "authentication", router: continuationRouter }} />;
     }
@@ -58,7 +47,7 @@ export function SessionApplication() {
         },
         projectId: state.identity.projectId,
     };
-    return <MortyApplication activeIdentity={activeIdentity} authorize={authorize} />;
+    return <SignedInApplication activeIdentity={activeIdentity} authorize={authorize} />;
 }
 
 function SetupApplication() {

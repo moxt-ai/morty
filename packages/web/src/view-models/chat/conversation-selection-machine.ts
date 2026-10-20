@@ -1,6 +1,6 @@
 import type { OpenMobiusSession } from "./open-session.ts";
 
-type SelectedConversationTarget =
+export type SelectedConversationTarget =
     | { readonly kind: "conversation"; readonly conversationId: string }
     | { readonly kind: "session"; readonly sessionId: string };
 
@@ -16,7 +16,11 @@ export type ConversationTarget =
 export type ConversationSelectionState =
     | { readonly kind: "draft"; readonly key: string }
     | { readonly kind: "loading"; readonly target: ConversationTarget }
-    | { readonly kind: "ready"; readonly session: OpenMobiusSession; readonly target: SelectedConversationTarget }
+    | {
+          readonly kind: "ready";
+          readonly session: OpenMobiusSession;
+          readonly target: SelectedConversationTarget;
+      }
     | { readonly kind: "failed"; readonly message: string; readonly target: ConversationTarget };
 
 export type ConversationSelectionEvent =
@@ -29,6 +33,7 @@ export type ConversationSelectionEvent =
       }
     | { readonly kind: "session-load-failed"; readonly message: string; readonly target: ConversationTarget }
     | { readonly kind: "retry-requested" }
+    | { readonly kind: "reload-requested" }
     | { readonly kind: "session-title-updated"; readonly sessionId: string; readonly title: string }
     | {
           readonly kind: "continued-session-loaded";
@@ -75,6 +80,8 @@ export function transitionConversationSelection(
                 : state;
         case "retry-requested":
             return state.kind === "failed" ? { kind: "loading", target: state.target } : state;
+        case "reload-requested":
+            return state.kind === "ready" ? { kind: "loading", target: state.target } : state;
         case "session-title-updated":
             return state.kind === "ready" && state.session.result.ready.sessionId === event.sessionId
                 ? {

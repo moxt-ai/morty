@@ -1,5 +1,5 @@
 import { MessageSquare, X } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { BotChatComposer, type ComposerAttachment } from "../../components/chat/bot-chat-composer.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
@@ -7,9 +7,10 @@ import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { dataTestId } from "../../data-testid.ts";
-import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
+import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
-import { createBotChatHomeStore, disconnectedBotNotice } from "../../view-models/chat/bot-chat-home-store.ts";
+import { disconnectedBotNotice } from "../../view-models/chat/bot-chat-home-store.ts";
+import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import {
     conversationComposerLocked,
     conversationCreationBusy,
@@ -18,22 +19,21 @@ import {
     queuedDraftMessage,
 } from "../../view-models/chat/conversation-creation-machine.ts";
 import { selectedConversationId } from "../../view-models/chat/conversation-selection-machine.ts";
-import { createConversationStatusStore } from "../../view-models/chat/conversation-status-store.ts";
 import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
-import { reportApplicationError } from "../../view-models/report-error.ts";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
 import { MobiusSessionPane } from "./mobius-session-pane.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
 
 export function BotChatHome({
+    workspace,
     requests,
     createTransfer,
     currentAccessToken,
     endRemoteAccess,
-    botId,
     projectId,
 }: {
+    readonly workspace: ChatWorkspace;
     readonly requests: Pick<
         BotChatApi,
         | "readBot"
@@ -59,57 +59,17 @@ export function BotChatHome({
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
     readonly currentAccessToken: (signal: AbortSignal) => Promise<string>;
     readonly endRemoteAccess: (token: string, signal: AbortSignal) => Promise<void>;
-    readonly botId: string;
     readonly projectId: string;
 }) {
-    const [store] = useState(() =>
-        createBotChatHomeStore(requests, {
-            botId,
-            url: window.location.href,
-            createId: () => crypto.randomUUID(),
-            navigation: {
-                showDraft: () => {
-                    const url = new URL(window.location.href);
-                    url.searchParams.delete("conversation");
-                    url.searchParams.delete("conversationId");
-                    url.searchParams.delete("sessionId");
-                    window.history.replaceState(window.history.state, "", url);
-                },
-                showManaged: (_isExternal, id) => {
-                    const url = new URL(window.location.href);
-                    url.searchParams.delete("conversationId");
-                    url.searchParams.delete("sessionId");
-                    url.searchParams.set("sessionId", id);
-                    window.history.replaceState(window.history.state, "", url);
-                },
-                showContinuedSession: (sessionId) => {
-                    const url = new URL(window.location.href);
-                    url.searchParams.delete("harness");
-                    url.searchParams.delete("nativeSessionAction");
-                    url.searchParams.set("sessionId", sessionId);
-                    window.history.replaceState(window.history.state, "", url);
-                },
-                showForkInstead: () => {
-                    const url = new URL(window.location.href);
-                    url.searchParams.set("nativeSessionAction", "fork");
-                    window.history.replaceState(window.history.state, "", url);
-                },
-            },
-        }),
-    );
+    const store = workspace.home;
     const model = useStore(store);
-    const [statusStore] = useState(() => createConversationStatusStore(requests));
-    const [statusLifetime] = useState(() => new AbortController());
-    const sessionStatuses = useStore(statusStore, (state) => state.statuses);
     const [pairingDialogOpen, setPairingDialogOpen] = useState(false);
     const [failureDialogOpen, setFailureDialogOpen] = useState(false);
     const [disconnectedNotificationDismissed, setDisconnectedNotificationDismissed] = useState(false);
     const [attachments, setAttachments] = useState<readonly ComposerAttachment[]>([]);
-    const lifetime = useRef<AbortController | null>(null);
+    const followLatest = useRef(true);
     const messageList = useRef<HTMLDivElement | null>(null);
     const messageContent = useRef<HTMLDivElement | null>(null);
-    const followLatest = useRef(true);
-    const entryConnectionResolved = useRef(false);
     const connectionStatus = model.connectionStatus;
     const disconnectionNotice = disconnectedBotNotice(model.view, connectionStatus);
     const creationBusy = conversationCreationBusy(model.creation);
@@ -119,54 +79,8 @@ export function BotChatHome({
     const queuedInitialMessage = queuedDraftMessage(model.creation);
     const draft = model.draft;
     const setupView = model.view.kind === "setup" ? model.view : null;
-
-    // biome-ignore lint/correctness/useExhaustiveDependencies: Store revision explicitly restarts route loading.
-    useEffect(() => {
-        const controller = new AbortController();
-        lifetime.current = controller;
-        void store
-            .getState()
-            .load(controller.signal)
-            .catch((cause: unknown) => {
-                if (!controller.signal.aborted) {
-                    reportApplicationError(cause, "chat-home-load");
-                }
-            });
-        return () => {
-            controller.abort();
-            if (lifetime.current === controller) {
-                lifetime.current = null;
-            }
-        };
-    }, [model.revision, store]);
-    useEffect(
-        () => () => {
-            statusLifetime.abort(new Error("Conversation status lifetime ended"));
-            statusStore.getState().close();
-        },
-        [statusLifetime, statusStore],
-    );
-
-    useEffect(() => {
-        if (model.view.kind === "active") {
-            setPairingDialogOpen(false);
-            setFailureDialogOpen(false);
-        }
-        if (
-            entryConnectionResolved.current ||
-            model.view.kind === "loading" ||
-            model.view.kind === "connecting" ||
-            model.selection.kind === "loading"
-        ) {
-            return;
-        }
-        entryConnectionResolved.current = true;
-        if (model.view.kind === "connection-failed") {
-            setFailureDialogOpen(true);
-        } else if (setupView?.reason === "unconfigured") {
-            setPairingDialogOpen(true);
-        }
-    }, [model.selection.kind, model.view.kind, setupView]);
+    const pairingNotice = model.notices.pairing.kind === "visible" || pairingDialogOpen;
+    const failureNotice = model.notices.connectionFailed.kind === "visible" || failureDialogOpen;
 
     useLayoutEffect(() => {
         if (model.view.kind === "active" && followLatest.current && messageList.current !== null) {
@@ -201,22 +115,13 @@ export function BotChatHome({
             : null;
     const activeBotId = active?.botId;
     const activeConversationId = selectedConversationId(model.selection);
-    useEffect(() => {
-        statusStore.getState().selectionChanged(activeConversationId);
-    }, [activeConversationId, statusStore]);
     const onStatusChange = useCallback(
         (sessionId: string, status: SessionActivityState): void => {
             if (activeBotId !== undefined) {
-                statusStore.getState().statusChanged(activeBotId, sessionId, status, statusLifetime.signal);
+                workspace.sessionStatusChanged(sessionId, status);
             }
         },
-        [activeBotId, statusLifetime, statusStore],
-    );
-    const onDirectorySessions = useCallback(
-        (botId: string, sessions: readonly ManagedChatSession[]): void => {
-            statusStore.getState().directoryLoaded(botId, sessions, statusLifetime.signal);
-        },
-        [statusLifetime, statusStore],
+        [activeBotId, workspace],
     );
     const clearComposer = () => {
         store.getState().setDraft("");
@@ -233,11 +138,7 @@ export function BotChatHome({
         store.getState().openManaged(isExternal, id);
     };
     const send = async () => {
-        const controller = lifetime.current;
-        if (controller === null) {
-            return;
-        }
-        if (await store.getState().createConversation(draft, attachments, controller.signal)) {
+        if (await store.getState().createConversation(draft, attachments, workspace.chatSignal())) {
             clearComposer();
         }
     };
@@ -247,13 +148,13 @@ export function BotChatHome({
             aria-label="Chat"
             data-chat-state={model.selection.kind === "ready" ? "connected" : "disconnected"}
             className="fixed inset-0 flex min-h-0 overflow-hidden bg-background text-foreground max-sm:flex-col sm:flex-row"
+            ref={workspace.onAttach}
         >
             {active !== null && (
                 <ConversationSidebar
                     botId={active.botId}
-                    sessionStatuses={sessionStatuses}
+                    workspace={workspace}
                     activeId={activeConversationId}
-                    directoryRevision={model.directoryRevision}
                     optimisticTitles={model.optimisticTitles}
                     projectId={projectId}
                     connectionStatus={connectionStatus}
@@ -266,7 +167,6 @@ export function BotChatHome({
                         openManaged(session.result.action === "import", session.result.ready.sessionId)
                     }
                     onNewConversation={newConversation}
-                    onSessionsLoaded={onDirectorySessions}
                     endRemoteAccess={endRemoteAccess}
                 />
             )}
@@ -277,6 +177,9 @@ export function BotChatHome({
                     key={model.selection.session.result.ready.sessionId}
                     session={model.selection.session}
                     initialMessage={model.creation.kind === "draft-message-sent" ? model.creation.message : undefined}
+                    onInitialMessageDelivered={() =>
+                        store.getState().initialMessageDelivered(selectedConversationId(model.selection))
+                    }
                     onStatusChange={onStatusChange}
                     onTitleChange={store.getState().updateConversationTitle}
                 />
@@ -392,34 +295,41 @@ export function BotChatHome({
                         >
                             <DraftChatControls
                                 key={model.selection.key}
+                                workspace={workspace}
                                 botId={model.view.botId}
                                 requests={requests}
                                 disabled={composerLocked}
-                                onSettings={store.getState().setDraftSettings}
                             />
                         </BotChatComposer>
                     )}
                 </section>
             )}
-            {pairingDialogOpen && setupView?.reason === "unconfigured" && active !== null && (
+            {pairingNotice && setupView?.reason === "unconfigured" && active !== null && (
                 <Dialog
                     title="Connect agent"
                     description="Morty is ready. Paste this instruction into your local agent to connect it."
-                    onClose={() => setPairingDialogOpen(false)}
+                    onClose={() => {
+                        setPairingDialogOpen(false);
+                        store.getState().dismissNotice("pairing");
+                    }}
                 >
                     <PairingInstruction />
                 </Dialog>
             )}
-            {failureDialogOpen && model.view.kind === "connection-failed" && (
+            {failureNotice && model.view.kind === "connection-failed" && (
                 <Dialog
                     title="Runtime connection unavailable"
                     description={model.view.message}
-                    onClose={() => setFailureDialogOpen(false)}
+                    onClose={() => {
+                        setFailureDialogOpen(false);
+                        store.getState().dismissNotice("connection-failed");
+                    }}
                     testId={dataTestId.runtimeSetupFailure}
                 >
                     <Button
                         onClick={() => {
                             setFailureDialogOpen(false);
+                            store.getState().dismissNotice("connection-failed");
                             store.getState().retry();
                         }}
                     >

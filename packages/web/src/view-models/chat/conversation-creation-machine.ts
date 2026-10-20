@@ -41,6 +41,7 @@ export type ConversationCreationEvent =
     | { readonly kind: "session-created"; readonly commandId: string; readonly access: ChatAccess }
     | { readonly kind: "session-create-failed"; readonly commandId: string; readonly error: string }
     | { readonly kind: "draft-message-retry-requested"; readonly commandId: string }
+    | { readonly kind: "initial-message-delivered"; readonly conversationId: string }
     | {
           readonly kind: "draft-message-sent";
           readonly commandId: string;
@@ -92,6 +93,12 @@ export function transitionConversationCreation(
         case "draft-message-retry-requested":
             return state.kind === "draft-message-send-failed" && isCurrentMessage(state, event.commandId)
                 ? { access: state.access, kind: "draft-message-sending", message: state.message }
+                : state;
+        case "initial-message-delivered":
+            // The pane that opened this conversation has sent the queued first
+            // message; a later view must not send it again.
+            return state.kind === "draft-message-sent" && state.conversationId === event.conversationId
+                ? { kind: "draft" }
                 : state;
         case "draft-message-sent":
             return state.kind === "draft-message-sending" && isCurrentMessage(state, event.commandId)

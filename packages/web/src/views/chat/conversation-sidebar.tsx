@@ -11,7 +11,7 @@ import {
     Wifi,
 } from "lucide-react";
 import { ContextMenu, DropdownMenu, Tooltip } from "radix-ui";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
@@ -20,8 +20,7 @@ import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
-import { createConversationDirectoryStore } from "../../view-models/chat/conversation-directory-store.ts";
-import type { ConversationListStatus } from "../../view-models/chat/conversation-status-store.ts";
+import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import { createNetworkDiagnosticStore } from "../../view-models/chat/network-diagnostic-store.ts";
 import { projectLocationLabel } from "../../view-models/chat/project-location-label.ts";
 import { createRemoteAccessStore } from "../../view-models/chat/remote-access-store.ts";
@@ -128,23 +127,22 @@ function ConnectionStatus({ status }: { readonly status: BotConnectionStatus }) 
 export function ConversationSidebar({
     botId,
     connectionStatus,
+    workspace,
     onConnectAgent,
     requests,
     activeId,
     onOpen,
     onOpenSession,
     onNewConversation,
-    onSessionsLoaded,
     currentAccessToken,
     endRemoteAccess,
     createTransfer,
-    sessionStatuses,
-    directoryRevision,
     optimisticTitles,
     projectId,
 }: {
     readonly botId: string;
     readonly connectionStatus: BotConnectionStatus;
+    readonly workspace: ChatWorkspace;
     readonly onConnectAgent: (() => void) | null;
     readonly requests: Pick<
         BotChatApi,
@@ -157,22 +155,20 @@ export function ConversationSidebar({
         | "networkDiagnostic"
     >;
     readonly activeId: string;
-    readonly directoryRevision: number;
     readonly optimisticTitles: ReadonlyMap<string, string>;
     readonly projectId: string;
     readonly onOpen: (session: ManagedChatSession) => void;
     readonly onOpenSession: (session: OpenMobiusSession) => void;
     readonly onNewConversation: () => void;
-    readonly onSessionsLoaded: (botId: string, sessions: readonly ManagedChatSession[]) => void;
     readonly currentAccessToken: (signal: AbortSignal) => Promise<string>;
     readonly endRemoteAccess: (token: string, signal: AbortSignal) => Promise<void>;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
-    readonly sessionStatuses: ReadonlyMap<string, ConversationListStatus>;
 }) {
     const transport = useApiTransport();
-    const [store] = useState(() => createConversationDirectoryStore(botId, requests));
-    const { archive, archiveSession, load, state: directory } = useStore(store);
-    const [revision, refresh] = useState(0);
+    const directory = useStore(workspace.directory, (state) => state.state);
+    const archive = useStore(workspace.directory, (state) => state.archive);
+    const archiveSession = useStore(workspace.directory, (state) => state.archiveSession);
+    const sessionStatuses = useStore(workspace.statuses, (state) => state.statuses);
     const [expanded, setExpanded] = useState(false);
     const [dialog, setDialog] = useState(false);
     const [sharing, setSharing] = useState(false);
@@ -186,12 +182,9 @@ export function ConversationSidebar({
         }),
     );
     const diagnostic = useStore(networkDiagnostic);
-    const lifetime = useRef<AbortController | null>(null);
+    const refreshing = directory.kind === "refreshing";
     const measureNetwork = () => {
-        const controller = lifetime.current;
-        if (controller !== null) {
-            void diagnostic.measure(controller.signal).catch(() => undefined);
-        }
+        void diagnostic.measure(workspace.operationsSignal()).catch(() => undefined);
     };
     const sessions =
         directory.kind === "ready" || directory.kind === "refreshing" || directory.kind === "stale"
@@ -201,27 +194,6 @@ export function ConversationSidebar({
               }))
             : null;
     const conversationGroups = sessions === null ? null : groupConversationsByUpdatedAt(sessions, new Date());
-    const refreshing = directory.kind === "refreshing";
-    // The directory belongs to the active Bot, not to the selected Session.
-    // Session selection is managed by the home view-model and must not restart
-    // or cancel this independent directory workflow.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: Creation and explicit refresh reload the persisted directory.
-    useEffect(() => {
-        const controller = new AbortController();
-        lifetime.current = controller;
-        void load(controller.signal);
-        return () => {
-            controller.abort();
-            if (lifetime.current === controller) {
-                lifetime.current = null;
-            }
-        };
-    }, [directoryRevision, load, revision]);
-    useEffect(() => {
-        if (directory.kind === "ready") {
-            onSessionsLoaded(botId, directory.sessions);
-        }
-    }, [botId, directory, onSessionsLoaded]);
     return (
         <aside
             aria-label="Morty navigation"
@@ -283,7 +255,7 @@ export function ConversationSidebar({
                                 aria-label={refreshing ? "Refreshing sessions" : "Refresh sessions"}
                                 aria-busy={refreshing}
                                 disabled={refreshing}
-                                onClick={() => refresh((value) => value + 1)}
+                                onClick={workspace.refreshDirectory}
                             >
                                 <RefreshCw
                                     className={`size-3.5 ${refreshing ? "animate-spin motion-reduce:animate-none" : ""}`}
@@ -417,10 +389,7 @@ export function ConversationSidebar({
                                             data-testid={dataTestId.archiveConversation}
                                             disabled={archive.kind === "archiving"}
                                             onSelect={() => {
-                                                const controller = lifetime.current;
-                                                if (controller !== null) {
-                                                    void archiveSession(session.id, controller.signal);
-                                                }
+                                                void archiveSession(session.id, workspace.operationsSignal());
                                             }}
                                         >
                                             Close session
@@ -482,10 +451,7 @@ export function ConversationSidebar({
                                         className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-destructive outline-none data-[highlighted]:bg-destructive/10"
                                         data-testid={dataTestId.endRemoteAccess}
                                         onSelect={() => {
-                                            const controller = lifetime.current;
-                                            if (controller !== null) {
-                                                void access.requestEnd(controller.signal);
-                                            }
+                                            void access.requestEnd(workspace.operationsSignal());
                                         }}
                                     >
                                         <LogOut aria-hidden="true" className="size-4" />
@@ -516,7 +482,7 @@ export function ConversationSidebar({
                     onOpen={(session) => {
                         onOpenSession(session);
                         setDialog(false);
-                        refresh((value) => value + 1);
+                        workspace.refreshDirectory();
                     }}
                 />
             )}
@@ -643,10 +609,7 @@ export function ConversationSidebar({
                         <Button
                             disabled={access.state.kind === "ending"}
                             onClick={() => {
-                                const controller = lifetime.current;
-                                if (controller !== null) {
-                                    void access.end(controller.signal);
-                                }
+                                void access.end(workspace.operationsSignal());
                             }}
                             variant="destructive"
                         >

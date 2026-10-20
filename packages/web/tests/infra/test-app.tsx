@@ -7,10 +7,12 @@ import { ApiTransportProvider } from "../../src/services/api/api-transport-conte
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../src/services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope } from "../../src/services/identity/identity-scope-url.ts";
+import { createMortyApplication } from "../../src/view-models/morty-application.ts";
 import { App } from "../../src/views/application/app.tsx";
+import { MortyApplicationProvider } from "../../src/views/application/application-context.tsx";
 import { Bootstrap } from "../../src/views/application/bootstrap.tsx";
 import { router as authenticationRouter } from "../../src/views/authentication/router.tsx";
-import { MortyApplication } from "../../src/views/authentication/session-application.tsx";
+import { SignedInApplication } from "../../src/views/authentication/session-application.tsx";
 import { createChatWorkerEnvironment } from "../support/chat-worker.ts";
 
 declare global {
@@ -94,6 +96,10 @@ export async function createTestApp(
         window.location.href = destination.href;
     }
     let container = document.createElement("div");
+    // The application factory owns the anonymous identity workflow for the
+    // whole test app, so a remount re-renders the same application instead of
+    // restarting the workflow, exactly like a production page reload remount.
+    const application = createMortyApplication({ origin: current.origin, transport: current.transport });
     const mount = () => {
         container.setAttribute("data-test-app-root", "");
         document.body.appendChild(container);
@@ -101,14 +107,16 @@ export async function createTestApp(
             <ApiTransportProvider transport={current.transport}>
                 <ToastProvider>
                     {page.kind === "bootstrap" ? (
-                        <Bootstrap />
+                        <Bootstrap application={application} />
                     ) : page.kind === "continue" ? (
                         <App state={{ kind: "authentication", router: authenticationRouter }} />
                     ) : (
-                        <MortyApplication
-                            activeIdentity={current.identity}
-                            authorize={async (signal) => signal.throwIfAborted()}
-                        />
+                        <MortyApplicationProvider application={application}>
+                            <SignedInApplication
+                                activeIdentity={current.identity}
+                                authorize={async (signal) => signal.throwIfAborted()}
+                            />
+                        </MortyApplicationProvider>
                     )}
                 </ToastProvider>
             </ApiTransportProvider>,
@@ -205,6 +213,9 @@ export async function createTestApp(
             closed = true;
             lifetime.abort(new DOMException("The test application closed", "AbortError"));
             rendered.unmount();
+            // The factory owns the identity lifetime and the chat API; the
+            // harness keeps the borrowed transport open for other viewers.
+            application?.dispose();
             await current.close();
             container.remove();
             activeApps.delete(app);

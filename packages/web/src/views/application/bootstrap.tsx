@@ -1,17 +1,14 @@
-import { useEffect, useState } from "react";
 import { ApiTransportProvider } from "../../services/api/api-transport-context.tsx";
-import { WebSocketApiTransport } from "../../services/api/websocket-api-transport.ts";
+import type { MortyApplication } from "../../view-models/morty-application.ts";
 import { SessionApplication } from "../authentication/session-application.tsx";
+import { MortyApplicationProvider } from "./application-context.tsx";
 
-export function Bootstrap() {
-    const [transport] = useState(() => new WebSocketApiTransport(window.location.origin));
-    useEffect(() => {
-        transport.open();
-        return () => transport.close();
-    }, [transport]);
+export function Bootstrap({ application }: { readonly application: MortyApplication }) {
     return (
-        <ApiTransportProvider transport={transport}>
-            <SessionApplication />
+        <ApiTransportProvider transport={application.transport}>
+            <MortyApplicationProvider application={application}>
+                <SessionApplication application={application} />
+            </MortyApplicationProvider>
         </ApiTransportProvider>
     );
 }

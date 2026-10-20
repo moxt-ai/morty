@@ -1,26 +1,23 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback } from "react";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
-import { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { AnonymousIdentityApi } from "../../services/identity/anonymous-identity-api.ts";
+import { useMortyApplication } from "../application/application-context.tsx";
 import { useActiveIdentity } from "../authentication/identity-context.tsx";
 import { BotChatHome } from "../chat/bot-chat-home.tsx";
 
 export function MobiusManagement() {
     const transport = useApiTransport();
+    const application = useMortyApplication();
     const identity = useActiveIdentity();
-    const requests = useMemo(
-        () =>
-            new BotChatApi({
-                origin: window.location.origin,
-                projectId: identity.projectId,
-                getToken: identity.getToken,
-                fetchRequest: transport.fetch,
-                subscribe: transport.subscribe,
-                waitForChange: transport.waitForChange,
-            }),
-        [identity, transport],
-    );
-    useEffect(() => () => requests.close(), [requests]);
+    // The workspace and its chat API are owned by the application factory, so
+    // view remounts re-render the same stores and no mount effect manages
+    // their loading lifetime.
+    const workspace = application.chatWorkspace({
+        botId: identity.botId,
+        getToken: identity.getToken,
+        projectId: identity.projectId,
+    });
+    const requests = workspace.requests;
     const createTransfer = useCallback(
         async (signal: AbortSignal) => {
             const api = new AnonymousIdentityApi({
@@ -62,11 +59,11 @@ export function MobiusManagement() {
     );
     return (
         <BotChatHome
+            workspace={workspace}
             requests={requests}
             createTransfer={createTransfer}
             currentAccessToken={currentAccessToken}
             endRemoteAccess={endRemoteAccess}
-            botId={identity.botId}
             projectId={identity.projectId}
         />
     );
