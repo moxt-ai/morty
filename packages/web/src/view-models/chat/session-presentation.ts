@@ -313,13 +313,12 @@ function mergeCompactionPresentation(
 }
 
 function compactionSummary(summary: readonly ContentBlock[]): SessionText | null {
-    for (let index = summary.length - 1; index >= 0; index -= 1) {
-        const block = summary[index];
-        if (block?.type === "text" && block.text.length > 0) {
-            return initialSessionText(block.text, COMPACTION_CHARACTER_LIMIT);
-        }
-    }
-    return null;
+    // A terminal summary may span several text blocks; they read as one summary,
+    // so aggregate them in order before applying the retention limit.
+    const text = summary
+        .flatMap((block) => (block?.type === "text" && block.text.length > 0 ? [block.text] : []))
+        .join("");
+    return text.length > 0 ? initialSessionText(text, COMPACTION_CHARACTER_LIMIT) : null;
 }
 
 function compactionStatus(
@@ -493,7 +492,15 @@ function consumeSessionEvent(
             role: "assistant",
         };
         return existingIndex === -1
-            ? { firstEvent: "known", kind: "constructed", message }
+            ? {
+                  // A compaction whose first observed event might not be its start
+                  // (a page boundary can fall mid-compaction) stays unresolved so
+                  // prependSessionMessageEvents can merge the older page's earlier
+                  // events under the same id.
+                  firstEvent: entries.length === 0 ? leadingEvent : "known",
+                  kind: "constructed",
+                  message,
+              }
             : { index: existingIndex, kind: "consumed", message };
     }
     if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update") {

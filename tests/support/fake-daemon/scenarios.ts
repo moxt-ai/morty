@@ -127,6 +127,17 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     { kind: "text", text: "Context compacted; continuing with the summary." },
                 ],
             };
+        case "compact with summary blocks":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        blocks: ["Early discussion covered the page merge. ", "Later discussion covered the summary."],
+                        kind: "compaction-summary-blocks",
+                    },
+                    { kind: "text", text: "Compaction replaced the summary." },
+                ],
+            };
         case "hold after first delta":
             return {
                 outcome: "hold",
@@ -207,6 +218,14 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
             };
         case "many session events":
             return manySessionEvents();
+        case "many session events then compact":
+            return {
+                outcome: "complete",
+                output: [
+                    ...manySessionEvents().output,
+                    { kind: "compaction", summary: "The older history was compacted.\nKeep this text." },
+                ],
+            };
         case "show generated picture":
             return {
                 outcome: "complete",
