@@ -16,6 +16,7 @@ import {
 } from "../../components/chat/session-interactions.tsx";
 import { WorkingIndicator } from "../../components/chat/working-indicator.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
+import { LinkButton } from "../../components/ui/link-button.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
@@ -149,21 +150,41 @@ function useCountdownSeconds(retryAtEpochMs: number): number {
 
 function DisconnectedNotice({
     message,
-    retryAtEpochMs,
+    onRetryNow,
+    retry,
 }: {
     readonly message: string;
-    readonly retryAtEpochMs: number;
+    readonly onRetryNow: () => void;
+    readonly retry: { readonly kind: "scheduled"; readonly retryAtEpochMs: number } | { readonly kind: "exhausted" };
 }) {
-    const remaining = useCountdownSeconds(retryAtEpochMs);
     return (
         <div data-testid={dataTestId.sessionReconnectNotice} className="mx-auto w-full max-w-[920px] px-3 sm:px-5">
             <p role="alert" className="text-sm text-destructive">
                 {message}
             </p>
-            <p role="status" className="text-sm text-muted-foreground">
-                Retrying in {remaining} s
-            </p>
+            {retry.kind === "scheduled" ? (
+                <ScheduledRetryNotice onRetryNow={onRetryNow} retryAtEpochMs={retry.retryAtEpochMs} />
+            ) : (
+                <p role="status" className="text-sm text-muted-foreground">
+                    Automatic retries stopped. <LinkButton onClick={onRetryNow}>Retry now</LinkButton>
+                </p>
+            )}
         </div>
+    );
+}
+
+function ScheduledRetryNotice({
+    onRetryNow,
+    retryAtEpochMs,
+}: {
+    readonly onRetryNow: () => void;
+    readonly retryAtEpochMs: number;
+}) {
+    const remaining = useCountdownSeconds(retryAtEpochMs);
+    return (
+        <p role="status" className="text-sm text-muted-foreground">
+            Retrying in {remaining} s <LinkButton onClick={onRetryNow}>Retry now</LinkButton>
+        </p>
     );
 }
 
@@ -177,9 +198,15 @@ function ReconnectingNotice() {
     );
 }
 
-function SessionReconnectNotice({ connection }: { readonly connection: SessionConnection }) {
+function SessionReconnectNotice({
+    connection,
+    onRetryNow,
+}: {
+    readonly connection: SessionConnection;
+    readonly onRetryNow: () => void;
+}) {
     if (connection.kind === "disconnected") {
-        return <DisconnectedNotice message={connection.message} retryAtEpochMs={connection.retryAtEpochMs} />;
+        return <DisconnectedNotice message={connection.message} onRetryNow={onRetryNow} retry={connection.retry} />;
     }
     return <ReconnectingNotice />;
 }
@@ -430,7 +457,10 @@ export function MobiusSessionPane({
                     className="min-h-0 flex-1 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10 lg:px-12"
                 >
                     {(model.connection.kind === "disconnected" || model.connection.kind === "reconnecting") && (
-                        <SessionReconnectNotice connection={model.connection} />
+                        <SessionReconnectNotice
+                            connection={model.connection}
+                            onRetryNow={() => pane.store.getState().retryNow()}
+                        />
                     )}
                     {model.messages.length === 0 && model.connection.kind === "loading" && <MessageListSkeleton />}
                     {model.messages.length === 0 && model.connection.kind === "failed" && (

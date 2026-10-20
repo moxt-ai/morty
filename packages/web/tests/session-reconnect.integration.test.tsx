@@ -40,10 +40,15 @@ test("Given a session whose Runtime goes offline, When the live event stream can
     }
     await daemon.disconnect();
 
-    const countdown = /^Retrying in [1-9]\d* s$/u;
+    const countdown = /^Retrying in [1-9]\d* s Retry now$/u;
     await vi.waitFor(() => expect(reconnectStatusText(app)).toMatch(countdown), { interval: 250, timeout: 30_000 });
     const notice = app.elementByTestId(dataTestId.sessionReconnectNotice);
     expect(queryByRole(notice, "alert")?.textContent).toContain("could not recover");
+    const retryNow = queryByRole(notice, "button", { name: "Retry now" });
+    if (!(retryNow instanceof HTMLButtonElement)) {
+        throw new Error("Expected the Retry now button");
+    }
+    await app.user.click(retryNow);
 
     await vi.waitFor(() => expect(reconnectStatusText(app)).toContain("Mobius is reconnecting"), {
         interval: 250,

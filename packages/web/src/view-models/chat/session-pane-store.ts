@@ -66,7 +66,13 @@ type Connection =
     | { readonly kind: "loading" }
     | { readonly kind: "ready"; readonly client: MobiusClient }
     | { readonly kind: "reconnecting" }
-    | { readonly kind: "disconnected"; readonly message: string; readonly retryAtEpochMs: number }
+    | {
+          readonly kind: "disconnected";
+          readonly message: string;
+          readonly retry:
+              | { readonly kind: "scheduled"; readonly retryAtEpochMs: number }
+              | { readonly kind: "exhausted" };
+      }
     | { readonly kind: "failed"; readonly message: string };
 
 export type SessionConnection = Connection;
@@ -78,6 +84,8 @@ const SESSION_EVENT_PAGE_LIMIT = 30;
 const HISTORY_MESSAGE_TARGET = 20;
 const SESSION_RECONNECT_DELAYS_MS = [5_000, 10_000, 20_000] as const;
 const SESSION_RECONNECT_DELAY_CAP_MS = 30_000;
+const SESSION_AUTO_RECONNECT_ATTEMPTS = 7;
+const MANUAL_RETRY_WAIT_MILLISECONDS = 2_147_483_647;
 
 function sleepAbortably(milliseconds: number, signal: AbortSignal): Promise<void> {
     return new Promise<void>((resolve, reject) => {
@@ -179,6 +187,7 @@ export interface SessionPaneStore {
     readonly operation: Operation;
     readonly activity: SessionActivityState;
     readonly connect: (signal: AbortSignal) => Promise<void>;
+    readonly retryNow: () => void;
     readonly loadOlderMessages: (signal: AbortSignal) => Promise<void>;
     readonly setDraft: (draft: string) => void;
     readonly setAttachments: (attachments: readonly ComposerAttachment[]) => void;
@@ -359,6 +368,7 @@ export function createSessionPaneModel(options: {
     const openedActiveTurn = activeTurn.current();
     const fallbackStartedAt = Date.now();
     let client: MobiusClient | null = null;
+    let countdownInterrupt: AbortController | null = null;
     let projection = createSessionProjection();
     let sessionTitle = session.entry.title;
     let loadingOlderHistory = false;
@@ -907,14 +917,14 @@ export function createSessionPaneModel(options: {
                     throw new Error("Session updates disconnected. Reopen the Session to continue.");
                 };
                 readStoredLastSentMessage();
-                let nextDelayIndex = 0;
+                let consecutiveFailures = 0;
                 for (;;) {
-                    if (nextDelayIndex > 0) {
+                    if (consecutiveFailures > 0) {
                         set({ connection: { kind: "reconnecting" } });
                     }
                     try {
                         await observeSession();
-                        nextDelayIndex = 0;
+                        consecutiveFailures = 0;
                     } catch (cause) {
                         client?.close();
                         client = null;
@@ -936,18 +946,21 @@ export function createSessionPaneModel(options: {
                             });
                             return;
                         }
-                        const delay = Math.min(
-                            SESSION_RECONNECT_DELAYS_MS[nextDelayIndex] ?? SESSION_RECONNECT_DELAY_CAP_MS,
-                            SESSION_RECONNECT_DELAY_CAP_MS,
-                        );
-                        nextDelayIndex += 1;
+                        const canAutoRetry = consecutiveFailures < SESSION_AUTO_RECONNECT_ATTEMPTS;
+                        const delay = canAutoRetry
+                            ? Math.min(
+                                  SESSION_RECONNECT_DELAYS_MS[consecutiveFailures] ?? SESSION_RECONNECT_DELAY_CAP_MS,
+                                  SESSION_RECONNECT_DELAY_CAP_MS,
+                              )
+                            : MANUAL_RETRY_WAIT_MILLISECONDS;
+                        consecutiveFailures += 1;
                         const retryAtEpochMs = Date.now() + delay;
                         const message = formatError(cause, "The Session could not be opened.");
                         set({
                             connection: {
                                 kind: "disconnected",
                                 message,
-                                retryAtEpochMs,
+                                retry: canAutoRetry ? { kind: "scheduled", retryAtEpochMs } : { kind: "exhausted" },
                             },
                             activity: transitionSessionActivity(get().activity, {
                                 kind: "session-failed",
@@ -958,12 +971,19 @@ export function createSessionPaneModel(options: {
                                 message,
                             },
                         });
-                        await sleepAbortably(delay, signal).catch(() => undefined);
+                        countdownInterrupt = new AbortController();
+                        await sleepAbortably(delay, AbortSignal.any([signal, countdownInterrupt.signal])).catch(
+                            () => undefined,
+                        );
+                        countdownInterrupt = null;
                         if (signal.aborted) {
                             return;
                         }
                     }
                 }
+            },
+            retryNow: () => {
+                countdownInterrupt?.abort(new Error("Retried now"));
             },
             setDraft: (draft) => {
                 tasks.getState().dismissFailure();
