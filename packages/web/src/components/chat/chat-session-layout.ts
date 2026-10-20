@@ -4,7 +4,7 @@ const chatSessionContentInsetClassName = "px-3 sm:px-6";
 export const chatSessionColumnClassName = `mx-auto w-full min-w-0 max-w-[920px] ${chatSessionContentInsetClassName}`;
 
 export const chatSessionMessageScrollClassName =
-    "min-h-0 flex-1 overflow-y-auto py-6 [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin] sm:py-10";
+    "min-h-0 flex-1 overflow-y-auto py-6 -mb-4 [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin] sm:py-10";
 
 export const chatSessionMessageColumnClassName = `${chatSessionColumnClassName} font-inter text-foreground`;
 
