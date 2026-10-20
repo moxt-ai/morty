@@ -71,13 +71,16 @@ export async function collectNetworkDiagnostics(
     const online = navigator.onLine;
     const connection = browserConnection();
     const signal = AbortSignal.any([parent, AbortSignal.timeout(5_000)]);
-    const [browserMorty, hops] = await Promise.all([
+    const browserMortyResult =
         browser === null
-            ? unavailable("NO_ACTIVE_TRANSPORT")
-            : probe(() => browser.measureMortyLatency(signal), signal, parent),
-        server === null ? unavailable("NO_ACTIVE_RUNTIME") : probe(() => server.readNetwork(signal), signal, parent),
-    ]);
+            ? Promise.resolve(unavailable("NO_ACTIVE_TRANSPORT"))
+            : probe(() => browser.measureMortyLatency(signal), signal, parent);
+    const hopsResult =
+        server === null
+            ? Promise.resolve(unavailable("NO_ACTIVE_RUNTIME"))
+            : probe(() => server.readNetwork(signal), signal, parent);
     async function measureBrowserMobius(): Promise<Probe<number>> {
+        const hops = await hopsResult;
         if (hops.kind !== "available") {
             return unavailable(hops.code);
         }
@@ -86,7 +89,11 @@ export async function collectNetworkDiagnostics(
         }
         return await probe(() => browser.measureMobiusLatency(hops.value.mobiusOrigin, signal), signal, parent);
     }
-    const browserMobius = await measureBrowserMobius();
+    const [browserMorty, hops, browserMobius] = await Promise.all([
+        browserMortyResult,
+        hopsResult,
+        measureBrowserMobius(),
+    ]);
     parent.throwIfAborted();
     return {
         capturedAt,

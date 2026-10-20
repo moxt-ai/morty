@@ -4,12 +4,12 @@ import { useStore } from "zustand";
 import { Button, reportApplicationError, Spinner } from "../../index.ts";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import { createContinueStore } from "../../view-models/authentication/continue-store.ts";
+import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 
 function ContinuePage() {
     const transport = useApiTransport();
     const [store] = useState(() => createContinueStore(transport.fetch));
-    const { redeem, retry, state } = useStore(store);
-    useEffect(() => () => store.getState().dispose(), [store]);
+    const { redeem, retry, state, diagnostics } = useStore(store);
     useEffect(() => {
         if (state.kind !== "session-opening" && state.kind !== "identity-redeeming") {
             return;
@@ -60,6 +60,7 @@ function ContinuePage() {
                     </>
                 )}
             </section>
+            <BugReportButton appearance="floating" daemonSource={diagnostics} />
         </div>
     );
 }

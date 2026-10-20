@@ -55,7 +55,7 @@ export function App({ state }: { readonly state: AppState }) {
     return (
         <>
             <ApplicationContent state={state} />
-            {state.kind !== "signed-in" && <BugReportButton appearance="floating" />}
+            {(state.kind === "loading" || state.kind === "failed") && <BugReportButton appearance="floating" />}
         </>
     );
 }

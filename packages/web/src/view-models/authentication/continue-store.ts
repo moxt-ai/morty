@@ -1,7 +1,7 @@
 import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
 import { BotChatApi } from "@/services/chat/bot-chat-api";
-import { recordBrowserError, registerDaemonDiagnostics } from "@/services/diagnostics/browser-diagnostics";
+import { type DaemonDiagnosticsSource, recordBrowserError } from "@/services/diagnostics/browser-diagnostics";
 import { type AnonymousIdentity, AnonymousIdentityApi } from "@/services/identity/anonymous-identity-api";
 import { encodeIdentityScope } from "@/services/identity/identity-scope-url";
 import { formatError } from "@/view-models/format-error";
@@ -30,7 +30,7 @@ export interface ContinueStore {
     readonly state: ContinueState;
     readonly redeem: (signal: AbortSignal) => Promise<void>;
     readonly retry: () => void;
-    readonly dispose: () => void;
+    readonly diagnostics: DaemonDiagnosticsSource | null;
 }
 
 function initialState(): ContinueState {
@@ -67,13 +67,8 @@ function identityDestination(path: "/" | "/chat", identity: AnonymousIdentity): 
 }
 
 export const createContinueStore = (fetchRequest: (request: Request) => Promise<Response>) => {
-    let releaseDiagnostics: (() => void) | null = null;
-    const dispose = () => {
-        releaseDiagnostics?.();
-        releaseDiagnostics = null;
-    };
     return createStore<ContinueStore>()((set, get) => ({
-        dispose,
+        diagnostics: null,
         retry: () => {
             const state = get().state;
             if (state.kind === "session-failed") {
@@ -96,7 +91,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 fetchRequest,
                 origin: window.location.origin,
             });
-            dispose();
+            set({ diagnostics: null });
             let operation = "redeem";
             try {
                 const identity = await api.redeemTransfer(state.code, signal);
@@ -117,12 +112,14 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                         throw new Error("Runtime updates are unavailable while continuing this session.");
                     },
                 });
-                releaseDiagnostics = registerDaemonDiagnostics({
-                    botId: identity.botId,
-                    sessionId: null,
-                    nativeSessionId: state.handoff.sessionId,
-                    read: (parent) => chat.daemonDiagnostics(identity.botId, parent),
-                    readNetwork: (parent) => chat.networkDiagnostic(identity.botId, parent),
+                set({
+                    diagnostics: {
+                        botId: identity.botId,
+                        sessionId: null,
+                        nativeSessionId: state.handoff.sessionId,
+                        read: (parent) => chat.daemonDiagnostics(identity.botId, parent),
+                        readNetwork: (parent) => chat.networkDiagnostic(identity.botId, parent),
+                    },
                 });
                 operation = "continue-native-session";
                 const session = await chat.continueNativeSession(

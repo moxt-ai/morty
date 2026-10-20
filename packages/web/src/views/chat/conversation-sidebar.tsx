@@ -18,7 +18,6 @@ import { Dialog } from "../../components/ui/dialog.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
-import { registerDaemonDiagnostics } from "../../services/diagnostics/browser-diagnostics.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
 import { createConversationDirectoryStore } from "../../view-models/chat/conversation-directory-store.ts";
@@ -187,17 +186,6 @@ export function ConversationSidebar({
         }),
     );
     const diagnostic = useStore(networkDiagnostic);
-    useEffect(
-        () =>
-            registerDaemonDiagnostics({
-                botId,
-                sessionId: activeId,
-                nativeSessionId: null,
-                read: (signal) => requests.daemonDiagnostics(botId, signal),
-                readNetwork: (signal) => requests.networkDiagnostic(botId, signal),
-            }),
-        [botId, activeId, requests],
-    );
     const lifetime = useRef<AbortController | null>(null);
     const measureNetwork = () => {
         const controller = lifetime.current;
@@ -446,7 +434,16 @@ export function ConversationSidebar({
             </div>
             <Tooltip.Provider delayDuration={150} disableHoverableContent>
                 <div className="col-start-2 row-start-2 flex items-center gap-1 sm:col-auto sm:row-auto sm:mt-3 sm:border-t sm:border-black/[0.06] sm:pt-3">
-                    <BugReportButton appearance="icon" />
+                    <BugReportButton
+                        appearance="icon"
+                        daemonSource={{
+                            botId,
+                            sessionId: activeId,
+                            nativeSessionId: null,
+                            read: (signal) => requests.daemonDiagnostics(botId, signal),
+                            readNetwork: (signal) => requests.networkDiagnostic(botId, signal),
+                        }}
+                    />
                     {access.state.kind !== "ended" && (
                         <DropdownMenu.Root>
                             <SidebarActionTooltip label="User menu" side="top">

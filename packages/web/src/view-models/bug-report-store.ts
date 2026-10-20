@@ -1,6 +1,9 @@
 import { getClient, lastEventId } from "@sentry/react";
 import { createStore } from "zustand/vanilla";
-import { browserDiagnosticsSnapshot, currentDaemonDiagnostics } from "../services/diagnostics/browser-diagnostics.ts";
+import {
+    browserDiagnosticsSnapshot,
+    type DaemonDiagnosticsSource,
+} from "../services/diagnostics/browser-diagnostics.ts";
 import { type BugReport, BugReportError, type BugReportSink } from "../services/diagnostics/bug-report.ts";
 import type { BrowserNetworkOperations } from "../services/diagnostics/network-diagnostics.ts";
 import { collectNetworkDiagnostics } from "./bug-report-network.ts";
@@ -17,7 +20,11 @@ export interface BugReportImage {
     readonly file: File;
 }
 
-export function createBugReportStore(sink: BugReportSink, browserNetwork: BrowserNetworkOperations | null) {
+export function createBugReportStore(
+    sink: BugReportSink,
+    browserNetwork: BrowserNetworkOperations | null,
+    daemonSource: DaemonDiagnosticsSource | null,
+) {
     let active: AbortController | null = null;
     return createStore<{
         readonly state: ReportState;
@@ -81,7 +88,7 @@ export function createBugReportStore(sink: BugReportSink, browserNetwork: Browse
             active = controller;
             set({ state: { kind: "sending" } });
             try {
-                const report = await collectBugReport(get().description, browserNetwork, signal);
+                const report = await collectBugReport(get().description, browserNetwork, daemonSource, signal);
                 const id = await sink.submit(
                     report,
                     signal,
@@ -125,10 +132,10 @@ export function createBugReportStore(sink: BugReportSink, browserNetwork: Browse
 async function collectBugReport(
     description: string,
     browserNetwork: BrowserNetworkOperations | null,
+    source: DaemonDiagnosticsSource | null,
     signal: AbortSignal,
 ): Promise<BugReport> {
     signal.throwIfAborted();
-    const source = currentDaemonDiagnostics();
     async function collectDaemon(): Promise<BugReport["daemon"]> {
         if (source === null) {
             return { kind: "unavailable", code: "NO_ACTIVE_RUNTIME" };

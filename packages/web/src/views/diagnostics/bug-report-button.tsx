@@ -5,6 +5,7 @@ import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { useOptionalApiTransport } from "../../services/api/api-transport-context.tsx";
+import type { DaemonDiagnosticsSource } from "../../services/diagnostics/browser-diagnostics.ts";
 import { sentryBugReportSink } from "../../services/diagnostics/bug-report.ts";
 import { type BugReportImage, bugReportImageAccept, createBugReportStore } from "../../view-models/bug-report-store.ts";
 
@@ -14,7 +15,13 @@ const appearances = {
     labelled: "min-h-10 shrink-0 text-xs",
 };
 
-export function BugReportButton({ appearance = "labelled" }: { readonly appearance?: keyof typeof appearances }) {
+export function BugReportButton({
+    appearance = "labelled",
+    daemonSource = null,
+}: {
+    readonly appearance?: keyof typeof appearances;
+    readonly daemonSource?: DaemonDiagnosticsSource | null;
+}) {
     const [open, setOpen] = useState(false);
     const trigger = (
         <Button
@@ -47,7 +54,7 @@ export function BugReportButton({ appearance = "labelled" }: { readonly appearan
             ) : (
                 trigger
             )}
-            {open && <BugReportDialog onClose={() => setOpen(false)} />}
+            {open && <BugReportDialog daemonSource={daemonSource} onClose={() => setOpen(false)} />}
         </>
     );
 }
@@ -86,9 +93,15 @@ function ReportImage({
     );
 }
 
-function BugReportDialog({ onClose }: { readonly onClose: () => void }) {
+function BugReportDialog({
+    onClose,
+    daemonSource,
+}: {
+    readonly onClose: () => void;
+    readonly daemonSource: DaemonDiagnosticsSource | null;
+}) {
     const transport = useOptionalApiTransport();
-    const [store] = useState(() => createBugReportStore(sentryBugReportSink, transport));
+    const [store] = useState(() => createBugReportStore(sentryBugReportSink, transport, daemonSource));
     const { state, description, images, addImages, removeImage, describe, send, close } = useStore(store);
     const fileInput = useRef<HTMLInputElement>(null);
     useEffect(() => close, [close]);

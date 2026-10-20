@@ -345,3 +345,31 @@ test("Given a connected Runtime, When the user reports a bug, Then the report au
         await inbox.close();
     }
 });
+
+test("Given two Runtime views are mounted, When a user reports from the first view, Then diagnostics identify that view's Runtime instead of the last mounted Runtime", {
+    timeout: 30_000,
+}, async () => {
+    const inbox = await createReportInbox();
+    try {
+        const first = await createTestApp({ connectAgent: true });
+        const reportButton = await first.waitForView(() =>
+            getByRole(document.body, "button", { name: "Report a bug" }),
+        );
+        const second = await createTestApp({ connectAgent: true });
+        await second.waitForView(() =>
+            expect(getAllByRole(document.body, "button", { name: "Report a bug" })).toHaveLength(2),
+        );
+        await first.user.click(reportButton);
+        const dialog = getByRole(document.body, "dialog", { name: "Report a bug" });
+        await first.user.type(getByRole(dialog, "textbox", { name: "What went wrong?" }), "The first Runtime is slow");
+        await first.user.click(getByRole(dialog, "button", { name: "Send report" }));
+        await visibleMessage(dialog, "status", "Report sent");
+        const report = JSON.parse((inbox.envelopes[0] ?? "").trim().split("\n").at(-1) ?? "null");
+        expect(report.botId).toBe(first.botId);
+        expect(report.botId).not.toBe(second.botId);
+        expect(report.daemon.kind).toBe("available");
+        expect(report.network.measurements.mobiusDaemon.kind).toBe("available");
+    } finally {
+        await inbox.close();
+    }
+});
