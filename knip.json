@@ -5,7 +5,7 @@
     "ignoreDependencies": ["cloudflare", "drizzle-kit"],
     "workspaces": {
         ".": {
-            "entry": ["drizzle/*.config.ts", ".agents/skills/*/scripts/*.{ts,cjs}"],
+            "entry": ["drizzle/*.config.ts", "vite.web-dev.config.ts", ".agents/skills/*/scripts/*.{ts,cjs}"],
             "ignoreDependencies": ["react", "@types/react"]
         },
         "packages/e2e": {
