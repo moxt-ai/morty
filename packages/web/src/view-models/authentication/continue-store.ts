@@ -122,6 +122,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     sessionId: null,
                     nativeSessionId: state.handoff.sessionId,
                     read: (parent) => chat.daemonDiagnostics(identity.botId, parent),
+                    readNetwork: (parent) => chat.networkDiagnostic(identity.botId, parent),
                 });
                 operation = "continue-native-session";
                 const session = await chat.continueNativeSession(

@@ -93,7 +93,7 @@ function BugReportDialog({ onClose }: { readonly onClose: () => void }) {
     return (
         <Dialog
             title="Report a bug"
-            description="Send a description, optional images and recent technical diagnostics to the Morty team. Session text, other files and credentials are not collected automatically."
+            description="Send a description, optional images and recent technical and network diagnostics to the Morty team. Session text, other files and credentials are not collected automatically."
             onClose={onClose}
         >
             {state.kind === "sent" ? (
@@ -171,8 +171,8 @@ function BugReportDialog({ onClose }: { readonly onClose: () => void }) {
                         </p>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                        Daemon diagnostics may take up to 10 seconds. You can still send a report when your Runtime is
-                        offline.
+                        Network and daemon diagnostics are collected automatically and may take up to 10 seconds. You
+                        can still send a report when your Runtime is offline.
                     </p>
                     {state.kind === "failed" && <p role="alert">{state.message}</p>}
                     {state.kind === "sending" && <p role="status">Collecting diagnostics and sending…</p>}

@@ -1,4 +1,5 @@
-import { createContext, type ReactNode, useContext } from "react";
+import { createContext, type ReactNode, useContext, useEffect } from "react";
+import { registerBrowserNetworkDiagnostics } from "../diagnostics/network-diagnostics.ts";
 export interface ApiTransport {
     readonly open: () => void;
     readonly fetch: (request: Request) => Promise<Response>;
@@ -18,6 +19,7 @@ export function ApiTransportProvider({
     readonly children: ReactNode;
     readonly transport: ApiTransport;
 }) {
+    useEffect(() => registerBrowserNetworkDiagnostics(transport), [transport]);
     return <ApiTransportContext.Provider value={transport}>{children}</ApiTransportContext.Provider>;
 }
 

@@ -194,6 +194,7 @@ export function ConversationSidebar({
                 sessionId: activeId,
                 nativeSessionId: null,
                 read: (signal) => requests.daemonDiagnostics(botId, signal),
+                readNetwork: (signal) => requests.networkDiagnostic(botId, signal),
             }),
         [botId, activeId, requests],
     );

@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { close as closeSentry, init, makeFetchTransport } from "@sentry/react";
-import { getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
+import { getAllByRole, getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
 import { cleanup, render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -205,6 +205,16 @@ test("Given Morty cannot load and no daemon is connected, When a user reports a 
         expect(envelope).toContain('"filename":"diagnostics.json"');
         expect(envelope).toContain('"description":"The conversation never opened"');
         expect(envelope).toContain('"code":"NO_ACTIVE_RUNTIME"');
+        const report = JSON.parse(envelope.trim().split("\n").at(-1) ?? "null");
+        expect(report.network).toMatchObject({
+            online: navigator.onLine,
+            measurements: {
+                browserMorty: { kind: "unavailable", code: "NO_ACTIVE_TRANSPORT" },
+                browserMobius: { kind: "unavailable", code: "NO_ACTIVE_RUNTIME" },
+            },
+        });
+        expect(report.network).not.toHaveProperty("vpn");
+        expect(report.network).not.toHaveProperty("proxy");
         expect(getByRole(document.body, "button", { name: "Close dialog" })).toBeDefined();
     } finally {
         await inbox.close();
@@ -261,6 +271,12 @@ test("Given a native handoff cannot find its Agent, When the user reports the di
             sessionId: null,
             nativeSessionId: "native-session",
             daemon: { kind: "unavailable", code: "AGENT_REQUIRED" },
+            network: {
+                measurements: {
+                    browserMorty: { kind: "available", latencyMs: expect.any(Number) },
+                    mobiusDaemon: { kind: "unavailable" },
+                },
+            },
         });
         expect(report.web.entries).toContainEqual(
             expect.objectContaining({
@@ -287,5 +303,45 @@ test("Given a native handoff cannot find its Agent, When the user reports the di
     } finally {
         await inbox.close();
         vi.useRealTimers();
+    }
+});
+
+test("Given a connected Runtime, When the user reports a bug, Then the report automatically includes each network hop without asking about their network", {
+    timeout: 30_000,
+}, async () => {
+    const inbox = await createReportInbox();
+    try {
+        const app = await createTestApp({ connectAgent: true });
+        await app.waitForView(() => getByRole(document.body, "button", { name: "Report a bug" }));
+        await app.user.click(getByRole(document.body, "button", { name: "Report a bug" }));
+        const dialog = getByRole(document.body, "dialog", { name: "Report a bug" });
+        expect(queryByRole(dialog, "combobox")).toBeNull();
+        expect(getAllByRole(dialog, "textbox")).toHaveLength(1);
+        await app.user.type(getByRole(dialog, "textbox", { name: "What went wrong?" }), "My connection stalled");
+        await app.user.click(getByRole(dialog, "button", { name: "Send report" }));
+        await visibleMessage(dialog, "status", "Report sent");
+        const report = JSON.parse((inbox.envelopes[0] ?? "").trim().split("\n").at(-1) ?? "null");
+        expect(report.network).toMatchObject({
+            online: navigator.onLine,
+            measurements: {
+                browserMorty: { kind: "available", latencyMs: expect.any(Number) },
+                browserMobius: { kind: "available", latencyMs: expect.any(Number) },
+                mortyMobius: { kind: "available", latencyMs: expect.any(Number) },
+                mobiusDaemon: { kind: "available", latencyMs: expect.any(Number) },
+            },
+        });
+        expect(report.web.entries).toContainEqual(
+            expect.objectContaining({
+                component: "worker",
+                operation: "connection",
+                outcome: "connected",
+                elapsedMs: expect.any(Number),
+            }),
+        );
+        expect(JSON.stringify(report.network)).not.toContain("http");
+        expect(report.network).not.toHaveProperty("vpn");
+        expect(report.network).not.toHaveProperty("proxy");
+    } finally {
+        await inbox.close();
     }
 });

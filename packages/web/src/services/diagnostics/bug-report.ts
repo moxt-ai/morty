@@ -1,6 +1,7 @@
 import type { RuntimeDiagnosticsResult } from "@moxt-ai/mobius-sdk/protocol";
 import { captureFeedback, getClient, lastEventId } from "@sentry/react";
 import { browserDiagnosticsSnapshot, currentDaemonDiagnostics } from "./browser-diagnostics.ts";
+import { collectNetworkDiagnostics } from "./network-diagnostics.ts";
 
 export interface BugReport {
     readonly id: string;
@@ -14,6 +15,7 @@ export interface BugReport {
     readonly sessionId: string | null;
     readonly nativeSessionId: string | null;
     readonly web: ReturnType<typeof browserDiagnosticsSnapshot>;
+    readonly network: Awaited<ReturnType<typeof collectNetworkDiagnostics>>;
     readonly daemon:
         | { readonly kind: "available"; readonly diagnostics: RuntimeDiagnosticsResult }
         | { readonly kind: "unavailable"; readonly code: string };
@@ -99,16 +101,17 @@ function readImage(file: File, signal: AbortSignal): Promise<Uint8Array<ArrayBuf
 export async function collectBugReport(description: string, signal: AbortSignal): Promise<BugReport> {
     signal.throwIfAborted();
     const source = currentDaemonDiagnostics();
-    const web = browserDiagnosticsSnapshot();
-    let daemon: BugReport["daemon"] = { kind: "unavailable", code: "NO_ACTIVE_RUNTIME" };
-    if (source !== null) {
+    async function collectDaemon(): Promise<BugReport["daemon"]> {
+        if (source === null) {
+            return { kind: "unavailable", code: "NO_ACTIVE_RUNTIME" };
+        }
         const deadline = AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
         try {
-            daemon = { kind: "available", diagnostics: await source.read(deadline) };
+            return { kind: "available", diagnostics: await source.read(deadline) };
         } catch (cause) {
             signal.throwIfAborted();
             const code: unknown = cause instanceof Error ? Reflect.get(cause, "code") : undefined;
-            daemon = {
+            return {
                 kind: "unavailable",
                 code: deadline.aborted
                     ? "DIAGNOSTIC_TIMEOUT"
@@ -118,6 +121,7 @@ export async function collectBugReport(description: string, signal: AbortSignal)
             };
         }
     }
+    const [daemon, network] = await Promise.all([collectDaemon(), collectNetworkDiagnostics(source, signal)]);
     signal.throwIfAborted();
     return {
         id: crypto.randomUUID().replaceAll("-", ""),
@@ -130,7 +134,8 @@ export async function collectBugReport(description: string, signal: AbortSignal)
         botId: source?.botId ?? null,
         sessionId: source?.sessionId ?? null,
         nativeSessionId: source?.nativeSessionId ?? null,
-        web,
+        web: browserDiagnosticsSnapshot(),
+        network,
         daemon,
     };
 }

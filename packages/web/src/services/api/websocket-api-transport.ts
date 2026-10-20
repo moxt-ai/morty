@@ -338,6 +338,7 @@ export class WebSocketApiTransport {
         }
         const endpoint = new URL("/morty/ws", this.#origin);
         endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
+        const startedAt = performance.now();
         const socket = new WebSocket(endpoint);
         const connection = new Promise<WebSocket>((resolve, reject) => {
             const closedWhileConnecting = () => {
@@ -362,7 +363,7 @@ export class WebSocketApiTransport {
                     operation: "connection",
                     outcome: "connected",
                     requestId: "",
-                    elapsedMs: 0,
+                    elapsedMs: Math.round(performance.now() - startedAt),
                 });
                 this.#state = { kind: "connected", socket };
                 const keepalive = setInterval(() => {
@@ -374,6 +375,14 @@ export class WebSocketApiTransport {
                 resolve(socket);
             };
             const failed = () => {
+                recordBrowserDiagnostic({
+                    at: new Date().toISOString(),
+                    component: "worker",
+                    operation: "connection",
+                    outcome: "connection_error",
+                    requestId: "",
+                    elapsedMs: Math.round(performance.now() - startedAt),
+                });
                 socket.removeEventListener("open", opened);
                 socket.removeEventListener("close", closedWhileConnecting);
                 if (this.#state.kind !== "closed") {
@@ -387,12 +396,13 @@ export class WebSocketApiTransport {
             socket.addEventListener("message", this.#receive);
             socket.addEventListener(
                 "close",
-                () => {
+                (event) => {
                     recordBrowserDiagnostic({
                         at: new Date().toISOString(),
                         component: "worker",
                         operation: "connection",
                         outcome: "disconnected",
+                        closeCode: event.code,
                         requestId: "",
                         elapsedMs: 0,
                     });

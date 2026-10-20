@@ -1,4 +1,5 @@
 import type { RuntimeDiagnosticsResult } from "@moxt-ai/mobius-sdk/protocol";
+import type { ServerNetworkOperations } from "./network-diagnostics.ts";
 
 export interface BrowserDiagnostic {
     readonly at: string;
@@ -7,6 +8,7 @@ export interface BrowserDiagnostic {
     readonly outcome: string;
     readonly requestId: string;
     readonly elapsedMs: number;
+    readonly closeCode?: number;
 }
 const entries: BrowserDiagnostic[] = [];
 let discarded = 0;
@@ -28,7 +30,7 @@ interface BrowserDiagnosticsSnapshot {
 }
 export const browserDiagnosticsSnapshot = (): BrowserDiagnosticsSnapshot => ({ entries: [...entries], discarded });
 
-interface DaemonDiagnosticsSource {
+interface DaemonDiagnosticsSource extends ServerNetworkOperations {
     readonly botId: string;
     readonly sessionId: string | null;
     readonly nativeSessionId: string | null;
