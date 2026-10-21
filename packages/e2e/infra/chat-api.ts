@@ -33,7 +33,7 @@ export async function jsonRequest(
 ) {
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (token !== undefined) {
-        headers.authorization = `Bearer ${token}`;
+        headers["authorization"] = `Bearer ${token}`;
     }
     if (provider !== undefined) {
         headers["x-mobius-oidc-provider"] = provider;
@@ -45,7 +45,7 @@ export async function jsonRequest(
     const response = await fetch(new URL(scopedPath, origin), {
         method: body === undefined ? "GET" : "POST",
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         signal,
     });
     const raw = await response.text();
@@ -73,19 +73,19 @@ export class ChatApi {
 
     async useBrowserIdentity(value: unknown) {
         const identity = object(value, "anonymous identity");
-        const projectId = text(identity.projectId, "projectId");
-        const token = text(identity.token, "anonymous token");
+        const projectId = text(identity["projectId"], "projectId");
+        const token = text(identity["token"], "anonymous token");
         const directory = await jsonRequest(this.origin, "/morty/api/management/bots", {
             project: projectId,
             token,
             signal: this.signal,
         });
-        if (!Array.isArray(directory.bots) || directory.bots.length !== 1) {
-            throw new Error(`Expected exactly one browser bot, received ${String(directory.bots)}`);
+        if (!Array.isArray(directory["bots"]) || directory["bots"].length !== 1) {
+            throw new Error(`Expected exactly one browser bot, received ${String(directory["bots"])}`);
         }
-        const bot = object(directory.bots[0], "browser bot");
+        const bot = object(directory["bots"][0], "browser bot");
         this.identity = {
-            botId: text(bot.botId, "botId"),
+            botId: text(bot["botId"], "botId"),
             projectId,
             token,
         };
@@ -101,13 +101,13 @@ export class ChatApi {
     async readPairedAgent(pairingId: string, agentId: string) {
         const paired = await this.#request(`/morty/api/management/runtime-pairings/${encodeURIComponent(pairingId)}`);
         if (
-            paired.status !== "paired" ||
-            !Array.isArray(paired.agents) ||
-            !paired.agents.some((agent) => object(agent, "agent").id === agentId)
+            paired["status"] !== "paired" ||
+            !Array.isArray(paired["agents"]) ||
+            !paired["agents"].some((agent) => object(agent, "agent")["id"] === agentId)
         ) {
             throw new Error(`The paired Runtime does not expose ${agentId}`);
         }
-        return { runtimeId: text(paired.runtimeId, "runtimeId") };
+        return { runtimeId: text(paired["runtimeId"], "runtimeId") };
     }
 
     async bindAgent(runtimeId: string, agentId: string) {
@@ -126,11 +126,11 @@ export class ChatApi {
             `/morty/api/chat/projects/${encodeURIComponent(identity.projectId)}/bots/${encodeURIComponent(identity.botId)}/workspace`,
             { body: {} },
         );
-        const runtime = object(configuration.runtime, "runtime");
+        const runtime = object(configuration["runtime"], "runtime");
         if (
-            runtime.online !== true ||
-            !Array.isArray(runtime.agents) ||
-            !runtime.agents.some((agent) => object(agent, "agent").agentRef === agentId)
+            runtime["online"] !== true ||
+            !Array.isArray(runtime["agents"]) ||
+            !runtime["agents"].some((agent) => object(agent, "agent")["agentRef"] === agentId)
         ) {
             throw new Error(`The configured Bot does not expose ${agentId}`);
         }

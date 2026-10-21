@@ -1,0 +1,11 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+// Keel's type-precision invariant, applied to TS and TSX by the existing linter.
+// AST matching avoids treating import/export aliases as assertions.
+or {
+    TsAsExpression(ty=$type) as $assertion where { not $type <: r"^const$" },
+    TsTypeAssertionExpression() as $assertion
+} where {
+    register_diagnostic(span=$assertion, message="Prove types with validation, narrowing, or satisfies; only as const is allowed.", severity="error")
+}

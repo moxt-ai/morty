@@ -12,7 +12,8 @@ test("Given Morty has no paired agent, When the setup page opens, Then it offers
 
     expect(pairing).toBeInstanceOf(HTMLTextAreaElement);
     expect(pairing).toHaveProperty("readOnly", true);
-    expect((pairing as HTMLTextAreaElement).value).toBe(
+    expect(pairing).toHaveProperty(
+        "value",
         `Fetch ${window.location.origin}/setup.md and set up Morty for me. Don't ask me anything.`,
     );
     expect(queryByRole(document.body, "combobox", { name: "Data region" })).toBeNull();
@@ -50,7 +51,7 @@ test("Given a paired Bot with cached agent settings, When a user filters its mod
     );
     const composer = await created.queryElementByTestId(dataTestId.messageComposer);
     expect(composer).toBeInstanceOf(HTMLTextAreaElement);
-    expect((composer as HTMLTextAreaElement).disabled).toBe(false);
+    expect(composer).toHaveProperty("disabled", false);
     expect(created.optionalElementByTestId(dataTestId.pairingInstruction)).toBeNull();
 
     await created.user.click(await created.queryElementByTestId(dataTestId.agentConfiguration));
@@ -70,7 +71,7 @@ test("Given a paired Bot with cached agent settings, When a user filters its mod
     await created.user.keyboard("{Escape}{Escape}");
 
     const prompt = "Confirm the refreshed model settings";
-    await sendPrompt(created, composer as HTMLTextAreaElement, prompt);
+    await sendPrompt(created, composer, prompt);
     await Promise.race([
         Promise.all([
             created.queryElementByTestId(

@@ -43,10 +43,6 @@ const clientFrame = v.variant("kind", [
 const CONNECTION_IDLE_MILLISECONDS = 60_000;
 const REQUEST_TIMEOUT_MILLISECONDS = 120_000;
 
-interface BridgeSocket extends WebSocket {
-    accept(): void;
-}
-
 interface BridgeLogger {
     readonly error: (value: unknown, message: string) => void;
 }
@@ -72,14 +68,14 @@ export interface WebSocketBridgeHandlers {
     ) => Promise<void>;
 }
 
-function send(socket: BridgeSocket, value: Readonly<Record<string, unknown>>): void {
+function send(socket: WebSocket, value: Readonly<Record<string, unknown>>): void {
     if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify(value));
     }
 }
 
 async function sendResponse(
-    socket: BridgeSocket,
+    socket: WebSocket,
     requestIdValue: string,
     response: Response,
     signal: AbortSignal,
@@ -96,7 +92,7 @@ async function sendResponse(
     });
 }
 
-function protocolError(socket: BridgeSocket, requestIdValue: string | null): void {
+function protocolError(socket: WebSocket, requestIdValue: string | null): void {
     send(socket, {
         kind: "error",
         requestId: requestIdValue,
@@ -118,7 +114,7 @@ export function createWebSocketApiBridge(
     }
     const pair = new WebSocketPair();
     const client = pair[0];
-    const server = pair[1] as BridgeSocket;
+    const server = pair[1];
     const pending = new Map<string, AbortController>();
     const watches = new Map<string, AbortController>();
     let idleTimer: ReturnType<typeof setTimeout>;

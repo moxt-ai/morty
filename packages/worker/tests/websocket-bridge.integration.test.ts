@@ -48,7 +48,7 @@ function receive(socket: MiniflareWebSocket): Promise<unknown> {
             "message",
             (event) => {
                 socket.removeEventListener("close", close);
-                resolve(JSON.parse(String(event.data)) as unknown);
+                resolve(JSON.parse(String(event.data)));
             },
             { once: true },
         );

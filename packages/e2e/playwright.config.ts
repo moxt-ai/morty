@@ -20,7 +20,7 @@ export default defineConfig({
     fullyParallel: true,
     // Each journey starts two Wrangler Workers and a local Runtime.
     workers: 1,
-    timeout: Number(process.env.MOBIUS_E2E_TIMEOUT_MS ?? 600000),
+    timeout: Number(process.env["MOBIUS_E2E_TIMEOUT_MS"] ?? 600000),
     expect: { timeout: 30000 },
     reporter: "list",
 });

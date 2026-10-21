@@ -82,11 +82,11 @@ export class ControlledSetupRuntime implements SetupRuntime {
             signal,
         });
         const connection: Connection = {
-            app_id: text(claim.appId, "App ID"),
-            channel_id: text(claim.channelId, "Channel ID"),
+            app_id: text(claim["appId"], "App ID"),
+            channel_id: text(claim["channelId"], "Channel ID"),
             connection_id: crypto.randomUUID(),
-            runtime_id: text(claim.runtimeId, "Runtime ID"),
-            credential: text(claim.runtimeCredential, "Runtime credential"),
+            runtime_id: text(claim["runtimeId"], "Runtime ID"),
+            credential: text(claim["runtimeCredential"], "Runtime credential"),
             origin,
         };
         this.#saved.set(connection.connection_id, connection);

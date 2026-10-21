@@ -8,7 +8,7 @@ test("Given a saved setup handoff, When its Runtime reconnects, Then setup retur
     const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
     await runtime.disconnectRuntime();
     const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
-    const statuses = connected.events.map((event) => event.status);
+    const statuses = connected.events.map((event) => event["status"]);
 
     expect(connected.botId).toBe(original.botId);
     expect(statuses).not.toContain("prepared");
@@ -22,7 +22,7 @@ test("Given a saved setup handoff, When its Runtime reconnects, Then setup retur
     expect(connected.configuration).not.toHaveProperty("pairing_key");
     expect(connected.configuration).not.toHaveProperty("expected_runtime_id");
     expect(connected.configuration).not.toHaveProperty("runtime_process");
-    const ready = connected.events.find((event) => event.status === "ready");
+    const ready = connected.events.find((event) => event["status"] === "ready");
     expect(ready).not.toHaveProperty("qrDataUrl");
     expect(ready).not.toHaveProperty("qrTextPath");
     if (connected.qrPath === null) {
@@ -43,7 +43,7 @@ test("Given a saved Machine whose Runtime the manager no longer manages, When se
     expect(connected.identity.userId).toBe(original.identity.userId);
     expect(connected.identity.projectId).not.toBe(original.identity.projectId);
     expect(connected.botId).not.toBe(original.botId);
-    const statuses = connected.events.map((event) => event.status);
+    const statuses = connected.events.map((event) => event["status"]);
     expect(statuses).toContain("prepared");
     expect(statuses).toContain("ready");
 });

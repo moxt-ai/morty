@@ -73,5 +73,6 @@
                 }
             }
         }
-    ]
+    ],
+    "plugins": ["./config/lint/no-type-assertions.grit"]
 }
