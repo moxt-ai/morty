@@ -537,7 +537,7 @@ export function MobiusSessionPane({
                         <SessionInteractionCards
                             elicitations={interactions.elicitations}
                             permissions={interactions.permissions}
-                            busyInteractionId={interactions.busyInteractionId}
+                            busyInteractionIds={interactions.busyInteractionIds}
                             error={interactions.error}
                             onElicitationResponse={respondToElicitation}
                             onPermissionResponse={respondToPermission}

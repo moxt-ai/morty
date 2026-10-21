@@ -381,14 +381,14 @@ export function SessionInteractionCards({
     permissions,
     onElicitationResponse,
     onPermissionResponse,
-    busyInteractionId,
+    busyInteractionIds,
     error,
 }: {
     readonly elicitations: readonly ElicitationInteraction[];
     readonly permissions: readonly PermissionInteraction[];
     readonly onElicitationResponse: (response: ElicitationInteractionResponse) => void;
     readonly onPermissionResponse: (response: PermissionInteractionResponse) => void;
-    readonly busyInteractionId: string;
+    readonly busyInteractionIds: ReadonlySet<string>;
     readonly error: string;
 }) {
     if (permissions.length === 0 && elicitations.length === 0) {
@@ -398,7 +398,7 @@ export function SessionInteractionCards({
         <div className="grid w-full gap-3">
             {permissions.map((permission) => (
                 <PermissionCard
-                    busy={busyInteractionId === permission.interactionId}
+                    busy={busyInteractionIds.has(permission.interactionId)}
                     key={permission.interactionId}
                     permission={permission}
                     respond={onPermissionResponse}
@@ -406,7 +406,7 @@ export function SessionInteractionCards({
             ))}
             {elicitations.map((elicitation) => (
                 <ElicitationCard
-                    busy={busyInteractionId === elicitation.interactionId}
+                    busy={busyInteractionIds.has(elicitation.interactionId)}
                     elicitation={elicitation}
                     key={elicitation.interactionId}
                     respond={onElicitationResponse}

@@ -8,13 +8,12 @@ import type {
 } from "./session-pane-types.ts";
 
 type InteractionOperation =
-    | { readonly kind: "idle" }
-    | { readonly kind: "submitting"; readonly interactionId: string }
-    | { readonly kind: "failed"; readonly interactionId: string; readonly message: string };
+    | { readonly kind: "submitting" }
+    | { readonly kind: "submitted" }
+    | { readonly kind: "failed"; readonly message: string };
 
 export interface SessionInteractionStore {
-    readonly operation: InteractionOperation;
-    readonly submitted: ReadonlySet<string>;
+    readonly submissions: ReadonlyMap<string, InteractionOperation>;
     readonly respondToPermission: (response: PermissionInteractionResponse, signal: AbortSignal) => void;
     readonly respondToElicitation: (response: ElicitationInteractionResponse, signal: AbortSignal) => void;
 }
@@ -24,37 +23,35 @@ export function createSessionInteractionStore(ports: {
     readonly elicitation: (response: ElicitationInteractionResponse, signal: AbortSignal) => Promise<void>;
 }) {
     return createStore<SessionInteractionStore>()((set, get) => {
+        const record = (id: string, operation: InteractionOperation): void => {
+            set((current) => ({ submissions: new Map(current.submissions).set(id, operation) }));
+        };
         const submit = (id: string, signal: AbortSignal, respond: () => Promise<void>): void => {
-            if (signal.aborted || get().operation.kind === "submitting" || get().submitted.has(id)) {
+            // The next interaction may arrive before the previous response is acknowledged.
+            const operation = get().submissions.get(id);
+            if (signal.aborted || operation?.kind === "submitting" || operation?.kind === "submitted") {
                 return;
             }
-            set({ operation: { kind: "submitting", interactionId: id } });
+            record(id, { kind: "submitting" });
             void respond().then(
                 () => {
                     if (!signal.aborted) {
-                        set((current) => ({
-                            operation: { kind: "idle" },
-                            submitted: new Set([...current.submitted, id]),
-                        }));
+                        record(id, { kind: "submitted" });
                     }
                 },
                 (cause: unknown) => {
                     if (signal.aborted) {
                         return;
                     }
-                    set({
-                        operation: {
-                            kind: "failed",
-                            interactionId: id,
-                            message: formatError(cause, "The response could not be submitted."),
-                        },
+                    record(id, {
+                        kind: "failed",
+                        message: formatError(cause, "The response could not be submitted."),
                     });
                 },
             );
         };
         return {
-            operation: { kind: "idle" },
-            submitted: new Set(),
+            submissions: new Map(),
             respondToPermission: (response, signal) =>
                 submit(response.interactionId, signal, () => ports.permission(response, signal)),
             respondToElicitation: (response, signal) =>
@@ -70,22 +67,30 @@ export function sessionInteractionPresentation(
     )[],
     model: SessionInteractionStore,
 ) {
+    const permissions = interactions.flatMap((interaction) =>
+        interaction.kind === "permission" &&
+        interaction.permission.state.kind === "pending" &&
+        model.submissions.get(interaction.permission.interactionId)?.kind !== "submitted"
+            ? [interaction.permission]
+            : [],
+    );
+    const elicitations = interactions.flatMap((interaction) =>
+        interaction.kind === "elicitation" &&
+        interaction.elicitation.state.kind === "pending" &&
+        model.submissions.get(interaction.elicitation.interactionId)?.kind !== "submitted"
+            ? [interaction.elicitation]
+            : [],
+    );
+    const visibleIds = new Set([...permissions, ...elicitations].map((interaction) => interaction.interactionId));
     return {
-        permissions: interactions.flatMap((interaction) =>
-            interaction.kind === "permission" &&
-            interaction.permission.state.kind === "pending" &&
-            !model.submitted.has(interaction.permission.interactionId)
-                ? [interaction.permission]
-                : [],
+        permissions,
+        elicitations,
+        busyInteractionIds: new Set(
+            Array.from(model.submissions).flatMap(([id, operation]) => (operation.kind === "submitting" ? [id] : [])),
         ),
-        elicitations: interactions.flatMap((interaction) =>
-            interaction.kind === "elicitation" &&
-            interaction.elicitation.state.kind === "pending" &&
-            !model.submitted.has(interaction.elicitation.interactionId)
-                ? [interaction.elicitation]
-                : [],
-        ),
-        busyInteractionId: model.operation.kind === "submitting" ? model.operation.interactionId : "",
-        error: model.operation.kind === "failed" ? model.operation.message : "",
+        error:
+            Array.from(model.submissions).flatMap(([id, operation]) =>
+                visibleIds.has(id) && operation.kind === "failed" ? [operation.message] : [],
+            )[0] ?? "",
     };
 }
