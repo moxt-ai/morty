@@ -47,9 +47,9 @@ test("Given two saved identities, When I reopen Morty, Then I can explicitly con
     const second = await createTestApp({
         connectAgent: true,
         agent: { id: "pi", label: "Pi" },
-        page: { kind: "continue", harness: "pi", sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644" },
+        page: { kind: "bootstrap", identity: true },
     });
-    await second.waitForView(() => getByRole(document.body, "button", { name: "Go to Morty" }));
+    await second.queryElementByTestId(dataTestId.chatLanding);
     const secondScope = new URL(window.location.href).searchParams.get("identity");
     expect(secondScope).not.toBe(firstScope);
     window.history.replaceState(null, "", "/");
@@ -94,4 +94,47 @@ test("Given saved access revoked on the server, When I reopen Morty, Then setup 
     await reloaded.waitForView(() =>
         getByRole(document.body, "heading", { name: "Continue your coding session from your phone." }),
     );
+});
+
+test("Given two saved identities and one deleted Bot, When I reopen Morty, Then the remaining access opens and survives another visit", {
+    timeout: 30_000,
+}, async () => {
+    const first = await createTestApp({ page: { kind: "bootstrap", identity: true }, connectAgent: true });
+    await first.queryElementByTestId(dataTestId.chatLanding);
+    await first.close();
+    const second = await createTestApp({
+        connectAgent: true,
+        agent: { id: "pi", label: "Pi" },
+        page: { kind: "bootstrap", identity: true },
+    });
+    await second.queryElementByTestId(dataTestId.chatLanding);
+    const secondScope = new URL(window.location.href).searchParams.get("identity");
+    const signal = new AbortController().signal;
+    const replacement = await second.transport.fetch(
+        new Request(`${second.origin}/morty/api/projects/${first.identity.projectId}/management/bots`, {
+            method: "POST",
+            headers: {
+                authorization: `Bearer ${await first.identity.getToken(signal)}`,
+                "content-type": "application/json",
+            },
+            body: JSON.stringify({ displayName: "Replacement Machine" }),
+            signal,
+        }),
+    );
+    expect(replacement.status).toBe(201);
+    const deleted = await second.transport.fetch(
+        new Request(`${second.origin}/morty/api/projects/${first.identity.projectId}/management/bots/${first.botId}`, {
+            method: "DELETE",
+            headers: { authorization: `Bearer ${await first.identity.getToken(signal)}` },
+            signal,
+        }),
+    );
+    expect(deleted.status).toBe(204);
+    window.history.replaceState(null, "", "/");
+    const home = await second.reload();
+    await home.queryElementByTestId(dataTestId.chatLanding);
+    expect(new URL(window.location.href).searchParams.get("identity")).toBe(secondScope);
+    window.history.replaceState(null, "", "/chat");
+    const nextVisit = await home.reload();
+    await nextVisit.queryElementByTestId(dataTestId.chatLanding);
 });

@@ -1,7 +1,6 @@
 import { createStore } from "zustand/vanilla";
 import { type AnonymousIdentity, AnonymousIdentityApi } from "../../services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope, hasIdentityScope } from "../../services/identity/identity-scope-url.ts";
-import { ManagementApi } from "../../services/management/management-api.ts";
 import {
     accessEndedNoticeEntry,
     centralSessionStorage,
@@ -44,37 +43,32 @@ export const createAnonymousSessionStore = (fetchRequest: (request: Request) => 
                         set({ state: { kind: "setup", notice: "access-ended" } });
                         return;
                     }
-                    const identities = hasIdentityScope()
-                        ? [await api.loadExisting(signal)].filter((identity) => identity !== null)
-                        : await api.loadSaved(signal);
-                    signal.throwIfAborted();
-                    const identity = identities[0];
-                    if (identity === undefined) {
-                        set({ state: { kind: "setup", notice: "none" } });
-                    } else if (identities.length === 1) {
-                        api.saveIdentity(identity);
-                        set({ state: { identity, kind: "active" } });
-                    } else {
-                        const choices = await Promise.all(
-                            identities.map(async (candidate, index) => {
-                                const management = new ManagementApi({
-                                    fetchRequest,
-                                    origin,
-                                    projectId: candidate.projectId,
-                                    getToken: async (requestSignal) => {
-                                        requestSignal.throwIfAborted();
-                                        return candidate.token;
-                                    },
-                                });
-                                const bot = await management.readBot(candidate.botId, signal);
-                                const parameters = new URLSearchParams({ identity: encodeIdentityScope(candidate) });
-                                return {
-                                    href: `/chat?${parameters}`,
-                                    label: `${bot.displayName} (access ${index + 1})`,
-                                };
-                            }),
-                        );
+                    if (hasIdentityScope()) {
+                        const identity = await api.loadExisting(signal);
                         signal.throwIfAborted();
+                        set({
+                            state: identity === null ? { kind: "setup", notice: "none" } : { identity, kind: "active" },
+                        });
+                        return;
+                    }
+                    const saved = await api.loadSaved(signal);
+                    signal.throwIfAborted();
+                    const access = saved[0];
+                    if (access === undefined) {
+                        set({ state: { kind: "setup", notice: "none" } });
+                    } else if (saved.length === 1) {
+                        api.saveIdentity(access.identity);
+                        set({ state: { identity: access.identity, kind: "active" } });
+                    } else {
+                        const choices = saved.map((candidate, index) => {
+                            const parameters = new URLSearchParams({
+                                identity: encodeIdentityScope(candidate.identity),
+                            });
+                            return {
+                                href: `/chat?${parameters}`,
+                                label: `${candidate.displayName} (access ${index + 1})`,
+                            };
+                        });
                         set({ state: { kind: "choices", choices } });
                     }
                 } catch {

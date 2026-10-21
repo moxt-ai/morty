@@ -5,6 +5,7 @@ import {
     anonymousScopesEntry,
     centralLocalStorage,
 } from "../local-storage/central-local-storage.ts";
+import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 import {
     clearIdentityScope,
     encodeIdentityScope,
@@ -52,6 +53,10 @@ const transferSchema = v.pipe(
 );
 export type AnonymousIdentity = v.InferOutput<typeof identitySchema>;
 export type IdentityTransfer = v.InferOutput<typeof transferSchema>;
+interface SavedAnonymousAccess {
+    readonly identity: AnonymousIdentity;
+    readonly displayName: string;
+}
 
 export type DataRegion =
     | "wnam"
@@ -94,16 +99,40 @@ export class AnonymousIdentityApi {
         return identity;
     };
 
-    readonly loadSaved = async (signal: AbortSignal): Promise<readonly AnonymousIdentity[]> => {
-        const identities: AnonymousIdentity[] = [];
+    readonly loadSaved = async (signal: AbortSignal): Promise<readonly SavedAnonymousAccess[]> => {
+        const saved: SavedAnonymousAccess[] = [];
         for (const scope of centralLocalStorage.read(anonymousScopesEntry) ?? []) {
             const identity = await this.#restoreScope(scope, signal);
             signal.throwIfAborted();
-            if (identity !== null) {
-                identities.push(identity);
+            if (identity === null) {
+                continue;
+            }
+            const management = new ManagementApi({
+                fetchRequest: this.#fetchRequest,
+                origin: this.#origin,
+                projectId: identity.projectId,
+                getToken: async (requestSignal) => {
+                    requestSignal.throwIfAborted();
+                    return identity.token;
+                },
+            });
+            try {
+                const bot = await management.readBot(identity.botId, signal);
+                signal.throwIfAborted();
+                saved.push({ identity, displayName: bot.displayName });
+            } catch (cause) {
+                signal.throwIfAborted();
+                if (
+                    cause instanceof CloudApiError &&
+                    (cause.code === "BOT_NOT_FOUND" || cause.status === 401 || cause.status === 403)
+                ) {
+                    this.#forgetScope(scope);
+                    continue;
+                }
+                throw cause;
             }
         }
-        return identities;
+        return saved;
     };
 
     readonly #restoreScope = async (scope: IdentityScope, signal: AbortSignal): Promise<AnonymousIdentity | null> => {

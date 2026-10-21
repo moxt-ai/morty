@@ -8,6 +8,10 @@ import { ApiTransportProvider } from "../../src/services/api/api-transport-conte
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../src/services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope } from "../../src/services/identity/identity-scope-url.ts";
+import {
+    anonymousCredentialsEntry,
+    centralLocalStorage,
+} from "../../src/services/local-storage/central-local-storage.ts";
 import type { Clock } from "../../src/services/time/clock.ts";
 import { createMortyApplication } from "../../src/view-models/morty-application.ts";
 import { App } from "../../src/views/application/app.tsx";
@@ -97,6 +101,7 @@ export async function createTestApp(
             window.localStorage.setItem(
                 ANONYMOUS_CREDENTIAL_KEY_NAME,
                 JSON.stringify({
+                    ...centralLocalStorage.read(anonymousCredentialsEntry),
                     [current.userId]: await current.identity.getToken(new AbortController().signal),
                 }),
             );
