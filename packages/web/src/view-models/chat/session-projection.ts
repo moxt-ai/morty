@@ -131,18 +131,17 @@ function newestTitle(events: readonly SessionEvent[]): string | undefined {
     return undefined;
 }
 
-function adoptionEffect(
-    events: readonly SessionEvent[],
-    clearMissingConfig: boolean,
-): readonly SessionProjectionEffect[] {
+function adoptionEffect(events: readonly SessionEvent[]): readonly SessionProjectionEffect[] {
     const config = newestConfig(events);
     const title = newestTitle(events);
-    if (config === null && title === undefined && !clearMissingConfig) {
+    if (config === null && title === undefined) {
         return [];
     }
     return [
         {
-            ...(config === null ? (clearMissingConfig ? { config: [] } : {}) : { config: config.options }),
+            // Rebuilt history may omit configuration events. Only an explicit
+            // config update, including an empty one, can replace current settings.
+            ...(config === null ? {} : { config: config.options }),
             kind: "adopted",
             ...(title === undefined ? {} : { title }),
         },
@@ -217,7 +216,7 @@ export function transitionSessionProjection(
             }
             const config = newestConfig([event]) ?? state.config;
             return {
-                effects: adoptionEffect([event], false),
+                effects: adoptionEffect([event]),
                 state: {
                     ...state,
                     config,
@@ -243,15 +242,13 @@ export function transitionSessionProjection(
                 input.history.sessionGenerationId !== state.generation;
             const events = mergeSessionEvents(input.history.events, state.pending.buffer);
             if (replacing) {
-                const clearMissingConfig =
-                    state.kind === "established" && state.generation !== input.history.sessionGenerationId;
                 return {
-                    effects: adoptionEffect(events, clearMissingConfig),
+                    effects: adoptionEffect(events),
                     state: adoptGeneration(state, input.history, events),
                 };
             }
             const merged = applyNewerEvents(state, input.history);
-            return { effects: adoptionEffect(merged.events, false), state: merged.state };
+            return { effects: adoptionEffect(merged.events), state: merged.state };
         }
         case "older-page": {
             if (

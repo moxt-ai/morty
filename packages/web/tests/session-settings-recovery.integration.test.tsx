@@ -1,0 +1,96 @@
+import { getByRole, queryByRole } from "@testing-library/dom";
+import { expect, test } from "vitest";
+import { dataTestId } from "../src/data-testid.ts";
+import { sendPrompt } from "./infra/application-scenario.ts";
+import { createTestApp, type TestApp } from "./infra/test-app.tsx";
+import { TestClock } from "./infra/test-clock.ts";
+
+async function openConfiguredConversation(app: TestApp): Promise<void> {
+    const composer = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    await sendPrompt(app, composer, "Keep my selected model");
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
+            "Codex turn 1: Keep my selected model",
+        ),
+    );
+    await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
+    await app.user.click(
+        await app.queryElementByTestId(
+            dataTestId.agentSetting("model"),
+            (element) => element instanceof HTMLButtonElement && !element.disabled,
+        ),
+    );
+    await app.user.click(await app.queryElementByTestId(dataTestId.sessionConfigValue("test-large")));
+    await app.user.keyboard("{Escape}");
+    await app.waitForView(() =>
+        expect(app.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Large"),
+    );
+}
+
+test("Given a configured conversation, When its Runtime stops and restarts with rebuilt history, Then recovery preserves its model and the preference for new conversations", {
+    timeout: 60_000,
+}, async () => {
+    const app = await createTestApp({
+        connectAgent: true,
+        clock: new TestClock("2026-10-21T08:00:00Z"),
+        page: { kind: "bootstrap", identity: true },
+    });
+    await openConfiguredConversation(app);
+    if (app.daemon === null) {
+        throw new Error("Expected the connected Runtime");
+    }
+    await app.daemon.disconnect();
+    await app.waitForView(() => expect(queryByRole(document.body, "button", { name: "Retry now" })).not.toBeNull());
+    expect(app.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Large");
+    // A failed recovery must retain the selection as well as offer another retry.
+    await app.user.click(getByRole(document.body, "button", { name: "Retry now" }));
+    await app.waitForView(() => expect(queryByRole(document.body, "button", { name: "Retry now" })).not.toBeNull());
+    expect(app.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Large");
+
+    // The fixture starts a new production Runtime engine from the same persisted directory.
+    await app.daemon.reconnect();
+    await app.user.click(getByRole(document.body, "button", { name: "Retry now" }));
+    const composer = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    expect(app.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Large");
+    await sendPrompt(app, composer, "Continue after the restart");
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
+            "Codex turn 2: Continue after the restart",
+        ),
+    );
+    expect(app.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Large");
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    await app.waitForView(() => expect(app.elementsByTestId(dataTestId.agentResponse)).toHaveLength(0));
+    await app.waitForView(() =>
+        expect(app.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Large"),
+    );
+    const reloaded = await app.reload();
+    await reloaded.queryElementByTestId(
+        dataTestId.agentConfiguration,
+        (element) => element.textContent?.includes("Test Large") === true,
+    );
+});
+
+test("Given a configured conversation, When the Agent explicitly removes every setting, Then the configuration clears", {
+    timeout: 60_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true, agent: { id: "settings-test", label: "Settings Agent" } });
+    await app.queryElementByTestId(
+        dataTestId.agentConfiguration,
+        (element) => element.textContent?.includes("Test Small") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    await sendPrompt(app, composer, "Remove settings");
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain("Settings removed"),
+    );
+    await app.waitForView(() =>
+        expect(app.elementByTestId(dataTestId.agentConfiguration).textContent).not.toContain("Test Small"),
+    );
+});
