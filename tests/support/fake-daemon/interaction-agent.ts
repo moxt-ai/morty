@@ -47,10 +47,17 @@ export function createInteractionAgent() {
                                 kind: "execute",
                                 status: "pending",
                                 title: "Run verification",
+                                rawInput: context.params.prompt.some(
+                                    (content) =>
+                                        content.type === "text" && content.text === "request without tool input",
+                                )
+                                    ? undefined
+                                    : { command: "pnpm test -- --reporter=verbose", target: "src/<entry>.ts" },
+                                locations: [{ path: "src/<entry>.ts", line: 12 }],
                             },
                             options: [
-                                { optionId: "allow-once", kind: "allow_once", name: "Allow once" },
-                                { optionId: "reject", kind: "reject_once", name: "Reject" },
+                                { optionId: "allow-once", kind: "allow_once", name: "Yes" },
+                                { optionId: "reject", kind: "reject_once", name: "No" },
                             ],
                         },
                         { cancellationSignal: signal },

@@ -3,7 +3,7 @@ import type { ElicitationResponseRequest } from "@moxt-ai/mobius-sdk/channel";
 
 type PermissionInteractionDetails = Pick<
     SessionPermissionRequestedEvent,
-    "interactionId" | "options" | "sessionId" | "title" | "toolCallId" | "toolKind"
+    "details" | "interactionId" | "options" | "sessionId" | "title" | "toolCallId" | "toolKind"
 >;
 
 type PermissionInteractionState =
