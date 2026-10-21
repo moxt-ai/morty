@@ -49,14 +49,17 @@ const STREAMDOWN_ICONS = Object.freeze({
 });
 
 const STREAMDOWN_FENCED_CODE_BLOCK_CLASSES = [
-    "[&_[data-streamdown=code-block]]:overflow-hidden",
+    "[&_[data-streamdown=code-block]]:!overflow-hidden",
     "[&_[data-streamdown=code-block]]:rounded-[20px]",
     "[&_[data-streamdown=code-block]]:!border-0",
     "[&_[data-streamdown=code-block]]:!bg-muted",
     "[&_[data-streamdown=code-block-header]]:!h-6",
+    "[&_[data-streamdown=code-block-body]]:flex [&_[data-streamdown=code-block-body]]:min-h-0 [&_[data-streamdown=code-block-body]]:flex-col [&_[data-streamdown=code-block-body]]:!overflow-hidden",
     "[&_[data-streamdown=code-block-body]]:!border-0",
     "[&_[data-streamdown=code-block-body]]:!bg-background",
     "[&_[data-streamdown=code-block-body]]:!p-3",
+    "[&_[data-streamdown=code-block-body]]:!text-[13px]",
+    "[&_[data-streamdown=code-block-body]_pre]:min-h-0 [&_[data-streamdown=code-block-body]_pre]:flex-1 [&_[data-streamdown=code-block-body]_pre]:overflow-auto",
     "[&_[data-streamdown=code-block-actions]]:!border-0",
     "[&_[data-streamdown=code-block-actions]]:!bg-transparent",
     "[&_[data-streamdown=code-block-actions]]:shadow-none",
@@ -76,7 +79,7 @@ const STREAMDOWN_FENCED_CODE_BLOCK_CLASSES = [
     "[&_[data-streamdown=code-block-copy-button]]:focus-visible:ring-2",
     "[&_[data-streamdown=code-block-copy-button]]:focus-visible:ring-ring/60",
     "[&_[data-streamdown=code-block-copy-button]_svg]:size-3.5",
-    "[&_[data-streamdown=inline-code]]:text-copy-secondary",
+    "[&_[data-streamdown=inline-code]]:text-[13px] [&_[data-streamdown=inline-code]]:text-copy-secondary",
 ].join(" ");
 const LOCAL_FILE_URL_ORIGIN = "https://local-file.morty.invalid";
 const LATEX_DELIMITER_PATTERN = /(^|[^\\$])(?:\$\$[\s\S]+?\$\$|\$(?!\$)[^\n$]+\$)/u;
