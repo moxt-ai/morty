@@ -1,4 +1,4 @@
-import { ChevronDown, CircleCheck, CircleMinus, CircleX, LoaderCircle } from "lucide-react";
+import { Check, ChevronDown, CircleMinus, LoaderCircle, X } from "lucide-react";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import { cn } from "../../../lib/utils.ts";
 import type { ToolCallState } from "./tool-renderer.ts";
@@ -19,6 +19,15 @@ export const agentThinkStepChevronClassName =
 
 export const agentThinkStepExpandedPanelClassName =
     "mb-1 ml-2 grid min-w-0 gap-2 border-l border-[#d9dde1] py-2 pl-5 [overflow-wrap:anywhere]";
+
+const toolCallStatusIconClassName = "block shrink-0";
+
+const toolCallStatusRenderedStrokePx = 1.3;
+
+/** Lucide strokes scale with icon size (viewBox 24). */
+const toolCallStatusStrokeWidthAt12Px = (toolCallStatusRenderedStrokePx * 24) / 12;
+
+const toolCallStatusSlotClassName = "inline-flex shrink-0 items-center justify-center leading-[22px]";
 
 export function ToolCallDisclosure({
     ariaLabel,
@@ -54,8 +63,11 @@ export function ToolCallDisclosure({
                 type="button"
             >
                 <span className="shrink-0 [&>svg]:size-3.5">{icon}</span>
-                <span className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden">
-                    <span className={agentThinkStepTitleClassName}>{title}</span>
+                <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden leading-[22px]">
+                    <span className={cn(agentThinkStepTitleClassName, "leading-[22px]")}>{title}</span>
+                    <span className={toolCallStatusSlotClassName}>
+                        <ToolCallStatus state={state} />
+                    </span>
                     <ChevronDown
                         aria-hidden="true"
                         className={cn(
@@ -64,9 +76,6 @@ export function ToolCallDisclosure({
                             open && "inline rotate-0",
                         )}
                     />
-                </span>
-                <span className="shrink-0">
-                    <ToolCallStatus state={state} />
                 </span>
             </button>
             {open && (
@@ -85,15 +94,37 @@ function ToolCallStatus({ state }: { readonly state: ToolCallState }) {
             return (
                 <LoaderCircle
                     aria-label="Tool running"
-                    className="size-4 shrink-0 animate-spin text-primary motion-reduce:animate-none"
+                    className={cn(
+                        toolCallStatusIconClassName,
+                        "size-3 animate-spin text-primary motion-reduce:animate-none",
+                    )}
+                    strokeWidth={toolCallStatusStrokeWidthAt12Px}
                 />
             );
         case "succeeded":
-            return <CircleCheck aria-label="Tool succeeded" className="size-4 shrink-0 text-emerald-600" />;
+            return (
+                <Check
+                    aria-label="Tool succeeded"
+                    className={cn(toolCallStatusIconClassName, "size-3 text-emerald-600")}
+                    strokeWidth={toolCallStatusStrokeWidthAt12Px}
+                />
+            );
         case "failed":
-            return <CircleX aria-label="Tool failed" className="size-4 shrink-0 text-destructive" />;
+            return (
+                <X
+                    aria-label="Tool failed"
+                    className={cn(toolCallStatusIconClassName, "size-3 text-destructive")}
+                    strokeWidth={toolCallStatusStrokeWidthAt12Px}
+                />
+            );
         case "interrupted":
-            return <CircleMinus aria-label="Tool interrupted" className="size-4 shrink-0 text-muted-foreground" />;
+            return (
+                <CircleMinus
+                    aria-label="Tool interrupted"
+                    className={cn(toolCallStatusIconClassName, "size-3 text-muted-foreground")}
+                    strokeWidth={toolCallStatusStrokeWidthAt12Px}
+                />
+            );
         case "unknown":
             return null;
     }

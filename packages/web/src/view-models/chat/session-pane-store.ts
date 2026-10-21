@@ -251,6 +251,16 @@ export function sessionPanePresentation(
         queue.operation.kind === "submitting" ||
         tasks.operation.kind === "steering" ||
         tasks.operation.kind === "stopping";
+    const composerInputDisabled =
+        (model.connection.kind !== "ready" && model.connection.kind !== "loading") ||
+        delivery.state.kind === "submitting" ||
+        delivery.state.kind === "delivery-unknown" ||
+        model.operation.kind === "sending" ||
+        model.operation.kind === "configuring" ||
+        waitingForInput ||
+        queue.operation.kind === "submitting" ||
+        tasks.operation.kind === "steering" ||
+        tasks.operation.kind === "stopping";
     const workingActivityCommandId = workingCommandId(model.activity);
     const submittingCommandId = model.operation.kind === "sending" ? model.operation.commandId : null;
     const activeCommandId = workingActivityCommandId ?? submittingCommandId;
@@ -283,6 +293,7 @@ export function sessionPanePresentation(
         activeCommandId,
         busy,
         composerDisabled,
+        composerInputDisabled,
         composerError:
             connectionFailure(model.connection) ??
             [model.activity, model.operation, delivery.state, tasks.feedback, queue.feedback].find(
@@ -309,6 +320,7 @@ export function sessionPanePresentation(
             model.messages.some((message) => message.role === "user" && message.commandId === activeCommandId),
         shouldQueueOnSubmit: tasks.operation.kind === "running",
         submitDisabled:
+            model.connection.kind !== "ready" ||
             (tasks.operation.kind === "running" ? queue.operation.kind !== "idle" : busy) ||
             attachments.state.kind === "reading" ||
             (model.draft.trim() === "" && attachments.attachments.length === 0),
