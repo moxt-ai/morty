@@ -2,6 +2,7 @@ import { fireEvent, getByLabelText, getByRole, queryByRole } from "@testing-libr
 import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
+import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
 test("Given the message composer, When the user clicks Add attachment and selects a file, Then the picker opens directly and the attachment appears", {
@@ -30,6 +31,36 @@ test("Given the message composer, When the user clicks Add attachment and select
     );
     await app.user.click(getByRole(document.body, "button", { name: "Remove notes.json" }));
     expect(queryByRole(document.body, "list", { name: "Attachments" })).toBeNull();
+});
+
+test("Given an Agent is running, When the user reads an attachment and immediately stops output, Then cancellation remains available before the file read finishes", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, "hold after first delta");
+    await app.waitForView(() => expect(document.body.textContent).toContain("Partial reply"));
+    await app.waitForView(() => getByRole(document.body, "button", { name: "Stop agent output" }));
+    // Flush the reading state without yielding to asynchronous FileReader completion.
+    act(() => {
+        fireEvent.change(getByLabelText(document.body, "Choose attachments"), {
+            target: { files: [new File(["Next message"], "next.json", { type: "text/plain" })] },
+        });
+    });
+    expect(getByRole(document.body, "button", { name: "Add attachment" }).hasAttribute("disabled")).toBe(true);
+    const stop = getByRole(document.body, "button", { name: "Stop agent output" });
+    expect(stop.hasAttribute("disabled")).toBe(false);
+    act(() => {
+        fireEvent.click(stop);
+    });
+    await app.waitForView(() => {
+        expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull();
+        expect(queryByRole(document.body, "button", { name: "Stop agent output" })).toBeNull();
+    });
+    expect(document.body.textContent).toContain("Partial reply");
 });
 
 test("Given a draft attachment, When Chat remounts, Then the attachment remains until the user starts a new conversation", {

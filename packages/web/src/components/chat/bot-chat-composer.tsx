@@ -208,7 +208,7 @@ export function BotChatComposer({
                             className={`size-11 rounded-full text-white shadow-sm sm:size-10 ${submitAction || outputState === "sending" ? "bg-primary hover:bg-primary/90" : "bg-destructive hover:bg-destructive/90"}`}
                             data-testid={dataTestId.sendMessage}
                             disabled={
-                                attachmentState.kind === "reading" ||
+                                (submitAction && attachmentState.kind === "reading") ||
                                 outputState === "sending" ||
                                 outputState === "stopping" ||
                                 (outputState === "idle" && submitDisabled)
