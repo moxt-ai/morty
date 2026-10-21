@@ -550,6 +550,7 @@ export class BotChatApi {
             endpoint,
             projectId,
             operationTimeoutMilliseconds: 120000,
+            maxStreamReconnectAttempts: 0,
             transport: sharedTransport,
             credentialProvider: {
                 credential: async (parent) => {

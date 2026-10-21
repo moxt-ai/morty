@@ -1,5 +1,3 @@
-import type { E2EHarness } from "./harness.ts";
-
 interface RequestOptions {
     readonly body?: unknown;
     readonly project?: string;
@@ -100,15 +98,15 @@ export class ChatApi {
         });
     }
 
-    async waitForAgent(harness: E2EHarness, pairingId: string, agentId: string, agentLabel: string) {
-        const paired = await harness.waitFor(
-            `Mobius pairing with ${agentLabel}`,
-            () => this.#request(`/morty/api/management/runtime-pairings/${encodeURIComponent(pairingId)}`),
-            (status) =>
-                status.status === "paired" &&
-                Array.isArray(status.agents) &&
-                status.agents.some((agent) => object(agent, "agent").id === agentId),
-        );
+    async readPairedAgent(pairingId: string, agentId: string) {
+        const paired = await this.#request(`/morty/api/management/runtime-pairings/${encodeURIComponent(pairingId)}`);
+        if (
+            paired.status !== "paired" ||
+            !Array.isArray(paired.agents) ||
+            !paired.agents.some((agent) => object(agent, "agent").id === agentId)
+        ) {
+            throw new Error(`The paired Runtime does not expose ${agentId}`);
+        }
         return { runtimeId: text(paired.runtimeId, "runtimeId") };
     }
 
@@ -122,26 +120,20 @@ export class ChatApi {
         );
     }
 
-    async waitForBinding(harness: E2EHarness, agentId: string, agentLabel: string) {
+    async readBinding(agentId: string) {
         const identity = this.#requireIdentity();
-        await harness.waitFor(
-            `${agentLabel} Bot binding`,
-            () =>
-                this.#request(
-                    `/morty/api/chat/projects/${encodeURIComponent(identity.projectId)}/bots/${encodeURIComponent(identity.botId)}/workspace`,
-                    {
-                        body: {},
-                    },
-                ),
-            (configuration) => {
-                const runtime = object(configuration.runtime, "runtime");
-                return (
-                    runtime.online === true &&
-                    Array.isArray(runtime.agents) &&
-                    runtime.agents.some((agent) => object(agent, "agent").agentRef === agentId)
-                );
-            },
+        const configuration = await this.#request(
+            `/morty/api/chat/projects/${encodeURIComponent(identity.projectId)}/bots/${encodeURIComponent(identity.botId)}/workspace`,
+            { body: {} },
         );
+        const runtime = object(configuration.runtime, "runtime");
+        if (
+            runtime.online !== true ||
+            !Array.isArray(runtime.agents) ||
+            !runtime.agents.some((agent) => object(agent, "agent").agentRef === agentId)
+        ) {
+            throw new Error(`The configured Bot does not expose ${agentId}`);
+        }
     }
 
     #requireIdentity() {
