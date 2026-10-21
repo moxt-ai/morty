@@ -131,12 +131,13 @@ export async function createTestRuntime(
                 instructionUrl: string,
                 sessionId?: string,
                 maximumWaitMilliseconds?: number,
+                workspace?: string,
             ) => {
                 const url = new URL(instructionUrl, stack.chatOrigin);
                 setupClockTime = setupClockStart;
                 const result = await followSetupInstructions({
                     instructionUrl: url.href,
-                    cwd: stack.directories.workspace,
+                    cwd: workspace ?? stack.directories.workspace,
                     documents: harness.workDirectory,
                     harness: agentId,
                     signal: harness.signal,

@@ -761,6 +761,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
         url.searchParams.set("harness", options.harness);
         url.searchParams.set("sessionId", options.sessionId);
+        url.searchParams.set("workspace", workingDirectory);
         const handoffUrl = url.toString();
         const qrPath = await createQrCode(handoffUrl);
         emit({

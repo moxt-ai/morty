@@ -1,6 +1,12 @@
 import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
 import { BotChatApi } from "@/services/chat/bot-chat-api";
+import {
+    readRecentCwdPreferences,
+    saveLastCwdPreference,
+    saveRecentCwdPreference,
+} from "@/services/chat/last-cwd-preference";
+import { pathDirectoryId } from "@/services/chat/workspace-directory-reference";
 import { type DaemonDiagnosticsSource, recordBrowserError } from "@/services/diagnostics/browser-diagnostics";
 import { type AnonymousIdentity, AnonymousIdentityApi } from "@/services/identity/anonymous-identity-api";
 import { encodeIdentityScope } from "@/services/identity/identity-scope-url";
@@ -9,6 +15,7 @@ import { formatError } from "@/view-models/format-error";
 type SessionHandoff = {
     readonly harness: string;
     readonly sessionId: string;
+    readonly workspace?: string;
 };
 export type ContinueState =
     | {
@@ -55,9 +62,12 @@ function initialState(): ContinueState {
     const query = new URLSearchParams(window.location.search);
     const harness = query.get("harness");
     const sessionId = query.get("sessionId");
+    const workspace = query.get("workspace");
     if (
         code === null ||
         code.length === 0 ||
+        (workspace !== null &&
+            (harness === null || workspace.length === 0 || workspace.length > 4096 || workspace.includes("\0"))) ||
         (harness === null) !== (sessionId === null) ||
         (harness !== null && (!isIdentifier(harness) || sessionId === null || !isIdentifier(sessionId)))
     ) {
@@ -66,7 +76,7 @@ function initialState(): ContinueState {
     if (harness !== null && sessionId !== null) {
         return {
             code,
-            handoff: { harness, sessionId },
+            handoff: { harness, sessionId, ...(workspace === null ? {} : { workspace }) },
             kind: "session-opening",
         };
     }
@@ -139,6 +149,24 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 },
             });
             try {
+                if (handoff.workspace !== undefined) {
+                    // A handoff supplies a requested path, never filesystem authority.
+                    // Resolve it through the Runtime before recording a browser preference.
+                    const configuration = await chat.runtimeConfiguration(identity.botId, signal);
+                    const directory = await chat.directory(identity.botId, pathDirectoryId(handoff.workspace), signal);
+                    signal.throwIfAborted();
+                    saveLastCwdPreference(
+                        identity.botId,
+                        configuration.runtime.runtimeId,
+                        handoff.harness,
+                        directory.directoryId,
+                    );
+                    saveRecentCwdPreference(
+                        identity.botId,
+                        { directoryId: directory.directoryId, directoryLabel: directory.directoryLabel },
+                        readRecentCwdPreferences(identity.botId) ?? [],
+                    );
+                }
                 const session = await chat.continueNativeSession(
                     identity.botId,
                     handoff.harness,
