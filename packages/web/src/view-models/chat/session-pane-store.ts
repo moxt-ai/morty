@@ -643,6 +643,25 @@ export function createSessionPaneModel(options: {
             }
             return result.effects;
         };
+        /**
+         * Re-reads the authoritative settings from the daemon. A daemon
+         * restart rebuilds the event log without config updates, so an
+         * established projection without a config event must fetch instead of
+         * keeping a stale view.
+         */
+        const recoverProjectionState = async (connected: MobiusClient, parentSignal: AbortSignal): Promise<void> => {
+            const signal = AbortSignal.any([parentSignal, AbortSignal.timeout(45_000)]);
+            const configurationResult = await connected.sessions.readConfiguration(sessionId, signal);
+            parentSignal.throwIfAborted();
+            sessionConfigurations = configurationResult.configOptions.map((candidate) => ({
+                booleanValue: candidate.type === "boolean" ? candidate.booleanValue : false,
+                configId: candidate.id,
+                value: candidate.type === "select" ? candidate.currentValue : "",
+                valueType: candidate.type,
+            }));
+            saveLastAgentSettings(botId, session.agentRef, configurationResult.configOptions);
+            set({ options: configurationResult.configOptions });
+        };
         const loadProjectionHistory = async (
             effect: Extract<SessionProjectionEffect, { readonly kind: "load-history" }>,
             connected: MobiusClient,
@@ -685,10 +704,20 @@ export function createSessionPaneModel(options: {
             signal: AbortSignal,
         ): Promise<void> => {
             const effects = commitProjection(input);
+            let historyReloaded = false;
             for (const effect of effects) {
                 if (effect.kind === "load-history") {
                     await loadProjectionHistory(effect, connected, signal);
+                    historyReloaded = true;
                 }
+            }
+            // A reloaded log without any config event is the post-restart
+            // shape: the rebuilt generation cannot speak for agent settings,
+            // so read them from the daemon instead of trusting a stale view.
+            // Until that read lands the pane keeps its current settings, so a
+            // failed or cancelled read cannot clobber what was configured.
+            if (historyReloaded && projection.kind === "established" && projection.config === null) {
+                await recoverProjectionState(connected, signal);
             }
         };
         return {
