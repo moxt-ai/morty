@@ -66,29 +66,32 @@ test("Given Morty access from a finished setup, When the user reopens Morty in a
     expect(window.sessionStorage.getItem("mobius.anonymous-credential.v2")).toBeNull();
 });
 
-test("Given shared Morty access, When the user opens Continue your work, Then the icon-only action and dialog use that name", {
+test("Given shared Morty access, When the user continues on another device, Then the visible entry opens sharing with its scope and expiry before the link", {
     timeout: 30_000,
 }, async () => {
-    const app = await createTestApp();
+    const app = await createTestApp({ page: { kind: "bootstrap", identity: true } });
     await app.user.click(await app.queryElementByTestId(dataTestId.closeDialog));
-    const reportBug = await app.waitForView(() => getByRole(document.body, "button", { name: "Report a bug" }));
-    const actions = [
-        { element: reportBug, tooltip: "Report a bug" },
-        { element: await app.queryElementByTestId(dataTestId.userMenu), tooltip: "User menu" },
-        { element: await app.queryElementByTestId(dataTestId.shareIdentity), tooltip: "Continue your work" },
-    ];
+    const share = await app.waitForView(() =>
+        getByRole(document.body, "button", { name: "Continue on another device" }),
+    );
+    expect(share.textContent).toContain("Continue on another device");
+    await app.user.click(share);
 
-    for (const { element, tooltip } of actions) {
-        expect(element.textContent).toBe("");
-        await app.user.hover(element);
-        expect(await app.waitForView(() => getByRole(document.body, "tooltip", { name: tooltip }))).toBeInstanceOf(
-            HTMLElement,
-        );
+    const dialog = getByRole(document.body, "dialog", { name: "Continue on another device" });
+    expect(dialog.textContent).toContain(
+        "Anyone with this link can use your current Morty identity to view and control sessions in this project",
+    );
+    expect(dialog.textContent).toContain("not just the current conversation");
+    expect(dialog.textContent).toContain("24 hours");
+    expect(dialog.textContent).toContain("Access already granted does not end when the link expires");
+    const link = await app.waitForView(() => getByRole(dialog, "link", { name: "Open sharing link" }));
+    expect(getByRole(dialog, "img", { name: "Continue on another device QR code" })).toBeInstanceOf(HTMLImageElement);
+    const description = getByRole(dialog, "heading", { name: "Continue on another device" }).parentElement;
+    if (description === null) {
+        throw new Error("The sharing description must precede its link.");
     }
-
-    await app.user.click(getByRole(document.body, "button", { name: "Continue your work" }));
-
-    expect(getByRole(document.body, "dialog", { name: "Continue your work" })).toBeInstanceOf(HTMLElement);
+    expect(description.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(queryByRole(dialog, "button", { name: "Confirm" })).toBeNull();
 });
 
 test("Given a native session handoff without a matching Agent, When the page loads, Then opening fails with the reason", {
@@ -246,27 +249,142 @@ test("Given connected shared Morty access, When the user refreshes Network laten
     });
 });
 
-test("Given shared Morty access, When the user chooses to end remote access from the user menu, Then they confirm the transfer-wide revocation without a recovery code", {
+test("Given current Morty access, When the user opens its visible end action, Then the confirmation explains conditional scope without promising immediate disconnection", {
     timeout: 30_000,
 }, async () => {
-    const app = await createTestApp();
-    const shareIdentity = await app.queryElementByTestId(dataTestId.shareIdentity);
-
+    const app = await createTestApp({ page: { kind: "bootstrap", identity: true } });
     await app.user.click(await app.queryElementByTestId(dataTestId.closeDialog));
-    const userMenu = await app.queryElementByTestId(dataTestId.userMenu);
-    expect(userMenu.parentElement).toBe(shareIdentity.parentElement);
-    await app.user.click(userMenu);
-    const endAccess = await app.queryElementByTestId(dataTestId.endRemoteAccess);
+    const endAccess = getByRole(document.body, "button", { name: "End current access" });
+    expect(endAccess.textContent).toContain("End current access");
     await app.user.click(endAccess);
 
     const dialog = await app.queryElementByTestId(dataTestId.endRemoteAccessDialog);
-    expect(dialog.textContent).toContain("End remote access?");
-    expect(dialog.textContent).toContain("every browser using this access link");
-    expect(dialog.textContent).toContain("Your local Runtime and task will keep running");
-    expect(dialog.textContent).not.toContain("Back up this token");
+    await app.waitForView(() =>
+        expect(getByRole(dialog, "button", { name: "End current access" }).hasAttribute("disabled")).toBe(false),
+    );
+    expect(dialog.textContent).toContain("If you joined through a link");
+    expect(dialog.textContent).toContain("Other sharing links and recovery access stay active");
+    expect(dialog.textContent).toContain("Already-open sessions elsewhere may keep working until their access expires");
+    expect(dialog.textContent).toContain("Your local agent and tasks keep running");
     expect(queryByRole(dialog, "textbox", { name: "Current user token" })).toBeNull();
-    expect(dialog.textContent).toContain("Cancel");
-    expect(dialog.textContent).toContain("End remote access");
+    await app.user.click(getByRole(dialog, "button", { name: "Cancel" }));
+    expect(queryByRole(document.body, "dialog", { name: "End current access?" })).toBeNull();
+    expect(getByRole(document.body, "button", { name: "Continue on another device" })).toBeInstanceOf(
+        HTMLButtonElement,
+    );
+});
+
+test("Given current Morty access, When ending succeeds, Then the setup page confirms this access ended after reloading", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ page: { kind: "bootstrap", identity: true } });
+    await app.user.click(await app.queryElementByTestId(dataTestId.closeDialog));
+    await app.user.click(getByRole(document.body, "button", { name: "End current access" }));
+    const dialog = await app.queryElementByTestId(dataTestId.endRemoteAccessDialog);
+    const confirm = await app.waitForView(() => {
+        const button = getByRole(dialog, "button", { name: "End current access" });
+        expect(button.hasAttribute("disabled")).toBe(false);
+        return button;
+    });
+    await app.user.click(confirm);
+    await app.waitForView(() => expect(window.location.search).not.toContain("identity="));
+    await app.close();
+
+    const reloaded = await createTestApp({ page: { kind: "bootstrap" } });
+    await reloaded.waitForView(() =>
+        expect(getByRole(document.body, "status").textContent).toContain("Current access ended"),
+    );
+    expect(document.body.textContent).toContain("Your local agent and tasks keep running");
+    expect(getByRole(document.body, "heading", { name: "Connect your local agent" })).toBeInstanceOf(HTMLElement);
+    await reloaded.close();
+    const nextVisit = await createTestApp({ page: { kind: "bootstrap" } });
+    await nextVisit.waitForView(() => getByRole(document.body, "heading", { name: "Connect your local agent" }));
+    expect(queryByRole(document.body, "status")).toBeNull();
+});
+
+test("Given the end confirmation, When the real API transport closes, Then an uncertain result is shown without claiming the access ended", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ page: { kind: "bootstrap", identity: true }, connectAgent: true });
+    await app.user.click(
+        await app.waitForView(() => getByRole(document.body, "button", { name: "End current access" })),
+    );
+    const dialog = await app.queryElementByTestId(dataTestId.endRemoteAccessDialog);
+    const confirm = await app.waitForView(() => {
+        const button = getByRole(dialog, "button", { name: "End current access" });
+        expect(button.hasAttribute("disabled")).toBe(false);
+        return button;
+    });
+    app.transport.close();
+    const connectionNotice = await app.waitForView(() =>
+        getByRole(document.body, "dialog", { name: "Runtime connection unavailable" }),
+    );
+    await app.user.click(getByRole(connectionNotice, "button", { name: "Close dialog" }));
+    await app.user.click(confirm);
+
+    await app.waitForView(() =>
+        expect(getByRole(dialog, "alert").textContent).toContain("We couldn't confirm whether this access ended"),
+    );
+    expect(getByRole(dialog, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
+    expect(window.location.search).toContain("identity=");
+    expect(document.body.textContent).not.toContain("Current access ended");
+    app.transport.open();
+    await app.user.click(getByRole(dialog, "button", { name: "Try again" }));
+    await app.waitForView(() => expect(window.location.search).not.toContain("identity="));
+});
+
+test("Given an end confirmation for revoked access, When the API rejects the request, Then Morty explains the rejection instead of reporting success", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ page: { kind: "bootstrap", identity: true }, connectAgent: true });
+    await app.user.click(
+        await app.waitForView(() => getByRole(document.body, "button", { name: "End current access" })),
+    );
+    const dialog = await app.queryElementByTestId(dataTestId.endRemoteAccessDialog);
+    const confirm = await app.waitForView(() => {
+        const button = getByRole(dialog, "button", { name: "End current access" });
+        expect(button.hasAttribute("disabled")).toBe(false);
+        return button;
+    });
+    const signal = new AbortController().signal;
+    const revoked = await app.transport.fetch(
+        new Request(`${app.origin}/morty/api/projects/${app.identity.projectId}/identity/remote-access`, {
+            method: "DELETE",
+            headers: { authorization: `Bearer ${await app.identity.getToken(signal)}` },
+            signal,
+        }),
+    );
+    expect(revoked.status).toBe(204);
+    await app.user.click(confirm);
+    await app.waitForView(() =>
+        expect(getByRole(dialog, "alert").textContent).toContain("This request was not authorized"),
+    );
+    expect(dialog.textContent).toContain("Reload Morty to check your current access");
+    expect(document.body.textContent).not.toContain("Current access ended");
+});
+
+test("Given an unavailable connection, When current access cannot be prepared, Then the user sees a retryable error and can return to confirmation", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ page: { kind: "bootstrap", identity: true }, connectAgent: true });
+    const endAccess = await app.waitForView(() => getByRole(document.body, "button", { name: "End current access" }));
+    app.transport.close();
+    const connectionNotice = await app.waitForView(() =>
+        getByRole(document.body, "dialog", { name: "Runtime connection unavailable" }),
+    );
+    await app.user.click(getByRole(connectionNotice, "button", { name: "Close dialog" }));
+    await app.user.click(endAccess);
+    const dialog = await app.queryElementByTestId(dataTestId.endRemoteAccessDialog);
+    await app.waitForView(() =>
+        expect(getByRole(dialog, "alert").textContent).toContain("Couldn't prepare to end this access"),
+    );
+    app.transport.open();
+    await app.user.click(getByRole(dialog, "button", { name: "Try again" }));
+    await app.waitForView(() =>
+        expect(getByRole(dialog, "button", { name: "End current access" }).hasAttribute("disabled")).toBe(false),
+    );
+    await app.user.click(getByRole(dialog, "button", { name: "Cancel" }));
+    expect(window.location.search).toContain("identity=");
 });
 
 test("Given the failure page after a redeemed Morty access, When the user chooses Go to Morty, Then Morty opens home with that access instead of the failed session", {

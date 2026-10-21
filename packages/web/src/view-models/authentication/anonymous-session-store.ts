@@ -1,9 +1,13 @@
 import { createStore } from "zustand/vanilla";
 import { type AnonymousIdentity, AnonymousIdentityApi } from "../../services/identity/anonymous-identity-api.ts";
+import {
+    accessEndedNoticeEntry,
+    centralSessionStorage,
+} from "../../services/session-storage/central-session-storage.ts";
 
 type AnonymousSessionState =
     | { readonly kind: "loading" }
-    | { readonly kind: "setup" }
+    | { readonly kind: "setup"; readonly notice: "access-ended" | "none" }
     | { readonly kind: "active"; readonly identity: AnonymousIdentity }
     | { readonly kind: "failed" };
 
@@ -33,8 +37,10 @@ export const createAnonymousSessionStore = (fetchRequest: (request: Request) => 
                 try {
                     const existing = await api.loadExisting(signal);
                     signal.throwIfAborted();
+                    const notice = centralSessionStorage.read(accessEndedNoticeEntry);
+                    centralSessionStorage.remove(accessEndedNoticeEntry);
                     if (existing === null) {
-                        set({ state: { kind: "setup" } });
+                        set({ state: { kind: "setup", notice: notice === "ended" ? "access-ended" : "none" } });
                         return;
                     }
                     const identity = existing;
