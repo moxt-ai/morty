@@ -1451,7 +1451,7 @@ export function createSessionPaneModel(options: {
                 reportApplicationError(cause, "session-pane-harnesses");
             }
         });
-    const readyClient = (signal: AbortSignal): Promise<MobiusClient> =>
+    const waitForConnectionReady = (signal: AbortSignal): Promise<void> =>
         new Promise((resolve, reject) => {
             let unsubscribe = () => {};
             const cleanup = (): void => {
@@ -1466,7 +1466,7 @@ export function createSessionPaneModel(options: {
                 const current = store.getState().connection;
                 if (current.kind === "ready") {
                     cleanup();
-                    resolve(current.client);
+                    resolve();
                 } else if (
                     current.kind === "failed" ||
                     (current.kind === "disconnected" && current.retry.kind === "exhausted")
@@ -1484,11 +1484,23 @@ export function createSessionPaneModel(options: {
             check();
         });
     const readFile = async (path: string, signal: AbortSignal) => {
+        signal.throwIfAborted();
+        const current = store.getState().connection;
+        if (current.kind !== "ready") {
+            throw new MobiusError("session_not_connected", "The Session is not connected.");
+        }
+        return await current.client.sessions.readFile(
+            sessionId,
+            path,
+            AbortSignal.any([signal, connection.signal, AbortSignal.timeout(20_000)]),
+            32 * 1024 * 1024,
+        );
+    };
+    const readResource = async (path: string, signal: AbortSignal) => {
         // The same bounded lifetime covers connection recovery and the file read.
         const requestSignal = AbortSignal.any([signal, connection.signal, AbortSignal.timeout(20_000)]);
-        const connected = await readyClient(requestSignal);
-        requestSignal.throwIfAborted();
-        return await connected.sessions.readFile(sessionId, path, requestSignal, 32 * 1024 * 1024);
+        await waitForConnectionReady(requestSignal);
+        return await readFile(path, requestSignal);
     };
     const filePreview = createBrowserFilePreviewStore(readFile);
     /**
@@ -1535,6 +1547,6 @@ export function createSessionPaneModel(options: {
         onAttach,
         /** The signal for view-triggered operations while the pane is attached. */
         operationsSignal: () => connection.signal,
-        readFile,
+        readResource,
     };
 }

@@ -468,7 +468,7 @@ export function MobiusSessionPane({
                                 {item.kind === "assistant-text" ? (
                                     <MobiusAssistantText
                                         openLocalFile={openLocalFile}
-                                        readImage={pane.readFile}
+                                        readImage={pane.readResource}
                                         text={item.text}
                                         streaming={
                                             model.activity.kind === "working" && index === renderItems.length - 1
@@ -481,7 +481,7 @@ export function MobiusSessionPane({
                                                 model.activity.kind === "working" && index === renderItems.length - 1
                                             }
                                             entries={item.entries}
-                                            readImage={pane.readFile}
+                                            readImage={pane.readResource}
                                         />
                                     </div>
                                 ) : (
@@ -492,7 +492,7 @@ export function MobiusSessionPane({
                                         deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
                                         onRemoveUnknownDelivery={pane.store.getState().removeUnknownDelivery}
                                         onRetryUnknownDelivery={() => run(pane.store.getState().retryUnknownDelivery)}
-                                        readImage={pane.readFile}
+                                        readImage={pane.readResource}
                                         openLocalFile={openLocalFile}
                                     />
                                 )}
