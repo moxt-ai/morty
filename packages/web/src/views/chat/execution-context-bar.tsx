@@ -39,11 +39,11 @@ export function ExecutionContextBar({ context }: { readonly context: ExecutionCo
             type="button"
             aria-label="Show execution details"
             aria-describedby={summaryId}
-            className="group flex min-h-11 w-full min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 text-left outline-none transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:transition-none sm:w-auto sm:max-w-full sm:py-1"
+            className="group grid min-h-11 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-lg px-2 py-1.5 text-left outline-none transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:transition-none lg:grid-cols-[minmax(0,auto)_minmax(6rem,1fr)_auto] lg:gap-x-6 lg:py-1"
         >
-            <span id={summaryId} className="grid min-w-0 flex-1 gap-1 sm:flex sm:items-center sm:gap-4">
-                <span className="flex min-w-0 items-center gap-2 text-[13px] leading-5">
-                    <span className="max-w-[45%] truncate font-medium text-foreground sm:max-w-40">
+            <span id={summaryId} className="contents">
+                <span className="col-start-1 row-start-1 flex min-w-0 items-center gap-2 text-[13px] leading-5">
+                    <span className="max-w-[45%] truncate font-medium text-foreground lg:max-w-40">
                         <span className="sr-only">Agent </span>
                         {context.agent}
                     </span>
@@ -53,11 +53,11 @@ export function ExecutionContextBar({ context }: { readonly context: ExecutionCo
                     <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
                         <Folder aria-hidden="true" className="size-3.5 shrink-0" />
                         <span className="sr-only">Working directory: </span>
-                        <span className="truncate sm:max-w-48">{context.directoryName}</span>
+                        <span className="truncate lg:max-w-48">{context.directoryName}</span>
                     </span>
                 </span>
-                <span className="flex min-w-0 items-center gap-3 text-[11px] leading-4 text-muted-foreground sm:text-xs">
-                    <span className="min-w-0 flex-1 truncate sm:max-w-56">
+                <span className="col-span-2 col-start-1 row-start-2 flex min-w-0 items-center gap-4 text-xs leading-5 text-muted-foreground lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:justify-end">
+                    <span className="min-w-0 flex-1 truncate lg:flex-initial">
                         <span className="sr-only">Machine: </span>
                         {context.machine}
                     </span>
@@ -74,7 +74,7 @@ export function ExecutionContextBar({ context }: { readonly context: ExecutionCo
             </span>
             <ChevronDown
                 aria-hidden="true"
-                className="size-3.5 shrink-0 text-muted-foreground/70 transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none"
+                className="col-start-2 row-start-1 size-3.5 text-muted-foreground/70 transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none lg:col-start-3"
             />
         </button>
     );

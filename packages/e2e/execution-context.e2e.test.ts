@@ -6,6 +6,7 @@ test.use({ runtimeMachineName: machineName });
 
 for (const viewport of [
     { width: 1440, height: 900 },
+    { width: 640, height: 900 },
     { width: 390, height: 844 },
     { width: 320, height: 740 },
 ]) {
@@ -31,7 +32,7 @@ for (const viewport of [
         expect(box.x).toBeGreaterThanOrEqual(0);
         expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
-        expect(box.height).toBeLessThanOrEqual(viewport.width < 640 ? 64 : 48);
+        expect(box.height).toBeLessThanOrEqual(viewport.width < 1024 ? 64 : 48);
         await expect(context.getByText("workspace", { exact: true })).toBeVisible();
         const details = context.getByRole("button", { name: "Show execution details" });
         await expect(details).toHaveAccessibleDescription(/Claude Code.*workspace.*Browser test Runtime.*Connected/);
