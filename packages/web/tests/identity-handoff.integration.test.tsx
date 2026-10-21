@@ -297,10 +297,14 @@ test("Given current Morty access, When ending succeeds, Then the setup page conf
         expect(getByRole(document.body, "status").textContent).toContain("Current access ended"),
     );
     expect(document.body.textContent).toContain("Your local agent and tasks keep running");
-    expect(getByRole(document.body, "heading", { name: "Connect your local agent" })).toBeInstanceOf(HTMLElement);
+    expect(
+        getByRole(document.body, "heading", { name: "Continue your coding session from your phone." }),
+    ).toBeInstanceOf(HTMLElement);
     await reloaded.close();
     const nextVisit = await createTestApp({ page: { kind: "bootstrap" } });
-    await nextVisit.waitForView(() => getByRole(document.body, "heading", { name: "Connect your local agent" }));
+    await nextVisit.waitForView(() =>
+        getByRole(document.body, "heading", { name: "Continue your coding session from your phone." }),
+    );
     expect(queryByRole(document.body, "status")).toBeNull();
 });
 
