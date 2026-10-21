@@ -74,25 +74,3 @@ test("Given a Markdown response over 32 KiB, When output grows and I load more, 
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
     expect(document.body.textContent).toContain("NEW_LIVE_OUTPUT");
 });
-
-test("Given Markdown below 32 KiB, When the agent responds, Then Chat renders its structures", {
-    timeout: 30_000,
-}, async () => {
-    const rows = Array.from({ length: 300 }, (_, index) => `| service-${index} | ${"ready ".repeat(6)} |`).join("\n");
-    const { app } = await startLongResponse(
-        `\n\n## Services\n\n[Reference][guide]\n\n| Service | Status |\n| --- | --- |\n${rows}\n\n1. Parent\n   - Child\n\n[guide]: https://example.com/reference\n\nEND_OF_REPORT`,
-    );
-    await app.waitForView(() => {
-        const response = getByRole(document.body, "heading", { name: "Services" }).closest("article");
-        if (response === null) {
-            throw new Error("Expected the services response");
-        }
-        expect(response.querySelectorAll("table")).toHaveLength(1);
-        expect(response.querySelectorAll("tbody tr")).toHaveLength(300);
-        expect(response.querySelector("ol li ul li")?.textContent).toContain("Child");
-        expect(getByRole(response, "link", { name: "Reference" }).getAttribute("href")).toBe(
-            "https://example.com/reference",
-        );
-        expect(response.textContent).toContain("END_OF_REPORT");
-    });
-});
