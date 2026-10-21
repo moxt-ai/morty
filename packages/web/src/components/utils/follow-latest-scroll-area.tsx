@@ -45,13 +45,25 @@ export function FollowLatestScrollArea({
         if (element === null) {
             return;
         }
-        const observer = new MutationObserver(() => {
+        const keepLatestVisible = () => {
             if (following.current) {
                 element.scrollTop = element.scrollHeight;
             }
-        });
-        observer.observe(element, { characterData: true, childList: true, subtree: true });
-        return () => observer.disconnect();
+        };
+        // Content changes (streaming, replacing branches) and pure layout
+        // changes (window resizing, images loading, reflowed text) both move
+        // the latest content; watch both so following survives each.
+        const mutations = new MutationObserver(keepLatestVisible);
+        mutations.observe(element, { characterData: true, childList: true, subtree: true });
+        const resizes = new ResizeObserver(keepLatestVisible);
+        resizes.observe(element);
+        for (const child of element.children) {
+            resizes.observe(child);
+        }
+        return () => {
+            mutations.disconnect();
+            resizes.disconnect();
+        };
     }, [container]);
 
     return (
