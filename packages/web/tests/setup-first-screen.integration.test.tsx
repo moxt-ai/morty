@@ -1,15 +1,15 @@
 import { getAllByRole, getByRole } from "@testing-library/dom";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
 test("Given a browser without a finished setup, When the first screen opens, Then it presents phone continuation above a single copy action", {
     timeout: 30_000,
 }, async () => {
-    await createTestApp({ page: { kind: "bootstrap" } });
+    const app = await createTestApp({ page: { kind: "bootstrap" } });
 
     expect(
-        await vi.waitFor(() =>
+        await app.waitForView(() =>
             getByRole(document.body, "heading", { level: 1, name: "Continue your coding session from your phone." }),
         ),
     ).toBeInstanceOf(HTMLElement);
@@ -43,7 +43,7 @@ test("Given the first screen, When the user reaches the copy button by keyboard 
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap" } });
     const instruction = `Fetch ${window.location.origin}/setup.md and set up Morty for me. Don't ask me anything.`;
-    const copy = await vi.waitFor(() => getByRole(document.body, "button", { name: "Copy setup instruction" }));
+    const copy = await app.waitForView(() => getByRole(document.body, "button", { name: "Copy setup instruction" }));
     expect(document.activeElement).not.toBe(copy);
 
     copy.focus();
@@ -60,7 +60,7 @@ test("Given the first screen, When the user focuses the instruction, Then the wh
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap" } });
-    await vi.waitFor(() =>
+    await app.waitForView(() =>
         getByRole(document.body, "heading", { level: 1, name: "Continue your coding session from your phone." }),
     );
 
@@ -82,7 +82,7 @@ test("Given the first screen, When the user clicks Copy again after success, The
     const instruction = `Fetch ${window.location.origin}/setup.md and set up Morty for me. Don't ask me anything.`;
 
     await app.user.click(
-        await vi.waitFor(() => getByRole(document.body, "button", { name: "Copy setup instruction" })),
+        await app.waitForView(() => getByRole(document.body, "button", { name: "Copy setup instruction" })),
     );
     const copied = getByRole(document.body, "button", { name: "Copied" });
     expect(await navigator.clipboard.readText()).toBe(instruction);
