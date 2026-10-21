@@ -85,7 +85,9 @@ test("Given a new browser, When Morty loads, Then Morty opens without presenting
     await createTestApp({ page: { kind: "bootstrap" } });
 
     expect(
-        await vi.waitFor(() => getByRole(document.body, "heading", { name: "Connect your local agent" })),
+        await vi.waitFor(() =>
+            getByRole(document.body, "heading", { name: "Continue your coding session from your phone." }),
+        ),
     ).toBeInstanceOf(HTMLElement);
     expect(document.body.textContent).not.toContain("Local agents");
     expect(document.body.textContent?.toLowerCase()).not.toContain("workspace");
@@ -97,7 +99,7 @@ test("Given Morty access from a finished setup, When the user reopens Morty in a
     const app = await createTestApp({ page: { kind: "bootstrap", identity: true }, connectAgent: true });
 
     expect(await app.queryElementByTestId(dataTestId.chatLanding)).toBeInstanceOf(HTMLElement);
-    expect(queryByRole(document.body, "heading", { name: "Connect your local agent" })).toBeNull();
+    expect(queryByRole(document.body, "heading", { name: "Continue your coding session from your phone." })).toBeNull();
     expect(window.location.search).toContain("identity=");
     expect(window.sessionStorage.getItem("mobius.anonymous-credential.v2")).toBeNull();
 });

@@ -17,6 +17,11 @@ test("Given Morty has no paired agent, When the setup page opens, Then it offers
     );
     expect(queryByRole(document.body, "combobox", { name: "Data region" })).toBeNull();
     expect(queryByRole(document.body, "button", { name: "Refresh pairing instruction" })).toBeNull();
+    const dialog = getByRole(document.body, "dialog", { name: "Connect agent" });
+    expect(getByRole(dialog, "button", { name: "Copy setup instruction" })).toBeInstanceOf(HTMLButtonElement);
+    expect(dialog.textContent).not.toContain("Continue your coding session from your phone.");
+    expect(dialog.textContent).not.toContain("Works with Codex, Claude Code, and Pi.");
+    expect(dialog.textContent).not.toContain("Local execution. Remote access you can revoke.");
 });
 
 test("Given a paired Bot, When its Runtime disconnects, Then the disconnected status is visible", {

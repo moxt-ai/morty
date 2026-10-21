@@ -52,20 +52,37 @@ export function SessionApplication({ application }: { readonly application: Mort
 
 function SetupApplication() {
     return (
-        <main className="flex min-h-screen items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_top,_hsl(var(--muted))_0%,_hsl(var(--background))_48%)] px-6 py-12 text-foreground">
+        <main className="flex min-h-screen items-center justify-center overflow-y-auto bg-[radial-gradient(circle_at_top,_hsl(var(--muted))_0%,_hsl(var(--background))_48%)] px-6 py-12 text-foreground">
             <section aria-labelledby="setup-title" className="w-full max-w-2xl">
                 <div className="rounded-3xl border border-border/70 bg-card/90 p-8 shadow-2xl shadow-black/10 backdrop-blur sm:p-12">
                     <div className="mb-10 flex size-12 items-center justify-center rounded-2xl bg-primary text-xl font-bold text-primary-foreground shadow-lg shadow-primary/20">
                         M
                     </div>
-                    <p className="text-sm font-medium text-primary">Welcome to Morty</p>
-                    <h1 id="setup-title" className="mt-2 text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">
-                        Connect your local agent
+                    <p className="text-sm font-medium text-primary">Morty</p>
+                    <h1
+                        id="setup-title"
+                        className="mt-2 text-3xl font-semibold tracking-[-0.035em] text-balance sm:text-4xl"
+                    >
+                        Continue your coding session from your phone.
                     </h1>
                     <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground">
-                        Copy this instruction into your agent. It will connect itself and finish the setup for you.
+                        Check progress, send instructions, and approve requests while your agent runs on your computer.
                     </p>
-                    <PairingInstruction />
+                    <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+                        Works with Codex, Claude Code, and Pi.
+                    </p>
+                    <h2 className="mt-10 text-lg font-semibold tracking-tight">Start on your computer</h2>
+                    <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+                        Paste the instruction below into the coding agent session you want to continue. Then open the
+                        link it returns on your phone or in another browser.
+                    </p>
+                    <div className="mt-4">
+                        <PairingInstruction />
+                    </div>
+                    <p className="mt-4 text-sm text-muted-foreground">Local execution. Remote access you can revoke.</p>
+                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                        Keep your computer awake and online. Setup may install or update the local connection software.
+                    </p>
                 </div>
             </section>
         </main>
