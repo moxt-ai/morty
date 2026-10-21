@@ -14,7 +14,7 @@ export function IdentitySharing({ store }: { readonly store: StoreApi<IdentitySh
     }
     return (
         <div className="space-y-4 text-center" data-testid={dataTestId.identitySharing}>
-            <img className="mx-auto size-56" src={state.image} alt="Continue your work QR code" />
+            <img className="mx-auto size-56" src={state.image} alt="Continue on another device QR code" />
             <a
                 className="block break-all font-mono text-xs text-primary underline underline-offset-4"
                 href={state.transfer.url}
@@ -25,8 +25,7 @@ export function IdentitySharing({ store }: { readonly store: StoreApi<IdentitySh
                 {state.transfer.url}
             </a>
             <p className="text-xs leading-5 text-muted-foreground">
-                This link expires {new Date(state.transfer.expiresAt).toLocaleString()}. Remote access remains active
-                until you end it.
+                New devices can join until {new Date(state.transfer.expiresAt).toLocaleString()}.
             </p>
         </div>
     );

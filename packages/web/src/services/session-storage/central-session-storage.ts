@@ -91,6 +91,12 @@ function stringSessionStorageEntry(options: {
     };
 }
 
+/** One-time confirmation carried across the existing access-ending page reload. */
+export const accessEndedNoticeEntry = stringSessionStorageEntry({
+    key: "morty:access-ended:v1",
+    schema: v.literal("ended"),
+});
+
 export const newConversationDraftEntry = (botId: string): SessionStorageEntry<string> =>
     stringSessionStorageEntry({
         key: scopedKey("morty:message-draft:new:v1:", botId),

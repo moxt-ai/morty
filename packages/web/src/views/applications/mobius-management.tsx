@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import { AnonymousIdentityApi } from "../../services/identity/anonymous-identity-api.ts";
+import { createRemoteAccessOperations } from "../../view-models/chat/remote-access-store.ts";
 import { useMortyApplication } from "../application/application-context.tsx";
 import { useActiveIdentity } from "../authentication/identity-context.tsx";
 import { BotChatHome } from "../chat/bot-chat-home.tsx";
@@ -42,30 +43,15 @@ export function MobiusManagement() {
         },
         [identity.projectId, transport.fetch],
     );
-    const currentAccessToken = useCallback(
-        async (signal: AbortSignal) => {
-            const api = new AnonymousIdentityApi({
+    const { currentAccessToken, endRemoteAccess } = useMemo(
+        () =>
+            createRemoteAccessOperations({
                 fetchRequest: transport.fetch,
                 origin: window.location.origin,
-            });
-            const localIdentity = await api.loadExisting(signal);
-            const token =
-                localIdentity?.projectId === identity.projectId ? localIdentity.token : await identity.getToken(signal);
-            return token;
-        },
+                identity,
+                onEnded: () => window.location.reload(),
+            }),
         [identity, transport.fetch],
-    );
-    const endRemoteAccess = useCallback(
-        async (token: string, signal: AbortSignal) => {
-            const api = new AnonymousIdentityApi({
-                fetchRequest: transport.fetch,
-                origin: window.location.origin,
-            });
-            await api.endRemoteAccess(token, signal);
-            signal.throwIfAborted();
-            window.location.reload();
-        },
-        [transport.fetch],
     );
     return (
         <BotChatHome

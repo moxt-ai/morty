@@ -288,7 +288,7 @@ function removeStoredToken(userId: string): void {
     centralLocalStorage.write(anonymousCredentialsEntry, kept);
 }
 
-class IdentityApiError extends Error {
+export class IdentityApiError extends Error {
     readonly code: string;
     constructor(code: string, message: string) {
         super(message);

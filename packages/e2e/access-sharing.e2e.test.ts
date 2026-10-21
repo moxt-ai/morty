@@ -1,0 +1,103 @@
+import { expect, test } from "./infra/test.ts";
+
+for (const viewport of [
+    { name: "desktop", width: 1440, height: 900 },
+    { name: "mobile", width: 390, height: 844 },
+]) {
+    test(`Given a working agent on ${viewport.name}, When the user shares and ends the receiving browser's access, Then the scope is clear and the local task continues`, async ({
+        runtime,
+    }, testInfo) => {
+        const { page } = runtime;
+        await page.setViewportSize(viewport);
+        await runtime.openPairedChat();
+        await page.getByRole("textbox", { name: "Message" }).fill("hold after first delta");
+        await page.getByRole("button", { name: "Send message" }).click();
+        await expect(
+            page.getByRole("article", { name: "Agent response" }).filter({ hasText: "Partial reply" }),
+        ).toBeVisible();
+        const share = page.getByRole("button", { name: "Continue on another device" });
+        await expect(share).toBeVisible();
+        await expect(share).toHaveText("Continue on another device");
+        await expect(page.getByRole("button", { name: "End current access" })).toBeVisible();
+        await page.screenshot({
+            animations: "disabled",
+            path: testInfo.outputPath("access-actions.png"),
+            fullPage: true,
+        });
+        await share.click();
+
+        const sharing = page.getByRole("dialog", { name: "Continue on another device" });
+        await expect(sharing).toContainText(
+            "Anyone with this link can use your current Morty identity to view and control sessions in this project",
+        );
+        await expect(sharing).toContainText("not just the current conversation");
+        await expect(sharing).toContainText("24 hours");
+        await expect(sharing).toContainText("Access already granted does not end when the link expires");
+        const link = sharing.getByRole("link", { name: "Open sharing link" });
+        const qr = sharing.getByRole("img", { name: "Continue on another device QR code" });
+        await expect(link).toBeVisible();
+        await expect(qr).toBeVisible();
+        await sharing.screenshot({
+            animations: "disabled",
+            path: testInfo.outputPath("sharing-scope.png"),
+            mask: [link, qr],
+            maskColor: "#e2e8f0",
+        });
+        const url = await link.getAttribute("href");
+        const browser = page.context().browser();
+        if (url === null || browser === null) {
+            throw new Error("Sharing needs a link and a browser for the receiving device.");
+        }
+        const receiverContext = await browser.newContext({
+            viewport,
+            isMobile: viewport.name === "mobile",
+            hasTouch: viewport.name === "mobile",
+        });
+        try {
+            const receiver = await receiverContext.newPage();
+            await receiver.goto(url);
+            const end = receiver.getByRole("button", { name: "End current access" });
+            await expect(end).toBeVisible();
+            await end.click();
+            const confirmation = receiver.getByRole("dialog", { name: "End current access?" });
+            await expect(confirmation).toContainText("If you joined through a link");
+            await expect(confirmation).toContainText("Other sharing links and recovery access stay active");
+            await expect(confirmation).toContainText(
+                "Already-open sessions elsewhere may keep working until their access expires",
+            );
+            await expect(confirmation).toContainText("Your local agent and tasks keep running");
+            await confirmation.screenshot({
+                animations: "disabled",
+                path: testInfo.outputPath("end-access-confirmation.png"),
+            });
+            await confirmation.getByRole("button", { name: "Cancel" }).click();
+            await expect(confirmation).toBeHidden();
+            await end.click();
+            await confirmation.getByRole("button", { name: "End current access", exact: true }).click();
+
+            await expect(receiver.getByRole("status")).toContainText("Current access ended");
+            await expect(receiver.getByRole("heading", { name: "Connect your local agent" })).toBeVisible();
+            await receiver.screenshot({
+                animations: "disabled",
+                path: testInfo.outputPath("access-ended.png"),
+                fullPage: true,
+            });
+            await receiver.reload();
+            await expect(receiver.getByRole("heading", { name: "Connect your local agent" })).toBeVisible();
+            await expect(receiver.getByText("Current access ended", { exact: true })).toBeHidden();
+
+            await sharing.getByRole("button", { name: "Close dialog" }).click();
+            await runtime.continueReply("hold after first delta", {
+                outcome: "complete",
+                output: [{ kind: "text", text: "Task continued after access ended." }],
+            });
+            await expect(
+                page
+                    .getByRole("article", { name: "Agent response" })
+                    .filter({ hasText: "Task continued after access ended." }),
+            ).toBeVisible();
+        } finally {
+            await receiverContext.close();
+        }
+    });
+}
