@@ -11,7 +11,7 @@ test("Given an agent links an HTML result, When the user opens it, Then they can
     await page.getByRole("button", { name: "Open delivery review" }).click();
 
     const preview = page.getByRole("dialog", { name: "Local file preview" });
-    const result = page.frameLocator('iframe[title="HTML preview"]');
+    const result = page.frameLocator('iframe[title="HTML preview"]').frameLocator('iframe[title="HTML content"]');
     await expect(result.getByRole("heading", { name: "Delivery review" })).toBeVisible();
     await result.getByRole("textbox", { name: "Review name" }).fill("Desktop review");
     await result.getByRole("button", { name: "Review result" }).click();
@@ -48,7 +48,7 @@ test.describe("touch preview", () => {
         await page.getByRole("button", { name: "Open delivery review" }).tap();
 
         const preview = page.getByRole("dialog", { name: "Local file preview" });
-        const result = page.frameLocator('iframe[title="HTML preview"]');
+        const result = page.frameLocator('iframe[title="HTML preview"]').frameLocator('iframe[title="HTML content"]');
         await expect(preview).toHaveCSS("width", "390px");
         await result.getByRole("textbox", { name: "Review name" }).fill("Phone review");
         await result.getByRole("button", { name: "Review result" }).tap();
@@ -114,7 +114,7 @@ test("Given a keyboard user expands an interactive result, When they navigate an
     await page.keyboard.press("Enter");
 
     const preview = page.getByRole("dialog", { name: "Local file preview" });
-    const result = page.frameLocator('iframe[title="HTML preview"]');
+    const result = page.frameLocator('iframe[title="HTML preview"]').frameLocator('iframe[title="HTML content"]');
     await expect(preview.getByRole("button", { name: "Close file preview" })).toBeFocused();
     await result.getByRole("textbox", { name: "Review name" }).fill("Keyboard review");
     await result.getByRole("button", { name: "Review result" }).click();
@@ -169,7 +169,7 @@ document.getElementById("quote").addEventListener("submit", (event) => {
     await composer.fill("show interactive result");
     await page.getByRole("button", { name: "Send message" }).click();
     await page.getByRole("button", { name: "Open delivery review" }).click();
-    const result = page.frameLocator('iframe[title="HTML preview"]');
+    const result = page.frameLocator('iframe[title="HTML preview"]').frameLocator('iframe[title="HTML content"]');
     await result.getByRole("spinbutton", { name: "Quantity" }).fill("3");
     await result.getByRole("button", { name: "Calculate quote" }).click();
     await expect(result.getByText("Total: 75", { exact: true })).toBeVisible();

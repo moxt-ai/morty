@@ -25,12 +25,16 @@ export interface HtmlPreviewDocument {
     readonly source: string;
 }
 
+function escapeHtmlAttribute(value: string): string {
+    return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
 export function createHtmlPreviewDocument(html: string): HtmlPreviewDocument {
     const id = crypto.randomUUID();
     // Install diagnostics and the restrictive policy before any untrusted markup.
     // A second CSP in the supplied document can only restrict this policy further.
     // No source rewriting or library-specific compatibility patches are performed.
-    const source = `<!doctype html>
+    const content = `<!doctype html>
 <meta http-equiv="Content-Security-Policy" content="${CONTENT_POLICY}">
 <meta name="referrer" content="no-referrer">
 <base href="https://preview.invalid/">
@@ -48,6 +52,31 @@ export function createHtmlPreviewDocument(html: string): HtmlPreviewDocument {
 })();
 </script>
 ${html}`;
+    // A document's own frame-src does not constrain its self-navigation. Keep
+    // the same policy in a trusted, opaque parent so the browser also applies it
+    // before any child navigation request. srcdoc inherits the parent's policy
+    // without a network fetch. Attribute escaping keeps all supplied HTML in the
+    // inner sandbox; it cannot replace the parent policy or diagnostic relay.
+    const source = `<!doctype html>
+<html><head>
+<meta http-equiv="Content-Security-Policy" content="${CONTENT_POLICY}">
+<meta name="referrer" content="no-referrer">
+<base href="https://preview.invalid/">
+<style>html,body{height:100%;margin:0}iframe{display:block;width:100%;height:100%;border:0}</style>
+<script>
+addEventListener("securitypolicyviolation", () => {
+    parent.postMessage({ type: "morty-html-preview", id: ${JSON.stringify(id)}, code: "policy" }, "*");
+});
+addEventListener("message", (event) => {
+    const frame = document.getElementById("content");
+    if (frame && event.source === frame.contentWindow && event.origin === "null") {
+        parent.postMessage(event.data, "*");
+    }
+});
+</script>
+</head><body>
+<iframe id="content" title="HTML content" sandbox="allow-scripts allow-forms" referrerpolicy="no-referrer" srcdoc="${escapeHtmlAttribute(content)}"></iframe>
+</body></html>`;
     return { id, source };
 }
 
