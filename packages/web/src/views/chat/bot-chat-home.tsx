@@ -285,8 +285,8 @@ export function BotChatHome({
             {pairingNotice && setupView?.reason === "unconfigured" && active !== null && (
                 <Dialog
                     appearance="setup"
-                    title="Connect your local agent"
-                    description="Copy this instruction into your agent. It will connect itself and finish the setup for you."
+                    title="Connect agent"
+                    description="Morty is ready. Paste this instruction into your local agent to connect it."
                     onClose={() => {
                         setPairingDialogOpen(false);
                         store.getState().dismissNotice("pairing");
