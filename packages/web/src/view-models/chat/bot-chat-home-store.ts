@@ -107,6 +107,7 @@ export interface BotChatHomeStore {
     readonly composerAttachments: ReturnType<typeof createComposerAttachmentStore>;
     readonly view: BotChatHomeView;
     readonly connectionStatus: BotConnectionStatus;
+    readonly runtimeConfiguration: BotRuntimeConfiguration | null;
     readonly selection: ConversationSelectionState;
     readonly creation: ConversationCreationState;
     readonly revision: number;
@@ -192,6 +193,7 @@ export const createBotChatHomeStore = (
         composerAttachments,
         view: { kind: "loading" },
         connectionStatus: { kind: "connecting", label: "Connecting" },
+        runtimeConfiguration: null,
         selection,
         creation: { kind: "draft" },
         revision: 0,
@@ -227,13 +229,17 @@ export const createBotChatHomeStore = (
                     set((current) =>
                         current.selection.kind === "draft"
                             ? {
+                                  runtimeConfiguration: changedConfiguration,
                                   connectionStatus: runtimeConnectionStatus(changedConfiguration),
                                   view:
                                       changedReason === null
                                           ? { kind: "active", botId }
                                           : { kind: "setup", botId, reason: changedReason },
                               }
-                            : { connectionStatus: runtimeConnectionStatus(changedConfiguration) },
+                            : {
+                                  runtimeConfiguration: changedConfiguration,
+                                  connectionStatus: runtimeConnectionStatus(changedConfiguration),
+                              },
                     );
                 }
             };
@@ -297,7 +303,7 @@ export const createBotChatHomeStore = (
                 }
                 const configuration = await requests.runtimeConfiguration(botId, signal);
                 signal.throwIfAborted();
-                set({ connectionStatus: runtimeConnectionStatus(configuration) });
+                set({ runtimeConfiguration: configuration, connectionStatus: runtimeConnectionStatus(configuration) });
                 const currentSelection = get().selection;
                 const currentTarget = currentSelection.kind === "draft" ? null : currentSelection.target;
                 if (currentTarget?.kind === "continue") {

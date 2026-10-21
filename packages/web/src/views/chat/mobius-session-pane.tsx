@@ -28,8 +28,9 @@ import { LinkButton } from "../../components/ui/link-button.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
 import { cn } from "../../lib/utils.ts";
-import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import type { BotChatApi, BotRuntimeConfiguration } from "../../services/chat/bot-chat-api.ts";
 import type { QueuedDraftMessage } from "../../view-models/chat/conversation-creation-machine.ts";
+import { type ExecutionContext, sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
 import type { UnconfirmedSubmission } from "../../view-models/chat/session-delivery-store.ts";
@@ -42,6 +43,7 @@ import {
 import { type SessionMessage, sessionTextValue } from "../../view-models/chat/session-presentation.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
 import { useMortyApplication } from "../application/application-context.tsx";
+import { ExecutionContextBar } from "./execution-context-bar.tsx";
 import { MobiusAssistantText, MobiusSessionMessage } from "./mobius-session-message.tsx";
 import { useDesktopChatLayout } from "./use-desktop-chat-layout.ts";
 
@@ -307,11 +309,12 @@ export function MobiusSessionPaneShell({
     );
 }
 
-export function MobiusSessionPaneLoading() {
+export function MobiusSessionPaneLoading({ executionContext }: { readonly executionContext: ExecutionContext }) {
     const desktop = useDesktopChatLayout();
     return (
         <>
             <MobiusSessionPaneShell mobileTitlePortaled={!desktop} titleLoading={desktop}>
+                <ExecutionContextBar context={executionContext} />
                 <div aria-label="Messages" className={chatSessionMessageScrollClassName} role="log">
                     <SessionMessageListSkeleton />
                 </div>
@@ -449,6 +452,7 @@ function OlderHistorySkeleton() {
 }
 
 export function MobiusSessionPane({
+    runtimeConfiguration,
     session,
     initialMessage,
     unconfirmedMessage,
@@ -460,6 +464,7 @@ export function MobiusSessionPane({
     onStatusChange,
     onTitleChange,
 }: {
+    readonly runtimeConfiguration: BotRuntimeConfiguration | null;
     readonly session: OpenMobiusSession;
     readonly initialMessage?: QueuedDraftMessage | undefined;
     readonly unconfirmedMessage?: UnconfirmedSubmission | undefined;
@@ -571,6 +576,9 @@ export function MobiusSessionPane({
                         <SessionConversationTitleBar {...titleBarProps} centered={false} />
                     </header>
                 ) : null}
+                <ExecutionContextBar
+                    context={sessionExecutionContext(session, runtimeConfiguration, model.connection)}
+                />
                 <FollowLatestScrollArea
                     role="log"
                     container={messageList}

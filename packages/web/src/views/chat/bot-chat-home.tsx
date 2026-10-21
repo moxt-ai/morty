@@ -24,9 +24,11 @@ import {
     queuedDraftMessage,
 } from "../../view-models/chat/conversation-creation-machine.ts";
 import { selectedConversationId } from "../../view-models/chat/conversation-selection-machine.ts";
+import { pendingExecutionContext } from "../../view-models/chat/execution-context.ts";
 import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
+import { ExecutionContextBar } from "./execution-context-bar.tsx";
 import { MobiusSessionPane, MobiusSessionPaneLoading, SessionMessageListSkeleton } from "./mobius-session-pane.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
 
@@ -68,6 +70,8 @@ export function BotChatHome({
 }) {
     const store = workspace.home;
     const model = useStore(store);
+    const draftControls = useStore(workspace.draftControls);
+    const executionContext = pendingExecutionContext(model, draftControls.settings);
     const [pairingDialogOpen, setPairingDialogOpen] = useState(false);
     const [disconnectedNotificationDismissed, setDisconnectedNotificationDismissed] = useState(false);
     const attachmentModel = useStore(model.composerAttachments);
@@ -144,6 +148,7 @@ export function BotChatHome({
             )}
             {model.selection.kind === "ready" && active !== null ? (
                 <MobiusSessionPane
+                    runtimeConfiguration={model.runtimeConfiguration}
                     botId={active.botId}
                     requests={requests}
                     key={model.selection.session.result.ready.sessionId}
@@ -169,9 +174,10 @@ export function BotChatHome({
                     onTitleChange={store.getState().updateConversationTitle}
                 />
             ) : model.selection.kind === "loading" && active !== null ? (
-                <MobiusSessionPaneLoading />
+                <MobiusSessionPaneLoading executionContext={executionContext} />
             ) : (
                 <section className={chatSessionPaneSectionClassName}>
+                    <ExecutionContextBar context={executionContext} />
                     <FollowLatestScrollArea
                         container={messageList}
                         followThreshold={80}

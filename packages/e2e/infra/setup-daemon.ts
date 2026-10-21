@@ -26,7 +26,9 @@ export class ControlledSetupRuntime implements SetupRuntime {
     readonly failure = this.#failed.promise;
 
     readonly #options: ControlledAgentBehavior;
-    constructor(options: ControlledAgentBehavior) {
+    readonly #machineName: string;
+    constructor(options: ControlledAgentBehavior, machineName: string) {
+        this.#machineName = machineName;
         this.#options = options;
         // The fixture races failures against the browser scenario; retain early failures too.
         void this.failure.catch(() => undefined);
@@ -75,7 +77,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
         const claim = await jsonRequest(origin, `/mobius/api/v1/runtime-pairings/${option("--pairing")}/redeem`, {
             body: {
                 agents: daemon.catalog,
-                machineName: "Browser test Runtime",
+                machineName: this.#machineName,
                 pairingCode: option("--code"),
                 workspaceName: "Test project",
             },

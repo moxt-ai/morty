@@ -12,19 +12,23 @@ export async function createTestRuntime(
     harness: E2EHarness,
     browserName: "chromium" | "firefox" | "webkit" = "chromium",
     contextOptions: BrowserContextOptions = {},
+    machineName = "Browser test Runtime",
 ) {
     const setupClockStart = Date.parse("2026-09-15T12:00:00Z");
     let setupClockTime = setupClockStart;
     const agentId = "claude";
     const agentName = "Claude Code";
     const stack = await LocalStack.create(harness);
-    const runtime = new ControlledSetupRuntime({
-        agentId,
-        agentName,
-        files: mortyFiles,
-        reply: mortyReply,
-        nativeSessionIds: new Set(["setup-reconnect-session"]),
-    });
+    const runtime = new ControlledSetupRuntime(
+        {
+            agentId,
+            agentName,
+            files: mortyFiles,
+            reply: mortyReply,
+            nativeSessionIds: new Set(["setup-reconnect-session"]),
+        },
+        machineName,
+    );
     const application = await stack.startPlatform();
     await stack.startChat(application);
     const browser = await { chromium, firefox, webkit }[browserName].launch({ headless: true });

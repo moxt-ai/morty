@@ -5,12 +5,16 @@ import { createTestRuntime } from "./test-runtime.ts";
 export { expect } from "@playwright/test";
 
 function runtimeTest() {
-    return base.extend<{ readonly runtime: Awaited<ReturnType<typeof createTestRuntime>> }>({
-        runtime: async ({ browserName, contextOptions }, use, testInfo) => {
+    return base.extend<{
+        readonly runtime: Awaited<ReturnType<typeof createTestRuntime>>;
+        readonly runtimeMachineName: string;
+    }>({
+        runtimeMachineName: ["Browser test Runtime", { option: true }],
+        runtime: async ({ browserName, contextOptions, runtimeMachineName }, use, testInfo) => {
             const harness = await E2EHarness.create("chat-e2e");
             let failure: unknown;
             try {
-                const runtime = await createTestRuntime(harness, browserName, contextOptions);
+                const runtime = await createTestRuntime(harness, browserName, contextOptions, runtimeMachineName);
                 try {
                     await Promise.race([use(runtime), runtime.failure]);
                 } finally {
