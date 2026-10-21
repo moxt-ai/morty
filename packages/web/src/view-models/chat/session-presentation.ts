@@ -758,8 +758,10 @@ export function sessionReductionMessages(reduction: SessionMessageReduction): re
             continue;
         }
         if (entry.kind === "turn-started") {
-            // Steering has its own command lifecycle but shares the target's execution.
-            turn = { kind: "active", commandId: executionOwners.get(entry.commandId) ?? entry.commandId };
+            // A started event alone does not identify its execution: the request may be
+            // on an older page and could describe steering of another command.
+            const owner = executionOwners.get(entry.commandId);
+            turn = owner === undefined ? { kind: "unknown" } : { kind: "active", commandId: owner };
             continue;
         }
         // A bare tool tail cannot render until the older page containing its start arrives.

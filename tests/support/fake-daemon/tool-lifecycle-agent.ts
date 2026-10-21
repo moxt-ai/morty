@@ -9,6 +9,8 @@ import { fakeDaemonCapabilities } from "@moxt-ai/mobius-test-support/fake-daemon
 /** Stateful ACP peer that deliberately leaves tool status updates unfinished at turn termination. */
 export function createToolLifecycleAgent() {
     const sessions = new Map<string, acp.SessionNotification[]>();
+    const steeringToolCounts = new Map<string, number>();
+    const heldSteering = new Set<string>();
     const createEndpoint = (): InProcessAcpEndpoint => {
         const termination = Promise.withResolvers<AcpEndpointTermination>();
         const lifetime = new AbortController();
@@ -44,6 +46,12 @@ export function createToolLifecycleAgent() {
                 const prompt = context.params.prompt
                     .flatMap((content) => (content.type === "text" ? [content.text] : []))
                     .join("\n");
+                steeringToolCounts.set(sessionId, prompt === "hold paginated steering" ? 27 : 1);
+                if (prompt === "hold steering acknowledgement") {
+                    heldSteering.add(sessionId);
+                } else {
+                    heldSteering.delete(sessionId);
+                }
                 const cancellation = new AbortController();
                 turns.set(sessionId, cancellation);
                 const signal = AbortSignal.any([context.signal, lifetime.signal, cancellation.signal]);
@@ -120,18 +128,36 @@ export function createToolLifecycleAgent() {
                     if (history === undefined || !turns.has(params.sessionId)) {
                         return { outcome: "promptRequired" };
                     }
-                    const event: acp.SessionNotification = {
-                        sessionId: params.sessionId,
-                        update: {
-                            sessionUpdate: "tool_call",
-                            toolCallId: crypto.randomUUID(),
-                            title: "Steered verification",
-                            status: "in_progress",
-                            kind: "other",
-                        },
-                    };
-                    history.push(event);
-                    await context.client.notify(acp.methods.client.session.update, event);
+                    const count = steeringToolCounts.get(params.sessionId) ?? 1;
+                    for (let index = 0; index < count; index += 1) {
+                        const event: acp.SessionNotification = {
+                            sessionId: params.sessionId,
+                            update: {
+                                sessionUpdate: "tool_call",
+                                toolCallId: crypto.randomUUID(),
+                                title: count === 1 ? "Steered verification" : `Steered verification ${index + 1}`,
+                                status: "in_progress",
+                                kind: "other",
+                            },
+                        };
+                        history.push(event);
+                        await context.client.notify(acp.methods.client.session.update, event);
+                    }
+                    const turn = turns.get(params.sessionId);
+                    if (heldSteering.has(params.sessionId) && turn !== undefined) {
+                        const signal = AbortSignal.any([context.signal, lifetime.signal, turn.signal]);
+                        const finished = Promise.withResolvers<void>();
+                        const abort = () => finished.resolve();
+                        signal.addEventListener("abort", abort, { once: true });
+                        try {
+                            if (signal.aborted) {
+                                abort();
+                            }
+                            await finished.promise;
+                        } finally {
+                            signal.removeEventListener("abort", abort);
+                        }
+                    }
                     return { outcome: "injected" };
                 },
             )
