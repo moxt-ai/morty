@@ -33,6 +33,15 @@ module.exports = {
                 pathNot: "^packages/web/content/instructions/[^/]+\\.txt$",
             },
         },
+        {
+            name: "web-utils-do-not-import-business-layers",
+            severity: "error",
+            comment: "DOM utilities stay business-agnostic: they may not import views, view-models, or services.",
+            from: { path: "^packages/web/src/components/utils/" },
+            to: {
+                path: ["^packages/web/src/views/", "^packages/web/src/view-models/", "^packages/web/src/services/"],
+            },
+        },
     ],
     options: {
         doNotFollow: { path: "node_modules|third-party" },

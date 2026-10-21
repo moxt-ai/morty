@@ -51,5 +51,27 @@
         "parser": {
             "tailwindDirectives": true
         }
-    }
+    },
+    "overrides": [
+        {
+            "includes": ["**", "!!packages/web/src/components/utils/**"],
+            "linter": {
+                "rules": {
+                    "style": {
+                        "noRestrictedImports": {
+                            "level": "error",
+                            "options": {
+                                "paths": {
+                                    "react": {
+                                        "message": "useLayoutEffect is only allowed in packages/web/src/components/utils; move the layout effect into a util there and compose it.",
+                                        "importNames": ["useLayoutEffect"]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
 }

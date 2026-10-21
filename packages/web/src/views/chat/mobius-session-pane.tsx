@@ -452,6 +452,7 @@ export function MobiusSessionPane({
                     role="log"
                     container={messageList}
                     followThreshold={80}
+                    followRevision={null}
                     aria-label="Messages"
                     className="min-h-0 flex-1 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10 lg:px-12"
                 >
