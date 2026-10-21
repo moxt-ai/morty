@@ -1,5 +1,6 @@
 import type { ApiTransport } from "../services/api/api-transport-context.tsx";
 import { BotChatApi } from "../services/chat/bot-chat-api.ts";
+import { type Clock, systemClock } from "../services/time/clock.ts";
 import { createAnonymousSessionStore } from "./authentication/anonymous-session-store.ts";
 import { createIdentityAccess, type IdentityAccess } from "./authentication/identity-access.ts";
 import { type ChatWorkspace, createChatWorkspace } from "./chat/chat-workspace.ts";
@@ -16,6 +17,7 @@ interface ChatIdentity {
 }
 
 export interface MortyApplication {
+    readonly clock: Clock;
     readonly anonymousSession: ReturnType<typeof createAnonymousSessionStore>;
     /** The chat workspace for the active identity, created once per identity. */
     readonly chatWorkspace: (identity: ChatIdentity) => ChatWorkspace;
@@ -35,6 +37,7 @@ export function createMortyApplication(options: {
     readonly origin: string;
     readonly transport: ApiTransport;
     readonly url?: string;
+    readonly clock?: Clock;
 }): MortyApplication {
     const lifetime = new AbortController();
     const transport = options.transport;
@@ -55,6 +58,7 @@ export function createMortyApplication(options: {
         workspaceIdentity = null;
     };
     return {
+        clock: options.clock ?? systemClock,
         anonymousSession,
         identityAccess: (identity, onAccessEnded) =>
             createIdentityAccess({

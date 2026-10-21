@@ -32,6 +32,7 @@ import {
 } from "../../view-models/chat/session-pane-store.ts";
 import { type SessionMessage, sessionTextValue } from "../../view-models/chat/session-presentation.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
+import { useMortyApplication } from "../application/application-context.tsx";
 import { MobiusAssistantText, MobiusSessionMessage } from "./mobius-session-message.tsx";
 
 type SessionRenderItem =
@@ -135,29 +136,17 @@ function MessageListSkeleton() {
     );
 }
 
-function useCountdownSeconds(retryAtEpochMs: number): number {
-    const [remaining, setRemaining] = useState(() => Math.max(0, Math.ceil((retryAtEpochMs - Date.now()) / 1000)));
-    useEffect(() => {
-        setRemaining(Math.max(0, Math.ceil((retryAtEpochMs - Date.now()) / 1000)));
-        const intervalId = setInterval(() => {
-            setRemaining(Math.max(0, Math.ceil((retryAtEpochMs - Date.now()) / 1000)));
-        }, 1000);
-        return () => clearInterval(intervalId);
-    }, [retryAtEpochMs]);
-    return remaining;
-}
-
 function DisconnectedNotice({
     onRetryNow,
     retry,
 }: {
     readonly onRetryNow: () => void;
-    readonly retry: { readonly kind: "scheduled"; readonly retryAtEpochMs: number } | { readonly kind: "exhausted" };
+    readonly retry: { readonly kind: "scheduled"; readonly remainingSeconds: number } | { readonly kind: "exhausted" };
 }) {
     return (
         <div data-testid={dataTestId.sessionReconnectNotice} className="mb-2 px-1 text-sm text-muted-foreground">
             {retry.kind === "scheduled" ? (
-                <ScheduledRetryNotice onRetryNow={onRetryNow} retryAtEpochMs={retry.retryAtEpochMs} />
+                <ScheduledRetryNotice onRetryNow={onRetryNow} remainingSeconds={retry.remainingSeconds} />
             ) : (
                 <p role="status">
                     Automatic retries stopped. <LinkButton onClick={onRetryNow}>Retry now</LinkButton>
@@ -169,15 +158,14 @@ function DisconnectedNotice({
 
 function ScheduledRetryNotice({
     onRetryNow,
-    retryAtEpochMs,
+    remainingSeconds,
 }: {
     readonly onRetryNow: () => void;
-    readonly retryAtEpochMs: number;
+    readonly remainingSeconds: number;
 }) {
-    const remaining = useCountdownSeconds(retryAtEpochMs);
     return (
         <p role="status">
-            Retrying in {remaining} s <LinkButton onClick={onRetryNow}>Retry now</LinkButton>
+            Retrying in {remainingSeconds} s <LinkButton onClick={onRetryNow}>Retry now</LinkButton>
         </p>
     );
 }
@@ -295,8 +283,10 @@ export function MobiusSessionPane({
     readonly onTitleChange: (sessionId: string, title: string) => void;
 }) {
     const sessionId = session.result.ready.sessionId;
+    const { clock } = useMortyApplication();
     const [pane] = useState(() =>
         createSessionPaneModel({
+            clock,
             session,
             botId,
             requests,
@@ -525,6 +515,7 @@ export function MobiusSessionPane({
                     </div>
                 </FollowLatestScrollArea>
                 <LoadMoreTrigger
+                    label="Load older messages"
                     container={messageList}
                     hasMore={model.hasOlderHistory}
                     loading={model.historyLoading}
