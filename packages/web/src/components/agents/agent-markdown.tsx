@@ -1,17 +1,17 @@
-import type { SessionResourceReader as MarkdownImageReader } from "../../view-models/chat/session-resource-store.ts";
-import { SessionResource } from "./session-resource.tsx";
-
-export type { SessionResourceReader as MarkdownImageReader } from "../../view-models/chat/session-resource-store.ts";
-
+import { Check, Copy } from "lucide-react";
 import { Lexer } from "marked";
 import { defaultRemarkPlugins, type MathPlugin, parseMarkdownIntoBlocks, Streamdown } from "streamdown";
 import "streamdown/styles.css";
-import { type ComponentProps, useEffect, useMemo, useState } from "react";
+import { type ComponentProps, type SVGProps, useEffect, useMemo, useState } from "react";
 import { dataTestId } from "@/data-testid";
 import { cn } from "@/lib/utils";
+import type { SessionResourceReader as MarkdownImageReader } from "../../view-models/chat/session-resource-store.ts";
 import { boundedCodeHighlighter } from "./bounded-code-highlighter.ts";
 import { MermaidCodeBlock } from "./mermaid-code-block.tsx";
 import { remarkMermaidCompletion } from "./remark-mermaid-completion.ts";
+import { SessionResource } from "./session-resource.tsx";
+
+export type { SessionResourceReader as MarkdownImageReader } from "../../view-models/chat/session-resource-store.ts";
 
 const STREAMDOWN_CONTROLS = Object.freeze({
     code: Object.freeze({ copy: true, download: false }),
@@ -21,6 +21,52 @@ const STREAMDOWN_PLUGINS = Object.freeze({
     renderers: [{ language: "mermaid", component: MermaidCodeBlock }],
 });
 const STREAMDOWN_TRANSLATIONS = Object.freeze({ copyCode: "Copy code" });
+
+type StreamdownIconProps = SVGProps<SVGSVGElement> & { readonly size?: number };
+
+function StreamdownCopyIcon({ className, size: _size, ...props }: StreamdownIconProps) {
+    return <Copy aria-hidden="true" className={cn("size-3.5", className)} {...props} />;
+}
+
+function StreamdownCheckIcon({ className, size: _size, ...props }: StreamdownIconProps) {
+    return <Check aria-hidden="true" className={cn("size-3.5", className)} {...props} />;
+}
+
+const STREAMDOWN_ICONS = Object.freeze({
+    CheckIcon: StreamdownCheckIcon,
+    CopyIcon: StreamdownCopyIcon,
+});
+
+const STREAMDOWN_FENCED_CODE_BLOCK_CLASSES = [
+    "[&_[data-streamdown=code-block]]:overflow-hidden",
+    "[&_[data-streamdown=code-block]]:rounded-[20px]",
+    "[&_[data-streamdown=code-block]]:!border-0",
+    "[&_[data-streamdown=code-block]]:!bg-muted",
+    "[&_[data-streamdown=code-block-header]]:!h-6",
+    "[&_[data-streamdown=code-block-body]]:!border-0",
+    "[&_[data-streamdown=code-block-body]]:!bg-background",
+    "[&_[data-streamdown=code-block-body]]:!p-3",
+    "[&_[data-streamdown=code-block-actions]]:!border-0",
+    "[&_[data-streamdown=code-block-actions]]:!bg-transparent",
+    "[&_[data-streamdown=code-block-actions]]:shadow-none",
+    "[&_[data-streamdown=code-block-actions]]:backdrop-blur-none",
+    "[&_[data-streamdown=code-block-actions]]:supports-[backdrop-filter]:!bg-transparent",
+    "[&_[data-streamdown=code-block-actions]]:!p-0",
+    "[&_[data-streamdown=code-block-copy-button]]:flex",
+    "[&_[data-streamdown=code-block-copy-button]]:size-6",
+    "[&_[data-streamdown=code-block-copy-button]]:items-center",
+    "[&_[data-streamdown=code-block-copy-button]]:justify-center",
+    "[&_[data-streamdown=code-block-copy-button]]:rounded-md",
+    "[&_[data-streamdown=code-block-copy-button]]:!p-0",
+    "[&_[data-streamdown=code-block-copy-button]]:text-muted-foreground",
+    "[&_[data-streamdown=code-block-copy-button]]:transition-opacity",
+    "[&_[data-streamdown=code-block-copy-button]]:hover:bg-black/[0.045]",
+    "[&_[data-streamdown=code-block-copy-button]]:hover:text-foreground",
+    "[&_[data-streamdown=code-block-copy-button]]:focus-visible:ring-2",
+    "[&_[data-streamdown=code-block-copy-button]]:focus-visible:ring-ring/60",
+    "[&_[data-streamdown=code-block-copy-button]_svg]:size-3.5",
+    "[&_[data-streamdown=inline-code]]:text-copy-secondary",
+].join(" ");
 const LOCAL_FILE_URL_ORIGIN = "https://local-file.morty.invalid";
 const LATEX_DELIMITER_PATTERN = /(^|[^\\$])(?:\$\$[\s\S]+?\$\$|\$(?!\$)[^\n$]+\$)/u;
 export const MAX_MARKDOWN_CHARACTERS = 32 * 1024;
@@ -241,7 +287,7 @@ export function AgentMarkdownContent({
     return sourceCharacters > MAX_MARKDOWN_CHARACTERS ? (
         <pre
             className={cn(
-                "m-0 min-w-0 whitespace-pre-wrap break-words font-sans text-[15px] leading-6 text-foreground",
+                "m-0 min-w-0 whitespace-pre-wrap break-words font-sans text-base leading-6 text-foreground",
                 className,
             )}
         >
@@ -250,7 +296,7 @@ export function AgentMarkdownContent({
     ) : (
         <Streamdown
             className={cn(
-                "agent-markdown min-w-0 text-[15px] leading-6 text-foreground [overflow-wrap:anywhere]",
+                "agent-markdown min-w-0 text-base leading-6 text-foreground [overflow-wrap:anywhere]",
                 "[&_p]:my-2 [&_p]:whitespace-pre-line",
                 "[&_h1]:mt-6 [&_h1]:mb-3 [&_h1]:text-[21px] [&_h1]:leading-7 [&_h1]:font-semibold md:[&_h1]:mt-7 md:[&_h1]:text-2xl md:[&_h1]:leading-8",
                 "[&_h2]:mt-5 [&_h2]:mb-3 [&_h2]:text-lg [&_h2]:leading-7 [&_h2]:font-semibold md:[&_h2]:mt-6 md:[&_h2]:text-xl",
@@ -263,10 +309,12 @@ export function AgentMarkdownContent({
                 "[&_a]:font-medium [&_a]:text-[#19764a] [&_a]:underline [&_a]:decoration-[#2fb872]/35 [&_a]:underline-offset-2 hover:[&_a]:decoration-[#2fb872]",
                 "[&_code]:font-mono",
                 "[&_table]:text-sm",
+                STREAMDOWN_FENCED_CODE_BLOCK_CLASSES,
                 className,
             )}
             components={components}
             controls={STREAMDOWN_CONTROLS}
+            icons={STREAMDOWN_ICONS}
             isAnimating={streaming}
             lineNumbers={false}
             mode={streaming ? "streaming" : "static"}

@@ -14,7 +14,7 @@ export function SearchToolPresentation({ autoOpen, entry, path }: ToolRendererPr
             state={entry.state}
             title={entry.title}
         >
-            <div className="mt-1 ml-5 grid min-w-0 gap-2 text-xs">
+            <div className="grid min-w-0 gap-2 text-xs">
                 <div className="truncate font-mono text-copy-secondary" title={path}>
                     {path}
                 </div>

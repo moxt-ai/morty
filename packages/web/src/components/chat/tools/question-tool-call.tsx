@@ -111,7 +111,7 @@ export function QuestionToolCall({ autoOpen, entry }: ToolRendererProps) {
             state={entry.state}
             title={entry.title}
         >
-            <div className="mt-2 ml-5 grid min-w-0 gap-4 text-sm">
+            <div className="grid min-w-0 gap-4 text-sm">
                 {request.questions.map((question, questionIndex) => {
                     const answer = answers.get(question.question);
                     return (

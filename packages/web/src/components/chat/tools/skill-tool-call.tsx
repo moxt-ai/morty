@@ -40,7 +40,7 @@ export function SkillToolCall({ autoOpen, entry }: ToolRendererProps) {
             title={title}
         >
             {input.args.length > 0 && (
-                <div className="mt-1 ml-5 max-h-96 overflow-auto rounded-lg bg-black/[0.035] p-2 text-xs whitespace-pre-wrap">
+                <div className="max-h-96 overflow-auto rounded-lg bg-black/[0.035] p-2 text-xs whitespace-pre-wrap">
                     {input.args}
                 </div>
             )}

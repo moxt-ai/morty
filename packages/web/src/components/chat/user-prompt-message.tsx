@@ -1,6 +1,9 @@
 import type { PromptImage, PromptResource } from "@moxt-ai/mobius-sdk";
 import { cn } from "@/lib/utils";
+import { dataTestId } from "../../data-testid.ts";
 import { AgentMarkdown } from "../agents/agent-markdown.tsx";
+import { MessageBubble } from "./message-bubble.tsx";
+import { UserMessageShell } from "./user-message-shell.tsx";
 
 const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/;
 
@@ -11,13 +14,13 @@ interface UserPromptMessageProps {
 }
 
 export function UserPromptMessage({ images, resources, text }: UserPromptMessageProps) {
+    if (text.length === 0 && images.length === 0 && resources.length === 0) {
+        return null;
+    }
     return (
-        <article
-            aria-label="Message from you"
-            className="mb-5 flex justify-end motion-safe:animate-[message-enter_200ms_ease-out_both]"
-        >
-            <div className="min-w-0 max-w-[85%] max-md:max-w-[94%]">
-                <div className="grid min-w-0 gap-2 rounded-[18px] rounded-br-[6px] border-[0.5px] border-primary/12 bg-success-subtle px-3.5 py-2.5 text-[15px] leading-6 whitespace-pre-wrap text-foreground [overflow-wrap:anywhere] md:px-4 md:py-3">
+        <UserMessageShell>
+            <MessageBubble copyText={text} data-testid={dataTestId.userMessage} speaker="user">
+                <div className="grid min-w-0 gap-2">
                     {images.length > 0 && (
                         <div className={cn("grid min-w-0 gap-1.5", images.length > 1 && "grid-cols-2")}>
                             {images.map((image, index) =>
@@ -31,7 +34,7 @@ export function UserPromptMessage({ images, resources, text }: UserPromptMessage
                                     />
                                 ) : (
                                     <span
-                                        className="rounded-lg border-[0.5px] border-black/9 bg-white/70 p-2 text-[10px] text-muted-foreground"
+                                        className="rounded-lg border border-black/[0.06] bg-muted/40 p-2 text-[10px] text-muted-foreground"
                                         key={`${index.toString()}:${image.name}`}
                                     >
                                         {image.name}
@@ -44,7 +47,7 @@ export function UserPromptMessage({ images, resources, text }: UserPromptMessage
                         <div className="flex flex-wrap gap-1.5">
                             {resources.map((resource) => (
                                 <span
-                                    className="rounded-md border-[0.5px] border-black/10 bg-white/70 px-2 py-1 font-mono text-[10px]"
+                                    className="rounded-md border border-black/[0.06] bg-muted/40 px-2 py-1 font-mono text-[10px]"
                                     key={`${resource.uri}:${resource.name}`}
                                 >
                                     {resource.name}
@@ -54,7 +57,7 @@ export function UserPromptMessage({ images, resources, text }: UserPromptMessage
                     )}
                     {text.length > 0 && <AgentMarkdown className="[&_p]:my-0" markdown={text} streaming={false} />}
                 </div>
-            </div>
-        </article>
+            </MessageBubble>
+        </UserMessageShell>
     );
 }

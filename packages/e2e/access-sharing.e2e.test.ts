@@ -76,14 +76,18 @@ for (const viewport of [
             await confirmation.getByRole("button", { name: "End current access", exact: true }).click();
 
             await expect(receiver.getByRole("status")).toContainText("Current access ended");
-            await expect(receiver.getByRole("heading", { name: "Connect your local agent" })).toBeVisible();
+            await expect(
+                receiver.getByRole("heading", { name: "Continue your coding session from your phone." }),
+            ).toBeVisible();
             await receiver.screenshot({
                 animations: "disabled",
                 path: testInfo.outputPath("access-ended.png"),
                 fullPage: true,
             });
             await receiver.reload();
-            await expect(receiver.getByRole("heading", { name: "Connect your local agent" })).toBeVisible();
+            await expect(
+                receiver.getByRole("heading", { name: "Continue your coding session from your phone." }),
+            ).toBeVisible();
             await expect(receiver.getByText("Current access ended", { exact: true })).toBeHidden();
 
             await sharing.getByRole("button", { name: "Close dialog" }).click();

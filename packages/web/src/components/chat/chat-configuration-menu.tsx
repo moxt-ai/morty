@@ -2,6 +2,7 @@ import { ChevronDown, LoaderCircle } from "lucide-react";
 import { Tooltip } from "radix-ui";
 import { useState } from "react";
 import { dataTestId } from "@/data-testid";
+import { MortyTooltipContent } from "../ui/morty-tooltip-content.tsx";
 import { Select } from "../ui/option-select.tsx";
 import { Popover } from "../ui/popover.tsx";
 import { HarnessMark } from "./harness-mark.tsx";
@@ -60,7 +61,7 @@ export function ChatConfigurationMenu({
             <Popover.Trigger asChild>
                 <button
                     aria-label="Configure agent"
-                    className="flex h-9 min-w-0 max-w-[200px] items-center gap-2 rounded-lg px-2 text-[13px] text-copy-secondary outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent motion-reduce:transition-none"
+                    className="flex h-9 min-w-0 max-w-[200px] items-center gap-2 rounded-lg px-2 text-[13px] text-copy-secondary outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                     data-testid={dataTestId.agentConfiguration}
                     title={selections.join(" · ")}
                     type="button"
@@ -124,14 +125,14 @@ export function ChatConfigurationMenu({
                                         <Tooltip.Root>
                                             <Tooltip.Trigger asChild>{tab}</Tooltip.Trigger>
                                             <Tooltip.Portal>
-                                                <Tooltip.Content
-                                                    className="z-[70] max-w-60 rounded-lg bg-foreground px-2.5 py-1.5 text-xs leading-5 text-background shadow-lg"
+                                                <MortyTooltipContent
+                                                    className="max-w-60 leading-5"
                                                     side="right"
                                                     sideOffset={6}
                                                 >
                                                     {harness.harnessLockedLabel ?? option.label}
                                                     <Tooltip.Arrow className="fill-foreground" />
-                                                </Tooltip.Content>
+                                                </MortyTooltipContent>
                                             </Tooltip.Portal>
                                         </Tooltip.Root>
                                     </Tooltip.Provider>

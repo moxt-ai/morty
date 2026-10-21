@@ -1,0 +1,91 @@
+@theme {
+    --font-sans:
+        CommentEmoji, Inter, apple-system, BlinkMacSystemFont, segoe ui, Helvetica Neue, Arial,
+        PingFang SC, Microsoft Yahei, Hiragino Sans GB, Noto Sans, Heiti SC, sans-serif, Apple Color Emoji;
+
+    --font-mono: RobotoMono;
+
+    --font-inter:
+        Inter, apple-system, BlinkMacSystemFont, segoe ui, Helvetica Neue, Arial, PingFang SC,
+        Microsoft Yahei, Hiragino Sans GB, Noto Sans, Heiti SC, sans-serif;
+
+    --text-10: calc(10 / 16 * 1rem);
+    --text-10--line-height: calc(16 / 11);
+    --text-11: calc(11 / 16 * 1rem);
+    --text-11--line-height: calc(18 / 11);
+    --text-12: calc(12 / 16 * 1rem);
+    --text-12--line-height: calc(20 / 12);
+    --text-13: calc(13 / 16 * 1rem);
+    --text-13--line-height: calc(22 / 13);
+    --text-14: calc(14 / 16 * 1rem);
+    --text-14--line-height: calc(22 / 14);
+    --text-15: calc(15 / 16 * 1rem);
+    --text-15--line-height: calc(22 / 15);
+    --text-16: 1rem;
+    --text-16--line-height: calc(24 / 16);
+    --text-18: calc(18 / 16 * 1rem);
+    --text-18--line-height: calc(28 / 18);
+    --text-20: calc(20 / 16 * 1rem);
+    --text-20--line-height: calc(28 / 20);
+    --text-22: calc(22 / 16 * 1rem);
+    --text-22--line-height: calc(28 / 22);
+    --text-24: calc(24 / 16 * 1rem);
+    --text-24--line-height: calc(32 / 24);
+    --text-26: calc(26 / 16 * 1rem);
+    --text-26--line-height: calc(34 / 26);
+    --text-28: calc(28 / 16 * 1rem);
+    --text-28--line-height: calc(36 / 28);
+    --text-32: 2rem;
+    --text-32--line-height: calc(40 / 32);
+    --text-36: calc(36 / 16 * 1rem);
+    --text-36--line-height: calc(42 / 36);
+    --text-40: calc(40 / 16 * 1rem);
+    --text-40--line-height: calc(48 / 40);
+
+    --text-base: calc(14 / 16 * 1rem);
+    --text-base--line-height: calc(22 / 14);
+
+    --font-weight-regular: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+}
+
+@font-face {
+    font-family: RobotoMono;
+    src: url("/fonts/RobotoMono.ttf") format("truetype");
+}
+
+@font-face {
+    font-family: CommentEmoji;
+    src: local("Apple Color Emoji"), local("Segoe UI Emoji"), local("Segoe UI Symbol"), local("Noto Color Emoji");
+    unicode-range:
+        U+200d, U+2600, U+2620, U+2639-263a, U+2705, U+2708, U+270a, U+274c, U+2757, U+2764, U+2795-2796, U+2b55,
+        U+dc12, U+dc31, U+dc36, U+dc40, U+dc42, U+dc44, U+dc46-dc4f, U+dc68, U+dc79-dc7b, U+dc7d-dc81, U+dc87, U+dc8a,
+        U+dc94, U+dca3, U+dca9-dcaa, U+dcaf, U+dcbb, U+dd0c, U+dd10-dd19, U+dd1d, U+dd20-dd2f, U+dd37, U+dd64,
+        U+dd70-dd76, U+dd78, U+dd7a, U+dd90, U+dd92, U+dd97-dd98, U+ddcf-ddd1, U+ddf1, U+de00-de47, U+de4b, U+de4d-de4f,
+        U+de51, U+de97, U+df1a, U+df1d-df1e, U+df4b, U+df4e, U+df7b, U+df82-df83, U+df93, U+dfa8, U+dfe0, U+fe0f,
+        U+1f192, U+1f197-1f198, U+1f21a, U+1f236, U+1f251, U+1f31a, U+1f31d-1f31e, U+1f34b, U+1f34e, U+1f37b,
+        U+1f382-1f383, U+1f393, U+1f3a8, U+1f3e0, U+1f412, U+1f431, U+1f436, U+1f440, U+1f442, U+1f444, U+1f446-1f44f,
+        U+1f468, U+1f479-1f47b, U+1f47d-1f481, U+1f487, U+1f48a, U+1f494, U+1f4a3, U+1f4a9-1f4aa, U+1f4af, U+1f4bb,
+        U+1f512, U+1f525, U+1f52b, U+1f590, U+1f600-1f647, U+1f64b, U+1f64d-1f64f, U+1f697, U+1f90c, U+1f910-1f919,
+        U+1f91d, U+1f920-1f92f, U+1f937, U+1f964, U+1f970-1f976, U+1f978, U+1f97a, U+1f9cf-1f9d1, U+1f9f1;
+}
+
+@font-face {
+    font-family: "Inter";
+    src: url("/fonts/Inter-Regular.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+}
+@font-face {
+    font-family: "Inter";
+    src: url("/fonts/Inter-Medium.otf") format("opentype");
+    font-weight: 500;
+    font-style: normal;
+}
+@font-face {
+    font-family: "Inter";
+    src: url("/fonts/Inter-SemiBold.ttf") format("truetype");
+    font-weight: 600;
+    font-style: normal;
+}

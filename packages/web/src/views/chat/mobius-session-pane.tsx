@@ -1,12 +1,20 @@
 import type { PromptImage, PromptResource, SessionConfigOption } from "@moxt-ai/mobius-sdk";
 import { Check, CircleAlert, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
 import { AgentThinking, type AgentThinkingEntry } from "../../components/chat/agent-thinking.tsx";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
 import { ChatMessageQueue } from "../../components/chat/chat-message-queue.tsx";
+import {
+    chatSessionColumnClassName,
+    chatSessionMessageColumnClassName,
+    chatSessionMessageItemClassName,
+    chatSessionMessageScrollClassName,
+    chatSessionPaneSectionClassName,
+} from "../../components/chat/chat-session-layout.ts";
 import { FilePreview } from "../../components/chat/file-preview.tsx";
 import {
     type ElicitationInteractionResponse,
@@ -19,6 +27,7 @@ import { Button } from "../../components/ui/cloud-button.tsx";
 import { LinkButton } from "../../components/ui/link-button.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
+import { cn } from "../../lib/utils.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { QueuedDraftMessage } from "../../view-models/chat/conversation-creation-machine.ts";
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
@@ -34,6 +43,7 @@ import { type SessionMessage, sessionTextValue } from "../../view-models/chat/se
 import { reportApplicationError } from "../../view-models/report-error.ts";
 import { useMortyApplication } from "../application/application-context.tsx";
 import { MobiusAssistantText, MobiusSessionMessage } from "./mobius-session-message.tsx";
+import { useDesktopChatLayout } from "./use-desktop-chat-layout.ts";
 
 type SessionRenderItem =
     | {
@@ -83,7 +93,7 @@ function thinkingEntry(message: SessionMessage): AgentThinkingEntry | null {
     return null;
 }
 
-function sessionRenderItems(messages: readonly SessionMessage[]): readonly SessionRenderItem[] {
+export function sessionRenderItems(messages: readonly SessionMessage[]): readonly SessionRenderItem[] {
     type RenderItemBuilder =
         | { kind: "assistant-text"; id: string; messageId: string | null; text: string[] }
         | { readonly kind: "event"; readonly message: SessionMessage }
@@ -115,9 +125,15 @@ function sessionRenderItems(messages: readonly SessionMessage[]): readonly Sessi
     );
 }
 
-function MessageListSkeleton() {
+export {
+    chatSessionMessageColumnClassName as mobiusSessionMessageColumnClassName,
+    chatSessionMessageItemClassName as mobiusSessionMessageItemClassName,
+    chatSessionMessageScrollClassName as mobiusSessionMessageScrollClassName,
+} from "../../components/chat/chat-session-layout.ts";
+
+export function SessionMessageListSkeleton() {
     return (
-        <div role="status" aria-label="Loading messages" className="mx-auto w-full min-w-0 max-w-[920px]">
+        <div role="status" aria-label="Loading messages" className={chatSessionColumnClassName}>
             <span className="sr-only">Loading messages</span>
             <div aria-hidden="true" className="grid animate-pulse gap-8 motion-reduce:animate-none">
                 <div className="ml-auto grid w-full max-w-[68%] justify-items-end gap-2">
@@ -133,6 +149,179 @@ function MessageListSkeleton() {
                 </div>
             </div>
         </div>
+    );
+}
+
+function SessionTitleSkeleton({ centered = false }: { readonly centered?: boolean }) {
+    return (
+        <h2 className={cn("min-w-0 flex-1 text-sm font-semibold", centered && "w-full max-w-full")}>
+            <div
+                role="status"
+                aria-label="Loading conversation title"
+                className={cn("max-w-full", centered && "mx-auto flex justify-center")}
+            >
+                <span className="sr-only">Loading conversation title</span>
+                <div
+                    aria-hidden="true"
+                    className="h-4 w-40 max-w-full animate-pulse rounded-full bg-muted motion-reduce:animate-none"
+                />
+            </div>
+        </h2>
+    );
+}
+
+function MobileSessionTitlePortal({ children }: { readonly children: ReactNode }) {
+    const [slot, setSlot] = useState<HTMLElement | null>(null);
+    useEffect(() => {
+        setSlot(document.getElementById(dataTestId.mobileSessionTitleSlot));
+    }, []);
+    if (slot === null) {
+        return null;
+    }
+    return createPortal(
+        <div className="pointer-events-auto flex min-w-0 w-full max-w-full justify-center overflow-hidden">
+            {children}
+        </div>,
+        slot,
+    );
+}
+
+function SessionConversationTitleBar({
+    title,
+    titleEdit,
+    titleLoading,
+    titleInput,
+    centered,
+    onOpenTitleEdit,
+    onSetTitleDraft,
+    onCancelTitleEdit,
+    onConfirmTitleEdit,
+}: {
+    readonly title: string;
+    readonly titleEdit:
+        | { readonly kind: "closed" }
+        | { readonly kind: "editing"; readonly draft: string }
+        | { readonly kind: "saving"; readonly draft: string };
+    readonly titleLoading: boolean;
+    readonly titleInput: React.RefObject<HTMLInputElement | null>;
+    readonly centered: boolean;
+    readonly onOpenTitleEdit: () => void;
+    readonly onSetTitleDraft: (draft: string) => void;
+    readonly onCancelTitleEdit: () => void;
+    readonly onConfirmTitleEdit: () => void;
+}) {
+    const displayTitle = title || "Untitled session";
+    if (titleEdit.kind === "closed") {
+        if (titleLoading) {
+            return <SessionTitleSkeleton centered={centered} />;
+        }
+        return (
+            <h2
+                className={cn("min-w-0 truncate text-sm font-semibold", centered && "w-full max-w-full text-center")}
+                title={displayTitle}
+            >
+                <button
+                    type="button"
+                    aria-label={displayTitle}
+                    className={cn(
+                        "max-w-full cursor-pointer truncate rounded-md outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/70",
+                        centered ? "mx-auto text-center" : "text-left",
+                    )}
+                    title="Rename conversation"
+                    onClick={onOpenTitleEdit}
+                >
+                    {displayTitle}
+                </button>
+            </h2>
+        );
+    }
+    const saving = titleEdit.kind === "saving";
+    return (
+        <div className={cn("flex min-w-0 items-center gap-0.5", centered ? "w-full max-w-full" : "flex-1")}>
+            <input
+                aria-label="Conversation title"
+                className={cn(
+                    "min-w-0 flex-1 appearance-none rounded-none border-0 bg-transparent px-0 py-0 text-sm font-semibold shadow-none outline-none ring-0 focus:ring-0 focus-visible:ring-0",
+                    centered && "text-center",
+                )}
+                disabled={saving}
+                maxLength={500}
+                ref={titleInput}
+                value={titleEdit.draft}
+                onChange={(event) => onSetTitleDraft(event.target.value)}
+                onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                        event.preventDefault();
+                        onConfirmTitleEdit();
+                    }
+                    if (event.key === "Escape") {
+                        onCancelTitleEdit();
+                    }
+                }}
+            />
+            <Button
+                aria-label="Cancel rename"
+                disabled={saving}
+                size="icon"
+                variant="ghost"
+                onClick={onCancelTitleEdit}
+            >
+                <X className="size-4" />
+            </Button>
+            <Button aria-label="Save title" disabled={saving} size="icon" variant="ghost" onClick={onConfirmTitleEdit}>
+                <Check className="size-4" />
+            </Button>
+        </div>
+    );
+}
+
+export function MobiusSessionPaneShell({
+    title,
+    titleLoading = false,
+    mobileTitlePortaled = false,
+    children,
+    footer,
+}: {
+    readonly title?: string;
+    readonly titleLoading?: boolean;
+    readonly mobileTitlePortaled?: boolean;
+    readonly children: ReactNode;
+    readonly footer?: ReactNode;
+}) {
+    return (
+        <section className={chatSessionPaneSectionClassName}>
+            <header
+                className={cn("h-12 shrink-0 items-center gap-1 px-6", mobileTitlePortaled ? "hidden sm:flex" : "flex")}
+            >
+                {titleLoading ? (
+                    <SessionTitleSkeleton />
+                ) : (
+                    <h2 className="min-w-0 truncate text-sm font-semibold" title={title}>
+                        {title}
+                    </h2>
+                )}
+            </header>
+            {children}
+            {footer}
+        </section>
+    );
+}
+
+export function MobiusSessionPaneLoading() {
+    const desktop = useDesktopChatLayout();
+    return (
+        <>
+            <MobiusSessionPaneShell mobileTitlePortaled={!desktop} titleLoading={desktop}>
+                <div aria-label="Messages" className={chatSessionMessageScrollClassName} role="log">
+                    <SessionMessageListSkeleton />
+                </div>
+            </MobiusSessionPaneShell>
+            {desktop ? null : (
+                <MobileSessionTitlePortal>
+                    <SessionTitleSkeleton centered />
+                </MobileSessionTitlePortal>
+            )}
+        </>
     );
 }
 
@@ -191,7 +380,7 @@ function UnconfirmedDeliveryCard({
     readonly onRetry: () => void;
 }) {
     return (
-        <div className="my-8 first:mt-0 last:mb-0" data-testid={dataTestId.unconfirmedDelivery}>
+        <div className={chatSessionMessageItemClassName} data-testid={dataTestId.unconfirmedDelivery}>
             <UserPromptMessage images={delivery.images} resources={delivery.resources} text={delivery.displayPrompt} />
             <div
                 className="ml-auto flex max-w-[85%] items-center gap-3 rounded-lg border border-destructive/15 bg-destructive/5 py-2 pr-2 pl-3 text-xs leading-5 text-destructive"
@@ -244,7 +433,7 @@ function SessionReconnectNotice({
  */
 function OlderHistorySkeleton() {
     return (
-        <div aria-label="Loading older messages" className="mx-auto mb-8 w-full min-w-0 max-w-[920px]" role="status">
+        <div aria-label="Loading older messages" className={`${chatSessionColumnClassName} mb-8`} role="status">
             <div aria-hidden="true" className="grid animate-pulse gap-8 motion-reduce:animate-none">
                 <div className="ml-auto grid w-full max-w-[68%] justify-items-end gap-2">
                     <div className="h-4 w-2/3 rounded-full bg-muted" />
@@ -349,6 +538,7 @@ export function MobiusSessionPane({
     };
     const presentation = sessionPanePresentation(model, delivery, taskControls, messageQueue, attachmentModel);
     const renderItems = sessionRenderItems(model.messages);
+    const sessionMessagesLoading = model.connection.kind === "loading";
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
         run(async (signal) => await pane.store.getState().configure(option, value, booleanValue, signal));
     const openLocalFile = useCallback(
@@ -361,83 +551,41 @@ export function MobiusSessionPane({
         void pane.filePreview.getState().reload(pane.operationsSignal());
     }, [pane]);
 
+    const desktop = useDesktopChatLayout();
+    const titleBarProps = {
+        title: model.title,
+        titleEdit: model.titleEdit,
+        titleLoading: sessionMessagesLoading,
+        titleInput,
+        onOpenTitleEdit: () => pane.store.getState().openTitleEdit(),
+        onSetTitleDraft: (draft: string) => pane.store.getState().setTitleDraft(draft),
+        onCancelTitleEdit: () => pane.store.getState().cancelTitleEdit(),
+        onConfirmTitleEdit: () => run(async (signal) => await pane.store.getState().confirmTitleEdit(signal)),
+    };
+
     return (
         <>
-            <section
-                className="flex min-h-0 min-w-0 flex-1 animate-cloud-enter flex-col motion-reduce:animate-none"
-                ref={pane.onAttach}
-            >
-                <header className="flex h-12 shrink-0 items-center gap-1 border-b border-border/80 px-4 sm:px-8 lg:px-12">
-                    {model.titleEdit.kind === "closed" ? (
-                        <h2
-                            className="min-w-0 truncate text-sm font-semibold"
-                            title={model.title || "Untitled session"}
-                        >
-                            <button
-                                type="button"
-                                aria-label={model.title || "Untitled session"}
-                                className="max-w-full cursor-pointer truncate rounded-md text-left outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/70"
-                                title="Rename conversation"
-                                onClick={() => pane.store.getState().openTitleEdit()}
-                            >
-                                {model.title || "Untitled session"}
-                            </button>
-                        </h2>
-                    ) : (
-                        <>
-                            <input
-                                aria-label="Conversation title"
-                                className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
-                                disabled={model.titleEdit.kind === "saving"}
-                                maxLength={500}
-                                ref={titleInput}
-                                value={model.titleEdit.draft}
-                                onChange={(event) => pane.store.getState().setTitleDraft(event.target.value)}
-                                onKeyDown={(event) => {
-                                    if (event.key === "Enter") {
-                                        event.preventDefault();
-                                        run(async (signal) => await pane.store.getState().confirmTitleEdit(signal));
-                                    }
-                                    if (event.key === "Escape") {
-                                        pane.store.getState().cancelTitleEdit();
-                                    }
-                                }}
-                            />
-                            <Button
-                                aria-label="Save title"
-                                disabled={model.titleEdit.kind === "saving"}
-                                size="icon"
-                                variant="ghost"
-                                onClick={() =>
-                                    run(async (signal) => await pane.store.getState().confirmTitleEdit(signal))
-                                }
-                            >
-                                <Check className="size-4" />
-                            </Button>
-                            <Button
-                                aria-label="Cancel rename"
-                                disabled={model.titleEdit.kind === "saving"}
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => pane.store.getState().cancelTitleEdit()}
-                            >
-                                <X className="size-4" />
-                            </Button>
-                        </>
-                    )}
-                </header>
+            <section className={chatSessionPaneSectionClassName} ref={pane.onAttach}>
+                {desktop ? (
+                    <header className="flex h-12 shrink-0 items-center gap-1 px-6">
+                        <SessionConversationTitleBar {...titleBarProps} centered={false} />
+                    </header>
+                ) : null}
                 <FollowLatestScrollArea
                     role="log"
                     container={messageList}
                     followThreshold={80}
                     followRevision={null}
+                    showTopFade
                     aria-label="Messages"
-                    className="min-h-0 flex-1 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10 lg:px-12"
+                    className={chatSessionMessageScrollClassName}
                 >
-                    {model.messages.length === 0 && model.connection.kind === "loading" && <MessageListSkeleton />}
-                    {model.messages.length === 0 && model.connection.kind === "failed" && (
-                        <div className="flex min-h-full items-center justify-center">
-                            <div className="grid max-w-lg justify-items-center gap-4 px-6 text-center">
+                    {sessionMessagesLoading && <SessionMessageListSkeleton />}
+                    {!sessionMessagesLoading && model.messages.length === 0 && model.connection.kind === "failed" && (
+                        <div
+                            className={`${chatSessionMessageColumnClassName} flex min-h-full items-center justify-center`}
+                        >
+                            <div className="grid w-full max-w-lg justify-items-center gap-4 text-center">
                                 <p data-testid={dataTestId.sessionLoadFailure} role="alert">
                                     {model.connection.message}
                                 </p>
@@ -450,69 +598,79 @@ export function MobiusSessionPane({
                             </div>
                         </div>
                     )}
-                    {model.messages.length === 0 &&
+                    {!sessionMessagesLoading &&
+                        model.messages.length === 0 &&
                         model.connection.kind === "ready" &&
                         model.activity.kind === "idle" &&
                         !model.historyLoading && (
-                            <p className="text-center text-sm text-muted-foreground" role="status">
-                                No message history is available for this session.
-                            </p>
+                            <div className={chatSessionMessageColumnClassName}>
+                                <p className="text-center text-sm text-muted-foreground" role="status">
+                                    No message history is available for this session.
+                                </p>
+                            </div>
                         )}
-                    {model.historyLoading && <OlderHistorySkeleton />}
-                    <div className="mx-auto w-full min-w-0 max-w-[920px]">
-                        {renderItems.map((item, index) => (
-                            <div
-                                key={item.kind === "event" ? item.message.firstEvent.eventId : item.id}
-                                className="my-8 first:mt-0 last:mb-0"
-                            >
-                                {item.kind === "assistant-text" ? (
-                                    <MobiusAssistantText
-                                        openLocalFile={openLocalFile}
-                                        readImage={pane.readResource}
-                                        text={item.text}
-                                        streaming={
-                                            model.activity.kind === "working" && index === renderItems.length - 1
-                                        }
-                                    />
-                                ) : item.kind === "thinking" ? (
-                                    <div data-testid={dataTestId.agentResponse}>
-                                        <AgentThinking
+                    {!sessionMessagesLoading && model.historyLoading && <OlderHistorySkeleton />}
+                    {!sessionMessagesLoading && (
+                        <div className={chatSessionMessageColumnClassName}>
+                            {renderItems.map((item, index) => (
+                                <div
+                                    key={item.kind === "event" ? item.message.firstEvent.eventId : item.id}
+                                    className={chatSessionMessageItemClassName}
+                                >
+                                    {item.kind === "assistant-text" ? (
+                                        <MobiusAssistantText
+                                            openLocalFile={openLocalFile}
+                                            readImage={pane.readResource}
+                                            text={item.text}
+                                            streaming={
+                                                model.activity.kind === "working" && index === renderItems.length - 1
+                                            }
+                                        />
+                                    ) : item.kind === "thinking" ? (
+                                        <div data-testid={dataTestId.agentResponse}>
+                                            <AgentThinking
+                                                active={
+                                                    model.activity.kind === "working" &&
+                                                    index === renderItems.length - 1
+                                                }
+                                                entries={item.entries}
+                                                readImage={pane.readResource}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <MobiusSessionMessage
                                             active={
                                                 model.activity.kind === "working" && index === renderItems.length - 1
                                             }
-                                            entries={item.entries}
+                                            failureApproval={{ botId, kind: "bot-approval" }}
+                                            message={item.message}
+                                            deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
+                                            onRemoveUnknownDelivery={pane.store.getState().removeUnknownDelivery}
+                                            onRetryUnknownDelivery={() =>
+                                                run(pane.store.getState().retryUnknownDelivery)
+                                            }
                                             readImage={pane.readResource}
+                                            openLocalFile={openLocalFile}
                                         />
-                                    </div>
-                                ) : (
-                                    <MobiusSessionMessage
-                                        active={model.activity.kind === "working" && index === renderItems.length - 1}
-                                        failureApproval={{ botId, kind: "bot-approval" }}
-                                        message={item.message}
-                                        deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
-                                        onRemoveUnknownDelivery={pane.store.getState().removeUnknownDelivery}
-                                        onRetryUnknownDelivery={() => run(pane.store.getState().retryUnknownDelivery)}
-                                        readImage={pane.readResource}
-                                        openLocalFile={openLocalFile}
-                                    />
-                                )}
-                            </div>
-                        ))}
-                        {presentation.unconfirmedDelivery !== null && (
-                            <UnconfirmedDeliveryCard
-                                delivery={presentation.unconfirmedDelivery}
-                                onRemove={() => pane.store.getState().removeUnknownDelivery()}
-                                onRetry={() => run(pane.store.getState().retryUnknownDelivery)}
-                            />
-                        )}
-                        {presentation.workingIndicatorVisible &&
-                            presentation.outputState !== "idle" &&
-                            model.activity.kind === "working" && (
-                                <div className="mt-6 sm:px-2">
-                                    <WorkingIndicator startedAt={model.activity.startedAt} />
+                                    )}
                                 </div>
+                            ))}
+                            {presentation.unconfirmedDelivery !== null && (
+                                <UnconfirmedDeliveryCard
+                                    delivery={presentation.unconfirmedDelivery}
+                                    onRemove={() => pane.store.getState().removeUnknownDelivery()}
+                                    onRetry={() => run(pane.store.getState().retryUnknownDelivery)}
+                                />
                             )}
-                    </div>
+                            {presentation.workingIndicatorVisible &&
+                                presentation.outputState !== "idle" &&
+                                model.activity.kind === "working" && (
+                                    <div className="mt-6">
+                                        <WorkingIndicator startedAt={model.activity.startedAt} />
+                                    </div>
+                                )}
+                        </div>
+                    )}
                 </FollowLatestScrollArea>
                 <LoadMoreTrigger
                     label="Load older messages"
@@ -533,7 +691,9 @@ export function MobiusSessionPane({
                     }
                 />
                 {(interactions.elicitations.length > 0 || interactions.permissions.length > 0) && (
-                    <div className="mx-auto mt-4 max-h-[50vh] w-full max-w-[920px] shrink-0 overflow-y-auto px-3 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:mt-5 sm:px-5">
+                    <div
+                        className={`${chatSessionColumnClassName} mt-4 max-h-[50vh] shrink-0 overflow-y-auto [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin] sm:mt-5`}
+                    >
                         <SessionInteractionCards
                             elicitations={interactions.elicitations}
                             permissions={interactions.permissions}
@@ -632,6 +792,11 @@ export function MobiusSessionPane({
                     )}
                 </BotChatComposer>
             </section>
+            {desktop ? null : (
+                <MobileSessionTitlePortal>
+                    <SessionConversationTitleBar {...titleBarProps} centered />
+                </MobileSessionTitlePortal>
+            )}
             <FilePreview
                 onClose={preview.close}
                 layout={preview.layout}

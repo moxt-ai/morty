@@ -9,6 +9,7 @@ import { AgentThinking } from "../../components/chat/agent-thinking.tsx";
 import { AttemptFailure } from "../../components/chat/attempt-failure.tsx";
 import { CompactionDisclosure } from "../../components/chat/compaction-disclosure.tsx";
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
+import { UserMessageShell } from "../../components/chat/user-message-shell.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { isDisplayableImageType } from "../../services/chat/image-media-type.ts";
 import {
@@ -142,12 +143,21 @@ function MessageContentBlock({
             );
         case "image":
             return isDisplayableImageType(content.mimeType) && content.data.length > 0 ? (
-                <img
-                    alt="Agent-provided content"
-                    className="max-h-[480px] w-auto max-w-full rounded-xl border border-border object-contain"
-                    data-testid={speaker === "user" ? dataTestId.userMessageImage : undefined}
-                    src={`data:${content.mimeType};base64,${content.data}`}
-                />
+                speaker === "user" ? (
+                    <MessageBubble speaker="user" data-testid={dataTestId.userMessageImage}>
+                        <img
+                            alt="Your attachment"
+                            className="h-auto max-h-56 max-w-full rounded-lg object-contain object-left"
+                            src={`data:${content.mimeType};base64,${content.data}`}
+                        />
+                    </MessageBubble>
+                ) : (
+                    <img
+                        alt="Agent-provided content"
+                        className="max-h-[480px] w-auto max-w-full rounded-xl border border-border object-contain"
+                        src={`data:${content.mimeType};base64,${content.data}`}
+                    />
+                )
             ) : (
                 <p className="text-sm text-muted-foreground">Image content could not be displayed safely.</p>
             );
@@ -202,7 +212,7 @@ function UserMessage({
     const deliveryUnknown = deliveryUnknownUserMessageId !== null && message.commandId === deliveryUnknownUserMessageId;
     return (
         <div className="min-w-0 space-y-2">
-            <div className="ml-auto grid max-w-[82%] gap-2">
+            <UserMessageShell>
                 {message.contents.map((content, index) => (
                     <MessageContentBlock
                         content={content}
@@ -212,10 +222,10 @@ function UserMessage({
                         speaker="user"
                     />
                 ))}
-            </div>
+            </UserMessageShell>
             {deliveryUnknown && (
                 <div
-                    className="ml-auto flex max-w-[82%] items-center gap-3 rounded-lg border border-destructive/15 bg-destructive/5 py-2 pr-2 pl-3 text-xs leading-5 text-destructive"
+                    className="ml-auto flex max-w-[85%] items-center gap-3 rounded-lg border border-destructive/15 bg-destructive/5 py-2 pr-2 pl-3 text-xs leading-5 text-destructive max-md:max-w-[94%]"
                     role="alert"
                 >
                     <button
@@ -367,7 +377,7 @@ export function MobiusSessionMessage({
             return null;
         }
         return (
-            <p className="px-4 text-sm text-muted-foreground" data-testid={dataTestId.agentReplyStatus} role="status">
+            <p className="text-sm text-muted-foreground" data-testid={dataTestId.agentReplyStatus} role="status">
                 {presentation.stopReason === "cancelled"
                     ? "Response cancelled."
                     : `Response stopped: ${presentation.stopReason}`}

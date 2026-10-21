@@ -33,7 +33,7 @@ export function ImageGenerationToolCall({ autoOpen, entry }: ToolRendererProps) 
             state={entry.state}
             title={entry.title}
         >
-            {prompt !== null && <p className="mt-1 ml-5 text-xs leading-5 text-copy-secondary">{prompt}</p>}
+            {prompt !== null && <p className="m-0 text-xs leading-5 text-copy-secondary">{prompt}</p>}
         </ToolCallDisclosure>
     );
 }
