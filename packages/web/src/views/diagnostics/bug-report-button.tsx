@@ -1,6 +1,6 @@
 import { Bug, Paperclip, X } from "lucide-react";
 import { Tooltip } from "radix-ui";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
@@ -104,6 +104,20 @@ function BugReportDialog({
     const [store] = useState(() => createBugReportStore(sentryBugReportSink, transport, daemonSource));
     const { state, description, images, addImages, removeImage, describe, send, close } = useStore(store);
     const fileInput = useRef<HTMLInputElement>(null);
+    // Stable for the dialog's lifetime so re-renders never re-run the
+    // cleanup; the owner unmounting (for example when application loading
+    // completes) cancels the in-flight send through the same close path.
+    const cancelOnUnmount = useCallback(
+        (node: HTMLElement | null): (() => void) | undefined => {
+            if (node === null) {
+                return undefined;
+            }
+            return () => {
+                store.getState().close();
+            };
+        },
+        [store],
+    );
     return (
         <Dialog
             title="Report a bug"
@@ -113,91 +127,94 @@ function BugReportDialog({
                 onClose();
             }}
         >
-            {state.kind === "sent" ? (
-                <div role="status" className="break-all">
-                    <p>Report sent. Reference: {state.id}</p>
-                    {!state.daemonAvailable && (
-                        <p>Daemon diagnostics were unavailable; Web diagnostics were included.</p>
-                    )}
-                    {state.truncated && <p>Older diagnostics were omitted to keep this report small.</p>}
-                </div>
-            ) : (
-                <form
-                    onPaste={(event) => {
-                        const files = Array.from(event.clipboardData.files);
-                        if (files.length > 0) {
-                            event.preventDefault();
-                            addImages(files);
-                        }
-                    }}
-                    onSubmit={(event) => {
-                        event.preventDefault();
-                        void send();
-                    }}
-                    className="space-y-3"
-                >
-                    <label className="block" htmlFor="bug-description">
-                        What went wrong?
-                    </label>
-                    <textarea
-                        id="bug-description"
-                        className="min-h-28 w-full rounded-md border border-border bg-background p-2"
-                        maxLength={2000}
-                        required
-                        disabled={state.kind === "sending"}
-                        value={description}
-                        onChange={(event) => describe(event.target.value)}
-                    />
-                    {images.length > 0 && (
-                        <ul aria-label="Attached images" className="flex flex-wrap gap-2">
-                            {images.map((image) => (
-                                <ReportImage
-                                    key={image.id}
-                                    image={image}
-                                    disabled={state.kind === "sending"}
-                                    onRemove={() => removeImage(image.id)}
-                                />
-                            ))}
-                        </ul>
-                    )}
-                    <div className="space-y-1.5">
-                        <input
-                            ref={fileInput}
-                            type="file"
-                            aria-label="Attach images"
-                            accept={bugReportImageAccept}
-                            multiple
-                            hidden
-                            disabled={state.kind === "sending"}
-                            onChange={(event) => {
-                                addImages(Array.from(event.target.files ?? []));
-                                event.target.value = "";
-                            }}
-                        />
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={state.kind === "sending" || images.length >= 3}
-                            onClick={() => fileInput.current?.click()}
-                        >
-                            <Paperclip aria-hidden="true" className="size-4" />
-                            Attach images
-                        </Button>
-                        <p className="text-xs text-muted-foreground">
-                            Paste an image here or choose a file. Up to 3 images, 2.5 MB each. PNG, JPEG, GIF or WebP.
-                        </p>
+            <div ref={cancelOnUnmount}>
+                {state.kind === "sent" ? (
+                    <div role="status" className="break-all">
+                        <p>Report sent. Reference: {state.id}</p>
+                        {!state.daemonAvailable && (
+                            <p>Daemon diagnostics were unavailable; Web diagnostics were included.</p>
+                        )}
+                        {state.truncated && <p>Older diagnostics were omitted to keep this report small.</p>}
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                        Network and daemon diagnostics are collected automatically and may take up to 10 seconds. You
-                        can still send a report when your Runtime is offline.
-                    </p>
-                    {state.kind === "failed" && <p role="alert">{state.message}</p>}
-                    {state.kind === "sending" && <p role="status">Collecting diagnostics and sending…</p>}
-                    <Button type="submit" disabled={state.kind === "sending" || description.trim() === ""}>
-                        Send report
-                    </Button>
-                </form>
-            )}
+                ) : (
+                    <form
+                        onPaste={(event) => {
+                            const files = Array.from(event.clipboardData.files);
+                            if (files.length > 0) {
+                                event.preventDefault();
+                                addImages(files);
+                            }
+                        }}
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            void send();
+                        }}
+                        className="space-y-3"
+                    >
+                        <label className="block" htmlFor="bug-description">
+                            What went wrong?
+                        </label>
+                        <textarea
+                            id="bug-description"
+                            className="min-h-28 w-full rounded-md border border-border bg-background p-2"
+                            maxLength={2000}
+                            required
+                            disabled={state.kind === "sending"}
+                            value={description}
+                            onChange={(event) => describe(event.target.value)}
+                        />
+                        {images.length > 0 && (
+                            <ul aria-label="Attached images" className="flex flex-wrap gap-2">
+                                {images.map((image) => (
+                                    <ReportImage
+                                        key={image.id}
+                                        image={image}
+                                        disabled={state.kind === "sending"}
+                                        onRemove={() => removeImage(image.id)}
+                                    />
+                                ))}
+                            </ul>
+                        )}
+                        <div className="space-y-1.5">
+                            <input
+                                ref={fileInput}
+                                type="file"
+                                aria-label="Attach images"
+                                accept={bugReportImageAccept}
+                                multiple
+                                hidden
+                                disabled={state.kind === "sending"}
+                                onChange={(event) => {
+                                    addImages(Array.from(event.target.files ?? []));
+                                    event.target.value = "";
+                                }}
+                            />
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={state.kind === "sending" || images.length >= 3}
+                                onClick={() => fileInput.current?.click()}
+                            >
+                                <Paperclip aria-hidden="true" className="size-4" />
+                                Attach images
+                            </Button>
+                            <p className="text-xs text-muted-foreground">
+                                Paste an image here or choose a file. Up to 3 images, 2.5 MB each. PNG, JPEG, GIF or
+                                WebP.
+                            </p>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            Network and daemon diagnostics are collected automatically and may take up to 10 seconds.
+                            You can still send a report when your Runtime is offline.
+                        </p>
+                        {state.kind === "failed" && <p role="alert">{state.message}</p>}
+                        {state.kind === "sending" && <p role="status">Collecting diagnostics and sending…</p>}
+                        <Button type="submit" disabled={state.kind === "sending" || description.trim() === ""}>
+                            Send report
+                        </Button>
+                    </form>
+                )}
+            </div>
         </Dialog>
     );
 }
