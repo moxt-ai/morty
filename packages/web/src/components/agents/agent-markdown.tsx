@@ -27,6 +27,8 @@ const STREAMDOWN_PLUGINS = Object.freeze({
     renderers: [{ language: "mermaid", component: MermaidCodeBlock }],
 });
 const STREAMDOWN_TRANSLATIONS = Object.freeze({ copyCode: "Copy code" });
+// Tags render as literal text, so incomplete tags must remain visible while streaming.
+const STREAMDOWN_REMEND = Object.freeze({ htmlTags: false });
 // Without the raw-HTML parser, Streamdown preserves HTML nodes as literal text.
 // Keep sanitization and URL hardening for the elements produced by Markdown.
 const STREAMDOWN_REHYPE_PLUGINS = Object.entries(defaultRehypePlugins)
@@ -336,6 +338,7 @@ export function AgentMarkdownContent({
             plugins={plugins}
             rehypePlugins={STREAMDOWN_REHYPE_PLUGINS}
             remarkPlugins={remarkPlugins}
+            remend={STREAMDOWN_REMEND}
             translations={STREAMDOWN_TRANSLATIONS}
         >
             {markdown}

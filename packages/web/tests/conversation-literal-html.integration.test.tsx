@@ -32,14 +32,31 @@ test("Given streamed HTML examples, When the response grows and completes, Then 
     }
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold after first delta");
     await app.waitForView(() => expect(document.body.textContent).toContain("Partial reply"));
+    await daemon.continueReply("hold after first delta", {
+        outcome: "hold",
+        output: [{ kind: "text", text: "\n\nUse Vec<Str" }],
+    });
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain("Use Vec<Str"),
+    );
+    await daemon.continueReply("hold after first delta", {
+        outcome: "hold",
+        output: [{ kind: "text", text: "ing> and <placeholder" }],
+    });
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
+            "Use Vec<String> and <placeholder",
+        ),
+    );
     const html =
         '<div>Literal **HTML**</div>\n<script>window.literalHtmlExecuted = true</script>\n<button onclick="window.literalHtmlExecuted = true">Run example</button>';
     await daemon.continueReply("hold after first delta", {
         outcome: "hold",
-        output: [{ kind: "text", text: `\n\n${html}\n\nGenerics: Vec<String>.` }],
+        output: [{ kind: "text", text: `> literally.\n\n${html}\n\nGenerics: Vec<String>.` }],
     });
     const assertLiteralHtml = () => {
         const response = getByRole(document.body, "log", { name: "Messages" });
+        expect(response.textContent).toContain("Use Vec<String> and <placeholder> literally.");
         expect(response.textContent).toContain(html);
         expect(response.textContent).toContain("Vec<String>");
         expect(queryByRole(response, "button", { name: "Run example" })).toBeNull();
