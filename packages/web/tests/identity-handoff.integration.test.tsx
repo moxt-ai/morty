@@ -1,6 +1,7 @@
 import { getByRole, queryByRole } from "@testing-library/dom";
 import { expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
+import { encodeIdentityScope } from "../src/services/identity/identity-scope-url.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
 test("Given a Codex native session handoff, When the page loads, Then it opens the original session and lands in Chat", {
@@ -35,6 +36,7 @@ test("Given a native session handoff, When the page loads, Then it tells the use
     expect(document.body.textContent).toContain("Opening the original session in Morty.");
     expect(queryByRole(document.body, "button", { name: "Open session" })).toBeNull();
     expect(queryByRole(document.body, "button", { name: "Fork session" })).toBeNull();
+    expect(queryByRole(document.body, "button", { name: "Go to Morty" })).toBeNull();
     expect(queryByRole(document.body, "img", { name: "QR code to continue on another device" })).toBeNull();
     expect(queryByRole(document.body, "button", { name: "Show QR code" })).toBeNull();
 });
@@ -154,15 +156,122 @@ test("Given opening a native session fails, When the user tries again, Then the 
             sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
         },
     });
-    await vi.waitFor(() => getByRole(document.body, "alert"));
-
-    await app.user.click(getByRole(document.body, "button", { name: "Try again" }));
-
-    expect(getByRole(document.body, "status", { name: "Opening session" })).toBeInstanceOf(HTMLElement);
     await vi.waitFor(() => {
         expect(getByRole(document.body, "alert").textContent).toContain("handoff harness is unavailable");
     });
+
+    // The retry must reach the open-session step again: once a Runtime answers
+    // for the redeemed access, the failure moves from the missing Agent to the
+    // missing native session.
+    await app.connectAgent({ id: "pi", label: "Pi" });
+    await app.user.click(getByRole(document.body, "button", { name: "Try again" }));
+
+    await vi.waitFor(() => {
+        expect(getByRole(document.body, "alert").textContent).toContain("The native session was not found");
+    });
     expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
+});
+
+test("Given the Morty access was redeemed and opening the original session failed, When the user views the failure page, Then they see the reason, retry, and an entry into Morty", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({
+        agent: { id: "pi", label: "Pi" },
+        connectAgent: true,
+        page: {
+            harness: "pi",
+            kind: "continue",
+            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
+        },
+    });
+
+    const alert = await vi.waitFor(() => getByRole(document.body, "alert"));
+    expect(alert.textContent).toContain("The native session was not found");
+    expect(getByRole(document.body, "heading", { name: "Continue native session" })).toBeInstanceOf(HTMLElement);
+    expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
+    expect(getByRole(document.body, "button", { name: "Go to Morty" })).toBeInstanceOf(HTMLButtonElement);
+
+    await app.user.click(getByRole(document.body, "button", { name: "Try again" }));
+
+    await vi.waitFor(() => {
+        expect(getByRole(document.body, "alert").textContent).toContain("The native session was not found");
+    });
+    expect(getByRole(document.body, "button", { name: "Go to Morty" })).toBeInstanceOf(HTMLButtonElement);
+});
+
+test("Given the failure page after a redeemed Morty access, When the user chooses Go to Morty, Then Morty opens home with that access instead of the failed session", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({
+        agent: { id: "pi", label: "Pi" },
+        connectAgent: true,
+        page: {
+            harness: "pi",
+            kind: "continue",
+            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
+        },
+    });
+    await vi.waitFor(() => getByRole(document.body, "alert"));
+
+    await app.user.click(getByRole(document.body, "button", { name: "Go to Morty" }));
+
+    await vi.waitFor(() => expect(window.location.pathname).toBe("/"));
+    const destination = new URL(window.location.href);
+    expect(destination.searchParams.get("identity")).toBe(
+        encodeIdentityScope({ botId: app.botId, projectId: app.identity.projectId, userId: app.userId }),
+    );
+    expect(destination.searchParams.get("sessionId")).toBeNull();
+    expect(destination.searchParams.get("harness")).toBeNull();
+    expect(destination.hash).toBe("");
+
+    const home = await createTestApp({ application: app, page: { kind: "bootstrap", identity: true } });
+    expect(await home.queryElementByTestId(dataTestId.chatLanding)).toBeInstanceOf(HTMLElement);
+    expect(queryByRole(document.body, "status", { name: "Opening session" })).toBeNull();
+});
+
+test("Given the Morty access was not redeemed, When the failure page shows, Then entering Morty home is not offered", {
+    timeout: 30_000,
+}, async () => {
+    await createTestApp({
+        page: {
+            code: (application) => `mobius_transfer_v2.${application.identity.projectId}.${"a".repeat(43)}`,
+            harness: "pi",
+            kind: "continue",
+            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
+        },
+    });
+
+    const alert = await vi.waitFor(() => getByRole(document.body, "alert"));
+    expect(alert.textContent).toContain("This transfer link has expired or been revoked.");
+    expect(queryByRole(document.body, "button", { name: "Go to Morty" })).toBeNull();
+    expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
+});
+
+test("Given the access was redeemed and its transfer link later stopped working, When the page redeems again, Then the user still enters Morty home with the redeemed access", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({
+        agent: { id: "pi", label: "Pi" },
+        connectAgent: true,
+        page: {
+            harness: "pi",
+            kind: "continue",
+            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
+        },
+    });
+    await vi.waitFor(() => getByRole(document.body, "alert"));
+    const redeemedScope = new URL(window.location.href).searchParams.get("identity");
+    expect(redeemedScope).not.toBeNull();
+
+    window.location.hash = `code=mobius_transfer_v2.${app.identity.projectId}.${"a".repeat(43)}`;
+    app.remount();
+
+    const alert = await vi.waitFor(() => getByRole(document.body, "alert"));
+    expect(alert.textContent).toContain("The native session was not found");
+    await app.user.click(getByRole(document.body, "button", { name: "Go to Morty" }));
+
+    await vi.waitFor(() => expect(window.location.pathname).toBe("/"));
+    expect(new URL(window.location.href).searchParams.get("identity")).toBe(redeemedScope);
 });
 
 test("Given a native session handoff whose Runtime went offline, When the page loads, Then the page reports Mobius is disconnected instead of a transfer-link problem", {
