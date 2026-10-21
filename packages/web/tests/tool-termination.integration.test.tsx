@@ -1,4 +1,12 @@
-import { getAllByLabelText, getByLabelText, getByRole, queryByLabelText } from "@testing-library/dom";
+import {
+    fireEvent,
+    getAllByLabelText,
+    getByLabelText,
+    getByRole,
+    queryByLabelText,
+    queryByRole,
+} from "@testing-library/dom";
+import { flushSync } from "react-dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -103,15 +111,12 @@ test("Given a stopped tool starts on an older history page, When the user loads 
             break;
         }
         const before = reloaded.elementsByTestId(dataTestId.agentResponse).length;
-        const older = await reloaded.waitForView(() =>
-            reloaded.elementsByTestId(dataTestId.agentToolCall).length === 4
-                ? null
-                : getByRole(document.body, "button", { name: "Load older messages" }),
+        await reloaded.waitForView(() =>
+            expect(queryByRole(document.body, "status", { name: "Loading older messages" })).toBeNull(),
         );
-        if (older === null) {
-            break;
-        }
-        await reloaded.user.click(older);
+        const messages = getByRole(document.body, "log", { name: "Messages" });
+        messages.scrollTop = 0;
+        flushSync(() => fireEvent.scroll(messages));
         await reloaded.waitForView(() =>
             expect(
                 reloaded.elementsByTestId(dataTestId.agentResponse).length +
