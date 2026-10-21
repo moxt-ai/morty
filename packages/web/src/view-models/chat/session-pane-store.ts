@@ -58,6 +58,14 @@ type Operation =
     | { readonly kind: "sending"; readonly commandId: string }
     | { readonly kind: "configuring" }
     | { readonly kind: "failed"; readonly message: string };
+
+function finishPromptOperation(operation: Operation, commandId: string): Operation {
+    if (operation.kind === "sending" && operation.commandId === commandId) {
+        return { kind: "idle" };
+    }
+    return operation;
+}
+
 type TitleEdit =
     | { readonly kind: "closed" }
     | { readonly kind: "editing"; readonly draft: string }
@@ -65,7 +73,7 @@ type TitleEdit =
 type Connection =
     | { readonly kind: "loading" }
     | { readonly kind: "ready"; readonly client: MobiusClient }
-    | { readonly kind: "reconnecting" }
+    | { readonly kind: "reconnecting"; readonly message: string | null }
     | {
           readonly kind: "disconnected";
           readonly message: string;
@@ -74,6 +82,18 @@ type Connection =
               | { readonly kind: "exhausted" };
       }
     | { readonly kind: "failed"; readonly message: string };
+
+function connectionFailure(connection: Connection): string | null {
+    switch (connection.kind) {
+        case "disconnected":
+        case "failed":
+        case "reconnecting":
+            return connection.message;
+        case "loading":
+        case "ready":
+            return null;
+    }
+}
 
 export type SessionConnection = Connection;
 type LocalInteraction =
@@ -273,17 +293,11 @@ export function sessionPanePresentation(
         busy,
         composerDisabled,
         composerError:
-            model.activity.kind === "failed"
-                ? model.activity.message
-                : model.operation.kind === "failed"
-                  ? model.operation.message
-                  : delivery.state.kind === "failed"
-                    ? delivery.state.message
-                    : tasks.feedback.kind === "failed"
-                      ? tasks.feedback.message
-                      : queue.feedback.kind === "failed"
-                        ? queue.feedback.message
-                        : "",
+            connectionFailure(model.connection) ??
+            [model.activity, model.operation, delivery.state, tasks.feedback, queue.feedback].find(
+                (state) => state.kind === "failed",
+            )?.message ??
+            "",
         controlRunning,
         deliveryUnknownUserMessageId,
         hasOlderHistory: model.hasOlderHistory,
@@ -800,7 +814,7 @@ export function createSessionPaneModel(options: {
                                                     : Date.now(),
                                         }),
                                         messages: timeline.messages,
-                                        operation: { kind: "idle" },
+                                        operation: finishPromptOperation(get().operation, payload.commandId),
                                     });
                                     return true;
                                 }
@@ -816,7 +830,11 @@ export function createSessionPaneModel(options: {
                                     : { commandId: payload.commandId, kind: "work-completed" },
                             );
                             const completed = deriveTimeline();
-                            set({ activity, messages: completed.messages, operation: { kind: "idle" } });
+                            set({
+                                activity,
+                                messages: completed.messages,
+                                operation: finishPromptOperation(get().operation, payload.commandId),
+                            });
                             tasks.getState().finish(payload.commandId);
                             activeTurn.turnCleared(payload.commandId);
                             if (command === payload.commandId) {
@@ -836,7 +854,12 @@ export function createSessionPaneModel(options: {
                                 case "initial-subscription":
                                     break;
                                 case "reconnecting":
-                                    set({ connection: { kind: "loading" } });
+                                    set({
+                                        connection: {
+                                            kind: "reconnecting",
+                                            message: connectionFailure(get().connection),
+                                        },
+                                    });
                                     break;
                             }
                             const executionPromise = connected.sessions.readSessionExecution(
@@ -870,18 +893,20 @@ export function createSessionPaneModel(options: {
                                 command = "";
                             }
                             const currentActivity = get().activity;
-                            const restoredActivity =
-                                command === ""
-                                    ? ({ kind: "idle" } as const)
-                                    : currentActivity.kind === "working" && currentActivity.commandId === command
-                                      ? currentActivity
-                                      : startSessionWork({
-                                            commandId: command,
-                                            startedAt:
-                                                lastSentMessage?.commandId === command
-                                                    ? lastSentMessage.sentAt
-                                                    : Date.now(),
-                                        });
+                            let restoredActivity: SessionActivityState;
+                            if (command === "") {
+                                // Restoring the connection cannot resolve an independent turn failure.
+                                restoredActivity =
+                                    currentActivity.kind === "failed" ? currentActivity : { kind: "idle" };
+                            } else if (currentActivity.kind === "working" && currentActivity.commandId === command) {
+                                restoredActivity = currentActivity;
+                            } else {
+                                restoredActivity = startSessionWork({
+                                    commandId: command,
+                                    startedAt:
+                                        lastSentMessage?.commandId === command ? lastSentMessage.sentAt : Date.now(),
+                                });
+                            }
                             signal.throwIfAborted();
                             const interactions: readonly LocalInteraction[] = (() => {
                                 const interaction = execution.turn?.interaction;
@@ -963,7 +988,7 @@ export function createSessionPaneModel(options: {
                 let consecutiveFailures = 0;
                 for (;;) {
                     if (consecutiveFailures > 0) {
-                        set({ connection: { kind: "reconnecting" } });
+                        set({ connection: { kind: "reconnecting", message: connectionFailure(get().connection) } });
                     }
                     try {
                         await observeSession();
@@ -978,14 +1003,6 @@ export function createSessionPaneModel(options: {
                             const message = formatError(cause, "The Session could not be opened.");
                             set({
                                 connection: { kind: "failed", message },
-                                activity: transitionSessionActivity(get().activity, {
-                                    kind: "session-failed",
-                                    message,
-                                }),
-                                operation: {
-                                    kind: "failed",
-                                    message,
-                                },
                             });
                             return;
                         }
@@ -1004,14 +1021,6 @@ export function createSessionPaneModel(options: {
                                 kind: "disconnected",
                                 message,
                                 retry: canAutoRetry ? { kind: "scheduled", retryAtEpochMs } : { kind: "exhausted" },
-                            },
-                            activity: transitionSessionActivity(get().activity, {
-                                kind: "session-failed",
-                                message,
-                            }),
-                            operation: {
-                                kind: "failed",
-                                message,
                             },
                         });
                         countdownInterrupt = new AbortController();
@@ -1103,10 +1112,14 @@ export function createSessionPaneModel(options: {
                     } else if (isQueuedInitialMessage(commandId)) {
                         options.onInitialMessageUnconfirmed?.({ commandId, displayPrompt, request: submission });
                     }
-                    if (accepted !== null && command === commandId) {
-                        tasks.getState().start(commandId, accepted.turnId);
-                        activeTurn.submissionAccepted(commandId, accepted.turnId);
-                        set({ operation: { kind: "idle" } });
+                    if (accepted !== null) {
+                        // A terminal live event may precede the acceptance response.
+                        // Its result already owns the activity; do not overwrite it.
+                        if (command === commandId) {
+                            tasks.getState().start(commandId, accepted.turnId);
+                            activeTurn.submissionAccepted(commandId, accepted.turnId);
+                        }
+                        set({ operation: finishPromptOperation(get().operation, commandId) });
                         return;
                     }
                     activeTurn.turnCleared(commandId);

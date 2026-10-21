@@ -84,17 +84,14 @@ export async function connectControlledAgentRuntime(options: {
     readonly signal: AbortSignal;
 }) {
     options.signal.throwIfAborted();
-    const cancellation = new AbortController();
-    const signal = AbortSignal.any([options.signal, cancellation.signal]);
     const directory = await mkdtemp(join(tmpdir(), "morty-controlled-agent-"));
     const workspace = join(directory, "workspace");
     await mkdir(workspace);
-    await writeWorkspaceFiles(options.behavior.files, workspace, signal);
+    await writeWorkspaceFiles(options.behavior.files, workspace, options.signal);
     const harness = createMortyFakeDaemon(options.behavior, workspace);
     const relayUrl = new URL("/mobius/api/v1/runtimes/connect", options.connection.origin);
     relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
     relayUrl.searchParams.set("token", options.connection.runtimeCredential);
-    const ready = Promise.withResolvers<void>();
     const config = createRuntimeConfig(
         {
             channelId: options.connection.channelId,
@@ -104,42 +101,79 @@ export async function connectControlledAgentRuntime(options: {
         harness.agents,
         new RuntimeLocalContext(directory, process.env),
     );
-    const engine = new MobiusRuntimeEngine(config, {
-        onConnectionStatus: (status) => {
-            if (status === "online") {
-                ready.resolve();
+    const unexpectedFailure = Promise.withResolvers<never>();
+    void unexpectedFailure.promise.catch(() => undefined);
+    const start = async () => {
+        const cancellation = new AbortController();
+        const signal = AbortSignal.any([options.signal, cancellation.signal]);
+        const ready = Promise.withResolvers<void>();
+        const engine = new MobiusRuntimeEngine(config, {
+            onConnectionStatus: (status) => {
+                if (status === "online") {
+                    ready.resolve();
+                }
+            },
+        });
+        const daemon = engine.run(signal);
+        const failure = daemon.then<never>(() => {
+            throw new Error("The production daemon stopped unexpectedly");
+        });
+        void failure.catch((cause: unknown) => {
+            if (!signal.aborted) {
+                unexpectedFailure.reject(cause);
             }
-        },
-    });
-    const daemon = engine.run(signal);
-    const failure = daemon.then<never>(() => {
-        throw new Error("The production daemon stopped unexpectedly");
-    });
-    void failure.catch(() => undefined);
-    const readinessSignal = AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
-    const abortReadiness = (): void => ready.reject(readinessSignal.reason);
-    readinessSignal.addEventListener("abort", abortReadiness, { once: true });
-    try {
-        await Promise.race([ready.promise, failure]);
-    } catch (cause) {
-        cancellation.abort(cause);
-        await daemon.catch(() => undefined);
-        await rm(directory, { force: true, recursive: true });
-        throw cause;
-    } finally {
-        readinessSignal.removeEventListener("abort", abortReadiness);
-    }
-    let disposed = false;
-    return {
-        continueReply: harness.continueReply,
-        failure,
-        [Symbol.asyncDispose]: async (): Promise<void> => {
-            if (disposed) {
-                return;
-            }
-            disposed = true;
+        });
+        const readinessSignal = AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
+        const abortReadiness = (): void => ready.reject(readinessSignal.reason);
+        readinessSignal.addEventListener("abort", abortReadiness, { once: true });
+        const stop = async (): Promise<void> => {
             cancellation.abort(new Error("Controlled Agent Runtime stopped"));
             await daemon.catch(() => undefined);
+        };
+        try {
+            await Promise.race([ready.promise, failure]);
+            return { stop };
+        } catch (cause) {
+            await stop();
+            throw cause;
+        } finally {
+            readinessSignal.removeEventListener("abort", abortReadiness);
+        }
+    };
+    const initial = await start().catch(async (cause: unknown) => {
+        await rm(directory, { force: true, recursive: true });
+        throw cause;
+    });
+    let state:
+        | { readonly kind: "running"; readonly runtime: typeof initial }
+        | { readonly kind: "disconnected" }
+        | { readonly kind: "disposed" } = { kind: "running", runtime: initial };
+    const disconnect = async (): Promise<void> => {
+        if (state.kind !== "running") {
+            return;
+        }
+        const runtime = state.runtime;
+        state = { kind: "disconnected" };
+        await runtime.stop();
+    };
+    return {
+        continueReply: harness.continueReply,
+        disconnect,
+        reconnect: async (): Promise<void> => {
+            if (state.kind === "disposed") {
+                throw new Error("Cannot reconnect a disposed controlled Runtime");
+            }
+            if (state.kind === "disconnected") {
+                state = { kind: "running", runtime: await start() };
+            }
+        },
+        failure: unexpectedFailure.promise,
+        [Symbol.asyncDispose]: async (): Promise<void> => {
+            if (state.kind === "disposed") {
+                return;
+            }
+            await disconnect();
+            state = { kind: "disposed" };
             await rm(directory, { force: true, recursive: true });
         },
     };

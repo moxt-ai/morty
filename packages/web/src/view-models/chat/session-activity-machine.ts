@@ -1,12 +1,11 @@
 export type SessionActivityState =
     | { readonly kind: "idle" }
     | { readonly kind: "working"; readonly commandId: string; readonly startedAt: number }
-    | { readonly kind: "failed"; readonly commandId: string | null; readonly message: string };
+    | { readonly kind: "failed"; readonly commandId: string; readonly message: string };
 
 export type SessionActivityEvent =
     | { readonly kind: "work-completed"; readonly commandId: string }
-    | { readonly kind: "work-failed"; readonly commandId: string; readonly message: string }
-    | { readonly kind: "session-failed"; readonly message: string };
+    | { readonly kind: "work-failed"; readonly commandId: string; readonly message: string };
 
 export function transitionSessionActivity(
     state: SessionActivityState,
@@ -19,12 +18,6 @@ export function transitionSessionActivity(
             return state.kind === "working" && state.commandId === event.commandId
                 ? { commandId: event.commandId, kind: "failed", message: event.message }
                 : state;
-        case "session-failed":
-            return {
-                commandId: state.kind === "working" ? state.commandId : null,
-                kind: "failed",
-                message: event.message,
-            };
     }
 }
 

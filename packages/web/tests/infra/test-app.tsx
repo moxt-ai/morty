@@ -39,7 +39,7 @@ export interface TestApp extends Application {
         testId: string | RegExp,
         accept?: (element: HTMLElement) => boolean,
     ) => Promise<HTMLElement>;
-    readonly waitForView: <T>(read: () => T) => Promise<T>;
+    readonly waitForView: <T>(read: () => T, timeoutMilliseconds?: number) => Promise<T>;
     readonly user: UserEvent;
 }
 
@@ -128,7 +128,7 @@ export async function createTestApp(
     const lifetime = new AbortController();
     // Use RTL's async boundary to settle external updates and pending microtasks.
     // DOM observation keeps this wait event-driven rather than polling the network.
-    const waitForView = <T,>(read: () => T): Promise<T> =>
+    const waitForView = <T,>(read: () => T, timeoutMilliseconds = 12_000): Promise<T> =>
         getConfig().asyncWrapper(
             () =>
                 new Promise<T>((resolve, reject) => {
@@ -155,7 +155,7 @@ export async function createTestApp(
                     const deadline = setTimeout(() => {
                         cleanup();
                         reject(lastFailure ?? new Error("The expected view did not appear."));
-                    }, 12_000);
+                    }, timeoutMilliseconds);
                     if (lifetime.signal.aborted) {
                         abort();
                         return;

@@ -80,6 +80,8 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
         return manySessionEvents(`Completed ${prompt.slice(eventBurstPrefix.length)}`);
     }
     switch (prompt) {
+        case "fail this turn explicitly":
+            throw new Error("The controlled Agent rejected this turn.");
         case "draw a deployment diagram":
             return {
                 outcome: "hold",
