@@ -1,6 +1,12 @@
 import { Check, Copy } from "lucide-react";
 import { Lexer } from "marked";
-import { defaultRemarkPlugins, type MathPlugin, parseMarkdownIntoBlocks, Streamdown } from "streamdown";
+import {
+    defaultRehypePlugins,
+    defaultRemarkPlugins,
+    type MathPlugin,
+    parseMarkdownIntoBlocks,
+    Streamdown,
+} from "streamdown";
 import "streamdown/styles.css";
 import { type ComponentProps, type SVGProps, useEffect, useMemo, useState } from "react";
 import { dataTestId } from "@/data-testid";
@@ -21,6 +27,11 @@ const STREAMDOWN_PLUGINS = Object.freeze({
     renderers: [{ language: "mermaid", component: MermaidCodeBlock }],
 });
 const STREAMDOWN_TRANSLATIONS = Object.freeze({ copyCode: "Copy code" });
+// Without the raw-HTML parser, Streamdown preserves HTML nodes as literal text.
+// Keep sanitization and URL hardening for the elements produced by Markdown.
+const STREAMDOWN_REHYPE_PLUGINS = Object.entries(defaultRehypePlugins)
+    .filter(([name]) => name !== "raw")
+    .map(([, plugin]) => plugin);
 
 type StreamdownIconProps = SVGProps<SVGSVGElement> & { readonly size?: number };
 
@@ -320,6 +331,7 @@ export function AgentMarkdownContent({
             mode={streaming ? "streaming" : "static"}
             parseMarkdownIntoBlocksFn={parseStreamingMarkdownIntoBlocks}
             plugins={plugins}
+            rehypePlugins={STREAMDOWN_REHYPE_PLUGINS}
             remarkPlugins={remarkPlugins}
             translations={STREAMDOWN_TRANSLATIONS}
         >
