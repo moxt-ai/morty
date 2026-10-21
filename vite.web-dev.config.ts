@@ -55,6 +55,19 @@ export default defineConfig({
     resolve: {
         alias: [{ find: "@", replacement: fileURLToPath(new URL("./packages/web/src", import.meta.url)) }],
     },
+    // The dependency pre-bundler only replaces `process.env.NODE_ENV`, while the
+    // production build replaces the whole `process.env` with `{}`. Dependencies
+    // such as streamdown read `process.env.<flag>` at render time, which throws
+    // "process is not defined" in the browser when serving them unbundled.
+    // Replace `process.env` the same way the production build does so the dev
+    // app matches the deployed app.
+    optimizeDeps: {
+        rolldownOptions: {
+            transform: {
+                define: { "process.env": "{}" },
+            },
+        },
+    },
     server: {
         host: "localhost",
         port,
