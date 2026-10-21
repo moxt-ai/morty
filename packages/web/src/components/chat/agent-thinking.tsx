@@ -56,18 +56,33 @@ function ReasoningContent({ entry }: { readonly entry: ReasoningEntry }) {
 function ReasoningDisclosure({ active, entry }: { readonly active: boolean; readonly entry: ReasoningEntry }) {
     const disclosure = useRef<HTMLDetailsElement>(null);
     const [contentVisible, setContentVisible] = useState(active);
+    // `active` opens the disclosure while a turn is running. Once the user
+    // toggles it, that choice stays until `active` changes; the mount sync can
+    // otherwise land after the click and close what the user just opened.
+    const interaction = useRef({ active, userToggled: false });
     useEffect(() => {
-        if (disclosure.current !== null) {
-            disclosure.current.open = active;
-            setContentVisible(active);
+        if (interaction.current.active !== active) {
+            interaction.current = { active, userToggled: false };
         }
+        if (interaction.current.userToggled) {
+            return;
+        }
+        const element = disclosure.current;
+        if (element === null) {
+            return;
+        }
+        element.open = active;
+        setContentVisible(active);
     }, [active]);
     return (
         <details
             aria-label="Agent thinking"
             className="group/thinking min-w-0"
             data-testid={dataTestId.agentReasoning}
-            onToggle={(event) => setContentVisible(event.currentTarget.open)}
+            onToggle={(event) => {
+                interaction.current = { active, userToggled: true };
+                setContentVisible(event.currentTarget.open);
+            }}
             ref={disclosure}
         >
             <summary
