@@ -860,20 +860,16 @@ export function createSessionPaneModel(options: {
                                     });
                                     break;
                             }
-                            const executionPromise = connected.sessions.readSessionExecution(
+                            await dispatchProjection({ kind: "reconcile" }, connected, signal);
+                            signal.throwIfAborted();
+                            // Confirm execution after history is adopted. An earlier idle snapshot
+                            // cannot settle work that started while those pages were loading.
+                            const execution = await connected.sessions.readSessionExecution(
                                 sessionId,
                                 sessionIdentity,
                                 signal,
                             );
-                            // Reconciliation may abandon this speculative read when the
-                            // subscription tears down; keep its aborted rejection awaited.
-                            void executionPromise.then(
-                                () => undefined,
-                                () => undefined,
-                            );
-                            await dispatchProjection({ kind: "reconcile" }, connected, signal);
                             signal.throwIfAborted();
-                            const execution = await executionPromise;
                             const running = execution.turn;
                             if (running === null) {
                                 commitProjection({ kind: "execution-idle" });

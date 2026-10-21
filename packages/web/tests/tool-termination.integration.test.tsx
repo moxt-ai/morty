@@ -116,3 +116,74 @@ test("Given a stopped tool starts on an older history page, When the user loads 
     await assertSettled(reloaded);
     expect(reloaded.elementsByTestId(dataTestId.agentReplyStatus)).toHaveLength(1);
 });
+
+test("Given a running turn receives steering, When the user stops the original turn, Then tools created by the steered work are interrupted for every viewer", {
+    timeout: 30_000,
+}, async () => {
+    const app = await start("hold unfinished tools");
+    await tool(app, "Pending verification");
+    const viewer = await app.openViewer();
+    await tool(viewer, "Pending verification");
+    const instruction = "Add another verification";
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), instruction);
+    const queued = await app.queryElementByTestId(
+        dataTestId.queuedMessage,
+        (element) => element.textContent?.includes(instruction) === true,
+    );
+    await app.user.click(getByLabelText(queued, `Steer queued message: ${instruction}`));
+    await tool(app, "Steered verification");
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull());
+    await app.user.click(
+        await app.queryElementByTestId(
+            dataTestId.sendMessage,
+            (element) => element.getAttribute("aria-label") === "Stop agent output",
+        ),
+    );
+    for (const current of [app, viewer]) {
+        await assertSettled(current);
+        await current.waitForView(() =>
+            expect(getByLabelText(readTool(current, "Steered verification"), "Tool interrupted")).toBeDefined(),
+        );
+    }
+    await viewer.close();
+    const reloaded = await app.reload();
+    await reloaded.waitForView(() =>
+        expect(getByLabelText(readTool(reloaded, "Steered verification"), "Tool interrupted")).toBeDefined(),
+    );
+});
+
+test("Given an idle conversation is being opened by another viewer, When a new turn starts, Then its tools remain running in both viewers until stopped", {
+    timeout: 30_000,
+}, async () => {
+    const app = await start("complete unfinished tools");
+    await assertSettled(app);
+    const viewer = await app.openViewer();
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold unfinished tools");
+    for (const current of [app, viewer]) {
+        await current.waitForView(() => expect(current.elementsByTestId(dataTestId.agentToolCall)).toHaveLength(8));
+        const unfinished = current
+            .elementsByTestId(dataTestId.agentToolCall)
+            .filter((entry) => entry.getAttribute("aria-label") === "Tool: Unfinished verification");
+        const activeTool = unfinished[1];
+        if (activeTool === undefined) {
+            throw new Error("Missing the new turn's tool");
+        }
+        expect(getByLabelText(activeTool, "Tool running")).toBeDefined();
+    }
+    await app.user.click(
+        await app.queryElementByTestId(
+            dataTestId.sendMessage,
+            (element) => element.getAttribute("aria-label") === "Stop agent output",
+        ),
+    );
+    for (const current of [app, viewer]) {
+        await current.waitForView(() =>
+            expect(
+                current
+                    .elementsByTestId(dataTestId.agentToolCall)
+                    .filter((entry) => queryByLabelText(entry, "Tool interrupted") !== null),
+            ).toHaveLength(4),
+        );
+    }
+    await viewer.close();
+});

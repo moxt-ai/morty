@@ -396,6 +396,12 @@ type SessionEventResult =
     | { readonly kind: "consumed"; readonly index: number; readonly message: SessionMessage }
     | { readonly kind: "turn-started"; readonly commandId: string }
     | {
+          readonly kind: "turn-requested";
+          readonly commandId: string;
+          readonly executionCommandId: string;
+          readonly message: SessionMessage | null;
+      }
+    | {
           readonly kind: "constructed";
           readonly firstEvent: FirstEventProvenance;
           readonly message: SessionMessage;
@@ -460,7 +466,8 @@ interface ReducedSessionMessage {
 type ReducedSessionEntry =
     | ReducedSessionMessage
     | { readonly kind: "turn-started"; readonly commandId: string }
-    | { readonly kind: "execution-idle" };
+    | { readonly kind: "execution-idle" }
+    | { readonly kind: "execution-owner"; readonly commandId: string; readonly executionCommandId: string };
 
 export interface SessionMessageReduction {
     readonly entries: readonly ReducedSessionEntry[];
@@ -497,18 +504,23 @@ function consumeSessionEvent(
         }
         if (lifecycle.kind === "prompt.requested") {
             const contents = lifecycle.content.filter((content) => !isBotInstructions(content)).map(userDisplayContent);
-            return contents.length === 0
-                ? { kind: "skipped" }
-                : {
-                      firstEvent: "known",
-                      kind: "constructed",
-                      message: {
-                          commandId: lifecycle.commandId,
-                          contents,
-                          firstEvent: event,
-                          role: "user",
-                      },
-                  };
+            return {
+                kind: "turn-requested",
+                commandId: lifecycle.commandId,
+                executionCommandId:
+                    lifecycle.disposition === "steer"
+                        ? (lifecycle.targetCommandId ?? lifecycle.commandId)
+                        : lifecycle.commandId,
+                message:
+                    contents.length === 0
+                        ? null
+                        : {
+                              commandId: lifecycle.commandId,
+                              contents,
+                              firstEvent: event,
+                              role: "user",
+                          },
+            };
         }
         return { kind: "skipped" };
     }
@@ -600,6 +612,23 @@ function applySessionEvent(
     result: SessionEventResult,
 ): readonly ReducedSessionEntry[] {
     switch (result.kind) {
+        case "turn-requested": {
+            const withOwner: readonly ReducedSessionEntry[] = [
+                ...entries,
+                {
+                    kind: "execution-owner",
+                    commandId: result.commandId,
+                    executionCommandId: result.executionCommandId,
+                },
+            ];
+            return result.message === null
+                ? withOwner
+                : applySessionEvent(withOwner, event, {
+                      kind: "constructed",
+                      firstEvent: "known",
+                      message: result.message,
+                  });
+        }
         case "turn-started":
             return [...entries, result];
         case "consumed": {
@@ -697,6 +726,7 @@ export function prependSessionMessageEvents(
 export function sessionReductionMessages(reduction: SessionMessageReduction): readonly SessionMessage[] {
     const messages: SessionMessage[] = [];
     const unfinished = new Map<string | null, number[]>();
+    const executionOwners = new Map<string, string>();
     let turn: { readonly kind: "unknown" } | { readonly kind: "active" | "terminal"; readonly commandId: string } = {
         kind: "unknown",
     };
@@ -715,6 +745,10 @@ export function sessionReductionMessages(reduction: SessionMessageReduction): re
         }
     };
     for (const entry of reduction.entries) {
+        if (entry.kind === "execution-owner") {
+            executionOwners.set(entry.commandId, entry.executionCommandId);
+            continue;
+        }
         if (entry.kind === "execution-idle") {
             for (const indexes of unfinished.values()) {
                 interrupt(indexes);
@@ -724,7 +758,8 @@ export function sessionReductionMessages(reduction: SessionMessageReduction): re
             continue;
         }
         if (entry.kind === "turn-started") {
-            turn = { kind: "active", commandId: entry.commandId };
+            // Steering has its own command lifecycle but shares the target's execution.
+            turn = { kind: "active", commandId: executionOwners.get(entry.commandId) ?? entry.commandId };
             continue;
         }
         // A bare tool tail cannot render until the older page containing its start arrives.
