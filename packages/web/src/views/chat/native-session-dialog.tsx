@@ -4,9 +4,7 @@ import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
 import { dataTestId } from "../../data-testid.ts";
-import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { createNativeSessionStore } from "../../view-models/chat/native-session-store.ts";
-import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 import { MobiusSessionMessage } from "./mobius-session-message.tsx";
 
 export type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
