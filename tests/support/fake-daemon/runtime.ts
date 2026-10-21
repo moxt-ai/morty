@@ -11,6 +11,7 @@ import {
 } from "@moxt-ai/mobius-test-support/fake-daemon";
 import * as v from "valibot";
 import { createInteractionAgent } from "./interaction-agent.ts";
+import { createSettingsAgent } from "./settings-agent.ts";
 
 type TestServerApp = { readonly request: (request: Request) => Response | Promise<Response> };
 
@@ -77,7 +78,13 @@ export function createMortyFakeDaemon(behavior: ControlledAgentBehavior, workspa
     const harness = createFakeDaemon(
         workspace === undefined ? behavior : { ...behavior, reply: workspaceReply(behavior, workspace) },
     );
-    return behavior.agentId === "interaction-test" ? { ...harness, agents: [createInteractionAgent()] } : harness;
+    if (behavior.agentId === "interaction-test") {
+        return { ...harness, agents: [createInteractionAgent()] };
+    }
+    if (behavior.agentId === "settings-test") {
+        return { ...harness, agents: [createSettingsAgent()] };
+    }
+    return harness;
 }
 
 export async function connectControlledAgentRuntime(options: {
