@@ -52,7 +52,13 @@ export async function createTestApp(
         readonly agent?: { readonly id: string; readonly label: string };
         readonly nativeSessionIds?: ReadonlySet<string>;
         readonly page?:
-            | { readonly kind: "continue"; readonly harness: string; readonly sessionId: string }
+            | {
+                  readonly kind: "continue";
+                  readonly harness: string;
+                  readonly sessionId: string;
+                  /** Replaces the created transfer code, for example with one that cannot be redeemed. */
+                  readonly code?: (application: Application) => string;
+              }
             | { readonly kind: "bootstrap"; readonly identity?: boolean }
             | { readonly kind: "managed-session"; readonly sessionId: string }
             | { readonly kind: "morty" };
@@ -69,6 +75,9 @@ export async function createTestApp(
         const transfer = new URL(await current.createTransferUrl());
         transfer.searchParams.set("harness", page.harness);
         transfer.searchParams.set("sessionId", page.sessionId);
+        if (page.code !== undefined) {
+            transfer.hash = `code=${page.code(current)}`;
+        }
         window.location.href = transfer.href;
         authenticationRouter.history.replace(`${transfer.pathname}${transfer.search}${transfer.hash}`);
     } else if (page.kind === "bootstrap") {

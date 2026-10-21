@@ -20,13 +20,10 @@ import { Button } from "../../components/ui/cloud-button.tsx";
 import { LinkButton } from "../../components/ui/link-button.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
-import { registerMortyDebugSession } from "../../debug-bridge.ts";
-import { type BotChatApi, connectedChatRuntimeAgents } from "../../services/chat/bot-chat-api.ts";
+import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { QueuedDraftMessage } from "../../view-models/chat/conversation-creation-machine.ts";
-import { createBrowserFilePreviewStore } from "../../view-models/chat/file-preview-store.ts";
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
-import { sessionDebugBlocks } from "../../view-models/chat/session-debug-blocks.ts";
 import type { UnconfirmedSubmission } from "../../view-models/chat/session-delivery-store.ts";
 import {
     createSessionPaneModel,
@@ -298,16 +295,15 @@ export function MobiusSessionPane({
             onInitialMessageDelivered,
             onInitialMessageRecoveryCleared,
             onInitialMessageUnconfirmed,
+            onStatusChange: (status) => onStatusChange(sessionId, status),
             onTitleChange,
         }),
     );
     const model = useStore(pane.store);
-    const [filePreview] = useState(() => createBrowserFilePreviewStore(pane.readFile));
-    const preview = useStore(filePreview);
+    const preview = useStore(pane.filePreview);
     const delivery = useStore(pane.delivery);
     const messageQueue = useStore(pane.messageQueue);
     const taskControls = useStore(pane.tasks);
-    const lifetime = useRef<AbortController | null>(null);
     const messageList = useRef<HTMLDivElement | null>(null);
     const titleInput = useRef<HTMLInputElement | null>(null);
     const titleEditorOpen = model.titleEdit.kind !== "closed";
@@ -317,9 +313,7 @@ export function MobiusSessionPane({
             titleInput.current?.select();
         }
     }, [titleEditorOpen]);
-    const [harnesses, setHarnesses] = useState<
-        readonly { readonly agentRef?: string; readonly label: string; readonly value: string }[]
-    >([{ agentRef: session.agentRef, label: session.agentRef, value: session.agentRef }]);
+    const harnesses = model.harnesses;
     const readImage = useCallback<MarkdownImageReader>(
         async (path, signal) => {
             for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -336,40 +330,22 @@ export function MobiusSessionPane({
         [pane],
     );
 
-    useEffect(() => {
-        const controller = new AbortController();
-        lifetime.current = controller;
-        void pane.store.getState().connect(controller.signal);
-        return () => {
-            filePreview.getState().close();
-            controller.abort();
-            if (lifetime.current === controller) {
-                lifetime.current = null;
-            }
-        };
-    }, [filePreview, pane]);
-    useEffect(
-        () =>
-            registerMortyDebugSession({
-                sessionId,
-                blocks: () => sessionDebugBlocks(pane.store.getState()),
-            }),
-        [pane, sessionId],
-    );
+    // The model owns the session connection through the same ref-cleanup
+    // protocol the chat root uses: attach starts it, the cleanup detaches,
+    // and the model's WeakSet latch ignores re-renders of the same element.
+
     const loadOlderMessages = useCallback(
         async (signal: AbortSignal) => await pane.store.getState().loadOlderMessages(signal),
         [pane],
     );
 
     const run = (action: (signal: AbortSignal) => Promise<void>) => {
-        const controller = lifetime.current;
-        if (controller !== null) {
-            void action(controller.signal).catch((cause: unknown) => {
-                if (!controller.signal.aborted) {
-                    reportApplicationError(cause, "session-pane-action");
-                }
-            });
-        }
+        const signal = pane.operationsSignal();
+        void action(signal).catch((cause: unknown) => {
+            if (!signal.aborted) {
+                reportApplicationError(cause, "session-pane-action");
+            }
+        });
     };
     const runAndFollow = (action: (signal: AbortSignal) => Promise<void>) => {
         if (messageList.current !== null) {
@@ -378,61 +354,31 @@ export function MobiusSessionPane({
         run(action);
     };
     const respondToPermission = async (response: PermissionInteractionResponse): Promise<void> => {
-        const controller = lifetime.current;
-        if (controller === null) {
-            throw new Error("The Session is not connected.");
-        }
-        await pane.store.getState().respondToPermission(response, controller.signal);
+        await pane.store.getState().respondToPermission(response, pane.operationsSignal());
     };
     const respondToElicitation = async (response: ElicitationInteractionResponse): Promise<void> => {
-        const controller = lifetime.current;
-        if (controller === null) {
-            throw new Error("The Session is not connected.");
-        }
-        await pane.store.getState().respondToElicitation(response, controller.signal);
+        await pane.store.getState().respondToElicitation(response, pane.operationsSignal());
     };
     const presentation = sessionPanePresentation(model, delivery, taskControls, messageQueue);
     const renderItems = sessionRenderItems(model.messages);
-    useEffect(() => {
-        onStatusChange(sessionId, model.activity);
-    }, [model.activity, onStatusChange, sessionId]);
-    useEffect(() => {
-        const controller = new AbortController();
-        // The harness list is display-only in an existing conversation: every
-        // entry is disabled, so a failed load just leaves the current harness.
-        requests
-            .runtimeConfiguration(botId, controller.signal)
-            .then((configuration) => {
-                setHarnesses(
-                    connectedChatRuntimeAgents(configuration.runtime).map((agent) => ({
-                        agentRef: agent.agentRef,
-                        label: agent.label,
-                        value: `${agent.runtimeId}:${agent.agentRef}`,
-                    })),
-                );
-            })
-            .catch((cause: unknown) => {
-                if (!controller.signal.aborted) {
-                    reportApplicationError(cause, "session-pane-harnesses");
-                }
-            });
-        return () => controller.abort();
-    }, [botId, requests]);
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
         run(async (signal) => await pane.store.getState().configure(option, value, booleanValue, signal));
     const openLocalFile = useCallback(
         (path: string) => {
-            const controller = lifetime.current;
-            if (controller !== null) {
-                void filePreview.getState().open(path, controller.signal);
-            }
+            void pane.filePreview.getState().open(path, pane.operationsSignal());
         },
-        [filePreview],
+        [pane],
     );
+    const reloadLocalFile = useCallback(() => {
+        void pane.filePreview.getState().reload(pane.operationsSignal());
+    }, [pane]);
 
     return (
         <>
-            <section className="flex min-h-0 min-w-0 flex-1 animate-cloud-enter flex-col motion-reduce:animate-none">
+            <section
+                className="flex min-h-0 min-w-0 flex-1 animate-cloud-enter flex-col motion-reduce:animate-none"
+                ref={pane.onAttach}
+            >
                 <header className="flex h-12 shrink-0 items-center gap-1 border-b border-border/80 px-4 sm:px-8 lg:px-12">
                     {model.titleEdit.kind === "closed" ? (
                         <h2
@@ -496,6 +442,7 @@ export function MobiusSessionPane({
                     role="log"
                     container={messageList}
                     followThreshold={80}
+                    followRevision={null}
                     aria-label="Messages"
                     className="min-h-0 flex-1 overflow-y-auto px-4 py-6 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10 lg:px-12"
                 >
@@ -703,7 +650,16 @@ export function MobiusSessionPane({
                     )}
                 </BotChatComposer>
             </section>
-            <FilePreview onClose={filePreview.getState().close} state={preview.state} />
+            <FilePreview
+                onClose={preview.close}
+                layout={preview.layout}
+                onPanelAttach={preview.onPanelAttach}
+                onToggleExpanded={preview.toggleExpanded}
+                onHtmlAttach={preview.onHtmlAttach}
+                onHtmlView={preview.showHtml}
+                onReload={reloadLocalFile}
+                state={preview.state}
+            />
         </>
     );
 }

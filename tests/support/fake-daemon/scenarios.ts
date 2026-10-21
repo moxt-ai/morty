@@ -1,4 +1,5 @@
 import type { HarnessOutput, HarnessReplyPlan } from "@moxt-ai/mobius-test-support/fake-daemon";
+import { interactiveHtml } from "./html-preview.ts";
 
 const FILE_EXPLORER_SOURCE = [
     "export function FileExplorer() {",
@@ -13,6 +14,7 @@ const FILE_EXPLORER_SOURCE = [
 ].join("\n");
 
 export const mortyFiles = new Map<string, { readonly content: string | Uint8Array; readonly mediaType: string }>([
+    ["/workspace/delivery-review.html", { content: interactiveHtml, mediaType: "text/html" }],
     [
         "/workspace/generated-picture.png",
         {
@@ -121,6 +123,25 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
             };
         case "wait for steering":
             return { outcome: "hold", output: [{ kind: "text", text: "Waiting for steering" }] };
+        case "compact the conversation":
+            return {
+                outcome: "complete",
+                output: [
+                    { kind: "compaction", summary: "The user explored the session timeline.\nContext was summarized." },
+                    { kind: "text", text: "Context compacted; continuing with the summary." },
+                ],
+            };
+        case "compact with summary blocks":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        blocks: ["Early discussion covered the page merge. ", "Later discussion covered the summary."],
+                        kind: "compaction-summary-blocks",
+                    },
+                    { kind: "text", text: "Compaction replaced the summary." },
+                ],
+            };
         case "hold after first delta":
             return {
                 outcome: "hold",
@@ -201,6 +222,58 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
             };
         case "many session events":
             return manySessionEvents();
+        case "many session events then compact":
+            return {
+                outcome: "complete",
+                output: [
+                    ...manySessionEvents().output,
+                    { kind: "compaction", summary: "The older history was compacted.\nKeep this text." },
+                ],
+            };
+        case "interleaved compaction hold":
+            // Opens a compaction, emits a message between the start and the
+            // settle, then holds the turn so the test can settle separately.
+            return {
+                outcome: "hold",
+                output: [
+                    { kind: "text", text: "Reply before the interleaved compaction." },
+                    { kind: "compaction-start" },
+                    { kind: "text", text: "Message between compaction start and settle." },
+                ],
+            };
+        case "interleaved compaction finish":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "compaction-finish",
+                        summary: "First half of the interleaved summary.\nSecond half of the interleaved summary.",
+                    },
+                ],
+            };
+        case "interleave padding one":
+        case "interleave padding two":
+            return {
+                outcome: "complete",
+                output: Array.from(
+                    { length: 5 },
+                    (_, index): HarnessOutput => ({
+                        kind: "text",
+                        text: `Interleave reply ${index.toString()}.`,
+                    }),
+                ),
+            };
+        case "interleave padding three":
+            return {
+                outcome: "complete",
+                output: Array.from(
+                    { length: 4 },
+                    (_, index): HarnessOutput => ({
+                        kind: "text",
+                        text: `Interleave reply tail ${index.toString()}.`,
+                    }),
+                ),
+            };
         case "show generated picture":
             return {
                 outcome: "complete",
@@ -259,6 +332,26 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                         text: "[Open source](file:///workspace/edit-tool-presentation.tsx)",
                     },
                 ],
+            };
+        case "show interactive result":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "text",
+                        text: "[Open delivery review](file:///workspace/delivery-review.html)",
+                    },
+                ],
+            };
+        case "show missing result":
+            return {
+                outcome: "complete",
+                output: [{ kind: "text", text: "[Open missing result](file:///workspace/missing-result.html)" }],
+            };
+        case "show preview image":
+            return {
+                outcome: "complete",
+                output: [{ kind: "text", text: "[Open picture](file:///workspace/generated-picture.png)" }],
             };
         case "show live output in order":
             return {

@@ -1,6 +1,7 @@
 import {
     type MobiusClient,
     MobiusElicitationResponseRequest,
+    MobiusError,
     MobiusPageRequest,
     MobiusPermissionResponseRequest,
     type MobiusSessionEventObserver,
@@ -9,7 +10,8 @@ import {
 } from "@moxt-ai/mobius-sdk";
 import { decodeIdentifier, type SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
-import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import { registerMortyDebugSession } from "../../debug-bridge.ts";
+import { type BotChatApi, connectedChatRuntimeAgents } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
 import {
     centralIndexedDB,
@@ -19,8 +21,10 @@ import {
 import { centralSessionStorage, sessionDraftEntry } from "../../services/session-storage/central-session-storage.ts";
 import type { Clock } from "../../services/time/clock.ts";
 import { formatError, isRetryableRuntimeConnectionFailure } from "../format-error.ts";
+import { reportApplicationError } from "../report-error.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
+import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { createSessionActiveTurn, type SessionActiveTurn } from "./session-active-turn.ts";
 import {
@@ -29,6 +33,7 @@ import {
     transitionSessionActivity,
     workingCommandId,
 } from "./session-activity-machine.ts";
+import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import { createSessionDeliveryStore, type Journal, type SessionDeliveryStore } from "./session-delivery-store.ts";
 import { createSessionMessageQueueStore, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
 import type {
@@ -187,6 +192,8 @@ export interface SessionPaneStore {
     readonly interactions: readonly LocalInteraction[];
     readonly operation: Operation;
     readonly activity: SessionActivityState;
+    /** Display-only harness list; loading failures leave the current harness. */
+    readonly harnesses: readonly { readonly agentRef?: string; readonly label: string; readonly value: string }[];
     readonly connect: (signal: AbortSignal) => Promise<void>;
     readonly retryNow: () => void;
     readonly loadOlderMessages: (signal: AbortSignal) => Promise<void>;
@@ -363,7 +370,7 @@ export function createSessionPaneModel(options: {
     readonly clock: Clock;
     readonly session: OpenMobiusSession;
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "connectSession">;
+    readonly requests: Pick<BotChatApi, "connectSession" | "runtimeConfiguration">;
     readonly initialMessage?: QueuedDraftMessage | undefined;
     /**
      * A previous pane's unconfirmed first-message submission. Adopted as the
@@ -377,6 +384,8 @@ export function createSessionPaneModel(options: {
     readonly onInitialMessageRecoveryCleared?: ((commandId: string) => void) | undefined;
     /** Invoked when the submission of the queued first message was not confirmed. */
     readonly onInitialMessageUnconfirmed?: ((journal: Journal) => void) | undefined;
+    /** Reports session activity transitions, such as a running turn, to the owner. */
+    readonly onStatusChange?: ((status: SessionActivityState) => void) | undefined;
     readonly onTitleChange: (sessionId: string, title: string) => void;
 }) {
     const { session, botId, requests, clock } = options;
@@ -615,6 +624,7 @@ export function createSessionPaneModel(options: {
             options: session.result.ready.configOptions,
             draft: options.initialMessage?.content ?? centralSessionStorage.read(draftEntry) ?? "",
             attachments: options.initialMessage?.attachments ?? [],
+            harnesses: [{ agentRef: session.agentRef, label: session.agentRef, value: session.agentRef }],
             interactions: [],
             operation: { kind: "idle" },
             activity: initialActivity,
@@ -1395,22 +1405,94 @@ export function createSessionPaneModel(options: {
             stop: async (signal) => await tasks.getState().stop(signal),
         };
     });
+    // Report activity transitions to the owner without a component effect;
+    // the subscription lives exactly as long as this pane model.
+    let reportedStatus: SessionActivityState | null = null;
+    store.subscribe((state) => {
+        if (state.activity !== reportedStatus) {
+            reportedStatus = state.activity;
+            options.onStatusChange?.(state.activity);
+        }
+    });
+    // The pane's connection lifetime: attach starts connecting with its own
+    // signal, detach aborts it. The view drives this through a ref callback,
+    // so no component effect owns the session connection and nothing starts
+    // during render.
+    const attachedViews = new WeakSet<HTMLElement>();
+    const connection = new AbortController();
+    // The harness list is display-only in an existing conversation: every
+    // entry is disabled, so a failed load just leaves the current harness.
+    const harnessController = new AbortController();
+    requests
+        .runtimeConfiguration(botId, harnessController.signal)
+        .then((configuration) => {
+            store.setState({
+                harnesses: connectedChatRuntimeAgents(configuration.runtime).map((agent) => ({
+                    agentRef: agent.agentRef,
+                    label: agent.label,
+                    value: `${agent.runtimeId}:${agent.agentRef}`,
+                })),
+            });
+        })
+        .catch((cause: unknown) => {
+            if (!harnessController.signal.aborted) {
+                reportApplicationError(cause, "session-pane-harnesses");
+            }
+        });
+    const readFile = async (path: string, signal: AbortSignal) => {
+        signal.throwIfAborted();
+        if (client === null) {
+            throw new MobiusError("session_not_connected", "The Session is not connected.");
+        }
+        return await client.sessions.readFile(
+            sessionId,
+            path,
+            AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
+            32 * 1024 * 1024,
+        );
+    };
+    const filePreview = createBrowserFilePreviewStore(readFile);
+    /**
+     * Announced with the pane's attached root element, following React's
+     * ref-cleanup protocol: the view hands it straight to its root element's
+     * ref. Attach starts the session connection; the returned function stops
+     * it. A WeakSet latches the node so a re-render of the same element cannot
+     * detach and reattach the connection.
+     */
+    const onAttach = (node: HTMLElement): (() => void) => {
+        if (attachedViews.has(node)) {
+            return () => {};
+        }
+        attachedViews.add(node);
+        const unregisterDebug = registerMortyDebugSession({
+            sessionId,
+            blocks: () => sessionDebugBlocks(store.getState()),
+        });
+        void store
+            .getState()
+            .connect(connection.signal)
+            .catch((cause: unknown) => {
+                if (!connection.signal.aborted) {
+                    reportApplicationError(cause, "session-pane-connect");
+                }
+            });
+        return () => {
+            attachedViews.delete(node);
+            unregisterDebug();
+            filePreview.getState().close();
+            harnessController.abort(new Error("The session pane detached."));
+            connection.abort(new Error("The session pane detached."));
+        };
+    };
     return {
         store,
         delivery,
+        filePreview,
         messageQueue,
         tasks,
-        readFile: async (path: string, signal: AbortSignal) => {
-            signal.throwIfAborted();
-            if (client === null) {
-                throw new Error("The Session is not connected.");
-            }
-            return await client.sessions.readFile(
-                sessionId,
-                path,
-                AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
-                32 * 1024 * 1024,
-            );
-        },
+        onAttach,
+        /** The signal for view-triggered operations while the pane is attached. */
+        operationsSignal: () => connection.signal,
+        readFile,
     };
 }

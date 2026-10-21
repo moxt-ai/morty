@@ -13,7 +13,7 @@ catalog:
   '@biomejs/biome': 2.5.12
   '@clerk/backend': 3.17.1
   '@cloudflare/vite-plugin': 1.54.4
-  '@playwright/test': 1.63.0
+  '@playwright/test': 1.64.1
   '@radix-ui/react-select': 2.3.7
   '@sentry/react': ^10.73.0
   '@sentry/vite-plugin': ^5.4.0
@@ -44,7 +44,7 @@ catalog:
   marked: 18.1.1
   miniflare: 5.20260903.0-alpha
   pino: ^10.3.1
-  playwright-core: ^1.63.0
+  playwright-core: ^1.64.1
   pngjs: ^7.0.0
   qrcode: ^1.5.4
   radix-ui: ^1.6.7

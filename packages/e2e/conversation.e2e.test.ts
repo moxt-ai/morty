@@ -44,7 +44,7 @@ test("Given a linked TypeScript file longer than the preview, When the user open
     const messagesBoxBefore = await messages.boundingBox();
     await openSource.click();
 
-    const preview = page.getByRole("complementary", { name: "Local file preview" });
+    const preview = page.getByRole("dialog", { name: "Local file preview" });
     await expect(preview).toContainText("export function FileExplorer");
     const highlightedTokens = preview.locator('code span[style*="--sdm-c"]');
     await expect(highlightedTokens.first()).toBeVisible();

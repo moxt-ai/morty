@@ -17,7 +17,23 @@ type ContinueState =
           readonly handoff: SessionHandoff;
       }
     | {
+          readonly kind: "session-resuming";
+          readonly handoff: SessionHandoff;
+          /** The redeemed access this attempt opens the session with. */
+          readonly identity: AnonymousIdentity;
+      }
+    | {
           readonly kind: "session-failed";
+          readonly handoff: SessionHandoff;
+          readonly message: string;
+          /**
+           * The redeemed access. Opening the original session failed, but this
+           * access still lets the user enter Morty home instead.
+           */
+          readonly identity: AnonymousIdentity;
+      }
+    | {
+          readonly kind: "redeem-failed";
           readonly code: string;
           readonly handoff: SessionHandoff;
           readonly message: string;
@@ -30,6 +46,7 @@ export interface ContinueStore {
     readonly state: ContinueState;
     readonly redeem: (signal: AbortSignal) => Promise<void>;
     readonly retry: () => void;
+    readonly enterMorty: () => void;
     readonly diagnostics: DaemonDiagnosticsSource | null;
 }
 
@@ -66,66 +83,66 @@ function identityDestination(path: "/" | "/chat", identity: AnonymousIdentity): 
     return url;
 }
 
+/**
+ * The Project a well-formed transfer code names, or null when the code cannot
+ * name one. A code that was already redeemed in this browser still names its
+ * Project, which is what lets a dead link fall back to the access it issued.
+ */
+function transferCodeProject(code: string): string | null {
+    const parts = code.split(".");
+    return parts.length === 3 && parts[0] === "mobius_transfer_v2" ? (parts[1] ?? null) : null;
+}
+
+/**
+ * Redeeming a transfer code is the only way to obtain access for a link that
+ * was never opened in this browser. Once a link has been redeemed here, its
+ * access stays usable even after the link itself expires or is revoked, so a
+ * failed redemption falls back to the access this browser still holds for the
+ * same Project.
+ */
 export const createContinueStore = (fetchRequest: (request: Request) => Promise<Response>) => {
-    return createStore<ContinueStore>()((set, get) => ({
-        diagnostics: null,
-        retry: () => {
-            const state = get().state;
-            if (state.kind === "session-failed") {
-                set({
-                    state: {
-                        code: state.code,
-                        handoff: state.handoff,
-                        kind: "session-opening",
-                    },
-                });
-            }
-        },
-        state: initialState(),
-        redeem: async (signal) => {
-            const state = get().state;
-            if (state.kind !== "session-opening" && state.kind !== "identity-redeeming") {
-                return;
-            }
-            const api = new AnonymousIdentityApi({
+    let attempt: AbortController | null = null;
+    const store = createStore<ContinueStore>()((set, get) => {
+        /**
+         * Opens the handoff session with an already-redeemed access. The
+         * identity stays in the resulting states, so a retry reuses it instead
+         * of redeeming the transfer code again.
+         */
+        const openSession = async (
+            handoff: SessionHandoff,
+            identity: AnonymousIdentity,
+            signal: AbortSignal,
+        ): Promise<void> => {
+            set({
+                diagnostics: null,
+                state: { handoff, identity, kind: "session-resuming" },
+            });
+            const chat = new BotChatApi({
                 fetchRequest,
                 origin: window.location.origin,
+                projectId: identity.projectId,
+                getToken: async () => identity.token,
+                subscribe: async () => {
+                    throw new Error("Session status updates are unavailable while continuing this session.");
+                },
+                waitForChange: async () => {
+                    throw new Error("Runtime updates are unavailable while continuing this session.");
+                },
             });
-            set({ diagnostics: null });
-            let operation = "redeem";
+            set({
+                diagnostics: {
+                    botId: identity.botId,
+                    sessionId: null,
+                    nativeSessionId: handoff.sessionId,
+                    read: (parent) => chat.daemonDiagnostics(identity.botId, parent),
+                    readNetwork: (parent) => chat.networkDiagnostic(identity.botId, parent),
+                },
+            });
             try {
-                const identity = await api.redeemTransfer(state.code, signal);
-                signal.throwIfAborted();
-                if (state.kind === "identity-redeeming") {
-                    window.location.replace(identityDestination("/", identity));
-                    return;
-                }
-                const chat = new BotChatApi({
-                    fetchRequest,
-                    origin: window.location.origin,
-                    projectId: identity.projectId,
-                    getToken: async () => identity.token,
-                    subscribe: async () => {
-                        throw new Error("Session status updates are unavailable while continuing this session.");
-                    },
-                    waitForChange: async () => {
-                        throw new Error("Runtime updates are unavailable while continuing this session.");
-                    },
-                });
-                set({
-                    diagnostics: {
-                        botId: identity.botId,
-                        sessionId: null,
-                        nativeSessionId: state.handoff.sessionId,
-                        read: (parent) => chat.daemonDiagnostics(identity.botId, parent),
-                        readNetwork: (parent) => chat.networkDiagnostic(identity.botId, parent),
-                    },
-                });
-                operation = "continue-native-session";
                 const session = await chat.continueNativeSession(
                     identity.botId,
-                    state.handoff.harness,
-                    state.handoff.sessionId,
+                    handoff.harness,
+                    handoff.sessionId,
                     "import",
                     signal,
                 );
@@ -134,22 +151,116 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 destination.searchParams.set("sessionId", session.result.ready.sessionId);
                 window.location.replace(destination);
             } catch (cause) {
-                if (!signal.aborted) {
-                    recordBrowserError(operation, cause);
-                    const message = formatError(cause, "This transfer link is unavailable.");
-                    set({
-                        state:
-                            state.kind === "session-opening"
-                                ? {
-                                      code: state.code,
-                                      handoff: state.handoff,
-                                      kind: "session-failed",
-                                      message,
-                                  }
-                                : { kind: "failed", message },
-                    });
+                if (signal.aborted) {
+                    return;
                 }
+                recordBrowserError("continue-native-session", cause);
+                set({
+                    state: {
+                        handoff,
+                        identity,
+                        kind: "session-failed",
+                        message: formatError(cause, "This transfer link is unavailable."),
+                    },
+                });
             }
-        },
-    }));
+        };
+        return {
+            diagnostics: null,
+            enterMorty: () => {
+                const state = get().state;
+                if (state.kind === "session-failed") {
+                    window.location.replace(identityDestination("/", state.identity));
+                }
+            },
+            retry: () => {
+                const state = get().state;
+                if (state.kind !== "session-failed" && state.kind !== "redeem-failed") {
+                    return;
+                }
+                attempt?.abort(new Error("The transfer retry replaced this attempt."));
+                attempt = new AbortController();
+                if (state.kind === "session-failed") {
+                    // The redeemed access, not the transfer code, owns this
+                    // retry: the link may be gone while the access still works.
+                    void openSession(state.handoff, state.identity, attempt.signal);
+                    return;
+                }
+                set({
+                    state: {
+                        code: state.code,
+                        handoff: state.handoff,
+                        kind: "session-opening",
+                    },
+                });
+                void get().redeem(attempt.signal);
+            },
+            state: initialState(),
+            redeem: async (signal) => {
+                const state = get().state;
+                if (state.kind !== "session-opening" && state.kind !== "identity-redeeming") {
+                    return;
+                }
+                const api = new AnonymousIdentityApi({
+                    fetchRequest,
+                    origin: window.location.origin,
+                });
+                set({ diagnostics: null });
+                let identity: AnonymousIdentity;
+                try {
+                    identity = await api.redeemTransfer(state.code, signal);
+                    signal.throwIfAborted();
+                } catch (cause) {
+                    if (signal.aborted) {
+                        return;
+                    }
+                    recordBrowserError("redeem", cause);
+                    const message = formatError(cause, "This transfer link is unavailable.");
+                    if (state.kind === "identity-redeeming") {
+                        set({ state: { kind: "failed", message } });
+                        return;
+                    }
+                    // A transfer link can expire or be revoked while the access
+                    // it already redeemed stays usable. Reuse that access for
+                    // the same Project so Morty home stays reachable instead of
+                    // stranding the user on a dead link.
+                    let retained: AnonymousIdentity | null;
+                    try {
+                        retained = await api.loadExisting(signal);
+                        signal.throwIfAborted();
+                    } catch (retainedCause) {
+                        if (signal.aborted) {
+                            return;
+                        }
+                        recordBrowserError("load-retained-identity", retainedCause);
+                        retained = null;
+                    }
+                    if (retained !== null && retained.projectId === transferCodeProject(state.code)) {
+                        await openSession(state.handoff, retained, signal);
+                        return;
+                    }
+                    set({
+                        state: {
+                            code: state.code,
+                            handoff: state.handoff,
+                            kind: "redeem-failed",
+                            message,
+                        },
+                    });
+                    return;
+                }
+                if (state.kind === "identity-redeeming") {
+                    window.location.replace(identityDestination("/", identity));
+                    return;
+                }
+                await openSession(state.handoff, identity, signal);
+            },
+        };
+    });
+    // The transfer page's lifetime starts the redeem as soon as the page's
+    // store exists; the first state write happens after its first await, so
+    // creation stays render-safe.
+    attempt = new AbortController();
+    void store.getState().redeem(attempt.signal);
+    return store;
 };

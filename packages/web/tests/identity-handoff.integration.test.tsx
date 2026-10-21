@@ -20,6 +20,7 @@ test("Given a native session handoff, When the page loads, Then it tells the use
     expect(document.body.textContent).toContain("Opening the original session in Morty.");
     expect(queryByRole(document.body, "button", { name: "Open session" })).toBeNull();
     expect(queryByRole(document.body, "button", { name: "Fork session" })).toBeNull();
+    expect(queryByRole(document.body, "button", { name: "Go to Morty" })).toBeNull();
     expect(queryByRole(document.body, "img", { name: "QR code to continue on another device" })).toBeNull();
     expect(queryByRole(document.body, "button", { name: "Show QR code" })).toBeNull();
 });
@@ -116,14 +117,64 @@ test("Given opening a native session fails, When the user tries again, Then the 
             sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
         },
     });
-    await app.waitForView(() => getByRole(document.body, "alert"));
-
-    await app.user.click(getByRole(document.body, "button", { name: "Try again" }));
-
-    expect(getByRole(document.body, "status", { name: "Opening session" })).toBeInstanceOf(HTMLElement);
     await app.waitForView(() => {
         expect(getByRole(document.body, "alert").textContent).toContain("handoff harness is unavailable");
     });
+
+    // The retry must reach the open-session step again: once a Runtime answers
+    // for the redeemed access, the failure moves from the missing Agent to the
+    // missing native session.
+    await app.connectAgent({ id: "pi", label: "Pi" });
+    await app.user.click(getByRole(document.body, "button", { name: "Try again" }));
+
+    await app.waitForView(() => {
+        expect(getByRole(document.body, "alert").textContent).toContain("The native session was not found");
+    });
+    expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
+});
+
+test("Given the Morty access was redeemed and opening the original session failed, When the user views the failure page, Then they see the reason, retry, and an entry into Morty", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({
+        agent: { id: "pi", label: "Pi" },
+        connectAgent: true,
+        page: {
+            harness: "pi",
+            kind: "continue",
+            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
+        },
+    });
+
+    const alert = await app.waitForView(() => getByRole(document.body, "alert"));
+    expect(alert.textContent).toContain("The native session was not found");
+    expect(getByRole(document.body, "heading", { name: "Continue native session" })).toBeInstanceOf(HTMLElement);
+    expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
+    expect(getByRole(document.body, "button", { name: "Go to Morty" })).toBeInstanceOf(HTMLButtonElement);
+
+    await app.user.click(getByRole(document.body, "button", { name: "Try again" }));
+
+    await app.waitForView(() => {
+        expect(getByRole(document.body, "alert").textContent).toContain("The native session was not found");
+    });
+    expect(getByRole(document.body, "button", { name: "Go to Morty" })).toBeInstanceOf(HTMLButtonElement);
+});
+
+test("Given the Morty access was not redeemed, When the failure page shows, Then entering Morty home is not offered", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({
+        page: {
+            code: (application) => `mobius_transfer_v2.${application.identity.projectId}.${"a".repeat(43)}`,
+            harness: "pi",
+            kind: "continue",
+            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
+        },
+    });
+
+    const alert = await app.waitForView(() => getByRole(document.body, "alert"));
+    expect(alert.textContent).toContain("This transfer link has expired or been revoked.");
+    expect(queryByRole(document.body, "button", { name: "Go to Morty" })).toBeNull();
     expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
 });
 

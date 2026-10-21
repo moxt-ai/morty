@@ -45,6 +45,12 @@ export interface NativeSessionStore {
     readonly preview: NativeSessionPreview;
     readonly operation: Operation;
     readonly error: string;
+    /** Starts discovery when the dialog opens. */
+    readonly start: () => void;
+    /** The signal of the dialog's discovery lifetime. */
+    readonly lifetimeSignal: () => AbortSignal;
+    /** Stops discovery and preview requests when the dialog closes. */
+    readonly stop: () => void;
     readonly load: (signal: AbortSignal) => Promise<void>;
     readonly selectAgent: (value: string) => void;
     readonly select: (entry: NativeSessionEntry, signal: AbortSignal) => Promise<void>;
@@ -59,14 +65,29 @@ export const createNativeSessionStore = (
     onOpen: (session: OpenMobiusSession) => void,
 ) => {
     let selection: AbortController | null = null;
+    let discovery: AbortController | null = null;
+    const lifetime = new AbortController();
     return createStore<NativeSessionStore>()((set, get) => ({
+        start: () => {
+            void get().load(lifetime.signal);
+        },
+        lifetimeSignal: () =>
+            discovery === null ? lifetime.signal : AbortSignal.any([lifetime.signal, discovery.signal]),
+        stop: () => {
+            lifetime.abort(new Error("The native session dialog closed."));
+            get().dispose();
+        },
         agents: [],
         selected: "",
         directory: { kind: "loading" },
         preview: { kind: "empty" },
         operation: "idle",
         error: "",
-        load: async (signal) => {
+        load: async (parent) => {
+            const attempt = new AbortController();
+            discovery?.abort(new Error("Native session discovery restarted."));
+            discovery = attempt;
+            const signal = AbortSignal.any([parent, attempt.signal]);
             set({ directory: { kind: "loading" }, preview: { kind: "empty" }, error: "" });
             try {
                 const configuration = await requests.runtimeConfiguration(botId, signal);
@@ -119,7 +140,10 @@ export const createNativeSessionStore = (
                 }
             }
         },
-        selectAgent: (selected) => set({ selected }),
+        selectAgent: (selected) => {
+            set({ selected });
+            void get().load(lifetime.signal);
+        },
         select: async (entry, lifetimeSignal) => {
             const { directory, operation } = get();
             if (directory.kind !== "ready" || operation !== "idle") {
@@ -196,6 +220,9 @@ export const createNativeSessionStore = (
                     result,
                     entry: preview.entry,
                 });
+                // A successful open unmounts the dialog, so end the discovery
+                // lifetime here; its close path never runs.
+                get().stop();
             } catch (cause) {
                 if (!signal.aborted) {
                     set({ error: formatError(cause, `The session could not be ${action}ed.`) });

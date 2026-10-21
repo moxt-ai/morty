@@ -158,6 +158,8 @@ export async function connectControlledAgentRuntime(options: {
     };
     return {
         continueReply: harness.continueReply,
+        writeFiles: async (files: NonNullable<ControlledAgentBehavior["files"]>): Promise<void> =>
+            await writeWorkspaceFiles(files, workspace, options.signal),
         disconnect,
         reconnect: async (): Promise<void> => {
             if (state.kind === "disposed") {
