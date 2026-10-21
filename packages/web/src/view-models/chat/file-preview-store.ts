@@ -1,6 +1,13 @@
 import { MobiusError } from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
 import {
+    attachFilePreviewPanel,
+    createFilePreviewImage,
+    filePreviewAllowsSidePanel,
+    observeFilePreviewLayout,
+} from "../../services/chat/file-preview-surface.ts";
+import {
+    attachHtmlPreview,
     createHtmlPreviewDocument,
     type HtmlPreviewDocument,
     type HtmlPreviewFailure,
@@ -71,9 +78,8 @@ export type FilePreviewState =
                 };
       }
     | {
-          readonly bytes: Uint8Array;
           readonly kind: "image";
-          readonly mediaType: string;
+          readonly source: string;
           readonly name: string;
           readonly path: string;
       }
@@ -84,13 +90,21 @@ export type FilePreviewState =
           readonly path: string;
       };
 
+export type FilePreviewLayout =
+    | { readonly kind: "desktop"; readonly size: "side-panel" | "expanded" }
+    | { readonly kind: "mobile"; readonly desktopSize: "side-panel" | "expanded" };
+
 interface FilePreviewStore {
     readonly state: FilePreviewState;
+    readonly layout: FilePreviewLayout;
     readonly close: () => void;
     readonly open: (path: string, signal: AbortSignal) => Promise<void>;
     readonly reload: (signal: AbortSignal) => Promise<void>;
     readonly showHtml: (view: "preview" | "source") => void;
     readonly reportHtmlFailure: (id: string, code: HtmlPreviewFailure) => void;
+    readonly toggleExpanded: () => void;
+    readonly onPanelAttach: (panel: HTMLDialogElement) => () => void;
+    readonly onHtmlAttach: (frame: HTMLIFrameElement) => () => void;
 }
 
 interface LocalFileResult {
@@ -103,6 +117,23 @@ interface LocalFileResult {
 export interface FilePreviewPort {
     readonly download: (file: LocalFileDownload) => void;
     readonly read: (path: string, signal: AbortSignal) => Promise<LocalFileResult>;
+    readonly allowsSidePanel: typeof filePreviewAllowsSidePanel;
+    readonly observeLayout: typeof observeFilePreviewLayout;
+    readonly attachPanel: typeof attachFilePreviewPanel;
+    readonly attachHtml: typeof attachHtmlPreview;
+    readonly createImage: typeof createFilePreviewImage;
+}
+
+function desktopSize(layout: FilePreviewLayout): "side-panel" | "expanded" {
+    return layout.kind === "desktop" ? layout.size : layout.desktopSize;
+}
+
+function previewLayout(sidePanel: boolean, size: "side-panel" | "expanded"): FilePreviewLayout {
+    return sidePanel ? { kind: "desktop", size } : { kind: "mobile", desktopSize: size };
+}
+
+function panelMode(layout: FilePreviewLayout): "side-panel" | "modal" {
+    return layout.kind === "desktop" && layout.size === "side-panel" ? "side-panel" : "modal";
 }
 
 function isTextFile(file: LocalFileResult): boolean {
@@ -153,12 +184,72 @@ function createFilePreviewStore(
     decoder: TextDecoder = new TextDecoder("utf-8", { fatal: true }),
 ) {
     let active: AbortController | null = null;
-    return createStore<FilePreviewStore>()((set, get) => ({
+    // The preview owns these resources. Refs only announce DOM availability;
+    // transitions also release content before React detaches the previous view.
+    let releasePanel: (() => void) | null = null;
+    let releaseHtml: (() => void) | null = null;
+    let releaseImage: (() => void) | null = null;
+    const releaseContent = () => {
+        releaseHtml?.();
+        releaseImage?.();
+        releaseImage = null;
+    };
+    const store = createStore<FilePreviewStore>()((set, get) => ({
         state: { kind: "closed" },
+        layout: previewLayout(port.allowsSidePanel(), "side-panel"),
         close: () => {
             active?.abort();
             active = null;
-            set({ state: { kind: "closed" } });
+            releaseContent();
+            releasePanel?.();
+            set({ state: { kind: "closed" }, layout: previewLayout(get().layout.kind === "desktop", "side-panel") });
+        },
+        toggleExpanded: () => {
+            const { state, layout } = get();
+            if (state.kind !== "closed" && layout.kind === "desktop") {
+                set({ layout: { kind: "desktop", size: layout.size === "expanded" ? "side-panel" : "expanded" } });
+            }
+        },
+        onPanelAttach: (node) => {
+            releasePanel?.();
+            const panel = port.attachPanel(node);
+            const unsubscribe = store.subscribe((next, previous) => {
+                if (next.layout !== previous.layout) {
+                    panel.show(panelMode(next.layout));
+                }
+            });
+            const stopLayout = port.observeLayout((sidePanel) => {
+                set({ layout: previewLayout(sidePanel, desktopSize(get().layout)) });
+            });
+            panel.show(panelMode(get().layout));
+            const release = () => {
+                if (releasePanel !== release) {
+                    return;
+                }
+                releasePanel = null;
+                unsubscribe();
+                stopLayout();
+                panel.dispose();
+            };
+            releasePanel = release;
+            return release;
+        },
+        onHtmlAttach: (frame) => {
+            releaseHtml?.();
+            const { state, reportHtmlFailure } = get();
+            if (state.kind !== "html" || state.view.kind !== "preview") {
+                return () => {};
+            }
+            const stop = port.attachHtml(frame, state.view.document, reportHtmlFailure);
+            const release = () => {
+                if (releaseHtml !== release) {
+                    return;
+                }
+                releaseHtml = null;
+                stop();
+            };
+            releaseHtml = release;
+            return release;
         },
         reload: async (signal) => {
             const { state, open } = get();
@@ -171,6 +262,7 @@ function createFilePreviewStore(
             if (state.kind !== "html" || state.view.kind === view) {
                 return;
             }
+            releaseHtml?.();
             set({
                 state: {
                     ...state,
@@ -205,7 +297,9 @@ function createFilePreviewStore(
             }
         },
         open: async (path, signal) => {
+            signal.throwIfAborted();
             active?.abort();
+            releaseContent();
             const controller = new AbortController();
             active = controller;
             const timeoutSignal = AbortSignal.timeout(20_000);
@@ -218,11 +312,12 @@ function createFilePreviewStore(
                     return;
                 }
                 if (isDisplayableImageType(file.mediaType)) {
+                    const image = port.createImage(file.bytes, file.mediaType);
+                    releaseImage = image.dispose;
                     set({
                         state: {
-                            bytes: file.bytes,
                             kind: "image",
-                            mediaType: file.mediaType,
+                            source: image.source,
                             name: file.name,
                             path,
                         },
@@ -251,7 +346,7 @@ function createFilePreviewStore(
                     } catch {}
                 }
                 port.download(file);
-                set({ state: { kind: "closed" } });
+                get().close();
             } catch (cause) {
                 if (controller.signal.aborted) {
                     return;
@@ -267,8 +362,17 @@ function createFilePreviewStore(
             }
         },
     }));
+    return store;
 }
 
 export function createBrowserFilePreviewStore(read: FilePreviewPort["read"]) {
-    return createFilePreviewStore({ download: downloadLocalFile, read });
+    return createFilePreviewStore({
+        download: downloadLocalFile,
+        read,
+        allowsSidePanel: filePreviewAllowsSidePanel,
+        observeLayout: observeFilePreviewLayout,
+        attachPanel: attachFilePreviewPanel,
+        attachHtml: attachHtmlPreview,
+        createImage: createFilePreviewImage,
+    });
 }

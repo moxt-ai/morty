@@ -660,7 +660,10 @@ export function MobiusSessionPane({
             </section>
             <FilePreview
                 onClose={preview.close}
-                onHtmlFailure={preview.reportHtmlFailure}
+                layout={preview.layout}
+                onPanelAttach={preview.onPanelAttach}
+                onToggleExpanded={preview.toggleExpanded}
+                onHtmlAttach={preview.onHtmlAttach}
                 onHtmlView={preview.showHtml}
                 onReload={reloadLocalFile}
                 state={preview.state}

@@ -80,7 +80,7 @@ addEventListener("message", (event) => {
     return { id, source };
 }
 
-export function observeHtmlPreview(
+function observeHtmlPreview(
     frame: Window,
     id: string,
     report: (id: string, code: HtmlPreviewFailure) => void,
@@ -109,4 +109,21 @@ export function observeHtmlPreview(
     };
     window.addEventListener("message", receive);
     return () => window.removeEventListener("message", receive);
+}
+
+export function attachHtmlPreview(
+    frame: HTMLIFrameElement,
+    document: HtmlPreviewDocument,
+    report: (id: string, code: HtmlPreviewFailure) => void,
+): () => void {
+    if (frame.contentWindow === null) {
+        return () => {};
+    }
+    const stop = observeHtmlPreview(frame.contentWindow, document.id, report);
+    // Subscribe before the document can execute, including its first error.
+    frame.srcdoc = document.source;
+    return () => {
+        stop();
+        frame.removeAttribute("srcdoc");
+    };
 }

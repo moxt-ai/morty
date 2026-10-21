@@ -1,30 +1,9 @@
 import { FileText, LoaderCircle, Maximize2, Minimize2, RotateCw, X } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { dataTestId } from "../../data-testid.ts";
-import type { HtmlPreviewFailure } from "../../services/chat/html-preview-document.ts";
-import type { FilePreviewState } from "../../view-models/chat/file-preview-store.ts";
+import type { FilePreviewLayout, FilePreviewState } from "../../view-models/chat/file-preview-store.ts";
 import { HtmlPreview } from "./html-preview.tsx";
 import { HighlightedCode, languageForPath } from "./tools/highlighted-code.tsx";
-
-const SIDE_PANEL_QUERY = "(min-width: 40rem) and (hover: hover) and (pointer: fine)";
-
-function PreviewImage({ state }: { readonly state: Extract<FilePreviewState, { readonly kind: "image" }> }) {
-    const [source, setSource] = useState("");
-    useEffect(() => {
-        const url = URL.createObjectURL(new Blob([Uint8Array.from(state.bytes)], { type: state.mediaType }));
-        setSource(url);
-        return () => URL.revokeObjectURL(url);
-    }, [state.bytes, state.mediaType]);
-    return source.length > 0 ? (
-        <img
-            alt={state.name}
-            className="max-h-full max-w-full object-contain"
-            data-testid={dataTestId.filePreviewContent}
-            src={source}
-        />
-    ) : null;
-}
 
 function CodeLineNumbers({ code }: { readonly code: string }) {
     const lineCount = code.split("\n").length;
@@ -64,10 +43,10 @@ function PreviewSource({ name, text }: { readonly name: string; readonly text: s
 
 function PreviewContent({
     state,
-    onHtmlFailure,
+    onHtmlAttach,
 }: {
     readonly state: FilePreviewState;
-    readonly onHtmlFailure: (id: string, code: HtmlPreviewFailure) => void;
+    readonly onHtmlAttach: (frame: HTMLIFrameElement) => () => void;
 }) {
     switch (state.kind) {
         case "closed":
@@ -87,7 +66,14 @@ function PreviewContent({
         case "text":
             return <PreviewSource name={state.name} text={state.text} />;
         case "image":
-            return <PreviewImage state={state} />;
+            return (
+                <img
+                    alt={state.name}
+                    className="max-h-full max-w-full object-contain"
+                    data-testid={dataTestId.filePreviewContent}
+                    src={state.source}
+                />
+            );
         case "html":
             return state.view.kind === "source" ? (
                 <PreviewSource name={state.name} text={state.text} />
@@ -98,11 +84,7 @@ function PreviewContent({
                             {state.view.diagnostic.message}
                         </p>
                     ) : null}
-                    <HtmlPreview
-                        document={state.view.document}
-                        key={state.view.document.id}
-                        onFailure={onHtmlFailure}
-                    />
+                    <HtmlPreview key={state.view.document.id} onAttach={onHtmlAttach} />
                 </div>
             );
         default: {
@@ -116,66 +98,23 @@ export function FilePreview({
     onClose,
     onReload,
     onHtmlView,
-    onHtmlFailure,
+    onHtmlAttach,
+    onPanelAttach,
+    onToggleExpanded,
+    layout,
     state,
 }: {
     readonly onClose: () => void;
     readonly onReload: () => void;
     readonly onHtmlView: (view: "preview" | "source") => void;
-    readonly onHtmlFailure: (id: string, code: HtmlPreviewFailure) => void;
+    readonly onHtmlAttach: (frame: HTMLIFrameElement) => () => void;
+    readonly layout: FilePreviewLayout;
+    readonly onPanelAttach: (panel: HTMLDialogElement) => () => void;
+    readonly onToggleExpanded: () => void;
     readonly state: FilePreviewState;
 }) {
-    const [expanded, setExpanded] = useState(false);
-    const [sidePanelLayout, setSidePanelLayout] = useState(() => window.matchMedia(SIDE_PANEL_QUERY).matches);
-    const panel = useRef<HTMLDialogElement>(null);
-    const closeButton = useRef<HTMLButtonElement>(null);
-    const open = state.kind !== "closed";
-    useEffect(() => {
-        const query = window.matchMedia(SIDE_PANEL_QUERY);
-        const update = () => setSidePanelLayout(query.matches);
-        query.addEventListener("change", update);
-        update();
-        return () => query.removeEventListener("change", update);
-    }, []);
-    useLayoutEffect(() => {
-        if (!open) {
-            setExpanded(false);
-            return;
-        }
-        const dialog = panel.current;
-        const previousFocus = document.activeElement;
-        return () => {
-            dialog?.close();
-            if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
-                previousFocus.focus({ preventScroll: true });
-            }
-        };
-    }, [open]);
-    const modal = expanded || !sidePanelLayout;
-    useLayoutEffect(() => {
-        const dialog = panel.current;
-        if (!open || dialog === null) {
-            return;
-        }
-        const previousFocus = document.activeElement;
-        const wasOpen = dialog.open;
-        if (wasOpen) {
-            dialog.close();
-        }
-        // Native modal focus handling also contains keyboard navigation inside
-        // the opaque iframe. Keep the same DOM when resizing or expanding so the
-        // preview's input and rendering state survive.
-        if (modal) {
-            dialog.showModal();
-        } else {
-            dialog.show();
-        }
-        if (wasOpen && previousFocus instanceof HTMLElement && dialog.contains(previousFocus)) {
-            previousFocus.focus({ preventScroll: true });
-        } else {
-            closeButton.current?.focus({ preventScroll: true });
-        }
-    }, [open, modal]);
+    const sidePanelLayout = layout.kind === "desktop";
+    const expanded = layout.kind === "desktop" && layout.size === "expanded";
     if (state.kind === "closed") {
         return null;
     }
@@ -198,7 +137,7 @@ export function FilePreview({
                     onClose();
                 }
             }}
-            ref={panel}
+            ref={onPanelAttach}
         >
             <header className="flex min-h-14 shrink-0 items-center gap-3 border-b border-border px-4">
                 <FileText aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
@@ -211,7 +150,7 @@ export function FilePreview({
                         "size-9 items-center justify-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/70",
                         sidePanelLayout ? "inline-flex" : "hidden",
                     )}
-                    onClick={() => setExpanded((value) => !value)}
+                    onClick={onToggleExpanded}
                     type="button"
                 >
                     {expanded ? (
@@ -225,7 +164,7 @@ export function FilePreview({
                     className="inline-flex size-9 items-center justify-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/70"
                     data-testid={dataTestId.closeFilePreview}
                     onClick={onClose}
-                    ref={closeButton}
+                    data-preview-initial-focus=""
                     type="button"
                 >
                     <X aria-hidden="true" className="size-4" />
@@ -260,7 +199,7 @@ export function FilePreview({
                         : "items-center justify-center overflow-auto bg-surface-subtle p-5",
                 )}
             >
-                <PreviewContent onHtmlFailure={onHtmlFailure} state={state} />
+                <PreviewContent onHtmlAttach={onHtmlAttach} state={state} />
             </div>
         </dialog>
     );

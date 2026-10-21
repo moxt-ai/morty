@@ -19,6 +19,18 @@ test("Given an agent links an HTML result, When the user opens it, Then they can
     await expect(result.getByText("Reviews: 1", { exact: true })).toBeVisible();
     await preview.screenshot({ animations: "disabled", path: testInfo.outputPath("html-interactive-desktop.png") });
 
+    const desktopViewport = page.viewportSize();
+    if (desktopViewport === null) {
+        throw new Error("Expected a desktop viewport");
+    }
+    await page.setViewportSize({ width: 560, height: desktopViewport.height });
+    await expect(preview).toHaveCSS("width", "560px");
+    await expect(preview.getByRole("button", { name: "Expand preview" })).toBeHidden();
+    await expect(result.getByText("Reviews: 1", { exact: true })).toBeVisible();
+    await page.setViewportSize(desktopViewport);
+    await expect(preview.getByRole("button", { name: "Expand preview" })).toBeVisible();
+    await expect(result.getByRole("textbox", { name: "Review name" })).toHaveValue("Desktop review");
+
     await preview.getByRole("button", { name: "View source", exact: true }).click();
     await expect(preview.getByRole("region", { name: "File contents" })).toContainText("<!doctype html>");
     await preview.getByRole("button", { name: "Show preview", exact: true }).click();
@@ -26,10 +38,20 @@ test("Given an agent links an HTML result, When the user opens it, Then they can
 
     await preview.getByRole("button", { name: "Expand preview", exact: true }).click();
     await expect(preview).toHaveCSS("width", `${page.viewportSize()?.width}px`);
+    await page.setViewportSize({ width: 560, height: desktopViewport.height });
+    await expect(preview).toHaveCSS("width", "560px");
+    await page.setViewportSize(desktopViewport);
+    await expect(preview.getByRole("button", { name: "Collapse preview" })).toBeVisible();
+    await expect(preview).toHaveCSS("width", `${desktopViewport.width}px`);
     await preview.getByRole("button", { name: "Close file preview", exact: true }).click();
     await expect(preview).toBeHidden();
     await expect(page.getByRole("textbox", { name: "Message" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Open delivery review" })).toBeVisible();
+    await page.getByRole("button", { name: "Open delivery review" }).click();
+    await expect(preview.getByRole("button", { name: "Expand preview" })).toBeVisible();
+    await expect(result.getByText("Reviews: 0", { exact: true })).toBeVisible();
+    await preview.getByRole("button", { name: "Close file preview" }).click();
+    await expect(page.getByRole("button", { name: "Open delivery review" })).toBeFocused();
 });
 
 test.describe("touch preview", () => {
