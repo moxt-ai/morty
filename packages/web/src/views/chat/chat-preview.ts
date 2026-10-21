@@ -12,7 +12,7 @@ export const CHAT_PREVIEW_STATES = [
 export type ChatPreviewStateId = (typeof CHAT_PREVIEW_STATES)[number];
 
 export function isChatPreviewStateId(value: string): value is ChatPreviewStateId {
-    return (CHAT_PREVIEW_STATES as readonly string[]).includes(value);
+    return CHAT_PREVIEW_STATES.some((state) => state === value);
 }
 
 export const CHAT_PREVIEW_STATE_LABELS: Record<ChatPreviewStateId, string> = {

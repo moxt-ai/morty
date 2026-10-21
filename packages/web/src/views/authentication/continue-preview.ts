@@ -21,7 +21,7 @@ const previewHandoff = () =>
     }) as const;
 
 export function isContinuePreviewStateId(value: string): value is ContinuePreviewStateId {
-    return (CONTINUE_PREVIEW_STATES as readonly string[]).includes(value);
+    return CONTINUE_PREVIEW_STATES.some((state) => state === value);
 }
 
 export function getContinuePreviewStateId(searchParams: URLSearchParams): ContinuePreviewStateId | null {
