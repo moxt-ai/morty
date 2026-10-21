@@ -15,11 +15,11 @@
         "build": "pnpm build:setup && vite build",
         "build:setup": "pnpm --filter @moxt-ai/morty-setup build",
         "publish:web-assets": "bash scripts/publish-web-assets.sh",
-        "typecheck": "pnpm typegen && pnpm --filter './packages/**' --recursive --if-present typecheck && pnpm --filter './packages/**' --recursive --if-present typecheck:tests",
+        "typecheck": "pnpm typegen && pnpm --filter './packages/**' --recursive --if-present typecheck && pnpm --filter './packages/**' --recursive --if-present typecheck:tests && pnpm typecheck:tooling",
         "check:no-chinese": "node scripts/check-no-chinese.ts",
         "lint": "biome ci --error-on-warnings && pnpm check:no-chinese && pnpm check:architecture",
         "check:architecture": "depcruise --config dependency-cruiser.config.cjs packages/web/src packages/worker/src",
-        "lint:fix": "biome check --write --error-on-warnings && pnpm check:no-chinese",
+        "lint:fix": "biome check --write --error-on-warnings && pnpm check:no-chinese && pnpm check:architecture",
         "format": "biome format --write",
         "test": "pnpm test:web && pnpm test:worker && pnpm test:web-assets",
         "test:changed": "pnpm --recursive --if-present test:changed",
@@ -39,10 +39,11 @@
         "build:staging": "pnpm build:setup && CLOUDFLARE_ENV=staging vite build",
         "build:production": "pnpm build:setup && CLOUDFLARE_ENV=production vite build",
         "deploy:staging": "pnpm build:staging && wrangler deploy --env staging",
-        "deploy:production": "pnpm build:production && wrangler deploy --env production"
+        "deploy:production": "pnpm build:production && wrangler deploy --env production",
+        "typecheck:tooling": "tsc --project tsconfig.tooling.json"
     },
     "simple-git-hooks": {
-        "pre-commit": "pnpm typecheck && pnpm check:no-chinese && pnpm biome check --staged --files-ignore-unknown=true --no-errors-on-unmatched"
+        "pre-commit": "pnpm typecheck && pnpm check:no-chinese && pnpm biome check --error-on-warnings --staged --files-ignore-unknown=true --no-errors-on-unmatched && pnpm check:architecture"
     },
     "devDependencies": {
         "@agentclientprotocol/sdk": "1.4.0",
@@ -58,6 +59,7 @@
         "@vitejs/plugin-react": "catalog:",
         "@vitest/coverage-istanbul": "catalog:",
         "dependency-cruiser": "catalog:",
+        "drizzle-kit": "catalog:",
         "happy-dom": "catalog:",
         "istanbul-lib-coverage": "catalog:",
         "istanbul-lib-report": "catalog:",

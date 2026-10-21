@@ -45,7 +45,7 @@ async function migrate(
 
 export class LocalStack {
     readonly harness: E2EHarness;
-    readonly directories: Readonly<Record<string, string>>;
+    readonly directories: Readonly<Record<"platform" | "chat" | "workspace", string>>;
     readonly platformOrigin: string;
     readonly chatOrigin: string;
     readonly platformPort: number;
@@ -54,16 +54,18 @@ export class LocalStack {
     static async create(harness: E2EHarness) {
         const platformPort = await freePort();
         const chatPort = await freePort();
-        const directories = Object.fromEntries(
-            ["platform", "chat", "workspace"].map((name) => [name, join(harness.workDirectory, name)]),
-        );
+        const directories = {
+            platform: join(harness.workDirectory, "platform"),
+            chat: join(harness.workDirectory, "chat"),
+            workspace: join(harness.workDirectory, "workspace"),
+        };
         await Promise.all(Object.values(directories).map((path) => mkdir(path, { recursive: true })));
         return new LocalStack(harness, directories, platformPort, chatPort);
     }
 
     constructor(
         harness: E2EHarness,
-        directories: Readonly<Record<string, string>>,
+        directories: Readonly<Record<"platform" | "chat" | "workspace", string>>,
         platformPort: number,
         chatPort: number,
     ) {
@@ -120,17 +122,20 @@ export class LocalStack {
                 "/mobius/api/dashboard/v1/platform/tenants",
                 authentication,
             );
-            const tenant = object(Array.isArray(inventory.tenants) ? inventory.tenants[0] : undefined, "tenant");
+            const tenant = object(Array.isArray(inventory["tenants"]) ? inventory["tenants"][0] : undefined, "tenant");
             const application = await jsonRequest(this.platformOrigin, "/mobius/api/dashboard/v1/apps", {
                 ...authentication,
                 body: {
                     displayName: "Morty live E2E",
-                    tenantId: text(tenant.tenantId, "tenantId"),
+                    tenantId: text(tenant["tenantId"], "tenantId"),
                 },
             });
             return {
-                appId: text(application.appId, "appId"),
-                appSecret: text(object(application.defaultCredential, "defaultCredential").credential, "credential"),
+                appId: text(application["appId"], "appId"),
+                appSecret: text(
+                    object(application["defaultCredential"], "defaultCredential")["credential"],
+                    "credential",
+                ),
             };
         });
     }

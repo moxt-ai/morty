@@ -90,7 +90,7 @@ export class E2EHarness {
     }
 
     static async create(name: string) {
-        const configuredRoot = process.env.MOBIUS_E2E_ARTIFACT_ROOT;
+        const configuredRoot = process.env["MOBIUS_E2E_ARTIFACT_ROOT"];
         const parent = configuredRoot === undefined ? tmpdir() : resolve(configuredRoot);
         await mkdir(parent, { recursive: true });
         const rootDirectory = await mkdtemp(join(parent, `${name}-`));
@@ -111,8 +111,8 @@ export class E2EHarness {
         this.rootDirectory = rootDirectory;
         this.artifactDirectory = artifactDirectory;
         this.workDirectory = workDirectory;
-        this.preserveArtifacts = preserveArtifacts || process.env.MOBIUS_E2E_KEEP_STATE === "1";
-        this.timeoutMilliseconds = Number(process.env.MOBIUS_E2E_TIMEOUT_MS ?? 10 * 60 * 1_000);
+        this.preserveArtifacts = preserveArtifacts || process.env["MOBIUS_E2E_KEEP_STATE"] === "1";
+        this.timeoutMilliseconds = Number(process.env["MOBIUS_E2E_TIMEOUT_MS"] ?? 10 * 60 * 1_000);
         this.signal = AbortSignal.timeout(this.timeoutMilliseconds);
         this.startedAt = Date.now();
         this.children = [];

@@ -44,14 +44,14 @@ export async function followSetupInstructions(options: {
     assert.ok(isSetupModule(bundle));
     const events: Readonly<Record<string, unknown>>[] = [];
     const exitCode = await bundle.runSetup(args, {
-        clock: options.clock,
+        ...(options.clock === undefined ? {} : { clock: options.clock }),
         documents: options.documents,
         emit: (event) => events.push(event),
         runtime: options.runtime,
         signal: options.signal,
     });
     assert.equal(exitCode, 0, JSON.stringify(events));
-    const ready = events.find((event) => event.status === "ready");
+    const ready = events.find((event) => event["status"] === "ready");
     assert.ok(ready);
     const configuration = object(
         JSON.parse(await readFile(join(options.documents, "morty/config.json"), "utf8")),
@@ -62,9 +62,9 @@ export async function followSetupInstructions(options: {
         events,
         ready,
         identity: {
-            botId: text(configuration.bot_id, "saved Bot"),
-            projectId: text(configuration.project_id, "saved project"),
-            userId: text(configuration.user_id, "saved user"),
+            botId: text(configuration["bot_id"], "saved Bot"),
+            projectId: text(configuration["project_id"], "saved project"),
+            userId: text(configuration["user_id"], "saved user"),
         },
     };
 }

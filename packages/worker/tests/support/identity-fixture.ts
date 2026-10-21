@@ -72,31 +72,26 @@ export async function createIdentityFixture(
             throw new Error(`Chat Worker started at ${ready.origin} instead of ${listener.origin}`);
         }
         const cloudBindings = await cloudflare.getBindings();
-        const projectObjects = cloudBindings["CHAT_PROJECTS"] as {
-            readonly idFromName: (name: string) => unknown;
-            readonly get: (
-                id: unknown,
-                options?: { readonly locationHint?: string },
-            ) => {
-                readonly fetch: (url: string, init: RequestInit) => Promise<Response>;
-            };
-        };
+        const projectObjects = await cloudflare.getDurableObjectNamespace("CHAT_PROJECTS");
         const chatProjects = {
             idFromName: (name: string) => projectObjects.idFromName(name),
-            get: (id: unknown, options?: { readonly locationHint?: string }) => {
+            get: (
+                id: ReturnType<typeof projectObjects.idFromName>,
+                options?: Parameters<typeof projectObjects.get>[1],
+            ) => {
                 const object = projectObjects.get(id, options);
                 return {
                     fetch: async (request: Request) => {
                         const response = await object.fetch(request.url, {
                             method: request.method,
-                            headers: request.headers,
+                            headers: [...request.headers],
                             ...(request.body === null ? {} : { body: await request.arrayBuffer() }),
                         });
                         const hasBody = response.status !== 204 && response.status !== 205 && response.status !== 304;
                         return new Response(hasBody ? await response.arrayBuffer() : null, {
                             status: response.status,
                             statusText: response.statusText,
-                            headers: response.headers,
+                            headers: [...response.headers],
                         });
                     },
                 };

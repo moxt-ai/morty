@@ -11,7 +11,7 @@ if (process.argv[1] !== undefined && pathToFileURL(await realpath(process.argv[1
     process.once("SIGTERM", cancel);
     try {
         process.exitCode = await runSetup(process.argv.slice(2), {
-            documents: process.env.DOCUMENT_DIR ?? "",
+            documents: process.env["DOCUMENT_DIR"] ?? "",
             signal: controller.signal,
             emit: (value) => console.log(JSON.stringify(value)),
         });
