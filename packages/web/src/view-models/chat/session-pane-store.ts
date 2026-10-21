@@ -875,6 +875,9 @@ export function createSessionPaneModel(options: {
                             signal.throwIfAborted();
                             const execution = await executionPromise;
                             const running = execution.turn;
+                            if (running === null) {
+                                commitProjection({ kind: "execution-idle" });
+                            }
                             messageQueue.getState().replace(execution.queued);
                             if (running !== null) {
                                 command = running.commandId;

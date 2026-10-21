@@ -13,11 +13,12 @@ export async function createTestRuntime(
     browserName: "chromium" | "firefox" | "webkit" = "chromium",
     contextOptions: BrowserContextOptions = {},
     machineName = "Browser test Runtime",
+    agent: { readonly id: string; readonly name: string } = { id: "claude", name: "Claude Code" },
 ) {
     const setupClockStart = Date.parse("2026-09-15T12:00:00Z");
     let setupClockTime = setupClockStart;
-    const agentId = "claude";
-    const agentName = "Claude Code";
+    const agentId = agent.id;
+    const agentName = agent.name;
     const stack = await LocalStack.create(harness);
     const runtime = new ControlledSetupRuntime(
         {

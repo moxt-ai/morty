@@ -379,7 +379,7 @@ export function MobiusSessionMessage({
         return (
             <p className="text-sm text-muted-foreground" data-testid={dataTestId.agentReplyStatus} role="status">
                 {presentation.stopReason === "cancelled"
-                    ? "Response cancelled."
+                    ? "Turn stopped."
                     : `Response stopped: ${presentation.stopReason}`}
             </p>
         );
