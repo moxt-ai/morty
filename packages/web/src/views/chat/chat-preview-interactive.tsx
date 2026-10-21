@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Tooltip } from "radix-ui";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useStore } from "zustand";
 import { AgentThinking } from "../../components/chat/agent-thinking.tsx";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
@@ -20,7 +21,7 @@ import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.t
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
-import type { ComposerAttachment } from "../../view-models/chat/composer-attachment.ts";
+import { createComposerAttachmentStore } from "../../view-models/chat/composer-attachment-store.ts";
 import { SetupCardLogo } from "../setup/setup-card-shell.tsx";
 import {
     CHAT_PREVIEW_DRAFT_ID,
@@ -137,7 +138,10 @@ export function InteractiveChatPreview() {
     const [mobileExpanded, setMobileExpanded] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [draft, setDraft] = useState("");
-    const [attachments, setAttachments] = useState<readonly ComposerAttachment[]>([]);
+    const [attachmentStore] = useState(() => createComposerAttachmentStore());
+    const [attachmentSignal] = useState(() => new AbortController().signal);
+    const attachmentModel = useStore(attachmentStore);
+    const attachments = attachmentModel.attachments;
     const [composerError, setComposerError] = useState("");
     const [outputState, setOutputState] = useState<"idle" | "sending" | "running" | "stopping">("idle");
     const [disconnectedNoticeDismissed, setDisconnectedNoticeDismissed] = useState(false);
@@ -190,7 +194,7 @@ export function InteractiveChatPreview() {
     const newConversation = () => {
         setActiveId(CHAT_PREVIEW_DRAFT_ID);
         setDraft("");
-        setAttachments([]);
+        attachmentStore.getState().clear();
         setComposerError("");
         setMobileExpanded(false);
     };
@@ -264,7 +268,7 @@ export function InteractiveChatPreview() {
         }
 
         setDraft("");
-        setAttachments([]);
+        attachmentStore.getState().clear();
         setOutputState("running");
 
         const replySessionId = targetSessionId;
@@ -488,11 +492,11 @@ export function InteractiveChatPreview() {
                     footer={
                         showComposer ? (
                             <BotChatComposer
-                                attachments={attachments}
+                                attachmentModel={attachmentModel}
+                                attachmentSignal={attachmentSignal}
                                 disabled={outputState !== "idle"}
                                 draft={draft}
                                 error={composerError}
-                                onAttachmentsChange={setAttachments}
                                 onDraftChange={setDraft}
                                 onStop={() => setOutputState("idle")}
                                 onSubmit={sendMessage}

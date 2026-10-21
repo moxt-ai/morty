@@ -1,6 +1,7 @@
 import { Laptop, List, MessageSquare, RefreshCw, Share2, SquarePen, UserRound, Wifi } from "lucide-react";
 import { Tooltip } from "radix-ui";
 import { type ReactNode, useRef, useState } from "react";
+import { useStore } from "zustand";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
@@ -9,7 +10,7 @@ import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.t
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
-import type { ComposerAttachment } from "../../view-models/chat/composer-attachment.ts";
+import { createComposerAttachmentStore } from "../../view-models/chat/composer-attachment-store.ts";
 import { SetupCardDescription, SetupCardLogo, SetupCardShell, SetupCardTitle } from "../setup/setup-card-shell.tsx";
 import type { ChatPreviewStateId } from "./chat-preview.ts";
 import { InteractiveChatPreview } from "./chat-preview-interactive.tsx";
@@ -222,19 +223,21 @@ function PreviewComposerControls() {
 
 function PreviewComposer({ draftSeed = "" }: { readonly draftSeed?: string }) {
     const [draft, setDraft] = useState(draftSeed);
-    const [attachments, setAttachments] = useState<readonly ComposerAttachment[]>([]);
+    const [attachmentStore] = useState(() => createComposerAttachmentStore());
+    const [attachmentSignal] = useState(() => new AbortController().signal);
+    const attachmentModel = useStore(attachmentStore);
     return (
         <BotChatComposer
-            attachments={attachments}
+            attachmentModel={attachmentModel}
+            attachmentSignal={attachmentSignal}
             disabled={false}
             draft={draft}
             error=""
-            onAttachmentsChange={setAttachments}
             onDraftChange={setDraft}
             onStop={() => {}}
             onSubmit={() => {}}
             outputState="idle"
-            submitDisabled={draft.trim().length === 0 && attachments.length === 0}
+            submitDisabled={draft.trim().length === 0 && attachmentModel.attachments.length === 0}
         >
             <PreviewComposerControls />
         </BotChatComposer>
