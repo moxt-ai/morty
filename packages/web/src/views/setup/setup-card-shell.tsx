@@ -12,7 +12,7 @@ const setupCardClassName =
     "overflow-hidden rounded-3xl border-[1px] border-white bg-card/90 p-8 shadow-module backdrop-blur sm:p-12";
 
 /** Vertical rhythm below title or description (24px top, 12px between children). */
-export const setupContentStackClassName = "mt-6 space-y-3";
+const setupContentStackClassName = "mt-6 space-y-3";
 
 export const setupMonoFieldClassName =
     "w-full resize-none overflow-hidden rounded-lg border-[0.5px] border-border/50 bg-morty-fill-opacity-2 px-4 py-3 font-mono text-14 leading-[22px] text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring";
