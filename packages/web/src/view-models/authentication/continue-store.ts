@@ -67,19 +67,24 @@ function identityDestination(path: "/" | "/chat", identity: AnonymousIdentity): 
 }
 
 export const createContinueStore = (fetchRequest: (request: Request) => Promise<Response>) => {
-    return createStore<ContinueStore>()((set, get) => ({
+    let attempt: AbortController | null = null;
+    const store = createStore<ContinueStore>()((set, get) => ({
         diagnostics: null,
         retry: () => {
             const state = get().state;
-            if (state.kind === "session-failed") {
-                set({
-                    state: {
-                        code: state.code,
-                        handoff: state.handoff,
-                        kind: "session-opening",
-                    },
-                });
+            if (state.kind !== "session-failed") {
+                return;
             }
+            attempt?.abort(new Error("The transfer retry replaced this attempt."));
+            attempt = new AbortController();
+            set({
+                state: {
+                    code: state.code,
+                    handoff: state.handoff,
+                    kind: "session-opening",
+                },
+            });
+            void get().redeem(attempt.signal);
         },
         state: initialState(),
         redeem: async (signal) => {
@@ -152,4 +157,10 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
             }
         },
     }));
+    // The transfer page's lifetime starts the redeem as soon as the page's
+    // store exists; the first state write happens after its first await, so
+    // creation stays render-safe.
+    attempt = new AbortController();
+    void store.getState().redeem(attempt.signal);
+    return store;
 };
