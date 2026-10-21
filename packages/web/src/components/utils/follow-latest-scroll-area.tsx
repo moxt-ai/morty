@@ -3,6 +3,13 @@ import { type ComponentPropsWithoutRef, type RefObject, useEffect, useLayoutEffe
 type FollowLatestScrollAreaProps = Omit<ComponentPropsWithoutRef<"div">, "ref"> & {
     readonly container: RefObject<HTMLDivElement | null>;
     readonly followThreshold?: number;
+    /**
+     * Re-arms following whenever this value changes: the container scrolls
+     * back to its latest content even if the user had scrolled away. Purely a
+     * scroll concern; callers decide what a new value means. `null` never
+     * re-arms.
+     */
+    readonly followRevision: number | null;
 };
 
 /**
@@ -12,11 +19,20 @@ type FollowLatestScrollAreaProps = Omit<ComponentPropsWithoutRef<"div">, "ref"> 
 export function FollowLatestScrollArea({
     container,
     followThreshold = 1,
+    followRevision = null,
     onScroll,
     ...props
 }: FollowLatestScrollAreaProps) {
     const following = useRef(true);
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: followRevision is the deliberate re-arm trigger.
+    useLayoutEffect(() => {
+        following.current = true;
+        const element = container.current;
+        if (element !== null) {
+            element.scrollTop = element.scrollHeight;
+        }
+    }, [container, followRevision]);
     useLayoutEffect(() => {
         const element = container.current;
         if (following.current && element !== null) {

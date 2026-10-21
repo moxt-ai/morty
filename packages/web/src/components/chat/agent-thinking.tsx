@@ -36,6 +36,7 @@ function ReasoningContent({ entry }: { readonly entry: ReasoningEntry }) {
             className="overscroll-contain [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin]"
             container={content}
             followThreshold={24}
+            followRevision={null}
             style={{ maxHeight: "10.5rem", overflowY: "auto" }}
         >
             <pre className="m-0 whitespace-pre-wrap font-sans text-[15px] leading-6 text-muted-foreground">
