@@ -37,7 +37,7 @@ export function SessionApplication({ application }: { readonly application: Mort
         return <App state={{ kind: "failed" }} />;
     }
     if (state.kind === "setup") {
-        return <SetupApplication />;
+        return <SetupApplication accessEnded={state.notice === "access-ended"} />;
     }
     const activeIdentity: ActiveIdentity = {
         botId: state.identity.botId,
@@ -50,10 +50,19 @@ export function SessionApplication({ application }: { readonly application: Mort
     return <SignedInApplication activeIdentity={activeIdentity} authorize={authorize} />;
 }
 
-function SetupApplication() {
+function SetupApplication({ accessEnded }: { readonly accessEnded: boolean }) {
     return (
         <main className="flex min-h-screen items-center justify-center overflow-y-auto bg-[radial-gradient(circle_at_top,_hsl(var(--muted))_0%,_hsl(var(--background))_48%)] px-6 py-12 text-foreground">
             <section aria-labelledby="setup-title" className="w-full max-w-2xl">
+                {accessEnded && (
+                    <div
+                        role="status"
+                        className="mb-5 rounded-xl border border-primary/20 bg-primary/5 px-5 py-4 text-sm"
+                    >
+                        <p className="font-medium">Current access ended</p>
+                        <p className="mt-1 text-muted-foreground">Your local agent and tasks keep running.</p>
+                    </div>
+                )}
                 <div className="rounded-3xl border border-border/70 bg-card/90 p-8 shadow-2xl shadow-black/10 backdrop-blur sm:p-12">
                     <div className="mb-10 flex size-12 items-center justify-center rounded-2xl bg-primary text-xl font-bold text-primary-foreground shadow-lg shadow-primary/20">
                         M

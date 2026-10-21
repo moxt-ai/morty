@@ -1,11 +1,12 @@
 import { MessageSquare, X } from "lucide-react";
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { BotChatComposer, type ComposerAttachment } from "../../components/chat/bot-chat-composer.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
+import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
@@ -66,9 +67,11 @@ export function BotChatHome({
     const [pairingDialogOpen, setPairingDialogOpen] = useState(false);
     const [disconnectedNotificationDismissed, setDisconnectedNotificationDismissed] = useState(false);
     const [attachments, setAttachments] = useState<readonly ComposerAttachment[]>([]);
-    const followLatest = useRef(true);
+    const [followRevision, setFollowRevision] = useState(0);
+    const rearmFollowing = () => {
+        setFollowRevision((revision) => revision + 1);
+    };
     const messageList = useRef<HTMLDivElement | null>(null);
-    const messageContent = useRef<HTMLDivElement | null>(null);
     const connectionStatus = model.connectionStatus;
     const disconnectionNotice = disconnectedBotNotice(model.view, connectionStatus);
     const creationBusy = conversationCreationBusy(model.creation);
@@ -80,29 +83,6 @@ export function BotChatHome({
     const setupView = model.view.kind === "setup" ? model.view : null;
     const pairingNotice = model.notices.pairing.kind === "visible" || pairingDialogOpen;
     const failureNotice = model.notices.connectionFailed.kind === "visible";
-
-    useLayoutEffect(() => {
-        if (model.view.kind === "active" && followLatest.current && messageList.current !== null) {
-            messageList.current.scrollTop = messageList.current.scrollHeight;
-        }
-    }, [model.view]);
-    useLayoutEffect(() => {
-        const list = messageList.current;
-        const content = messageContent.current;
-        if (model.selection.kind !== "draft" || list === null || content === null) {
-            return;
-        }
-        const keepLatestVisible = () => {
-            if (followLatest.current) {
-                list.scrollTop = list.scrollHeight;
-            }
-        };
-        const observer = new ResizeObserver(keepLatestVisible);
-        observer.observe(list);
-        observer.observe(content);
-        keepLatestVisible();
-        return () => observer.disconnect();
-    }, [model.selection]);
 
     const active =
         model.view.kind === "connecting" ||
@@ -125,7 +105,7 @@ export function BotChatHome({
     const clearComposer = () => {
         store.getState().setDraft("");
         setAttachments([]);
-        followLatest.current = true;
+        rearmFollowing();
     };
     const newConversation = () => {
         clearComposer();
@@ -133,7 +113,7 @@ export function BotChatHome({
     };
     const openManaged = (isExternal: boolean, id: string) => {
         setAttachments([]);
-        followLatest.current = true;
+        rearmFollowing();
         store.getState().openManaged(isExternal, id);
     };
     const send = async () => {
@@ -197,17 +177,15 @@ export function BotChatHome({
                 />
             ) : (
                 <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                    <div
-                        ref={messageList}
-                        onScroll={(event) => {
-                            const element = event.currentTarget;
-                            followLatest.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
-                        }}
+                    <FollowLatestScrollArea
+                        container={messageList}
+                        followThreshold={80}
+                        followRevision={followRevision}
                         className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-4 py-6 [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin] sm:px-8 sm:py-10 lg:px-12"
                         role="log"
                         aria-label="Messages"
                     >
-                        <div ref={messageContent} className="flex min-h-full flex-col gap-8">
+                        <div className="flex min-h-full flex-col gap-8">
                             {model.selection.kind === "loading" || model.view.kind === "loading" ? (
                                 <div className="m-auto">
                                     <Spinner
@@ -287,7 +265,7 @@ export function BotChatHome({
                                 </div>
                             )}
                         </div>
-                    </div>
+                    </FollowLatestScrollArea>
                     {model.view.kind === "active" && model.selection.kind === "draft" && (
                         <BotChatComposer
                             attachments={attachments}

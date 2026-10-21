@@ -7,6 +7,7 @@ import { ApiTransportProvider } from "../../src/services/api/api-transport-conte
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../src/services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope } from "../../src/services/identity/identity-scope-url.ts";
+import type { Clock } from "../../src/services/time/clock.ts";
 import { createMortyApplication } from "../../src/view-models/morty-application.ts";
 import { App } from "../../src/views/application/app.tsx";
 import { MortyApplicationProvider } from "../../src/views/application/application-context.tsx";
@@ -27,6 +28,7 @@ const environment = createChatWorkerEnvironment();
 const activeApps = new Set<TestApp>();
 
 export interface TestApp extends Application {
+    readonly reload: () => Promise<TestApp>;
     readonly daemon: Awaited<ReturnType<Application["connectAgent"]>> | null;
     readonly agentFailure: Promise<never> | null;
     readonly close: () => Promise<void>;
@@ -47,11 +49,19 @@ export async function createTestApp(
     options: {
         readonly application?: Application;
         readonly connectAgent?: boolean;
+        readonly clock?: Clock;
         readonly agent?: { readonly id: string; readonly label: string };
         readonly nativeSessionIds?: ReadonlySet<string>;
         readonly page?:
-            | { readonly kind: "continue"; readonly harness: string; readonly sessionId: string }
+            | {
+                  readonly kind: "continue";
+                  readonly harness: string;
+                  readonly sessionId: string;
+                  /** Replaces the created transfer code, for example with one that cannot be redeemed. */
+                  readonly code?: (application: Application) => string;
+              }
             | { readonly kind: "bootstrap"; readonly identity?: boolean }
+            | { readonly kind: "reload" }
             | { readonly kind: "managed-session"; readonly sessionId: string }
             | { readonly kind: "morty" };
         readonly prepare?: (application: Application) => void | Promise<void>;
@@ -67,6 +77,9 @@ export async function createTestApp(
         const transfer = new URL(await current.createTransferUrl());
         transfer.searchParams.set("harness", page.harness);
         transfer.searchParams.set("sessionId", page.sessionId);
+        if (page.code !== undefined) {
+            transfer.hash = `code=${page.code(current)}`;
+        }
         window.location.href = transfer.href;
         authenticationRouter.history.replace(`${transfer.pathname}${transfer.search}${transfer.hash}`);
     } else if (page.kind === "bootstrap") {
@@ -99,14 +112,18 @@ export async function createTestApp(
     // The application factory owns the anonymous identity workflow for the
     // whole test app, so a remount re-renders the same application instead of
     // restarting the workflow, exactly like a production page reload remount.
-    const application = createMortyApplication({ origin: current.origin, transport: current.transport });
+    const application = createMortyApplication({
+        origin: current.origin,
+        transport: current.transport,
+        ...(options.clock === undefined ? {} : { clock: options.clock }),
+    });
     const mount = () => {
         container.setAttribute("data-test-app-root", "");
         document.body.appendChild(container);
         return render(
             <ApiTransportProvider transport={current.transport}>
                 <ToastProvider>
-                    {page.kind === "bootstrap" ? (
+                    {page.kind === "bootstrap" || page.kind === "reload" ? (
                         <Bootstrap application={application} />
                     ) : page.kind === "continue" ? (
                         <App state={{ kind: "authentication", router: authenticationRouter }} />
@@ -201,10 +218,28 @@ export async function createTestApp(
                           await act(async () => await daemon.continueReply(...args));
                       },
                   },
+        reload: async () => {
+            closed = true;
+            lifetime.abort(new DOMException("The test document reloaded", "AbortError"));
+            rendered.unmount();
+            container.remove();
+            application.dispose();
+            activeApps.delete(app);
+            // Transfer the live server/Runtime fixture to a fresh document.
+            // Bootstrap uses the navigated URL and existing browser storage.
+            return await createTestApp({
+                application: current,
+                page: { kind: "reload" },
+                ...(options.clock === undefined ? {} : { clock: options.clock }),
+            });
+        },
         openViewer: async () => {
             const transport = new WebSocketApiTransport(current.origin);
             transport.open();
-            return await createTestApp({ application: { ...current, transport, close: () => transport.close() } });
+            return await createTestApp({
+                application: { ...current, transport, close: () => transport.close() },
+                ...(options.clock === undefined ? {} : { clock: options.clock }),
+            });
         },
         close: async () => {
             if (closed) {

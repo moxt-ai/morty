@@ -1,5 +1,5 @@
 import { getAllByRole, getByRole, queryByRole } from "@testing-library/dom";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
@@ -87,7 +87,7 @@ test("Given a paired Bot with cached agent settings, When a user filters its mod
         ]),
         failure,
     ]);
-    await vi.waitFor(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    await created.waitForView(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
 });
 
 test("Given multiple Runtimes share a Project, When a user configures a paired Bot, Then only its Runtime harnesses are listed", {

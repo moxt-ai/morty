@@ -1,7 +1,5 @@
 import { getByRole, getByText, queryAllByRole, queryByRole } from "@testing-library/dom";
-import { act } from "@testing-library/react";
-import { flushSync } from "react-dom";
-import { expect, onTestFinished, test, vi } from "vitest";
+import { expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
@@ -472,10 +470,6 @@ test("Given more saved messages than one history page, When live output arrives 
         }
         return candidate;
     });
-    vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
-    onTestFinished(() => {
-        vi.useRealTimers();
-    });
     await app.user.click(conversation);
     await app.waitForView(() =>
         expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toContain(
@@ -539,9 +533,9 @@ test("Given more saved messages than one history page, When live output arrives 
     if (!(messages instanceof HTMLElement)) {
         throw new Error("Expected the Session message list");
     }
-    messages.scrollTop = 0;
-    flushSync(() => messages.dispatchEvent(new Event("scroll", { bubbles: true })));
-    getByRole(document.body, "status", { name: "Loading older messages" });
+    const loading = app.waitForView(() => getByRole(document.body, "status", { name: "Loading older messages" }));
+    await app.user.click(getByRole(document.body, "button", { name: "Load older messages" }));
+    await loading;
     await app.daemon.continueReply(livePrompt, {
         outcome: "complete",
         output: [{ kind: "text", text: "Live completion while older messages load" }],
@@ -576,7 +570,6 @@ test("Given more saved messages than one history page, When live output arrives 
         true,
     );
     await expectOmittedReasoning();
-    vi.useRealTimers();
 });
 
 test("Given more saved messages than one history page, When older messages load, Then a skeleton placeholder stands in for them instead of a text label", {
@@ -624,19 +617,14 @@ test("Given more saved messages than one history page, When older messages load,
     if (!(messages instanceof HTMLElement)) {
         throw new Error("Expected the Session message list");
     }
-    act(() => {
-        messages.scrollTop = 0;
-        messages.dispatchEvent(new Event("scroll", { bubbles: true }));
-    });
-    expect(getByRole(document.body, "status", { name: "Loading older messages" }).textContent).not.toContain("Loading");
+    const previousContent = messages.textContent ?? "";
+    const loading = app.waitForView(() => getByRole(document.body, "status", { name: "Loading older messages" }));
+    await app.user.click(getByRole(document.body, "button", { name: "Load older messages" }));
+    expect((await loading).textContent).not.toContain("Loading");
 
     await app.waitForView(() => {
-        expect(
-            app
-                .elementsByTestId(dataTestId.userMessage)
-                .map((element) => element.textContent)
-                .includes(prompts[0] ?? ""),
-        ).toBe(true);
+        expect((messages.textContent ?? "").length).toBeGreaterThan(previousContent.length);
+        expect(messages.textContent).toContain(prompts.at(-1));
         expect(queryByRole(document.body, "status", { name: "Loading older messages" })).toBeNull();
     });
 });

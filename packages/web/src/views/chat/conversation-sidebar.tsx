@@ -414,83 +414,96 @@ export function ConversationSidebar({
                 ))}
             </div>
             <Tooltip.Provider delayDuration={150} disableHoverableContent>
-                <div className="col-start-2 row-start-2 flex items-center gap-1 sm:col-auto sm:row-auto sm:mt-3 sm:border-t sm:border-black/[0.06] sm:pt-3">
-                    <BugReportButton
-                        appearance="icon"
-                        daemonSource={{
-                            botId,
-                            sessionId: activeId,
-                            nativeSessionId: null,
-                            read: (signal) => requests.daemonDiagnostics(botId, signal),
-                            readNetwork: (signal) => requests.networkDiagnostic(botId, signal),
-                        }}
-                    />
-                    {access.state.kind !== "ended" && (
-                        <DropdownMenu.Root>
-                            <SidebarActionTooltip label="User menu" side="top">
-                                <DropdownMenu.Trigger asChild>
-                                    <Button
-                                        aria-label="User menu"
-                                        className="min-h-10 shrink-0 rounded-full"
-                                        data-testid={dataTestId.userMenu}
-                                        disabled={access.state.kind === "loading"}
-                                        size="icon"
-                                        variant="ghost"
-                                    >
-                                        {access.state.kind === "loading" ? (
-                                            <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-                                        ) : (
-                                            <UserRound aria-hidden="true" className="size-4" />
-                                        )}
-                                    </Button>
-                                </DropdownMenu.Trigger>
-                            </SidebarActionTooltip>
-                            <DropdownMenu.Portal>
-                                <DropdownMenu.Content
-                                    align="start"
-                                    className="z-[110] min-w-52 rounded-lg border border-border bg-background p-1 text-sm text-foreground shadow-lg"
-                                    side="top"
-                                    sideOffset={6}
-                                >
-                                    <DropdownMenu.Item
-                                        className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 outline-none data-[highlighted]:bg-accent"
-                                        onSelect={measureNetwork}
-                                    >
-                                        <Wifi aria-hidden="true" className="size-4" />
-                                        Network latency
-                                    </DropdownMenu.Item>
-                                    <DropdownMenu.Item
-                                        className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-destructive outline-none data-[highlighted]:bg-destructive/10"
-                                        data-testid={dataTestId.endRemoteAccess}
-                                        onSelect={() => {
-                                            void access.requestEnd(workspace.operationsSignal());
-                                        }}
-                                    >
-                                        <LogOut aria-hidden="true" className="size-4" />
-                                        End remote access
-                                    </DropdownMenu.Item>
-                                </DropdownMenu.Content>
-                            </DropdownMenu.Portal>
-                        </DropdownMenu.Root>
-                    )}
-                    <SidebarActionTooltip label="Continue your work" side="top">
+                <div className="col-span-2 row-start-4 flex flex-col gap-1 border-t border-border/60 pt-2 sm:col-auto sm:row-auto sm:mt-3 sm:pt-3">
+                    <Button
+                        variant="ghost"
+                        className="min-h-10 w-full justify-start gap-2 rounded-lg px-3 text-xs text-foreground hover:bg-white/70"
+                        data-testid={dataTestId.shareIdentity}
+                        onClick={dialogs.openSharing}
+                    >
+                        <Share2 className="size-4 shrink-0" aria-hidden="true" />
+                        Continue on another device
+                    </Button>
+                    <div className="flex items-center gap-1">
                         <Button
-                            aria-label="Continue your work"
                             variant="ghost"
-                            className="size-10 shrink-0 justify-center rounded-full px-0 text-copy-secondary hover:bg-white/70"
-                            data-testid={dataTestId.shareIdentity}
-                            onClick={dialogs.openSharing}
+                            className="min-h-10 min-w-0 flex-1 justify-start gap-1.5 whitespace-nowrap rounded-lg px-2 text-left text-xs text-muted-foreground"
+                            data-testid={dataTestId.endRemoteAccess}
+                            disabled={access.state.kind === "loading" || access.state.kind === "ending"}
+                            onClick={() => {
+                                void access.requestEnd(workspace.operationsSignal());
+                            }}
                         >
-                            <Share2 className="size-4" aria-hidden="true" />
+                            <LogOut className="size-4 shrink-0" aria-hidden="true" />
+                            End current access
                         </Button>
-                    </SidebarActionTooltip>
+                        <BugReportButton
+                            appearance="icon"
+                            daemonSource={{
+                                botId,
+                                sessionId: activeId,
+                                nativeSessionId: null,
+                                read: (signal) => requests.daemonDiagnostics(botId, signal),
+                                readNetwork: (signal) => requests.networkDiagnostic(botId, signal),
+                            }}
+                        />
+                        {access.state.kind !== "ended" && (
+                            <DropdownMenu.Root>
+                                <SidebarActionTooltip label="User menu" side="top">
+                                    <DropdownMenu.Trigger asChild>
+                                        <Button
+                                            aria-label="User menu"
+                                            className="min-h-10 shrink-0 rounded-full"
+                                            data-testid={dataTestId.userMenu}
+                                            disabled={access.state.kind === "loading"}
+                                            size="icon"
+                                            variant="ghost"
+                                        >
+                                            {access.state.kind === "loading" ? (
+                                                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                                            ) : (
+                                                <UserRound aria-hidden="true" className="size-4" />
+                                            )}
+                                        </Button>
+                                    </DropdownMenu.Trigger>
+                                </SidebarActionTooltip>
+                                <DropdownMenu.Portal>
+                                    <DropdownMenu.Content
+                                        align="start"
+                                        className="z-[110] min-w-52 rounded-lg border border-border bg-background p-1 text-sm text-foreground shadow-lg"
+                                        side="top"
+                                        sideOffset={6}
+                                    >
+                                        <DropdownMenu.Item
+                                            className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 outline-none data-[highlighted]:bg-accent"
+                                            onSelect={measureNetwork}
+                                        >
+                                            <Wifi aria-hidden="true" className="size-4" />
+                                            Network latency
+                                        </DropdownMenu.Item>
+                                    </DropdownMenu.Content>
+                                </DropdownMenu.Portal>
+                            </DropdownMenu.Root>
+                        )}
+                    </div>
                 </div>
             </Tooltip.Provider>
             {dialogStore !== null && <NativeSessionDialog store={dialogStore} onClose={dialogs.closeNativeDialog} />}
             {sharingStore !== null && (
                 <Dialog
-                    title="Continue your work"
-                    description="Scan the QR code or open the link on another device to use Morty."
+                    title="Continue on another device"
+                    description={
+                        <>
+                            <span className="block">
+                                Anyone with this link can use your current Morty identity to view and control sessions
+                                in this project, not just the current conversation.
+                            </span>
+                            <span className="mt-2 block">
+                                New devices can join for 24 hours after the link is created. Access already granted does
+                                not end when the link expires.
+                            </span>
+                        </>
+                    }
                     onClose={dialogs.closeSharing}
                 >
                     <IdentitySharing store={sharingStore} />
@@ -588,33 +601,62 @@ export function ConversationSidebar({
                     )}
                 </Dialog>
             )}
-            {(access.state.kind === "confirming-end" ||
+            {(access.state.kind === "loading" ||
+                access.state.kind === "unavailable" ||
+                access.state.kind === "confirming-end" ||
                 access.state.kind === "ending" ||
                 access.state.kind === "failed") && (
                 <Dialog
-                    busy={access.state.kind === "ending"}
-                    title="End remote access?"
-                    description="This will sign out every browser using this access link and prevent the link from being used again. Your local Runtime and task will keep running."
+                    busy={access.state.kind === "loading" || access.state.kind === "ending"}
+                    title="End current access?"
+                    description={
+                        <>
+                            <span className="block">
+                                End access in this browser. If you joined through a link, that link and the browser
+                                access it granted will also be revoked.
+                            </span>
+                            <span className="mt-2 block">
+                                Other sharing links and recovery access stay active. Already-open sessions elsewhere may
+                                keep working until their access expires.
+                            </span>
+                            <span className="mt-3 block font-medium text-foreground">
+                                Your local agent and tasks keep running.
+                            </span>
+                        </>
+                    }
                     testId={dataTestId.endRemoteAccessDialog}
                     onClose={access.cancel}
                 >
-                    {access.state.kind === "failed" && (
+                    {access.state.kind === "loading" && <p role="status">Preparing current access…</p>}
+                    {(access.state.kind === "failed" || access.state.kind === "unavailable") && (
                         <p className="mt-3 text-sm text-destructive" role="alert">
                             {access.state.message}
                         </p>
                     )}
                     <div className="mt-5 flex justify-end gap-2">
-                        <Button disabled={access.state.kind === "ending"} onClick={access.cancel} variant="ghost">
+                        <Button
+                            disabled={access.state.kind === "loading" || access.state.kind === "ending"}
+                            onClick={access.cancel}
+                            variant="ghost"
+                        >
                             Cancel
                         </Button>
                         <Button
-                            disabled={access.state.kind === "ending"}
+                            disabled={access.state.kind === "loading" || access.state.kind === "ending"}
                             onClick={() => {
-                                void access.end(workspace.operationsSignal());
+                                if (access.state.kind === "unavailable") {
+                                    void access.requestEnd(workspace.operationsSignal());
+                                } else {
+                                    void access.end(workspace.operationsSignal());
+                                }
                             }}
                             variant="destructive"
                         >
-                            {access.state.kind === "ending" ? "Ending…" : "End remote access"}
+                            {access.state.kind === "ending"
+                                ? "Ending…"
+                                : access.state.kind === "failed" || access.state.kind === "unavailable"
+                                  ? "Try again"
+                                  : "End current access"}
                         </Button>
                     </div>
                 </Dialog>

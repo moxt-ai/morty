@@ -1,5 +1,7 @@
 import { type RefObject, useEffect, useLayoutEffect, useRef } from "react";
 
+import { LinkButton } from "../ui/link-button.tsx";
+
 const TOP_EDGE_PIXELS = 80;
 
 /**
@@ -15,12 +17,14 @@ export function LoadMoreTrigger({
     container,
     hasMore,
     loading,
+    label,
     onLoadMore,
     revision,
 }: {
     readonly container: RefObject<HTMLElement | null>;
     readonly hasMore: boolean;
     readonly loading: boolean;
+    readonly label: string;
     readonly onLoadMore: (signal: AbortSignal) => Promise<void>;
     readonly revision: number;
 }) {
@@ -40,7 +44,7 @@ export function LoadMoreTrigger({
 
     requestRef.current = () => {
         const element = container.current;
-        if (element === null || pending.current || !hasMore || loading || element.scrollTop > TOP_EDGE_PIXELS) {
+        if (element === null || pending.current || !hasMore || loading) {
             return;
         }
         pending.current = true;
@@ -68,7 +72,11 @@ export function LoadMoreTrigger({
         if (element === null) {
             return;
         }
-        const request = (): void => requestRef.current();
+        const request = (): void => {
+            if (element.clientHeight > 0 && element.scrollTop <= TOP_EDGE_PIXELS) {
+                requestRef.current();
+            }
+        };
         element.addEventListener("scroll", request, { passive: true });
         return () => element.removeEventListener("scroll", request);
     });
@@ -80,7 +88,12 @@ export function LoadMoreTrigger({
     // latest message when a conversation first renders) before measuring.
     // biome-ignore lint/correctness/useExhaustiveDependencies: The edge check reads current props through a ref.
     useEffect(() => {
-        const frame = requestAnimationFrame(() => requestRef.current());
+        const frame = requestAnimationFrame(() => {
+            const element = container.current;
+            if (element !== null && element.clientHeight > 0 && element.scrollTop <= TOP_EDGE_PIXELS) {
+                requestRef.current();
+            }
+        });
         return () => cancelAnimationFrame(frame);
     }, [container, hasMore, revision]);
 
@@ -94,5 +107,9 @@ export function LoadMoreTrigger({
         }
     }, [container, revision]);
 
-    return null;
+    return hasMore && !loading ? (
+        <div className="flex justify-center py-2">
+            <LinkButton onClick={() => requestRef.current()}>{label}</LinkButton>
+        </div>
+    ) : null;
 }
