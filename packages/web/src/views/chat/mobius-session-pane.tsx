@@ -3,7 +3,6 @@ import { Check, CircleAlert, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
-import type { MarkdownImageReader } from "../../components/agents/agent-markdown.tsx";
 import { AgentThinking, type AgentThinkingEntry } from "../../components/chat/agent-thinking.tsx";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
@@ -25,6 +24,7 @@ import type { QueuedDraftMessage } from "../../view-models/chat/conversation-cre
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
 import type { UnconfirmedSubmission } from "../../view-models/chat/session-delivery-store.ts";
+import { sessionInteractionPresentation } from "../../view-models/chat/session-interaction-store.ts";
 import {
     createSessionPaneModel,
     type SessionConnection,
@@ -310,6 +310,9 @@ export function MobiusSessionPane({
         }),
     );
     const model = useStore(pane.store);
+    const attachmentModel = useStore(pane.composerAttachments);
+    const interactionSubmissions = useStore(pane.interactionSubmissions);
+    const interactions = sessionInteractionPresentation(model.interactions, interactionSubmissions);
     const preview = useStore(pane.filePreview);
     const delivery = useStore(pane.delivery);
     const messageQueue = useStore(pane.messageQueue);
@@ -324,21 +327,6 @@ export function MobiusSessionPane({
         }
     }, [titleEditorOpen]);
     const harnesses = model.harnesses;
-    const readImage = useCallback<MarkdownImageReader>(
-        async (path, signal) => {
-            for (let attempt = 0; attempt < 10; attempt += 1) {
-                signal.throwIfAborted();
-                const connection = pane.store.getState().connection;
-                if (connection.kind === "ready") {
-                    const file = await pane.readFile(path, signal);
-                    return { bytes: file.bytes, mediaType: file.mediaType };
-                }
-                await new Promise((resolve) => setTimeout(resolve, 100));
-            }
-            throw new Error("The Session is not connected.");
-        },
-        [pane],
-    );
 
     // The model owns the session connection through the same ref-cleanup
     // protocol the chat root uses: attach starts it, the cleanup detaches,
@@ -363,13 +351,13 @@ export function MobiusSessionPane({
         }
         run(action);
     };
-    const respondToPermission = async (response: PermissionInteractionResponse): Promise<void> => {
-        await pane.store.getState().respondToPermission(response, pane.operationsSignal());
+    const respondToPermission = (response: PermissionInteractionResponse): void => {
+        interactionSubmissions.respondToPermission(response, pane.operationsSignal());
     };
-    const respondToElicitation = async (response: ElicitationInteractionResponse): Promise<void> => {
-        await pane.store.getState().respondToElicitation(response, pane.operationsSignal());
+    const respondToElicitation = (response: ElicitationInteractionResponse): void => {
+        interactionSubmissions.respondToElicitation(response, pane.operationsSignal());
     };
-    const presentation = sessionPanePresentation(model, delivery, taskControls, messageQueue);
+    const presentation = sessionPanePresentation(model, delivery, taskControls, messageQueue, attachmentModel);
     const renderItems = sessionRenderItems(model.messages);
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
         run(async (signal) => await pane.store.getState().configure(option, value, booleanValue, signal));
@@ -490,7 +478,7 @@ export function MobiusSessionPane({
                                 {item.kind === "assistant-text" ? (
                                     <MobiusAssistantText
                                         openLocalFile={openLocalFile}
-                                        readImage={readImage}
+                                        readImage={pane.readFile}
                                         text={item.text}
                                         streaming={
                                             model.activity.kind === "working" && index === renderItems.length - 1
@@ -503,7 +491,7 @@ export function MobiusSessionPane({
                                                 model.activity.kind === "working" && index === renderItems.length - 1
                                             }
                                             entries={item.entries}
-                                            readImage={readImage}
+                                            readImage={pane.readFile}
                                         />
                                     </div>
                                 ) : (
@@ -514,7 +502,7 @@ export function MobiusSessionPane({
                                         deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
                                         onRemoveUnknownDelivery={pane.store.getState().removeUnknownDelivery}
                                         onRetryUnknownDelivery={() => run(pane.store.getState().retryUnknownDelivery)}
-                                        readImage={readImage}
+                                        readImage={pane.readFile}
                                         openLocalFile={openLocalFile}
                                     />
                                 )}
@@ -553,26 +541,21 @@ export function MobiusSessionPane({
                         runAndFollow(async (signal) => await pane.store.getState().steerQueued(commandId, signal))
                     }
                 />
-                {model.interactions.some((interaction) =>
-                    interaction.kind === "elicitation"
-                        ? interaction.elicitation.state.kind === "pending"
-                        : interaction.permission.state.kind === "pending",
-                ) && (
+                {(interactions.elicitations.length > 0 || interactions.permissions.length > 0) && (
                     <div className="mx-auto mt-4 max-h-[50vh] w-full max-w-[920px] shrink-0 overflow-y-auto px-3 [scrollbar-color:#c8d5ce_transparent] [scrollbar-width:thin] sm:mt-5 sm:px-5">
                         <SessionInteractionCards
-                            elicitations={model.interactions.flatMap((interaction) =>
-                                interaction.kind === "elicitation" ? [interaction.elicitation] : [],
-                            )}
-                            permissions={model.interactions.flatMap((interaction) =>
-                                interaction.kind === "permission" ? [interaction.permission] : [],
-                            )}
+                            elicitations={interactions.elicitations}
+                            permissions={interactions.permissions}
+                            busyInteractionId={interactions.busyInteractionId}
+                            error={interactions.error}
                             onElicitationResponse={respondToElicitation}
                             onPermissionResponse={respondToPermission}
                         />
                     </div>
                 )}
                 <BotChatComposer
-                    attachments={model.attachments}
+                    attachmentModel={attachmentModel}
+                    attachmentSignal={pane.operationsSignal()}
                     disabled={presentation.composerDisabled}
                     draft={model.draft}
                     error={presentation.composerError}
@@ -584,7 +567,6 @@ export function MobiusSessionPane({
                             />
                         ) : undefined
                     }
-                    onAttachmentsChange={pane.store.getState().setAttachments}
                     onDraftChange={pane.store.getState().setDraft}
                     onStop={() => run(pane.store.getState().stop)}
                     onSubmit={() =>

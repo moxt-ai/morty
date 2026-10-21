@@ -1,9 +1,9 @@
 import { ExternalLink, FileText, Image as ImageIcon, Terminal, Video } from "lucide-react";
-import { useEffect, useState } from "react";
 import type { MarkdownImageReader } from "@/components/agents/agent-markdown";
 import { AgentMarkdown } from "@/components/agents/agent-markdown";
 import { ToolTextPreview } from "@/components/chat/tools/tool-text-preview";
 import type { AgentDisplayContent } from "@/view-models/chat/display-content";
+import { SessionResource } from "./session-resource.tsx";
 
 const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/;
 const VIDEO_CONTENT_MIME = /^video\//;
@@ -90,63 +90,37 @@ function LocalImage({
     readonly mediaTestId?: string | undefined;
     readonly readImage?: MarkdownImageReader | undefined;
 }) {
-    const [source, setSource] = useState<string | null>(null);
-    useEffect(() => {
-        const controller = new AbortController();
-        let objectUrl = "";
-        const load = async () => {
-            try {
-                if (readImage === undefined) {
-                    setSource("");
-                    return;
-                }
-                const file = await readImage(content.uri, controller.signal);
-
-                if (controller.signal.aborted || !SAFE_IMAGE_MIME.test(file.mediaType)) {
-                    return;
-                }
-                objectUrl = URL.createObjectURL(new Blob([Uint8Array.from(file.bytes)], { type: file.mediaType }));
-                setSource(objectUrl);
-            } catch (error: unknown) {
-                if (!controller.signal.aborted) {
-                    console.error("Agent media could not be loaded", error);
-                    setSource("");
-                }
-            }
-        };
-        void load();
-        return () => {
-            controller.abort();
-            if (objectUrl.length > 0) {
-                URL.revokeObjectURL(objectUrl);
-            }
-        };
-    }, [content.uri, readImage]);
-    if (source === null) {
-        return (
-            <div className="min-h-24 rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
-                Loading media…
-            </div>
-        );
-    }
-    if (source.length === 0) {
-        return (
-            <div className="rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
-                Media content could not be loaded.
-            </div>
-        );
-    }
     return (
-        <figure className="m-0 overflow-hidden rounded-xl border-[0.5px] border-black/9 bg-white p-2">
-            <ContentHeader content={content} />
-            <img
-                alt={content.name.length > 0 ? content.name : "Agent-provided image"}
-                className="max-h-[480px] w-auto max-w-full rounded-lg object-contain"
-                data-testid={mediaTestId}
-                loading="lazy"
-                src={source}
-            />
-        </figure>
+        <SessionResource request={{ kind: "raster-image", path: content.uri }} read={readImage}>
+            {(state) => {
+                if (state.kind === "loading") {
+                    return (
+                        <div className="min-h-24 rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
+                            Loading media…
+                        </div>
+                    );
+                }
+                if (state.kind !== "media") {
+                    return (
+                        <div className="rounded-lg border-[0.5px] border-black/8 bg-black/[0.02] p-3 text-xs text-muted-foreground">
+                            Media content could not be loaded.
+                        </div>
+                    );
+                }
+                return (
+                    <figure className="m-0 overflow-hidden rounded-xl border-[0.5px] border-black/9 bg-white p-2">
+                        <ContentHeader content={content} />
+                        <img
+                            alt={content.name.length > 0 ? content.name : "Agent-provided image"}
+                            className="max-h-[480px] w-auto max-w-full rounded-lg object-contain"
+                            data-testid={mediaTestId}
+                            loading="lazy"
+                            src={state.source}
+                        />
+                    </figure>
+                );
+            }}
+        </SessionResource>
     );
 }
 

@@ -1,6 +1,7 @@
 import type { ApiTransport } from "../services/api/api-transport-context.tsx";
 import { BotChatApi } from "../services/chat/bot-chat-api.ts";
 import { createAnonymousSessionStore } from "./authentication/anonymous-session-store.ts";
+import { createIdentityAccess, type IdentityAccess } from "./authentication/identity-access.ts";
 import { type ChatWorkspace, createChatWorkspace } from "./chat/chat-workspace.ts";
 
 /**
@@ -18,6 +19,7 @@ export interface MortyApplication {
     readonly anonymousSession: ReturnType<typeof createAnonymousSessionStore>;
     /** The chat workspace for the active identity, created once per identity. */
     readonly chatWorkspace: (identity: ChatIdentity) => ChatWorkspace;
+    readonly identityAccess: (identity: ChatIdentity, onAccessEnded: () => void) => IdentityAccess;
     readonly transport: ApiTransport;
     readonly dispose: () => void;
 }
@@ -54,6 +56,13 @@ export function createMortyApplication(options: {
     };
     return {
         anonymousSession,
+        identityAccess: (identity, onAccessEnded) =>
+            createIdentityAccess({
+                fetchRequest: transport.fetch,
+                origin: options.origin,
+                identity,
+                onAccessEnded,
+            }),
         chatWorkspace: (identity) => {
             if (disposed) {
                 throw new Error("The Morty application was disposed.");

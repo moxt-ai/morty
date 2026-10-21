@@ -1,0 +1,47 @@
+import { AnonymousIdentityApi, type IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
+
+export interface IdentityAccess {
+    readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
+    readonly currentAccessToken: (signal: AbortSignal) => Promise<string>;
+    readonly endRemoteAccess: (token: string, signal: AbortSignal) => Promise<void>;
+}
+
+class IdentitySharingUnavailable extends Error {
+    readonly code = "identity_sharing_unavailable";
+
+    constructor() {
+        super("Morty cannot be shared from this device.");
+        this.name = "IdentitySharingUnavailable";
+    }
+}
+
+export function createIdentityAccess(options: {
+    readonly fetchRequest: (request: Request) => Promise<Response>;
+    readonly origin: string;
+    readonly identity: { readonly projectId: string; readonly getToken: (signal: AbortSignal) => Promise<string> };
+    readonly onAccessEnded: () => void;
+}): IdentityAccess {
+    const api = new AnonymousIdentityApi({ fetchRequest: options.fetchRequest, origin: options.origin });
+    return {
+        createTransfer: async (signal) => {
+            const localIdentity = await api.loadExisting(signal);
+            signal.throwIfAborted();
+            if (localIdentity === null || localIdentity.projectId !== options.identity.projectId) {
+                throw new IdentitySharingUnavailable();
+            }
+            return await api.createTransfer(localIdentity.token, signal);
+        },
+        currentAccessToken: async (signal) => {
+            const localIdentity = await api.loadExisting(signal);
+            signal.throwIfAborted();
+            return localIdentity?.projectId === options.identity.projectId
+                ? localIdentity.token
+                : await options.identity.getToken(signal);
+        },
+        endRemoteAccess: async (token, signal) => {
+            await api.endRemoteAccess(token, signal);
+            signal.throwIfAborted();
+            options.onAccessEnded();
+        },
+    };
+}

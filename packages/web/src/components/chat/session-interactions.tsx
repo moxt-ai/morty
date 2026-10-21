@@ -1,7 +1,6 @@
 import type { SessionElicitationField } from "@moxt-ai/mobius-sdk";
 import type { ElicitationResponseRequest } from "@moxt-ai/mobius-sdk/channel";
 import { ExternalLink, HelpCircle, ShieldCheck } from "lucide-react";
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { encodeElicitationForm, readMultiselectDefaults } from "@/services/chat/elicitation-form";
 import type {
@@ -10,7 +9,6 @@ import type {
     PermissionInteraction,
     PermissionInteractionResponse,
 } from "@/view-models/chat/session-pane-types";
-import { formatError } from "@/view-models/format-error";
 
 export type {
     ElicitationInteraction,
@@ -18,12 +16,6 @@ export type {
     PermissionInteraction,
     PermissionInteractionResponse,
 } from "@/view-models/chat/session-pane-types";
-
-type InteractionOperation =
-    | { readonly kind: "idle" }
-    | { readonly kind: "submitting"; readonly interactionId: string }
-    | { readonly kind: "submitted"; readonly interactionId: string }
-    | { readonly kind: "failed"; readonly interactionId: string; readonly message: string };
 
 function safeExternalUrl(value: string): string {
     try {
@@ -389,64 +381,40 @@ export function SessionInteractionCards({
     permissions,
     onElicitationResponse,
     onPermissionResponse,
+    busyInteractionId,
+    error,
 }: {
     readonly elicitations: readonly ElicitationInteraction[];
     readonly permissions: readonly PermissionInteraction[];
-    readonly onElicitationResponse: (response: ElicitationInteractionResponse) => Promise<void>;
-    readonly onPermissionResponse: (response: PermissionInteractionResponse) => Promise<void>;
+    readonly onElicitationResponse: (response: ElicitationInteractionResponse) => void;
+    readonly onPermissionResponse: (response: PermissionInteractionResponse) => void;
+    readonly busyInteractionId: string;
+    readonly error: string;
 }) {
-    const [operation, setOperation] = useState<InteractionOperation>({ kind: "idle" });
-    const answeredInteractionId = operation.kind === "submitted" ? operation.interactionId : "";
-    const visiblePermissions = permissions.filter(
-        (permission) => permission.state.kind === "pending" && permission.interactionId !== answeredInteractionId,
-    );
-    const visibleElicitations = elicitations.filter(
-        (elicitation) => elicitation.state.kind === "pending" && elicitation.interactionId !== answeredInteractionId,
-    );
-    if (visiblePermissions.length === 0 && visibleElicitations.length === 0) {
+    if (permissions.length === 0 && elicitations.length === 0) {
         return null;
     }
-    const submit = (interactionId: string, response: () => Promise<void>): void => {
-        if (
-            operation.kind === "submitting" ||
-            (operation.kind === "submitted" && operation.interactionId === interactionId)
-        ) {
-            return;
-        }
-        setOperation({ kind: "submitting", interactionId });
-        void response().then(
-            () => setOperation({ kind: "submitted", interactionId }),
-            (cause: unknown) =>
-                setOperation({
-                    kind: "failed",
-                    interactionId,
-                    message: formatError(cause, "The response could not be submitted."),
-                }),
-        );
-    };
-    const busyInteractionId =
-        operation.kind === "submitting" || operation.kind === "submitted" ? operation.interactionId : "";
     return (
         <div className="grid w-full gap-3">
-            {visiblePermissions.map((permission) => (
+            {permissions.map((permission) => (
                 <PermissionCard
                     busy={busyInteractionId === permission.interactionId}
                     key={permission.interactionId}
                     permission={permission}
-                    respond={(response) => submit(permission.interactionId, () => onPermissionResponse(response))}
+                    respond={onPermissionResponse}
                 />
             ))}
-            {visibleElicitations.map((elicitation) => (
+            {elicitations.map((elicitation) => (
                 <ElicitationCard
                     busy={busyInteractionId === elicitation.interactionId}
                     elicitation={elicitation}
                     key={elicitation.interactionId}
-                    respond={(response) => submit(elicitation.interactionId, () => onElicitationResponse(response))}
+                    respond={onElicitationResponse}
                 />
             ))}
-            {operation.kind === "failed" && (
+            {error.length > 0 && (
                 <p role="alert" className="text-xs text-destructive">
-                    {operation.message}
+                    {error}
                 </p>
             )}
         </div>

@@ -1,7 +1,7 @@
 import { MessageSquare, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useStore } from "zustand";
-import { BotChatComposer, type ComposerAttachment } from "../../components/chat/bot-chat-composer.tsx";
+import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
@@ -66,7 +66,7 @@ export function BotChatHome({
     const model = useStore(store);
     const [pairingDialogOpen, setPairingDialogOpen] = useState(false);
     const [disconnectedNotificationDismissed, setDisconnectedNotificationDismissed] = useState(false);
-    const [attachments, setAttachments] = useState<readonly ComposerAttachment[]>([]);
+    const attachmentModel = useStore(model.composerAttachments);
     const [followRevision, setFollowRevision] = useState(0);
     const rearmFollowing = () => {
         setFollowRevision((revision) => revision + 1);
@@ -102,24 +102,13 @@ export function BotChatHome({
         },
         [activeBotId, workspace],
     );
-    const clearComposer = () => {
-        store.getState().setDraft("");
-        setAttachments([]);
-        rearmFollowing();
-    };
     const newConversation = () => {
-        clearComposer();
+        rearmFollowing();
         store.getState().newConversation();
     };
     const openManaged = (isExternal: boolean, id: string) => {
-        setAttachments([]);
         rearmFollowing();
         store.getState().openManaged(isExternal, id);
-    };
-    const send = async () => {
-        if (await store.getState().createConversation(draft, attachments, workspace.chatSignal())) {
-            clearComposer();
-        }
     };
 
     return (
@@ -268,18 +257,21 @@ export function BotChatHome({
                     </FollowLatestScrollArea>
                     {model.view.kind === "active" && model.selection.kind === "draft" && (
                         <BotChatComposer
-                            attachments={attachments}
+                            attachmentModel={attachmentModel}
+                            attachmentSignal={workspace.operationsSignal()}
                             disabled={composerLocked}
                             draft={draft}
                             error={creationError}
-                            onAttachmentsChange={setAttachments}
                             onDraftChange={store.getState().setDraft}
                             onStop={() => {}}
-                            onSubmit={() => void send()}
+                            onSubmit={() => {
+                                rearmFollowing();
+                                void store.getState().createConversation(workspace.chatSignal());
+                            }}
                             outputState="idle"
                             submitDisabled={
                                 creationBusy ||
-                                (draft.trim().length === 0 && attachments.length === 0) ||
+                                (draft.trim().length === 0 && attachmentModel.attachments.length === 0) ||
                                 model.draftSettings === null
                             }
                         >
