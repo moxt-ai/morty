@@ -1105,12 +1105,17 @@ export function createSessionPaneModel(options: {
                     attachment.kind === "image" ? [attachment.image] : [],
                 );
                 const submittedDraftRevision = draftRevision;
+                // The submission owns this snapshot until it is accepted, journaled,
+                // or returned to the composer by an authoritative rejection.
+                centralSessionStorage.remove(draftEntry);
+                composerAttachments.getState().clear();
                 const activity = startSessionWork({ commandId, startedAt: lastSentMessage.sentAt });
                 const pending = deriveTimeline();
                 set({
                     activity,
                     operation: { kind: "sending", commandId },
                     messages: pending.messages,
+                    draft: "",
                 });
                 try {
                     activeTurn.submissionStarted(commandId);
@@ -1124,21 +1129,16 @@ export function createSessionPaneModel(options: {
                     };
                     const outcome = await delivery.getState().submit(commandId, displayPrompt, submission, signal);
                     signal.throwIfAborted();
-                    // The composer retains ownership until the service or the
-                    // unknown-delivery journal owns this exact submission.
                     switch (outcome.kind) {
                         case "accepted":
                         case "delivery-unknown":
-                            if (draftRevision === submittedDraftRevision) {
-                                centralSessionStorage.remove(draftEntry);
-                                set({ draft: "" });
-                            }
-                            if (composerAttachments.getState().attachments === attachments) {
-                                composerAttachments.getState().clear();
-                            }
                             break;
                         case "rejected":
-                            centralSessionStorage.write(draftEntry, get().draft);
+                            if (draftRevision === submittedDraftRevision) {
+                                set({ draft: current.draft });
+                                composerAttachments.getState().restore(attachments);
+                                centralSessionStorage.write(draftEntry, current.draft);
+                            }
                             if (isQueuedInitialMessage(commandId)) {
                                 // This rejected message is editable again. Retire
                                 // the auto-send/retry copy owned by the home store.

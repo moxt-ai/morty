@@ -94,3 +94,58 @@ test("Given two idle viewers with drafts and attachments, When both submit befor
         );
     }
 });
+
+test("Given two attachments in a message, When an attachment is removed while submission begins, Then accepted attachments leave the composer and are not sent again", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await sendPrompt(
+        app,
+        await app.queryElementByTestId(dataTestId.messageComposer),
+        "Open attachment ownership conversation",
+    );
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    const composer = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    if (!(composer instanceof HTMLTextAreaElement) || composer.form === null) {
+        throw new Error("Expected composer form");
+    }
+    const form = composer.form;
+    await app.user.click(composer);
+    await app.user.paste("Submit both attachments");
+    await app.user.upload(getByLabelText(form, "Choose attachments"), [
+        new File(["First attachment payload"], "first.json", { type: "text/plain" }),
+        new File(["Second attachment payload"], "second.json", { type: "text/plain" }),
+    ]);
+    await app.waitForView(() =>
+        expect(getByRole(form, "list", { name: "Attachments" }).textContent).toContain("second.json"),
+    );
+    const remove = getByRole(form, "button", { name: "Remove first.json" });
+    act(() => {
+        fireEvent.submit(form);
+        fireEvent.click(remove);
+    });
+    await app.waitForView(() =>
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((message) => message.textContent?.includes("Submit both attachments")),
+        ).toBe(true),
+    );
+    expect(queryByRole(form, "list", { name: "Attachments" })).toBeNull();
+    expect(composer.value).toBe("");
+    await sendPrompt(app, composer, "Send next message without attachments");
+    await app.waitForView(() =>
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((message) => message.textContent?.includes("Send next message without attachments")),
+        ).toBe(true),
+    );
+    const messages = app.elementsByTestId(dataTestId.userMessage);
+    expect(messages.at(-1)?.textContent).not.toContain("Second attachment payload");
+    expect(messages.at(-1)?.textContent).not.toContain("first.json");
+    expect(messages.at(-1)?.textContent).not.toContain("second.json");
+});
