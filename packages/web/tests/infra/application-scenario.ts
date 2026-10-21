@@ -1,7 +1,10 @@
 import { dataTestId } from "../../src/data-testid.ts";
 import type { TestApp } from "./test-app.tsx";
 
-export async function sendPrompt(app: TestApp, composer: HTMLTextAreaElement, prompt: string): Promise<void> {
+export async function sendPrompt(app: TestApp, composer: HTMLElement, prompt: string): Promise<void> {
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer to be a textarea");
+    }
     const readyComposer = await app.queryElementByTestId(
         dataTestId.messageComposer,
         (element) => element instanceof HTMLTextAreaElement && !element.disabled,

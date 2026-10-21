@@ -294,7 +294,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
         // Preserve identity and Bot configuration; resolve Runtime connections through the manager.
         const identity =
-            config.base_url !== undefined && config.base_url !== base
+            config["base_url"] !== undefined && config["base_url"] !== base
                 ? {}
                 : Object.fromEntries(
                       Object.entries(config).filter(([key]) =>
@@ -326,25 +326,27 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     async function request(context: Context, route: string, body?: unknown, authenticated = true) {
         const headers: Record<string, string> = { "content-type": "application/json" };
         if (authenticated) {
-            headers.authorization = `Bearer ${credential(context.config.user_token)}`;
+            headers["authorization"] = `Bearer ${credential(context.config["user_token"])}`;
         }
         const path =
             authenticated && !route.startsWith("/chat/projects/")
-                ? `/projects/${identifier(context.config.project_id)}${route}`
+                ? `/projects/${identifier(context.config["project_id"])}${route}`
                 : route;
         const response = await fetch(new URL(`/morty/api${path}`, context.base), {
             method: body === undefined ? "GET" : "POST",
             headers,
             redirect: "error",
-            body: body === undefined ? undefined : JSON.stringify(body),
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
             signal: AbortSignal.any([signal, AbortSignal.timeout(45000)]),
         });
         const value = object(await response.json());
         if (!response.ok) {
-            const failure = object(value.error);
-            const code = text(failure.code, /^[A-Za-z0-9_-]+$/u);
+            const failure = object(value["error"]);
+            const code = text(failure["code"], /^[A-Za-z0-9_-]+$/u);
             const message =
-                typeof failure.message === "string" ? failure.message : `Request failed with HTTP ${response.status}`;
+                typeof failure["message"] === "string"
+                    ? failure["message"]
+                    : `Request failed with HTTP ${response.status}`;
             fail(code, Object.assign(new Error(message), { name: "RemoteError" }));
         }
         return value;
@@ -387,17 +389,17 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function prepareIdentity(context: Context): Promise<SetupIdentity> {
-        if (context.config.user_token !== undefined) {
+        if (context.config["user_token"] !== undefined) {
             progress("identity", "Reusing the saved identity.");
             return { kind: "setup", context };
         }
         progress("identity", "Creating the standalone identity and Machine.");
         const identity = await request(context, "/identity/anonymous-users", {}, false);
         const saved = await saveConfiguration(context, {
-            user_token: credential(identity.token),
-            user_id: identifier(identity.userId),
-            bot_id: identifier(object(identity.bot).botId),
-            project_id: identifier(identity.projectId),
+            user_token: credential(identity["token"]),
+            user_id: identifier(identity["userId"]),
+            bot_id: identifier(object(identity["bot"])["botId"]),
+            project_id: identifier(identity["projectId"]),
             entry: "setup",
         });
         return { kind: "setup", context: saved };
@@ -405,25 +407,25 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
 
     async function verifyIdentityAndBot(context: Context): Promise<VerifiedIdentity> {
         const session = await request(context, "/session");
-        identifier(session.userId);
+        identifier(session["userId"]);
         const listed = await request(context, "/management/bots");
-        if (!Array.isArray(listed.bots)) {
+        if (!Array.isArray(listed["bots"])) {
             fail("INVALID_RESPONSE");
         }
-        const bot = listed.bots
+        const bot = listed["bots"]
             .map(object)
-            .find((item) => context.config.bot_id === undefined || item.botId === context.config.bot_id);
+            .find((item) => context.config["bot_id"] === undefined || item["botId"] === context.config["bot_id"]);
         if (bot === undefined) {
             fail("BOT_NOT_FOUND");
         }
-        const botId = identifier(bot.botId);
+        const botId = identifier(bot["botId"]);
         const detail = await request(context, `/management/bots/${encodeURIComponent(botId)}/runtime-binding`);
-        if (identifier(detail.botId) !== botId) {
+        if (identifier(detail["botId"]) !== botId) {
             fail("INVALID_RESPONSE");
         }
-        const expectedRuntimeId = detail.runtimeId === null ? null : identifier(detail.runtimeId);
+        const expectedRuntimeId = detail["runtimeId"] === null ? null : identifier(detail["runtimeId"]);
         return {
-            context: await saveConfiguration(context, { user_id: session.userId, bot_id: botId }),
+            context: await saveConfiguration(context, { user_id: session["userId"], bot_id: botId }),
             expectedRuntimeId,
         };
     }
@@ -489,9 +491,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             return value.map((item) => {
                 const connection = object(item);
                 return {
-                    appId: identifier(connection.app_id),
-                    connectionId: identifier(connection.connection_id),
-                    runtimeId: identifier(connection.runtime_id),
+                    appId: identifier(connection["app_id"]),
+                    connectionId: identifier(connection["connection_id"]),
+                    runtimeId: identifier(connection["runtime_id"]),
                 };
             });
         } finally {
@@ -505,18 +507,18 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         });
         const selection: RuntimeSelection = {
             kind: "pairing",
-            appId: identifier(pairing.appId),
-            channelId: identifier(pairing.channelId),
-            pairingCode: text(pairing.pairingCode, /^[A-Za-z0-9-]+$/u),
-            pairingId: identifier(pairing.pairingId),
-            projectId: identifier(pairing.projectId),
-            relayUrl: origin(pairing.relayUrl),
-            runtimeId: identifier(pairing.runtimeId),
+            appId: identifier(pairing["appId"]),
+            channelId: identifier(pairing["channelId"]),
+            pairingCode: text(pairing["pairingCode"], /^[A-Za-z0-9-]+$/u),
+            pairingId: identifier(pairing["pairingId"]),
+            projectId: identifier(pairing["projectId"]),
+            relayUrl: origin(pairing["relayUrl"]),
+            runtimeId: identifier(pairing["runtimeId"]),
         };
-        if (selection.appId !== appId || selection.projectId !== context.config.project_id) {
+        if (selection.appId !== appId || selection.projectId !== context.config["project_id"]) {
             fail("PROJECT_CONFLICT");
         }
-        emit({ status: "prepared", botId: context.config.bot_id });
+        emit({ status: "prepared", botId: context.config["bot_id"] });
         return selection;
     }
 
@@ -524,16 +526,16 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         progress("identity", "Replacing the Project to pair a new Runtime for the same user.");
         const replacement = await request(context, "/management/project/replacement", {});
         const saved = await saveConfiguration(context, {
-            user_token: credential(replacement.token),
-            user_id: identifier(replacement.userId),
-            bot_id: identifier(object(replacement.bot).botId),
-            project_id: identifier(replacement.projectId),
+            user_token: credential(replacement["token"]),
+            user_id: identifier(replacement["userId"]),
+            bot_id: identifier(object(replacement["bot"])["botId"]),
+            project_id: identifier(replacement["projectId"]),
             // The replacement Machine starts unbound; drop the previous Machine's Agent binding.
             agent_ref: undefined,
             agent_config_revision: undefined,
             entry: "setup",
         });
-        emit({ status: "project_replaced", botId: saved.config.bot_id, projectId: saved.config.project_id });
+        emit({ status: "project_replaced", botId: saved.config["bot_id"], projectId: saved.config["project_id"] });
         return saved;
     }
 
@@ -544,7 +546,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     ): Promise<{ readonly context: Context; readonly runtime: RuntimeSelection }> {
         progress("pairing", "Preparing the Runtime connection.");
         const project = await request(context, "/management/project");
-        const appId = identifier(project.appId);
+        const appId = identifier(project["appId"]);
         if (expectedRuntimeId !== null) {
             const existing = (await listManagedConnections(context, cwd)).find(
                 (connection) => connection.appId === appId && connection.runtimeId === expectedRuntimeId,
@@ -590,17 +592,17 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
 
     function hasOnlineRuntimeAgent(runtime: Record<string, unknown>, runtimeId: string, agentRef: string): boolean {
         return (
-            runtime.runtimeId === runtimeId &&
-            runtime.online === true &&
-            Array.isArray(runtime.agents) &&
-            runtime.agents.some((agent) => object(agent).agentRef === agentRef)
+            runtime["runtimeId"] === runtimeId &&
+            runtime["online"] === true &&
+            Array.isArray(runtime["agents"]) &&
+            runtime["agents"].some((agent) => object(agent)["agentRef"] === agentRef)
         );
     }
 
     function setupHasOnlineRuntimeAgent(setup: Record<string, unknown>, runtimeId: string, agentRef: string): boolean {
         return (
-            Array.isArray(setup.runtimes) &&
-            setup.runtimes.some((runtime) => hasOnlineRuntimeAgent(object(runtime), runtimeId, agentRef))
+            Array.isArray(setup["runtimes"]) &&
+            setup["runtimes"].some((runtime) => hasOnlineRuntimeAgent(object(runtime), runtimeId, agentRef))
         );
     }
 
@@ -611,24 +613,24 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             while (true) {
                 signal.throwIfAborted();
                 const status = await request(context, `/management/runtime-pairings/${runtime.pairingId}`);
-                if (status.status !== "pending" && status.status !== "paired") {
+                if (status["status"] !== "pending" && status["status"] !== "paired") {
                     fail("RUNTIME_PAIRING_UNAVAILABLE");
                 }
                 if (attempts++ % 10 === 0) {
                     progress("runtime", "Waiting for Runtime pairing to complete.");
                 }
-                if (status.status === "paired") {
-                    if (status.runtimeId !== runtimeId || !Array.isArray(status.agents)) {
+                if (status["status"] === "paired") {
+                    if (status["runtimeId"] !== runtimeId || !Array.isArray(status["agents"])) {
                         fail("INVALID_RESPONSE");
                     }
-                    if (status.agents.some((agent) => object(agent).id === harness)) {
+                    if (status["agents"].some((agent) => object(agent)["id"] === harness)) {
                         emit({ status: "runtime_paired", runtimeId, harness });
                         break;
                     }
                     emit({
                         status: "harness_unavailable",
                         harness,
-                        available: status.agents.map((agent) => identifier(object(agent).id)),
+                        available: status["agents"].map((agent) => identifier(object(agent)["id"])),
                     });
                     fail("HARNESS_UNAVAILABLE");
                 }
@@ -639,15 +641,15 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         attempts = 0;
         while (true) {
             signal.throwIfAborted();
-            const botPath = `/chat/projects/${context.config.project_id}/bots/${context.config.bot_id}`;
-            const alreadyConfigured = runtime.kind === "existing" && typeof context.config.agent_ref === "string";
+            const botPath = `/chat/projects/${context.config["project_id"]}/bots/${context.config["bot_id"]}`;
+            const alreadyConfigured = runtime.kind === "existing" && typeof context.config["agent_ref"] === "string";
             const state = await request(
                 context,
                 `${botPath}/${alreadyConfigured ? "workspace" : "setup/runtimes"}`,
                 {},
             );
             const online = alreadyConfigured
-                ? hasOnlineRuntimeAgent(object(state.runtime), runtimeId, harness)
+                ? hasOnlineRuntimeAgent(object(state["runtime"]), runtimeId, harness)
                 : setupHasOnlineRuntimeAgent(state, runtimeId, harness);
             if (online) {
                 if (runtime.kind === "existing") {
@@ -667,24 +669,28 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         progress("binding", `Connecting the Machine to ${harness} in the default working directory.`);
         const runtimeId = runtime.runtimeId;
         const agentRef = identifier(harness);
-        const revision = context.config.agent_ref === agentRef ? (context.config.agent_config_revision ?? 1) : 1;
+        const revision = context.config["agent_ref"] === agentRef ? (context.config["agent_config_revision"] ?? 1) : 1;
         if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 1) {
             fail("AGENT_REVISION_REQUIRED");
         }
-        await request(context, `/chat/projects/${context.config.project_id}/bots/${context.config.bot_id}/setup`, {
-            runtimeId,
-            agentRef,
-        });
+        await request(
+            context,
+            `/chat/projects/${context.config["project_id"]}/bots/${context.config["bot_id"]}/setup`,
+            {
+                runtimeId,
+                agentRef,
+            },
+        );
         const saved = await saveConfiguration(context, { agent_ref: agentRef, agent_config_revision: revision });
-        emit({ status: "binding_activated", botId: context.config.bot_id, harness });
+        emit({ status: "binding_activated", botId: context.config["bot_id"], harness });
         return saved;
     }
 
     function hasReadyBinding(context: Context, runtime: RuntimeSelection, configuration: Record<string, unknown>) {
         const runtimeId = runtime.runtimeId;
         if (
-            typeof context.config.agent_ref !== "string" ||
-            !hasOnlineRuntimeAgent(object(configuration.runtime), runtimeId, context.config.agent_ref)
+            typeof context.config["agent_ref"] !== "string" ||
+            !hasOnlineRuntimeAgent(object(configuration["runtime"]), runtimeId, context.config["agent_ref"])
         ) {
             return false;
         }
@@ -697,7 +703,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             signal.throwIfAborted();
             const configuration = await request(
                 context,
-                `/chat/projects/${context.config.project_id}/bots/${context.config.bot_id}/workspace`,
+                `/chat/projects/${context.config["project_id"]}/bots/${context.config["bot_id"]}/workspace`,
                 {},
             );
             if (hasReadyBinding(context, runtime, configuration)) {
@@ -723,7 +729,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             fail("QR_DECODER_UNAVAILABLE");
         }
         const decoded: unknown = decoder(new Uint8ClampedArray(png.data), png.width, png.height);
-        if (decoded === null || object(decoded).data !== value) {
+        if (decoded === null || object(decoded)["data"] !== value) {
             fail("QR_VERIFICATION_FAILED");
         }
 
@@ -741,10 +747,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
 
     async function finishSetup(context: Context, runtime: RuntimeSelection, options: Options) {
         await waitForReadiness(context, runtime);
-        const botId = context.config.bot_id;
-        const workingDirectory = text(context.config.workspace);
+        const botId = context.config["bot_id"];
+        const workingDirectory = text(context.config["workspace"]);
         const transfer = await request(context, "/identity/transfers", {});
-        const url = new URL(text(transfer.url));
+        const url = new URL(text(transfer["url"]));
         if (
             url.origin !== context.base ||
             url.pathname !== "/continue" ||
@@ -777,7 +783,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         context = identity.context;
         const verified = await verifyIdentityAndBot(context);
         context = verified.context;
-        emit({ status: "identity_ready", userId: context.config.user_id, botId: context.config.bot_id });
+        emit({ status: "identity_ready", userId: context.config["user_id"], botId: context.config["bot_id"] });
         const prepared = await prepareRuntime(context, cwd, verified.expectedRuntimeId);
         context = prepared.context;
         context = await startRuntime(context, prepared.runtime, cwd);

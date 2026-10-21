@@ -221,6 +221,9 @@ importers:
       dependency-cruiser:
         specifier: 'catalog:'
         version: 18.2.0
+      drizzle-kit:
+        specifier: 'catalog:'
+        version: 0.31.8(supports-color@10.2.2)
       happy-dom:
         specifier: 'catalog:'
         version: 20.8.9(bufferutil@4.1.0)(utf-8-validate@6.0.6)

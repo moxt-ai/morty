@@ -22,11 +22,7 @@ test("Given the daemon has queued work, When the user steers it into the active 
     await app.queryElementByTestId(dataTestId.sessionStatus);
     const viewer = await app.openViewer();
     await viewer.queryElementByTestId(dataTestId.sessionStatus);
-    await sendPrompt(
-        app,
-        (await app.queryElementByTestId(dataTestId.messageComposer)) as HTMLTextAreaElement,
-        instruction,
-    );
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), instruction);
     const queued = await viewer.queryElementByTestId(
         dataTestId.queuedMessage,
         (element) => element.textContent?.includes(instruction) === true,
@@ -68,11 +64,7 @@ test("Given the daemon has queued work, When the user steers it into the active 
                 .some((element) => element.textContent?.includes("steered") === true),
         ).toBe(false);
     }
-    await sendPrompt(
-        app,
-        (await app.queryElementByTestId(dataTestId.messageComposer)) as HTMLTextAreaElement,
-        deletedInstruction,
-    );
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), deletedInstruction);
     const queuedForDeletion = await viewer.queryElementByTestId(
         dataTestId.queuedMessage,
         (element) => element.textContent?.includes(deletedInstruction) === true,
@@ -122,11 +114,7 @@ test("Given a follow-up is queued, When the user stops the active turn, Then the
         dataTestId.sendMessage,
         (element) => element.getAttribute("aria-label") === "Stop agent output",
     );
-    await sendPrompt(
-        app,
-        (await app.queryElementByTestId(dataTestId.messageComposer)) as HTMLTextAreaElement,
-        queuedPrompt,
-    );
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), queuedPrompt);
     await app.queryElementByTestId(
         dataTestId.queuedMessage,
         (element) => element.textContent?.includes(queuedPrompt) === true,

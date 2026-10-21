@@ -1,8 +1,7 @@
 {
     "$schema": "https://unpkg.com/knip@6/schema.json",
     "ignore": ["third-party/**"],
-    "ignoreBinaries": ["mobius"],
-    "ignoreDependencies": ["cloudflare", "drizzle-kit"],
+    "ignoreDependencies": ["cloudflare"],
     "workspaces": {
         ".": {
             "entry": ["drizzle/*.config.ts", "vite.web-dev.config.ts", ".agents/skills/*/scripts/*.{ts,cjs}"],

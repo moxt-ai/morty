@@ -42,10 +42,10 @@ export async function createTestRuntime(
                 }),
                 "anonymous identity",
             );
-            const token = text(identity.token, "anonymous token");
-            const projectId = text(identity.projectId, "projectId");
-            const userId = text(identity.userId, "userId");
-            const botId = text(object(identity.bot, "anonymous bot").botId, "botId");
+            const token = text(identity["token"], "anonymous token");
+            const projectId = text(identity["projectId"], "projectId");
+            const userId = text(identity["userId"], "userId");
+            const botId = text(object(identity["bot"], "anonymous bot")["botId"], "botId");
             const url = new URL(stack.chatOrigin);
             url.searchParams.set("identity", encodeIdentityScope({ botId, projectId, userId }));
             await page.addInitScript(
@@ -81,16 +81,16 @@ export async function createTestRuntime(
                     [
                         "pair",
                         "--url",
-                        text(pairing.relayUrl, "relay URL"),
+                        text(pairing["relayUrl"], "relay URL"),
                         "--pairing",
-                        text(pairing.pairingId, "pairing ID"),
+                        text(pairing["pairingId"], "pairing ID"),
                         "--code",
-                        text(pairing.pairingCode, "pairing code"),
+                        text(pairing["pairingCode"], "pairing code"),
                     ],
                     stack.directories.workspace,
                     harness.signal,
                 );
-                const paired = await chat.readPairedAgent(text(pairing.pairingId, "pairing ID"), agentId);
+                const paired = await chat.readPairedAgent(text(pairing["pairingId"], "pairing ID"), agentId);
                 await chat.bindAgent(paired.runtimeId, agentId);
                 await chat.readBinding(agentId);
                 await page.reload();
@@ -111,16 +111,16 @@ export async function createTestRuntime(
                     [
                         "pair",
                         "--url",
-                        text(pairing.relayUrl, "relay URL"),
+                        text(pairing["relayUrl"], "relay URL"),
                         "--pairing",
-                        text(pairing.pairingId, "pairing ID"),
+                        text(pairing["pairingId"], "pairing ID"),
                         "--code",
-                        text(pairing.pairingCode, "pairing code"),
+                        text(pairing["pairingCode"], "pairing code"),
                     ],
                     stack.directories.workspace,
                     harness.signal,
                 );
-                await unrelated.readPairedAgent(text(pairing.pairingId, "unrelated pairingId"), agentId);
+                await unrelated.readPairedAgent(text(pairing["pairingId"], "unrelated pairingId"), agentId);
             },
             followInstructions: async (
                 instructionUrl: string,
@@ -149,16 +149,16 @@ export async function createTestRuntime(
                         },
                     },
                     runtime,
-                    sessionId,
+                    ...(sessionId === undefined ? {} : { sessionId }),
                 });
                 return {
-                    botId: text(result.ready.botId, "ready Bot"),
+                    botId: text(result.ready["botId"], "ready Bot"),
                     configuration: result.configuration,
                     events: result.events,
-                    url: text(result.ready.url, "Chat URL"),
-                    qrPath: typeof result.ready.qrPath === "string" ? result.ready.qrPath : null,
-                    workspace: text(result.ready.workspace, "Runtime working directory"),
-                    message: text(result.ready.message, "ready message"),
+                    url: text(result.ready["url"], "Chat URL"),
+                    qrPath: typeof result.ready["qrPath"] === "string" ? result.ready["qrPath"] : null,
+                    workspace: text(result.ready["workspace"], "Runtime working directory"),
+                    message: text(result.ready["message"], "ready message"),
                     identity: result.identity,
                 };
             },
