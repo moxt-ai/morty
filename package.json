@@ -46,8 +46,12 @@
         "pre-commit": "pnpm typecheck && pnpm check:no-chinese && pnpm biome check --error-on-warnings --staged --files-ignore-unknown=true --no-errors-on-unmatched && pnpm check:architecture"
     },
     "devDependencies": {
+        "@agentclientprotocol/sdk": "1.4.0",
         "@biomejs/biome": "catalog:",
         "@cloudflare/vite-plugin": "catalog:",
+        "@moxt-ai/mobius": "workspace:*",
+        "@moxt-ai/mobius-sdk": "workspace:*",
+        "@moxt-ai/mobius-test-support": "workspace:*",
         "@sentry/vite-plugin": "catalog:",
         "@tailwindcss/vite": "catalog:",
         "@types/node": "catalog:",
@@ -66,11 +70,7 @@
         "typescript": "catalog:",
         "vite": "catalog:",
         "vitest": "catalog:",
-        "wrangler": "catalog:",
-        "@moxt-ai/mobius": "workspace:*",
-        "@moxt-ai/mobius-sdk": "workspace:*",
-
-        "@moxt-ai/mobius-test-support": "workspace:*"
+        "wrangler": "catalog:"
     },
     "dependencies": {
         "react": "catalog:",

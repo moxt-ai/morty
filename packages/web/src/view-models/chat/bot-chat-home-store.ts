@@ -12,7 +12,7 @@ import {
     newConversationDraftEntry,
 } from "../../services/session-storage/central-session-storage.ts";
 import { formatError } from "../format-error.ts";
-import type { ComposerAttachment } from "./composer-attachment.ts";
+import { createComposerAttachmentStore } from "./composer-attachment-store.ts";
 import { type ConversationCreationState, transitionConversationCreation } from "./conversation-creation-machine.ts";
 import {
     type ConversationSelectionState,
@@ -104,6 +104,7 @@ interface ChatEntryNotices {
 }
 
 export interface BotChatHomeStore {
+    readonly composerAttachments: ReturnType<typeof createComposerAttachmentStore>;
     readonly view: BotChatHomeView;
     readonly connectionStatus: BotConnectionStatus;
     readonly selection: ConversationSelectionState;
@@ -130,11 +131,7 @@ export interface BotChatHomeStore {
     readonly initialMessageRecoveryCleared: (conversationId: string, commandId: string) => void;
     /** Marks the queued first message unconfirmed after an uncertain submission. */
     readonly initialMessageUnconfirmed: (conversationId: string, journal: UnconfirmedSubmission) => void;
-    readonly createConversation: (
-        draft: string,
-        attachments: readonly ComposerAttachment[],
-        signal: AbortSignal,
-    ) => Promise<boolean>;
+    readonly createConversation: (signal: AbortSignal) => Promise<boolean>;
 }
 
 function initialSelection(urlValue: string, createId: () => string): ConversationSelectionState {
@@ -188,9 +185,11 @@ export const createBotChatHomeStore = (
     },
 ) => {
     const botId = options.botId;
+    const composerAttachments = createComposerAttachmentStore();
     const conversations = createConversationSessionStore(requests);
     const selection = initialSelection(options.url, options.createId);
     return createStore<BotChatHomeStore>()((set, get) => ({
+        composerAttachments,
         view: { kind: "loading" },
         connectionStatus: { kind: "connecting", label: "Connecting" },
         selection,
@@ -463,6 +462,7 @@ export const createBotChatHomeStore = (
             }
         },
         newConversation: () => {
+            composerAttachments.getState().clear();
             const current = get();
             if (current.view.kind !== "loading" && current.view.kind !== "failed") {
                 centralSessionStorage.remove(newConversationDraftEntry(current.view.botId));
@@ -480,6 +480,7 @@ export const createBotChatHomeStore = (
             }));
         },
         openManaged: (isExternal, id) => {
+            composerAttachments.getState().clear();
             options.navigation.showManaged(isExternal, id);
             set((current) => ({
                 selection: transitionConversationSelection(current.selection, {
@@ -554,9 +555,12 @@ export const createBotChatHomeStore = (
                     ? { creation }
                     : {};
             }),
-        createConversation: async (draft, attachments, signal) => {
+        createConversation: async (signal) => {
             const current = get();
+            const { attachments, state: attachmentState } = composerAttachments.getState();
+            const draft = current.draft;
             if (
+                attachmentState.kind === "reading" ||
                 current.view.kind !== "active" ||
                 current.selection.kind !== "draft" ||
                 current.draftSettings === null
@@ -652,6 +656,7 @@ export const createBotChatHomeStore = (
                     directoryRevision: state.directoryRevision + 1,
                     optimisticTitles: new Map(state.optimisticTitles).set(sent.conversationId, sent.message.summary),
                 }));
+                composerAttachments.getState().clear();
                 centralSessionStorage.remove(newConversationDraftEntry(activeBotId));
                 return true;
             } catch (cause) {

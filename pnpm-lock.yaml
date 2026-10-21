@@ -185,6 +185,9 @@ importers:
         specifier: 'catalog:'
         version: 1.4.2(typescript@7.0.2)
     devDependencies:
+      '@agentclientprotocol/sdk':
+        specifier: 1.4.0
+        version: 1.4.0(zod@4.6.5)
       '@biomejs/biome':
         specifier: 'catalog:'
         version: 2.5.12
