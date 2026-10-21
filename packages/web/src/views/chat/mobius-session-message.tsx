@@ -7,10 +7,15 @@ import { AgentResponseText } from "../../components/agents/agent-response-text.t
 import { loadDiagramRenderer } from "../../components/agents/mermaid-code-block.tsx";
 import { AgentThinking } from "../../components/chat/agent-thinking.tsx";
 import { AttemptFailure } from "../../components/chat/attempt-failure.tsx";
+import { CompactionDisclosure } from "../../components/chat/compaction-disclosure.tsx";
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { isDisplayableImageType } from "../../services/chat/image-media-type.ts";
-import { type SessionMessage, sessionTextValue } from "../../view-models/chat/session-presentation.ts";
+import {
+    COMPACTION_CHARACTER_LIMIT,
+    type SessionMessage,
+    sessionTextValue,
+} from "../../view-models/chat/session-presentation.ts";
 
 // Warm the lazily loaded rich renderers once the page settles, so the first
 // LaTeX or Mermaid content resolves its renderer without a visible fallback
@@ -363,6 +368,19 @@ export function MobiusSessionMessage({
     }
     if (presentation.kind === "failure") {
         return <AttemptFailure approval={failureApproval} code={presentation.code} message={presentation.message} />;
+    }
+    if (presentation.kind === "compaction") {
+        return (
+            <CompactionDisclosure
+                error={presentation.error}
+                status={presentation.status}
+                summary={
+                    presentation.summary === null
+                        ? ""
+                        : sessionTextValue(presentation.summary).slice(-COMPACTION_CHARACTER_LIMIT)
+                }
+            />
+        );
     }
     if (presentation.kind === "completed") {
         if (presentation.stopReason === "end_turn" || presentation.stopReason === "steered") {
