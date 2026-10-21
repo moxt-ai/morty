@@ -643,7 +643,11 @@ export function ConversationSidebar({
                                 testId={dataTestId.newConversation}
                                 onClick={onNewConversation}
                             />
-                            <SidebarSessionOption icon={Laptop} label="Open Session" onClick={dialogs.openNativeDialog} />
+                            <SidebarSessionOption
+                                icon={Laptop}
+                                label="Open Session"
+                                onClick={dialogs.openNativeDialog}
+                            />
                         </nav>
                     )}
                     {desktop && (
@@ -686,7 +690,7 @@ export function ConversationSidebar({
                                 <nav aria-label="Account actions" className="flex flex-col gap-0.5 sm:hidden">
                                     <SidebarSessionOption
                                         icon={Share2}
-                                        label="Continue your work"
+                                        label="Continue on another device"
                                         onClick={dialogs.openSharing}
                                     />
                                     <BugReportButton appearance="option" daemonSource={sessionDiagnostics} />
@@ -701,9 +705,11 @@ export function ConversationSidebar({
                                             />
                                             <SidebarSessionOption
                                                 destructive
-                                                disabled={access.state.kind === "loading"}
+                                                disabled={
+                                                    access.state.kind === "loading" || access.state.kind === "ending"
+                                                }
                                                 icon={LogOut}
-                                                label="End remote access"
+                                                label="End current access"
                                                 onClick={() => {
                                                     void access.requestEnd(workspace.operationsSignal());
                                                 }}
@@ -746,33 +752,35 @@ export function ConversationSidebar({
                                                 <Wifi aria-hidden="true" className="size-4" />
                                                 Network latency
                                             </DropdownMenu.Item>
-                                            <DropdownMenu.Item
-                                                className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-destructive outline-none data-[highlighted]:bg-destructive/10"
-                                                data-testid={dataTestId.endRemoteAccess}
-                                                onSelect={() => {
-                                                    void access.requestEnd(workspace.operationsSignal());
-                                                }}
-                                            >
-                                                <LogOut aria-hidden="true" className="size-4" />
-                                                End remote access
-                                            </DropdownMenu.Item>
                                         </DropdownMenu.Content>
                                     </DropdownMenu.Portal>
                                 </DropdownMenu.Root>
                             ) : null}
+                            {desktop && access.state.kind !== "ended" ? (
+                                <Button
+                                    className="min-h-10 min-w-0 justify-start gap-1.5 px-2 text-xs text-muted-foreground"
+                                    data-testid={dataTestId.endRemoteAccess}
+                                    disabled={access.state.kind === "loading" || access.state.kind === "ending"}
+                                    onClick={() => {
+                                        void access.requestEnd(workspace.operationsSignal());
+                                    }}
+                                    variant="ghost"
+                                >
+                                    <LogOut aria-hidden="true" className="size-4 shrink-0" />
+                                    End current access
+                                </Button>
+                            ) : null}
                             {desktop && (
                                 <div className="ml-auto flex shrink-0 items-center gap-0.5">
-                                    <SidebarActionTooltip label="Continue your work" side="top">
-                                        <Button
-                                            aria-label="Continue your work"
-                                            className="size-8! min-h-8! shrink-0 justify-center rounded-full px-0 text-copy-secondary hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3"
-                                            data-testid={dataTestId.shareIdentity}
-                                            onClick={dialogs.openSharing}
-                                            variant="ghost"
-                                        >
-                                            <Share2 aria-hidden="true" className="size-4" />
-                                        </Button>
-                                    </SidebarActionTooltip>
+                                    <Button
+                                        className="min-h-10 justify-start gap-2 px-3 text-xs"
+                                        data-testid={dataTestId.shareIdentity}
+                                        onClick={dialogs.openSharing}
+                                        variant="ghost"
+                                    >
+                                        <Share2 aria-hidden="true" className="size-4 shrink-0" />
+                                        Continue on another device
+                                    </Button>
                                     <BugReportButton appearance="icon" daemonSource={sessionDiagnostics} />
                                 </div>
                             )}
@@ -784,8 +792,19 @@ export function ConversationSidebar({
                 )}
                 {sharingStore !== null && (
                     <Dialog
-                        title="Continue your work"
-                        description="Scan the QR code or open the link on another device to use Morty."
+                        title="Continue on another device"
+                        description={
+                            <>
+                                <span className="block">
+                                    Anyone with this link can use your current Morty identity to view and control
+                                    sessions in this project, not just the current conversation.
+                                </span>
+                                <span className="mt-2 block">
+                                    New devices can join for 24 hours after the link is created. Access already granted
+                                    does not end when the link expires.
+                                </span>
+                            </>
+                        }
                         onClose={dialogs.closeSharing}
                     >
                         <IdentitySharing store={sharingStore} />
@@ -883,33 +902,62 @@ export function ConversationSidebar({
                         )}
                     </Dialog>
                 )}
-                {(access.state.kind === "confirming-end" ||
+                {(access.state.kind === "loading" ||
+                    access.state.kind === "unavailable" ||
+                    access.state.kind === "confirming-end" ||
                     access.state.kind === "ending" ||
                     access.state.kind === "failed") && (
                     <Dialog
-                        busy={access.state.kind === "ending"}
-                        title="End remote access?"
-                        description="This will sign out every browser using this access link and prevent the link from being used again. Your local Runtime and task will keep running."
+                        busy={access.state.kind === "loading" || access.state.kind === "ending"}
+                        title="End current access?"
+                        description={
+                            <>
+                                <span className="block">
+                                    End access in this browser. If you joined through a link, that link and the browser
+                                    access it granted will also be revoked.
+                                </span>
+                                <span className="mt-2 block">
+                                    Other sharing links and recovery access stay active. Already-open sessions elsewhere
+                                    may keep working until their access expires.
+                                </span>
+                                <span className="mt-3 block font-medium text-foreground">
+                                    Your local agent and tasks keep running.
+                                </span>
+                            </>
+                        }
                         testId={dataTestId.endRemoteAccessDialog}
                         onClose={access.cancel}
                     >
-                        {access.state.kind === "failed" && (
+                        {access.state.kind === "loading" && <p role="status">Preparing current access…</p>}
+                        {(access.state.kind === "failed" || access.state.kind === "unavailable") && (
                             <p className="mt-3 text-sm text-destructive" role="alert">
                                 {access.state.message}
                             </p>
                         )}
                         <div className="mt-5 flex justify-end gap-2">
-                            <Button disabled={access.state.kind === "ending"} onClick={access.cancel} variant="ghost">
+                            <Button
+                                disabled={access.state.kind === "loading" || access.state.kind === "ending"}
+                                onClick={access.cancel}
+                                variant="ghost"
+                            >
                                 Cancel
                             </Button>
                             <Button
-                                disabled={access.state.kind === "ending"}
+                                disabled={access.state.kind === "loading" || access.state.kind === "ending"}
                                 onClick={() => {
-                                    void access.end(workspace.operationsSignal());
+                                    if (access.state.kind === "unavailable") {
+                                        void access.requestEnd(workspace.operationsSignal());
+                                    } else {
+                                        void access.end(workspace.operationsSignal());
+                                    }
                                 }}
                                 variant="destructive"
                             >
-                                {access.state.kind === "ending" ? "Ending…" : "End remote access"}
+                                {access.state.kind === "ending"
+                                    ? "Ending…"
+                                    : access.state.kind === "failed" || access.state.kind === "unavailable"
+                                      ? "Try again"
+                                      : "End current access"}
                             </Button>
                         </div>
                     </Dialog>
