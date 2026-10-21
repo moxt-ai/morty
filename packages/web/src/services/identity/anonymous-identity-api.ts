@@ -1,7 +1,17 @@
 import { type Identifier, isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import * as v from "valibot";
-import { anonymousCredentialsEntry, centralLocalStorage } from "../local-storage/central-local-storage.ts";
-import { clearIdentityScope, type IdentityScope, readIdentityScope, writeIdentityScope } from "./identity-scope-url.ts";
+import {
+    anonymousCredentialsEntry,
+    anonymousScopesEntry,
+    centralLocalStorage,
+} from "../local-storage/central-local-storage.ts";
+import {
+    clearIdentityScope,
+    encodeIdentityScope,
+    type IdentityScope,
+    readIdentityScope,
+    writeIdentityScope,
+} from "./identity-scope-url.ts";
 
 const tokenSchema = v.pipe(
     v.string(),
@@ -72,22 +82,38 @@ export class AnonymousIdentityApi {
 
     readonly loadExisting = async (requestSignal: AbortSignal): Promise<AnonymousIdentity | null> => {
         const scope = readIdentityScope();
-        const token = scope === null ? null : readStoredToken(scope.userId);
-        if (scope === null || token === null) {
-            if (scope !== null) {
-                this.#forgetScope(scope);
-            }
+        if (scope === null) {
             return null;
         }
-        const identity: AnonymousIdentity = {
-            botId: scope.botId,
-            projectId: scope.projectId,
-            token,
-            userId: scope.userId,
-        };
-        const session = await this.#anonymousSession(identity, requestSignal);
-        if (session !== null) {
-            if (session.userId === identity.userId) {
+        const identity = await this.#restoreScope(scope, requestSignal);
+        if (identity !== null) {
+            this.#saveIdentity(identity);
+        } else {
+            clearIdentityScope();
+        }
+        return identity;
+    };
+
+    readonly loadSaved = async (signal: AbortSignal): Promise<readonly AnonymousIdentity[]> => {
+        const identities: AnonymousIdentity[] = [];
+        for (const scope of centralLocalStorage.read(anonymousScopesEntry) ?? []) {
+            const identity = await this.#restoreScope(scope, signal);
+            signal.throwIfAborted();
+            if (identity !== null) {
+                identities.push(identity);
+            }
+        }
+        return identities;
+    };
+
+    readonly #restoreScope = async (scope: IdentityScope, signal: AbortSignal): Promise<AnonymousIdentity | null> => {
+        signal.throwIfAborted();
+        const token = readStoredToken(scope.userId);
+        if (token !== null) {
+            const identity: AnonymousIdentity = { ...scope, token };
+            const session = await this.#anonymousSession(identity, signal);
+            signal.throwIfAborted();
+            if (session?.userId === identity.userId) {
                 return identity;
             }
         }
@@ -161,7 +187,7 @@ export class AnonymousIdentityApi {
         );
         const scope = readIdentityScope();
         if (scope !== null) {
-            removeStoredToken(scope.userId);
+            this.#forgetScope(scope);
         }
         clearIdentityScope();
     };
@@ -187,12 +213,27 @@ export class AnonymousIdentityApi {
 
     readonly #saveIdentity = (identity: AnonymousIdentity) => {
         writeStoredToken(identity.userId, identity.token);
-        writeIdentityScope({ botId: identity.botId, projectId: identity.projectId, userId: identity.userId });
+        const scope = { botId: identity.botId, projectId: identity.projectId, userId: identity.userId };
+        const credentials = centralLocalStorage.read(anonymousCredentialsEntry) ?? {};
+        const saved = (centralLocalStorage.read(anonymousScopesEntry) ?? []).filter(
+            (candidate) =>
+                encodeIdentityScope(candidate) !== encodeIdentityScope(scope) && candidate.userId in credentials,
+        );
+        centralLocalStorage.write(anonymousScopesEntry, [...saved, scope].slice(-10));
+        const current = readIdentityScope();
+        if (current === null || encodeIdentityScope(current) !== encodeIdentityScope(scope)) {
+            writeIdentityScope(scope);
+        }
     };
 
     readonly #forgetScope = (scope: IdentityScope) => {
-        removeStoredToken(scope.userId);
-        clearIdentityScope();
+        const saved = (centralLocalStorage.read(anonymousScopesEntry) ?? []).filter(
+            (candidate) => encodeIdentityScope(candidate) !== encodeIdentityScope(scope),
+        );
+        centralLocalStorage.write(anonymousScopesEntry, saved);
+        if (!saved.some((candidate) => candidate.userId === scope.userId)) {
+            removeStoredToken(scope.userId);
+        }
     };
 
     /** Maps the nested `bot` of an anonymous-user creation response onto the identity. */
@@ -225,7 +266,7 @@ export class AnonymousIdentityApi {
                 ),
             );
         } catch (error) {
-            if (error instanceof IdentityApiError) {
+            if (error instanceof IdentityApiError && (error.status === 401 || error.status === 403)) {
                 return null;
             }
             throw error;
@@ -252,6 +293,7 @@ export class AnonymousIdentityApi {
             throw new IdentityApiError(
                 error.success ? error.output.error.code : "IDENTITY_UNAVAILABLE",
                 error.success ? error.output.error.message : "Identity service is unavailable.",
+                response.status,
             );
         }
         return value;
@@ -290,9 +332,11 @@ function removeStoredToken(userId: string): void {
 
 export class IdentityApiError extends Error {
     readonly code: string;
-    constructor(code: string, message: string) {
+    readonly status: number | null;
+    constructor(code: string, message: string, status: number | null = null) {
         super(message);
         this.code = code;
+        this.status = status;
         this.name = "IdentityApiError";
     }
 }

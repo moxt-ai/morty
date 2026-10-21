@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import { identityScopeSchema } from "../identity/identity-scope-url.ts";
 
 /**
  * Central management of every value the web application persists in browser
@@ -184,4 +185,10 @@ const storedAnonymousCredentialsSchema = v.pipe(
 export const anonymousCredentialsEntry = jsonLocalStorageEntry({
     key: "mobius.anonymous-credentials.v1",
     schema: storedAnonymousCredentialsSchema,
+});
+
+/** Scope references contain no credentials and are useful only with a matching stored token. */
+export const anonymousScopesEntry = jsonLocalStorageEntry({
+    key: "mobius.anonymous-scopes.v1",
+    schema: v.pipe(v.array(identityScopeSchema), v.maxLength(10), v.readonly()),
 });

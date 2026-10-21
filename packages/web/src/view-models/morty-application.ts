@@ -43,7 +43,10 @@ export function createMortyApplication(options: {
     const transport = options.transport;
     transport.open();
     const anonymousSession = createAnonymousSessionStore(transport.fetch, options.origin);
-    void anonymousSession.getState().load(lifetime.signal);
+    const path = new URL(options.url ?? window.location.href).pathname;
+    if (!path.startsWith("/continue") && !path.startsWith("/chat/preview")) {
+        void anonymousSession.getState().load(lifetime.signal);
+    }
     let workspace: ChatWorkspace | null = null;
     let workspaceRequests: BotChatApi | null = null;
     let workspaceIdentity: ChatIdentity | null = null;

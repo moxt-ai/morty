@@ -45,6 +45,28 @@ export function SessionApplication({ application }: { readonly application: Mort
     if (state.kind === "setup") {
         return <SetupApplication accessEnded={state.notice === "access-ended"} />;
     }
+    if (state.kind === "choices") {
+        return (
+            <SetupCardShell titleId="saved-access-title">
+                <SetupCardTitle id="saved-access-title">Continue with saved access</SetupCardTitle>
+                <SetupCardDescription>
+                    This browser has access to more than one Morty identity. Choose where to continue.
+                </SetupCardDescription>
+                <ul className="mt-6 space-y-3">
+                    {state.choices.map((choice) => (
+                        <li key={choice.href}>
+                            <a
+                                className="block rounded-xl border border-border px-5 py-4 font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary"
+                                href={choice.href}
+                            >
+                                Continue to {choice.label}
+                            </a>
+                        </li>
+                    ))}
+                </ul>
+            </SetupCardShell>
+        );
+    }
     const activeIdentity: ActiveIdentity = {
         botId: state.identity.botId,
         getToken: async (signal) => {
