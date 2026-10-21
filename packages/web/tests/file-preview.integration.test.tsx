@@ -5,6 +5,29 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
+test("Given the agent links a file relative to the working directory, When the user opens the reference, Then Chat previews the local file instead of blocking the link", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, "show cwd relative link");
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    await app.queryElementByTestId(dataTestId.localFileLink);
+    await app.waitForView(() => expect(document.body.textContent).not.toContain("[blocked]"));
+    await app.user.click(await app.waitForView(() => getByRole(document.body, "button", { name: "index.html" })));
+    const preview = await app.queryElementByTestId(dataTestId.filePreview);
+    await app.waitForView(() => getByRole(preview, "button", { name: "View source" }));
+    await app.user.click(getByRole(preview, "button", { name: "View source" }));
+    await app.waitForView(() =>
+        expect(getByRole(preview, "region", { name: "File contents" }).textContent).toContain(
+            "Working directory index",
+        ),
+    );
+});
+
 test("Given an HTML link points to an unavailable file, When the file becomes available and the user retries, Then the preview recovers in the same conversation", {
     timeout: 30_000,
 }, async () => {

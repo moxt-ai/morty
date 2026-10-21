@@ -103,7 +103,10 @@ function rewriteLocalMarkdownTargets(value: unknown): void {
         "url" in value &&
         typeof value.url === "string"
     ) {
-        const path = localFilePath(value.url) ?? (value.type === "image" ? relativeFilePath(value.url) : null);
+        // Relative targets refer to files in the session working directory for
+        // both links and images, so rewrite them before URL hardening can see a
+        // bare relative URL and replace the node with a blocked marker.
+        const path = localFilePath(value.url) ?? relativeFilePath(value.url);
         if (path !== null) {
             value.url = encodeLocalFileUrl(path);
         }
@@ -143,7 +146,9 @@ function AgentMarkdownLink({
             </button>
         );
     }
-    if (href === undefined || !isSafeLink(href)) {
+    // A local file reference without an opener stays plain text: the rewritten
+    // placeholder URL has no destination a browser could visit.
+    if (href === undefined || path !== null || !isSafeLink(href)) {
         return <span>{children}</span>;
     }
     return (

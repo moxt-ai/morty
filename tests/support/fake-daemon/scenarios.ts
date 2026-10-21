@@ -16,6 +16,13 @@ const FILE_EXPLORER_SOURCE = [
 export const mortyFiles = new Map<string, { readonly content: string | Uint8Array; readonly mediaType: string }>([
     ["/workspace/delivery-review.html", { content: interactiveHtml, mediaType: "text/html" }],
     [
+        "/workspace/index.html",
+        {
+            content: "<!doctype html>\n<html><body><h1>Working directory index</h1></body></html>\n",
+            mediaType: "text/html",
+        },
+    ],
+    [
         "/workspace/unsupported.svg",
         { content: '<svg xmlns="http://www.w3.org/2000/svg"/>', mediaType: "image/svg+xml" },
     ],
@@ -351,6 +358,11 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                         text: "[Open source](file:///workspace/edit-tool-presentation.tsx)",
                     },
                 ],
+            };
+        case "show cwd relative link":
+            return {
+                outcome: "complete",
+                output: [{ kind: "text", text: "[index.html](index.html)" }],
             };
         case "show interactive result":
             return {
