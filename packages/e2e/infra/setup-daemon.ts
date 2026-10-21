@@ -132,4 +132,10 @@ export class ControlledSetupRuntime implements SetupRuntime {
             await daemon.continueReply(prompt, plan);
         }
     };
+
+    readonly writeFiles = async (files: NonNullable<ControlledAgentBehavior["files"]>): Promise<void> => {
+        for (const daemon of this.#active.values()) {
+            await daemon.writeFiles(files);
+        }
+    };
 }

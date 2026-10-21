@@ -128,7 +128,11 @@ function AgentMarkdownLink({
             <button
                 className="cursor-pointer font-inherit font-medium text-[#19764a] underline decoration-[#2fb872]/35 underline-offset-2 hover:decoration-[#2fb872]"
                 data-testid={dataTestId.localFileLink}
-                onClick={() => openLocalFile(path)}
+                onClick={(event) => {
+                    // Preserve a return-focus target even on browsers that do not focus tapped buttons.
+                    event.currentTarget.focus({ preventScroll: true });
+                    openLocalFile(path);
+                }}
                 type="button"
             >
                 {children}

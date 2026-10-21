@@ -1,6 +1,7 @@
 import {
     type MobiusClient,
     MobiusElicitationResponseRequest,
+    MobiusError,
     MobiusPageRequest,
     MobiusPermissionResponseRequest,
     type MobiusSessionEventObserver,
@@ -1381,7 +1382,7 @@ export function createSessionPaneModel(options: {
         readFile: async (path: string, signal: AbortSignal) => {
             signal.throwIfAborted();
             if (client === null) {
-                throw new Error("The Session is not connected.");
+                throw new MobiusError("session_not_connected", "The Session is not connected.");
             }
             return await client.sessions.readFile(
                 sessionId,

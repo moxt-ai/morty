@@ -6,12 +6,11 @@ export { expect } from "@playwright/test";
 
 function runtimeTest() {
     return base.extend<{ readonly runtime: Awaited<ReturnType<typeof createTestRuntime>> }>({
-        // biome-ignore lint/correctness/noEmptyPattern: Playwright requires a destructured fixture dependency list.
-        runtime: async ({}, use, testInfo) => {
+        runtime: async ({ browserName, contextOptions }, use, testInfo) => {
             const harness = await E2EHarness.create("chat-e2e");
             let failure: unknown;
             try {
-                const runtime = await createTestRuntime(harness);
+                const runtime = await createTestRuntime(harness, browserName, contextOptions);
                 try {
                     await Promise.race([use(runtime), runtime.failure]);
                 } finally {

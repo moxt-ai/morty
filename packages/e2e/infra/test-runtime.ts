@@ -1,4 +1,4 @@
-import { chromium } from "playwright-core";
+import { type BrowserContextOptions, chromium, firefox, webkit } from "playwright-core";
 import { mortyFiles, mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../web/src/services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope } from "../../web/src/services/identity/identity-scope-url.ts";
@@ -8,7 +8,11 @@ import { LocalStack } from "./local-stack.ts";
 import { ControlledSetupRuntime } from "./setup-daemon.ts";
 import { followSetupInstructions } from "./setup-instructions.ts";
 
-export async function createTestRuntime(harness: E2EHarness) {
+export async function createTestRuntime(
+    harness: E2EHarness,
+    browserName: "chromium" | "firefox" | "webkit" = "chromium",
+    contextOptions: BrowserContextOptions = {},
+) {
     const setupClockStart = Date.parse("2026-09-15T12:00:00Z");
     let setupClockTime = setupClockStart;
     const agentId = "claude";
@@ -23,9 +27,12 @@ export async function createTestRuntime(harness: E2EHarness) {
     });
     const application = await stack.startPlatform();
     await stack.startChat(application);
-    const browser = await chromium.launch({ channel: "chrome", headless: true });
+    const browser = await { chromium, firefox, webkit }[browserName].launch({
+        ...(browserName === "chromium" ? { channel: "chrome" } : {}),
+        headless: true,
+    });
     try {
-        const context = await browser.newContext();
+        const context = await browser.newContext(contextOptions);
         const page = await context.newPage();
         await harness.attachBrowser(browser, context, page);
         const chat = new ChatApi(stack.chatOrigin, harness.signal);
@@ -44,10 +51,17 @@ export async function createTestRuntime(harness: E2EHarness) {
             const botId = text(object(identity.bot, "anonymous bot").botId, "botId");
             const url = new URL(stack.chatOrigin);
             url.searchParams.set("identity", encodeIdentityScope({ botId, projectId, userId }));
-            await page.addInitScript(({ key, raw }) => window.localStorage.setItem(key, raw), {
-                key: ANONYMOUS_CREDENTIAL_KEY_NAME,
-                raw: JSON.stringify({ [userId]: token }),
-            });
+            await page.addInitScript(
+                ({ key, raw }) => {
+                    if (window === window.top) {
+                        window.localStorage.setItem(key, raw);
+                    }
+                },
+                {
+                    key: ANONYMOUS_CREDENTIAL_KEY_NAME,
+                    raw: JSON.stringify({ [userId]: token }),
+                },
+            );
             await page.goto(url.href);
             const user = await chat.useBrowserIdentity({ projectId, token });
             return { botId: user.botId, projectId: user.projectId };
@@ -59,6 +73,7 @@ export async function createTestRuntime(harness: E2EHarness) {
             },
             failure: runtime.failure,
             continueReply: runtime.continueReply,
+            writeFiles: runtime.writeFiles,
             page,
             openChat,
             openPairedChat: async () => {

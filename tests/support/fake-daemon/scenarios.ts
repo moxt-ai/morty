@@ -1,4 +1,5 @@
 import type { HarnessOutput, HarnessReplyPlan } from "@moxt-ai/mobius-test-support/fake-daemon";
+import { interactiveHtml } from "./html-preview.ts";
 
 const FILE_EXPLORER_SOURCE = [
     "export function FileExplorer() {",
@@ -13,6 +14,7 @@ const FILE_EXPLORER_SOURCE = [
 ].join("\n");
 
 export const mortyFiles = new Map<string, { readonly content: string | Uint8Array; readonly mediaType: string }>([
+    ["/workspace/delivery-review.html", { content: interactiveHtml, mediaType: "text/html" }],
     [
         "/workspace/generated-picture.png",
         {
@@ -257,6 +259,26 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                         text: "[Open source](file:///workspace/edit-tool-presentation.tsx)",
                     },
                 ],
+            };
+        case "show interactive result":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "text",
+                        text: "[Open delivery review](file:///workspace/delivery-review.html)",
+                    },
+                ],
+            };
+        case "show missing result":
+            return {
+                outcome: "complete",
+                output: [{ kind: "text", text: "[Open missing result](file:///workspace/missing-result.html)" }],
+            };
+        case "show preview image":
+            return {
+                outcome: "complete",
+                output: [{ kind: "text", text: "[Open picture](file:///workspace/generated-picture.png)" }],
             };
         case "show live output in order":
             return {

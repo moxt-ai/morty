@@ -74,6 +74,7 @@ export async function createChatWorkerEnvironment() {
                 return {
                     failure: runtime.failure,
                     continueReply: runtime.continueReply,
+                    writeFiles: runtime.writeFiles,
                     disconnect: async () => await runtime[Symbol.asyncDispose](),
                 };
             },

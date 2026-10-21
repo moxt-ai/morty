@@ -44,7 +44,7 @@ test("Given a linked TypeScript file longer than the preview, When the user open
     const messagesBoxBefore = await messages.boundingBox();
     await openSource.click();
 
-    const preview = page.getByRole("complementary", { name: "Local file preview" });
+    const preview = page.getByRole("dialog", { name: "Local file preview" });
     await expect(preview).toContainText("export function FileExplorer");
     const highlightedTokens = preview.locator('code span[style*="--sdm-c"]');
     await expect(highlightedTokens.first()).toBeVisible();
@@ -109,7 +109,7 @@ test("Given a working reply, When the user reloads after 65 seconds, Then elapse
 
     await page.getByRole("textbox", { name: "Message" }).fill("First conversation");
     await page.getByRole("button", { name: "Send message" }).click();
-    await expect(page).toHaveURL(/\?sessionId=[^&#]+/u);
+    await expect(page).toHaveURL(/[?&]sessionId=[^&#]+/u);
     const workingConversation = page.getByRole("button", { name: /First conversation.*Session working/u });
     const firstConversationResponse = page
         .getByRole("article", { name: "Agent response" })

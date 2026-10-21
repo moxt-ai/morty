@@ -132,6 +132,8 @@ export async function connectControlledAgentRuntime(options: {
     let disposed = false;
     return {
         continueReply: harness.continueReply,
+        writeFiles: async (files: NonNullable<ControlledAgentBehavior["files"]>): Promise<void> =>
+            await writeWorkspaceFiles(files, workspace, signal),
         failure,
         [Symbol.asyncDispose]: async (): Promise<void> => {
             if (disposed) {
