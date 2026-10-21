@@ -28,6 +28,7 @@ const environment = createChatWorkerEnvironment();
 const activeApps = new Set<TestApp>();
 
 export interface TestApp extends Application {
+    readonly reload: () => Promise<TestApp>;
     readonly daemon: Awaited<ReturnType<Application["connectAgent"]>> | null;
     readonly agentFailure: Promise<never> | null;
     readonly close: () => Promise<void>;
@@ -60,6 +61,7 @@ export async function createTestApp(
                   readonly code?: (application: Application) => string;
               }
             | { readonly kind: "bootstrap"; readonly identity?: boolean }
+            | { readonly kind: "reload" }
             | { readonly kind: "managed-session"; readonly sessionId: string }
             | { readonly kind: "morty" };
         readonly prepare?: (application: Application) => void | Promise<void>;
@@ -121,7 +123,7 @@ export async function createTestApp(
         return render(
             <ApiTransportProvider transport={current.transport}>
                 <ToastProvider>
-                    {page.kind === "bootstrap" ? (
+                    {page.kind === "bootstrap" || page.kind === "reload" ? (
                         <Bootstrap application={application} />
                     ) : page.kind === "continue" ? (
                         <App state={{ kind: "authentication", router: authenticationRouter }} />
@@ -216,6 +218,21 @@ export async function createTestApp(
                           await act(async () => await daemon.continueReply(...args));
                       },
                   },
+        reload: async () => {
+            closed = true;
+            lifetime.abort(new DOMException("The test document reloaded", "AbortError"));
+            rendered.unmount();
+            container.remove();
+            application.dispose();
+            activeApps.delete(app);
+            // Transfer the live server/Runtime fixture to a fresh document.
+            // Bootstrap uses the navigated URL and existing browser storage.
+            return await createTestApp({
+                application: current,
+                page: { kind: "reload" },
+                ...(options.clock === undefined ? {} : { clock: options.clock }),
+            });
+        },
         openViewer: async () => {
             const transport = new WebSocketApiTransport(current.origin);
             transport.open();
