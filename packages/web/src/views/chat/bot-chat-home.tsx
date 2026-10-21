@@ -174,7 +174,25 @@ export function BotChatHome({
                     onTitleChange={store.getState().updateConversationTitle}
                 />
             ) : model.selection.kind === "loading" && active !== null ? (
-                <MobiusSessionPaneLoading executionContext={executionContext} />
+                <MobiusSessionPaneLoading
+                    executionContext={executionContext}
+                    footer={
+                        <BotChatComposer
+                            attachmentModel={attachmentModel}
+                            attachmentSignal={workspace.operationsSignal()}
+                            disabled
+                            draft=""
+                            error=""
+                            onDraftChange={() => {}}
+                            onStop={() => {}}
+                            onSubmit={() => {}}
+                            outputState="idle"
+                            submitDisabled
+                        >
+                            {null}
+                        </BotChatComposer>
+                    }
+                />
             ) : (
                 <section className={chatSessionPaneSectionClassName}>
                     <ExecutionContextBar context={executionContext} />

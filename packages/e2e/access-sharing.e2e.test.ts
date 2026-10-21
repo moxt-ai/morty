@@ -1,4 +1,21 @@
+import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
+import type { createTestRuntime } from "./infra/test-runtime.ts";
+
+type E2EPage = Awaited<ReturnType<typeof createTestRuntime>>["page"];
+
+async function clickContinueOnAnotherDevice(page: E2EPage) {
+    await page.getByTestId(dataTestId.shareIdentity).click();
+}
+
+async function clickEndCurrentAccess(page: E2EPage, viewportName: string) {
+    if (viewportName === "desktop") {
+        await page.getByTestId(dataTestId.userMenu).click();
+        await page.getByTestId(dataTestId.endRemoteAccess).click();
+        return;
+    }
+    await page.getByRole("button", { name: "End current access" }).click();
+}
 
 for (const viewport of [
     { name: "desktop", width: 1440, height: 900 },
@@ -15,16 +32,22 @@ for (const viewport of [
         await expect(
             page.getByRole("article", { name: "Agent response" }).filter({ hasText: "Partial reply" }),
         ).toBeVisible();
-        const share = page.getByRole("button", { name: "Continue on another device" });
-        await expect(share).toBeVisible();
-        await expect(share).toHaveText("Continue on another device");
-        await expect(page.getByRole("button", { name: "End current access" })).toBeVisible();
+        await expect(page.getByTestId(dataTestId.shareIdentity)).toBeVisible();
+        if (viewport.name === "mobile") {
+            const share = page.getByRole("button", { name: "Continue on another device" });
+            await expect(share).toHaveText("Continue on another device");
+            await expect(page.getByRole("button", { name: "End current access" })).toBeVisible();
+        } else {
+            await page.getByTestId(dataTestId.userMenu).click();
+            await expect(page.getByRole("menuitem", { name: "End current access" })).toBeVisible();
+            await page.keyboard.press("Escape");
+        }
         await page.screenshot({
             animations: "disabled",
             path: testInfo.outputPath("access-actions.png"),
             fullPage: true,
         });
-        await share.click();
+        await clickContinueOnAnotherDevice(page);
 
         const sharing = page.getByRole("dialog", { name: "Continue on another device" });
         await expect(sharing).toContainText(
@@ -56,9 +79,13 @@ for (const viewport of [
         try {
             const receiver = await receiverContext.newPage();
             await receiver.goto(url);
-            const end = receiver.getByRole("button", { name: "End current access" });
-            await expect(end).toBeVisible();
-            await end.click();
+            if (viewport.name === "desktop") {
+                await receiver.getByTestId(dataTestId.userMenu).click();
+                await expect(receiver.getByRole("menuitem", { name: "End current access" })).toBeVisible();
+            } else {
+                await expect(receiver.getByRole("button", { name: "End current access" })).toBeVisible();
+            }
+            await clickEndCurrentAccess(receiver, viewport.name);
             const confirmation = receiver.getByRole("dialog", { name: "End current access?" });
             await expect(confirmation).toContainText("If you joined through a link");
             await expect(confirmation).toContainText("Other sharing links and recovery access stay active");
@@ -72,7 +99,7 @@ for (const viewport of [
             });
             await confirmation.getByRole("button", { name: "Cancel" }).click();
             await expect(confirmation).toBeHidden();
-            await end.click();
+            await clickEndCurrentAccess(receiver, viewport.name);
             await confirmation.getByRole("button", { name: "End current access", exact: true }).click();
 
             await expect(receiver.getByRole("status")).toContainText("Current access ended");
