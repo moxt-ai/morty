@@ -59,33 +59,64 @@ test("Given a linked TypeScript file longer than the preview, When the user open
         throw new Error("Expected the first line number and source line to have browser layout boxes");
     }
     expect(firstLineNumberBox.y).toBeCloseTo(firstCodeLineBox.y, 0);
-    await expect
-        .poll(async () => {
-            const colors = await highlightedTokens.evaluateAll((tokens) =>
-                Array.from(new Set(tokens.map((token) => getComputedStyle(token).color))),
-            );
-            return colors.length;
-        })
-        .toBeGreaterThan(1);
+    await preview.evaluate(
+        (element) =>
+            new Promise<void>((resolve) => {
+                const check = () => {
+                    const colors = new Set(
+                        Array.from(
+                            element.querySelectorAll('code span[style*="--sdm-c"]'),
+                            (token) => getComputedStyle(token).color,
+                        ),
+                    );
+                    if (colors.size > 1) {
+                        observer.disconnect();
+                        resolve();
+                    }
+                };
+                const observer = new MutationObserver(check);
+                observer.observe(element, { childList: true, subtree: true, attributes: true });
+                check();
+            }),
+    );
     await expect(preview.getByText("tsx", { exact: true })).toBeHidden();
     await expect(preview.getByRole("button", { name: "Copy code" })).toBeHidden();
     await expect(preview.locator('[data-streamdown="code-block"]')).toHaveCSS("border-top-width", "0px");
     const codeBody = preview.locator('[data-streamdown="code-block-body"]');
     await expect(codeBody).toContainText("export const fileExplorerEnd = true;");
-    await expect
-        .poll(async () => {
-            const box = await codeBody.boundingBox();
-            return box?.height ?? 0;
-        })
-        .toBeGreaterThan(400);
+    await codeBody.evaluate(
+        (element) =>
+            new Promise<void>((resolve) => {
+                const check = () => {
+                    if (element.getBoundingClientRect().height > 400) {
+                        observer.disconnect();
+                        resolve();
+                    }
+                };
+                const observer = new ResizeObserver(check);
+                observer.observe(element);
+                check();
+            }),
+    );
     const fileContents = preview.getByRole("region", { name: "File contents" });
     await expect(fileContents).toBeVisible();
-    await expect
-        .poll(async () => await fileContents.evaluate((element) => element.scrollHeight - element.clientHeight))
-        .toBeGreaterThan(0);
+    expect(await fileContents.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0);
     await fileContents.focus();
+    const scrolled = fileContents.evaluate(
+        (element) =>
+            new Promise<void>((resolve) => {
+                const check = () => {
+                    if (element.scrollTop > 0) {
+                        element.removeEventListener("scroll", check);
+                        resolve();
+                    }
+                };
+                element.addEventListener("scroll", check);
+                check();
+            }),
+    );
     await page.keyboard.press("End");
-    await expect.poll(async () => await fileContents.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await scrolled;
     const messagesBox = await messages.boundingBox();
     const previewBox = await preview.boundingBox();
     expect(messagesBoxBefore).not.toBeNull();
@@ -109,7 +140,7 @@ test("Given a working reply, When the user reloads after 65 seconds, Then elapse
 
     await page.getByRole("textbox", { name: "Message" }).fill("First conversation");
     await page.getByRole("button", { name: "Send message" }).click();
-    await expect(page).toHaveURL(/\?sessionId=[^&#]+/u);
+    await expect(page).toHaveURL((url) => url.searchParams.has("sessionId"));
     const workingConversation = page.getByRole("button", { name: /First conversation.*Session working/u });
     const firstConversationResponse = page
         .getByRole("article", { name: "Agent response" })

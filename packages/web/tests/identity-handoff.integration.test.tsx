@@ -1,37 +1,22 @@
 import { getByRole, queryByRole } from "@testing-library/dom";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { createTestApp } from "./infra/test-app.tsx";
-
-test("Given a Codex native session handoff, When the page loads, Then it opens the original session and lands in Chat", {
-    timeout: 30_000,
-}, async () => {
-    const sessionId = "01a0d270-0d62-7003-98df-22a5d11dc644";
-    await createTestApp({
-        agent: { id: "codex", label: "Codex" },
-        connectAgent: true,
-        nativeSessionIds: new Set([sessionId]),
-        page: { harness: "codex", kind: "continue", sessionId },
-    });
-
-    await vi.waitFor(() => expect(window.location.pathname).toBe("/chat"));
-    expect(new URL(window.location.href).searchParams.get("sessionId")).not.toBeNull();
-    expect(queryByRole(document.body, "button", { name: "Open session" })).toBeNull();
-    expect(queryByRole(document.body, "button", { name: "Fork session" })).toBeNull();
-});
 
 test("Given a native session handoff, When the page loads, Then it tells the user the session is opening instead of offering choices and a QR code", {
     timeout: 30_000,
 }, async () => {
     const sessionId = "01a0d270-0d62-7003-98df-22a5d11dc644";
-    await createTestApp({
+    const app = await createTestApp({
         agent: { id: "pi", label: "Pi" },
         connectAgent: true,
         nativeSessionIds: new Set([sessionId]),
         page: { harness: "pi", kind: "continue", sessionId },
     });
 
-    expect(getByRole(document.body, "status", { name: "Opening session" })).toBeInstanceOf(HTMLElement);
+    expect(await app.waitForView(() => getByRole(document.body, "status", { name: "Opening session" }))).toBeInstanceOf(
+        HTMLElement,
+    );
     expect(document.body.textContent).toContain("Opening the original session in Morty.");
     expect(queryByRole(document.body, "button", { name: "Open session" })).toBeNull();
     expect(queryByRole(document.body, "button", { name: "Fork session" })).toBeNull();
@@ -43,49 +28,26 @@ test("Given a native session handoff, When the page loads, Then it shows no site
     timeout: 30_000,
 }, async () => {
     const sessionId = "01a0d270-0d62-7003-98df-22a5d11dc644";
-    await createTestApp({
-        agent: { id: "pi", label: "Pi" },
-        connectAgent: true,
-        nativeSessionIds: new Set([sessionId]),
-        page: { harness: "pi", kind: "continue", sessionId },
-    });
-
-    expect(document.body.textContent).not.toContain("Your agents. Connected.");
-    expect(document.body.querySelector("header")).toBeNull();
-    expect(queryByRole(document.body, "link")).toBeNull();
-});
-
-test("Given a native session handoff, When the Continue page succeeds and the user reloads, Then it reopens the same session from the retained transfer code", {
-    timeout: 30_000,
-}, async () => {
-    const sessionId = "01a0d270-0d62-7003-98df-22a5d11dc644";
     const app = await createTestApp({
         agent: { id: "pi", label: "Pi" },
         connectAgent: true,
         nativeSessionIds: new Set([sessionId]),
         page: { harness: "pi", kind: "continue", sessionId },
     });
-    const transferUrl = window.location.href;
-    expect(new URL(transferUrl).hash).toMatch(/^#code=\S+$/u);
 
-    await vi.waitFor(() => expect(window.location.pathname).toBe("/chat"));
-    expect(new URL(window.location.href).searchParams.get("sessionId")).not.toBeNull();
-
-    window.location.href = transferUrl;
-    app.remount();
-
-    await vi.waitFor(() => expect(window.location.pathname).toBe("/chat"));
-    expect(new URL(window.location.href).searchParams.get("sessionId")).not.toBeNull();
-    expect(queryByRole(document.body, "alert")).toBeNull();
+    await app.waitForView(() => getByRole(document.body, "heading", { name: "Continue native session" }));
+    expect(document.body.textContent).not.toContain("Your agents. Connected.");
+    expect(document.body.querySelector("header")).toBeNull();
+    expect(queryByRole(document.body, "link")).toBeNull();
 });
 
 test("Given a new browser, When Morty loads, Then Morty opens without presenting a workspace concept", {
     timeout: 30_000,
 }, async () => {
-    await createTestApp({ page: { kind: "bootstrap" } });
+    const app = await createTestApp({ page: { kind: "bootstrap" } });
 
     expect(
-        await vi.waitFor(() => getByRole(document.body, "heading", { name: "Connect your local agent" })),
+        await app.waitForView(() => getByRole(document.body, "heading", { name: "Connect your local agent" })),
     ).toBeInstanceOf(HTMLElement);
     expect(document.body.textContent).not.toContain("Local agents");
     expect(document.body.textContent?.toLowerCase()).not.toContain("workspace");
@@ -107,7 +69,7 @@ test("Given shared Morty access, When the user opens Continue your work, Then th
 }, async () => {
     const app = await createTestApp();
     await app.user.click(await app.queryElementByTestId(dataTestId.closeDialog));
-    const reportBug = await vi.waitFor(() => getByRole(document.body, "button", { name: "Report a bug" }));
+    const reportBug = await app.waitForView(() => getByRole(document.body, "button", { name: "Report a bug" }));
     const actions = [
         { element: reportBug, tooltip: "Report a bug" },
         { element: await app.queryElementByTestId(dataTestId.userMenu), tooltip: "User menu" },
@@ -117,7 +79,7 @@ test("Given shared Morty access, When the user opens Continue your work, Then th
     for (const { element, tooltip } of actions) {
         expect(element.textContent).toBe("");
         await app.user.hover(element);
-        expect(await vi.waitFor(() => getByRole(document.body, "tooltip", { name: tooltip }))).toBeInstanceOf(
+        expect(await app.waitForView(() => getByRole(document.body, "tooltip", { name: tooltip }))).toBeInstanceOf(
             HTMLElement,
         );
     }
@@ -130,7 +92,7 @@ test("Given shared Morty access, When the user opens Continue your work, Then th
 test("Given a native session handoff without a matching Agent, When the page loads, Then opening fails with the reason", {
     timeout: 30_000,
 }, async () => {
-    await createTestApp({
+    const app = await createTestApp({
         page: {
             harness: "pi",
             kind: "continue",
@@ -138,7 +100,7 @@ test("Given a native session handoff without a matching Agent, When the page loa
         },
     });
 
-    const alert = await vi.waitFor(() => getByRole(document.body, "alert"));
+    const alert = await app.waitForView(() => getByRole(document.body, "alert"));
     expect(alert.textContent).toContain("handoff harness is unavailable");
     expect(getByRole(document.body, "heading", { name: "Continue native session" })).toBeInstanceOf(HTMLElement);
     expect(queryByRole(document.body, "button", { name: "Fork session" })).toBeNull();
@@ -154,12 +116,12 @@ test("Given opening a native session fails, When the user tries again, Then the 
             sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
         },
     });
-    await vi.waitFor(() => getByRole(document.body, "alert"));
+    await app.waitForView(() => getByRole(document.body, "alert"));
 
     await app.user.click(getByRole(document.body, "button", { name: "Try again" }));
 
     expect(getByRole(document.body, "status", { name: "Opening session" })).toBeInstanceOf(HTMLElement);
-    await vi.waitFor(() => {
+    await app.waitForView(() => {
         expect(getByRole(document.body, "alert").textContent).toContain("handoff harness is unavailable");
     });
     expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
@@ -168,7 +130,7 @@ test("Given opening a native session fails, When the user tries again, Then the 
 test("Given a native session handoff whose Runtime went offline, When the page loads, Then the page reports Mobius is disconnected instead of a transfer-link problem", {
     timeout: 30_000,
 }, async () => {
-    await createTestApp({
+    const app = await createTestApp({
         prepare: async (application) => {
             const runtime = await application.connectAgent({ id: "claude", label: "Claude" });
             await runtime.disconnect();
@@ -180,7 +142,7 @@ test("Given a native session handoff whose Runtime went offline, When the page l
         },
     });
 
-    const alert = await vi.waitFor(() => getByRole(document.body, "alert"));
+    const alert = await app.waitForView(() => getByRole(document.body, "alert"));
     expect(alert.textContent).toContain("Your Mobius is disconnected");
     expect(alert.textContent).toContain("Start your Mobius");
     expect(alert.textContent?.toLowerCase()).not.toContain("transfer link");

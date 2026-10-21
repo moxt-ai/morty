@@ -67,3 +67,31 @@ test("Given a saved Machine and another same-App connection, When its Runtime re
         ]),
     );
 });
+
+test("Given a native session handoff, When the browser opens it, Then the original session opens directly in Chat", async ({
+    runtime,
+}) => {
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    const { page } = runtime;
+    await page.goto(connected.url);
+    await expect(page).toHaveURL((url) => url.pathname === "/chat" && url.searchParams.has("sessionId"));
+    await expect(page.getByRole("main", { name: "Chat" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Message" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Fork session", exact: true })).toHaveCount(0);
+});
+
+test("Given a successful native session handoff, When the browser opens the retained link again, Then it reopens the same session", async ({
+    runtime,
+}) => {
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    const { page } = runtime;
+    await page.goto(connected.url);
+    await expect(page).toHaveURL((url) => url.pathname === "/chat" && url.searchParams.has("sessionId"));
+    await expect(page.getByRole("textbox", { name: "Message" })).toBeEnabled();
+    const sessionUrl = page.url();
+    await page.goto(connected.url);
+    await expect(page).toHaveURL(sessionUrl);
+    await expect(page.getByRole("main", { name: "Chat" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Message" })).toBeEnabled();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+});

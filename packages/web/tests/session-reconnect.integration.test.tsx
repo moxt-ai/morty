@@ -1,8 +1,10 @@
-import { queryByRole } from "@testing-library/dom";
-import { expect, test, vi } from "vitest";
+import { getByRole, queryByRole } from "@testing-library/dom";
+import { act } from "@testing-library/react";
+import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
+import { TestClock } from "./infra/test-clock.ts";
 
 function reconnectStatusText(app: TestApp): string | null {
     const notice = app.optionalElementByTestId(dataTestId.sessionReconnectNotice);
@@ -12,55 +14,34 @@ function reconnectStatusText(app: TestApp): string | null {
     return queryByRole(notice, "status")?.textContent ?? null;
 }
 
-test("Given a session whose Runtime goes offline, When the live event stream cannot recover, Then the pane shows the failure with a retry countdown, reconnects automatically, and shows the failure with a retry time again", {
-    timeout: 90_000,
+const CLOCK_ORIGIN = "2026-10-13T08:00:00Z";
+
+test("Given an offline Runtime, When the retry deadline elapses, Then the countdown advances and automatic retries back off", {
+    timeout: 30_000,
 }, async () => {
-    const app = await createTestApp({ connectAgent: true });
-    await app.queryElementByTestId(
-        dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
-    );
-    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
-    if (!(composer instanceof HTMLTextAreaElement)) {
-        throw new Error("Expected the message composer");
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    await openSavedConversation(app, "Survive a Runtime restart");
+    if (app.daemon === null) {
+        throw new Error("Expected the connected Runtime");
     }
-    const prompt = "Survive a Runtime restart";
-    await sendPrompt(app, composer, prompt);
-    await app.waitForView(() =>
-        expect(
-            app
-                .elementsByTestId(dataTestId.agentResponse)
-                .some((element) => element.textContent?.includes(`Codex turn 1: ${prompt}`) === true),
-        ).toBe(true),
-    );
-    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
-    const daemon = app.daemon;
-    if (daemon === null) {
-        throw new Error("Expected the connected Agent Runtime");
-    }
-    await daemon.disconnect();
-
-    const countdown = /^Retrying in [1-9]\d* s Retry now$/u;
-    await vi.waitFor(() => expect(reconnectStatusText(app)).toMatch(countdown), { interval: 250, timeout: 30_000 });
+    await app.daemon.disconnect();
+    await app.waitForView(() => expect(reconnectStatusText(app)).toBe("Retrying in 5 s Retry now"));
     const notice = app.elementByTestId(dataTestId.sessionReconnectNotice);
-    const composerForm = notice.closest("form");
-    if (composerForm === null) {
-        throw new Error("Expected the retry status beside the composer");
+    const form = notice.closest("form");
+    if (form === null) {
+        throw new Error("Expected the composer form");
     }
-    expect(queryByRole(composerForm, "alert")?.textContent).toContain("could not recover");
-    expect(composerForm.textContent).toMatch(/could not recover[\s\S]*Retrying in [1-9]\d* s Retry now/u);
-    const retryNow = queryByRole(notice, "button", { name: "Retry now" });
-    if (!(retryNow instanceof HTMLButtonElement)) {
-        throw new Error("Expected the Retry now button");
-    }
-    await app.user.click(retryNow);
-
-    await vi.waitFor(() => expect(reconnectStatusText(app)).toContain("Mobius is reconnecting"), {
-        interval: 250,
-        timeout: 30_000,
-    });
-
-    await vi.waitFor(() => expect(reconnectStatusText(app)).toMatch(countdown), { interval: 250, timeout: 30_000 });
+    expect(queryByRole(form, "alert")?.textContent).toContain("could not recover");
+    await act(async () => clock.advanceBy(1000));
+    expect(reconnectStatusText(app)).toBe("Retrying in 4 s Retry now");
+    await act(async () => clock.advanceBy(3999));
+    expect(reconnectStatusText(app)).toBe("Retrying in 1 s Retry now");
+    await act(async () => clock.advanceBy(1));
+    await app.waitForView(() => expect(reconnectStatusText(app)).toBe("Retrying in 10 s Retry now"));
+    expect(queryByRole(form, "alert")?.textContent).toContain("could not recover");
+    await act(async () => clock.advanceBy(10000));
+    await app.waitForView(() => expect(reconnectStatusText(app)).toBe("Retrying in 20 s Retry now"));
 });
 
 async function openSavedConversation(app: TestApp, prompt: string): Promise<HTMLTextAreaElement> {
@@ -105,9 +86,10 @@ async function openSavedConversation(app: TestApp, prompt: string): Promise<HTML
 }
 
 test("Given a disconnected conversation with an unsent draft, When the same Runtime reconnects twice, Then its connection error clears without sending and the draft remains", {
-    timeout: 90_000,
+    timeout: 30_000,
 }, async () => {
-    const app = await createTestApp({ connectAgent: true });
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
     const composer = await openSavedConversation(app, "Before the Runtime restart");
     if (app.daemon === null) {
         throw new Error("Expected a connected Runtime");
@@ -120,12 +102,8 @@ test("Given a disconnected conversation with an unsent draft, When the same Runt
     }
     for (const cycle of [1, 2]) {
         await app.daemon.disconnect();
-        await app.waitForView(
-            () =>
-                expect(reconnectStatusText(app), document.body.textContent ?? `disconnect ${cycle}`).toContain(
-                    "Retrying in",
-                ),
-            30_000,
+        await app.waitForView(() =>
+            expect(reconnectStatusText(app), `disconnect ${cycle}`).toBe("Retrying in 5 s Retry now"),
         );
         expect(queryByRole(form, "alert")?.textContent).toContain("could not recover");
         expect(composer.disabled).toBe(true);
@@ -154,9 +132,10 @@ test("Given a disconnected conversation with an unsent draft, When the same Runt
 });
 
 test("Given a failed Agent turn, When its Runtime disconnects and reconnects, Then the unrelated turn error remains visible", {
-    timeout: 90_000,
+    timeout: 30_000,
 }, async () => {
-    const app = await createTestApp({ connectAgent: true });
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
     const composer = await openSavedConversation(app, "Before the failed turn");
     if (app.daemon === null) {
         throw new Error("Expected a connected Runtime");
@@ -172,10 +151,7 @@ test("Given a failed Agent turn, When its Runtime disconnects and reconnects, Th
         ),
     );
     await app.daemon.disconnect();
-    await app.waitForView(
-        () => expect(reconnectStatusText(app), document.body.textContent ?? "").toContain("Retrying in"),
-        30_000,
-    );
+    await app.waitForView(() => expect(reconnectStatusText(app)).toContain("Retrying in"));
     await app.daemon.reconnect();
     const retry = queryByRole(form, "button", { name: "Retry now" });
     if (!(retry instanceof HTMLButtonElement)) {
@@ -187,4 +163,32 @@ test("Given a failed Agent turn, When its Runtime disconnects and reconnects, Th
         expect(reconnectStatusText(app)).toBeNull();
     });
     expect(queryByRole(form, "alert")?.textContent).toContain("The controlled Agent rejected this turn.");
+});
+
+test("Given a recovered Runtime and an unsent draft, When the retry deadline arrives, Then Chat recovers automatically without sending the draft", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    const composer = await openSavedConversation(app, "Recover automatically");
+    if (app.daemon === null) {
+        throw new Error("Expected the connected Runtime");
+    }
+    await app.user.click(composer);
+    await app.user.paste("Still unsent");
+    await app.daemon.disconnect();
+    await app.waitForView(() => expect(reconnectStatusText(app)).toBe("Retrying in 5 s Retry now"));
+    await app.daemon.reconnect();
+    await act(async () => clock.advanceBy(4999));
+    expect(composer.disabled).toBe(true);
+    expect(reconnectStatusText(app)).toBe("Retrying in 1 s Retry now");
+    await act(async () => clock.advanceBy(1));
+    await app.waitForView(() => expect(composer.disabled).toBe(false));
+    expect(reconnectStatusText(app)).toBeNull();
+    expect(queryByRole(composer.closest("form") ?? document.body, "alert")).toBeNull();
+    expect(composer.value).toBe("Still unsent");
+    expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain("Still unsent");
+    await act(async () => clock.advanceBy(60000));
+    expect(composer.disabled).toBe(false);
+    expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain("Still unsent");
 });

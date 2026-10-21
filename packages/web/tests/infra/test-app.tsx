@@ -7,6 +7,7 @@ import { ApiTransportProvider } from "../../src/services/api/api-transport-conte
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../src/services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope } from "../../src/services/identity/identity-scope-url.ts";
+import type { Clock } from "../../src/services/time/clock.ts";
 import { createMortyApplication } from "../../src/view-models/morty-application.ts";
 import { App } from "../../src/views/application/app.tsx";
 import { MortyApplicationProvider } from "../../src/views/application/application-context.tsx";
@@ -39,7 +40,7 @@ export interface TestApp extends Application {
         testId: string | RegExp,
         accept?: (element: HTMLElement) => boolean,
     ) => Promise<HTMLElement>;
-    readonly waitForView: <T>(read: () => T, timeoutMilliseconds?: number) => Promise<T>;
+    readonly waitForView: <T>(read: () => T) => Promise<T>;
     readonly user: UserEvent;
 }
 
@@ -47,6 +48,7 @@ export async function createTestApp(
     options: {
         readonly application?: Application;
         readonly connectAgent?: boolean;
+        readonly clock?: Clock;
         readonly agent?: { readonly id: string; readonly label: string };
         readonly nativeSessionIds?: ReadonlySet<string>;
         readonly page?:
@@ -99,7 +101,11 @@ export async function createTestApp(
     // The application factory owns the anonymous identity workflow for the
     // whole test app, so a remount re-renders the same application instead of
     // restarting the workflow, exactly like a production page reload remount.
-    const application = createMortyApplication({ origin: current.origin, transport: current.transport });
+    const application = createMortyApplication({
+        origin: current.origin,
+        transport: current.transport,
+        ...(options.clock === undefined ? {} : { clock: options.clock }),
+    });
     const mount = () => {
         container.setAttribute("data-test-app-root", "");
         document.body.appendChild(container);
@@ -128,7 +134,7 @@ export async function createTestApp(
     const lifetime = new AbortController();
     // Use RTL's async boundary to settle external updates and pending microtasks.
     // DOM observation keeps this wait event-driven rather than polling the network.
-    const waitForView = <T,>(read: () => T, timeoutMilliseconds = 12_000): Promise<T> =>
+    const waitForView = <T,>(read: () => T): Promise<T> =>
         getConfig().asyncWrapper(
             () =>
                 new Promise<T>((resolve, reject) => {
@@ -155,7 +161,7 @@ export async function createTestApp(
                     const deadline = setTimeout(() => {
                         cleanup();
                         reject(lastFailure ?? new Error("The expected view did not appear."));
-                    }, timeoutMilliseconds);
+                    }, 12_000);
                     if (lifetime.signal.aborted) {
                         abort();
                         return;
@@ -204,7 +210,10 @@ export async function createTestApp(
         openViewer: async () => {
             const transport = new WebSocketApiTransport(current.origin);
             transport.open();
-            return await createTestApp({ application: { ...current, transport, close: () => transport.close() } });
+            return await createTestApp({
+                application: { ...current, transport, close: () => transport.close() },
+                ...(options.clock === undefined ? {} : { clock: options.clock }),
+            });
         },
         close: async () => {
             if (closed) {

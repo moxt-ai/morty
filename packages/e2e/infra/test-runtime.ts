@@ -23,7 +23,7 @@ export async function createTestRuntime(harness: E2EHarness) {
     });
     const application = await stack.startPlatform();
     await stack.startChat(application);
-    const browser = await chromium.launch({ channel: "chrome", headless: true });
+    const browser = await chromium.launch({ headless: true });
     try {
         const context = await browser.newContext();
         const page = await context.newPage();
@@ -78,14 +78,9 @@ export async function createTestRuntime(harness: E2EHarness) {
                     stack.directories.workspace,
                     harness.signal,
                 );
-                const paired = await chat.waitForAgent(
-                    harness,
-                    text(pairing.pairingId, "pairing ID"),
-                    agentId,
-                    agentName,
-                );
+                const paired = await chat.readPairedAgent(text(pairing.pairingId, "pairing ID"), agentId);
                 await chat.bindAgent(paired.runtimeId, agentId);
-                await chat.waitForBinding(harness, agentId, agentName);
+                await chat.readBinding(agentId);
                 await page.reload();
             },
             disconnectRuntime: async () => await runtime.disconnect(),
@@ -113,12 +108,7 @@ export async function createTestRuntime(harness: E2EHarness) {
                     stack.directories.workspace,
                     harness.signal,
                 );
-                await unrelated.waitForAgent(
-                    harness,
-                    text(pairing.pairingId, "unrelated pairingId"),
-                    agentId,
-                    agentName,
-                );
+                await unrelated.readPairedAgent(text(pairing.pairingId, "unrelated pairingId"), agentId);
             },
             followInstructions: async (
                 instructionUrl: string,

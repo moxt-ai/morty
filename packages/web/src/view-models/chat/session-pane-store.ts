@@ -17,6 +17,7 @@ import {
     sessionLastSentMessageEntry,
 } from "../../services/indexed-db/central-indexed-db.ts";
 import { centralSessionStorage, sessionDraftEntry } from "../../services/session-storage/central-session-storage.ts";
+import type { Clock } from "../../services/time/clock.ts";
 import { formatError, isRetryableRuntimeConnectionFailure } from "../format-error.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
@@ -78,7 +79,7 @@ type Connection =
           readonly kind: "disconnected";
           readonly message: string;
           readonly retry:
-              | { readonly kind: "scheduled"; readonly retryAtEpochMs: number }
+              | { readonly kind: "scheduled"; readonly remainingSeconds: number }
               | { readonly kind: "exhausted" };
       }
     | { readonly kind: "failed"; readonly message: string };
@@ -105,26 +106,6 @@ const HISTORY_MESSAGE_TARGET = 20;
 const SESSION_RECONNECT_DELAYS_MS = [5_000, 10_000, 20_000] as const;
 const SESSION_RECONNECT_DELAY_CAP_MS = 30_000;
 const SESSION_AUTO_RECONNECT_ATTEMPTS = 7;
-const MANUAL_RETRY_WAIT_MILLISECONDS = 2_147_483_647;
-
-function sleepAbortably(milliseconds: number, signal: AbortSignal): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-        const timeoutId = globalThis.setTimeout(() => {
-            signal.removeEventListener("abort", abort);
-            resolve();
-        }, milliseconds);
-        const abort = (): void => {
-            globalThis.clearTimeout(timeoutId);
-            reject(signal.reason);
-        };
-        if (signal.aborted) {
-            abort();
-            return;
-        }
-        signal.addEventListener("abort", abort, { once: true });
-    });
-}
-
 function interactionId(interaction: LocalInteraction): string {
     return interaction.kind === "permission"
         ? interaction.permission.interactionId
@@ -379,6 +360,7 @@ function mergeSessionEvents(
 }
 
 export function createSessionPaneModel(options: {
+    readonly clock: Clock;
     readonly session: OpenMobiusSession;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "connectSession">;
@@ -397,7 +379,7 @@ export function createSessionPaneModel(options: {
     readonly onInitialMessageUnconfirmed?: ((journal: Journal) => void) | undefined;
     readonly onTitleChange: (sessionId: string, title: string) => void;
 }) {
-    const { session, botId, requests } = options;
+    const { session, botId, requests, clock } = options;
     const sessionId = session.result.ready.sessionId;
     const initialActiveTurn: SessionActiveTurn =
         session.result.action === "conversation" && session.result.activeTurn.kind === "running"
@@ -689,6 +671,7 @@ export function createSessionPaneModel(options: {
                         }
                     });
                 };
+                let consecutiveFailures = 0;
                 const observeSession = async (): Promise<void> => {
                     client = await requests.connectSession(
                         botId,
@@ -967,6 +950,7 @@ export function createSessionPaneModel(options: {
                     };
                     const subscription = await connected.events.subscribeLive(sessionId, observer, signal);
                     signal.throwIfAborted();
+                    consecutiveFailures = 0;
                     set({ connection: { kind: "ready", client: connected } });
                     if (initialCommandId !== null) {
                         // Send reports delivery itself, so an uncertain or
@@ -985,14 +969,12 @@ export function createSessionPaneModel(options: {
                     throw new Error("Session updates disconnected. Reopen the Session to continue.");
                 };
                 readStoredLastSentMessage();
-                let consecutiveFailures = 0;
                 for (;;) {
                     if (consecutiveFailures > 0) {
                         set({ connection: { kind: "reconnecting", message: connectionFailure(get().connection) } });
                     }
                     try {
                         await observeSession();
-                        consecutiveFailures = 0;
                     } catch (cause) {
                         client?.close();
                         client = null;
@@ -1007,26 +989,53 @@ export function createSessionPaneModel(options: {
                             return;
                         }
                         const canAutoRetry = consecutiveFailures < SESSION_AUTO_RECONNECT_ATTEMPTS;
-                        const delay = canAutoRetry
-                            ? Math.min(
-                                  SESSION_RECONNECT_DELAYS_MS[consecutiveFailures] ?? SESSION_RECONNECT_DELAY_CAP_MS,
-                                  SESSION_RECONNECT_DELAY_CAP_MS,
-                              )
-                            : MANUAL_RETRY_WAIT_MILLISECONDS;
+                        const delay = Math.min(
+                            SESSION_RECONNECT_DELAYS_MS[consecutiveFailures] ?? SESSION_RECONNECT_DELAY_CAP_MS,
+                            SESSION_RECONNECT_DELAY_CAP_MS,
+                        );
                         consecutiveFailures += 1;
-                        const retryAtEpochMs = Date.now() + delay;
                         const message = formatError(cause, "The Session could not be opened.");
+                        const remainingSeconds = Math.ceil(delay / 1000);
                         set({
                             connection: {
                                 kind: "disconnected",
                                 message,
-                                retry: canAutoRetry ? { kind: "scheduled", retryAtEpochMs } : { kind: "exhausted" },
+                                retry: canAutoRetry ? { kind: "scheduled", remainingSeconds } : { kind: "exhausted" },
                             },
                         });
                         countdownInterrupt = new AbortController();
-                        await sleepAbortably(delay, AbortSignal.any([signal, countdownInterrupt.signal])).catch(
-                            () => undefined,
-                        );
+                        const retrySignal = AbortSignal.any([signal, countdownInterrupt.signal]);
+                        try {
+                            if (canAutoRetry) {
+                                const retryAt = clock.now() + delay;
+                                while (clock.now() < retryAt) {
+                                    await clock.sleep(Math.min(1000, retryAt - clock.now()), retrySignal);
+                                    retrySignal.throwIfAborted();
+                                    set({
+                                        connection: {
+                                            kind: "disconnected",
+                                            message,
+                                            retry: {
+                                                kind: "scheduled",
+                                                remainingSeconds: Math.ceil((retryAt - clock.now()) / 1000),
+                                            },
+                                        },
+                                    });
+                                }
+                            } else {
+                                await new Promise<void>((resolve) => {
+                                    if (retrySignal.aborted) {
+                                        resolve();
+                                        return;
+                                    }
+                                    retrySignal.addEventListener("abort", () => resolve(), { once: true });
+                                });
+                            }
+                        } catch (cause) {
+                            if (!retrySignal.aborted) {
+                                throw cause;
+                            }
+                        }
                         countdownInterrupt = null;
                         if (signal.aborted) {
                             return;
