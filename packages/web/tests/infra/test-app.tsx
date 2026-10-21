@@ -1,6 +1,7 @@
 import { getByTestId, getConfig, queryAllByTestId } from "@testing-library/dom";
 import { act, render } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
+import { flushSync } from "react-dom";
 import { afterAll, afterEach } from "vitest";
 import { ToastProvider } from "../../src/components/ui/toast.tsx";
 import { ApiTransportProvider } from "../../src/services/api/api-transport-context.tsx";
@@ -215,7 +216,13 @@ export async function createTestApp(
                 : {
                       ...daemon,
                       continueReply: async (...args) => {
-                          await act(async () => await daemon.continueReply(...args));
+                          await daemon.continueReply(...args);
+                          // Let the host scheduler accept the reply, then commit the
+                          // view synchronously so a large message is visible to the test.
+                          await new Promise((resolve) => {
+                              setTimeout(resolve, 0);
+                          });
+                          flushSync(() => undefined);
                       },
                   },
         reload: async () => {

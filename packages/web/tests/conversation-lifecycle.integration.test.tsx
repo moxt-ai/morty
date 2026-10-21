@@ -613,17 +613,24 @@ test("Given more saved messages than one history page, When older messages load,
     await app.waitForView(() =>
         expect(getByRole(document.body, "textbox", { name: "Message" }).hasAttribute("disabled")).toBe(false),
     );
+    const initialPrompts = await app.waitForView(() => {
+        const loaded = app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent ?? "");
+        expect(loaded).toContain(prompts.at(-1));
+        expect(loaded).not.toContain(prompts[0]);
+        return loaded;
+    });
     const messages = queryByRole(document.body, "log", { name: "Messages" });
     if (!(messages instanceof HTMLElement)) {
         throw new Error("Expected the Session message list");
     }
-    const previousContent = messages.textContent ?? "";
     const loading = app.waitForView(() => getByRole(document.body, "status", { name: "Loading older messages" }));
     await app.user.click(getByRole(document.body, "button", { name: "Load older messages" }));
     expect((await loading).textContent).not.toContain("Loading");
 
     await app.waitForView(() => {
-        expect((messages.textContent ?? "").length).toBeGreaterThan(previousContent.length);
+        const loaded = app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent ?? "");
+        expect(loaded.length).toBeGreaterThan(initialPrompts.length);
+        expect(loaded.some((text) => !initialPrompts.includes(text))).toBe(true);
         expect(messages.textContent).toContain(prompts.at(-1));
         expect(queryByRole(document.body, "status", { name: "Loading older messages" })).toBeNull();
     });

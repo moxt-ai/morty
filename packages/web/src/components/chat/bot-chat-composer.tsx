@@ -1,10 +1,11 @@
-import { FileText, LoaderCircle, Plus, Send, Square, X } from "lucide-react";
+import { ArrowUp, FileText, LoaderCircle, Plus, Square, X } from "lucide-react";
 import { type ClipboardEvent, type FormEvent, type KeyboardEvent, type ReactNode, useRef } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import type { ComposerAttachment } from "../../view-models/chat/composer-attachment.ts";
 import { type ComposerAttachmentStore, canAddAttachments } from "../../view-models/chat/composer-attachment-store.ts";
 import { Button } from "../ui/cloud-button.tsx";
 import { Textarea } from "../ui/textarea.tsx";
+import { chatSessionComposerClassName } from "./chat-session-layout.ts";
 
 function attachmentName(attachment: ComposerAttachment): string {
     return attachment.kind === "image" ? attachment.image.name : attachment.resource.name;
@@ -19,7 +20,7 @@ function AttachmentPreview({
 }) {
     const name = attachmentName(attachment);
     return (
-        <li className="group/attachment relative flex h-[60px] max-w-52 items-center gap-2 rounded-xl border border-border bg-surface-subtle p-2 pr-8 text-xs text-copy-secondary">
+        <li className="group/attachment relative flex h-[60px] max-w-52 items-center gap-2 rounded-md border border-border bg-surface-subtle p-2 pr-8 text-xs text-copy-secondary">
             {attachment.kind === "image" ? (
                 <img
                     alt=""
@@ -126,17 +127,14 @@ export function BotChatComposer({
     const submitAction = outputState === "idle" || (outputState === "running" && !submitDisabled);
 
     return (
-        <form
-            className="mx-auto mt-4 mb-4 w-full max-w-[920px] shrink-0 px-3 sm:mt-5 sm:mb-5 sm:px-5"
-            onSubmit={submit}
-        >
+        <form className={chatSessionComposerClassName} onSubmit={submit}>
             {(error.length > 0 || attachmentState.kind === "failed") && (
                 <p className="mb-2 px-1 text-sm text-destructive" role="alert">
                     {error.length > 0 ? error : attachmentState.kind === "failed" ? attachmentState.message : ""}
                 </p>
             )}
             {errorStatus}
-            <div className="rounded-[22px] border border-border bg-surface-elevated px-3 pt-3 pb-2.5 shadow-[0_8px_28px_rgba(23,30,36,0.06)] transition-[border-color,box-shadow] focus-within:border-primary/35 focus-within:shadow-[0_10px_32px_rgba(23,30,36,0.08),0_0_0_3px_rgba(34,123,78,0.06)] sm:min-h-[128px] sm:px-4 sm:pt-3.5 sm:pb-3 motion-reduce:transition-none">
+            <div className="rounded-[24px] border-[0.5px] border-border bg-surface-elevated px-3 pt-3 pb-2.5 shadow-[0_8px_28px_rgba(23,30,36,0.06)] sm:min-h-[128px] sm:pb-3">
                 {attachments.length > 0 && (
                     <ul aria-label="Attachments" className="mb-2 flex list-none flex-wrap gap-2 p-0">
                         {attachments.map((attachment, index) => (
@@ -160,11 +158,11 @@ export function BotChatComposer({
                     placeholder={placeholder}
                     value={draft}
                 />
-                <div className="mt-1 flex min-h-10 items-center justify-between gap-2">
+                <div className="mt-1 flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-1">
                         <button
                             aria-label="Add attachment"
-                            className="flex size-11 items-center justify-center rounded-full text-copy-secondary outline-none transition-colors duration-150 hover:bg-black/[0.045] focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50 sm:size-10 motion-reduce:transition-none"
+                            className="flex size-9 items-center justify-center rounded-full text-copy-secondary outline-none transition-colors duration-150 hover:bg-black/[0.045] focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50 motion-reduce:transition-none"
                             disabled={disabled || !canAttach}
                             onClick={() => fileInput.current?.click()}
                             title="Add attachment"
@@ -205,7 +203,7 @@ export function BotChatComposer({
                                         ? submitLabel
                                         : "Stop agent output"
                             }
-                            className={`size-11 rounded-full text-white shadow-sm sm:size-10 ${submitAction || outputState === "sending" ? "bg-primary hover:bg-primary/90" : "bg-destructive hover:bg-destructive/90"}`}
+                            className={`size-9 rounded-full text-white ${submitAction || outputState === "sending" ? "bg-primary hover:bg-primary/90" : "bg-destructive hover:bg-destructive/90"}`}
                             data-testid={dataTestId.sendMessage}
                             disabled={
                                 (submitAction && attachmentState.kind === "reading") ||
@@ -218,7 +216,7 @@ export function BotChatComposer({
                             type={submitAction ? "submit" : "button"}
                         >
                             {submitAction || outputState === "sending" ? (
-                                <Send aria-hidden="true" className="size-[18px]" />
+                                <ArrowUp aria-hidden="true" className="size-[18px]" />
                             ) : (
                                 <Square aria-hidden="true" className="size-3.5 fill-current" />
                             )}

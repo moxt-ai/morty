@@ -225,7 +225,7 @@ export class AnonymousIdentityApi {
                 ),
             );
         } catch (error) {
-            if (error instanceof IdentityApiError && error.code === "UNAUTHENTICATED") {
+            if (error instanceof IdentityApiError) {
                 return null;
             }
             throw error;
@@ -233,7 +233,7 @@ export class AnonymousIdentityApi {
     };
 
     readonly #request = async (path: string, init: RequestInit, requestSignal: AbortSignal): Promise<unknown> => {
-        const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(15_000)]);
+        const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(30_000)]);
         const headers = new Headers(init.headers);
         const scope = readIdentityScope();
         const scopedPath =
