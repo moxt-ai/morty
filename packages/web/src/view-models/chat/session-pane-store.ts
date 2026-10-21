@@ -227,6 +227,9 @@ export function sessionPanePresentation(
     tasks: SessionTaskControlsStore,
     queue: SessionMessageQueueStore,
 ) {
+    const needsApproval = model.interactions.some(
+        (interaction) => interaction.kind === "permission" && interaction.permission.state.kind === "pending",
+    );
     const waitingForInput = model.interactions.some(
         (interaction) =>
             (interaction.kind === "permission" && interaction.permission.state.kind !== "resolved") ||
@@ -301,6 +304,7 @@ export function sessionPanePresentation(
                       ? "running"
                       : "idle",
         workingIndicatorVisible:
+            !needsApproval &&
             activeCommandId !== null &&
             model.messages.some((message) => message.role === "user" && message.commandId === activeCommandId),
         shouldQueueOnSubmit: tasks.operation.kind === "running",
