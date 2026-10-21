@@ -66,17 +66,6 @@ function errorRecord(error: unknown): ErrorRecord {
     };
 }
 
-function observation(value: unknown): unknown {
-    if (value instanceof Error) {
-        return errorRecord(value);
-    }
-    try {
-        return JSON.parse(JSON.stringify(value));
-    } catch {
-        return String(value);
-    }
-}
-
 export class E2EHarness {
     readonly name: string;
     readonly rootDirectory: string;
@@ -177,7 +166,7 @@ export class E2EHarness {
         });
     }
 
-    async start(name: string, command: string, args: readonly string[], options: ProcessOptions = {}) {
+    async startWorker(name: string, command: string, args: readonly string[], options: ProcessOptions = {}) {
         const launch = await localLaunch(command, args);
         const logPath = join(this.artifactDirectory, `${name}.log`);
         const output = openSync(logPath, "a", 0o600);
@@ -185,14 +174,55 @@ export class E2EHarness {
             cwd: options.cwd ?? fileURLToPath(new URL("../../..", import.meta.url)),
             detached: true,
             env: { ...process.env, ...options.env },
-            stdio: ["ignore", output, output],
+            stdio: ["ignore", output, output, "ipc"],
             windowsHide: true,
         });
         const processRecord = { child, logPath, name, output };
         this.children.push(processRecord);
-        await new Promise<void>((resolveSpawn, reject) => {
-            child.once("error", reject);
-            child.once("spawn", resolveSpawn);
+        const startupSignal = AbortSignal.any([this.signal, AbortSignal.timeout(90_000)]);
+        await new Promise<void>((resolveReady, reject) => {
+            const cleanup = () => {
+                child.removeListener("message", ready);
+                child.removeListener("error", failed);
+                child.removeListener("exit", exited);
+                startupSignal.removeEventListener("abort", aborted);
+            };
+            const failed = (cause: unknown) => {
+                cleanup();
+                reject(cause);
+            };
+            const exited = (code: number | null, signal: NodeJS.Signals | null) =>
+                failed(new Error(`${name} exited before readiness (${code ?? signal})`));
+            const aborted = () => failed(startupSignal.reason);
+            const ready = (message: unknown) => {
+                if (typeof message !== "string") {
+                    return;
+                }
+                let value: unknown;
+                try {
+                    value = JSON.parse(message);
+                } catch (cause) {
+                    failed(new Error("Invalid Worker readiness message", { cause }));
+                    return;
+                }
+                if (
+                    typeof value === "object" &&
+                    value !== null &&
+                    "event" in value &&
+                    value.event === "DEV_SERVER_READY"
+                ) {
+                    cleanup();
+                    resolveReady();
+                }
+            };
+            child.on("message", ready);
+            child.once("error", failed);
+            child.once("exit", exited);
+            if (startupSignal.aborted) {
+                aborted();
+                return;
+            }
+            startupSignal.addEventListener("abort", aborted, { once: true });
         });
         this.log(`STARTED ${name} pid=${child.pid}`);
         return child;
@@ -214,46 +244,17 @@ export class E2EHarness {
         closeSync(processRecord.output);
     }
 
-    async waitFor<T>(
-        description: string,
-        probe: () => Promise<T>,
-        accept: (value: T) => boolean,
-        options: { readonly timeoutMilliseconds?: number; readonly intervalMilliseconds?: number } = {},
-    ): Promise<T> {
-        const timeout = AbortSignal.timeout(options.timeoutMilliseconds ?? 90_000);
-        let lastObservation: unknown;
-        while (!this.signal.aborted && !timeout.aborted) {
-            await this.#assertProcessesRunning();
-            try {
-                const value = await probe();
-                lastObservation = value;
-                if (accept(value)) {
-                    return value;
-                }
-            } catch (error) {
-                lastObservation = error;
-            }
-            await new Promise((resolveDelay) => setTimeout(resolveDelay, options.intervalMilliseconds ?? 500));
-        }
-        throw new Error(
-            `Timed out waiting for ${description}; last observation: ${JSON.stringify(observation(lastObservation))}`,
-        );
-    }
-
-    async waitForHttp(
+    async checkHttp(
         url: string,
         description: string,
         accept: (response: Response) => boolean | Promise<boolean> = (response) => response.ok,
     ) {
-        return await this.waitFor(
-            description,
-            async () => {
-                const response = await fetch(url, { signal: AbortSignal.timeout(2_000) });
-                return { accepted: await accept(response), status: response.status };
-            },
-            (result) => result.accepted,
-            { intervalMilliseconds: 250 },
-        );
+        await this.#assertProcessesRunning();
+        const response = await fetch(url, { signal: AbortSignal.any([this.signal, AbortSignal.timeout(90_000)]) });
+        if (!(await accept(response))) {
+            throw new Error(`${description} is not healthy after Worker readiness (${response.status})`);
+        }
+        return response;
     }
 
     async attachBrowser(browser: Browser, context: BrowserContext, page: Page) {

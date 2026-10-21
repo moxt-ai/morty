@@ -90,7 +90,7 @@ export class LocalStack {
             );
         });
         await this.harness.stage("start-platform", async () => {
-            await this.harness.start(
+            await this.harness.startWorker(
                 "mobius-platform",
                 wranglerExecutable,
                 [
@@ -108,7 +108,7 @@ export class LocalStack {
                 ],
                 { cwd: mobiusRepository },
             );
-            await this.harness.waitForHttp(
+            await this.harness.checkHttp(
                 `${this.platformOrigin}/mobius/api/dashboard/health`,
                 "mobius-platform health",
             );
@@ -161,7 +161,7 @@ export class LocalStack {
         ]);
         await this.harness.stage("start-chat", async () => {
             const variableArguments = Object.entries(variables).flatMap(([key, value]) => ["--var", `${key}:${value}`]);
-            await this.harness.start("morty", wranglerExecutable, [
+            await this.harness.startWorker("morty", wranglerExecutable, [
                 "dev",
                 "--config",
                 chatConfiguration,
@@ -175,7 +175,7 @@ export class LocalStack {
                 this.directories.chat,
                 ...variableArguments,
             ]);
-            await this.harness.waitForHttp(this.chatOrigin, "morty", (response) => response.status === 200);
+            await this.harness.checkHttp(this.chatOrigin, "morty", (response) => response.status === 200);
         });
     }
 }
