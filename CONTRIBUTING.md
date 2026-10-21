@@ -6,10 +6,28 @@ metadata:
     and approval. The recommended reviewer is taowen-paraflow.
 ---
 
-# Development
+# Contributing to Morty
 
-This guide records development and operational constraints. See
+Read this guide before opening an issue or pull request. It covers contribution,
+development, and operational requirements. See
 [AGENTS.md](AGENTS.md) for engineering rules and [TESTING.md](TESTING.md) for verification.
+
+## Issues and pull requests
+
+Read this guide before opening an issue or pull request.
+
+- Write issue titles and descriptions in English.
+- Write pull request titles and descriptions in English.
+- Write code comments in English.
+- Format pull request titles as Conventional Commits:
+  `<type>(<optional-scope>): <imperative summary>`. Omit the parentheses when
+  no scope is needed, for example `chore: update dependencies`.
+- Describe the problem, expected behavior, and relevant reproduction steps in
+  issues. For feature requests, describe the user need and desired outcome.
+- In pull requests, explain the change, link related issues, and include relevant
+  verification results and any limitations.
+- Keep Markdown changes in documentation-only pull requests, separate from code,
+  configuration, dependencies, and submodule updates.
 
 ## Local development
 
