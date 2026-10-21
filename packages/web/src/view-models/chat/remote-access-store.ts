@@ -1,9 +1,14 @@
 import { createStore } from "zustand/vanilla";
-import { formatError } from "../format-error.ts";
+import { AnonymousIdentityApi, IdentityApiError } from "../../services/identity/anonymous-identity-api.ts";
+import {
+    accessEndedNoticeEntry,
+    centralSessionStorage,
+} from "../../services/session-storage/central-session-storage.ts";
 
 type RemoteAccessState =
     | { readonly kind: "available" }
     | { readonly kind: "loading" }
+    | { readonly kind: "unavailable"; readonly message: string }
     | { readonly kind: "confirming-end"; readonly accessToken: string }
     | { readonly kind: "ending"; readonly accessToken: string }
     | { readonly kind: "ended" }
@@ -12,6 +17,33 @@ type RemoteAccessState =
 interface RemoteAccessOperations {
     readonly currentAccessToken: (signal: AbortSignal) => Promise<string>;
     readonly endRemoteAccess: (token: string, signal: AbortSignal) => Promise<void>;
+}
+
+export function createRemoteAccessOperations(options: {
+    readonly fetchRequest: (request: Request) => Promise<Response>;
+    readonly origin: string;
+    readonly identity: {
+        readonly projectId: string;
+        readonly getToken: (signal: AbortSignal) => Promise<string>;
+    };
+    readonly onEnded: () => void;
+}): RemoteAccessOperations {
+    const api = new AnonymousIdentityApi(options);
+    return {
+        currentAccessToken: async (signal) => {
+            const localIdentity = await api.loadExisting(signal);
+            signal.throwIfAborted();
+            return localIdentity?.projectId === options.identity.projectId
+                ? localIdentity.token
+                : await options.identity.getToken(signal);
+        },
+        endRemoteAccess: async (token, signal) => {
+            await api.endRemoteAccess(token, signal);
+            signal.throwIfAborted();
+            centralSessionStorage.write(accessEndedNoticeEntry, "ended");
+            options.onEnded();
+        },
+    };
 }
 
 export interface RemoteAccessStore {
@@ -34,7 +66,12 @@ export const createRemoteAccessStore = (operations: RemoteAccessOperations) =>
                 set({ state: { kind: "confirming-end", accessToken } });
             } catch {
                 signal.throwIfAborted();
-                set({ state: { kind: "available" } });
+                set({
+                    state: {
+                        kind: "unavailable",
+                        message: "Couldn't prepare to end this access. Check your connection and try again.",
+                    },
+                });
             }
         },
         cancel: () => set({ state: { kind: "available" } }),
@@ -54,7 +91,10 @@ export const createRemoteAccessStore = (operations: RemoteAccessOperations) =>
                     state: {
                         kind: "failed",
                         accessToken: state.accessToken,
-                        message: formatError(cause, "Remote access could not be ended."),
+                        message:
+                            cause instanceof IdentityApiError && cause.code === "UNAUTHENTICATED"
+                                ? "This request was not authorized. Reload Morty to check your current access."
+                                : "We couldn't confirm whether this access ended. Check your connection and try again.",
                     },
                 });
             }

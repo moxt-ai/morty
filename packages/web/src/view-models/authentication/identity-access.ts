@@ -1,4 +1,5 @@
 import { AnonymousIdentityApi, type IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
+import { createRemoteAccessOperations } from "../chat/remote-access-store.ts";
 
 export interface IdentityAccess {
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
@@ -23,6 +24,7 @@ export function createIdentityAccess(options: {
 }): IdentityAccess {
     const api = new AnonymousIdentityApi({ fetchRequest: options.fetchRequest, origin: options.origin });
     return {
+        ...createRemoteAccessOperations({ ...options, onEnded: options.onAccessEnded }),
         createTransfer: async (signal) => {
             const localIdentity = await api.loadExisting(signal);
             signal.throwIfAborted();
@@ -30,18 +32,6 @@ export function createIdentityAccess(options: {
                 throw new IdentitySharingUnavailable();
             }
             return await api.createTransfer(localIdentity.token, signal);
-        },
-        currentAccessToken: async (signal) => {
-            const localIdentity = await api.loadExisting(signal);
-            signal.throwIfAborted();
-            return localIdentity?.projectId === options.identity.projectId
-                ? localIdentity.token
-                : await options.identity.getToken(signal);
-        },
-        endRemoteAccess: async (token, signal) => {
-            await api.endRemoteAccess(token, signal);
-            signal.throwIfAborted();
-            options.onAccessEnded();
         },
     };
 }
