@@ -11,7 +11,7 @@ import {
     Wifi,
 } from "lucide-react";
 import { ContextMenu, DropdownMenu, Tooltip } from "radix-ui";
-import { type ReactNode, useCallback, useRef, useState } from "react";
+import { type ReactNode, useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
@@ -21,11 +21,10 @@ import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-cha
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
-import { createIdentitySharingStore } from "../../view-models/chat/identity-sharing-store.ts";
-import { createNativeSessionStore } from "../../view-models/chat/native-session-store.ts";
 import { createNetworkDiagnosticStore } from "../../view-models/chat/network-diagnostic-store.ts";
 import { projectLocationLabel } from "../../view-models/chat/project-location-label.ts";
 import { createRemoteAccessStore } from "../../view-models/chat/remote-access-store.ts";
+import { createSidebarDialogs } from "../../view-models/chat/sidebar-dialogs.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import { IdentitySharing } from "./identity-sharing.tsx";
 import { NativeSessionDialog, type OpenMobiusSession } from "./native-session-dialog.tsx";
@@ -172,22 +171,18 @@ export function ConversationSidebar({
     const archiveSession = useStore(workspace.directory, (state) => state.archiveSession);
     const sessionStatuses = useStore(workspace.statuses, (state) => state.statuses);
     const [expanded, setExpanded] = useState(false);
-    const [dialog, setDialog] = useState(false);
-    const [dialogStore, setDialogStore] = useState<ReturnType<typeof createNativeSessionStore> | null>(null);
-    const dialogStoreRef = useRef(dialogStore);
-    dialogStoreRef.current = dialogStore;
-    const openDialog = () => {
-        setDialog(true);
-        const store = createNativeSessionStore(botId, requests, (session) => {
-            onOpenSession(session);
-            setDialog(false);
-            setDialogStore(null);
-            workspace.refreshDirectory();
-        });
-        store.getState().start();
-        setDialogStore(store);
-    };
-    const [sharingStore, setSharingStore] = useState<ReturnType<typeof createIdentitySharingStore> | null>(null);
+    const [dialogs] = useState(() =>
+        createSidebarDialogs({
+            botId,
+            requests,
+            createTransfer,
+            onOpenSession,
+            onOpenedSession: workspace.refreshDirectory,
+        }),
+    );
+    useSyncExternalStore(dialogs.subscribe, () => `${dialogs.nativeDialog() === null}:${dialogs.sharing() === null}`);
+    const dialogStore = dialogs.nativeDialog();
+    const sharingStore = dialogs.sharing();
     const [remoteAccess] = useState(() => createRemoteAccessStore({ currentAccessToken, endRemoteAccess }));
     const access = useStore(remoteAccess);
     const [networkDiagnostic] = useState(() =>
@@ -210,19 +205,9 @@ export function ConversationSidebar({
               }))
             : null;
     const conversationGroups = sessions === null ? null : groupConversationsByUpdatedAt(sessions, new Date());
-    // Stable for the sidebar's lifetime so re-renders never re-run the
-    // cleanup; it reads the current dialog store when the sidebar unmounts.
-    const stopDialogOnUnmount = useCallback((node: HTMLElement | null): (() => void) | undefined => {
-        if (node === null) {
-            return undefined;
-        }
-        return () => {
-            dialogStoreRef.current?.getState().stop();
-        };
-    }, []);
     return (
         <aside
-            ref={stopDialogOnUnmount}
+            ref={dialogs.onAttach}
             aria-label="Morty navigation"
             className="grid min-h-0 w-full shrink-0 grid-cols-[minmax(0,1fr)_auto] gap-y-2 overflow-hidden border-b border-border/80 bg-sidebar px-3 py-3 sm:flex sm:w-[280px] sm:flex-col sm:gap-0 sm:border-r sm:border-b-0 sm:px-3.5 sm:py-4"
         >
@@ -267,7 +252,7 @@ export function ConversationSidebar({
                             <Button
                                 aria-label="Open Session"
                                 className="size-8 rounded-lg"
-                                onClick={openDialog}
+                                onClick={dialogs.openNativeDialog}
                                 size="icon"
                                 variant="ghost"
                             >
@@ -494,30 +479,19 @@ export function ConversationSidebar({
                             variant="ghost"
                             className="size-10 shrink-0 justify-center rounded-full px-0 text-copy-secondary hover:bg-white/70"
                             data-testid={dataTestId.shareIdentity}
-                            onClick={() => setSharingStore(createIdentitySharingStore(createTransfer))}
+                            onClick={dialogs.openSharing}
                         >
                             <Share2 className="size-4" aria-hidden="true" />
                         </Button>
                     </SidebarActionTooltip>
                 </div>
             </Tooltip.Provider>
-            {dialog && dialogStore !== null && (
-                <NativeSessionDialog
-                    store={dialogStore}
-                    onClose={() => {
-                        setDialog(false);
-                        setDialogStore(null);
-                    }}
-                />
-            )}
+            {dialogStore !== null && <NativeSessionDialog store={dialogStore} onClose={dialogs.closeNativeDialog} />}
             {sharingStore !== null && (
                 <Dialog
                     title="Continue your work"
                     description="Scan the QR code or open the link on another device to use Morty."
-                    onClose={() => {
-                        sharingStore.getState().dispose();
-                        setSharingStore(null);
-                    }}
+                    onClose={dialogs.closeSharing}
                 >
                     <IdentitySharing store={sharingStore} />
                 </Dialog>

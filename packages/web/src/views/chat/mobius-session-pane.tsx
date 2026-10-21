@@ -20,13 +20,10 @@ import { Button } from "../../components/ui/cloud-button.tsx";
 import { LinkButton } from "../../components/ui/link-button.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
-import { registerMortyDebugSession } from "../../debug-bridge.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { QueuedDraftMessage } from "../../view-models/chat/conversation-creation-machine.ts";
-import { createBrowserFilePreviewStore } from "../../view-models/chat/file-preview-store.ts";
 import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
-import { sessionDebugBlocks } from "../../view-models/chat/session-debug-blocks.ts";
 import type { UnconfirmedSubmission } from "../../view-models/chat/session-delivery-store.ts";
 import {
     createSessionPaneModel,
@@ -313,8 +310,7 @@ export function MobiusSessionPane({
         }),
     );
     const model = useStore(pane.store);
-    const [filePreview] = useState(() => createBrowserFilePreviewStore(pane.readFile));
-    const preview = useStore(filePreview);
+    const preview = useStore(pane.filePreview);
     const delivery = useStore(pane.delivery);
     const messageQueue = useStore(pane.messageQueue);
     const taskControls = useStore(pane.tasks);
@@ -344,28 +340,10 @@ export function MobiusSessionPane({
         [pane],
     );
 
-    // The model owns the session connection: attach through the ref callback
-    // starts it, the cleanup detaches. The callback is stable for the pane's
-    // lifetime, so re-renders never detach and reattach.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId is fixed for the pane's keyed instance.
-    const detachPane = useCallback(
-        (node: HTMLElement | null): (() => void) | undefined => {
-            if (node === null) {
-                return undefined;
-            }
-            const unregister = registerMortyDebugSession({
-                sessionId,
-                blocks: () => sessionDebugBlocks(pane.store.getState()),
-            });
-            pane.attach();
-            return () => {
-                unregister();
-                filePreview.getState().close();
-                pane.detach();
-            };
-        },
-        [filePreview, pane],
-    );
+    // The model owns the session connection through the same ref-cleanup
+    // protocol the chat root uses: attach starts it, the cleanup detaches,
+    // and the model's WeakSet latch ignores re-renders of the same element.
+
     const loadOlderMessages = useCallback(
         async (signal: AbortSignal) => await pane.store.getState().loadOlderMessages(signal),
         [pane],
@@ -397,16 +375,16 @@ export function MobiusSessionPane({
         run(async (signal) => await pane.store.getState().configure(option, value, booleanValue, signal));
     const openLocalFile = useCallback(
         (path: string) => {
-            void filePreview.getState().open(path, pane.operationsSignal());
+            void pane.filePreview.getState().open(path, pane.operationsSignal());
         },
-        [filePreview, pane],
+        [pane],
     );
 
     return (
         <>
             <section
                 className="flex min-h-0 min-w-0 flex-1 animate-cloud-enter flex-col motion-reduce:animate-none"
-                ref={detachPane}
+                ref={pane.onAttach}
             >
                 <header className="flex h-12 shrink-0 items-center gap-1 border-b border-border/80 px-4 sm:px-8 lg:px-12">
                     {model.titleEdit.kind === "closed" ? (
@@ -677,7 +655,7 @@ export function MobiusSessionPane({
                     )}
                 </BotChatComposer>
             </section>
-            <FilePreview onClose={filePreview.getState().close} state={preview.state} />
+            <FilePreview onClose={pane.filePreview.getState().close} state={preview.state} />
         </>
     );
 }

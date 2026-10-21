@@ -9,6 +9,7 @@ import {
 } from "@moxt-ai/mobius-sdk";
 import { decodeIdentifier, type SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
+import { registerMortyDebugSession } from "../../debug-bridge.ts";
 import { type BotChatApi, connectedChatRuntimeAgents } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
 import {
@@ -21,6 +22,7 @@ import { formatError, isRetryableRuntimeConnectionFailure } from "../format-erro
 import { reportApplicationError } from "../report-error.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
+import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { createSessionActiveTurn, type SessionActiveTurn } from "./session-active-turn.ts";
 import {
@@ -29,6 +31,7 @@ import {
     transitionSessionActivity,
     workingCommandId,
 } from "./session-activity-machine.ts";
+import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import { createSessionDeliveryStore, type Journal, type SessionDeliveryStore } from "./session-delivery-store.ts";
 import { createSessionMessageQueueStore, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
 import type {
@@ -1392,9 +1395,8 @@ export function createSessionPaneModel(options: {
     // signal, detach aborts it. The view drives this through a ref callback,
     // so no component effect owns the session connection and nothing starts
     // during render.
+    const attachedViews = new WeakSet<HTMLElement>();
     const connection = new AbortController();
-    let attached = false;
-    void 0;
     // The harness list is display-only in an existing conversation: every
     // entry is disabled, so a failed load just leaves the current harness.
     const harnessController = new AbortController();
@@ -1414,47 +1416,60 @@ export function createSessionPaneModel(options: {
                 reportApplicationError(cause, "session-pane-harnesses");
             }
         });
+    const readFile = async (path: string, signal: AbortSignal) => {
+        signal.throwIfAborted();
+        if (client === null) {
+            throw new Error("The Session is not connected.");
+        }
+        return await client.sessions.readFile(
+            sessionId,
+            path,
+            AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
+            32 * 1024 * 1024,
+        );
+    };
+    const filePreview = createBrowserFilePreviewStore(readFile);
+    /**
+     * Announced with the pane's attached root element, following React's
+     * ref-cleanup protocol: the view hands it straight to its root element's
+     * ref. Attach starts the session connection; the returned function stops
+     * it. A WeakSet latches the node so a re-render of the same element cannot
+     * detach and reattach the connection.
+     */
+    const onAttach = (node: HTMLElement): (() => void) => {
+        if (attachedViews.has(node)) {
+            return () => {};
+        }
+        attachedViews.add(node);
+        const unregisterDebug = registerMortyDebugSession({
+            sessionId,
+            blocks: () => sessionDebugBlocks(store.getState()),
+        });
+        void store
+            .getState()
+            .connect(connection.signal)
+            .catch((cause: unknown) => {
+                if (!connection.signal.aborted) {
+                    reportApplicationError(cause, "session-pane-connect");
+                }
+            });
+        return () => {
+            attachedViews.delete(node);
+            unregisterDebug();
+            filePreview.getState().close();
+            harnessController.abort(new Error("The session pane detached."));
+            connection.abort(new Error("The session pane detached."));
+        };
+    };
     return {
         store,
         delivery,
+        filePreview,
         messageQueue,
         tasks,
-        attach: () => {
-            if (attached) {
-                return;
-            }
-            attached = true;
-            void store
-                .getState()
-                .connect(connection.signal)
-                .catch((cause: unknown) => {
-                    if (!connection.signal.aborted) {
-                        reportApplicationError(cause, "session-pane-connect");
-                    }
-                });
-        },
-        /** Stops the session connection when the pane's view detaches. */
-        detach: () => {
-            if (!attached) {
-                return;
-            }
-            attached = false;
-            harnessController.abort(new Error("The session pane detached."));
-            connection.abort(new Error("The session pane detached."));
-        },
+        onAttach,
         /** The signal for view-triggered operations while the pane is attached. */
         operationsSignal: () => connection.signal,
-        readFile: async (path: string, signal: AbortSignal) => {
-            signal.throwIfAborted();
-            if (client === null) {
-                throw new Error("The Session is not connected.");
-            }
-            return await client.sessions.readFile(
-                sessionId,
-                path,
-                AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
-                32 * 1024 * 1024,
-            );
-        },
+        readFile,
     };
 }
