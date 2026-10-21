@@ -220,10 +220,12 @@ test("Given a history page that starts inside an interleaved compaction, When th
     });
     await app.user.click(conversation);
     // The newest page's first compaction event is the settle chunk, not the
-    // start: the entry must still render as one completed compaction.
-    await app.waitForView(() =>
-        expect(app.elementByTestId(dataTestId.agentCompaction).textContent).toContain("Context compaction completed"),
-    );
+    // start: the entry must still render immediately as one completed
+    // compaction, without loading the older page that holds the start.
+    await app.waitForView(() => {
+        expect(app.elementsByTestId(dataTestId.agentCompaction).length).toBe(1);
+        expect(app.elementByTestId(dataTestId.agentCompaction).textContent).toContain("Context compaction completed");
+    });
     const messages = queryByRole(document.body, "log", { name: "Messages" });
     if (!(messages instanceof HTMLElement)) {
         throw new Error("Expected the Session message list");

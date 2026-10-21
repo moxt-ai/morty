@@ -398,6 +398,9 @@ type SessionEventResult =
           readonly kind: "constructed";
           readonly firstEvent: "known" | "possibly-before-page";
           readonly message: SessionMessage;
+          /** The entry renders immediately even while its events stay retained
+           *  for merging with an older page. */
+          readonly visible?: boolean;
       }
     | { readonly kind: "skipped" };
 
@@ -441,6 +444,12 @@ function mergeAdjacentText(previous: SessionMessage | undefined, incoming: Sessi
 interface ReducedSessionMessage {
     readonly complete: boolean;
     readonly message: SessionMessage;
+    /** The message renders even though its events stay retained for merging with
+     *  an older page. True for id-addressed entries (compactions), where any
+     *  observed event establishes the entity; false for entries whose rendering
+     *  depends on their unseen start (a bare tool_call_update tail, a leading
+     *  message chunk whose head may live on the older page). */
+    readonly visible: boolean;
     readonly unresolvedEvents: readonly SessionEvent[];
 }
 
@@ -493,18 +502,19 @@ function consumeSessionEvent(
         };
         return existingIndex === -1
             ? {
-                  // Completeness is decided by the compaction's own first event, not
-                  // by position: a leading in_progress is the entity's start (chunks
-                  // and terminal updates may only follow it per the ACP contract), so
-                  // the entry is complete. Any other first-observed event means the
-                  // start may live on an older page, and the entry stays unresolved so
-                  // prependSessionMessageEvents can merge that page under this id.
+                  // The entry keeps its events for cross-page merging whenever its
+                  // own start (a leading in_progress per the ACP contract) has not
+                  // been observed on this page, but it renders immediately: any of
+                  // its events establishes the id-addressed entity, so the current
+                  // state (streaming or settled) is visible without waiting for the
+                  // older page that holds the start.
                   firstEvent:
                       update.sessionUpdate === "compaction_update" && update.status === "in_progress"
                           ? "known"
-                          : "possibly-before-page",
+                          : leadingEvent,
                   kind: "constructed",
                   message,
+                  visible: true,
               }
             : { index: existingIndex, kind: "consumed", message };
     }
@@ -562,6 +572,7 @@ function applySessionEvent(
             next[result.index] = {
                 complete: previous.complete,
                 message: result.message,
+                visible: previous.visible,
                 unresolvedEvents: previous.complete ? [] : [...previous.unresolvedEvents, event],
             };
             return next;
@@ -572,6 +583,7 @@ function applySessionEvent(
                 {
                     complete: result.firstEvent === "known",
                     message: result.message,
+                    visible: result.visible ?? false,
                     unresolvedEvents: result.firstEvent === "known" ? [] : [event],
                 },
             ];
@@ -629,13 +641,17 @@ export function prependSessionMessageEvents(
         events: mergeSessionEventSequences(history.events, unresolvedEvents),
         nextCursor: history.nextCursor,
     });
+    // Entries with retained events were replayed into the older reduction, where
+    // their ids merge under one entity with the start events this page lacked;
+    // they are superseded and dropped here. Complete entries have nothing to
+    // merge and are kept as-is.
     return {
         entries: [...older.entries, ...reduction.entries.filter((entry) => entry.complete)],
     };
 }
 
 export function sessionReductionMessages(reduction: SessionMessageReduction): readonly SessionMessage[] {
-    return reduction.entries.flatMap((entry) => (entry.complete ? [entry.message] : []));
+    return reduction.entries.flatMap((entry) => (entry.complete || entry.visible ? [entry.message] : []));
 }
 
 export function sessionEventLogPresentation(events: readonly SessionEvent[]): SessionTimeline {
