@@ -8,8 +8,18 @@ export interface ExecutionContext {
     readonly machine: string;
     readonly agent: string;
     readonly directory: string | null;
+    readonly directoryName: string;
     readonly directoryPlaceholder: string;
     readonly connection: "Connecting" | "Connected" | "Disconnected" | "Reconnecting" | "Unavailable";
+}
+
+function directoryName(directory: string): string {
+    return (
+        directory
+            .replace(/[\\/]+$/u, "")
+            .split(/[\\/]/u)
+            .at(-1) || directory
+    );
 }
 
 export function pendingExecutionContext(
@@ -22,6 +32,7 @@ export function pendingExecutionContext(
         machine: home.runtimeConfiguration?.runtime.machineName.trim() || (loading ? "Loading…" : "Unknown"),
         agent: loading ? "Loading…" : "Unknown",
         directory: null,
+        directoryName: loading ? "Loading…" : "Unknown",
         directoryPlaceholder: loading ? "Loading…" : "Unknown",
         connection: loading
             ? "Connecting"
@@ -40,10 +51,11 @@ export function pendingExecutionContext(
                 machine: settings.selectedAgent.machineName.trim() || "Unknown",
                 agent: settings.selectedAgent.label.trim() || "Unknown",
                 directory: settings.cwd.directoryLabel,
+                directoryName: directoryName(settings.cwd.directoryLabel),
             };
         case "loading":
         case "switching":
-            return { ...base, agent: "Loading…", directoryPlaceholder: "Loading…" };
+            return { ...base, agent: "Loading…", directoryName: "Loading…", directoryPlaceholder: "Loading…" };
         case "failed":
             return base;
     }
@@ -59,6 +71,7 @@ export function sessionExecutionContext(
         machine: configuration?.runtime.machineName.trim() || "Unknown",
         agent: agent?.label.trim() || session.result.ready.agentName.trim() || "Unknown",
         directory: session.result.ready.directoryLabel,
+        directoryName: directoryName(session.result.ready.directoryLabel),
         directoryPlaceholder: "Unknown",
     };
     switch (connection.kind) {

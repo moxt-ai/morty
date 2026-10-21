@@ -1,9 +1,19 @@
-import { getByRole } from "@testing-library/dom";
+import { getByRole, getByText, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
-import { createTestApp } from "./infra/test-app.tsx";
+import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
+
+async function readDirectory(app: TestApp): Promise<string> {
+    await app.user.click(getByRole(document.body, "button", { name: "Show execution details" }));
+    const dialog = getByRole(document.body, "dialog", { name: "Execution details" });
+    const directory = app.elementByTestId(dataTestId.executionDirectory, dialog).textContent ?? "";
+    expect(directory.length).toBeGreaterThan(0);
+    await app.user.keyboard("{Escape}");
+    expect(queryByRole(document.body, "dialog", { name: "Execution details" })).toBeNull();
+    return directory;
+}
 
 test("Given a connected Runtime, When a draft becomes a saved session and reconnects, Then its execution context stays visible and reflects the session connection", {
     timeout: 30_000,
@@ -18,13 +28,8 @@ test("Given a connected Runtime, When a draft becomes a saved session and reconn
         expect(context().textContent).toContain("Codex");
         expect(context().textContent).toContain("Connected");
     });
-    const directory = getByRole(context(), "button", { name: /^Working directory:/ });
-    const directoryName = directory.getAttribute("aria-label");
-    await app.user.click(directory);
-    expect(getByRole(document.body, "dialog", { name: "Working directory" }).textContent).toContain(
-        directoryName?.replace("Working directory: ", ""),
-    );
-    await app.user.keyboard("{Escape}");
+    expect(getByText(context(), "workspace", { exact: true })).toBeDefined();
+    const directoryName = await readDirectory(app);
     await sendPrompt(app, app.elementByTestId(dataTestId.messageComposer), "Remember this execution context");
     await app.waitForView(() =>
         expect(
@@ -33,14 +38,14 @@ test("Given a connected Runtime, When a draft becomes a saved session and reconn
                 .some((element) => element.textContent?.includes("Codex turn 1")),
         ).toBe(true),
     );
-    expect(getByRole(context(), "button", { name: directoryName ?? "" })).toBeDefined();
+    expect(await readDirectory(app)).toBe(directoryName);
     if (app.daemon === null) {
         throw new Error("Expected a connected Runtime");
     }
     await app.daemon.disconnect();
     await app.waitForView(() => expect(context().textContent).toContain("Disconnected"));
     expect(context().textContent).toContain("Codex");
-    expect(getByRole(context(), "button", { name: directoryName ?? "" })).toBeDefined();
+    expect(await readDirectory(app)).toBe(directoryName);
     await app.daemon.reconnect();
     await app.user.click(await app.waitForView(() => getByRole(document.body, "button", { name: "Retry now" })));
     await app.waitForView(() => expect(context().textContent).toContain("Connected"));
@@ -51,9 +56,8 @@ test("Given a saved conversation and a different draft directory, When the user 
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
     const context = () => getByRole(document.body, "region", { name: "Execution context" });
-    const directory = () => getByRole(context(), "button", { name: /^Working directory:/ }).getAttribute("aria-label");
     await app.waitForView(() => expect(context().textContent).toContain("Codex"));
-    const originalDirectory = directory();
+    const originalDirectory = await readDirectory(app);
     expect(context().textContent).toContain("Controlled Agent Runtime");
     await sendPrompt(
         app,
@@ -78,8 +82,11 @@ test("Given a saved conversation and a different draft directory, When the user 
             (element) => element instanceof HTMLButtonElement && !element.disabled,
         ),
     );
-    await app.waitForView(() => expect(directory()).not.toBe(originalDirectory));
-    const changedDirectory = directory();
+    await app.waitForView(() =>
+        expect(queryByRole(document.body, "dialog", { name: "Choose working directory" })).toBeNull(),
+    );
+    const changedDirectory = await readDirectory(app);
+    expect(changedDirectory).not.toBe(originalDirectory);
     await sendPrompt(app, app.elementByTestId(dataTestId.messageComposer), "Changed directory conversation");
     await app.waitForView(() =>
         expect(
@@ -109,8 +116,8 @@ test("Given a saved conversation and a different draft directory, When the user 
         await app.user.click(saved);
         await app.waitForView(() => {
             expect(getByRole(context(), "status", { name: "Connection" }).textContent).toBe("Connected");
-            expect(directory()).toBe(expectedDirectory);
         });
+        expect(await readDirectory(app)).toBe(expectedDirectory);
     }
 });
 

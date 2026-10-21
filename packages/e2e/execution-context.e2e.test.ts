@@ -1,3 +1,4 @@
+import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
 const machineName = "Browser test Runtime — Engineering workstation with a long machine name";
@@ -6,6 +7,7 @@ test.use({ runtimeMachineName: machineName });
 for (const viewport of [
     { width: 1440, height: 900 },
     { width: 390, height: 844 },
+    { width: 320, height: 740 },
 ]) {
     test(`Given a paired chat at ${viewport.width}px, When the user opens a conversation, Then execution context and its full directory remain accessible`, async ({
         runtime,
@@ -29,17 +31,32 @@ for (const viewport of [
         expect(box.x).toBeGreaterThanOrEqual(0);
         expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
-        const directory = context.getByRole("button", { name: /^Working directory:/ });
-        const fullPath = (await directory.getAttribute("aria-label"))?.replace("Working directory: ", "");
-        await directory.click();
-        const dialog = page.getByRole("dialog", { name: "Working directory", exact: true });
+        expect(box.height).toBeLessThanOrEqual(viewport.width < 640 ? 64 : 48);
+        await expect(context.getByText("workspace", { exact: true })).toBeVisible();
+        const details = context.getByRole("button", { name: "Show execution details" });
+        await expect(details).toHaveAccessibleDescription(/Claude Code.*workspace.*Browser test Runtime.*Connected/);
+        const target = await details.boundingBox();
+        expect(target?.height).toBeGreaterThanOrEqual(44);
+        await details.click();
+        const dialog = page.getByRole("dialog", { name: "Execution details", exact: true });
         await expect(dialog).toBeVisible();
-        await expect(dialog).toContainText(fullPath ?? "missing directory");
+        await expect(dialog).toContainText(machineName);
+        const fullPath = await dialog.getByTestId(dataTestId.executionDirectory).textContent();
+        expect(fullPath).toMatch(/\/workspace$/);
+        const detailBox = await dialog.boundingBox();
+        if (detailBox === null) {
+            throw new Error("Expected visible execution details");
+        }
+        expect(detailBox.x).toBeGreaterThanOrEqual(0);
+        expect(detailBox.x + detailBox.width).toBeLessThanOrEqual(viewport.width);
+        if (viewport.width < 640) {
+            expect(detailBox.y + detailBox.height).toBe(viewport.height);
+        }
         await page.screenshot({
             animations: "disabled",
             path: testInfo.outputPath(`execution-directory-${viewport.width}.png`),
         });
-        await dialog.getByRole("button", { name: "Close dialog" }).click();
+        await dialog.getByRole("button", { name: "Close execution details" }).click();
         await page.reload();
         await expect(context).toContainText("Claude Code");
         await expect(context.getByRole("status", { name: "Connection" })).toHaveText("Connected");
@@ -47,9 +64,10 @@ for (const viewport of [
             animations: "disabled",
             path: testInfo.outputPath(`execution-context-${viewport.width}.png`),
         });
-        await expect(context.getByRole("button", { name: /^Working directory:/ })).toHaveAttribute(
-            "aria-label",
-            `Working directory: ${fullPath}`,
-        );
+        await details.click();
+        await expect(dialog.getByTestId(dataTestId.executionDirectory)).toHaveText(fullPath ?? "missing directory");
+        await page.keyboard.press("Escape");
+        await expect(dialog).toBeHidden();
+        await expect(details).toBeFocused();
     });
 }
