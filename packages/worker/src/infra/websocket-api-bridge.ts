@@ -101,49 +101,15 @@ function protocolError(socket: WebSocket, requestIdValue: string | null): void {
     });
 }
 
-function isLoopbackHost(hostname: string): boolean {
-    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
-}
-
-function loopbackOriginsEquivalent(left: string, right: string): boolean {
-    try {
-        const a = new URL(left);
-        const b = new URL(right);
-        if (!isLoopbackHost(a.hostname) || !isLoopbackHost(b.hostname)) {
-            return false;
-        }
-        return a.protocol === b.protocol && a.port === b.port;
-    } catch {
-        return false;
-    }
-}
-
-function isWebSocketOriginAllowed(request: Request, browserOrigin: string | undefined): boolean {
-    const originHeader = request.headers.get("Origin");
-    if (originHeader === null) {
-        return false;
-    }
-    const requestOrigin = new URL(request.url).origin;
-    if (originHeader === requestOrigin || loopbackOriginsEquivalent(originHeader, requestOrigin)) {
-        return true;
-    }
-    if (browserOrigin === undefined || browserOrigin.length === 0) {
-        return false;
-    }
-    const configuredOrigin = new URL(browserOrigin).origin;
-    return originHeader === configuredOrigin || loopbackOriginsEquivalent(originHeader, configuredOrigin);
-}
-
 export function createWebSocketApiBridge(
     request: Request,
     handlers: WebSocketBridgeHandlers,
     logger: BridgeLogger,
-    browserOrigin?: string,
 ): Response {
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
         throw new RequestError("WEBSOCKET_UPGRADE_REQUIRED", "A WebSocket upgrade is required.", 426);
     }
-    if (!isWebSocketOriginAllowed(request, browserOrigin)) {
+    if (request.headers.get("Origin") !== new URL(request.url).origin) {
         throw new RequestError("WEBSOCKET_ORIGIN_FORBIDDEN", "The WebSocket origin is not allowed.", 403);
     }
     const pair = new WebSocketPair();
