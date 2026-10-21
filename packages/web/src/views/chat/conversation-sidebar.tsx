@@ -11,7 +11,7 @@ import {
     Wifi,
 } from "lucide-react";
 import { ContextMenu, DropdownMenu, Tooltip } from "radix-ui";
-import { type ReactNode, useCallback, useRef, useState, useSyncExternalStore } from "react";
+import { type ReactNode, useState, useSyncExternalStore } from "react";
 import { useStore } from "zustand";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
