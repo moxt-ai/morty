@@ -121,6 +121,13 @@ export class ControlledSetupRuntime implements SetupRuntime {
         await Promise.all(active.map((daemon) => daemon[Symbol.asyncDispose]()));
     };
 
+    /** Restarts the production engines while keeping their persisted session directories. */
+    readonly restart = async (): Promise<void> => {
+        const active = Array.from(this.#active.values());
+        await Promise.all(active.map((daemon) => daemon.disconnect()));
+        await Promise.all(active.map((daemon) => daemon.reconnect()));
+    };
+
     /** Simulates the manager forgetting every saved Runtime connection. */
     readonly forgetConnections = async (): Promise<void> => {
         await this.disconnect();
