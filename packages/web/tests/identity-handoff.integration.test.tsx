@@ -472,15 +472,18 @@ test("Given the access was redeemed and its transfer link later stopped working,
     expect(await home.queryElementByTestId(dataTestId.chatLanding)).toBeInstanceOf(HTMLElement);
 });
 
-for (const longPath of [false, true]) {
-    test.skipIf(longPath && process.platform !== "linux")(
-        `Given a setup handoff carries a ${longPath ? "long multibyte" : "short"} project directory, When the original session is unavailable and I enter Morty, Then the validated directory is selected and remembered`,
+for (const segments of [0, 4, 8]) {
+    test.skipIf(segments === 8 && process.platform !== "linux")(
+        `Given a setup handoff carries a ${segments > 0 ? `${segments}-segment multibyte` : "short"} project directory, When the original session is unavailable and I enter Morty, Then the validated directory is selected and remembered`,
         {
             timeout: 30_000,
         },
         async () => {
             const root = await realpath(await mkdtemp(join(tmpdir(), "morty-handoff-project-")));
-            const directory = longPath ? join(root, ...Array.from({ length: 8 }, () => "\u00e9".repeat(110))) : root;
+            const directory = join(
+                root,
+                ...Array.from({ length: segments }, () => "\u00e9".repeat(segments === 8 ? 110 : 90)),
+            );
             try {
                 await mkdir(directory, { recursive: true });
                 const app = await createTestApp({

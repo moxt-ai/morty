@@ -1,12 +1,14 @@
 import { execFile, spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
+import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
+import { ControlledSetupRuntime } from "../../e2e/infra/setup-daemon.ts";
 import { createIdentityFixture } from "./support/identity-fixture.ts";
 
 interface SetupModule {
@@ -15,6 +17,11 @@ interface SetupModule {
         host: {
             readonly documents: string;
             readonly signal: AbortSignal;
+            readonly runtime?: ControlledSetupRuntime;
+            readonly clock?: {
+                readonly now: () => Date;
+                readonly wait: (milliseconds: number, signal: AbortSignal) => Promise<void>;
+            };
             readonly emit: (event: Readonly<Record<string, unknown>>) => void;
         },
     ) => Promise<number>;
@@ -270,3 +277,79 @@ test.runIf(process.env["MORTY_VERIFY_SYSTEM_DOCUMENTS"] === "true" && process.pl
         }
     },
 );
+
+for (const segments of [4, 8]) {
+    test.skipIf(segments === 8 && process.platform !== "linux")(
+        `Given a valid ${segments}-segment multibyte workspace, When setup prepares the handoff, Then it delivers the normal link even when no QR can represent it`,
+        { timeout: 30_000 },
+        async () => {
+            const root = await realpath(await mkdtemp(join(tmpdir(), "morty-setup-long-")));
+            const documents = join(root, "Documents");
+            const workspace = join(
+                root,
+                ...Array.from({ length: segments }, () => "\u00e9".repeat(segments === 8 ? 110 : 90)),
+            );
+            await mkdir(workspace, { recursive: true });
+            const fixture = await createIdentityFixture({ appOrigin: await localOrigin() });
+            const runtime = new ControlledSetupRuntime(
+                { agentId: "codex", agentName: "Codex", reply: mortyReply },
+                "Setup test Runtime",
+            );
+            const events: Readonly<Record<string, unknown>>[] = [];
+            let time = Date.parse("2026-09-15T12:00:00Z");
+            try {
+                const code = await runSetup(
+                    [
+                        "setup",
+                        "--base-url",
+                        fixture.origin,
+                        "--cwd",
+                        workspace,
+                        "--harness",
+                        "codex",
+                        "--session-id",
+                        "native-long-project",
+                    ],
+                    {
+                        documents,
+                        signal: AbortSignal.timeout(25_000),
+                        runtime,
+                        emit: (event) => events.push(event),
+                        clock: {
+                            now: () => new Date(time),
+                            wait: async (milliseconds, signal) => {
+                                signal.throwIfAborted();
+                                time += milliseconds;
+                            },
+                        },
+                    },
+                );
+                expect(code, JSON.stringify(events)).toBe(0);
+                const ready = events.at(-1);
+                expect(ready).toMatchObject({ status: "ready", workspace });
+                const link = ready?.["url"];
+                if (typeof link !== "string") {
+                    throw new Error("Missing setup link");
+                }
+                expect(new URL(link).searchParams.get("workspace")).toBe(workspace);
+                if (segments === 8) {
+                    expect(ready).toMatchObject({ qrPath: null });
+                    expect(events).toContainEqual(
+                        expect.objectContaining({
+                            status: "qr_unavailable",
+                            error: expect.objectContaining({ code: "QR_UNAVAILABLE" }),
+                        }),
+                    );
+                }
+            } finally {
+                await runtime.disconnect();
+                await fixture.close();
+                const qrPath = events.at(-1)?.["qrPath"];
+                if (typeof qrPath === "string") {
+                    await rm(qrPath, { force: true });
+                }
+                await rm(root, { recursive: true, force: true });
+            }
+        },
+    );
+}

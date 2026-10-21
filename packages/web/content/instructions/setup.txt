@@ -44,7 +44,8 @@ five minutes). The manager keeps the Runtime online after the command exits.
 Only ready confirms setup; a working chat reply is a separate check.
 
 Return the exact clickable `url` and the working directory from the `workspace` field. Display the owner-only PNG at
-`qrPath` if inline images are supported; otherwise return the URL. Never open,
+`qrPath` when present and inline images are supported; otherwise return the URL.
+If `qrPath` is null, explain that the QR image is unavailable and use the link. Never open,
 preview, or redeem the handoff URL yourself. Tell the user: **Open this link or
 scan the QR code to chat. It is valid for 24 hours and
 opens the same user and Machine. Keep the Runtime online. You can bind an account later.**
