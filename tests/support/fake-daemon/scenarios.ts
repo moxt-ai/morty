@@ -290,6 +290,25 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                 outcome: "complete",
                 output: [{ kind: "text", text: "![Generated picture](file:///workspace/generated-picture.png)" }],
             };
+        case "show external content": {
+            const content = {
+                type: "image" as const,
+                mimeType: "image/png",
+                data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV4kAAAAASUVORK5CYII=",
+            };
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        content: [{ type: "content", content }],
+                        title: "External content",
+                        output: "",
+                    },
+                ],
+            };
+        }
         case "show unsupported image": {
             const content = { type: "image" as const, mimeType: "image/png", data: "", uri: "unsupported.svg" };
             return {

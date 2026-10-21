@@ -1,9 +1,9 @@
 import { FileText, LoaderCircle, Maximize2, Minimize2, RotateCw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { HighlightedCode, languageForPath } from "../../components/chat/highlighted-code.tsx";
+import { HtmlPreview } from "../../components/chat/html-preview.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { FilePreviewLayout, FilePreviewState } from "../../view-models/chat/file-preview-store.ts";
-import { HtmlPreview } from "./html-preview.tsx";
-import { HighlightedCode, languageForPath } from "./tools/highlighted-code.tsx";
 
 function CodeLineNumbers({ code }: { readonly code: string }) {
     const lineCount = code.split("\n").length;

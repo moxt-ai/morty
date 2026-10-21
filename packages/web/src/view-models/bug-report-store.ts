@@ -8,6 +8,8 @@ import { type BugReport, BugReportError, type BugReportSink } from "../services/
 import type { BrowserNetworkOperations } from "../services/diagnostics/network-diagnostics.ts";
 import { collectNetworkDiagnostics } from "./bug-report-network.ts";
 
+export type BugReportStoreApi = ReturnType<typeof createBugReportStore>;
+
 type ReportState =
     | { readonly kind: "editing" }
     | { readonly kind: "sending" }
@@ -73,6 +75,11 @@ export function createBugReportStore(
         close: () => {
             active?.abort(new DOMException("Report closed", "AbortError"));
             active = null;
+            // An aborted send must not leave the dialog in its sending state:
+            // the owner keeps the dialog open, so return it to editing.
+            if (get().state.kind === "sending") {
+                set({ state: { kind: "editing" } });
+            }
         },
         send: async (parent) => {
             if (
