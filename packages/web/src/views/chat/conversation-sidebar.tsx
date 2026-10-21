@@ -414,7 +414,7 @@ export function ConversationSidebar({
                 ))}
             </div>
             <Tooltip.Provider delayDuration={150} disableHoverableContent>
-                <div className="col-span-2 row-start-3 flex flex-col gap-1 border-t border-border/60 pt-2 sm:col-auto sm:row-auto sm:mt-3 sm:pt-3">
+                <div className="col-span-2 row-start-4 flex flex-col gap-1 border-t border-border/60 pt-2 sm:col-auto sm:row-auto sm:mt-3 sm:pt-3">
                     <Button
                         variant="ghost"
                         className="min-h-10 w-full justify-start gap-2 rounded-lg px-3 text-xs text-foreground hover:bg-white/70"

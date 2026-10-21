@@ -101,3 +101,46 @@ for (const viewport of [
         }
     });
 }
+
+test("Given a recent session on mobile, When the user expands the session list, Then they can select the session and still use sharing actions", async ({
+    runtime,
+}, testInfo) => {
+    const { page } = runtime;
+    await page.setViewportSize({ width: 390, height: 844 });
+    await runtime.openPairedChat();
+    await page.getByRole("textbox", { name: "Message" }).fill("Mobile session navigation");
+    await page.getByRole("button", { name: "Send message" }).click();
+    const response = page
+        .getByRole("article", { name: "Agent response" })
+        .filter({ hasText: "Mobile session navigation" });
+    await expect(response).toBeVisible();
+    const sessionUrl = page.url();
+    await page.getByRole("button", { name: "New Session" }).click();
+    await expect(response).toBeHidden();
+
+    const recentSessions = page.getByRole("button", { name: "Recent sessions", exact: true });
+    await recentSessions.click();
+    await expect(recentSessions).toHaveAttribute("aria-expanded", "true");
+    const session = page.getByRole("button", { name: /^Mobile session navigation/u });
+    await expect(session).toBeVisible();
+    await page.screenshot({
+        animations: "disabled",
+        path: testInfo.outputPath("mobile-expanded-sessions.png"),
+        fullPage: true,
+    });
+    const sessionBox = await session.boundingBox();
+    const sharingBox = await page
+        .getByRole("button", { name: "Continue on another device", exact: true })
+        .boundingBox();
+    if (sessionBox === null || sharingBox === null) {
+        throw new Error("The session and sharing action must have visible layout boxes.");
+    }
+    expect(sharingBox.y).toBeGreaterThanOrEqual(sessionBox.y + sessionBox.height);
+    await session.click();
+    await expect(page).toHaveURL(sessionUrl);
+    await expect(response).toBeVisible();
+    await expect(recentSessions).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("button", { name: "End current access", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Continue on another device", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Continue on another device", exact: true })).toBeVisible();
+});
