@@ -16,11 +16,6 @@ const sentry = v.parse(
     process.env,
 );
 const cloudflareEnvironment = v.parse(v.optional(v.picklist(["staging", "production"])), process.env["CLOUDFLARE_ENV"]);
-const devApiOriginRaw = process.env["MORTY_DEV_API_ORIGIN"];
-const devApiOrigin =
-    devApiOriginRaw === undefined || devApiOriginRaw.length === 0
-        ? undefined
-        : v.parse(v.pipe(v.string(), v.url()), devApiOriginRaw);
 const assetOrigin =
     cloudflareEnvironment === "staging"
         ? "https://assets.morty.paradev.biz"
@@ -39,7 +34,7 @@ export default defineConfig({
     plugins: [
         react(),
         tailwindcss(),
-        ...(devApiOrigin === undefined ? [cloudflare()] : []),
+        cloudflare(),
         ...(sentry.SENTRY_AUTH_TOKEN
             ? sentryVitePlugin({
                   org: v.parse(v.string(), sentry.SENTRY_ORG),
@@ -66,23 +61,8 @@ export default defineConfig({
     },
     server: {
         allowedHosts: [".trycloudflare.com"],
-        host: true,
+        host: "localhost",
         port: 5173,
         strictPort: true,
-        ...(devApiOrigin === undefined
-            ? {}
-            : {
-                  proxy: {
-                      "/morty": {
-                          target: devApiOrigin,
-                          changeOrigin: true,
-                          ws: true,
-                          rewriteWsOrigin: true,
-                      },
-                      "/setup.md": { target: devApiOrigin, changeOrigin: true },
-                      "/pair.md": { target: devApiOrigin, changeOrigin: true },
-                      "/setup.mjs": { target: devApiOrigin, changeOrigin: true },
-                  },
-              }),
     },
 });

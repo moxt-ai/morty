@@ -120,7 +120,7 @@ function previewToolEntry(
     };
 }
 
-/** 覆盖主对话区常见 SessionMessage / presentation 形态，供样式 preview 使用。 */
+/** Covers common SessionMessage and presentation shapes for the style preview. */
 export function createMessageTypesShowcase(sessionId: string): readonly SessionMessage[] {
     return [
         previewUserText("showcase-user-text", sessionId, "Help me review spacing on message bubbles and tool rows."),

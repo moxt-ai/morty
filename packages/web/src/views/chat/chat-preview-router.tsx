@@ -9,19 +9,19 @@ function ChatPreviewIndexPage() {
         <main className={setupPageClassName}>
             <section aria-labelledby="chat-preview-index-title" className={`${setupSectionClassName} md:max-w-[640px]`}>
                 <h1 id="chat-preview-index-title" className="text-24 font-semibold tracking-[-0.03em]">
-                    Chat 界面预览
+                    Chat UI preview
                 </h1>
                 <p className="mt-2 text-14 leading-[22px] text-muted-foreground">
-                    临时路由：无需连接本地 Agent 即可调整 Chat 布局与样式。上线前会移除。
+                    Temporary route for adjusting Chat layout and styles without a local Agent. Removed before shipping.
                 </p>
                 <Link
                     className="mt-5 block rounded-xl border border-primary/25 bg-primary/5 px-4 py-4 text-14 transition-colors hover:bg-primary/10"
                     to="/chat/preview/$stateId"
                     params={{ stateId: "interactive" }}
                 >
-                    <span className="font-semibold text-primary">打开交互 playground</span>
+                    <span className="font-semibold text-primary">Open the interactive playground</span>
                     <span className="mt-1 block text-muted-foreground">
-                        连接、切换会话、发消息、弹窗等操作均使用本地模拟数据。
+                        Connecting, switching sessions, sending messages, and dialogs all use local mock data.
                     </span>
                 </Link>
                 <ul className="mt-6 grid gap-2">
@@ -52,10 +52,10 @@ function ChatPreviewStatePage() {
             <main className={setupPageClassName}>
                 <section className={setupSectionClassName}>
                     <p role="alert" className="text-destructive">
-                        未知的预览状态：{stateId}
+                        Unknown preview state: {stateId}
                     </p>
                     <Link className="mt-4 inline-block text-primary underline underline-offset-4" to="/chat/preview">
-                        返回预览列表
+                        Back to the preview list
                     </Link>
                 </section>
             </main>

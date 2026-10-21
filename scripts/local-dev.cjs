@@ -504,10 +504,9 @@ async function prepare(options) {
         ]);
 
         const { publicKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2_048 });
-        const webOrigin = process.env.CHAT_LOCAL_WEB_ORIGIN ?? chatOrigin;
         const variables = {
-            APP_ORIGIN: webOrigin,
-            AUTHENTICATION_BASE_URL: webOrigin,
+            APP_ORIGIN: chatOrigin,
+            AUTHENTICATION_BASE_URL: chatOrigin,
             CLERK_JWT_KEY: publicKey.export({ format: "pem", type: "spki" }).toString(),
             CLERK_PUBLISHABLE_KEY: clerkKey,
             MOBIUS_APP_ID: appId,
@@ -651,12 +650,15 @@ async function setup(options) {
     const shimDirectory = path.join(stack.stateDir, "local-cli-bin");
     fs.mkdirSync(shimDirectory, { recursive: true, mode: 0o700 });
     const shim = path.join(shimDirectory, hostPlatform.cliShimName);
-    const cliEntrypoint = path.join(MOBIUS_ROOT, "packages/cli/src/entrypoint/cli.ts");
     fs.writeFileSync(
         shim,
-        `#!/bin/sh
-set -eu
-exec ${JSON.stringify(process.execPath)} ${JSON.stringify(cliEntrypoint)} "$@"
+        `#!/usr/bin/env node
+const { spawnSync } = require("node:child_process");
+const args = process.argv.slice(2);
+const result = spawnSync(process.execPath, [${JSON.stringify(path.join(MOBIUS_ROOT, "packages/cli/src/entrypoint/cli.ts"))}, ...args], {
+    stdio: "inherit",
+});
+process.exit(result.status ?? 1);
 `,
         { mode: 0o700 },
     );

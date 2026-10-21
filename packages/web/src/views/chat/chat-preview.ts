@@ -16,10 +16,10 @@ export function isChatPreviewStateId(value: string): value is ChatPreviewStateId
 }
 
 export const CHAT_PREVIEW_STATE_LABELS: Record<ChatPreviewStateId, string> = {
-    interactive: "交互 playground（推荐）",
-    "landing-disconnected": "落地页 · 未连接（无输入框）",
-    "landing-composer": "落地页 · 已连接（含输入框）",
-    conversation: "会话中（消息 + 输入框）",
-    "setup-card": "Setup 卡片（配对说明）",
-    "pairing-dialog": "配对弹窗 + Chat 壳",
+    interactive: "Interactive playground (recommended)",
+    "landing-disconnected": "Landing, disconnected (no composer)",
+    "landing-composer": "Landing, connected (with composer)",
+    conversation: "In conversation (messages and composer)",
+    "setup-card": "Setup card (pairing instructions)",
+    "pairing-dialog": "Pairing dialog and chat shell",
 };

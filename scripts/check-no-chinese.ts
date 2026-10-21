@@ -38,18 +38,10 @@ function violation(path: string, source: ChineseTextViolation["source"], locatio
     return { path, source, ...location };
 }
 
-/** TEMP local style preview; removed before shipping. */
-function allowsHanCharacters(path: string): boolean {
-    return path.startsWith("packages/web/src/views/chat/chat-preview");
-}
-
 export function findChineseTextViolations(root: string, paths: readonly string[]): readonly ChineseTextViolation[] {
     const violations: ChineseTextViolation[] = [];
 
     for (const path of paths) {
-        if (allowsHanCharacters(path)) {
-            continue;
-        }
         const pathMatch = findHanCharacter(path);
         if (pathMatch !== null) {
             violations.push(violation(path, "path", pathMatch));
