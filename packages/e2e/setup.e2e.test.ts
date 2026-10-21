@@ -102,14 +102,14 @@ test("Given setup was previously paired in another directory, When a new project
     runtime,
 }) => {
     const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
-    const workspace = join(original.workspace, "project with spaces");
+    const workspace = join(original.workspace, "project with spaces \u00e9");
     await mkdir(workspace);
     const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session", 5000, workspace);
     expect(connected.workspace).toBe(workspace);
     await runtime.page.goto(connected.url);
     await expect(runtime.page.getByRole("textbox", { name: "Message" })).toBeEnabled();
     await runtime.page.getByRole("button", { name: "New Session", exact: true }).click();
-    await expect(runtime.page.getByTestId(dataTestId.workingDirectory)).toContainText("project with spaces");
+    await expect(runtime.page.getByTestId(dataTestId.workingDirectory)).toContainText("project with spaces \u00e9");
     await runtime.page.getByRole("textbox", { name: "Message" }).fill("Verify the setup project directory");
     await runtime.page.getByRole("button", { name: "Send message" }).click();
     await expect(runtime.page.getByRole("article", { name: "Agent response" })).toContainText(

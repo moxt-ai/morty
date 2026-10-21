@@ -1,4 +1,4 @@
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getByRole, queryByRole } from "@testing-library/dom";
@@ -472,41 +472,54 @@ test("Given the access was redeemed and its transfer link later stopped working,
     expect(await home.queryElementByTestId(dataTestId.chatLanding)).toBeInstanceOf(HTMLElement);
 });
 
-test("Given a setup handoff carries a project directory, When the original session is unavailable and I enter Morty, Then the validated directory is selected and remembered", {
-    timeout: 30_000,
-}, async () => {
-    const directory = await realpath(await mkdtemp(join(tmpdir(), "morty-handoff-project-")));
-    try {
-        const app = await createTestApp({
-            connectAgent: true,
-            agent: { id: "codex", label: "Codex" },
-            page: { kind: "continue", harness: "codex", sessionId: "native-project-session", workspace: directory },
-        });
-        await app.waitForView(() =>
-            expect(getByRole(document.body, "alert").textContent).toContain("The native session was not found"),
-        );
-        await app.user.click(getByRole(document.body, "button", { name: "Go to Morty" }));
-        const continued = await app.reload();
-        await continued.user.click(
-            await continued.waitForView(() => getByRole(document.body, "button", { name: "New Session" })),
-        );
-        expect((await continued.queryElementByTestId(dataTestId.workingDirectory)).textContent).toContain(
-            directory.split("/").at(-1),
-        );
-        await continued.user.click(continued.elementByTestId(dataTestId.workingDirectory));
-        expect((await continued.queryElementByTestId(dataTestId.recentWorkingDirectory)).textContent).toContain(
-            directory,
-        );
-        await continued.user.click(continued.elementByTestId(dataTestId.changeWorkingDirectory));
-        const path = await continued.queryElementByTestId(dataTestId.workingDirectoryPath);
-        if (!(path instanceof HTMLInputElement)) {
-            throw new Error("Expected working directory path input");
-        }
-        expect(path.value).toBe(directory);
-    } finally {
-        await rm(directory, { recursive: true, force: true });
-    }
-});
+for (const longPath of [false, true]) {
+    test.skipIf(longPath && process.platform !== "linux")(
+        `Given a setup handoff carries a ${longPath ? "long multibyte" : "short"} project directory, When the original session is unavailable and I enter Morty, Then the validated directory is selected and remembered`,
+        {
+            timeout: 30_000,
+        },
+        async () => {
+            const root = await realpath(await mkdtemp(join(tmpdir(), "morty-handoff-project-")));
+            const directory = longPath ? join(root, ...Array.from({ length: 8 }, () => "\u00e9".repeat(110))) : root;
+            try {
+                await mkdir(directory, { recursive: true });
+                const app = await createTestApp({
+                    connectAgent: true,
+                    agent: { id: "codex", label: "Codex" },
+                    page: {
+                        kind: "continue",
+                        harness: "codex",
+                        sessionId: "native-project-session",
+                        workspace: directory,
+                    },
+                });
+                await app.waitForView(() =>
+                    expect(getByRole(document.body, "alert").textContent).toContain("The native session was not found"),
+                );
+                await app.user.click(getByRole(document.body, "button", { name: "Go to Morty" }));
+                const continued = await app.reload();
+                await continued.user.click(
+                    await continued.waitForView(() => getByRole(document.body, "button", { name: "New Session" })),
+                );
+                expect((await continued.queryElementByTestId(dataTestId.workingDirectory)).textContent).toContain(
+                    directory.split("/").at(-1),
+                );
+                await continued.user.click(continued.elementByTestId(dataTestId.workingDirectory));
+                expect((await continued.queryElementByTestId(dataTestId.recentWorkingDirectory)).textContent).toContain(
+                    directory,
+                );
+                await continued.user.click(continued.elementByTestId(dataTestId.changeWorkingDirectory));
+                const path = await continued.queryElementByTestId(dataTestId.workingDirectoryPath);
+                if (!(path instanceof HTMLInputElement)) {
+                    throw new Error("Expected working directory path input");
+                }
+                expect(path.value).toBe(directory);
+            } finally {
+                await rm(root, { recursive: true, force: true });
+            }
+        },
+    );
+}
 
 test("Given a handoff requests a missing directory, When it opens, Then the Runtime reports the directory failure before continuing the session", {
     timeout: 30_000,
@@ -527,3 +540,19 @@ test("Given a handoff requests a missing directory, When it opens, Then the Runt
     expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
     expect(window.location.pathname).toBe("/continue");
 });
+
+for (const segment of ["a".repeat(220), "\u00e9".repeat(110)]) {
+    test(`Given a handoff path over 1533 UTF-8 bytes with ${segment.charCodeAt(0)} characters, When the directory does not exist, Then the request reaches the Runtime's filesystem validation`, {
+        timeout: 30_000,
+    }, async () => {
+        const workspace = join(tmpdir(), `missing-${crypto.randomUUID()}`, ...Array.from({ length: 8 }, () => segment));
+        expect(new TextEncoder().encode(workspace).length).toBeGreaterThan(1533);
+        const app = await createTestApp({
+            connectAgent: true,
+            agent: { id: "codex", label: "Codex" },
+            page: { kind: "continue", harness: "codex", sessionId: "native-directory-session", workspace },
+        });
+        const alert = await app.waitForView(() => getByRole(document.body, "alert"));
+        expect(alert.textContent).toContain("This directory is missing or unavailable");
+    });
+}

@@ -1,4 +1,4 @@
-import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
+import { isIdentifier, MAX_WORKSPACE_PATH_LENGTH } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
 import { BotChatApi } from "@/services/chat/bot-chat-api";
 import {
@@ -67,7 +67,10 @@ function initialState(): ContinueState {
         code === null ||
         code.length === 0 ||
         (workspace !== null &&
-            (harness === null || workspace.length === 0 || workspace.length > 4096 || workspace.includes("\0"))) ||
+            (harness === null ||
+                workspace.length === 0 ||
+                workspace.length > MAX_WORKSPACE_PATH_LENGTH ||
+                workspace.includes("\0"))) ||
         (harness === null) !== (sessionId === null) ||
         (harness !== null && (!isIdentifier(harness) || sessionId === null || !isIdentifier(sessionId)))
     ) {
