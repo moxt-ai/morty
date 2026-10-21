@@ -4,7 +4,7 @@ const IMAGE_BYTES_LIMIT = 2_500_000;
 const RESOURCE_BYTES_LIMIT = 1_000_000;
 const READ_TIMEOUT_MILLISECONDS = 15_000;
 
-export abstract class ReadPromptAttachment {
+abstract class ReadPromptAttachment {
     abstract readonly name: string;
 }
 
@@ -40,7 +40,8 @@ export class AttachmentReadError extends Error {
     }
 }
 
-function readBytes(file: File): Promise<ArrayBuffer> {
+function readBytes(file: File, signal: AbortSignal): Promise<ArrayBuffer> {
+    signal.throwIfAborted();
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         const timeout = window.setTimeout(() => {
@@ -48,6 +49,7 @@ function readBytes(file: File): Promise<ArrayBuffer> {
             reject(new AttachmentReadError("attachment_timeout", `Timed out while reading ${file.name}.`));
         }, READ_TIMEOUT_MILLISECONDS);
         const cleanup = (): void => {
+            signal.removeEventListener("abort", cancel);
             window.clearTimeout(timeout);
             reader.removeEventListener("abort", handleAbort);
             reader.removeEventListener("error", handleError);
@@ -55,7 +57,11 @@ function readBytes(file: File): Promise<ArrayBuffer> {
         };
         const handleAbort = (): void => {
             cleanup();
-            reject(new AttachmentReadError("attachment_cancelled", `Reading ${file.name} was cancelled.`));
+            reject(
+                signal.aborted
+                    ? signal.reason
+                    : new AttachmentReadError("attachment_cancelled", `Reading ${file.name} was cancelled.`),
+            );
         };
         const handleError = (): void => {
             cleanup();
@@ -76,6 +82,8 @@ function readBytes(file: File): Promise<ArrayBuffer> {
             }
             resolve(result);
         };
+        const cancel = (): void => reader.abort();
+        signal.addEventListener("abort", cancel, { once: true });
         reader.addEventListener("abort", handleAbort, { once: true });
         reader.addEventListener("error", handleError, { once: true });
         reader.addEventListener("load", handleLoad, { once: true });
@@ -96,7 +104,11 @@ function attachmentUri(name: string): string {
     return `attachment:///${encodeURIComponent(name.replaceAll("/", "_"))}`;
 }
 
-export async function readPromptAttachment(file: File): Promise<ReadPromptAttachment> {
+export async function readPromptAttachment(
+    file: File,
+    signal: AbortSignal,
+): Promise<ReadPromptImage | ReadPromptResource> {
+    signal.throwIfAborted();
     const image = file.type.startsWith("image/");
     const limit = image ? IMAGE_BYTES_LIMIT : RESOURCE_BYTES_LIMIT;
     if (file.size === 0 || file.size > limit) {
@@ -105,7 +117,8 @@ export async function readPromptAttachment(file: File): Promise<ReadPromptAttach
             image ? "Images must be between 1 byte and 2.5 MB." : "Text resources must be between 1 byte and 1 MB.",
         );
     }
-    const bytes = new Uint8Array(await readBytes(file));
+    const bytes = new Uint8Array(await readBytes(file, signal));
+    signal.throwIfAborted();
     if (image) {
         if (!/^image\/(?:gif|jpeg|png|webp)$/.test(file.type)) {
             throw new AttachmentReadError(
