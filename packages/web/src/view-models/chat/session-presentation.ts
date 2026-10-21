@@ -396,11 +396,8 @@ type SessionEventResult =
     | { readonly kind: "consumed"; readonly index: number; readonly message: SessionMessage }
     | {
           readonly kind: "constructed";
-          readonly firstEvent: "known" | "possibly-before-page";
+          readonly firstEvent: FirstEventProvenance;
           readonly message: SessionMessage;
-          /** The entry renders immediately even while its events stay retained
-           *  for merging with an older page. */
-          readonly visible?: boolean;
       }
     | { readonly kind: "skipped" };
 
@@ -441,15 +438,20 @@ function mergeAdjacentText(previous: SessionMessage | undefined, incoming: Sessi
     };
 }
 
+/** What the page knows about an entry's first event.
+ *  - "known": the entity's first event is on this page (or merged in); the
+ *    entry renders and retains no events.
+ *  - "possibly-before-page": the entity may have begun on an unobserved older
+ *    page and the entry cannot render without its start (a bare tool-call
+ *    tail); events stay retained for the merge and it hides until then.
+ *  - "possibly-before-page-visible": the entity may have begun on an older
+ *    page, but any observed event renders it (an id-addressed compaction);
+ *    events stay retained and it renders while the merge is outstanding. */
+type FirstEventProvenance = "known" | "possibly-before-page" | "possibly-before-page-visible";
+
 interface ReducedSessionMessage {
-    readonly complete: boolean;
     readonly message: SessionMessage;
-    /** The message renders even though its events stay retained for merging with
-     *  an older page. True for id-addressed entries (compactions), where any
-     *  observed event establishes the entity; false for entries whose rendering
-     *  depends on their unseen start (a bare tool_call_update tail, a leading
-     *  message chunk whose head may live on the older page). */
-    readonly visible: boolean;
+    readonly provenance: FirstEventProvenance;
     readonly unresolvedEvents: readonly SessionEvent[];
 }
 
@@ -511,10 +513,11 @@ function consumeSessionEvent(
                   firstEvent:
                       update.sessionUpdate === "compaction_update" && update.status === "in_progress"
                           ? "known"
-                          : leadingEvent,
+                          : leadingEvent === "known"
+                            ? "known"
+                            : "possibly-before-page-visible",
                   kind: "constructed",
                   message,
-                  visible: true,
               }
             : { index: existingIndex, kind: "consumed", message };
     }
@@ -570,10 +573,9 @@ function applySessionEvent(
             }
             const next = [...entries];
             next[result.index] = {
-                complete: previous.complete,
                 message: result.message,
-                visible: previous.visible,
-                unresolvedEvents: previous.complete ? [] : [...previous.unresolvedEvents, event],
+                provenance: previous.provenance,
+                unresolvedEvents: previous.provenance === "known" ? [] : [...previous.unresolvedEvents, event],
             };
             return next;
         }
@@ -581,9 +583,8 @@ function applySessionEvent(
             return [
                 ...entries,
                 {
-                    complete: result.firstEvent === "known",
                     message: result.message,
-                    visible: result.visible ?? false,
+                    provenance: result.firstEvent,
                     unresolvedEvents: result.firstEvent === "known" ? [] : [event],
                 },
             ];
@@ -643,15 +644,19 @@ export function prependSessionMessageEvents(
     });
     // Entries with retained events were replayed into the older reduction, where
     // their ids merge under one entity with the start events this page lacked;
-    // they are superseded and dropped here. Complete entries have nothing to
+    // they are superseded and dropped here. "known" entries have nothing to
     // merge and are kept as-is.
     return {
-        entries: [...older.entries, ...reduction.entries.filter((entry) => entry.complete)],
+        entries: [...older.entries, ...reduction.entries.filter((entry) => entry.provenance === "known")],
     };
 }
 
 export function sessionReductionMessages(reduction: SessionMessageReduction): readonly SessionMessage[] {
-    return reduction.entries.flatMap((entry) => (entry.complete || entry.visible ? [entry.message] : []));
+    // "possibly-before-page-visible" renders while its merge is outstanding;
+    // "possibly-before-page" cannot render without its unseen start.
+    return reduction.entries.flatMap((entry) =>
+        entry.provenance === "known" || entry.provenance === "possibly-before-page-visible" ? [entry.message] : [],
+    );
 }
 
 export function sessionEventLogPresentation(events: readonly SessionEvent[]): SessionTimeline {
