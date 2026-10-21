@@ -1,6 +1,10 @@
+import type { SessionResourceReader as MarkdownImageReader } from "../../view-models/chat/session-resource-store.ts";
+import { SessionResource } from "./session-resource.tsx";
+
+export type { SessionResourceReader as MarkdownImageReader } from "../../view-models/chat/session-resource-store.ts";
+
 import { Lexer } from "marked";
 import { defaultRemarkPlugins, type MathPlugin, parseMarkdownIntoBlocks, Streamdown } from "streamdown";
-import { isDisplayableImageType } from "../../services/chat/image-media-type.ts";
 import "streamdown/styles.css";
 import { type ComponentProps, useEffect, useMemo, useState } from "react";
 import { dataTestId } from "@/data-testid";
@@ -149,11 +153,6 @@ function AgentMarkdownLink({
     );
 }
 
-export type MarkdownImageReader = (
-    path: string,
-    signal: AbortSignal,
-) => Promise<{ readonly bytes: Uint8Array; readonly mediaType: string }>;
-
 function directImageSource(value: string): string {
     if (localFilePath(value) !== null) {
         return "";
@@ -175,52 +174,22 @@ function AgentMarkdownImage({
 }) {
     const directSource = typeof src === "string" ? directImageSource(src) : "";
     const requestedSource = typeof src === "string" ? (localFilePath(src) ?? src) : "";
-    const [source, setSource] = useState<string | null>(directSource || null);
-
-    useEffect(() => {
-        if (directSource.length > 0) {
-            setSource(directSource);
-            return;
-        }
-        if (requestedSource.length === 0 || readImage === undefined) {
-            setSource("");
-            return;
-        }
-        const controller = new AbortController();
-        let objectUrl = "";
-        setSource(null);
-        void readImage(requestedSource, controller.signal)
-            .then((file) => {
-                if (controller.signal.aborted) {
-                    return;
-                }
-                if (!isDisplayableImageType(file.mediaType)) {
-                    setSource("");
-                    return;
-                }
-                objectUrl = URL.createObjectURL(new Blob([Uint8Array.from(file.bytes)], { type: file.mediaType }));
-                setSource(objectUrl);
-            })
-            .catch(() => {
-                if (!controller.signal.aborted) {
-                    setSource("");
-                }
-            });
-        return () => {
-            controller.abort();
-            if (objectUrl.length > 0) {
-                URL.revokeObjectURL(objectUrl);
-            }
-        };
-    }, [directSource, readImage, requestedSource]);
-
-    if (source === null) {
-        return <span className="text-xs text-muted-foreground">Loading image…</span>;
+    if (directSource.length > 0) {
+        return <img alt={alt ?? ""} className={className} loading="lazy" src={directSource} title={title} />;
     }
-    if (source.length === 0) {
-        return <span className="text-xs text-muted-foreground">Image not available</span>;
-    }
-    return <img alt={alt ?? ""} className={className} loading="lazy" src={source} title={title} />;
+    return (
+        <SessionResource inline request={{ kind: "image", path: requestedSource }} read={readImage}>
+            {(state) => {
+                if (state.kind === "loading") {
+                    return <span className="text-xs text-muted-foreground">Loading image…</span>;
+                }
+                if (state.kind !== "media") {
+                    return <span className="text-xs text-muted-foreground">Image not available</span>;
+                }
+                return <img alt={alt ?? ""} className={className} loading="lazy" src={state.source} title={title} />;
+            }}
+        </SessionResource>
+    );
 }
 
 export interface AgentMarkdownProps {

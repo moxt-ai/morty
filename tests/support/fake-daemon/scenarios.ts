@@ -16,6 +16,10 @@ const FILE_EXPLORER_SOURCE = [
 export const mortyFiles = new Map<string, { readonly content: string | Uint8Array; readonly mediaType: string }>([
     ["/workspace/delivery-review.html", { content: interactiveHtml, mediaType: "text/html" }],
     [
+        "/workspace/unsupported.svg",
+        { content: '<svg xmlns="http://www.w3.org/2000/svg"/>', mediaType: "image/svg+xml" },
+    ],
+    [
         "/workspace/generated-picture.png",
         {
             content: Buffer.from(
@@ -279,6 +283,21 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                 outcome: "complete",
                 output: [{ kind: "text", text: "![Generated picture](file:///workspace/generated-picture.png)" }],
             };
+        case "show unsupported image": {
+            const content = { type: "image" as const, mimeType: "image/png", data: "", uri: "unsupported.svg" };
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        content: [{ type: "content", content }],
+                        title: "Unsupported image",
+                        output: "",
+                    },
+                ],
+            };
+        }
         case "generate an image":
             return {
                 outcome: "complete",

@@ -1,17 +1,10 @@
 import { FileText, LoaderCircle, Plus, Send, Square, X } from "lucide-react";
-import { type ClipboardEvent, type FormEvent, type KeyboardEvent, type ReactNode, useRef, useState } from "react";
+import { type ClipboardEvent, type FormEvent, type KeyboardEvent, type ReactNode, useRef } from "react";
 import { dataTestId } from "../../data-testid.ts";
-import {
-    AttachmentReadError,
-    ReadPromptImage,
-    ReadPromptResource,
-    readPromptAttachment,
-} from "../../services/chat/attachment-reader.ts";
 import type { ComposerAttachment } from "../../view-models/chat/composer-attachment.ts";
+import { type ComposerAttachmentStore, canAddAttachments } from "../../view-models/chat/composer-attachment-store.ts";
 import { Button } from "../ui/cloud-button.tsx";
 import { Textarea } from "../ui/textarea.tsx";
-
-export type { ComposerAttachment } from "../../view-models/chat/composer-attachment.ts";
 
 function attachmentName(attachment: ComposerAttachment): string {
     return attachment.kind === "image" ? attachment.image.name : attachment.resource.name;
@@ -54,13 +47,13 @@ function AttachmentPreview({
 }
 
 export function BotChatComposer({
-    attachments,
+    attachmentModel,
+    attachmentSignal,
     children,
     disabled,
     draft,
     error,
     errorStatus,
-    onAttachmentsChange,
     onDraftChange,
     onStop,
     onSubmit,
@@ -70,13 +63,13 @@ export function BotChatComposer({
     submitLabel = "Send message",
     submitDisabled,
 }: {
-    readonly attachments: readonly ComposerAttachment[];
+    readonly attachmentModel: ComposerAttachmentStore;
+    readonly attachmentSignal: AbortSignal;
     readonly children: ReactNode;
     readonly disabled: boolean;
     readonly draft: string;
     readonly error: string;
     readonly errorStatus?: ReactNode;
-    readonly onAttachmentsChange: (attachments: readonly ComposerAttachment[]) => void;
     readonly onDraftChange: (draft: string) => void;
     readonly onStop: () => void;
     readonly onSubmit: () => void;
@@ -87,48 +80,12 @@ export function BotChatComposer({
     readonly submitDisabled: boolean;
 }) {
     const fileInput = useRef<HTMLInputElement>(null);
-    const [attachmentState, setAttachmentState] = useState<
-        { readonly kind: "idle" } | { readonly kind: "reading" } | { readonly kind: "failed"; readonly message: string }
-    >({ kind: "idle" });
-
-    const attachFiles = (files: readonly File[]): void => {
-        setAttachmentState({ kind: "reading" });
-        void Promise.all(files.slice(0, Math.max(0, 8 - attachments.length)).map(readPromptAttachment))
-            .then((read) => {
-                const added = read.map((attachment): ComposerAttachment => {
-                    if (attachment instanceof ReadPromptImage) {
-                        return { image: attachment.image, kind: "image" };
-                    }
-                    if (attachment instanceof ReadPromptResource) {
-                        return { kind: "resource", resource: attachment.resource };
-                    }
-                    throw new AttachmentReadError(
-                        "attachment_type_unsupported",
-                        "The selected attachment is unsupported.",
-                    );
-                });
-                onAttachmentsChange([...attachments, ...added]);
-                setAttachmentState({ kind: "idle" });
-            })
-            .catch((cause: unknown) => {
-                setAttachmentState({
-                    kind: "failed",
-                    message:
-                        cause instanceof AttachmentReadError
-                            ? cause.message
-                            : "The selected attachment could not be read.",
-                });
-            })
-            .finally(() => {
-                if (fileInput.current !== null) {
-                    fileInput.current.value = "";
-                }
-            });
-    };
+    const { attachments, state: attachmentState } = attachmentModel;
+    const canAttach = canAddAttachments(attachmentModel);
 
     const submit = (event: FormEvent<HTMLFormElement>): void => {
         event.preventDefault();
-        if (!submitDisabled) {
+        if (!submitDisabled && attachmentState.kind !== "reading") {
             onSubmit();
         }
     };
@@ -160,11 +117,11 @@ export function BotChatComposer({
     };
     const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>): void => {
         const images = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
-        if (images.length === 0 || disabled || attachmentState.kind === "reading" || attachments.length >= 8) {
+        if (images.length === 0 || disabled || !canAttach) {
             return;
         }
         event.preventDefault();
-        attachFiles(images);
+        attachmentModel.addFiles(images, attachmentSignal);
     };
     const submitAction = outputState === "idle" || (outputState === "running" && !submitDisabled);
 
@@ -186,7 +143,7 @@ export function BotChatComposer({
                             <AttachmentPreview
                                 attachment={attachment}
                                 key={`${attachment.kind}:${attachmentName(attachment)}:${index.toString()}`}
-                                onRemove={() => onAttachmentsChange(attachments.filter((_, item) => item !== index))}
+                                onRemove={() => attachmentModel.remove(index)}
                             />
                         ))}
                     </ul>
@@ -208,7 +165,7 @@ export function BotChatComposer({
                         <button
                             aria-label="Add attachment"
                             className="flex size-11 items-center justify-center rounded-full text-copy-secondary outline-none transition-colors duration-150 hover:bg-black/[0.045] focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50 sm:size-10 motion-reduce:transition-none"
-                            disabled={disabled || attachmentState.kind === "reading" || attachments.length >= 8}
+                            disabled={disabled || !canAttach}
                             onClick={() => fileInput.current?.click()}
                             title="Add attachment"
                             type="button"
@@ -227,7 +184,8 @@ export function BotChatComposer({
                             multiple
                             onChange={(event) => {
                                 if (event.currentTarget.files !== null) {
-                                    attachFiles(Array.from(event.currentTarget.files));
+                                    attachmentModel.addFiles(Array.from(event.currentTarget.files), attachmentSignal);
+                                    event.currentTarget.value = "";
                                 }
                             }}
                             ref={fileInput}
@@ -250,6 +208,7 @@ export function BotChatComposer({
                             className={`size-11 rounded-full text-white shadow-sm sm:size-10 ${submitAction || outputState === "sending" ? "bg-primary hover:bg-primary/90" : "bg-destructive hover:bg-destructive/90"}`}
                             data-testid={dataTestId.sendMessage}
                             disabled={
+                                (submitAction && attachmentState.kind === "reading") ||
                                 outputState === "sending" ||
                                 outputState === "stopping" ||
                                 (outputState === "idle" && submitDisabled)

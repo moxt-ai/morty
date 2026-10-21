@@ -22,7 +22,7 @@ import { centralSessionStorage, sessionDraftEntry } from "../../services/session
 import type { Clock } from "../../services/time/clock.ts";
 import { formatError, isRetryableRuntimeConnectionFailure } from "../format-error.ts";
 import { reportApplicationError } from "../report-error.ts";
-import type { ComposerAttachment } from "./composer-attachment.ts";
+import { type ComposerAttachmentStore, createComposerAttachmentStore } from "./composer-attachment-store.ts";
 import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
 import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
@@ -35,6 +35,7 @@ import {
 } from "./session-activity-machine.ts";
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import { createSessionDeliveryStore, type Journal, type SessionDeliveryStore } from "./session-delivery-store.ts";
+import { createSessionInteractionStore } from "./session-interaction-store.ts";
 import { createSessionMessageQueueStore, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
 import type {
     ElicitationInteraction,
@@ -188,7 +189,6 @@ export interface SessionPaneStore {
     readonly hasOlderHistory: boolean;
     readonly options: readonly SessionConfigOption[];
     readonly draft: string;
-    readonly attachments: readonly ComposerAttachment[];
     readonly interactions: readonly LocalInteraction[];
     readonly operation: Operation;
     readonly activity: SessionActivityState;
@@ -198,7 +198,6 @@ export interface SessionPaneStore {
     readonly retryNow: () => void;
     readonly loadOlderMessages: (signal: AbortSignal) => Promise<void>;
     readonly setDraft: (draft: string) => void;
-    readonly setAttachments: (attachments: readonly ComposerAttachment[]) => void;
     readonly send: (signal: AbortSignal) => Promise<void>;
     readonly removeUnknownDelivery: () => void;
     readonly retryUnknownDelivery: (signal: AbortSignal) => Promise<void>;
@@ -226,6 +225,7 @@ export function sessionPanePresentation(
     delivery: SessionDeliveryStore,
     tasks: SessionTaskControlsStore,
     queue: SessionMessageQueueStore,
+    attachments: ComposerAttachmentStore,
 ) {
     const needsApproval = model.interactions.some(
         (interaction) => interaction.kind === "permission" && interaction.permission.state.kind === "pending",
@@ -310,7 +310,8 @@ export function sessionPanePresentation(
         shouldQueueOnSubmit: tasks.operation.kind === "running",
         submitDisabled:
             (tasks.operation.kind === "running" ? queue.operation.kind !== "idle" : busy) ||
-            (model.draft.trim() === "" && model.attachments.length === 0),
+            attachments.state.kind === "reading" ||
+            (model.draft.trim() === "" && attachments.attachments.length === 0),
         unconfirmedDelivery,
     } as const;
 }
@@ -393,6 +394,7 @@ export function createSessionPaneModel(options: {
     readonly onTitleChange: (sessionId: string, title: string) => void;
 }) {
     const { session, botId, requests, clock } = options;
+    const composerAttachments = createComposerAttachmentStore(options.initialMessage?.attachments);
     const sessionId = session.result.ready.sessionId;
     const initialActiveTurn: SessionActiveTurn =
         session.result.action === "conversation" && session.result.activeTurn.kind === "running"
@@ -627,7 +629,6 @@ export function createSessionPaneModel(options: {
             hasOlderHistory: false,
             options: session.result.ready.configOptions,
             draft: options.initialMessage?.content ?? centralSessionStorage.read(draftEntry) ?? "",
-            attachments: options.initialMessage?.attachments ?? [],
             harnesses: [{ agentRef: session.agentRef, label: session.agentRef, value: session.agentRef }],
             interactions: [],
             operation: { kind: "idle" },
@@ -1070,12 +1071,13 @@ export function createSessionPaneModel(options: {
                 }
                 set({ draft });
             },
-            setAttachments: (attachments) => set({ attachments }),
             send: async (signal) => {
                 const current = get();
+                const { attachments, state: attachmentState } = composerAttachments.getState();
                 if (
                     current.connection.kind !== "ready" ||
-                    (current.draft.trim() === "" && current.attachments.length === 0) ||
+                    attachmentState.kind === "reading" ||
+                    (current.draft.trim() === "" && attachments.length === 0) ||
                     current.operation.kind === "sending" ||
                     current.operation.kind === "configuring" ||
                     tasks.getState().operation.kind !== "idle"
@@ -1091,21 +1093,21 @@ export function createSessionPaneModel(options: {
                 const prompt = current.draft.trim();
                 const displayPrompt =
                     prompt ||
-                    current.attachments
+                    attachments
                         .map((attachment) =>
                             attachment.kind === "image" ? attachment.image.name : attachment.resource.name,
                         )
                         .join(", ");
-                const images = current.attachments.flatMap((attachment) =>
+                const images = attachments.flatMap((attachment) =>
                     attachment.kind === "image" ? [attachment.image] : [],
                 );
                 centralSessionStorage.remove(draftEntry);
+                composerAttachments.getState().clear();
                 const activity = startSessionWork({ commandId, startedAt: lastSentMessage.sentAt });
                 const pending = deriveTimeline();
                 set({
                     activity,
                     draft: "",
-                    attachments: [],
                     operation: { kind: "sending", commandId },
                     messages: pending.messages,
                 });
@@ -1115,7 +1117,7 @@ export function createSessionPaneModel(options: {
                         ...request,
                         content: prompt,
                         images,
-                        resources: current.attachments.flatMap((attachment) =>
+                        resources: attachments.flatMap((attachment) =>
                             attachment.kind === "resource" ? [attachment.resource] : [],
                         ),
                     };
@@ -1219,14 +1221,19 @@ export function createSessionPaneModel(options: {
             },
             queueDraft: async (signal) => {
                 const current = get();
+                const { attachments, state: attachmentState } = composerAttachments.getState();
                 const controls = tasks.getState();
-                if (current.connection.kind !== "ready" || controls.operation.kind !== "running") {
+                if (
+                    attachmentState.kind === "reading" ||
+                    current.connection.kind !== "ready" ||
+                    controls.operation.kind !== "running"
+                ) {
                     return;
                 }
                 const prompt = current.draft.trim();
                 const summary =
                     prompt ||
-                    current.attachments
+                    attachments
                         .map((attachment) =>
                             attachment.kind === "image" ? attachment.image.name : attachment.resource.name,
                         )
@@ -1237,10 +1244,10 @@ export function createSessionPaneModel(options: {
                     {
                         ...request,
                         content: prompt,
-                        images: current.attachments.flatMap((attachment) =>
+                        images: attachments.flatMap((attachment) =>
                             attachment.kind === "image" ? [attachment.image] : [],
                         ),
-                        resources: current.attachments.flatMap((attachment) =>
+                        resources: attachments.flatMap((attachment) =>
                             attachment.kind === "resource" ? [attachment.resource] : [],
                         ),
                     },
@@ -1252,7 +1259,8 @@ export function createSessionPaneModel(options: {
                     lastSentMessage = { commandId: queued.commandId, sentAt: Date.now() };
                     void centralIndexedDB.set(lastSentMessageEntry, lastSentMessage, signal);
                     centralSessionStorage.remove(draftEntry);
-                    set({ draft: "", attachments: [] });
+                    composerAttachments.getState().clear();
+                    set({ draft: "" });
                 }
             },
             steerQueued: async (commandId, signal) => {
@@ -1409,6 +1417,10 @@ export function createSessionPaneModel(options: {
             stop: async (signal) => await tasks.getState().stop(signal),
         };
     });
+    const interactionSubmissions = createSessionInteractionStore({
+        permission: (response, signal) => store.getState().respondToPermission(response, signal),
+        elicitation: (response, signal) => store.getState().respondToElicitation(response, signal),
+    });
     // Report activity transitions to the owner without a component effect;
     // the subscription lives exactly as long as this pane model.
     let reportedStatus: SessionActivityState | null = null;
@@ -1443,17 +1455,56 @@ export function createSessionPaneModel(options: {
                 reportApplicationError(cause, "session-pane-harnesses");
             }
         });
+    const waitForConnectionReady = (signal: AbortSignal): Promise<void> =>
+        new Promise((resolve, reject) => {
+            let unsubscribe = () => {};
+            const cleanup = (): void => {
+                unsubscribe();
+                signal.removeEventListener("abort", abort);
+            };
+            const abort = (): void => {
+                cleanup();
+                reject(signal.reason);
+            };
+            const check = (): void => {
+                const current = store.getState().connection;
+                if (current.kind === "ready") {
+                    cleanup();
+                    resolve();
+                } else if (
+                    current.kind === "failed" ||
+                    (current.kind === "disconnected" && current.retry.kind === "exhausted")
+                ) {
+                    cleanup();
+                    reject(new MobiusError("session_not_connected", current.message));
+                }
+            };
+            if (signal.aborted) {
+                abort();
+                return;
+            }
+            signal.addEventListener("abort", abort, { once: true });
+            unsubscribe = store.subscribe(check);
+            check();
+        });
     const readFile = async (path: string, signal: AbortSignal) => {
         signal.throwIfAborted();
-        if (client === null) {
+        const current = store.getState().connection;
+        if (current.kind !== "ready") {
             throw new MobiusError("session_not_connected", "The Session is not connected.");
         }
-        return await client.sessions.readFile(
+        return await current.client.sessions.readFile(
             sessionId,
             path,
-            AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
+            AbortSignal.any([signal, connection.signal, AbortSignal.timeout(20_000)]),
             32 * 1024 * 1024,
         );
+    };
+    const readResource = async (path: string, signal: AbortSignal) => {
+        // The same bounded lifetime covers connection recovery and the file read.
+        const requestSignal = AbortSignal.any([signal, connection.signal, AbortSignal.timeout(20_000)]);
+        await waitForConnectionReady(requestSignal);
+        return await readFile(path, requestSignal);
     };
     const filePreview = createBrowserFilePreviewStore(readFile);
     /**
@@ -1483,12 +1534,15 @@ export function createSessionPaneModel(options: {
         return () => {
             attachedViews.delete(node);
             unregisterDebug();
+            composerAttachments.getState().clear();
             filePreview.getState().close();
             harnessController.abort(new Error("The session pane detached."));
             connection.abort(new Error("The session pane detached."));
         };
     };
     return {
+        composerAttachments,
+        interactionSubmissions,
         store,
         delivery,
         filePreview,
@@ -1497,6 +1551,6 @@ export function createSessionPaneModel(options: {
         onAttach,
         /** The signal for view-triggered operations while the pane is attached. */
         operationsSignal: () => connection.signal,
-        readFile,
+        readResource,
     };
 }

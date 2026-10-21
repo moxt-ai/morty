@@ -32,6 +32,7 @@ export function createRemoteAccessOperations(options: {
     return {
         currentAccessToken: async (signal) => {
             const localIdentity = await api.loadExisting(signal);
+            signal.throwIfAborted();
             return localIdentity?.projectId === options.identity.projectId
                 ? localIdentity.token
                 : await options.identity.getToken(signal);

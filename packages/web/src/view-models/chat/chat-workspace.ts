@@ -279,6 +279,7 @@ export function createChatWorkspace(options: {
         chatSignal: () => chatLifetime.signal,
         operationsSignal: () => operationsLifetime.signal,
         dispose: () => {
+            home.getState().composerAttachments.getState().clear();
             unsubscribeHome();
             unsubscribeDirectory();
             chatLifetime.abort(new Error("The chat workspace was disposed."));

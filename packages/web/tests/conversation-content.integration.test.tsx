@@ -14,6 +14,25 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
+test("Given a tool returns an unsupported image type, When the user opens its output, Then Chat reports unavailable media instead of loading forever", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, "show unsupported image");
+    await app.user.click(
+        await app.waitForView(() => getByRole(document.body, "button", { name: "Unsupported image Tool succeeded" })),
+    );
+    await app.waitForView(() => {
+        const tool = getByRole(document.body, "group", { name: "Tool: Unsupported image" });
+        expect(tool.textContent).toContain("Media content could not be loaded.");
+        expect(tool.textContent).not.toContain("Loading media");
+    });
+});
+
 test("Given the user selected an option and entered a custom response, When they reopen the completed ask tool, Then Chat shows both answers", () => {
     render(
         renderRegisteredTool({
