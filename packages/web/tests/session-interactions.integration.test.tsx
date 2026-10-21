@@ -32,7 +32,7 @@ test("Given a pending permission, When Chat remounts and the user allows it and 
     );
     expect(permission.textContent).toContain("pnpm test -- --reporter=verbose");
     expect(permission.textContent).toContain("src/<entry>.ts");
-    await app.user.click(getByRole(permission, "button", { name: "Allow this action" }));
+    await app.user.click(getByRole(permission, "button", { name: "Allow this action: Yes" }));
     const form = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Agent information request" }));
     await app.user.type(getByRole(form, "textbox", { name: "Branch" }), "feature/separation");
     await app.user.click(getByRole(form, "button", { name: "Continue" }));
@@ -45,7 +45,7 @@ test("Given a pending permission, When the user rejects it, Then the agent recei
     timeout: 30_000,
 }, async () => {
     const app = await requestInput();
-    await app.user.click(getByRole(document.body, "button", { name: "Deny this action" }));
+    await app.user.click(getByRole(document.body, "button", { name: "Deny this action: No" }));
     await app.waitForView(() => expect(document.body.textContent).toContain("Permission rejected"));
     expect(queryByRole(document.body, "dialog", { name: "Agent information request" })).toBeNull();
 });
@@ -54,7 +54,7 @@ test("Given an information request, When the user declines it, Then the agent re
     timeout: 30_000,
 }, async () => {
     const app = await requestInput();
-    await app.user.click(getByRole(document.body, "button", { name: "Allow this action" }));
+    await app.user.click(getByRole(document.body, "button", { name: "Allow this action: Yes" }));
     const form = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Agent information request" }));
     await app.user.click(getByRole(form, "button", { name: "Decline" }));
     await app.waitForView(() => expect(document.body.textContent).toContain("Input decline"));
@@ -80,6 +80,18 @@ test("Given an agent omits the original input, When permission is requested, The
     const app = await requestInput("request without tool input");
     const permission = getByRole(document.body, "alertdialog", { name: "Agent permission request" });
     expect(permission.textContent).toContain("The agent did not provide the original tool input.");
-    await app.user.click(getByRole(permission, "button", { name: "Deny this action" }));
+    await app.user.click(getByRole(permission, "button", { name: "Deny this action: No" }));
     await app.waitForView(() => expect(document.body.textContent).toContain("Permission rejected"));
+});
+
+test("Given a permission decision changes the agent's workflow, When the user reviews and declines it, Then the original option meaning remains visible and is sent unchanged", {
+    timeout: 30_000,
+}, async () => {
+    const app = await requestInput("request plan mode");
+    const permission = getByRole(document.body, "alertdialog", { name: "Agent permission request" });
+    expect(getByRole(permission, "button", { name: "Allow this action: Yes, enter plan mode" })).toBeDefined();
+    await app.user.click(getByRole(permission, "button", { name: "Deny this action: No, start implementing now" }));
+    await app.waitForView(() =>
+        expect(document.body.textContent).toContain("Selected decision: No, start implementing now"),
+    );
 });

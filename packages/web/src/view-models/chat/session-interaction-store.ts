@@ -112,11 +112,11 @@ export function permissionPresentation(permission: PermissionInteraction) {
         options: permission.options.map((option) => {
             switch (option.kind) {
                 case "allow_once":
-                    return { ...option, label: "Allow this action", allow: true };
+                    return { ...option, label: `Allow this action: ${option.name}`, allow: true };
                 case "allow_always":
                     return { ...option, label: `Always allow: ${option.name}`, allow: true };
                 case "reject_once":
-                    return { ...option, label: "Deny this action", allow: false };
+                    return { ...option, label: `Deny this action: ${option.name}`, allow: false };
                 case "reject_always":
                     return { ...option, label: `Always deny: ${option.name}`, allow: false };
                 default: {

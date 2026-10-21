@@ -16,10 +16,10 @@ for (const width of [1440, 390]) {
         await page.reload();
         await expect(permission).toContainText("pnpm test -- --reporter=verbose");
         await expect(permission.getByRole("region", { name: "Session working directory" })).toContainText("/workspace");
-        await expect(permission.getByRole("button", { name: "Deny this action" })).toBeVisible();
+        await expect(permission.getByRole("button", { name: "Deny this action: No" })).toBeVisible();
         await expect(permission.getByRole("button", { name: "Stop turn" })).toBeVisible();
         await page.screenshot({ path: testInfo.outputPath(`permission-${width}.png`), fullPage: true });
-        await permission.getByRole("button", { name: "Allow this action" }).click();
+        await permission.getByRole("button", { name: "Allow this action: Yes" }).click();
         const form = page.getByRole("dialog", { name: "Agent information request" });
         await form.getByRole("textbox", { name: "Branch" }).fill("feature/permissions");
         await form.getByRole("button", { name: "Continue" }).click();
