@@ -6,6 +6,7 @@ import {
     prependSessionMessageEvents,
     type SessionMessage,
     type SessionMessageReduction,
+    sessionReductionExecutionOwner,
     sessionReductionMessages,
 } from "./session-presentation.ts";
 
@@ -283,6 +284,10 @@ export function transitionSessionProjection(
         default:
             return input satisfies never;
     }
+}
+
+export function sessionProjectionExecutionOwner(state: SessionProjection, commandId: string): string | null {
+    return state.kind === "established" ? sessionReductionExecutionOwner(state.reduction, commandId) : null;
 }
 
 export function sessionProjectionMessages(state: SessionProjection): readonly SessionMessage[] {

@@ -54,6 +54,7 @@ import {
     type SessionEventHistory,
     type SessionProjectionEffect,
     type SessionProjectionInput,
+    sessionProjectionExecutionOwner,
     sessionProjectionMessages,
     sessionProjectionPagination,
     transitionSessionProjection,
@@ -773,6 +774,11 @@ export function createSessionPaneModel(options: {
                         if (payload.kind === "prompt.started") {
                             delivery.getState().reconcile([payload.commandId]);
                             const queued = messageQueue.getState().takeStarted(payload.commandId);
+                            const owner = sessionProjectionExecutionOwner(projection, payload.commandId);
+                            if (owner !== null && owner !== payload.commandId) {
+                                // Steering starts a command, not a new execution to stop.
+                                return true;
+                            }
                             if (command !== "" && command !== payload.commandId) {
                                 tasks.getState().finish(command);
                                 activeTurn.turnCleared(command);

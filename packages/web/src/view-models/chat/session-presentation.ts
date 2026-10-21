@@ -723,6 +723,11 @@ export function prependSessionMessageEvents(
     };
 }
 
+export function sessionReductionExecutionOwner(reduction: SessionMessageReduction, commandId: string): string | null {
+    const owner = reduction.entries.find((entry) => entry.kind === "execution-owner" && entry.commandId === commandId);
+    return owner?.kind === "execution-owner" ? owner.executionCommandId : null;
+}
+
 export function sessionReductionMessages(reduction: SessionMessageReduction): readonly SessionMessage[] {
     const messages: SessionMessage[] = [];
     const unfinished = new Map<string | null, number[]>();
