@@ -6,6 +6,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import * as v from "valibot";
 import { expect, test } from "vitest";
 import { createIdentityFixture } from "./support/identity-fixture.ts";
 
@@ -270,3 +271,159 @@ test.runIf(process.env["MORTY_VERIFY_SYSTEM_DOCUMENTS"] === "true" && process.pl
         }
     },
 );
+
+for (const failure of ["exit", "signal", "cancel", "recover"]) {
+    test.runIf(process.platform !== "win32")(
+        `Given an offline managed Runtime, When its starter ${failure === "cancel" ? "fails and setup is cancelled during recovery" : `fails by ${failure}`}, Then setup reports actionable diagnostics and bounds recovery`,
+        async () => {
+            const directory = await mkdtemp(join(tmpdir(), "morty-setup-start-"));
+            const documents = join(directory, "Documents");
+            const bin = join(directory, "bin");
+            await Promise.all([mkdir(join(documents, "morty"), { recursive: true }), mkdir(bin)]);
+            const fixture = await createIdentityFixture({ appOrigin: await localOrigin() });
+            try {
+                const identity = await fixture.createAnonymousUser();
+                const runtime = await fixture.connectAgent(identity.projectId);
+                const request = async (path: string, body?: object) => {
+                    const response = await fetch(`${fixture.origin}/morty/api/${path}`, {
+                        method: body === undefined ? "GET" : "POST",
+                        headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+                        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+                        signal: AbortSignal.timeout(10000),
+                    });
+                    expect(response.ok).toBe(true);
+                    return await response.json();
+                };
+                const bots = v.parse(
+                    v.object({ bots: v.array(v.object({ botId: v.string() })) }),
+                    await request(`projects/${identity.projectId}/management/bots`),
+                );
+                const botId = v.parse(v.string(), bots.bots[0]?.botId);
+                await request(`chat/projects/${identity.projectId}/bots/${botId}/setup`, {
+                    runtimeId: runtime.runtimeId,
+                    agentRef: "codex",
+                });
+                await runtime.disconnect();
+                const connection = {
+                    app_id: fixture.baseConfiguration.MOBIUS_APP_ID,
+                    runtime_id: runtime.runtimeId,
+                    connection_id: "managed-test-connection",
+                };
+                await writeFile(
+                    join(documents, "morty/config.json"),
+                    JSON.stringify({
+                        base_url: fixture.origin,
+                        user_token: identity.token,
+                        user_id: identity.userId,
+                        project_id: identity.projectId,
+                        bot_id: botId,
+                        agent_ref: "codex",
+                        agent_config_revision: 1,
+                        workspace: directory,
+                        entry: "setup",
+                    }),
+                    { mode: 0o600 },
+                );
+                await writeFile(join(directory, "connections.json"), JSON.stringify([connection]));
+                await writeFile(join(directory, "attempts.txt"), "0");
+                await writeFile(
+                    join(bin, "mobius"),
+                    `#!${process.execPath}
+import { readFileSync, writeFileSync } from 'node:fs';
+const output = process.argv.find(arg => arg.startsWith('--output-json='));
+if (output) { writeFileSync(output.slice('--output-json='.length), readFileSync('connections.json')); }
+else {
+    const attempts = Number(readFileSync('attempts.txt', 'utf8')) + 1;
+    writeFileSync('attempts.txt', String(attempts));
+    ${failure === "signal" ? "process.kill(process.pid, 'SIGTERM');" : failure === "recover" ? "process.exit(attempts === 1 ? 42 : 0);" : "process.exit(42);"}
+}
+`,
+                    { mode: 0o700 },
+                );
+                const runner = join(directory, "run.mjs");
+                await writeFile(
+                    runner,
+                    `import { runSetup } from ${JSON.stringify(new URL("../../setup/src/setup.ts", import.meta.url).href)};
+const cancellation = new AbortController();
+let time = Date.parse('2026-09-15T12:00:00Z');
+process.exitCode = await runSetup(process.argv.slice(2), {
+    documents: process.env.DOCUMENT_DIR, signal: cancellation.signal,
+    emit(event) { console.log(JSON.stringify(event)); ${failure === "cancel" ? "if (event.status === 'runtime_retrying') cancellation.abort();" : ""} },
+    clock: { now: () => new Date(time), wait: async (milliseconds, signal) => { signal.throwIfAborted(); time += milliseconds; } },
+});
+`,
+                );
+                const child = spawn(
+                    process.execPath,
+                    [
+                        runner,
+                        "setup",
+                        "--base-url",
+                        fixture.origin,
+                        "--cwd",
+                        directory,
+                        "--harness",
+                        "codex",
+                        "--session-id",
+                        "native-start",
+                    ],
+                    {
+                        env: { ...process.env, DOCUMENT_DIR: documents, PATH: `${bin}:${process.env["PATH"] ?? ""}` },
+                        stdio: ["ignore", "pipe", "pipe"],
+                        signal: AbortSignal.timeout(30000),
+                    },
+                );
+                const exited = once(child, "exit");
+                let output = "";
+                let recovery: Promise<void> | undefined;
+                child.stdout.on("data", (chunk) => {
+                    output += chunk.toString();
+                    if (
+                        failure === "recover" &&
+                        recovery === undefined &&
+                        output.includes('"status":"runtime_started"')
+                    ) {
+                        recovery = runtime.reconnect();
+                        void recovery.catch(() => child.kill());
+                    }
+                });
+                child.stderr.on("data", (chunk) => {
+                    output += chunk.toString();
+                });
+                const [code] = await exited;
+                await recovery;
+                expect(code, output).toBe(failure === "recover" ? 0 : 1);
+                const events = output
+                    .trim()
+                    .split("\n")
+                    .map((line) => v.parse(v.record(v.string(), v.unknown()), JSON.parse(line)));
+                const retries = events.filter((event) => event["status"] === "runtime_retrying");
+                expect(retries, output).toHaveLength(failure === "cancel" || failure === "recover" ? 1 : 2);
+                if (failure === "recover") {
+                    expect(events.at(-1)).toMatchObject({ status: "ready" });
+                    expect(events).toContainEqual(expect.objectContaining({ status: "runtime_online" }));
+                    return;
+                }
+                expect(events.at(-1)).toMatchObject({
+                    error: { code: failure === "cancel" ? "CANCELLED" : "RUNTIME_START_FAILED" },
+                });
+                const lastError = v.parse(v.object({ runtime: v.optional(v.unknown()) }), events.at(-1)?.["error"]);
+                const diagnostic = v.parse(
+                    v.object({ logPath: v.string(), termination: v.unknown(), nextStep: v.string() }),
+                    failure === "cancel" ? retries[0]?.["failure"] : lastError.runtime,
+                );
+                expect(diagnostic).toMatchObject({
+                    termination:
+                        failure === "signal" ? { kind: "signal", signal: "SIGTERM" } : { kind: "exit", exitCode: 42 },
+                    logPath: expect.stringMatching(/runtime-.*\.log$/u),
+                    nextStep: expect.stringContaining("mobius"),
+                });
+                expect(await readFile(diagnostic.logPath, "utf8")).toContain(failure === "signal" ? "SIGTERM" : "42");
+            } finally {
+                await fixture.close();
+                await rm(directory, { recursive: true, force: true });
+            }
+        },
+        30000,
+    );
+}

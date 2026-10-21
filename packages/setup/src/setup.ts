@@ -88,6 +88,44 @@ function errorCode(cause: unknown): unknown {
     return cause !== null && typeof cause === "object" && "code" in cause ? cause.code : undefined;
 }
 
+type RuntimeTermination =
+    | { readonly kind: "exit"; readonly exitCode: number }
+    | { readonly kind: "signal"; readonly signal: string }
+    | { readonly kind: "spawn"; readonly code: string };
+
+class RuntimeStartError extends Error {
+    readonly code = "RUNTIME_START_FAILED";
+    readonly termination: RuntimeTermination;
+    readonly logPath: string;
+    readonly nextStep =
+        "Inspect the Runtime log, then run mobius start --connection <connectionId> for the managed connection and rerun setup. Check mobius --version when diagnosing compatibility; setup does not stop an existing daemon.";
+
+    constructor(termination: RuntimeTermination, logPath: string, cause?: unknown) {
+        let reason: string;
+        switch (termination.kind) {
+            case "exit":
+                reason = `exited with code ${termination.exitCode}`;
+                break;
+            case "signal":
+                reason = `was terminated by ${termination.signal}`;
+                break;
+            case "spawn":
+                reason = `could not launch (${termination.code})`;
+                break;
+            default: {
+                const exhaustive: never = termination;
+                throw exhaustive;
+            }
+        }
+        super(`The local Runtime command ${reason}. See ${logPath}.`, { cause });
+        this.name = "RuntimeStartError";
+        this.termination = termination;
+        this.logPath = logPath;
+    }
+
+    readonly diagnostic = () => ({ termination: this.termination, logPath: this.logPath, nextStep: this.nextStep });
+}
+
 interface ErrorCause {
     readonly name: string;
     readonly message: string;
@@ -458,22 +496,40 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             if (child.pid === undefined || !Number.isSafeInteger(child.pid) || child.pid < 2) {
                 fail("RUNTIME_START_FAILED");
             }
-            const [code] = await once(child, "exit", { signal });
+            const [code, exitSignal] = await once(child, "exit", { signal });
+            if (typeof exitSignal === "string") {
+                throw new RuntimeStartError({ kind: "signal", signal: exitSignal }, logPath);
+            }
+            if (typeof code !== "number") {
+                fail("INVALID_RUNTIME_EXIT");
+            }
             if (code !== 0) {
-                fail("RUNTIME_START_FAILED");
+                throw new RuntimeStartError({ kind: "exit", exitCode: code }, logPath);
             }
             return { pid: child.pid, logPath };
         } catch (cause) {
-            if (child?.pid !== undefined) {
-                try {
-                    process.kill(child.pid, "SIGTERM");
-                } catch (cleanup) {
-                    if (errorCode(cleanup) !== "ESRCH") {
-                        throw new AggregateError([cause, cleanup], "Runtime startup cleanup failed");
-                    }
-                }
+            // Only terminate the child this invocation still owns; an exited PID may be reused.
+            if (child?.pid !== undefined && child.exitCode === null && child.signalCode === null) {
+                const exited = once(child, "exit", { signal: AbortSignal.timeout(10000) });
+                child.kill("SIGKILL");
+                await exited;
             }
-            throw cause;
+            signal.throwIfAborted();
+            if (errorCode(cause) === "RUNTIME_NOT_INSTALLED") {
+                throw cause;
+            }
+            const code = errorCode(cause);
+            const failure =
+                cause instanceof RuntimeStartError
+                    ? cause
+                    : new RuntimeStartError(
+                          { kind: "spawn", code: typeof code === "string" ? code : "UNKNOWN" },
+                          logPath,
+                          cause,
+                      );
+            // A silent crash still leaves a useful private log without recording pairing credentials.
+            await log.writeFile(`${JSON.stringify(failure.diagnostic())}\n`);
+            throw failure;
         } finally {
             await log.close();
         }
@@ -584,10 +640,52 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         ];
     }
 
-    async function startRuntime(context: Context, runtime: RuntimeSelection, cwd: string): Promise<Context> {
-        const started = await runMobius(context, runtimeArguments(runtime, cwd), cwd);
-        emit({ status: "runtime_started", ...started });
-        return await saveConfiguration(context, { workspace: cwd });
+    async function startRuntime(
+        context: Context,
+        runtime: RuntimeSelection,
+        cwd: string,
+        harness: string,
+    ): Promise<Context> {
+        const reuseOnline = async () => {
+            if (runtime.kind !== "existing" || !(await runtimeIsOnline(context, runtime, harness))) {
+                return false;
+            }
+            emit({ status: "runtime_already_online", runtimeId: runtime.runtimeId, harness });
+            return true;
+        };
+        // Starting a saved connection is idempotent. Redeeming a one-time pairing is not.
+        const maximumAttempts = runtime.kind === "existing" ? 3 : 1;
+        for (let attempt = 1; attempt <= maximumAttempts; attempt++) {
+            signal.throwIfAborted();
+            if (await reuseOnline()) {
+                return await saveConfiguration(context, { workspace: cwd });
+            }
+            try {
+                const started = await runMobius(context, runtimeArguments(runtime, cwd), cwd);
+                emit({ status: "runtime_started", ...started });
+                return await saveConfiguration(context, { workspace: cwd });
+            } catch (cause) {
+                signal.throwIfAborted();
+                if (!(cause instanceof RuntimeStartError)) {
+                    throw cause;
+                }
+                // A launcher may fail after the daemon has connected successfully.
+                if (await reuseOnline()) {
+                    return await saveConfiguration(context, { workspace: cwd });
+                }
+                if (attempt === maximumAttempts) {
+                    throw cause;
+                }
+                emit({
+                    status: "runtime_retrying",
+                    attempt: attempt + 1,
+                    maximumAttempts,
+                    failure: cause.diagnostic(),
+                });
+                await clock.wait(1000, signal);
+            }
+        }
+        fail("RUNTIME_START_FAILED");
     }
 
     function hasOnlineRuntimeAgent(runtime: Record<string, unknown>, runtimeId: string, agentRef: string): boolean {
@@ -604,6 +702,15 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             Array.isArray(setup["runtimes"]) &&
             setup["runtimes"].some((runtime) => hasOnlineRuntimeAgent(object(runtime), runtimeId, agentRef))
         );
+    }
+
+    async function runtimeIsOnline(context: Context, runtime: RuntimeSelection, harness: string): Promise<boolean> {
+        const botPath = `/chat/projects/${context.config["project_id"]}/bots/${context.config["bot_id"]}`;
+        const alreadyConfigured = runtime.kind === "existing" && typeof context.config["agent_ref"] === "string";
+        const state = await request(context, `${botPath}/${alreadyConfigured ? "workspace" : "setup/runtimes"}`, {});
+        return alreadyConfigured
+            ? hasOnlineRuntimeAgent(object(state["runtime"]), runtime.runtimeId, harness)
+            : setupHasOnlineRuntimeAgent(state, runtime.runtimeId, harness);
     }
 
     async function waitForRuntime(context: Context, runtime: RuntimeSelection, harness: string) {
@@ -641,16 +748,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         attempts = 0;
         while (true) {
             signal.throwIfAborted();
-            const botPath = `/chat/projects/${context.config["project_id"]}/bots/${context.config["bot_id"]}`;
-            const alreadyConfigured = runtime.kind === "existing" && typeof context.config["agent_ref"] === "string";
-            const state = await request(
-                context,
-                `${botPath}/${alreadyConfigured ? "workspace" : "setup/runtimes"}`,
-                {},
-            );
-            const online = alreadyConfigured
-                ? hasOnlineRuntimeAgent(object(state["runtime"]), runtimeId, harness)
-                : setupHasOnlineRuntimeAgent(state, runtimeId, harness);
+            const online = await runtimeIsOnline(context, runtime, harness);
             if (online) {
                 if (runtime.kind === "existing") {
                     emit({ status: "runtime_paired", runtimeId, harness });
@@ -786,7 +884,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         emit({ status: "identity_ready", userId: context.config["user_id"], botId: context.config["bot_id"] });
         const prepared = await prepareRuntime(context, cwd, verified.expectedRuntimeId);
         context = prepared.context;
-        context = await startRuntime(context, prepared.runtime, cwd);
+        context = await startRuntime(context, prepared.runtime, cwd, options.harness);
         await waitForRuntime(context, prepared.runtime, options.harness);
         context = await bindAgent(context, prepared.runtime, options.harness);
         await finishSetup(context, prepared.runtime, options);
@@ -808,6 +906,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                           ? "TIMEOUT"
                           : "SETUP_FAILED",
                 cause: serializeErrorCause(cause),
+                ...(cause instanceof RuntimeStartError ? { runtime: cause.diagnostic() } : {}),
             },
         });
         return 1;

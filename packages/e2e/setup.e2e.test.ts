@@ -95,3 +95,20 @@ test("Given a successful native session handoff, When the browser opens the reta
     await expect(page.getByRole("textbox", { name: "Message" })).toBeEnabled();
     await expect(page.getByRole("alert")).toHaveCount(0);
 });
+
+test("Given a healthy connected Runtime, When setup runs again, Then it reuses the live connection and hands off to Chat", async ({
+    runtime,
+}) => {
+    const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    expect(connected.botId).toBe(original.botId);
+    expect(connected.events).toContainEqual(expect.objectContaining({ status: "runtime_already_online" }));
+    expect(connected.events).not.toContainEqual(expect.objectContaining({ status: "runtime_started" }));
+    await runtime.page.goto(connected.url);
+    await expect(runtime.page.getByRole("textbox", { name: "Message" })).toBeEnabled();
+    await runtime.page.getByRole("textbox", { name: "Message" }).fill("Hello after repeated setup");
+    await runtime.page.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect(runtime.page.getByRole("article", { name: "Agent response" })).toContainText(
+        "Hello after repeated setup",
+    );
+});
