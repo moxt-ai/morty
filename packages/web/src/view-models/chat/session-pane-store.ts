@@ -20,11 +20,7 @@ import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
 import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
 import { recordBrowserError } from "../../services/diagnostics/browser-diagnostics.ts";
-import {
-    centralIndexedDB,
-    type SessionLastSentMessage,
-    sessionLastSentMessageEntry,
-} from "../../services/indexed-db/central-indexed-db.ts";
+import { centralIndexedDB, sessionLastSentMessageEntry } from "../../services/indexed-db/central-indexed-db.ts";
 import { centralSessionStorage, sessionDraftEntry } from "../../services/session-storage/central-session-storage.ts";
 import type { Clock } from "../../services/time/clock.ts";
 import { formatError, isRetryableRuntimeConnectionFailure, isSessionClosedFailure } from "../format-error.ts";
@@ -33,7 +29,6 @@ import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
 import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
 import { nativeSessionAgentTabs } from "./native-session-agents.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
-import { createSessionActiveTurn, type SessionActiveTurn } from "./session-active-turn.ts";
 import {
     type SessionActivityState,
     startSessionWork,
@@ -71,6 +66,7 @@ import {
     transitionSessionProjection,
 } from "./session-projection.ts";
 import { createSessionTaskControlsStore, type SessionTaskControlsStore } from "./session-task-controls.ts";
+import { createSessionTurnLedger, type SessionActiveTurn } from "./session-turn-ledger.ts";
 
 export type SessionPaneModel = ReturnType<typeof createSessionPaneModel>;
 
@@ -346,7 +342,7 @@ export function createSessionPaneModel(options: {
     // harness and the settings it runs with carry into New Session.
     saveLastHarnessPreference(botId, session.agentRef);
     saveLastAgentSettings(botId, session.agentRef, session.result.ready.configOptions);
-    const initialActiveTurn: SessionActiveTurn =
+    const openedActiveTurn: SessionActiveTurn =
         session.result.action === "conversation" && session.result.activeTurn.kind === "running"
             ? {
                   commandId: decodeIdentifier(session.result.activeTurn.commandId),
@@ -354,8 +350,10 @@ export function createSessionPaneModel(options: {
                   turnId: decodeIdentifier(session.result.activeTurn.turnId),
               }
             : { kind: "idle" };
-    const activeTurn = createSessionActiveTurn({ initial: initialActiveTurn });
-    const openedActiveTurn = activeTurn.current();
+    const turns = createSessionTurnLedger({
+        opened: openedActiveTurn,
+        initialCommandId: options.initialMessage?.commandId ?? null,
+    });
     const fallbackStartedAt = Date.now();
     let client: MobiusClient | null = null;
     let countdownInterrupt: AbortController | null = null;
@@ -388,8 +386,6 @@ export function createSessionPaneModel(options: {
     let projection = createSessionProjection();
     let sessionTitle = session.entry.title;
     let loadingOlderHistory = false;
-    let command = openedActiveTurn.kind === "idle" ? "" : openedActiveTurn.commandId;
-    let initialCommandId = options.initialMessage?.commandId ?? null;
     let draftRevision = 0;
     // The queued first message stays the pane's recovery responsibility until
     // the service accepts it or the user discards it, not just until the send
@@ -442,10 +438,11 @@ export function createSessionPaneModel(options: {
         initialUnknown: options.unconfirmedMessage,
     });
     const lastSentMessageEntry = sessionLastSentMessageEntry(sessionId);
-    let lastSentMessage: SessionLastSentMessage | null = null;
-    let lastSentMessageRevision = 0;
+    const openedCommand = turns.command();
     const initialActivity: SessionActivityState =
-        command === "" ? { kind: "idle" } : startSessionWork({ commandId: command, startedAt: fallbackStartedAt });
+        openedCommand === null
+            ? { kind: "idle" }
+            : startSessionWork({ commandId: openedCommand, startedAt: fallbackStartedAt });
     const deriveTimeline = (): { readonly messages: readonly SessionMessage[] } => ({
         messages: sessionProjectionMessages(projection),
     });
@@ -731,11 +728,7 @@ export function createSessionPaneModel(options: {
             if (controlled.kind !== "idle") {
                 tasks.getState().finish(controlled.active.commandId);
             }
-            const turn = activeTurn.current();
-            if (turn.kind !== "idle") {
-                activeTurn.turnCleared(turn.commandId);
-            }
-            command = "";
+            turns.settleIdle();
             const activity = get().activity;
             interactions.getState().restore([]);
             set({ activity: activity.kind === "failed" ? activity : { kind: "idle" } });
@@ -820,12 +813,11 @@ export function createSessionPaneModel(options: {
                 projection = createSessionProjection();
                 set({ messages: sessionProjectionMessages(projection) });
                 const readStoredLastSentMessage = (): void => {
-                    const revision = lastSentMessageRevision;
+                    const revision = turns.lastSentRevision();
                     void centralIndexedDB.get(lastSentMessageEntry, signal).then((stored) => {
-                        if (stored === null || revision !== lastSentMessageRevision) {
+                        if (stored === null || !turns.adoptStoredSent(stored, revision)) {
                             return;
                         }
-                        lastSentMessage = stored;
                         const current = get().activity;
                         if (current.kind === "working" && current.commandId === stored.commandId) {
                             set({
@@ -874,26 +866,24 @@ export function createSessionPaneModel(options: {
                                     // Steering starts a command, not a new execution to stop.
                                     return;
                                 }
-                                if (command !== "" && command !== fact.commandId) {
-                                    tasks.getState().finish(command);
-                                    activeTurn.turnCleared(command);
+                                const superseded = turns.supersede(fact.commandId);
+                                if (superseded !== null) {
+                                    tasks.getState().finish(superseded);
                                 }
-                                command = fact.commandId;
-                                const accepted = activeTurn.current();
+                                turns.setCommand(fact.commandId);
+                                const accepted = turns.activeTurn();
                                 const turnId =
                                     queued?.turnId ??
                                     (accepted.kind === "accepted" && accepted.commandId === fact.commandId
                                         ? accepted.turnId
                                         : fact.commandId);
                                 tasks.getState().start(fact.commandId, turnId);
-                                activeTurn.submissionAccepted(fact.commandId, turnId);
+                                turns.submissionAccepted(fact.commandId, turnId);
                                 const currentActivity = get().activity;
                                 const startedAt =
                                     currentActivity.kind === "working" && currentActivity.commandId === fact.commandId
                                         ? currentActivity.startedAt
-                                        : lastSentMessage?.commandId === fact.commandId
-                                          ? lastSentMessage.sentAt
-                                          : Date.now();
+                                        : turns.startedAt(fact.commandId, Date.now());
                                 set({ activity: startSessionWork({ commandId: fact.commandId, startedAt }) });
                                 announceActivity();
                                 return;
@@ -910,17 +900,14 @@ export function createSessionPaneModel(options: {
                                     signal.throwIfAborted();
                                     const running = execution.turn;
                                     if (running !== null) {
-                                        command = running.commandId;
+                                        turns.setCommand(running.commandId);
                                         tasks.getState().start(running.commandId, running.commandId);
-                                        activeTurn.submissionAccepted(running.commandId, running.commandId);
+                                        turns.submissionAccepted(running.commandId, running.commandId);
                                         const timeline = deriveTimeline();
                                         set({
                                             activity: startSessionWork({
                                                 commandId: running.commandId,
-                                                startedAt:
-                                                    lastSentMessage?.commandId === running.commandId
-                                                        ? lastSentMessage.sentAt
-                                                        : Date.now(),
+                                                startedAt: turns.startedAt(running.commandId, Date.now()),
                                             }),
                                             messages: timeline.messages,
                                             operation: finishPromptOperation(get().operation, fact.commandId),
@@ -943,10 +930,7 @@ export function createSessionPaneModel(options: {
                                 });
                                 announceActivity();
                                 tasks.getState().finish(fact.commandId);
-                                activeTurn.turnCleared(fact.commandId);
-                                if (command === fact.commandId) {
-                                    command = "";
-                                }
+                                turns.release(fact.commandId);
                                 return;
                             }
                             case "none":
@@ -957,7 +941,7 @@ export function createSessionPaneModel(options: {
                     };
                     const observer: MobiusSessionEventObserver = {
                         reconcile: async (connection) => {
-                            const reconcilingTurn = activeTurn.current();
+                            const reconcilingTurn = turns.activeTurn();
                             const reconciliation =
                                 connection.kind === "initial"
                                     ? { kind: "initial-subscription" as const, turn: reconcilingTurn }
@@ -990,22 +974,22 @@ export function createSessionPaneModel(options: {
                             }
                             messageQueue.getState().replace(execution.queued);
                             if (running !== null) {
-                                command = running.commandId;
+                                turns.setCommand(running.commandId);
                                 const turnId =
                                     reconciliation.turn.kind === "accepted" &&
                                     reconciliation.turn.commandId === running.commandId
                                         ? reconciliation.turn.turnId
                                         : running.commandId;
                                 tasks.getState().start(running.commandId, turnId);
-                                activeTurn.submissionAccepted(running.commandId, turnId);
+                                turns.submissionAccepted(running.commandId, turnId);
                             } else if (reconciliation.turn.kind !== "idle") {
                                 tasks.getState().finish(reconciliation.turn.commandId);
-                                activeTurn.turnCleared(reconciliation.turn.commandId);
-                                command = "";
+                                turns.abandon(reconciliation.turn.commandId);
                             }
+                            const command = turns.command();
                             const currentActivity = get().activity;
                             let restoredActivity: SessionActivityState;
-                            if (command === "") {
+                            if (command === null) {
                                 // Restoring the connection cannot resolve an independent turn failure.
                                 restoredActivity =
                                     currentActivity.kind === "failed" ? currentActivity : { kind: "idle" };
@@ -1014,8 +998,7 @@ export function createSessionPaneModel(options: {
                             } else {
                                 restoredActivity = startSessionWork({
                                     commandId: command,
-                                    startedAt:
-                                        lastSentMessage?.commandId === command ? lastSentMessage.sentAt : Date.now(),
+                                    startedAt: turns.startedAt(command, Date.now()),
                                 });
                             }
                             signal.throwIfAborted();
@@ -1060,7 +1043,7 @@ export function createSessionPaneModel(options: {
                     signal.throwIfAborted();
                     consecutiveFailures = 0;
                     setAndSettle({ connection: { kind: "ready", client: connected } });
-                    if (initialCommandId !== null) {
+                    if (turns.hasInitialCommand()) {
                         // Send reports delivery itself, so an uncertain or
                         // rejected submission leaves the queued message and its
                         // idempotent command id in the home store for a remount
@@ -1236,12 +1219,9 @@ export function createSessionPaneModel(options: {
                 ) {
                     return;
                 }
-                const commandId = initialCommandId ?? crypto.randomUUID();
-                initialCommandId = null;
-                command = commandId;
-                lastSentMessageRevision += 1;
-                lastSentMessage = { commandId, sentAt: Date.now() };
-                void centralIndexedDB.set(lastSentMessageEntry, lastSentMessage, signal);
+                const commandId = turns.claimCommand(crypto.randomUUID());
+                const sent = turns.recordSent(commandId, Date.now());
+                void centralIndexedDB.set(lastSentMessageEntry, sent, signal);
                 const prompt = current.draft.trim();
                 const displayPrompt =
                     prompt ||
@@ -1258,7 +1238,7 @@ export function createSessionPaneModel(options: {
                 // or returned to the composer by an authoritative rejection.
                 centralSessionStorage.remove(draftEntry);
                 composerAttachments.getState().clear();
-                const activity = startSessionWork({ commandId, startedAt: lastSentMessage.sentAt });
+                const activity = startSessionWork({ commandId, startedAt: sent.sentAt });
                 const pending = deriveTimeline();
                 set({
                     activity,
@@ -1268,7 +1248,7 @@ export function createSessionPaneModel(options: {
                     draft: "",
                 });
                 try {
-                    activeTurn.submissionStarted(commandId);
+                    turns.submissionStarted(commandId);
                     const submission = {
                         ...request,
                         content: prompt,
@@ -1308,17 +1288,14 @@ export function createSessionPaneModel(options: {
                     if (outcome.kind === "accepted") {
                         // A terminal live event may precede the acceptance response.
                         // Its result already owns the activity; do not overwrite it.
-                        if (command === commandId) {
+                        if (turns.command() === commandId) {
                             tasks.getState().start(commandId, outcome.turn.turnId);
-                            activeTurn.submissionAccepted(commandId, outcome.turn.turnId);
+                            turns.submissionAccepted(commandId, outcome.turn.turnId);
                         }
                         set({ operation: finishPromptOperation(get().operation, commandId) });
                         return;
                     }
-                    activeTurn.turnCleared(commandId);
-                    if (command === commandId) {
-                        command = "";
-                    }
+                    turns.release(commandId);
                     const restored = deriveTimeline();
                     set({
                         activity: transitionSessionActivity(get().activity, { commandId, kind: "work-completed" }),
@@ -1347,10 +1324,7 @@ export function createSessionPaneModel(options: {
                 if (commandId === null) {
                     return;
                 }
-                if (command === commandId) {
-                    activeTurn.turnCleared(commandId);
-                    command = "";
-                }
+                turns.discard(commandId);
                 // Mirrors the delivery report: dropping this pane's retry path
                 // must also drop the home store's recovery copy, or a remount
                 // would submit the message the user just discarded.
@@ -1368,10 +1342,10 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 const pending = state.journal;
-                command = pending.commandId;
+                turns.setCommand(pending.commandId);
                 const retrying = startSessionWork({
                     commandId: pending.commandId,
-                    startedAt: lastSentMessage?.commandId === pending.commandId ? lastSentMessage.sentAt : Date.now(),
+                    startedAt: turns.startedAt(pending.commandId, Date.now()),
                 });
                 const retried = deriveTimeline();
                 set({ activity: retrying, messages: retried.messages });
@@ -1383,9 +1357,9 @@ export function createSessionPaneModel(options: {
                         if (isQueuedInitialMessage(pending.commandId)) {
                             options.onInitialMessageDelivered?.();
                         }
-                        if (command === pending.commandId) {
+                        if (turns.command() === pending.commandId) {
                             tasks.getState().start(pending.commandId, outcome.turn.turnId);
-                            activeTurn.submissionAccepted(pending.commandId, outcome.turn.turnId);
+                            turns.submissionAccepted(pending.commandId, outcome.turn.turnId);
                         }
                         return;
                     case "rejected": {
@@ -1408,10 +1382,7 @@ export function createSessionPaneModel(options: {
                     default:
                         return outcome satisfies never;
                 }
-                activeTurn.turnCleared(pending.commandId);
-                if (command === pending.commandId) {
-                    command = "";
-                }
+                turns.release(pending.commandId);
                 set({
                     activity: transitionSessionActivity(get().activity, {
                         commandId: pending.commandId,
@@ -1457,9 +1428,8 @@ export function createSessionPaneModel(options: {
                 );
                 signal.throwIfAborted();
                 if (queued !== null) {
-                    lastSentMessageRevision += 1;
-                    lastSentMessage = { commandId: queued.commandId, sentAt: Date.now() };
-                    void centralIndexedDB.set(lastSentMessageEntry, lastSentMessage, signal);
+                    const sent = turns.recordSent(queued.commandId, Date.now());
+                    void centralIndexedDB.set(lastSentMessageEntry, sent, signal);
                     centralSessionStorage.remove(draftEntry);
                     composerAttachments.getState().clear();
                     set({ draft: "", followRevision: get().followRevision + 1 });
