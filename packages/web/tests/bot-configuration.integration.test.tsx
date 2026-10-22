@@ -1,7 +1,7 @@
 import { getAllByRole, getByRole, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt } from "./infra/application-scenario.ts";
+import { openAgentModelPicker, sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
 test("Given Morty has no paired agent, When the setup page opens, Then it offers the current-origin setup instruction without a data region selector", {
@@ -55,6 +55,7 @@ test("Given a paired Bot with cached agent settings, When a user filters its mod
     expect(created.optionalElementByTestId(dataTestId.pairingInstruction)).toBeNull();
 
     await created.user.click(await created.queryElementByTestId(dataTestId.agentConfiguration));
+    await openAgentModelPicker(created);
     const search = await created.queryElementByTestId(dataTestId.modelSearch);
     await created.user.type(search, "large");
     await created.queryElementByTestId(
@@ -265,7 +266,8 @@ test("Given a Bot paired with an unlisted harness, When the user opens its setti
     const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
     const tab = getByRole(configuration, "tab", { name: "Unlisted Agent" });
     expect(app.elementByTestId(dataTestId.harnessMark, tab).getAttribute("data-harness-product")).toBe("generic");
-    expect(getAllByRole(configuration, "tab")).toHaveLength(1);
+    expect(getAllByRole(configuration, "tab", { name: "Unlisted Agent" })).toHaveLength(1);
+    expect(getByRole(configuration, "tab", { name: "Pi" })).toHaveProperty("disabled", true);
 });
 
 test("Given a Bot paired with Pi, When the user opens its settings and sends a prompt, Then Pi and its streamed reply are visible", {

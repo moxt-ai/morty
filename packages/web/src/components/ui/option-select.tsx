@@ -1,3 +1,4 @@
+import { Check, ChevronDown, Search } from "lucide-react";
 import { Select as Primitive } from "radix-ui";
 import { useState } from "react";
 import { dataTestId } from "@/data-testid";
@@ -141,5 +142,3 @@ export function Select({
         </Primitive.Root>
     );
 }
-
-import { Check, ChevronDown, Search } from "lucide-react";

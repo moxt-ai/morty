@@ -87,7 +87,6 @@ test("Given a saved conversation and a different draft directory, When the user 
         (element) => element instanceof HTMLTextAreaElement && !element.disabled,
     );
     await selectCodexHarness(app);
-    const context = () => getByRole(document.body, "region", { name: "Execution context" });
     const selectedHarnessProduct = () =>
         app.elementByTestId(dataTestId.harnessTriggerMark).getAttribute("data-harness-product");
     await app.waitForView(() => {

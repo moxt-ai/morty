@@ -1,7 +1,7 @@
 import { getByRole, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt } from "./infra/application-scenario.ts";
+import { openAgentModelPicker, sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
 
@@ -15,6 +15,7 @@ async function openConfiguredConversation(app: TestApp, reply: string): Promise<
         expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(reply),
     );
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
+    await openAgentModelPicker(app);
     await app.user.click(await app.queryElementByTestId(dataTestId.sessionConfigValue("test-large")));
     await app.user.keyboard("{Escape}");
     await app.waitForView(() =>

@@ -50,7 +50,7 @@ test("Given Pi is not installed on the Runtime, When the user opens Open Session
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     await app.user.click(getByRole(document.body, "button", { name: "Open Session" }));
     const dialog = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
@@ -69,7 +69,7 @@ test("Given Pi is installed on the Runtime, When the user opens Open Session, Th
     const app = await createTestApp({ connectAgent: true, agent: { id: "pi", label: "Pi" } });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     await app.user.click(getByRole(document.body, "button", { name: "Open Session" }));
     const dialog = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
