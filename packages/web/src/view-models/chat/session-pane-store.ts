@@ -50,14 +50,10 @@ import {
 } from "./session-connection.ts";
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import { createSessionDeliveryStore, type Journal, type SessionDeliveryStore } from "./session-delivery-store.ts";
-import { createSessionInteractionStore } from "./session-interaction-store.ts";
+import { createSessionInteractionStore, type SessionInteractionStore } from "./session-interaction-store.ts";
 import { requestedInteraction, type SessionLifecycleFact, sessionLifecycleFact } from "./session-lifecycle.ts";
 import { createSessionMessageQueueStore, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
-import type {
-    ElicitationInteractionResponse,
-    PermissionInteractionResponse,
-    SessionInteraction,
-} from "./session-pane-types.ts";
+import type { ElicitationInteractionResponse, PermissionInteractionResponse } from "./session-pane-types.ts";
 import {
     createSessionMessageReduction,
     type SessionMessage,
@@ -100,73 +96,6 @@ export type { SessionConnection } from "./session-connection.ts";
 
 const SESSION_EVENT_PAGE_LIMIT = 30;
 const HISTORY_MESSAGE_TARGET = 20;
-function interactionId(interaction: SessionInteraction): string {
-    return interaction.kind === "permission"
-        ? interaction.permission.interactionId
-        : interaction.elicitation.interactionId;
-}
-
-function replaceInteraction(
-    current: readonly SessionInteraction[],
-    id: string,
-    replacement: SessionInteraction | null,
-): readonly SessionInteraction[] {
-    const remaining = current.filter((interaction) => interactionId(interaction) !== id);
-    return replacement === null ? remaining : [...remaining, replacement];
-}
-
-function resolveElicitation(
-    current: readonly SessionInteraction[],
-    id: string,
-    action: "accept" | "cancel" | "complete" | "decline",
-): readonly SessionInteraction[] {
-    return current.map((interaction): SessionInteraction => {
-        if (
-            interaction.kind !== "elicitation" ||
-            interaction.elicitation.interactionId !== id ||
-            interaction.elicitation.state.kind === "resolved"
-        ) {
-            return interaction;
-        }
-        return {
-            kind: "elicitation",
-            elicitation: {
-                ...interaction.elicitation,
-                state: {
-                    action,
-                    content:
-                        interaction.elicitation.state.kind === "submitted" ? interaction.elicitation.state.content : "",
-                    kind: "resolved",
-                },
-            },
-        };
-    });
-}
-
-function resolvePermission(
-    current: readonly SessionInteraction[],
-    id: string,
-    outcome: PermissionInteractionResponse["outcome"],
-    optionId: string,
-): readonly SessionInteraction[] {
-    return current.map((interaction): SessionInteraction => {
-        if (
-            interaction.kind !== "permission" ||
-            interaction.permission.interactionId !== id ||
-            interaction.permission.state.kind === "resolved"
-        ) {
-            return interaction;
-        }
-        return {
-            kind: "permission",
-            permission: {
-                ...interaction.permission,
-                state: { kind: "resolved", optionId, outcome },
-            },
-        };
-    });
-}
-
 export interface SessionPaneStore {
     readonly connection: SessionConnection;
     readonly title: string;
@@ -177,18 +106,11 @@ export interface SessionPaneStore {
     readonly hasOlderHistory: boolean;
     readonly options: readonly SessionConfigOption[];
     readonly draft: string;
-    readonly interactions: readonly SessionInteraction[];
     /**
      * Bumped after a user-submitted action that appends content (send, queue,
      * steer) so the message surface re-arms following the latest message.
      */
     readonly followRevision: number;
-    /** In-flight response for the interaction cards; a submitted interaction stays answered. */
-    readonly interactionOperation:
-        | { readonly kind: "idle" }
-        | { readonly kind: "submitting"; readonly interactionId: string }
-        | { readonly kind: "submitted"; readonly interactionId: string }
-        | { readonly kind: "failed"; readonly interactionId: string; readonly message: string };
     readonly operation: Operation;
     readonly activity: SessionActivityState;
     /** Display-only harness list; loading failures leave the current harness. */
@@ -226,14 +148,6 @@ export interface SessionPaneStore {
     readonly confirmTitleEdit: (signal: AbortSignal) => Promise<void>;
     readonly cancelTitleEdit: () => void;
     readonly refreshSettings: (signal: AbortSignal) => Promise<void>;
-    readonly respondToPermission: (response: PermissionInteractionResponse, signal: AbortSignal) => Promise<void>;
-    readonly respondToElicitation: (response: ElicitationInteractionResponse, signal: AbortSignal) => Promise<void>;
-    /** Submits an interaction response, tracking busy/answered/failed state for the cards. */
-    readonly respondToInteraction: (
-        interactionId: string,
-        response: () => Promise<void>,
-        signal: AbortSignal,
-    ) => Promise<void>;
     readonly stop: (signal: AbortSignal) => Promise<void>;
 }
 
@@ -243,11 +157,12 @@ export function sessionPanePresentation(
     tasks: SessionTaskControlsStore,
     queue: SessionMessageQueueStore,
     attachments: ComposerAttachmentStore,
+    interactions: SessionInteractionStore,
 ) {
-    const needsApproval = model.interactions.some(
+    const needsApproval = interactions.interactions.some(
         (interaction) => interaction.kind === "permission" && interaction.permission.state.kind === "pending",
     );
-    const waitingForInput = model.interactions.some(
+    const waitingForInput = interactions.interactions.some(
         (interaction) =>
             (interaction.kind === "permission" && interaction.permission.state.kind !== "resolved") ||
             (interaction.kind === "elicitation" &&
@@ -603,6 +518,54 @@ export function createSessionPaneModel(options: {
     const draftEntry = sessionDraftEntry(sessionId);
     const initialTimeline = deriveTimeline();
 
+    const respondToPermission = async (response: PermissionInteractionResponse, signal: AbortSignal): Promise<void> => {
+        if (client === null || store.getState().connection.kind !== "ready") {
+            throw new Error("The Session is not connected.");
+        }
+        const reopeningsAtStart = reopenings;
+        try {
+            await client.interactions.respond(
+                sessionId,
+                response.interactionId,
+                new MobiusPermissionResponseRequest("mobius-web", response.outcome, response.optionId),
+                AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
+            );
+        } catch (cause) {
+            signal.throwIfAborted();
+            if (closedNow(cause, reopeningsAtStart)) {
+                store.getState().sessionClosed(null);
+            }
+            throw cause;
+        }
+    };
+    const respondToElicitation = async (
+        response: ElicitationInteractionResponse,
+        signal: AbortSignal,
+    ): Promise<void> => {
+        if (client === null || store.getState().connection.kind !== "ready") {
+            throw new Error("The Session is not connected.");
+        }
+        const reopeningsAtStart = reopenings;
+        try {
+            await client.interactions.respond(
+                sessionId,
+                response.interactionId,
+                new MobiusElicitationResponseRequest("mobius-web", response.action, response.content),
+                AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
+            );
+        } catch (cause) {
+            signal.throwIfAborted();
+            if (closedNow(cause, reopeningsAtStart)) {
+                store.getState().sessionClosed(null);
+            }
+            throw cause;
+        }
+    };
+    const interactions = createSessionInteractionStore({
+        permission: respondToPermission,
+        elicitation: respondToElicitation,
+    });
+
     // Activity transitions are reported to the owner through this latch at
     // the explicit sites that change activity; connection waiters are woken
     // where the connection settles. No wrapped set, no subscriptions.
@@ -774,7 +737,8 @@ export function createSessionPaneModel(options: {
             }
             command = "";
             const activity = get().activity;
-            set({ activity: activity.kind === "failed" ? activity : { kind: "idle" }, interactions: [] });
+            interactions.getState().restore([]);
+            set({ activity: activity.kind === "failed" ? activity : { kind: "idle" } });
             announceActivity();
         };
         // Holds the connect loop on a closed Session until the user reopens it, then lets the loop connect again.
@@ -806,9 +770,7 @@ export function createSessionPaneModel(options: {
             options: session.result.ready.configOptions,
             draft: options.initialMessage?.content ?? centralSessionStorage.read(draftEntry) ?? "",
             harnesses: [{ agentRef: session.agentRef, label: session.agentRef, value: session.agentRef }],
-            interactions: [],
             followRevision: 0,
-            interactionOperation: { kind: "idle" },
             operation: { kind: "idle" },
             activity: initialActivity,
             loadOlderMessages: async (signal) => {
@@ -890,32 +852,9 @@ export function createSessionPaneModel(options: {
                     const receiveLifecycle = async (fact: SessionLifecycleFact): Promise<void> => {
                         switch (fact.kind) {
                             case "interaction-requested":
-                                set((current) => ({
-                                    interactions: replaceInteraction(
-                                        current.interactions,
-                                        interactionId(fact.interaction),
-                                        fact.interaction,
-                                    ),
-                                }));
-                                return;
                             case "permission-resolved":
-                                set((current) => ({
-                                    interactions: resolvePermission(
-                                        current.interactions,
-                                        fact.interactionId,
-                                        fact.outcome,
-                                        fact.optionId,
-                                    ),
-                                }));
-                                return;
                             case "elicitation-resolved":
-                                set((current) => ({
-                                    interactions: resolveElicitation(
-                                        current.interactions,
-                                        fact.interactionId,
-                                        fact.action,
-                                    ),
-                                }));
+                                interactions.getState().apply(fact);
                                 return;
                             case "queue-changed": {
                                 const execution = await connected.sessions.readSessionExecution(
@@ -1081,14 +1020,14 @@ export function createSessionPaneModel(options: {
                             }
                             signal.throwIfAborted();
                             const interaction = execution.turn?.interaction;
-                            const interactions: readonly SessionInteraction[] =
-                                interaction === undefined || interaction === null
-                                    ? []
-                                    : [requestedInteraction(interaction)];
-                            set({
-                                interactions,
-                                activity: restoredActivity,
-                            });
+                            interactions
+                                .getState()
+                                .restore(
+                                    interaction === undefined || interaction === null
+                                        ? []
+                                        : [requestedInteraction(interaction)],
+                                );
+                            set({ activity: restoredActivity });
                             announceActivity();
                             switch (reconciliation.kind) {
                                 case "initial-subscription":
@@ -1657,77 +1596,8 @@ export function createSessionPaneModel(options: {
                     });
                 }
             },
-            respondToPermission: async (response, signal) => {
-                if (client === null || get().connection.kind !== "ready") {
-                    throw new Error("The Session is not connected.");
-                }
-                const reopeningsAtStart = reopenings;
-                try {
-                    await client.interactions.respond(
-                        sessionId,
-                        response.interactionId,
-                        new MobiusPermissionResponseRequest("mobius-web", response.outcome, response.optionId),
-                        AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
-                    );
-                } catch (cause) {
-                    signal.throwIfAborted();
-                    if (closedNow(cause, reopeningsAtStart)) {
-                        get().sessionClosed(null);
-                    }
-                    throw cause;
-                }
-            },
-            respondToElicitation: async (response, signal) => {
-                if (client === null || get().connection.kind !== "ready") {
-                    throw new Error("The Session is not connected.");
-                }
-                const reopeningsAtStart = reopenings;
-                try {
-                    await client.interactions.respond(
-                        sessionId,
-                        response.interactionId,
-                        new MobiusElicitationResponseRequest("mobius-web", response.action, response.content),
-                        AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
-                    );
-                } catch (cause) {
-                    signal.throwIfAborted();
-                    if (closedNow(cause, reopeningsAtStart)) {
-                        get().sessionClosed(null);
-                    }
-                    throw cause;
-                }
-            },
-            respondToInteraction: async (interactionId, response, signal) => {
-                const current = get().interactionOperation;
-                if (
-                    current.kind === "submitting" ||
-                    (current.kind === "submitted" && current.interactionId === interactionId)
-                ) {
-                    return;
-                }
-                set({ interactionOperation: { kind: "submitting", interactionId } });
-                try {
-                    await response();
-                    if (!signal.aborted) {
-                        set({ interactionOperation: { kind: "submitted", interactionId } });
-                    }
-                } catch (cause) {
-                    signal.throwIfAborted();
-                    set({
-                        interactionOperation: {
-                            kind: "failed",
-                            interactionId,
-                            message: formatError(cause, "The response could not be submitted."),
-                        },
-                    });
-                }
-            },
             stop: async (signal) => await tasks.getState().stop(signal),
         };
-    });
-    const interactionSubmissions = createSessionInteractionStore({
-        permission: (response, signal) => store.getState().respondToPermission(response, signal),
-        elicitation: (response, signal) => store.getState().respondToElicitation(response, signal),
     });
     // The pane's connection lifetime: attach starts connecting with its own
     // signal, detach aborts it. The view drives this through a ref callback,
@@ -1866,7 +1736,7 @@ export function createSessionPaneModel(options: {
     };
     return {
         composerAttachments,
-        interactionSubmissions,
+        interactions,
         store,
         delivery,
         filePreview,

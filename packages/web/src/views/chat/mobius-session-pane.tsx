@@ -614,8 +614,8 @@ function MobiusSessionPaneBody({
     const runtimeConfiguration = useStore(workspace.home, (state) => state.runtimeConfiguration);
     const model = useStore(pane.store);
     const attachmentModel = useStore(pane.composerAttachments);
-    const interactionSubmissions = useStore(pane.interactionSubmissions);
-    const interactions = sessionInteractionPresentation(model.interactions, interactionSubmissions);
+    const interactionModel = useStore(pane.interactions);
+    const interactions = sessionInteractionPresentation(interactionModel);
     const preview = useStore(pane.filePreview);
     const delivery = useStore(pane.delivery);
     const messageQueue = useStore(pane.messageQueue);
@@ -638,12 +638,19 @@ function MobiusSessionPaneBody({
         run(action);
     };
     const respondToPermission = (response: PermissionInteractionResponse): void => {
-        interactionSubmissions.respondToPermission(response, pane.operationsSignal());
+        interactionModel.respondToPermission(response, pane.operationsSignal());
     };
     const respondToElicitation = (response: ElicitationInteractionResponse): void => {
-        interactionSubmissions.respondToElicitation(response, pane.operationsSignal());
+        interactionModel.respondToElicitation(response, pane.operationsSignal());
     };
-    const presentation = sessionPanePresentation(model, delivery, taskControls, messageQueue, attachmentModel);
+    const presentation = sessionPanePresentation(
+        model,
+        delivery,
+        taskControls,
+        messageQueue,
+        attachmentModel,
+        interactionModel,
+    );
     const renderItems = sessionRenderItems(model.messages);
     const renderGroups = sessionRenderGroups(renderItems);
     const lastRenderItemIndex = renderItems.length - 1;
