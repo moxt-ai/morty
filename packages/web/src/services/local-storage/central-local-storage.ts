@@ -133,6 +133,20 @@ export const lastAgentSettingsEntry = (botId: string, agentRef: string) =>
     });
 
 // ---------------------------------------------------------------------------
+// Last harness per Bot
+// ---------------------------------------------------------------------------
+
+/**
+ * The harness a Bot last worked in, so a new draft continues there instead of
+ * falling back to whichever connected Agent happens to be listed first.
+ */
+export const lastHarnessEntry = (botId: string): LocalStorageEntry<string> =>
+    stringLocalStorageEntry({
+        key: scopedKey("mobius:last-harness:v1:", botId),
+        schema: settingIdentifierSchema,
+    });
+
+// ---------------------------------------------------------------------------
 // Working-directory preferences
 // ---------------------------------------------------------------------------
 

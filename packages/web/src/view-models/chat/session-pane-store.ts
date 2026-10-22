@@ -17,6 +17,7 @@ import {
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
 import { type BotChatApi, connectedChatRuntimeAgents } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
+import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
 import {
     centralIndexedDB,
     type SessionLastSentMessage,
@@ -431,6 +432,10 @@ export function createSessionPaneModel(options: {
     const { session, botId, requests, clock } = options;
     const composerAttachments = createComposerAttachmentStore(options.initialMessage?.attachments);
     const sessionId = session.result.ready.sessionId;
+    // Working in a conversation makes it the reference for the next draft: its
+    // harness and the settings it runs with carry into New Session.
+    saveLastHarnessPreference(botId, session.agentRef);
+    saveLastAgentSettings(botId, session.agentRef, session.result.ready.configOptions);
     const initialActiveTurn: SessionActiveTurn =
         session.result.action === "conversation" && session.result.activeTurn.kind === "running"
             ? {
