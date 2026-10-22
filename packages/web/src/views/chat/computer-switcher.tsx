@@ -29,7 +29,7 @@ export function ComputerSwitcher({
                 <button
                     type="button"
                     aria-label={`Switch computer, ${computerName}`}
-                    className="mb-2 flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60"
+                    className="mb-2 flex min-h-11 w-full min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left outline-none hover:bg-muted focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-muted-foreground"
                 >
                     <Laptop aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
                     <span className="flex min-w-0 flex-1 items-center justify-between gap-2 sm:flex-col sm:items-start sm:gap-0.5">
@@ -55,7 +55,7 @@ export function ComputerSwitcher({
                 <DropdownMenu.Content
                     align="start"
                     sideOffset={4}
-                    className="z-[180] max-h-[min(70dvh,520px)] w-80 max-w-[calc(100vw-1.5rem)] overflow-y-auto rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-xl"
+                    className="z-[180] max-h-[min(70dvh,520px)] w-88 max-w-[calc(100vw-1.5rem)] overflow-y-auto rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-xl"
                     aria-label="Computers"
                 >
                     <DropdownMenu.Label className="px-3 py-2 text-xs font-medium text-muted-foreground">
@@ -67,15 +67,17 @@ export function ComputerSwitcher({
                         </p>
                     )}
                     {state.choices.map((choice) => (
-                        <DropdownMenu.Item key={choice.key} asChild>
+                        <DropdownMenu.Item key={choice.key} textValue={choice.name} asChild>
                             <a
                                 href={choice.href}
-                                className="flex items-center gap-2 rounded-lg px-3 py-2.5 outline-none data-[highlighted]:bg-accent"
+                                className="grid min-h-14 grid-cols-[1rem_minmax(0,1fr)_4.5rem_1rem] items-center gap-2 rounded-sm px-3 py-2.5 outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-muted-foreground data-[highlighted]:bg-accent"
                                 aria-current={choice.key === model.activeKey ? "true" : undefined}
                             >
                                 <Laptop className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                                 <span className="min-w-0 flex-1">
-                                    <span className="block truncate text-sm font-medium">{choice.name}</span>
+                                    <span className="block text-sm font-medium [overflow-wrap:anywhere]">
+                                        {choice.name}
+                                    </span>
                                     <span
                                         className="block truncate text-xs text-muted-foreground"
                                         title={choice.directory ?? undefined}
@@ -87,7 +89,7 @@ export function ComputerSwitcher({
                                     </span>
                                 </span>
                                 <span
-                                    className={`text-xs ${choice.status === "online" ? "text-primary" : "text-muted-foreground"}`}
+                                    className={`whitespace-nowrap text-right text-xs ${choice.status === "online" ? "text-emerald-700" : "text-muted-foreground"}`}
                                 >
                                     {choice.status === "online"
                                         ? "Online"
@@ -95,9 +97,9 @@ export function ComputerSwitcher({
                                           ? "Offline"
                                           : "Unavailable"}
                                 </span>
-                                {choice.key === model.activeKey && (
-                                    <Check className="size-3.5 shrink-0" aria-label="Current computer" />
-                                )}
+                                <span className="flex size-4 items-center justify-center" aria-hidden="true">
+                                    {choice.key === model.activeKey && <Check className="size-3.5" />}
+                                </span>
                             </a>
                         </DropdownMenu.Item>
                     ))}
@@ -105,9 +107,9 @@ export function ComputerSwitcher({
                     <DropdownMenu.Item asChild>
                         <a
                             href="/setup"
-                            className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm outline-none data-[highlighted]:bg-accent"
+                            className="flex min-h-11 items-center gap-2 rounded-sm px-3 py-2.5 text-sm outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-muted-foreground data-[highlighted]:bg-accent"
                         >
-                            <Plus className="size-4" aria-hidden="true" />
+                            <Plus className="size-4 shrink-0" aria-hidden="true" />
                             Connect another computer
                         </a>
                     </DropdownMenu.Item>
