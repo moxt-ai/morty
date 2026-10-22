@@ -1,7 +1,7 @@
 import * as v from "valibot";
+import { isOversizedToolText } from "../tool-text-preview.tsx";
 import { EditToolPresentation } from "./edit-tool-presentation.tsx";
 import type { ToolRendererProps } from "./tool-renderer.ts";
-import { isOversizedToolText } from "./tool-text-preview.tsx";
 
 const changesSchema = v.pipe(
     v.strictObject({

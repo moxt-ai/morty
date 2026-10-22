@@ -12,30 +12,27 @@ import {
     X,
 } from "lucide-react";
 import { ContextMenu, DropdownMenu, Tooltip } from "radix-ui";
-import { type ReactNode, type TransitionEvent, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "zustand";
+import { mortyThinScrollbarClassName } from "../../components/chat/chat-session-layout.ts";
+import { panelMotionClassName, usePanelPresence } from "../../components/chat/sidebar-panel-presence.ts";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { MortyAlert } from "../../components/ui/morty-alert.tsx";
 import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.tsx";
+import { useDesktopChatLayout } from "../../components/utils/use-desktop-chat-layout.ts";
 import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
-import { useApiTransport } from "../../services/api/api-transport-context.tsx";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
-import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import type { ConversationDirectoryStore } from "../../view-models/chat/conversation-directory-store.ts";
 import type { ConversationListStatus } from "../../view-models/chat/conversation-status-store.ts";
-import { createNetworkDiagnosticStore } from "../../view-models/chat/network-diagnostic-store.ts";
 import { projectLocationLabel } from "../../view-models/chat/project-location-label.ts";
-import { createRemoteAccessStore } from "../../view-models/chat/remote-access-store.ts";
-import { createSidebarDialogs } from "../../view-models/chat/sidebar-dialogs.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import { IdentitySharing } from "./identity-sharing.tsx";
-import { NativeSessionDialog, type OpenMobiusSession } from "./native-session-dialog.tsx";
-import { useDesktopChatLayout } from "./use-desktop-chat-layout.ts";
+import { NativeSessionDialog } from "./native-session-dialog.tsx";
 
 function SidebarSessionOption({
     label,
@@ -195,8 +192,10 @@ function ManagedSessionDirectoryList({
                 <p className="py-3 text-xs text-muted-foreground sm:py-2">Your Chat sessions will appear here.</p>
             )}
             {conversationGroups?.map((group) => (
-                <section className="min-w-0 space-y-0" key={group.label}>
-                    <h3 className="mb-0 pb-1 pl-2 pt-1 text-11 font-normal text-morty-text-3">{group.label}</h3>
+                <section className="mb-3 min-w-0 w-full space-y-0 last:mb-0" key={group.label}>
+                    <h3 className="sticky top-0 z-[1] -mx-2 mb-0 bg-card px-[22px] pb-1 pt-1 text-11 font-normal text-morty-text-3 sm:-mx-3 sm:bg-sidebar">
+                        {group.label}
+                    </h3>
                     {group.sessions.map((session) => {
                         const sessionButton = (
                             <button
@@ -318,79 +317,6 @@ function ConnectionStatus({
     );
 }
 
-const panelMotionMs = 280;
-const panelMotionClassName =
-    "motion-safe:transition-[opacity,transform,translate] motion-safe:duration-[280ms] motion-safe:ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none";
-
-function usePanelPresence(open: boolean) {
-    const [present, setPresent] = useState(open);
-    const [shown, setShown] = useState(open);
-    const [animate, setAnimate] = useState(false);
-    const openRef = useRef(open);
-    const presentRef = useRef(present);
-    openRef.current = open;
-    presentRef.current = present;
-    useEffect(() => {
-        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-            setPresent(open);
-            setShown(open);
-            setAnimate(false);
-            return;
-        }
-        if (!open) {
-            setShown(false);
-            if (presentRef.current) {
-                setAnimate(true);
-            }
-            return;
-        }
-        setPresent(true);
-        setShown(false);
-        setAnimate(false);
-        let secondFrame = 0;
-        const firstFrame = window.requestAnimationFrame(() => {
-            secondFrame = window.requestAnimationFrame(() => {
-                if (!openRef.current) {
-                    return;
-                }
-                setAnimate(true);
-                setShown(true);
-            });
-        });
-        return () => {
-            window.cancelAnimationFrame(firstFrame);
-            window.cancelAnimationFrame(secondFrame);
-        };
-    }, [open]);
-    useEffect(() => {
-        if (open || !present || shown) {
-            return;
-        }
-        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-            return;
-        }
-        const timeout = window.setTimeout(() => {
-            if (!openRef.current) {
-                setPresent(false);
-                setAnimate(false);
-            }
-        }, panelMotionMs + 80);
-        return () => window.clearTimeout(timeout);
-    }, [open, present, shown]);
-    const onTransitionEnd = (event: TransitionEvent<HTMLElement>) => {
-        if (
-            event.target !== event.currentTarget ||
-            (event.propertyName !== "transform" && event.propertyName !== "translate") ||
-            openRef.current
-        ) {
-            return;
-        }
-        setPresent(false);
-        setAnimate(false);
-    };
-    return { present, shown, animate, onTransitionEnd };
-}
-
 export function ConversationSidebar({
     botId,
     connectionStatus,
@@ -399,13 +325,8 @@ export function ConversationSidebar({
     requests,
     activeId,
     onOpen,
-    onOpenSession,
     onNewConversation,
-    currentAccessToken,
-    endRemoteAccess,
-    createTransfer,
     optimisticTitles,
-    projectId,
 }: {
     readonly botId: string;
     readonly connectionStatus: BotConnectionStatus;
@@ -423,46 +344,28 @@ export function ConversationSidebar({
     >;
     readonly activeId: string;
     readonly optimisticTitles: ReadonlyMap<string, string>;
-    readonly projectId: string;
     readonly onOpen: (session: ManagedChatSession) => void;
-    readonly onOpenSession: (session: OpenMobiusSession) => void;
     readonly onNewConversation: () => void;
-    readonly currentAccessToken: (signal: AbortSignal) => Promise<string>;
-    readonly endRemoteAccess: (token: string, signal: AbortSignal) => Promise<void>;
-    readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
 }) {
-    const transport = useApiTransport();
+    // The workspace owns the sidebar's dialog, remote-access, and diagnostic
+    // stores outside React; the view only subscribes.
+    const dialogs = workspace.sidebar.dialogs;
     const directory = useStore(workspace.directory, (state) => state.state);
     const archive = useStore(workspace.directory, (state) => state.archive);
-    const archiveSession = useStore(workspace.directory, (state) => state.archiveSession);
+
     const sessionStatuses = useStore(workspace.statuses, (state) => state.statuses);
-    const [mobileNavOpen, setMobileNavOpen] = useState(false);
-    const [mobileSessionsOpen, setMobileSessionsOpen] = useState(false);
+    const dialogState = useStore(dialogs);
+    const mobileNavOpen = dialogState.mobileNavOpen;
+    const mobileSessionsOpen = dialogState.mobileSessionsOpen;
     const navigationMotion = usePanelPresence(mobileNavOpen);
     const sessionsMotion = usePanelPresence(mobileSessionsOpen);
     const desktop = useDesktopChatLayout();
-    const [dialogs] = useState(() =>
-        createSidebarDialogs({
-            botId,
-            requests,
-            createTransfer,
-            onOpenSession,
-            onOpenedSession: workspace.refreshDirectory,
-        }),
-    );
-    useSyncExternalStore(dialogs.subscribe, () => `${dialogs.nativeDialog() === null}:${dialogs.sharing() === null}`);
-    const dialogStore = dialogs.nativeDialog();
-    const sharingStore = dialogs.sharing();
-    const [remoteAccess] = useState(() => createRemoteAccessStore({ currentAccessToken, endRemoteAccess }));
-    const access = useStore(remoteAccess);
-    const [networkDiagnostic] = useState(() =>
-        createNetworkDiagnosticStore({
-            measureBrowserMobius: transport.measureMobiusLatency,
-            measureBrowserMorty: transport.measureMortyLatency,
-            measureServerHops: (signal) => requests.networkDiagnostic(botId, signal),
-        }),
-    );
-    const diagnostic = useStore(networkDiagnostic);
+    const dialogStore = dialogState.nativeDialog;
+    const sharingStore = dialogState.sharing;
+    const openMobileRecentSessions = dialogs.getState().openMobileRecentSessions;
+    const closeMobileRecentSessions = dialogs.getState().closeMobileRecentSessions;
+    const access = useStore(workspace.sidebar.remoteAccess);
+    const diagnostic = useStore(workspace.sidebar.networkDiagnostic);
     const sessionDiagnostics = {
         botId,
         sessionId: activeId,
@@ -470,13 +373,6 @@ export function ConversationSidebar({
         read: (signal: AbortSignal) => requests.daemonDiagnostics(botId, signal),
         readNetwork: (signal: AbortSignal) => requests.networkDiagnostic(botId, signal),
     };
-    const mobileSheetDismissLockUntil = useRef(0);
-    const openMobileRecentSessions = () => {
-        mobileSheetDismissLockUntil.current = Date.now() + 450;
-        setMobileNavOpen(false);
-        setMobileSessionsOpen(true);
-    };
-    const closeMobileRecentSessions = () => setMobileSessionsOpen(false);
     const measureNetwork = () => {
         void diagnostic.measure(workspace.operationsSignal()).catch(() => undefined);
     };
@@ -491,8 +387,8 @@ export function ConversationSidebar({
     const refreshing = directory.kind === "refreshing";
     const openSession = (session: ManagedChatSession) => {
         onOpen(session);
-        setMobileNavOpen(false);
-        setMobileSessionsOpen(false);
+        dialogs.getState().closeMobileNav();
+        dialogs.getState().closeMobileRecentSessions();
     };
     const sessionListProps = {
         directory,
@@ -504,7 +400,7 @@ export function ConversationSidebar({
         sessionStatuses,
         onConnectAgent,
         onOpen: openSession,
-        archiveSession,
+        archiveSession: workspace.directory.getState().archiveSession,
         operationsSignal: workspace.operationsSignal,
     };
     return (
@@ -518,14 +414,14 @@ export function ConversationSidebar({
                         navigationMotion.animate && panelMotionClassName,
                         navigationMotion.shown ? "opacity-100" : "opacity-0",
                     )}
-                    onClick={() => setMobileNavOpen(false)}
+                    onClick={dialogs.getState().closeMobileNav}
                 />
             ) : null}
             <aside
-                ref={dialogs.onAttach}
+                ref={dialogs.getState().onAttach}
                 id="conversation-sidebar-mobile-panel"
                 aria-label="Morty navigation"
-                className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-card/90 px-3 pt-0 max-sm:overflow-visible sm:w-[280px] sm:gap-0 sm:bg-sidebar sm:pt-2 sm:pb-4"
+                className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-card/90 px-3 pt-0 max-sm:overflow-visible sm:w-[264px] sm:gap-0 sm:bg-sidebar sm:pt-2 sm:pb-4"
             >
                 <header className="relative flex min-w-0 shrink-0 items-center justify-between gap-3 py-2 max-sm:z-[110] max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:bg-card/90">
                     <div className="relative z-[1] flex w-fit shrink-0 items-center gap-3">
@@ -536,8 +432,10 @@ export function ConversationSidebar({
                             aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
                             className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_4px_12px_rgba(34,123,78,0.18)] outline-none transition-opacity hover:opacity-95 focus-visible:ring-2 focus-visible:ring-ring/60 sm:hidden"
                             onClick={() => {
-                                setMobileNavOpen((value) => !value);
-                                setMobileSessionsOpen(false);
+                                mobileNavOpen
+                                    ? dialogs.getState().closeMobileNav()
+                                    : dialogs.getState().openMobileNav();
+                                dialogs.getState().closeMobileRecentSessions();
                             }}
                         >
                             <MessageSquare className="size-4" aria-hidden="true" />
@@ -591,7 +489,7 @@ export function ConversationSidebar({
                                         <Button
                                             aria-label="Open Session"
                                             className="size-10 shrink-0 justify-center rounded-lg px-0 text-copy-secondary"
-                                            onClick={dialogs.openNativeDialog}
+                                            onClick={dialogs.getState().openNativeDialog}
                                             size="icon"
                                             variant="ghost"
                                         >
@@ -611,7 +509,7 @@ export function ConversationSidebar({
                 <div
                     id="conversation-sidebar-mobile-drawer"
                     className={cn(
-                        "min-h-0 flex-1 flex-col gap-2",
+                        "min-h-0 flex-1 flex-col gap-0",
                         navigationMotion.present
                             ? cn(
                                   "fixed inset-y-0 left-0 z-[130] flex w-[85vw] max-w-[85vw] border-r border-border/80 bg-sidebar px-3 pt-0 pb-3 shadow-xl sm:static sm:z-auto sm:w-auto sm:max-w-none sm:translate-x-0 sm:border-0 sm:bg-transparent sm:px-0 sm:pt-0 sm:pb-0 sm:shadow-none sm:transition-none",
@@ -635,7 +533,7 @@ export function ConversationSidebar({
                     {desktop && (
                         <nav
                             aria-label="Session actions"
-                            className="box-border hidden min-w-0 w-full shrink-0 flex-col gap-0.5 sm:mt-2 sm:mb-2 sm:flex"
+                            className="box-border hidden min-w-0 w-full shrink-0 flex-col gap-0.5 sm:mt-2 sm:mb-3 sm:flex"
                         >
                             <SidebarSessionOption
                                 icon={SquarePen}
@@ -646,7 +544,7 @@ export function ConversationSidebar({
                             <SidebarSessionOption
                                 icon={Laptop}
                                 label="Open Session"
-                                onClick={dialogs.openNativeDialog}
+                                onClick={dialogs.getState().openNativeDialog}
                             />
                         </nav>
                     )}
@@ -677,7 +575,10 @@ export function ConversationSidebar({
                                 </div>
                                 <div
                                     id="chat-conversations"
-                                    className="col-span-2 box-border block min-h-0 w-full min-w-0 flex-1 space-y-2 overflow-y-auto max-sm:row-start-2 max-sm:max-h-none sm:max-h-none"
+                                    className={cn(
+                                        "col-span-2 -ml-3 -mr-3 box-border block min-h-0 min-w-0 w-[calc(100%+24px)] max-w-none flex-1 space-y-0 overflow-y-auto px-3 max-sm:row-start-2 max-sm:max-h-none sm:max-h-none",
+                                        mortyThinScrollbarClassName,
+                                    )}
                                 >
                                     <ManagedSessionDirectoryList {...sessionListProps} />
                                 </div>
@@ -691,9 +592,13 @@ export function ConversationSidebar({
                                     <SidebarSessionOption
                                         icon={Share2}
                                         label="Continue on another device"
-                                        onClick={dialogs.openSharing}
+                                        onClick={dialogs.getState().openSharing}
                                     />
-                                    <BugReportButton appearance="option" daemonSource={sessionDiagnostics} />
+                                    <BugReportButton
+                                        appearance="option"
+                                        daemonSource={sessionDiagnostics}
+                                        dialog={workspace.bugReportDialog}
+                                    />
                                     {access.state.kind !== "ended" ? (
                                         <>
                                             <div aria-hidden="true" className="my-2 h-px bg-black/[0.06]" />
@@ -752,43 +657,50 @@ export function ConversationSidebar({
                                                 <Wifi aria-hidden="true" className="size-4" />
                                                 Network latency
                                             </DropdownMenu.Item>
+                                            <DropdownMenu.Separator className="my-1 h-px bg-black/[0.06]" />
+                                            <DropdownMenu.Item
+                                                className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-destructive outline-none data-[highlighted]:bg-destructive/10"
+                                                data-testid={dataTestId.endRemoteAccess}
+                                                disabled={
+                                                    access.state.kind === "loading" || access.state.kind === "ending"
+                                                }
+                                                onSelect={() => {
+                                                    void access.requestEnd(workspace.operationsSignal());
+                                                }}
+                                            >
+                                                <LogOut aria-hidden="true" className="size-4" />
+                                                End current access
+                                            </DropdownMenu.Item>
                                         </DropdownMenu.Content>
                                     </DropdownMenu.Portal>
                                 </DropdownMenu.Root>
                             ) : null}
-                            {desktop && access.state.kind !== "ended" ? (
-                                <Button
-                                    className="min-h-10 min-w-0 justify-start gap-1.5 px-2 text-xs text-muted-foreground"
-                                    data-testid={dataTestId.endRemoteAccess}
-                                    disabled={access.state.kind === "loading" || access.state.kind === "ending"}
-                                    onClick={() => {
-                                        void access.requestEnd(workspace.operationsSignal());
-                                    }}
-                                    variant="ghost"
-                                >
-                                    <LogOut aria-hidden="true" className="size-4 shrink-0" />
-                                    End current access
-                                </Button>
-                            ) : null}
-                            {desktop && (
+                            {desktop ? (
                                 <div className="ml-auto flex shrink-0 items-center gap-0.5">
-                                    <Button
-                                        className="min-h-10 justify-start gap-2 px-3 text-xs"
-                                        data-testid={dataTestId.shareIdentity}
-                                        onClick={dialogs.openSharing}
-                                        variant="ghost"
-                                    >
-                                        <Share2 aria-hidden="true" className="size-4 shrink-0" />
-                                        Continue on another device
-                                    </Button>
-                                    <BugReportButton appearance="icon" daemonSource={sessionDiagnostics} />
+                                    <SidebarActionTooltip label="Continue on another device" side="top">
+                                        <Button
+                                            aria-label="Continue on another device"
+                                            className="size-8! min-h-8! shrink-0 justify-center rounded-lg px-0"
+                                            data-testid={dataTestId.shareIdentity}
+                                            onClick={dialogs.getState().openSharing}
+                                            size="icon"
+                                            variant="ghost"
+                                        >
+                                            <Share2 aria-hidden="true" className="size-4" />
+                                        </Button>
+                                    </SidebarActionTooltip>
+                                    <BugReportButton
+                                        appearance="icon"
+                                        daemonSource={sessionDiagnostics}
+                                        dialog={workspace.bugReportDialog}
+                                    />
                                 </div>
-                            )}
+                            ) : null}
                         </div>
                     </Tooltip.Provider>
                 </div>
                 {dialogStore !== null && (
-                    <NativeSessionDialog store={dialogStore} onClose={dialogs.closeNativeDialog} />
+                    <NativeSessionDialog store={dialogStore} onClose={dialogs.getState().closeNativeDialog} />
                 )}
                 {sharingStore !== null && (
                     <Dialog
@@ -805,7 +717,7 @@ export function ConversationSidebar({
                                 </span>
                             </>
                         }
-                        onClose={dialogs.closeSharing}
+                        onClose={dialogs.getState().closeSharing}
                     >
                         <IdentitySharing store={sharingStore} />
                     </Dialog>
@@ -818,7 +730,9 @@ export function ConversationSidebar({
                                 <span className="block">
                                     Round-trip latency for this browser and its connected Runtime.
                                 </span>
-                                <span className="mt-1 block">Mobius location: {projectLocationLabel(projectId)}</span>
+                                <span className="mt-1 block">
+                                    Mobius location: {projectLocationLabel(workspace.projectId ?? "")}
+                                </span>
                             </>
                         }
                         headerAction={
@@ -974,12 +888,7 @@ export function ConversationSidebar({
                                   sessionsMotion.animate && panelMotionClassName,
                                   sessionsMotion.shown ? "opacity-100" : "opacity-0",
                               )}
-                              onClick={() => {
-                                  if (Date.now() < mobileSheetDismissLockUntil.current) {
-                                      return;
-                                  }
-                                  closeMobileRecentSessions();
-                              }}
+                              onClick={() => dialogs.getState().dismissMobileRecentSessions()}
                           />
                           <div
                               id="chat-conversations-mobile-sheet"
@@ -1030,7 +939,10 @@ export function ConversationSidebar({
                               </header>
                               <div
                                   id="chat-conversations-mobile"
-                                  className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-2 pb-2"
+                                  className={cn(
+                                      "min-h-0 flex-1 space-y-0 overflow-y-auto overscroll-contain px-2 pb-2",
+                                      mortyThinScrollbarClassName,
+                                  )}
                               >
                                   <ManagedSessionDirectoryList {...sessionListProps} />
                               </div>

@@ -42,6 +42,19 @@ module.exports = {
                 path: ["^packages/web/src/views/", "^packages/web/src/view-models/", "^packages/web/src/services/"],
             },
         },
+        {
+            name: "web-components-do-not-import-business-layers",
+            severity: "error",
+            comment:
+                "Components may use React hooks but stay business-decoupled: they may not import views, view-models, or services. Business-coupled UI belongs in views.",
+            from: { path: "^packages/web/src/components/" },
+            to: {
+                path: ["^packages/web/src/views/", "^packages/web/src/view-models/", "^packages/web/src/services/"],
+                // Type-only imports carry no runtime coupling; components may
+                // render against view-model contracts passed in as props.
+                dependencyTypesNot: ["type-only"],
+            },
+        },
     ],
     options: {
         doNotFollow: { path: "node_modules|third-party" },

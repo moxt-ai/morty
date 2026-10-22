@@ -1,11 +1,11 @@
 import { ArrowUp, FileText, LoaderCircle, Plus, Square, X } from "lucide-react";
 import { type ClipboardEvent, type FormEvent, type KeyboardEvent, type ReactNode, useRef } from "react";
 import { dataTestId } from "../../data-testid.ts";
-import type { ComposerAttachment } from "../../view-models/chat/composer-attachment.ts";
-import { type ComposerAttachmentStore, canAddAttachments } from "../../view-models/chat/composer-attachment-store.ts";
 import { Button } from "../ui/cloud-button.tsx";
 import { Textarea } from "../ui/textarea.tsx";
 import { chatSessionComposerClassName } from "./chat-session-layout.ts";
+import type { ComposerAttachment } from "./composer-attachment.ts";
+import { type ComposerAttachmentStore, canAddAttachments } from "./composer-attachment-store.ts";
 
 function attachmentName(attachment: ComposerAttachment): string {
     return attachment.kind === "image" ? attachment.image.name : attachment.resource.name;

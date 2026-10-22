@@ -63,8 +63,13 @@ test("Given invalid Mermaid syntax, When I open the diagram, Then a readable fai
     timeout: 30_000,
 }, async () => {
     const app = await replyWithDiagram("not-a-diagram\nBrowser --> Worker");
-    const fullscreen = await app.waitForView(() =>
-        getByRole(document.body, "button", { name: "View diagram fullscreen" }),
+    await app.waitForView(() => {
+        expect(document.body.textContent).toContain("Response complete.");
+        expect(document.body.textContent).not.toContain("Loading diagram…");
+    }, 30_000);
+    const fullscreen = await app.waitForView(
+        () => getByRole(document.body, "button", { name: "View diagram fullscreen" }),
+        30_000,
     );
     await app.user.click(fullscreen);
     await app.waitForView(() => expect(document.body.textContent).toContain("Diagram could not be displayed."));

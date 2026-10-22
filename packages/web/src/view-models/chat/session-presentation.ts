@@ -1,29 +1,17 @@
 import { externalContentPath } from "@moxt-ai/mobius-sdk";
 import type { AcpSessionUpdate, ContentBlock, SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
-import type { AgentDisplayContent } from "./display-content.ts";
+import type { AgentDisplayContent } from "../../components/agents/display-content.ts";
+import {
+    REASONING_CHARACTER_LIMIT,
+    type SessionToolCallState,
+    type SessionToolPresentation,
+} from "../../components/chat/tools/tool-contract.ts";
+
+export type { SessionToolPresentation };
 
 type ToolCallUpdate = Extract<AcpSessionUpdate, { readonly sessionUpdate: "tool_call" | "tool_call_update" }>;
 const BOT_INSTRUCTIONS_URI = "morty://bot/instructions";
 
-type SessionToolCallState =
-    | { readonly kind: "running" }
-    | { readonly kind: "succeeded" }
-    | { readonly kind: "failed" }
-    | { readonly kind: "interrupted" }
-    | { readonly kind: "unknown" };
-
-export interface SessionToolPresentation {
-    readonly content: readonly AgentDisplayContent[];
-    readonly id: string;
-    readonly input: string;
-    readonly kind: "tool";
-    readonly name: string;
-    readonly output: string;
-    readonly state: SessionToolCallState;
-    readonly title: string;
-}
-
-export const REASONING_CHARACTER_LIMIT = 16 * 1024;
 export const COMPACTION_CHARACTER_LIMIT = 16 * 1024;
 
 export type SessionText =

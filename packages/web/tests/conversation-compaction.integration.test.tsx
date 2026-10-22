@@ -1,4 +1,4 @@
-import { getByRole, queryByRole } from "@testing-library/dom";
+import { fireEvent, getByRole, queryByRole } from "@testing-library/dom";
 import { flushSync } from "react-dom";
 import { expect, onTestFinished, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
@@ -119,7 +119,7 @@ test("Given a history page that ends mid-compaction, When the user loads older m
         throw new Error("Expected the Session message list");
     }
     messages.scrollTop = 0;
-    flushSync(() => messages.dispatchEvent(new Event("scroll", { bubbles: true })));
+    flushSync(() => fireEvent.scroll(messages));
 
     // The older page's start and summary-chunk events merge with the newer
     // page's terminal update: one entry, full summary, no orphaned compacting twin.
@@ -231,7 +231,7 @@ test("Given a history page that starts inside an interleaved compaction, When th
         throw new Error("Expected the Session message list");
     }
     messages.scrollTop = 0;
-    flushSync(() => messages.dispatchEvent(new Event("scroll", { bubbles: true })));
+    flushSync(() => fireEvent.scroll(messages));
 
     // The older page's start and the newest page's settle events merge under
     // one compaction id with the whole summary; no second, compacting twin.

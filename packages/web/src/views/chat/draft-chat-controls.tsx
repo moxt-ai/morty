@@ -1,6 +1,5 @@
 import { CircleAlert, CircleHelp, RefreshCw } from "lucide-react";
 import { Tooltip } from "radix-ui";
-import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
 import { CwdSelector } from "../../components/chat/cwd-selector.tsx";
@@ -8,6 +7,7 @@ import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.t
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { connectedChatRuntimeAgents } from "../../services/chat/bot-chat-api.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
+import { useExternalStore } from "../../view-models/external-store.ts";
 
 export function DraftChatControls({
     workspace,
@@ -16,7 +16,7 @@ export function DraftChatControls({
     readonly workspace: ChatWorkspace;
     readonly disabled: boolean;
 }) {
-    const viewModel = useStore(workspace.draftControls);
+    const viewModel = useExternalStore(workspace.draftControls);
     const signal = workspace.chatSignal();
     const { settings } = viewModel;
     const retry = () => {

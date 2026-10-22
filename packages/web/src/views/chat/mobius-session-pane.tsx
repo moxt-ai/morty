@@ -1,13 +1,12 @@
 import type { PromptImage, PromptResource, SessionConfigOption } from "@moxt-ai/mobius-sdk";
 import { Check, CircleAlert, X } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import type { ReactNode } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
 import { AgentThinking, type AgentThinkingEntry } from "../../components/chat/agent-thinking.tsx";
+import { AutoFocusInput } from "../../components/chat/auto-focus-input.tsx";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
-import { ChatMessageQueue } from "../../components/chat/chat-message-queue.tsx";
 import {
     chatSessionColumnClassName,
     chatSessionMessageColumnClassName,
@@ -15,7 +14,8 @@ import {
     chatSessionMessageScrollClassName,
     chatSessionPaneSectionClassName,
 } from "../../components/chat/chat-session-layout.ts";
-import { FilePreview } from "../../components/chat/file-preview.tsx";
+import { ExecutionContextBar } from "../../components/chat/execution-context-bar.tsx";
+import { MobileSessionTitlePortal } from "../../components/chat/mobile-session-title-portal.tsx";
 import {
     type ElicitationInteractionResponse,
     type PermissionInteractionResponse,
@@ -26,26 +26,19 @@ import { WorkingIndicator } from "../../components/chat/working-indicator.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { LinkButton } from "../../components/ui/link-button.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
-import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
+import { useDesktopChatLayout } from "../../components/utils/use-desktop-chat-layout.ts";
 import { cn } from "../../lib/utils.ts";
-import type { BotChatApi, BotRuntimeConfiguration } from "../../services/chat/bot-chat-api.ts";
-import type { QueuedDraftMessage } from "../../view-models/chat/conversation-creation-machine.ts";
+import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import { type ExecutionContext, sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
-import type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
-import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
-import type { UnconfirmedSubmission } from "../../view-models/chat/session-delivery-store.ts";
 import { sessionInteractionPresentation } from "../../view-models/chat/session-interaction-store.ts";
-import {
-    createSessionPaneModel,
-    type SessionConnection,
-    sessionPanePresentation,
-} from "../../view-models/chat/session-pane-store.ts";
+import type { SessionPaneModel } from "../../view-models/chat/session-pane-store.ts";
+import { type SessionConnection, sessionPanePresentation } from "../../view-models/chat/session-pane-store.ts";
 import { type SessionMessage, sessionTextValue } from "../../view-models/chat/session-presentation.ts";
+import { createSessionResourceStore } from "../../view-models/chat/session-resource-store.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
-import { useMortyApplication } from "../application/application-context.tsx";
-import { ExecutionContextBar } from "./execution-context-bar.tsx";
+import { ChatMessageQueue } from "./chat-message-queue.tsx";
+import { FilePreview } from "./file-preview.tsx";
 import { MobiusAssistantText, MobiusSessionMessage } from "./mobius-session-message.tsx";
-import { useDesktopChatLayout } from "./use-desktop-chat-layout.ts";
 
 type SessionRenderItem =
     | {
@@ -172,27 +165,10 @@ function SessionTitleSkeleton({ centered = false }: { readonly centered?: boolea
     );
 }
 
-function MobileSessionTitlePortal({ children }: { readonly children: ReactNode }) {
-    const [slot, setSlot] = useState<HTMLElement | null>(null);
-    useEffect(() => {
-        setSlot(document.getElementById(dataTestId.mobileSessionTitleSlot));
-    }, []);
-    if (slot === null) {
-        return null;
-    }
-    return createPortal(
-        <div className="pointer-events-auto flex min-w-0 w-full max-w-full justify-center overflow-hidden">
-            {children}
-        </div>,
-        slot,
-    );
-}
-
 function SessionConversationTitleBar({
     title,
     titleEdit,
     titleLoading,
-    titleInput,
     centered,
     onOpenTitleEdit,
     onSetTitleDraft,
@@ -205,7 +181,6 @@ function SessionConversationTitleBar({
         | { readonly kind: "editing"; readonly draft: string }
         | { readonly kind: "saving"; readonly draft: string };
     readonly titleLoading: boolean;
-    readonly titleInput: React.RefObject<HTMLInputElement | null>;
     readonly centered: boolean;
     readonly onOpenTitleEdit: () => void;
     readonly onSetTitleDraft: (draft: string) => void;
@@ -240,7 +215,7 @@ function SessionConversationTitleBar({
     const saving = titleEdit.kind === "saving";
     return (
         <div className={cn("flex min-w-0 items-center gap-0.5", centered ? "w-full max-w-full" : "flex-1")}>
-            <input
+            <AutoFocusInput
                 aria-label="Conversation title"
                 className={cn(
                     "min-w-0 flex-1 appearance-none rounded-none border-0 bg-transparent px-0 py-0 text-sm font-semibold shadow-none outline-none ring-0 focus:ring-0 focus-visible:ring-0",
@@ -248,7 +223,6 @@ function SessionConversationTitleBar({
                 )}
                 disabled={saving}
                 maxLength={500}
-                ref={titleInput}
                 value={titleEdit.draft}
                 onChange={(event) => onSetTitleDraft(event.target.value)}
                 onKeyDown={(event) => {
@@ -309,11 +283,17 @@ export function MobiusSessionPaneShell({
     );
 }
 
-export function MobiusSessionPaneLoading({ executionContext }: { readonly executionContext: ExecutionContext }) {
+export function MobiusSessionPaneLoading({
+    executionContext,
+    footer,
+}: {
+    readonly executionContext: ExecutionContext;
+    readonly footer?: ReactNode;
+}) {
     const desktop = useDesktopChatLayout();
     return (
         <>
-            <MobiusSessionPaneShell mobileTitlePortaled={!desktop} titleLoading={desktop}>
+            <MobiusSessionPaneShell footer={footer} mobileTitlePortaled={!desktop} titleLoading={desktop}>
                 <ExecutionContextBar context={executionContext} />
                 <div aria-label="Messages" className={chatSessionMessageScrollClassName} role="log">
                     <SessionMessageListSkeleton />
@@ -451,48 +431,27 @@ function OlderHistorySkeleton() {
     );
 }
 
-export function MobiusSessionPane({
-    runtimeConfiguration,
-    session,
-    initialMessage,
-    unconfirmedMessage,
-    botId,
-    requests,
-    onInitialMessageDelivered,
-    onInitialMessageRecoveryCleared,
-    onInitialMessageUnconfirmed,
-    onStatusChange,
-    onTitleChange,
+export function MobiusSessionPane({ workspace }: { readonly workspace: ChatWorkspace }) {
+    // The workspace owns the pane model outside React; the keyed view reads
+    // it and hands it to the pane body, which subscribes to its stores. The
+    // pane for a ready selection is always built before the view renders
+    // through it; the empty stand-in covers the gap without conditional
+    // hooks.
+    const pane = workspace.sessionPane();
+    if (pane === null) {
+        return <section className={chatSessionPaneSectionClassName} />;
+    }
+    return <MobiusSessionPaneBody pane={pane} workspace={workspace} />;
+}
+
+function MobiusSessionPaneBody({
+    pane,
+    workspace,
 }: {
-    readonly runtimeConfiguration: BotRuntimeConfiguration | null;
-    readonly session: OpenMobiusSession;
-    readonly initialMessage?: QueuedDraftMessage | undefined;
-    readonly unconfirmedMessage?: UnconfirmedSubmission | undefined;
-    readonly botId: string;
-    readonly requests: Pick<BotChatApi, "connectSession" | "runtimeConfiguration">;
-    readonly onInitialMessageDelivered?: (() => void) | undefined;
-    readonly onInitialMessageRecoveryCleared?: ((commandId: string) => void) | undefined;
-    readonly onInitialMessageUnconfirmed?: ((journal: UnconfirmedSubmission) => void) | undefined;
-    readonly onStatusChange: (sessionId: string, status: SessionActivityState) => void;
-    readonly onTitleChange: (sessionId: string, title: string) => void;
+    readonly pane: SessionPaneModel;
+    readonly workspace: ChatWorkspace;
 }) {
-    const sessionId = session.result.ready.sessionId;
-    const { clock } = useMortyApplication();
-    const [pane] = useState(() =>
-        createSessionPaneModel({
-            clock,
-            session,
-            botId,
-            requests,
-            initialMessage,
-            unconfirmedMessage,
-            onInitialMessageDelivered,
-            onInitialMessageRecoveryCleared,
-            onInitialMessageUnconfirmed,
-            onStatusChange: (status) => onStatusChange(sessionId, status),
-            onTitleChange,
-        }),
-    );
+    const runtimeConfiguration = useStore(workspace.home, (state) => state.runtimeConfiguration);
     const model = useStore(pane.store);
     const attachmentModel = useStore(pane.composerAttachments);
     const interactionSubmissions = useStore(pane.interactionSubmissions);
@@ -501,25 +460,11 @@ export function MobiusSessionPane({
     const delivery = useStore(pane.delivery);
     const messageQueue = useStore(pane.messageQueue);
     const taskControls = useStore(pane.tasks);
-    const messageList = useRef<HTMLDivElement | null>(null);
-    const titleInput = useRef<HTMLInputElement | null>(null);
-    const titleEditorOpen = model.titleEdit.kind !== "closed";
-    useEffect(() => {
-        if (titleEditorOpen) {
-            titleInput.current?.focus();
-            titleInput.current?.select();
-        }
-    }, [titleEditorOpen]);
     const harnesses = model.harnesses;
 
     // The model owns the session connection through the same ref-cleanup
     // protocol the chat root uses: attach starts it, the cleanup detaches,
     // and the model's WeakSet latch ignores re-renders of the same element.
-
-    const loadOlderMessages = useCallback(
-        async (signal: AbortSignal) => await pane.store.getState().loadOlderMessages(signal),
-        [pane],
-    );
 
     const run = (action: (signal: AbortSignal) => Promise<void>) => {
         const signal = pane.operationsSignal();
@@ -530,9 +475,6 @@ export function MobiusSessionPane({
         });
     };
     const runAndFollow = (action: (signal: AbortSignal) => Promise<void>) => {
-        if (messageList.current !== null) {
-            messageList.current.scrollTop = messageList.current.scrollHeight;
-        }
         run(action);
     };
     const respondToPermission = (response: PermissionInteractionResponse): void => {
@@ -546,22 +488,18 @@ export function MobiusSessionPane({
     const sessionMessagesLoading = model.connection.kind === "loading";
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
         run(async (signal) => await pane.store.getState().configure(option, value, booleanValue, signal));
-    const openLocalFile = useCallback(
-        (path: string) => {
-            void pane.filePreview.getState().open(path, pane.operationsSignal());
-        },
-        [pane],
-    );
-    const reloadLocalFile = useCallback(() => {
+    const openLocalFile = (path: string) => {
+        void pane.filePreview.getState().open(path, pane.operationsSignal());
+    };
+    const reloadLocalFile = () => {
         void pane.filePreview.getState().reload(pane.operationsSignal());
-    }, [pane]);
+    };
 
     const desktop = useDesktopChatLayout();
     const titleBarProps = {
         title: model.title,
         titleEdit: model.titleEdit,
         titleLoading: sessionMessagesLoading,
-        titleInput,
         onOpenTitleEdit: () => pane.store.getState().openTitleEdit(),
         onSetTitleDraft: (draft: string) => pane.store.getState().setTitleDraft(draft),
         onCancelTitleEdit: () => pane.store.getState().cancelTitleEdit(),
@@ -577,16 +515,21 @@ export function MobiusSessionPane({
                     </header>
                 ) : null}
                 <ExecutionContextBar
-                    context={sessionExecutionContext(session, runtimeConfiguration, model.connection)}
+                    context={sessionExecutionContext(pane.session, runtimeConfiguration, model.connection)}
                 />
                 <FollowLatestScrollArea
                     role="log"
-                    container={messageList}
                     followThreshold={80}
-                    followRevision={null}
+                    followRevision={model.followRevision}
                     showTopFade
                     aria-label="Messages"
                     className={chatSessionMessageScrollClassName}
+                    loadOlder={{
+                        hasMore: model.hasOlderHistory,
+                        loading: model.historyLoading,
+                        onLoadMore: (signal) => pane.store.getState().loadOlderMessages(signal),
+                        revision: model.historyRevision,
+                    }}
                 >
                     {sessionMessagesLoading && <SessionMessageListSkeleton />}
                     {!sessionMessagesLoading && model.messages.length === 0 && model.connection.kind === "failed" && (
@@ -627,6 +570,7 @@ export function MobiusSessionPane({
                                 >
                                     {item.kind === "assistant-text" ? (
                                         <MobiusAssistantText
+                                            createResourceStore={createSessionResourceStore}
                                             openLocalFile={openLocalFile}
                                             readImage={pane.readResource}
                                             text={item.text}
@@ -641,6 +585,7 @@ export function MobiusSessionPane({
                                                     model.activity.kind === "working" &&
                                                     index === renderItems.length - 1
                                                 }
+                                                createResourceStore={createSessionResourceStore}
                                                 entries={item.entries}
                                                 readImage={pane.readResource}
                                             />
@@ -650,7 +595,7 @@ export function MobiusSessionPane({
                                             active={
                                                 model.activity.kind === "working" && index === renderItems.length - 1
                                             }
-                                            failureApproval={{ botId, kind: "bot-approval" }}
+                                            failureApproval={{ botId: pane.botId, kind: "bot-approval" }}
                                             message={item.message}
                                             deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
                                             onRemoveUnknownDelivery={pane.store.getState().removeUnknownDelivery}
@@ -680,14 +625,6 @@ export function MobiusSessionPane({
                         </div>
                     )}
                 </FollowLatestScrollArea>
-                <LoadMoreTrigger
-                    label="Load older messages"
-                    container={messageList}
-                    hasMore={model.hasOlderHistory}
-                    loading={model.historyLoading}
-                    onLoadMore={loadOlderMessages}
-                    revision={model.historyRevision}
-                />
                 <ChatMessageQueue
                     messages={messageQueue.messages}
                     steeringSupported={taskControls.steeringSupported}
@@ -715,7 +652,7 @@ export function MobiusSessionPane({
                 <BotChatComposer
                     attachmentModel={attachmentModel}
                     attachmentSignal={pane.operationsSignal()}
-                    disabled={presentation.composerDisabled}
+                    disabled={presentation.composerInputDisabled}
                     draft={model.draft}
                     error={presentation.composerError}
                     errorStatus={
@@ -748,21 +685,19 @@ export function MobiusSessionPane({
                                 label: "Harness",
                                 locked: true,
                                 onValueChange: () => {},
-                                options: harnesses.some(
-                                    (harness) => harness.value.split(":").at(-1) === session.agentRef,
-                                )
+                                options: harnesses.some((harness) => harness.value.split(":").at(-1) === pane.agentRef)
                                     ? harnesses
                                     : [
                                           ...harnesses,
                                           {
-                                              agentRef: session.agentRef,
-                                              label: session.agentRef,
-                                              value: session.agentRef,
+                                              agentRef: pane.agentRef,
+                                              label: pane.agentRef,
+                                              value: pane.agentRef,
                                           },
                                       ],
                                 value:
-                                    harnesses.find((harness) => harness.value.split(":").at(-1) === session.agentRef)
-                                        ?.value ?? session.agentRef,
+                                    harnesses.find((harness) => harness.value.split(":").at(-1) === pane.agentRef)
+                                        ?.value ?? pane.agentRef,
                             },
                             ...model.options.map((option) =>
                                 option.type === "boolean"

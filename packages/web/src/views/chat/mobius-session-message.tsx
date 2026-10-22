@@ -1,22 +1,23 @@
-import { externalContentPath, type MobiusExternalContentBlock } from "@moxt-ai/mobius-sdk";
 import type { ContentBlock } from "@moxt-ai/mobius-sdk/protocol";
 import { CircleAlert, X } from "lucide-react";
 import { AgentMarkdown, loadLatexRenderer, type MarkdownImageReader } from "../../components/agents/agent-markdown.tsx";
 import { AgentResponseText } from "../../components/agents/agent-response-text.tsx";
+import { isDisplayableImageType } from "../../components/agents/displayable-image-type.ts";
+import { ExternalContentBlock } from "../../components/agents/external-content-block.tsx";
 import { loadDiagramRenderer } from "../../components/agents/mermaid-code-block.tsx";
-import { SessionResource } from "../../components/agents/session-resource.tsx";
+import type { SessionResourceStoreFactory } from "../../components/agents/resource-reader.ts";
 import { AgentThinking } from "../../components/chat/agent-thinking.tsx";
 import { AttemptFailure } from "../../components/chat/attempt-failure.tsx";
 import { CompactionDisclosure } from "../../components/chat/compaction-disclosure.tsx";
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { UserMessageShell } from "../../components/chat/user-message-shell.tsx";
 import { dataTestId } from "../../data-testid.ts";
-import { isDisplayableImageType } from "../../services/chat/image-media-type.ts";
 import {
     COMPACTION_CHARACTER_LIMIT,
     type SessionMessage,
     sessionTextValue,
 } from "../../view-models/chat/session-presentation.ts";
+import { createSessionResourceStore } from "../../view-models/chat/session-resource-store.ts";
 
 // Warm the lazily loaded rich renderers once the page settles, so the first
 // LaTeX or Mermaid content resolves its renderer without a visible fallback
@@ -44,82 +45,15 @@ function safeRemoteUrl(value: string): string | null {
     }
 }
 
-function ExternalContent({
-    content,
-    readContent,
-    speaker,
-}: {
-    readonly content: MobiusExternalContentBlock;
-    readonly readContent?: MarkdownImageReader | undefined;
-    readonly speaker: "assistant" | "user";
-}) {
-    return (
-        <SessionResource
-            request={{
-                path: externalContentPath(content),
-                kind:
-                    content.type === "external_image"
-                        ? "image"
-                        : content.type === "external_resource" && content.encoding === "text"
-                          ? "text"
-                          : "binary",
-            }}
-            read={readContent}
-        >
-            {(state) => {
-                if (state.kind === "loading") {
-                    return <p className="text-sm text-muted-foreground">Loading content…</p>;
-                }
-                if (state.kind === "failed") {
-                    return <p className="text-sm text-muted-foreground">Content could not be loaded.</p>;
-                }
-                switch (content.type) {
-                    case "external_image":
-                        return isDisplayableImageType(content.mimeType) && state.kind === "media" ? (
-                            <img
-                                alt="Agent-provided content"
-                                className="max-h-[480px] w-auto max-w-full rounded-xl border border-border object-contain"
-                                data-testid={speaker === "user" ? dataTestId.userMessageImage : undefined}
-                                src={state.source}
-                            />
-                        ) : (
-                            <p className="text-sm text-muted-foreground">
-                                Image content could not be displayed safely.
-                            </p>
-                        );
-                    case "external_audio":
-                        return SAFE_AUDIO_MIME.test(content.mimeType) && state.kind === "media" ? (
-                            <audio controls src={state.source}>
-                                <track kind="captions" />
-                            </audio>
-                        ) : (
-                            <p className="text-sm text-muted-foreground">
-                                Audio content could not be displayed safely.
-                            </p>
-                        );
-                    case "external_resource":
-                        return state.kind === "text" ? (
-                            <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-muted p-3 text-xs">
-                                {state.text}
-                            </pre>
-                        ) : (
-                            <a className="break-all text-sm underline" download href={state.source}>
-                                Download resource
-                            </a>
-                        );
-                }
-            }}
-        </SessionResource>
-    );
-}
-
 function MessageContentBlock({
     content,
+    createResourceStore,
     openLocalFile,
     readImage,
     speaker,
 }: {
     readonly content: ContentBlock;
+    readonly createResourceStore: SessionResourceStoreFactory;
     readonly openLocalFile: (path: string) => void;
     readonly readImage?: MarkdownImageReader | undefined;
     readonly speaker: "assistant" | "user";
@@ -134,6 +68,7 @@ function MessageContentBlock({
                 >
                     <AgentMarkdown
                         className="[&_p]:my-0"
+                        createResourceStore={createResourceStore}
                         markdown={content.text}
                         openLocalFile={openLocalFile}
                         readImage={readImage}
@@ -190,12 +125,20 @@ function MessageContentBlock({
         case "external_image":
         case "external_audio":
         case "external_resource":
-            return <ExternalContent content={content} readContent={readImage} speaker={speaker} />;
+            return (
+                <ExternalContentBlock
+                    content={content}
+                    createResourceStore={createResourceStore}
+                    readContent={readImage}
+                    speaker={speaker}
+                />
+            );
     }
 }
 
 function UserMessage({
     message,
+    createResourceStore,
     deliveryUnknownUserMessageId,
     onRemoveUnknownDelivery,
     onRetryUnknownDelivery,
@@ -203,6 +146,7 @@ function UserMessage({
     readImage,
 }: {
     readonly message: Extract<SessionMessage, { readonly role: "user" }>;
+    readonly createResourceStore: SessionResourceStoreFactory;
     readonly deliveryUnknownUserMessageId: string | null;
     readonly onRemoveUnknownDelivery: () => void;
     readonly onRetryUnknownDelivery: () => void;
@@ -216,6 +160,7 @@ function UserMessage({
                 {message.contents.map((content, index) => (
                     <MessageContentBlock
                         content={content}
+                        createResourceStore={createResourceStore}
                         key={`${message.firstEvent.eventId}:${index.toString()}`}
                         openLocalFile={openLocalFile}
                         readImage={readImage}
@@ -250,11 +195,13 @@ function UserMessage({
 
 export function MobiusAssistantText({
     text,
+    createResourceStore,
     openLocalFile,
     readImage,
     streaming,
 }: {
     readonly text: string;
+    readonly createResourceStore?: SessionResourceStoreFactory | undefined;
     readonly streaming: boolean;
     readonly openLocalFile: (path: string) => void;
     readonly readImage?: MarkdownImageReader | undefined;
@@ -264,6 +211,7 @@ export function MobiusAssistantText({
             <MessageBubble speaker="assistant">
                 <AgentResponseText
                     text={text}
+                    createResourceStore={createResourceStore}
                     openLocalFile={openLocalFile}
                     readImage={readImage}
                     streaming={streaming}
@@ -294,9 +242,11 @@ export function MobiusSessionMessage({
         | { readonly kind: "bot-approval"; readonly botId: string }
         | { readonly kind: "unavailable" };
 }) {
+    const createResourceStore: SessionResourceStoreFactory = createSessionResourceStore;
     if (message.role === "user") {
         return (
             <UserMessage
+                createResourceStore={createResourceStore}
                 deliveryUnknownUserMessageId={deliveryUnknownUserMessageId}
                 message={message}
                 onRemoveUnknownDelivery={onRemoveUnknownDelivery}
@@ -311,6 +261,7 @@ export function MobiusSessionMessage({
         if (presentation.content.type === "text") {
             return (
                 <MobiusAssistantText
+                    createResourceStore={createResourceStore}
                     openLocalFile={openLocalFile}
                     readImage={readImage}
                     text={sessionTextValue(presentation.content.text)}
@@ -322,6 +273,7 @@ export function MobiusSessionMessage({
             <div className="min-w-0" data-testid={dataTestId.agentResponse}>
                 <MessageContentBlock
                     content={presentation.content}
+                    createResourceStore={createResourceStore}
                     openLocalFile={openLocalFile}
                     readImage={readImage}
                     speaker="assistant"
@@ -334,6 +286,7 @@ export function MobiusSessionMessage({
             return (
                 <AgentThinking
                     active={active}
+                    createResourceStore={createResourceStore}
                     entries={[
                         {
                             id: message.firstEvent.eventId,
@@ -350,6 +303,7 @@ export function MobiusSessionMessage({
         return (
             <MessageContentBlock
                 content={presentation.content}
+                createResourceStore={createResourceStore}
                 openLocalFile={openLocalFile}
                 readImage={readImage}
                 speaker="assistant"
@@ -386,7 +340,12 @@ export function MobiusSessionMessage({
     }
     return (
         <div data-testid={dataTestId.agentResponse}>
-            <AgentThinking active={active} entries={[presentation.entry]} readImage={readImage} />
+            <AgentThinking
+                active={active}
+                createResourceStore={createResourceStore}
+                entries={[presentation.entry]}
+                readImage={readImage}
+            />
         </div>
     );
 }
