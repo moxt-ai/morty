@@ -9,16 +9,11 @@ import type { AuthenticationService } from "./authentication-service.ts";
 
 type LocationHint = ProjectLocationHint | undefined;
 
-interface AuditLogger {
-    readonly info: (value: Readonly<Record<string, unknown>>, message: string) => void;
-}
-
 export class ManagementService {
     readonly #authentication: AuthenticationService;
     readonly #managedBots: ManagedBotStorage;
     readonly #platformProjects: PlatformProjectStorage;
     readonly #platform: PlatformProjectGateway;
-    readonly #logger: AuditLogger;
     readonly #scopeProject: (projectId: string, signal: AbortSignal) => Promise<ManagementService>;
 
     constructor(cx: {
@@ -28,14 +23,12 @@ export class ManagementService {
             readonly platformProjects: PlatformProjectStorage;
         };
         readonly gateways: { readonly platformProjects: PlatformProjectGateway };
-        readonly logger: AuditLogger;
         readonly scopeProject: (projectId: string, signal: AbortSignal) => Promise<ManagementService>;
     }) {
         this.#authentication = cx.services.authentication;
         this.#managedBots = cx.storages.managedBots;
         this.#platformProjects = cx.storages.platformProjects;
         this.#platform = cx.gateways.platformProjects;
-        this.#logger = cx.logger;
         this.#scopeProject = cx.scopeProject;
     }
 
@@ -67,7 +60,6 @@ export class ManagementService {
         signal.throwIfAborted();
         const bot = { botId: `bot_${crypto.randomUUID()}`, displayName: "My Machine" };
         await this.#managedBots.saveClaim(userId, bot, Date.now(), signal);
-        this.#logger.info({ event: "user-bot-created", userId, botId: bot.botId }, "Bot audit event");
         return bot;
     };
 
@@ -79,7 +71,6 @@ export class ManagementService {
     readonly createBot = async (userId: string, displayName: string, signal: AbortSignal) => {
         const bot = { botId: `bot_${crypto.randomUUID()}`, displayName };
         await this.#managedBots.saveClaim(userId, bot, Date.now(), signal);
-        this.#logger.info({ event: "user-bot-created", userId, botId: bot.botId }, "Bot audit event");
         return bot;
     };
 
@@ -114,7 +105,6 @@ export class ManagementService {
         if (!(await this.#managedBots.updateBot(userId, botId, input, Date.now(), signal))) {
             throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
         }
-        this.#logger.info({ event: "user-bot-updated", userId, botId }, "Bot audit event");
         return await this.readBot(userId, botId, signal);
     };
 
@@ -122,7 +112,6 @@ export class ManagementService {
         const result = await this.#managedBots.deleteBot(userId, botId, signal);
         switch (result) {
             case "deleted":
-                this.#logger.info({ event: "user-bot-deleted", userId, botId }, "Bot audit event");
                 return;
             case "last-bot":
                 throw new ManagementError("LAST_BOT_REQUIRED", "Keep at least one Machine in Morty.", 409);
@@ -150,10 +139,6 @@ export class ManagementService {
         const project = await this.#platform.create(userId, displayName, signal, location);
         const scoped = await this.#scopeProject(project.projectId, signal);
         await scoped.#platformProjects.save(userId, origin, appId, project, signal);
-        this.#logger.info(
-            { event: "platform-project-provisioned", userId, projectId: project.projectId },
-            "Project audit event",
-        );
         return (await scoped.#platformProjects.read(userId, origin, appId, signal)) ?? project;
     };
 
@@ -175,25 +160,12 @@ export class ManagementService {
             projectRegion(previous.projectId),
             reference,
         );
-        this.#logger.info(
-            {
-                event: "platform-project-replaced",
-                userId,
-                previousProjectId: previous.projectId,
-                projectId: project.projectId,
-            },
-            "Project audit event",
-        );
         return project;
     };
 
     readonly createRuntimePairing = async (userId: string, idempotencyKey: string, signal: AbortSignal) => {
         const project = await this.#requireProject(userId, signal);
         const pairing = await this.#platform.createPairing(project.projectId, idempotencyKey, signal);
-        this.#logger.info(
-            { event: "runtime-pairing-issued", userId, projectId: project.projectId, runtimeId: pairing.runtimeId },
-            "Runtime audit event",
-        );
         return pairing;
     };
 

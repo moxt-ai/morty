@@ -1,5 +1,4 @@
 import * as v from "valibot";
-import type { RequestAccessMetrics } from "./request-access-metrics.ts";
 
 function hasMethods(value: unknown, methods: readonly string[]): boolean {
     return (
@@ -54,5 +53,4 @@ export interface CloudBindings {
     readonly RUNTIME_RELAY?: unknown;
     readonly SESSION_ACTIVE_SESSIONS_PER_PROJECT?: unknown;
     readonly SESSION_ACTIVE_SESSIONS_PER_TENANT?: unknown;
-    readonly requestAccessMetrics?: RequestAccessMetrics;
 }
