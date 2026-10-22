@@ -3,6 +3,7 @@ import type { ElicitationResponseRequest } from "@moxt-ai/mobius-sdk/channel";
 import { ExternalLink, HelpCircle, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { encodeElicitationForm, readMultiselectDefaults } from "@/services/chat/elicitation-form";
+import { permissionPresentation } from "@/view-models/chat/session-interaction-store";
 import type {
     ElicitationInteraction,
     ElicitationInteractionResponse,
@@ -151,15 +152,18 @@ function PermissionCard({
     busy,
     permission,
     respond,
+    stop,
 }: {
     readonly busy: boolean;
     readonly permission: PermissionInteraction;
+    readonly stop: () => void;
     readonly respond: (response: PermissionInteractionResponse) => void;
 }) {
     const confirmed = permission.state.kind !== "pending";
+    const presentation = permissionPresentation(permission);
     return (
         <section
-            className="w-full rounded-lg border-[0.5px] border-input bg-white px-4 pt-5 pb-4 text-sm"
+            className="min-w-0 w-full rounded-lg border-[0.5px] border-input bg-white px-4 pt-5 pb-4 text-sm"
             role="alertdialog"
             aria-label="Agent permission request"
         >
@@ -171,14 +175,25 @@ function PermissionCard({
                     <p className="text-base leading-6 font-semibold text-foreground">
                         {confirmed ? "Confirmed" : "Agent needs permission"}
                     </p>
-                    <p className="mt-1 text-sm leading-6 text-foreground">{permission.title}</p>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                        {permission.toolKind.length > 0 ? permission.toolKind : "tool"} · {permission.toolCallId}
-                    </p>
+                    <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted p-3 font-mono text-xs leading-5">
+                        {presentation.input}
+                    </pre>
+                    <section aria-label="Session working directory" className="mt-2 break-all text-xs leading-5">
+                        <span className="text-muted-foreground">Session working directory: </span>
+                        <code>{presentation.cwd}</code>
+                    </section>
+                    {presentation.locations.length > 0 && (
+                        <section aria-label="Affected paths" className="mt-2 break-all font-mono text-xs leading-5">
+                            {presentation.locations.map((location) => (
+                                <p key={location}>{location}</p>
+                            ))}
+                        </section>
+                    )}
+                    <p className="mt-2 break-all text-sm leading-6 text-muted-foreground">{permission.title}</p>
                     <div className="mt-2.5 flex flex-wrap gap-2">
-                        {permission.options.map((option) => (
+                        {presentation.options.map((option) => (
                             <Button
-                                className="min-h-11 md:min-h-10"
+                                className="h-auto min-h-11 max-w-full whitespace-normal break-all py-2 md:min-h-10"
                                 disabled={busy || confirmed}
                                 key={option.optionId}
                                 onClick={() => {
@@ -190,26 +205,19 @@ function PermissionCard({
                                     });
                                 }}
                                 size="sm"
-                                variant={option.kind.startsWith("allow") ? "default" : "outline"}
+                                variant={option.allow ? "default" : "outline"}
                             >
-                                {option.name}
+                                {option.label}
                             </Button>
                         ))}
                         <Button
-                            className="min-h-11 md:min-h-10"
+                            className="h-auto min-h-11 max-w-full whitespace-normal break-all py-2 md:min-h-10"
                             disabled={busy || confirmed}
-                            onClick={() => {
-                                respond({
-                                    interactionId: permission.interactionId,
-                                    optionId: "",
-                                    outcome: "cancelled",
-                                    sessionId: permission.sessionId,
-                                });
-                            }}
+                            onClick={stop}
                             size="sm"
                             variant="ghost"
                         >
-                            Cancel
+                            Stop turn
                         </Button>
                     </div>
                 </div>
@@ -381,11 +389,13 @@ export function SessionInteractionCards({
     permissions,
     onElicitationResponse,
     onPermissionResponse,
+    onStop,
     busyInteractionIds,
     error,
 }: {
     readonly elicitations: readonly ElicitationInteraction[];
     readonly permissions: readonly PermissionInteraction[];
+    readonly onStop: () => void;
     readonly onElicitationResponse: (response: ElicitationInteractionResponse) => void;
     readonly onPermissionResponse: (response: PermissionInteractionResponse) => void;
     readonly busyInteractionIds: ReadonlySet<string>;
@@ -402,6 +412,7 @@ export function SessionInteractionCards({
                     key={permission.interactionId}
                     permission={permission}
                     respond={onPermissionResponse}
+                    stop={onStop}
                 />
             ))}
             {elicitations.map((elicitation) => (

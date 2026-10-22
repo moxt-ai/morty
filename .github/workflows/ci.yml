@@ -56,8 +56,6 @@ jobs:
         env:
           APP_ORIGIN: ${{ vars.APP_ORIGIN }}
           AUTHENTICATION_BASE_URL: ${{ vars.AUTHENTICATION_BASE_URL }}
-          CLERK_PUBLISHABLE_KEY: ${{ vars.CLERK_PUBLISHABLE_KEY }}
-          CLERK_JWT_KEY: ${{ vars.CLERK_JWT_KEY }}
           MOBIUS_BASE_URL: ${{ vars.MOBIUS_BASE_URL }}
           MOBIUS_APP_ID: ${{ vars.MOBIUS_APP_ID }}
           MOBIUS_APP_SECRET: ${{ secrets.MOBIUS_APP_SECRET }}
@@ -125,6 +123,35 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  browser-visuals:
+    name: Browser visual contracts
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+        with:
+          mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
+
+      - name: Install Chromium
+        run: pnpm --filter @moxt-ai/morty-e2e exec playwright install --with-deps chromium
+
+      - name: Verify agent text and source line alignment
+        run: pnpm test:e2e conversation.e2e.test.ts --grep 'grayer|linked TypeScript'
+
+      - name: Save browser screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v7.0.0
+        with:
+          name: browser-visuals
+          path: packages/e2e/test-results/
+          if-no-files-found: error
+          retention-days: 14
+
   coverage:
     name: Merge coverage
     needs: [tests]
@@ -158,7 +185,7 @@ jobs:
 
   check:
     name: check
-    needs: [static, tests, coverage]
+    needs: [static, tests, coverage, browser-visuals]
     if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -168,10 +195,12 @@ jobs:
           test "$STATIC_RESULT" = success
           test "$TESTS_RESULT" = success
           test "$COVERAGE_RESULT" = success
+          test "$BROWSER_RESULT" = success
         env:
           STATIC_RESULT: ${{ needs.static.result }}
           TESTS_RESULT: ${{ needs.tests.result }}
           COVERAGE_RESULT: ${{ needs.coverage.result }}
+          BROWSER_RESULT: ${{ needs.browser-visuals.result }}
 
   deploy:
     needs: [validate-worker-config]

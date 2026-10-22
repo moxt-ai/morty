@@ -11,7 +11,6 @@ overrides:
 
 catalog:
   '@biomejs/biome': 2.5.12
-  '@clerk/backend': 3.17.1
   '@cloudflare/vite-plugin': 1.54.4
   '@playwright/test': 1.64.1
   '@radix-ui/react-select': 2.3.7

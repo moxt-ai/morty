@@ -29,6 +29,10 @@ test("Given a connected Runtime, When a draft becomes a saved session and reconn
         expect(context().textContent).toContain("Connected");
     });
     expect(getByText(context(), "workspace", { exact: true })).toBeDefined();
+    const summary = getByRole(context(), "button", { name: "Show execution details" });
+    expect(summary.textContent).not.toContain("Controlled Agent Runtime");
+    expect(summary.textContent).not.toContain("Connected");
+    expect(getByRole(document.body, "button", { name: /Switch computer/ }).textContent).toContain("Online");
     const directoryName = await readDirectory(app);
     await sendPrompt(app, app.elementByTestId(dataTestId.messageComposer), "Remember this execution context");
     await app.waitForView(() =>
@@ -44,7 +48,9 @@ test("Given a connected Runtime, When a draft becomes a saved session and reconn
     }
     await app.daemon.disconnect();
     await app.waitForView(() => expect(context().textContent).toContain("Disconnected"));
-    expect(context().textContent).toContain("Codex");
+    expect(getByRole(context(), "button", { name: "Show execution details" }).textContent).toContain(
+        "Session: Disconnected",
+    );
     expect(await readDirectory(app)).toBe(directoryName);
     await app.daemon.reconnect();
     await app.user.click(await app.waitForView(() => getByRole(document.body, "button", { name: "Retry now" })));
@@ -58,7 +64,9 @@ test("Given a saved conversation and a different draft directory, When the user 
     const context = () => getByRole(document.body, "region", { name: "Execution context" });
     await app.waitForView(() => expect(context().textContent).toContain("Codex"));
     const originalDirectory = await readDirectory(app);
-    expect(context().textContent).toContain("Controlled Agent Runtime");
+    expect(getByRole(document.body, "button", { name: /Switch computer/ }).textContent).toContain(
+        "Controlled Agent Runtime",
+    );
     await sendPrompt(
         app,
         await app.queryElementByTestId(dataTestId.messageComposer),
@@ -128,7 +136,9 @@ test("Given no paired Runtime, When the user dismisses setup, Then the context r
     await app.queryElementByTestId(dataTestId.pairingInstruction);
     await app.user.click(getByRole(document.body, "button", { name: "Close dialog" }));
     const context = getByRole(document.body, "region", { name: "Execution context" });
-    expect(context.textContent).toContain("Machine: Unknown");
+    await app.user.click(getByRole(context, "button", { name: "Show execution details" }));
+    expect(getByRole(document.body, "dialog", { name: "Execution details" }).textContent).toContain("MachineUnknown");
+    await app.user.keyboard("{Escape}");
     expect(context.textContent).toContain("Agent Unknown");
     expect(context.textContent).toContain("Working directory: Unknown");
     expect(getByRole(context, "status", { name: "Connection" }).textContent).toBe("Disconnected");

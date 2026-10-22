@@ -1,4 +1,8 @@
-import { encodeSessionStatusChangedEvent, isDirectoryIdentifier } from "@moxt-ai/mobius-sdk/protocol";
+import {
+    encodeSessionCloseNoticeEvent,
+    encodeSessionStatusChangedEvent,
+    isDirectoryIdentifier,
+} from "@moxt-ai/mobius-sdk/protocol";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { createMiddleware } from "hono/factory";
@@ -8,7 +12,7 @@ import { bodyParser } from "../../../middleware/body-parser.ts";
 import type { Session } from "../../management/entity/authentication/session.ts";
 import { PlatformProjectError, platformIdentifier } from "../../management/entity/platform-project.ts";
 import { authenticatedSession } from "../../management/http/authenticated-session.ts";
-import type { ChatScope } from "../service/chat-service.ts";
+import type { ChatScope, ManagedSessionEvent } from "../service/chat-service.ts";
 import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
 
 const setupInput = v.strictObject({
@@ -89,7 +93,7 @@ async function authorizeChat(context: Context<AuthorizedChatEnvironment>, timeou
     const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(timeout)]);
     const projectId = v.parse(platformIdentifier, context.req.param("projectId"));
     const botId = v.parse(platformIdentifier, context.req.param("botId"));
-    return await context.env.services.chat.authorize(userId, projectId, botId, signal, context.get("operationTiming"));
+    return await context.env.services.chat.authorize(userId, projectId, botId, signal);
 }
 
 function authorizedChat(timeout = 45000) {
@@ -105,6 +109,15 @@ function privateJson(value: unknown) {
     return response;
 }
 
+function encodeManagedSessionEvent(event: ManagedSessionEvent): string {
+    switch (event.kind) {
+        case "session.status.changed":
+            return encodeSessionStatusChangedEvent(event);
+        case "session.close.notice":
+            return encodeSessionCloseNoticeEvent(event);
+    }
+}
+
 function sessionStatusStream(context: Context<AuthorizedChatEnvironment>): Response {
     const lifetime = new AbortController();
     const abort = (): void => lifetime.abort(context.req.raw.signal.reason);
@@ -115,7 +128,7 @@ function sessionStatusStream(context: Context<AuthorizedChatEnvironment>): Respo
             void context.env.services.chat
                 .subscribeManagedSessionStatuses(
                     context.get("chatScope"),
-                    (event) => controller.enqueue(encoder.encode(`${encodeSessionStatusChangedEvent(event)}\n`)),
+                    (event) => controller.enqueue(encoder.encode(`${encodeManagedSessionEvent(event)}\n`)),
                     lifetime.signal,
                 )
                 .then(
@@ -197,11 +210,7 @@ export function createBotChatRoutes() {
             bodyParser<AuthorizedChatEnvironment, typeof accessInput>(accessInput),
             async (context) => {
                 return privateJson(
-                    await context.env.services.chat.openChat(
-                        context.get("chatScope"),
-                        context.req.valid("json"),
-                        context.get("operationTiming"),
-                    ),
+                    await context.env.services.chat.openChat(context.get("chatScope"), context.req.valid("json")),
                 );
             },
         )
@@ -276,15 +285,11 @@ export function createBotChatRoutes() {
             authorizedChat(120000),
             bodyParser<AuthorizedChatEnvironment, typeof nativePreviewInput>(nativePreviewInput),
             async (context) => {
-                const entryId = v.parse(platformIdentifier, context.req.param("id"));
+                // The preview is addressed by the request body; validate the path identifier for the route contract.
+                v.parse(platformIdentifier, context.req.param("id"));
                 const { runtimeId, ...input } = context.req.valid("json");
                 return privateJson(
-                    await context.env.services.chat.previewNativeSession(
-                        context.get("chatScope"),
-                        runtimeId,
-                        entryId,
-                        input,
-                    ),
+                    await context.env.services.chat.previewNativeSession(context.get("chatScope"), runtimeId, input),
                 );
             },
         )

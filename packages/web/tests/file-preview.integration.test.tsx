@@ -76,6 +76,9 @@ test("Given a Runtime goes offline after an HTML result was opened, When the use
     const preview = await app.queryElementByTestId(dataTestId.filePreview);
     await app.waitForView(() => getByRole(preview, "button", { name: "View source" }));
     await app.daemon.disconnect();
+    await app.waitForView(() =>
+        expect(app.elementByTestId(dataTestId.sessionReconnectNotice).textContent).toContain("Retrying in"),
+    );
     await app.user.click(getByRole(preview, "button", { name: "Reload file" }));
     await app.waitForView(() => expect(getByRole(preview, "alert").textContent).toContain("offline or disconnected"));
     expect(getByRole(preview, "button", { name: "Reload file" })).toBeDefined();

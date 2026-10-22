@@ -25,7 +25,11 @@ interface ConversationStatusState {
 
 type ConversationStatusRequests = Pick<BotChatApi, "managedSessions" | "subscribeManagedSessionStatuses">;
 
-export function createConversationStatusStore(requests: ConversationStatusRequests) {
+export function createConversationStatusStore(
+    requests: ConversationStatusRequests,
+    /** Announced when the Runtime closes a Session, with the reason it gives. */
+    onSessionClosed: (sessionId: string, reason: string) => void,
+) {
     let watcher: {
         readonly botId: string;
         readonly directoryKey: string;
@@ -92,7 +96,9 @@ export function createConversationStatusStore(requests: ConversationStatusReques
                                 botId,
                                 (event) => {
                                     recoveries = 0;
-                                    if (event.status.kind === "idle") {
+                                    if (event.kind === "session.close.notice") {
+                                        onSessionClosed(event.sessionId, event.reason);
+                                    } else if (event.status.kind === "idle") {
                                         markCompleted(event.sessionId);
                                     } else {
                                         replaceStatus(event.sessionId, event.status);

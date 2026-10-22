@@ -3,7 +3,6 @@ import * as v from "valibot";
 import { projectObject } from "../../../gateway/project-object-routing.ts";
 import { json } from "../../../infra/http.ts";
 import { bodyParser, readJsonBody } from "../../../middleware/body-parser.ts";
-import { serverTiming } from "../../../middleware/server-timing.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { projectLocationHint } from "../util/project-location.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
@@ -14,30 +13,9 @@ const anonymousUserInput = v.strictObject({
         v.picklist(["wnam", "enam", "sam", "weur", "eeur", "apac", "apac-ne", "apac-se", "oc", "afr", "me"]),
     ),
 });
-const bindingInput = v.pipe(
-    v.object({
-        action: v.picklist(["bind", "discard-local", "override"]),
-        anonymousToken: v.string(),
-    }),
-    v.readonly(),
-);
-
-function unavailable(): never {
-    throw new ManagementError("AUTH_UNAVAILABLE", "Sign-in is temporarily unavailable.", 503);
-}
 
 export function createAuthenticationRoutes() {
     return new Hono<ManagementHttpEnvironment>()
-        .all("/config", (context) => {
-            const request = context.req.raw;
-            if (request.method !== "GET") {
-                throw new ManagementError("METHOD_NOT_ALLOWED", "Method not allowed.", 405, {
-                    Allow: "GET",
-                });
-            }
-            const configuration = context.env.services.authentication.publicConfiguration();
-            return configuration === null ? unavailable() : json(configuration);
-        })
         .all("/session", async (context) => {
             const request = context.req.raw;
             if (request.method !== "GET") {
@@ -52,17 +30,8 @@ export function createAuthenticationRoutes() {
                     return json(result.session);
                 case "unauthenticated":
                     throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
-                case "unavailable":
-                    return unavailable();
             }
         })
-        .use(
-            "/identity/anonymous-users",
-            serverTiming<ManagementHttpEnvironment>({
-                event: "anonymous-user-request-timing",
-                message: "Anonymous user request timing",
-            }),
-        )
         .post("/identity/anonymous-users", async (context) => {
             const request = context.req.raw;
             const signal = AbortSignal.any([request.signal, AbortSignal.timeout(45000)]);
@@ -73,33 +42,19 @@ export function createAuthenticationRoutes() {
                     : undefined;
             signal.throwIfAborted();
             const userId = `usr_${crypto.randomUUID()}`;
-            const timing = context.get("operationTiming");
-            if (timing === undefined) {
-                throw new Error("Anonymous user request timing is unavailable.");
-            }
-            const project = await timing.measure(
-                "anonymous-project-create",
-                "Create Platform Project",
-                async () =>
-                    await context.env.gateways.platformProjects.create(
-                        userId,
-                        "Morty",
-                        signal,
-                        requestedLocation?.locationHint ?? projectLocationHint(request),
-                    ),
+            const project = await context.env.gateways.platformProjects.create(
+                userId,
+                "Morty",
+                signal,
+                requestedLocation?.locationHint ?? projectLocationHint(request),
             );
-            const response = await timing.measure(
-                "anonymous-project-bootstrap",
-                "Bootstrap Project",
-                async () =>
-                    await projectObject(context.env.config.bindings, project.projectId).fetch(
-                        new Request("https://project.internal/__project/bootstrap", {
-                            body: JSON.stringify({ project, userId }),
-                            headers: { "content-type": "application/json" },
-                            method: "POST",
-                            signal,
-                        }),
-                    ),
+            const response = await projectObject(context.env.config.bindings, project.projectId).fetch(
+                new Request("https://project.internal/__project/bootstrap", {
+                    body: JSON.stringify({ project, userId }),
+                    headers: { "content-type": "application/json" },
+                    method: "POST",
+                    signal,
+                }),
             );
             signal.throwIfAborted();
             return response;
@@ -161,42 +116,5 @@ export function createAuthenticationRoutes() {
                 case "unauthenticated":
                     throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
             }
-        })
-        .get("/identity/clerk-binding", async (context) => {
-            const result = await context.env.services.authentication.clerkBinding(
-                context.get("bearerToken"),
-                context.req.raw.signal,
-            );
-            if (result === null) {
-                throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
-            }
-            return json(result);
-        })
-        .post(
-            "/identity/clerk-binding",
-            bodyParser<ManagementHttpEnvironment, typeof bindingInput>(bindingInput),
-            async (context) => {
-                const input = context.req.valid("json");
-                const result = await context.env.services.authentication.bindClerk(
-                    context.get("bearerToken"),
-                    input.anonymousToken,
-                    input.action,
-                    context.req.raw.signal,
-                );
-                switch (result.kind) {
-                    case "bound":
-                        return json(result);
-                    case "conflict":
-                        throw new ManagementError(
-                            "BINDING_CONFLICT",
-                            "This account is already connected to another local user.",
-                            409,
-                        );
-                    case "invalid-local-user":
-                        throw new ManagementError("INVALID_LOCAL_USER", "The local user cannot be connected.", 409);
-                    case "unauthenticated":
-                        throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
-                }
-            },
-        );
+        });
 }

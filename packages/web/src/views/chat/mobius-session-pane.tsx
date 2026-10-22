@@ -88,7 +88,7 @@ function thinkingEntry(message: SessionMessage): AgentThinkingEntry | null {
     return null;
 }
 
-export function sessionRenderItems(messages: readonly SessionMessage[]): readonly SessionRenderItem[] {
+function sessionRenderItems(messages: readonly SessionMessage[]): readonly SessionRenderItem[] {
     type RenderItemBuilder =
         | { kind: "assistant-text"; id: string; messageId: string | null; text: string[] }
         | { readonly kind: "event"; readonly message: SessionMessage }
@@ -119,12 +119,6 @@ export function sessionRenderItems(messages: readonly SessionMessage[]): readonl
         (item): SessionRenderItem => (item.kind === "assistant-text" ? { ...item, text: item.text.join("") } : item),
     );
 }
-
-export {
-    chatSessionMessageColumnClassName as mobiusSessionMessageColumnClassName,
-    chatSessionMessageItemClassName as mobiusSessionMessageItemClassName,
-    chatSessionMessageScrollClassName as mobiusSessionMessageScrollClassName,
-} from "../../components/chat/chat-session-layout.ts";
 
 export function SessionMessageListSkeleton() {
     return (
@@ -251,7 +245,7 @@ function SessionConversationTitleBar({
     );
 }
 
-export function MobiusSessionPaneShell({
+function MobiusSessionPaneShell({
     title,
     titleLoading = false,
     mobileTitlePortaled = false,
@@ -407,6 +401,26 @@ function SessionReconnectNotice({
         return <DisconnectedNotice onRetryNow={onRetryNow} retry={connection.retry} />;
     }
     return <ReconnectingNotice />;
+}
+
+/** Tells the user that the Runtime closed the Session, and why when it said so, and offers to reopen it. */
+function SessionClosedNotice({
+    connection,
+    onReopen,
+}: {
+    readonly connection: Extract<SessionConnection, { readonly kind: "closed" }>;
+    readonly onReopen: () => void;
+}) {
+    return (
+        <div data-testid={dataTestId.sessionClosedNotice} className="mb-2 px-1 text-sm text-muted-foreground">
+            <p role="status">
+                The session is closed.{connection.reason === null ? "" : ` Reason: ${connection.reason}`}{" "}
+                <LinkButton disabled={connection.reopen.kind === "reopening"} onClick={onReopen}>
+                    {connection.reopen.kind === "reopening" ? "Reopening…" : "Reopen it"}
+                </LinkButton>
+            </p>
+        </div>
+    );
 }
 
 /**
@@ -646,6 +660,7 @@ function MobiusSessionPaneBody({
                             error={interactions.error}
                             onElicitationResponse={respondToElicitation}
                             onPermissionResponse={respondToPermission}
+                            onStop={() => run(pane.store.getState().stop)}
                         />
                     </div>
                 )}
@@ -660,6 +675,11 @@ function MobiusSessionPaneBody({
                             <SessionReconnectNotice
                                 connection={model.connection}
                                 onRetryNow={() => pane.store.getState().retryNow()}
+                            />
+                        ) : model.connection.kind === "closed" ? (
+                            <SessionClosedNotice
+                                connection={model.connection}
+                                onReopen={() => run(pane.store.getState().reopen)}
                             />
                         ) : undefined
                     }

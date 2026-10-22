@@ -8,5 +8,5 @@ export interface ExecutionContext {
     readonly directory: string | null;
     readonly directoryName: string;
     readonly directoryPlaceholder: string;
-    readonly connection: "Connecting" | "Connected" | "Disconnected" | "Reconnecting" | "Unavailable";
+    readonly connection: "Connecting" | "Connected" | "Disconnected" | "Reconnecting" | "Unavailable" | "Closed";
 }

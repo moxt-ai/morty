@@ -8,7 +8,6 @@ import { cloudRoutes, publicCloudRoutes } from "./composition/cloud-http.ts";
 import { createCloudWebSocketHandlers } from "./composition/cloud-websocket.ts";
 import { setupArtifact } from "./gateway/setup-artifact.ts";
 import type { CloudBindings } from "./infra/cloud-bindings.ts";
-import { instrumentD1Database, RequestAccessMetrics } from "./infra/request-access-metrics.ts";
 import { RequestError } from "./infra/request-error.ts";
 import { createWebSocketApiBridge } from "./infra/websocket-api-bridge.ts";
 import { errorMiddleware, rethrowHttpError } from "./middleware/error-middleware.ts";
@@ -91,25 +90,11 @@ export async function fetchPublicApplication(
     bindings: CloudBindings,
     context?: ExecutionContext,
 ): Promise<Response> {
-    const metrics = new RequestAccessMetrics();
-    const instrumented = {
-        ...bindings,
-        DATABASE: instrumentD1Database(bindings.DATABASE, metrics),
-        requestAccessMetrics: metrics,
-    };
-    const response = await publicApplication.fetch(request, instrumented, context);
-    return metrics.appendServerTiming(response);
+    return await publicApplication.fetch(request, bindings, context);
 }
 
 export default {
     async fetch(request: Request, bindings: CloudBindings, context?: ExecutionContext): Promise<Response> {
-        const metrics = new RequestAccessMetrics();
-        const instrumented = {
-            ...bindings,
-            DATABASE: instrumentD1Database(bindings.DATABASE, metrics),
-            requestAccessMetrics: metrics,
-        };
-        const response = await application.fetch(request, instrumented, context);
-        return metrics.appendServerTiming(response);
+        return await application.fetch(request, bindings, context);
     },
 } satisfies ExportedHandler<CloudBindings, unknown>;

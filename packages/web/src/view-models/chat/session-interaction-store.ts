@@ -94,3 +94,36 @@ export function sessionInteractionPresentation(
             )[0] ?? "",
     };
 }
+
+export function permissionPresentation(permission: PermissionInteraction) {
+    return {
+        cwd: permission.details?.cwd ?? "Session working directory unavailable",
+        input:
+            permission.details?.rawInput == null
+                ? "The agent did not provide the original tool input."
+                : JSON.stringify(permission.details.rawInput, null, 2),
+        locations: [
+            ...new Set(
+                permission.details?.locations.map((location) =>
+                    location.line == null ? location.path : `${location.path}:${location.line}`,
+                ) ?? [],
+            ),
+        ],
+        options: permission.options.map((option) => {
+            switch (option.kind) {
+                case "allow_once":
+                    return { ...option, label: `Allow: ${option.name}`, allow: true };
+                case "allow_always":
+                    return { ...option, label: `Allow: ${option.name}`, allow: true };
+                case "reject_once":
+                    return { ...option, label: `Deny: ${option.name}`, allow: false };
+                case "reject_always":
+                    return { ...option, label: `Deny: ${option.name}`, allow: false };
+                default: {
+                    const unexpected: never = option.kind;
+                    throw new Error(`Unsupported permission option: ${unexpected}`);
+                }
+            }
+        }),
+    };
+}

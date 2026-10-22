@@ -221,7 +221,7 @@ export function AgentThinking({
     flushReasoning();
     const currentEntry = timeline.at(-1);
     return (
-        <div className="grid min-w-0 gap-0 py-0.5 text-[13px] leading-[22px] text-morty-text-3">
+        <div className="grid min-w-0 gap-0 py-0.5 text-[13px] leading-[22px] text-muted-foreground">
             {timeline.map((item) =>
                 item.kind === "reasoning" ? (
                     <ReasoningDisclosure

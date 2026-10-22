@@ -1,4 +1,4 @@
-import { MobiusError } from "@moxt-ai/mobius-sdk";
+import { MobiusError, SESSION_CLOSED_ERROR_CODE } from "@moxt-ai/mobius-sdk";
 import { isRuntimeConnectionFailure } from "../services/management/management-api.ts";
 
 const runtimeDisconnectedMessage = "Your Mobius is disconnected. Start your Mobius to reconnect, then try again.";
@@ -15,6 +15,14 @@ export function formatError(cause: unknown, fallback: string): string {
         return runtimeDisconnectedMessage;
     }
     return cause instanceof Error ? cause.message : fallback;
+}
+
+/**
+ * Whether an operation failed because the Runtime closed the Session and nobody reopened it. The Session is not
+ * broken: reopening it makes its operations work again.
+ */
+export function isSessionClosedFailure(cause: unknown): boolean {
+    return cause instanceof MobiusError && cause.code === SESSION_CLOSED_ERROR_CODE;
 }
 
 /**

@@ -6,6 +6,7 @@ import {
     MobiusPermissionResponseRequest,
     type MobiusSessionEventObserver,
     type PromptResource,
+    SESSION_CLOSED_ERROR_CODE,
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
 import { decodeIdentifier, type SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
@@ -17,6 +18,7 @@ import {
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
 import { type BotChatApi, connectedChatRuntimeAgents } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
+import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
 import {
     centralIndexedDB,
     type SessionLastSentMessage,
@@ -24,7 +26,7 @@ import {
 } from "../../services/indexed-db/central-indexed-db.ts";
 import { centralSessionStorage, sessionDraftEntry } from "../../services/session-storage/central-session-storage.ts";
 import type { Clock } from "../../services/time/clock.ts";
-import { formatError, isRetryableRuntimeConnectionFailure } from "../format-error.ts";
+import { formatError, isRetryableRuntimeConnectionFailure, isSessionClosedFailure } from "../format-error.ts";
 import { reportApplicationError } from "../report-error.ts";
 import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
 import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
@@ -57,6 +59,7 @@ import {
     type SessionEventHistory,
     type SessionProjectionEffect,
     type SessionProjectionInput,
+    sessionProjectionExecutionOwner,
     sessionProjectionMessages,
     sessionProjectionPagination,
     transitionSessionProjection,
@@ -93,6 +96,16 @@ type Connection =
               | { readonly kind: "scheduled"; readonly remainingSeconds: number }
               | { readonly kind: "exhausted" };
       }
+    | {
+          /** The Runtime closed the Session. Reopening it, which only the user chooses to do, resumes the connection. */
+          readonly kind: "closed";
+          /** The Runtime's explanation, or null when this page learned of the closing from a failed operation. */
+          readonly reason: string | null;
+          readonly reopen:
+              | { readonly kind: "available" }
+              | { readonly kind: "reopening" }
+              | { readonly kind: "failed"; readonly message: string };
+      }
     | { readonly kind: "failed"; readonly message: string };
 
 function connectionFailure(connection: Connection): string | null {
@@ -101,6 +114,8 @@ function connectionFailure(connection: Connection): string | null {
         case "failed":
         case "reconnecting":
             return connection.message;
+        case "closed":
+            return connection.reopen.kind === "failed" ? connection.reopen.message : null;
         case "loading":
         case "ready":
             return null;
@@ -212,6 +227,13 @@ export interface SessionPaneStore {
     readonly harnesses: readonly { readonly agentRef?: string; readonly label: string; readonly value: string }[];
     readonly connect: (signal: AbortSignal) => Promise<void>;
     readonly retryNow: () => void;
+    /**
+     * Records that the Runtime closed the Session and stops the connection until it is reopened. `reason` is the
+     * Runtime's explanation, or null when a failed operation was the only sign of the closing.
+     */
+    readonly sessionClosed: (reason: string | null) => void;
+    /** Reopens a closed Session on the user's request, then connects to it again. */
+    readonly reopen: (signal: AbortSignal) => Promise<void>;
     readonly loadOlderMessages: (signal: AbortSignal) => Promise<void>;
     readonly setDraft: (draft: string) => void;
     readonly send: (signal: AbortSignal) => Promise<void>;
@@ -316,12 +338,14 @@ export function sessionPanePresentation(
         busy,
         composerDisabled,
         composerInputDisabled,
+        // Operations that failed because the Session closed say nothing the closed notice does not already say.
         composerError:
             connectionFailure(model.connection) ??
-            [model.activity, model.operation, delivery.state, tasks.feedback, queue.feedback].find(
-                (state) => state.kind === "failed",
-            )?.message ??
-            "",
+            (model.connection.kind === "closed"
+                ? ""
+                : ([model.activity, model.operation, delivery.state, tasks.feedback, queue.feedback].find(
+                      (state) => state.kind === "failed",
+                  )?.message ?? "")),
         controlRunning,
         deliveryUnknownUserMessageId,
         hasOlderHistory: model.hasOlderHistory,
@@ -409,7 +433,7 @@ export function createSessionPaneModel(options: {
     readonly clock: Clock;
     readonly session: OpenMobiusSession;
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "connectSession" | "runtimeConfiguration">;
+    readonly requests: Pick<BotChatApi, "connectSession" | "managedSession" | "runtimeConfiguration">;
     readonly initialMessage?: QueuedDraftMessage | undefined;
     /**
      * A previous pane's unconfirmed first-message submission. Adopted as the
@@ -430,6 +454,10 @@ export function createSessionPaneModel(options: {
     const { session, botId, requests, clock } = options;
     const composerAttachments = createComposerAttachmentStore(options.initialMessage?.attachments);
     const sessionId = session.result.ready.sessionId;
+    // Working in a conversation makes it the reference for the next draft: its
+    // harness and the settings it runs with carry into New Session.
+    saveLastHarnessPreference(botId, session.agentRef);
+    saveLastAgentSettings(botId, session.agentRef, session.result.ready.configOptions);
     const initialActiveTurn: SessionActiveTurn =
         session.result.action === "conversation" && session.result.activeTurn.kind === "running"
             ? {
@@ -443,11 +471,38 @@ export function createSessionPaneModel(options: {
     const fallbackStartedAt = Date.now();
     let client: MobiusClient | null = null;
     let countdownInterrupt: AbortController | null = null;
+    // The Runtime closed the Session. The connect loop turns this into the closed connection state.
+    let closure: { readonly reason: string | null } | null = null;
+    // The running connection attempt, which a closing of the Session interrupts.
+    let attempt: AbortController | null = null;
+    // Lets the connect loop go on once the user has reopened the closed Session.
+    let resumeAfterReopen: (() => void) | null = null;
+    // Counts the times the user reopened the Session. A `session_closed` failure from an operation that began
+    // before a reopening describes the Session as it was, so it must not close the reopened Session again.
+    let reopenings = 0;
+    /** Whether a failure says the Session is closed now, not just as it was when the operation began. */
+    const closedNow = (cause: unknown, reopeningsAtStart: number): boolean =>
+        isSessionClosedFailure(cause) && reopeningsAtStart === reopenings;
+    /** Wraps an operation on the Session so that failing because the Session closed also closes this pane. */
+    const noticingClosure =
+        <Arguments extends readonly unknown[], Result>(operation: (...args: Arguments) => Promise<Result>) =>
+        async (...args: Arguments): Promise<Result> => {
+            const reopeningsAtStart = reopenings;
+            try {
+                return await operation(...args);
+            } catch (cause) {
+                if (closedNow(cause, reopeningsAtStart)) {
+                    store.getState().sessionClosed(null);
+                }
+                throw cause;
+            }
+        };
     let projection = createSessionProjection();
     let sessionTitle = session.entry.title;
     let loadingOlderHistory = false;
     let command = openedActiveTurn.kind === "idle" ? "" : openedActiveTurn.commandId;
     let initialCommandId = options.initialMessage?.commandId ?? null;
+    let draftRevision = 0;
     // The queued first message stays the pane's recovery responsibility until
     // the service accepts it or the user discards it, not just until the send
     // starts.
@@ -478,7 +533,7 @@ export function createSessionPaneModel(options: {
         ],
     });
     const delivery = createSessionDeliveryStore({
-        submit: async (request, signal) => {
+        submit: noticingClosure(async (request, signal) => {
             if (client === null) {
                 throw new Error("The Session is not connected.");
             }
@@ -492,7 +547,7 @@ export function createSessionPaneModel(options: {
                 }),
                 signal,
             );
-        },
+        }),
         initialUnknown: options.unconfirmedMessage,
     });
     const lastSentMessageEntry = sessionLastSentMessageEntry(sessionId);
@@ -506,13 +561,13 @@ export function createSessionPaneModel(options: {
     const tasks = createSessionTaskControlsStore({
         steeringSupported: session.result.ready.capabilities.steering,
         port: {
-            cancel: async (turnId, idempotencyKey, signal) => {
+            cancel: noticingClosure(async (turnId, idempotencyKey, signal) => {
                 if (client === null) {
                     throw new Error("The Session is not connected.");
                 }
                 return await client.turns.cancel(sessionId, turnId, { idempotencyKey }, signal);
-            },
-            submit: async (request, signal) => {
+            }),
+            submit: noticingClosure(async (request, signal) => {
                 if (client === null) {
                     throw new Error("The Session is not connected.");
                 }
@@ -525,7 +580,7 @@ export function createSessionPaneModel(options: {
                     }),
                     signal,
                 );
-            },
+            }),
         },
     });
     if (openedActiveTurn.kind === "accepted") {
@@ -533,19 +588,19 @@ export function createSessionPaneModel(options: {
     }
     const messageQueue = createSessionMessageQueueStore({
         port: {
-            cancel: async (turnId, idempotencyKey, signal) => {
+            cancel: noticingClosure(async (turnId, idempotencyKey, signal) => {
                 if (client === null) {
                     throw new Error("The Session is not connected.");
                 }
                 return await client.turns.cancel(sessionId, turnId, { idempotencyKey }, signal);
-            },
-            steer: async (turnId, signal) => {
+            }),
+            steer: noticingClosure(async (turnId, signal) => {
                 if (client === null) {
                     throw new Error("The Session is not connected.");
                 }
                 await client.turns.steer(sessionId, turnId, signal);
-            },
-            submit: async (request, signal) => {
+            }),
+            submit: noticingClosure(async (request, signal) => {
                 if (client === null) {
                     throw new Error("The Session is not connected.");
                 }
@@ -558,7 +613,7 @@ export function createSessionPaneModel(options: {
                     }),
                     signal,
                 );
-            },
+            }),
         },
     });
     const request = {
@@ -583,6 +638,7 @@ export function createSessionPaneModel(options: {
             const settled =
                 connection.kind === "ready" ||
                 connection.kind === "failed" ||
+                connection.kind === "closed" ||
                 (connection.kind === "disconnected" && connection.retry.kind === "exhausted");
             if (settled) {
                 for (const wake of connectionWaiters) {
@@ -641,6 +697,25 @@ export function createSessionPaneModel(options: {
             }
             return result.effects;
         };
+        /**
+         * Re-reads the authoritative settings from the daemon. A daemon
+         * restart rebuilds the event log without config updates, so an
+         * established projection without a config event must fetch instead of
+         * keeping a stale view.
+         */
+        const recoverProjectionState = async (connected: MobiusClient, parentSignal: AbortSignal): Promise<void> => {
+            const signal = AbortSignal.any([parentSignal, AbortSignal.timeout(45_000)]);
+            const configurationResult = await connected.sessions.readConfiguration(sessionId, signal);
+            parentSignal.throwIfAborted();
+            sessionConfigurations = configurationResult.configOptions.map((candidate) => ({
+                booleanValue: candidate.type === "boolean" ? candidate.booleanValue : false,
+                configId: candidate.id,
+                value: candidate.type === "select" ? candidate.currentValue : "",
+                valueType: candidate.type,
+            }));
+            saveLastAgentSettings(botId, session.agentRef, configurationResult.configOptions);
+            set({ options: configurationResult.configOptions });
+        };
         const loadProjectionHistory = async (
             effect: Extract<SessionProjectionEffect, { readonly kind: "load-history" }>,
             connected: MobiusClient,
@@ -683,11 +758,57 @@ export function createSessionPaneModel(options: {
             signal: AbortSignal,
         ): Promise<void> => {
             const effects = commitProjection(input);
+            let historyReloaded = false;
             for (const effect of effects) {
                 if (effect.kind === "load-history") {
                     await loadProjectionHistory(effect, connected, signal);
+                    historyReloaded = true;
                 }
             }
+            // A reloaded log without any config event is the post-restart
+            // shape: the rebuilt generation cannot speak for agent settings,
+            // so read them from the daemon instead of trusting a stale view.
+            // Until that read lands the pane keeps its current settings, so a
+            // failed or cancelled read cannot clobber what was configured.
+            if (historyReloaded && projection.kind === "established" && projection.config === null) {
+                await recoverProjectionState(connected, signal);
+            }
+        };
+        // A closed Session runs nothing. Settles the turn, queue and interactions it was holding, the way a
+        // reconnect finds them when the Session reports no running turn.
+        const settleClosedExecution = (): void => {
+            commitProjection({ kind: "execution-idle" });
+            messageQueue.getState().replace([]);
+            const controlled = tasks.getState().operation;
+            if (controlled.kind !== "idle") {
+                tasks.getState().finish(controlled.active.commandId);
+            }
+            const turn = activeTurn.current();
+            if (turn.kind !== "idle") {
+                activeTurn.turnCleared(turn.commandId);
+            }
+            command = "";
+            const activity = get().activity;
+            set({ activity: activity.kind === "failed" ? activity : { kind: "idle" }, interactions: [] });
+            announceActivity();
+        };
+        // Holds the connect loop on a closed Session until the user reopens it, then lets the loop connect again.
+        const untilReopened = async (reason: string | null, signal: AbortSignal): Promise<void> => {
+            await new Promise<void>((resolve) => {
+                if (signal.aborted) {
+                    resolve();
+                    return;
+                }
+                const finish = (): void => {
+                    resumeAfterReopen = null;
+                    signal.removeEventListener("abort", finish);
+                    resolve();
+                };
+                resumeAfterReopen = finish;
+                signal.addEventListener("abort", finish, { once: true });
+                settleClosedExecution();
+                setAndSettle({ connection: { kind: "closed", reason, reopen: { kind: "available" } } });
+            });
         };
         return {
             connection: { kind: "loading" },
@@ -712,6 +833,7 @@ export function createSessionPaneModel(options: {
                 }
                 loadingOlderHistory = true;
                 set({ historyLoading: true });
+                const reopeningsAtStart = reopenings;
                 try {
                     const page = await readSessionHistory(
                         client,
@@ -725,6 +847,10 @@ export function createSessionPaneModel(options: {
                     commitProjection({ kind: "older-page", page, revision: pagination.revision });
                 } catch (cause) {
                     signal.throwIfAborted();
+                    if (closedNow(cause, reopeningsAtStart)) {
+                        get().sessionClosed(null);
+                        return;
+                    }
                     set({
                         operation: {
                             kind: "failed",
@@ -766,7 +892,9 @@ export function createSessionPaneModel(options: {
                     });
                 };
                 let consecutiveFailures = 0;
-                const observeSession = async (): Promise<void> => {
+                const paneSignal = signal;
+                // The signal is this attempt's own: the pane's lifetime, and also the closing of the Session.
+                const observeSession = async (signal: AbortSignal): Promise<void> => {
                     client = await requests.connectSession(
                         botId,
                         sessionId,
@@ -840,6 +968,11 @@ export function createSessionPaneModel(options: {
                         if (payload.kind === "prompt.started") {
                             delivery.getState().reconcile([payload.commandId]);
                             const queued = messageQueue.getState().takeStarted(payload.commandId);
+                            const owner = sessionProjectionExecutionOwner(projection, payload.commandId);
+                            if (owner !== null && owner !== payload.commandId) {
+                                // Steering starts a command, not a new execution to stop.
+                                return true;
+                            }
                             if (command !== "" && command !== payload.commandId) {
                                 tasks.getState().finish(command);
                                 activeTurn.turnCleared(command);
@@ -942,21 +1075,20 @@ export function createSessionPaneModel(options: {
                                     });
                                     break;
                             }
-                            const executionPromise = connected.sessions.readSessionExecution(
+                            await dispatchProjection({ kind: "reconcile" }, connected, signal);
+                            signal.throwIfAborted();
+                            // Confirm execution after history is adopted. An earlier idle snapshot
+                            // cannot settle work that started while those pages were loading.
+                            const execution = await connected.sessions.readSessionExecution(
                                 sessionId,
                                 sessionIdentity,
                                 signal,
                             );
-                            // Reconciliation may abandon this speculative read when the
-                            // subscription tears down; keep its aborted rejection awaited.
-                            void executionPromise.then(
-                                () => undefined,
-                                () => undefined,
-                            );
-                            await dispatchProjection({ kind: "reconcile" }, connected, signal);
                             signal.throwIfAborted();
-                            const execution = await executionPromise;
                             const running = execution.turn;
+                            if (running === null) {
+                                commitProjection({ kind: "execution-idle" });
+                            }
                             messageQueue.getState().replace(execution.queued);
                             if (running !== null) {
                                 command = running.commandId;
@@ -1055,7 +1187,9 @@ export function createSessionPaneModel(options: {
                         // rejected submission leaves the queued message and its
                         // idempotent command id in the home store for a remount
                         // to recover.
-                        await get().send(signal);
+                        // The send belongs to the pane, not to this attempt: a closing of the Session must not
+                        // abandon a submission that is already on its way.
+                        await get().send(paneSignal);
                         signal.throwIfAborted();
                     }
                     // A detach between submit and the delivery report can still
@@ -1068,18 +1202,37 @@ export function createSessionPaneModel(options: {
                 };
                 readStoredLastSentMessage();
                 for (;;) {
+                    if (closure !== null) {
+                        const closed = closure;
+                        closure = null;
+                        await untilReopened(closed.reason, signal);
+                        if (signal.aborted) {
+                            return;
+                        }
+                        consecutiveFailures = 0;
+                        setAndSettle({ connection: { kind: "reconnecting", message: null } });
+                    }
                     if (consecutiveFailures > 0) {
                         setAndSettle({
                             connection: { kind: "reconnecting", message: connectionFailure(get().connection) },
                         });
                     }
+                    const running = new AbortController();
+                    attempt = running;
                     try {
-                        await observeSession();
+                        await observeSession(AbortSignal.any([signal, running.signal]));
                     } catch (cause) {
+                        attempt = null;
                         client?.close();
                         client = null;
                         if (signal.aborted) {
                             return;
+                        }
+                        if (closure === null && isSessionClosedFailure(cause)) {
+                            closure = { reason: null };
+                        }
+                        if (closure !== null) {
+                            continue;
                         }
                         if (!isRetryableRuntimeConnectionFailure(cause)) {
                             const message = formatError(cause, "The Session could not be opened.");
@@ -1146,7 +1299,56 @@ export function createSessionPaneModel(options: {
             retryNow: () => {
                 countdownInterrupt?.abort(new Error("Retried now"));
             },
+            sessionClosed: (reason) => {
+                const current = get().connection;
+                // A failed operation and the Runtime's notice can both report one closing; the notice has the reason.
+                if (current.kind === "closed") {
+                    if (current.reason === null && reason !== null) {
+                        set({ connection: { ...current, reason } });
+                    }
+                    return;
+                }
+                if (closure !== null) {
+                    if (closure.reason === null && reason !== null) {
+                        closure = { reason };
+                    }
+                    return;
+                }
+                closure = { reason };
+                // The connect loop takes over: it stops the running attempt or retry countdown and shows the closing.
+                attempt?.abort(new Error("The Session closed."));
+                countdownInterrupt?.abort(new Error("The Session closed."));
+            },
+            reopen: async (signal) => {
+                const current = get().connection;
+                if (current.kind !== "closed" || current.reopen.kind === "reopening" || resumeAfterReopen === null) {
+                    return;
+                }
+                const setReopen = (reopen: Extract<Connection, { readonly kind: "closed" }>["reopen"]): void => {
+                    const connection = get().connection;
+                    if (connection.kind === "closed") {
+                        set({ connection: { ...connection, reopen } });
+                    }
+                };
+                setReopen({ kind: "reopening" });
+                try {
+                    await requests.managedSession(botId, sessionId, signal);
+                    signal.throwIfAborted();
+                } catch (cause) {
+                    signal.throwIfAborted();
+                    setReopen({ kind: "failed", message: formatError(cause, "The Session could not be reopened.") });
+                    return;
+                }
+                // Failures the closing caused say nothing about the reopened Session.
+                delivery.getState().dismissFailure();
+                tasks.getState().dismissFailure();
+                messageQueue.getState().dismissFailure();
+                reopenings += 1;
+                resumeAfterReopen?.();
+            },
             setDraft: (draft) => {
+                draftRevision += 1;
+                delivery.getState().dismissFailure();
                 tasks.getState().dismissFailure();
                 messageQueue.getState().dismissFailure();
                 if (draft === "") {
@@ -1186,16 +1388,19 @@ export function createSessionPaneModel(options: {
                 const images = attachments.flatMap((attachment) =>
                     attachment.kind === "image" ? [attachment.image] : [],
                 );
+                const submittedDraftRevision = draftRevision;
+                // The submission owns this snapshot until it is accepted, journaled,
+                // or returned to the composer by an authoritative rejection.
                 centralSessionStorage.remove(draftEntry);
                 composerAttachments.getState().clear();
                 const activity = startSessionWork({ commandId, startedAt: lastSentMessage.sentAt });
                 const pending = deriveTimeline();
                 set({
                     activity,
-                    draft: "",
                     followRevision: get().followRevision + 1,
                     operation: { kind: "sending", commandId },
                     messages: pending.messages,
+                    draft: "",
                 });
                 try {
                     activeTurn.submissionStarted(commandId);
@@ -1207,40 +1412,53 @@ export function createSessionPaneModel(options: {
                             attachment.kind === "resource" ? [attachment.resource] : [],
                         ),
                     };
-                    const accepted = await delivery.getState().submit(commandId, displayPrompt, submission, signal);
+                    const outcome = await delivery.getState().submit(commandId, displayPrompt, submission, signal);
                     signal.throwIfAborted();
-                    // Report delivery as soon as the service accepts the turn,
-                    // independently of `command`: a live event may clear it
-                    // while the submission is in flight. An uncertain
-                    // (delivery-unknown) or rejected submission marks the
-                    // queued first message as unconfirmed, which keeps its
-                    // content and command id for an explicit retry but never
-                    // auto-sends it from a remount.
-                    if (accepted !== null) {
+                    switch (outcome.kind) {
+                        case "accepted":
+                        case "delivery-unknown":
+                            break;
+                        case "rejected":
+                            if (draftRevision === submittedDraftRevision) {
+                                set({ draft: current.draft });
+                                composerAttachments.getState().restore(attachments);
+                                centralSessionStorage.write(draftEntry, current.draft);
+                            }
+                            if (isQueuedInitialMessage(commandId)) {
+                                // This rejected message is editable again. Retire
+                                // the auto-send/retry copy owned by the home store.
+                                options.onInitialMessageRecoveryCleared?.(commandId);
+                            }
+                            break;
+                        default:
+                            return outcome satisfies never;
+                    }
+                    if (outcome.kind === "accepted") {
                         if (isQueuedInitialMessage(commandId)) {
                             options.onInitialMessageDelivered?.();
                         }
-                    } else if (isQueuedInitialMessage(commandId)) {
+                    } else if (outcome.kind === "delivery-unknown" && isQueuedInitialMessage(commandId)) {
                         options.onInitialMessageUnconfirmed?.({ commandId, displayPrompt, request: submission });
                     }
-                    if (accepted !== null) {
+                    if (outcome.kind === "accepted") {
                         // A terminal live event may precede the acceptance response.
                         // Its result already owns the activity; do not overwrite it.
                         if (command === commandId) {
-                            tasks.getState().start(commandId, accepted.turnId);
-                            activeTurn.submissionAccepted(commandId, accepted.turnId);
+                            tasks.getState().start(commandId, outcome.turn.turnId);
+                            activeTurn.submissionAccepted(commandId, outcome.turn.turnId);
                         }
                         set({ operation: finishPromptOperation(get().operation, commandId) });
                         return;
                     }
                     activeTurn.turnCleared(commandId);
-                    command = "";
-                    const idle = { kind: "idle" } as const;
+                    if (command === commandId) {
+                        command = "";
+                    }
                     const restored = deriveTimeline();
                     set({
-                        activity: idle,
+                        activity: transitionSessionActivity(get().activity, { commandId, kind: "work-completed" }),
                         messages: restored.messages,
-                        operation: { kind: "idle" },
+                        operation: finishPromptOperation(get().operation, commandId),
                     });
                     announceActivity();
                 } catch (cause) {
@@ -1293,21 +1511,49 @@ export function createSessionPaneModel(options: {
                 const retried = deriveTimeline();
                 set({ activity: retrying, messages: retried.messages });
                 announceActivity();
-                const accepted = await delivery.getState().retry(signal);
+                const outcome = await delivery.getState().retry(signal);
                 signal.throwIfAborted();
-                if (accepted !== null) {
-                    // A successful retry also delivers the queued first
-                    // message, so the home store must stop treating it as
-                    // pending recovery.
-                    if (isQueuedInitialMessage(pending.commandId)) {
-                        options.onInitialMessageDelivered?.();
+                switch (outcome?.kind) {
+                    case "accepted":
+                        if (isQueuedInitialMessage(pending.commandId)) {
+                            options.onInitialMessageDelivered?.();
+                        }
+                        if (command === pending.commandId) {
+                            tasks.getState().start(pending.commandId, outcome.turn.turnId);
+                            activeTurn.submissionAccepted(pending.commandId, outcome.turn.turnId);
+                        }
+                        return;
+                    case "rejected": {
+                        const restoredAttachments = [
+                            ...pending.request.images.map((image) => ({ kind: "image" as const, image })),
+                            ...pending.request.resources.map((resource) => ({ kind: "resource" as const, resource })),
+                        ];
+                        composerAttachments.getState().restore(restoredAttachments);
+                        centralSessionStorage.write(draftEntry, pending.request.content);
+                        set({ draft: pending.request.content });
+                        if (isQueuedInitialMessage(pending.commandId)) {
+                            options.onInitialMessageRecoveryCleared?.(pending.commandId);
+                        }
+                        break;
                     }
-                    tasks.getState().start(pending.commandId, accepted.turnId);
-                    activeTurn.submissionAccepted(pending.commandId, accepted.turnId);
-                } else {
-                    activeTurn.turnCleared(pending.commandId);
+                    case "delivery-unknown":
+                        break;
+                    case undefined:
+                        return;
+                    default:
+                        return outcome satisfies never;
+                }
+                activeTurn.turnCleared(pending.commandId);
+                if (command === pending.commandId) {
                     command = "";
                 }
+                set({
+                    activity: transitionSessionActivity(get().activity, {
+                        commandId: pending.commandId,
+                        kind: "work-completed",
+                    }),
+                });
+                announceActivity();
             },
             queueDraft: async (signal) => {
                 const current = get();
@@ -1328,6 +1574,7 @@ export function createSessionPaneModel(options: {
                             attachment.kind === "image" ? attachment.image.name : attachment.resource.name,
                         )
                         .join(", ");
+                delivery.getState().dismissFailure();
                 const queued = await messageQueue.getState().enqueue(
                     controls.operation.active.commandId,
                     summary,
@@ -1369,6 +1616,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 set({ operation: { kind: "configuring" } });
+                const reopeningsAtStart = reopenings;
                 try {
                     const result = await client.sessions.updateConfiguration(
                         sessionId,
@@ -1396,6 +1644,11 @@ export function createSessionPaneModel(options: {
                     set({ options: result.configOptions, operation: { kind: "idle" } });
                 } catch (cause) {
                     signal.throwIfAborted();
+                    if (closedNow(cause, reopeningsAtStart)) {
+                        set({ operation: { kind: "idle" } });
+                        get().sessionClosed(null);
+                        return;
+                    }
                     set({
                         operation: {
                             kind: "failed",
@@ -1431,6 +1684,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 set({ titleEdit: { draft: trimmed, kind: "saving" } });
+                const reopeningsAtStart = reopenings;
                 try {
                     const result = await client.sessions.rename(
                         sessionId,
@@ -1443,6 +1697,11 @@ export function createSessionPaneModel(options: {
                     options.onTitleChange(sessionId, sessionTitle);
                 } catch (cause) {
                     signal.throwIfAborted();
+                    if (closedNow(cause, reopeningsAtStart)) {
+                        set({ titleEdit: { kind: "closed" } });
+                        get().sessionClosed(null);
+                        return;
+                    }
                     set({
                         titleEdit: { kind: "closed" },
                         operation: {
@@ -1457,6 +1716,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 set({ operation: { kind: "configuring" } });
+                const reopeningsAtStart = reopenings;
                 try {
                     const connected = client;
                     await dispatchProjection({ kind: "reconcile" }, connected, signal);
@@ -1464,6 +1724,11 @@ export function createSessionPaneModel(options: {
                     set({ operation: { kind: "idle" } });
                 } catch (cause) {
                     signal.throwIfAborted();
+                    if (closedNow(cause, reopeningsAtStart)) {
+                        set({ operation: { kind: "idle" } });
+                        get().sessionClosed(null);
+                        return;
+                    }
                     set({
                         operation: {
                             kind: "failed",
@@ -1476,6 +1741,7 @@ export function createSessionPaneModel(options: {
                 if (client === null || get().connection.kind !== "ready") {
                     throw new Error("The Session is not connected.");
                 }
+                const reopeningsAtStart = reopenings;
                 try {
                     await client.interactions.respond(
                         sessionId,
@@ -1485,6 +1751,9 @@ export function createSessionPaneModel(options: {
                     );
                 } catch (cause) {
                     signal.throwIfAborted();
+                    if (closedNow(cause, reopeningsAtStart)) {
+                        get().sessionClosed(null);
+                    }
                     throw cause;
                 }
             },
@@ -1492,6 +1761,7 @@ export function createSessionPaneModel(options: {
                 if (client === null || get().connection.kind !== "ready") {
                     throw new Error("The Session is not connected.");
                 }
+                const reopeningsAtStart = reopenings;
                 try {
                     await client.interactions.respond(
                         sessionId,
@@ -1501,6 +1771,9 @@ export function createSessionPaneModel(options: {
                     );
                 } catch (cause) {
                     signal.throwIfAborted();
+                    if (closedNow(cause, reopeningsAtStart)) {
+                        get().sessionClosed(null);
+                    }
                     throw cause;
                 }
             },
@@ -1582,6 +1855,9 @@ export function createSessionPaneModel(options: {
             }
             if (current.kind === "failed" || (current.kind === "disconnected" && current.retry.kind === "exhausted")) {
                 throw new MobiusError("session_not_connected", current.message);
+            }
+            if (current.kind === "closed") {
+                throw new MobiusError(SESSION_CLOSED_ERROR_CODE, "The session is closed.");
             }
             await new Promise<void>((resolve, reject) => {
                 const wake = (): void => {

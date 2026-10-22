@@ -8,8 +8,13 @@ import {
 } from "@/services/chat/last-cwd-preference";
 import { pathDirectoryId } from "@/services/chat/workspace-directory-reference";
 import { type DaemonDiagnosticsSource, recordBrowserError } from "@/services/diagnostics/browser-diagnostics";
-import { type AnonymousIdentity, AnonymousIdentityApi } from "@/services/identity/anonymous-identity-api";
-import { encodeIdentityScope } from "@/services/identity/identity-scope-url";
+import {
+    type AnonymousIdentity,
+    AnonymousIdentityApi,
+    IdentityApiError,
+} from "@/services/identity/anonymous-identity-api";
+import { encodeIdentityScope, hasIdentityScope, readIdentityScope } from "@/services/identity/identity-scope-url";
+import { computerKey, rememberedComputers } from "@/services/identity/remembered-computers";
 import { formatError } from "@/view-models/format-error";
 
 export type ContinueStoreApi = ReturnType<typeof createContinueStore>;
@@ -47,12 +52,14 @@ export type ContinueState =
           readonly handoff: SessionHandoff;
           readonly message: string;
       }
+    | { readonly kind: "link-unavailable"; readonly recovery: "setup" | "share"; readonly message: string }
     | { readonly kind: "identity-redeeming"; readonly code: string }
-    | { readonly kind: "failed"; readonly message: string }
+    | { readonly kind: "failed"; readonly code: string; readonly message: string }
     | { readonly kind: "invalid" };
 
 export interface ContinueStore {
     readonly state: ContinueState;
+    readonly continueHref: string | null;
     /** Aborts the in-flight redeem or session-open attempt, if any. */
     readonly cancel: () => void;
     readonly redeem: (signal: AbortSignal) => Promise<void>;
@@ -120,6 +127,19 @@ function transferCodeProject(code: string): string | null {
 export const createContinueStore = (fetchRequest: (request: Request) => Promise<Response>) => {
     let attempt: AbortController | null = null;
     const store = createStore<ContinueStore>()((set, get) => {
+        const showRetryableFailure = (
+            state: Extract<ContinueState, { readonly kind: "session-opening" | "identity-redeeming" }>,
+            cause: unknown,
+        ) => {
+            const message = formatError(cause, "Check your connection and try again.");
+            set({
+                continueHref: rememberedComputers().length > 0 ? "/" : null,
+                state:
+                    state.kind === "identity-redeeming"
+                        ? { kind: "failed", code: state.code, message }
+                        : { kind: "redeem-failed", code: state.code, handoff: state.handoff, message },
+            });
+        };
         /**
          * Opens the handoff session with an already-redeemed access. The
          * identity stays in the resulting states, so a retry reuses it instead
@@ -202,6 +222,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
         };
         return {
             diagnostics: null,
+            continueHref: rememberedComputers().length > 0 ? "/" : null,
             enterMorty: () => {
                 const state = get().state;
                 if (state.kind === "session-failed") {
@@ -213,7 +234,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
             },
             retry: () => {
                 const state = get().state;
-                if (state.kind !== "session-failed" && state.kind !== "redeem-failed") {
+                if (state.kind !== "session-failed" && state.kind !== "redeem-failed" && state.kind !== "failed") {
                     return;
                 }
                 attempt?.abort(new Error("The transfer retry replaced this attempt."));
@@ -225,11 +246,14 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     return;
                 }
                 set({
-                    state: {
-                        code: state.code,
-                        handoff: state.handoff,
-                        kind: "session-opening",
-                    },
+                    state:
+                        state.kind === "failed"
+                            ? { code: state.code, kind: "identity-redeeming" }
+                            : {
+                                  code: state.code,
+                                  handoff: state.handoff,
+                                  kind: "session-opening",
+                              },
                 });
                 void get().redeem(attempt.signal);
             },
@@ -254,37 +278,58 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     }
                     recordBrowserError("redeem", cause);
                     const message = formatError(cause, "This transfer link is unavailable.");
-                    if (state.kind === "identity-redeeming") {
-                        set({ state: { kind: "failed", message } });
-                        return;
-                    }
-                    // A transfer link can expire or be revoked while the access
-                    // it already redeemed stays usable. Reuse that access for
-                    // the same Project so Morty home stays reachable instead of
-                    // stranding the user on a dead link.
-                    let retained: AnonymousIdentity | null;
-                    try {
-                        retained = await api.loadExisting(signal);
-                        signal.throwIfAborted();
-                    } catch (retainedCause) {
-                        if (signal.aborted) {
+                    // A dead transfer code does not revoke an access it already
+                    // issued. Validate only the explicit scope, or a remembered
+                    // scope for this exact Project when the old link has no scope.
+                    if (cause instanceof IdentityApiError && cause.code === "TRANSFER_UNAVAILABLE") {
+                        const projectId = transferCodeProject(state.code);
+                        const explicit = readIdentityScope();
+                        const scopes = hasIdentityScope()
+                            ? explicit === null
+                                ? []
+                                : [explicit]
+                            : rememberedComputers().map((computer) => computer.scope);
+                        const matching = scopes.filter((scope) => scope.projectId === projectId);
+                        const visited = new Set<string>();
+                        try {
+                            for (const scope of matching) {
+                                if (visited.has(computerKey(scope))) {
+                                    continue;
+                                }
+                                visited.add(computerKey(scope));
+                                const retained = await api.loadScope(scope, signal);
+                                signal.throwIfAborted();
+                                if (retained === null) {
+                                    continue;
+                                }
+                                if (state.kind === "identity-redeeming") {
+                                    window.location.replace(identityDestination("/", retained));
+                                } else {
+                                    await openSession(state.handoff, retained, signal);
+                                }
+                                return;
+                            }
+                        } catch (retainedCause) {
+                            if (signal.aborted) {
+                                return;
+                            }
+                            recordBrowserError("load-retained-identity", retainedCause);
+                            // The code is terminal, but checking independently
+                            // retained access can still succeed after reconnecting.
+                            showRetryableFailure(state, retainedCause);
                             return;
                         }
-                        recordBrowserError("load-retained-identity", retainedCause);
-                        retained = null;
-                    }
-                    if (retained !== null && retained.projectId === transferCodeProject(state.code)) {
-                        await openSession(state.handoff, retained, signal);
+                        set({
+                            continueHref: rememberedComputers().length > 0 ? "/" : null,
+                            state: {
+                                kind: "link-unavailable",
+                                recovery: state.kind === "session-opening" ? "setup" : "share",
+                                message,
+                            },
+                        });
                         return;
                     }
-                    set({
-                        state: {
-                            code: state.code,
-                            handoff: state.handoff,
-                            kind: "redeem-failed",
-                            message,
-                        },
-                    });
+                    showRetryableFailure(state, cause);
                     return;
                 }
                 if (state.kind === "identity-redeeming") {

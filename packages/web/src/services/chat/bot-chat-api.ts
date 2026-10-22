@@ -8,17 +8,22 @@ import {
 } from "@moxt-ai/mobius-sdk";
 import {
     decodeAgentSettingsDiscoveredEvent,
+    decodeMessageKind,
     decodeNativeSessionEvents,
     decodeNativeSessionResult,
     decodeRuntimeDiagnosticsResult,
+    decodeSessionCloseNoticeEvent,
     decodeSessionReadyEvent,
     decodeSessionStatusChangedEvent,
     decodeWorkspaceEntriesEvent,
     type Identifier,
     isDirectoryIdentifier,
     isIdentifier,
+    SESSION_CLOSE_NOTICE_KIND,
+    type SessionCloseNoticeEvent,
     type SessionConfigOption,
     type SessionConfigurationSelection,
+    type SessionStatusChangedEvent,
 } from "@moxt-ai/mobius-sdk/protocol";
 import * as v from "valibot";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
@@ -61,6 +66,8 @@ const managedSessionSchema = v.pipe(
     v.readonly(),
 );
 export type ManagedChatSession = v.InferOutput<typeof managedSessionSchema>;
+/** What the Chat Worker's Session stream tells this page: a Session's activity changed, or the Runtime closed one. */
+export type ManagedSessionEvent = SessionStatusChangedEvent | SessionCloseNoticeEvent;
 const chatRuntimeSchema = v.object({
     runtimeId: identifier,
     machineName: v.string(),
@@ -326,7 +333,7 @@ export class BotChatApi {
         ).sessions;
     readonly subscribeManagedSessionStatuses = async (
         botId: string,
-        receive: (event: ReturnType<typeof decodeSessionStatusChangedEvent>) => void,
+        receive: (event: ManagedSessionEvent) => void,
         signal: AbortSignal,
     ): Promise<void> => {
         const token = await this.#getToken(signal);
@@ -341,7 +348,17 @@ export class BotChatApi {
                 ),
                 { method: "POST", headers: { authorization: `Bearer ${token}` }, signal },
             ),
-            (data) => receive(decodeSessionStatusChangedEvent(data)),
+            (data) => {
+                // A newer Chat Worker may send other kinds; this page skips them and keeps its stream.
+                switch (decodeMessageKind(data)) {
+                    case SESSION_CLOSE_NOTICE_KIND:
+                        receive(decodeSessionCloseNoticeEvent(data));
+                        return;
+                    case "session.status.changed":
+                        receive(decodeSessionStatusChangedEvent(data));
+                        return;
+                }
+            },
         );
     };
     readonly archiveManagedSession = async (botId: string, sessionId: string, signal: AbortSignal): Promise<void> => {

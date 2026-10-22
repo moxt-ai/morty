@@ -7,14 +7,15 @@
     "durable_objects": {
         "bindings": [
             { "name": "RUNTIME_RELAY", "class_name": "RuntimeRelay" },
-            { "name": "PROJECT_RELAY", "class_name": "ProjectRelay" }
+            { "name": "PROJECT_RELAY", "class_name": "ProjectDO" }
         ]
     },
     "migrations": [
         {
             "tag": "platform-initial",
             "new_sqlite_classes": ["RuntimeRelay", "ProjectRelay"]
-        }
+        },
+        { "tag": "platform-rename-project-do", "renamed_classes": [{ "from": "ProjectRelay", "to": "ProjectDO" }] }
     ],
     "d1_databases": [
         {
