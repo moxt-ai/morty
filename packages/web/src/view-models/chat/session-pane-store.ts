@@ -449,6 +449,7 @@ export function createSessionPaneModel(options: {
     let loadingOlderHistory = false;
     let command = openedActiveTurn.kind === "idle" ? "" : openedActiveTurn.commandId;
     let initialCommandId = options.initialMessage?.commandId ?? null;
+    let draftRevision = 0;
     // The queued first message stays the pane's recovery responsibility until
     // the service accepts it or the user discards it, not just until the send
     // starts.
@@ -1152,6 +1153,8 @@ export function createSessionPaneModel(options: {
                 countdownInterrupt?.abort(new Error("Retried now"));
             },
             setDraft: (draft) => {
+                draftRevision += 1;
+                delivery.getState().dismissFailure();
                 tasks.getState().dismissFailure();
                 messageQueue.getState().dismissFailure();
                 if (draft === "") {
@@ -1191,16 +1194,19 @@ export function createSessionPaneModel(options: {
                 const images = attachments.flatMap((attachment) =>
                     attachment.kind === "image" ? [attachment.image] : [],
                 );
+                const submittedDraftRevision = draftRevision;
+                // The submission owns this snapshot until it is accepted, journaled,
+                // or returned to the composer by an authoritative rejection.
                 centralSessionStorage.remove(draftEntry);
                 composerAttachments.getState().clear();
                 const activity = startSessionWork({ commandId, startedAt: lastSentMessage.sentAt });
                 const pending = deriveTimeline();
                 set({
                     activity,
-                    draft: "",
                     followRevision: get().followRevision + 1,
                     operation: { kind: "sending", commandId },
                     messages: pending.messages,
+                    draft: "",
                 });
                 try {
                     activeTurn.submissionStarted(commandId);
@@ -1212,40 +1218,53 @@ export function createSessionPaneModel(options: {
                             attachment.kind === "resource" ? [attachment.resource] : [],
                         ),
                     };
-                    const accepted = await delivery.getState().submit(commandId, displayPrompt, submission, signal);
+                    const outcome = await delivery.getState().submit(commandId, displayPrompt, submission, signal);
                     signal.throwIfAborted();
-                    // Report delivery as soon as the service accepts the turn,
-                    // independently of `command`: a live event may clear it
-                    // while the submission is in flight. An uncertain
-                    // (delivery-unknown) or rejected submission marks the
-                    // queued first message as unconfirmed, which keeps its
-                    // content and command id for an explicit retry but never
-                    // auto-sends it from a remount.
-                    if (accepted !== null) {
+                    switch (outcome.kind) {
+                        case "accepted":
+                        case "delivery-unknown":
+                            break;
+                        case "rejected":
+                            if (draftRevision === submittedDraftRevision) {
+                                set({ draft: current.draft });
+                                composerAttachments.getState().restore(attachments);
+                                centralSessionStorage.write(draftEntry, current.draft);
+                            }
+                            if (isQueuedInitialMessage(commandId)) {
+                                // This rejected message is editable again. Retire
+                                // the auto-send/retry copy owned by the home store.
+                                options.onInitialMessageRecoveryCleared?.(commandId);
+                            }
+                            break;
+                        default:
+                            return outcome satisfies never;
+                    }
+                    if (outcome.kind === "accepted") {
                         if (isQueuedInitialMessage(commandId)) {
                             options.onInitialMessageDelivered?.();
                         }
-                    } else if (isQueuedInitialMessage(commandId)) {
+                    } else if (outcome.kind === "delivery-unknown" && isQueuedInitialMessage(commandId)) {
                         options.onInitialMessageUnconfirmed?.({ commandId, displayPrompt, request: submission });
                     }
-                    if (accepted !== null) {
+                    if (outcome.kind === "accepted") {
                         // A terminal live event may precede the acceptance response.
                         // Its result already owns the activity; do not overwrite it.
                         if (command === commandId) {
-                            tasks.getState().start(commandId, accepted.turnId);
-                            activeTurn.submissionAccepted(commandId, accepted.turnId);
+                            tasks.getState().start(commandId, outcome.turn.turnId);
+                            activeTurn.submissionAccepted(commandId, outcome.turn.turnId);
                         }
                         set({ operation: finishPromptOperation(get().operation, commandId) });
                         return;
                     }
                     activeTurn.turnCleared(commandId);
-                    command = "";
-                    const idle = { kind: "idle" } as const;
+                    if (command === commandId) {
+                        command = "";
+                    }
                     const restored = deriveTimeline();
                     set({
-                        activity: idle,
+                        activity: transitionSessionActivity(get().activity, { commandId, kind: "work-completed" }),
                         messages: restored.messages,
-                        operation: { kind: "idle" },
+                        operation: finishPromptOperation(get().operation, commandId),
                     });
                     announceActivity();
                 } catch (cause) {
@@ -1298,21 +1317,49 @@ export function createSessionPaneModel(options: {
                 const retried = deriveTimeline();
                 set({ activity: retrying, messages: retried.messages });
                 announceActivity();
-                const accepted = await delivery.getState().retry(signal);
+                const outcome = await delivery.getState().retry(signal);
                 signal.throwIfAborted();
-                if (accepted !== null) {
-                    // A successful retry also delivers the queued first
-                    // message, so the home store must stop treating it as
-                    // pending recovery.
-                    if (isQueuedInitialMessage(pending.commandId)) {
-                        options.onInitialMessageDelivered?.();
+                switch (outcome?.kind) {
+                    case "accepted":
+                        if (isQueuedInitialMessage(pending.commandId)) {
+                            options.onInitialMessageDelivered?.();
+                        }
+                        if (command === pending.commandId) {
+                            tasks.getState().start(pending.commandId, outcome.turn.turnId);
+                            activeTurn.submissionAccepted(pending.commandId, outcome.turn.turnId);
+                        }
+                        return;
+                    case "rejected": {
+                        const restoredAttachments = [
+                            ...pending.request.images.map((image) => ({ kind: "image" as const, image })),
+                            ...pending.request.resources.map((resource) => ({ kind: "resource" as const, resource })),
+                        ];
+                        composerAttachments.getState().restore(restoredAttachments);
+                        centralSessionStorage.write(draftEntry, pending.request.content);
+                        set({ draft: pending.request.content });
+                        if (isQueuedInitialMessage(pending.commandId)) {
+                            options.onInitialMessageRecoveryCleared?.(pending.commandId);
+                        }
+                        break;
                     }
-                    tasks.getState().start(pending.commandId, accepted.turnId);
-                    activeTurn.submissionAccepted(pending.commandId, accepted.turnId);
-                } else {
-                    activeTurn.turnCleared(pending.commandId);
+                    case "delivery-unknown":
+                        break;
+                    case undefined:
+                        return;
+                    default:
+                        return outcome satisfies never;
+                }
+                activeTurn.turnCleared(pending.commandId);
+                if (command === pending.commandId) {
                     command = "";
                 }
+                set({
+                    activity: transitionSessionActivity(get().activity, {
+                        commandId: pending.commandId,
+                        kind: "work-completed",
+                    }),
+                });
+                announceActivity();
             },
             queueDraft: async (signal) => {
                 const current = get();
@@ -1333,6 +1380,7 @@ export function createSessionPaneModel(options: {
                             attachment.kind === "image" ? attachment.image.name : attachment.resource.name,
                         )
                         .join(", ");
+                delivery.getState().dismissFailure();
                 const queued = await messageQueue.getState().enqueue(
                     controls.operation.active.commandId,
                     summary,
