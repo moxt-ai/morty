@@ -477,14 +477,21 @@ export function createSessionPaneModel(options: {
     let attempt: AbortController | null = null;
     // Lets the connect loop go on once the user has reopened the closed Session.
     let resumeAfterReopen: (() => void) | null = null;
+    // Counts the times the user reopened the Session. A `session_closed` failure from an operation that began
+    // before a reopening describes the Session as it was, so it must not close the reopened Session again.
+    let reopenings = 0;
+    /** Whether a failure says the Session is closed now, not just as it was when the operation began. */
+    const closedNow = (cause: unknown, reopeningsAtStart: number): boolean =>
+        isSessionClosedFailure(cause) && reopeningsAtStart === reopenings;
     /** Wraps an operation on the Session so that failing because the Session closed also closes this pane. */
     const noticingClosure =
         <Arguments extends readonly unknown[], Result>(operation: (...args: Arguments) => Promise<Result>) =>
         async (...args: Arguments): Promise<Result> => {
+            const reopeningsAtStart = reopenings;
             try {
                 return await operation(...args);
             } catch (cause) {
-                if (isSessionClosedFailure(cause)) {
+                if (closedNow(cause, reopeningsAtStart)) {
                     store.getState().sessionClosed(null);
                 }
                 throw cause;
@@ -772,11 +779,15 @@ export function createSessionPaneModel(options: {
         const settleClosedExecution = (): void => {
             commitProjection({ kind: "execution-idle" });
             messageQueue.getState().replace([]);
-            if (command !== "") {
-                tasks.getState().finish(command);
-                activeTurn.turnCleared(command);
-                command = "";
+            const controlled = tasks.getState().operation;
+            if (controlled.kind !== "idle") {
+                tasks.getState().finish(controlled.active.commandId);
             }
+            const turn = activeTurn.current();
+            if (turn.kind !== "idle") {
+                activeTurn.turnCleared(turn.commandId);
+            }
+            command = "";
             const activity = get().activity;
             set({ activity: activity.kind === "failed" ? activity : { kind: "idle" }, interactions: [] });
             announceActivity();
@@ -822,6 +833,7 @@ export function createSessionPaneModel(options: {
                 }
                 loadingOlderHistory = true;
                 set({ historyLoading: true });
+                const reopeningsAtStart = reopenings;
                 try {
                     const page = await readSessionHistory(
                         client,
@@ -835,7 +847,7 @@ export function createSessionPaneModel(options: {
                     commitProjection({ kind: "older-page", page, revision: pagination.revision });
                 } catch (cause) {
                     signal.throwIfAborted();
-                    if (isSessionClosedFailure(cause)) {
+                    if (closedNow(cause, reopeningsAtStart)) {
                         get().sessionClosed(null);
                         return;
                     }
@@ -1331,6 +1343,7 @@ export function createSessionPaneModel(options: {
                 delivery.getState().dismissFailure();
                 tasks.getState().dismissFailure();
                 messageQueue.getState().dismissFailure();
+                reopenings += 1;
                 resumeAfterReopen?.();
             },
             setDraft: (draft) => {
@@ -1603,6 +1616,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 set({ operation: { kind: "configuring" } });
+                const reopeningsAtStart = reopenings;
                 try {
                     const result = await client.sessions.updateConfiguration(
                         sessionId,
@@ -1630,7 +1644,7 @@ export function createSessionPaneModel(options: {
                     set({ options: result.configOptions, operation: { kind: "idle" } });
                 } catch (cause) {
                     signal.throwIfAborted();
-                    if (isSessionClosedFailure(cause)) {
+                    if (closedNow(cause, reopeningsAtStart)) {
                         set({ operation: { kind: "idle" } });
                         get().sessionClosed(null);
                         return;
@@ -1670,6 +1684,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 set({ titleEdit: { draft: trimmed, kind: "saving" } });
+                const reopeningsAtStart = reopenings;
                 try {
                     const result = await client.sessions.rename(
                         sessionId,
@@ -1682,7 +1697,7 @@ export function createSessionPaneModel(options: {
                     options.onTitleChange(sessionId, sessionTitle);
                 } catch (cause) {
                     signal.throwIfAborted();
-                    if (isSessionClosedFailure(cause)) {
+                    if (closedNow(cause, reopeningsAtStart)) {
                         set({ titleEdit: { kind: "closed" } });
                         get().sessionClosed(null);
                         return;
@@ -1701,6 +1716,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 set({ operation: { kind: "configuring" } });
+                const reopeningsAtStart = reopenings;
                 try {
                     const connected = client;
                     await dispatchProjection({ kind: "reconcile" }, connected, signal);
@@ -1708,7 +1724,7 @@ export function createSessionPaneModel(options: {
                     set({ operation: { kind: "idle" } });
                 } catch (cause) {
                     signal.throwIfAborted();
-                    if (isSessionClosedFailure(cause)) {
+                    if (closedNow(cause, reopeningsAtStart)) {
                         set({ operation: { kind: "idle" } });
                         get().sessionClosed(null);
                         return;
@@ -1725,6 +1741,7 @@ export function createSessionPaneModel(options: {
                 if (client === null || get().connection.kind !== "ready") {
                     throw new Error("The Session is not connected.");
                 }
+                const reopeningsAtStart = reopenings;
                 try {
                     await client.interactions.respond(
                         sessionId,
@@ -1734,7 +1751,7 @@ export function createSessionPaneModel(options: {
                     );
                 } catch (cause) {
                     signal.throwIfAborted();
-                    if (isSessionClosedFailure(cause)) {
+                    if (closedNow(cause, reopeningsAtStart)) {
                         get().sessionClosed(null);
                     }
                     throw cause;
@@ -1744,6 +1761,7 @@ export function createSessionPaneModel(options: {
                 if (client === null || get().connection.kind !== "ready") {
                     throw new Error("The Session is not connected.");
                 }
+                const reopeningsAtStart = reopenings;
                 try {
                     await client.interactions.respond(
                         sessionId,
@@ -1753,7 +1771,7 @@ export function createSessionPaneModel(options: {
                     );
                 } catch (cause) {
                     signal.throwIfAborted();
-                    if (isSessionClosedFailure(cause)) {
+                    if (closedNow(cause, reopeningsAtStart)) {
                         get().sessionClosed(null);
                     }
                     throw cause;
