@@ -17,7 +17,7 @@ These rules apply to `packages/web`. Repository-wide rules in the root `AGENTS.m
 - Use Zustand stores in the view-model layer. Prefer vanilla `createStore` factories for screen- or resource-scoped state and the existing Zustand `create` API for intentionally shared application state.
 - Keep each store scoped to one cohesive workflow. Split screens with independent loading, editing, submission, or lifecycle concerns into collaborating stores instead of building a page-sized store.
 - Do not implement view-models as custom React hooks. Views create or receive a store and subscribe with Zustand's `useStore`.
-- Do not call `store.subscribe(...)` to react to state changes. State transitions go through explicit store actions that announce outcomes through port callbacks; React reads state with `useStore` or a `useSyncExternalStore` port.
+- Do not call `store.subscribe(...)`: it creates an implicit business lifecycle outside the store's explicit transitions. State transitions go through explicit store actions that announce outcomes through port callbacks; React reads state with `useStore` or a `useSyncExternalStore` port.
 - Store factories are pure construction. Do not create effects, such as subscriptions, listeners, timers, requests, or other side effects, while creating a store. Effects start from explicit lifecycle actions and stop explicitly.
 - Store actions that perform external work must accept an `AbortSignal`, propagate cancellation, and avoid publishing state after cancellation.
 - Inject external ports or construct production clients inside store factories. Components and views must not coordinate multi-step service workflows.
