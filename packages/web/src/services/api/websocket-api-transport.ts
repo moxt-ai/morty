@@ -36,6 +36,12 @@ const KEEPALIVE_MILLISECONDS = 25_000;
 const RECONNECT_DELAYS_MILLISECONDS = [1_000, 2_000, 4_000, 8_000, 15_000] as const;
 /** Background attempts before Chat waits for a user action to dial again. */
 const MAX_RECONNECT_ATTEMPTS = 10;
+/**
+ * How long one WebSocket upgrade may stay pending. A network that accepts the
+ * TCP connection but never completes the handshake must not leave the bridge
+ * connecting forever, so the attempt is abandoned and the retry budget continues.
+ */
+export const CHAT_BRIDGE_HANDSHAKE_TIMEOUT_MILLISECONDS = 10_000;
 
 /**
  * A bridge failure that crosses the transport boundary. Requests and watches
@@ -61,8 +67,16 @@ const bridgeUnavailable = (): ChatBridgeError => new ChatBridgeError("The WebSoc
 type BridgeState =
     | { readonly kind: "closed" }
     | { readonly kind: "disconnected" }
-    | { readonly kind: "connecting"; readonly connection: Promise<WebSocket> }
+    | { readonly kind: "connecting"; readonly attempt: DialAttempt }
     | { readonly kind: "connected"; readonly socket: WebSocket };
+
+/** One WebSocket upgrade, including its handshake deadline. */
+interface DialAttempt {
+    readonly connection: Promise<WebSocket>;
+    readonly socket: WebSocket;
+    /** Ends an unfinished handshake: closes the socket and settles the attempt. */
+    readonly abandon: (cause: ChatBridgeError) => void;
+}
 
 interface PendingRequest {
     readonly reject: (cause: unknown) => void;
@@ -424,10 +438,9 @@ export class WebSocketApiTransport {
         if (state.kind === "connected") {
             state.socket.close(1000, reason);
         } else if (state.kind === "connecting") {
-            void state.connection.then(
-                (socket) => socket.close(1000, reason),
-                () => undefined,
-            );
+            // Closing during the handshake settles the attempt without waiting
+            // for a close event the browser may never deliver.
+            state.attempt.abandon(bridgeClosed());
         }
     };
 
@@ -437,10 +450,7 @@ export class WebSocketApiTransport {
         if (state.kind === "connected") {
             state.socket.close(1000, "Chat API transport disconnected");
         } else if (state.kind === "connecting") {
-            void state.connection.then(
-                (socket) => socket.close(1000, "Chat API transport disconnected"),
-                () => undefined,
-            );
+            state.attempt.abandon(cause);
         }
         this.#rejectRequests(cause);
         this.#scheduleReconnect();
@@ -458,21 +468,18 @@ export class WebSocketApiTransport {
         }
     };
 
-    readonly #dial = async (): Promise<boolean> => {
+    readonly #dial = async (): Promise<void> => {
         if (!this.#desired || this.#disposed) {
-            return false;
+            return;
         }
-        if (this.#state.kind === "connected") {
-            return true;
-        }
-        if (this.#state.kind === "connecting") {
-            return false;
+        if (this.#state.kind === "connected" || this.#state.kind === "connecting") {
+            return;
         }
         try {
             await this.#connect(this.#lifetime.signal);
-            return true;
         } catch {
-            return false;
+            // The attempt already scheduled the next backoff or exhausted the
+            // budget from its own failure path.
         }
     };
 
@@ -480,6 +487,8 @@ export class WebSocketApiTransport {
         if (!this.#desired || this.#disposed || this.#reconnectTimer !== null) {
             return;
         }
+        // One attempt at a time: the in-flight attempt schedules the next
+        // backoff when its handshake settles or its deadline expires.
         if (this.#state.kind === "connected" || this.#state.kind === "connecting") {
             return;
         }
@@ -490,7 +499,6 @@ export class WebSocketApiTransport {
         const delay =
             RECONNECT_DELAYS_MILLISECONDS[Math.min(this.#reconnectAttempt, RECONNECT_DELAYS_MILLISECONDS.length - 1)] ??
             15_000;
-        const lastAttempt = this.#reconnectAttempt + 1 >= MAX_RECONNECT_ATTEMPTS;
         this.#reconnectAttempt += 1;
         const controller = new AbortController();
         const timer = {
@@ -508,19 +516,7 @@ export class WebSocketApiTransport {
                     this.#reconnectExhausted = false;
                     return;
                 }
-                // Arm the next attempt before dialing so a slow connection
-                // cannot stall the bounded retry budget.
-                if (!lastAttempt) {
-                    this.#scheduleReconnect();
-                }
-                const dialing = this.#dial();
-                if (lastAttempt) {
-                    void dialing.then((connected) => {
-                        if (!connected) {
-                            this.#exhaustReconnect();
-                        }
-                    });
-                }
+                void this.#dial();
             },
             () => {
                 if (this.#reconnectTimer === timer) {
@@ -528,6 +524,21 @@ export class WebSocketApiTransport {
                 }
             },
         );
+    };
+
+    /**
+     * A failed handshake continues the bounded budget: arm the next backoff, or
+     * stop and tell waiting callers once the budget is spent.
+     */
+    readonly #attemptFailed = (): void => {
+        if (!this.#desired || this.#disposed) {
+            return;
+        }
+        if (this.#reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
+            this.#exhaustReconnect();
+            return;
+        }
+        this.#scheduleReconnect();
     };
 
     /**
@@ -585,7 +596,8 @@ export class WebSocketApiTransport {
 
     /**
      * API calls fail fast while a backoff attempt is pending, like a refused
-     * HTTP connection, instead of racing another socket.
+     * HTTP connection, instead of racing another socket. Once the budget is
+     * spent a call dials again, so an explicit user retry can recover.
      */
     readonly #connectForCall = async (signal: AbortSignal): Promise<WebSocket> => {
         if (this.#reconnectTimer !== null) {
@@ -602,24 +614,58 @@ export class WebSocketApiTransport {
             return this.#state.socket;
         }
         if (this.#state.kind === "connecting") {
-            return await this.#waitForConnection(this.#state.connection, signal);
+            return await this.#waitForConnection(this.#state.attempt.connection, signal);
         }
         const endpoint = new URL("/morty/ws", this.#origin);
         endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
         const startedAt = performance.now();
         const socket = new WebSocket(endpoint);
+        const deadline = new AbortController();
+        let abandoned: (cause: ChatBridgeError) => void = () => undefined;
         const connection = new Promise<WebSocket>((resolve, reject) => {
-            const closedWhileConnecting = () => {
+            let settled = false;
+            /** Ends the handshake exactly once: listeners and deadline go away. */
+            const settle = (): boolean => {
+                if (settled) {
+                    return false;
+                }
+                settled = true;
                 socket.removeEventListener("open", opened);
                 socket.removeEventListener("error", failed);
-                if (this.#state.kind !== "closed") {
+                socket.removeEventListener("close", closedWhileConnecting);
+                deadline.abort(new Error("The Chat WebSocket handshake finished."));
+                return true;
+            };
+            const releaseState = (): void => {
+                if (this.#state.kind === "connecting" && this.#state.attempt.socket === socket && !this.#disposed) {
                     this.#state = { kind: "disconnected" };
                 }
+            };
+            abandoned = (cause: ChatBridgeError): void => {
+                if (!settle()) {
+                    return;
+                }
+                try {
+                    socket.close(1000, "Chat API transport stopped waiting for the handshake");
+                } catch {
+                    // The browser already discarded the socket.
+                }
+                releaseState();
+                reject(cause);
+                this.#attemptFailed();
+            };
+            const closedWhileConnecting = () => {
+                if (!settle()) {
+                    return;
+                }
+                releaseState();
                 reject(bridgeClosed());
+                this.#attemptFailed();
             };
             const opened = () => {
-                socket.removeEventListener("error", failed);
-                socket.removeEventListener("close", closedWhileConnecting);
+                if (!settle()) {
+                    return;
+                }
                 if (this.#disposed || this.#state.kind === "closed") {
                     socket.close(1000, "Chat API transport disposed");
                     reject(bridgeClosed());
@@ -650,6 +696,9 @@ export class WebSocketApiTransport {
                 resolve(socket);
             };
             const failed = () => {
+                if (!settle()) {
+                    return;
+                }
                 recordBrowserDiagnostic({
                     at: new Date().toISOString(),
                     component: "worker",
@@ -658,12 +707,9 @@ export class WebSocketApiTransport {
                     requestId: "",
                     elapsedMs: Math.round(performance.now() - startedAt),
                 });
-                socket.removeEventListener("open", opened);
-                socket.removeEventListener("close", closedWhileConnecting);
-                if (this.#state.kind !== "closed") {
-                    this.#state = { kind: "disconnected" };
-                }
+                releaseState();
                 reject(bridgeUnavailable());
+                this.#attemptFailed();
             };
             socket.addEventListener("open", opened, { once: true });
             socket.addEventListener("error", failed, { once: true });
@@ -684,7 +730,16 @@ export class WebSocketApiTransport {
                     if (this.#disposed) {
                         return;
                     }
-                    if (this.#state.kind === "connected" && this.#state.socket === socket) {
+                    const current =
+                        this.#state.kind === "connected"
+                            ? this.#state.socket === socket
+                            : this.#state.kind === "connecting" && this.#state.attempt.socket === socket;
+                    if (!current) {
+                        // A socket from a finished attempt closing late must not
+                        // touch the bridge that replaced it.
+                        return;
+                    }
+                    if (this.#state.kind === "connected") {
                         this.#state = { kind: "disconnected" };
                     }
                     this.#rejectRequests(bridgeClosed());
@@ -692,8 +747,23 @@ export class WebSocketApiTransport {
                 },
                 { once: true },
             );
+            // A handshake the network never finishes must not pin the bridge in
+            // "connecting": give up, release the state, and let the retry budget
+            // continue from a clean slate.
+            void this.#clock
+                .sleep(
+                    CHAT_BRIDGE_HANDSHAKE_TIMEOUT_MILLISECONDS,
+                    AbortSignal.any([this.#lifetime.signal, deadline.signal]),
+                )
+                .then(
+                    () => abandoned(bridgeUnavailable()),
+                    () => undefined,
+                );
         });
-        this.#state = { kind: "connecting", connection };
+        this.#state = {
+            kind: "connecting",
+            attempt: { connection, socket, abandon: (cause) => abandoned(cause) },
+        };
         return await this.#waitForConnection(connection, signal);
     };
 

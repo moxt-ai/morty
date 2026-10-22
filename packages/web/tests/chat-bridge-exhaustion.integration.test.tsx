@@ -62,6 +62,6 @@ test("Given a bridge endpoint that disappears, When every reconnect attempt fail
     // page stuck on the skeleton or on a dead end.
     await app.user.click(reconnect);
     await app.waitForView(() =>
-        expect(getByRole(document.body, "alert").textContent).toContain("The WebSocket to Morty"),
+        expect(app.elementByTestId(dataTestId.sessionLoadFailure).textContent).toContain("The WebSocket to Morty"),
     );
 });
