@@ -27,9 +27,21 @@ export class ControlledSetupRuntime implements SetupRuntime {
 
     readonly #options: ControlledAgentBehavior;
     readonly #machineName: string;
-    constructor(options: ControlledAgentBehavior, machineName: string) {
+    readonly #upgrade: "available" | "unavailable";
+    #release: NonNullable<ControlledAgentBehavior["runtime"]>;
+    /**
+     * `options.runtime` is the release the machine's daemon runs before setup.
+     * `upgrade` says whether `mobius upgrade` can reach a newer release.
+     */
+    constructor(
+        options: ControlledAgentBehavior,
+        machineName: string,
+        upgrade: "available" | "unavailable" = "available",
+    ) {
         this.#machineName = machineName;
         this.#options = options;
+        this.#upgrade = upgrade;
+        this.#release = options.runtime ?? "current";
         // The fixture races failures against the browser scenario; retain early failures too.
         void this.failure.catch(() => undefined);
     }
@@ -61,6 +73,10 @@ export class ControlledSetupRuntime implements SetupRuntime {
             }
             return text(args[index + 1], name);
         };
+        if (args[0] === "upgrade") {
+            await this.#upgradeDaemon(signal);
+            return result;
+        }
         if (args[0] === "start") {
             const connection = this.#saved.get(option("--connection"));
             if (connection === undefined) {
@@ -96,12 +112,34 @@ export class ControlledSetupRuntime implements SetupRuntime {
         return result;
     };
 
+    /** The daemon release `mobius --version` reports. */
+    readonly daemonRelease = (): NonNullable<ControlledAgentBehavior["runtime"]> => this.#release;
+
+    // Like `mobius upgrade`: the running daemon switches to the newest release, and
+    // its active connections come back on it.
+    async #upgradeDaemon(signal: AbortSignal): Promise<void> {
+        if (this.#upgrade === "unavailable") {
+            throw new Error("npm could not return a valid latest Mobius version");
+        }
+        if (this.#release === "current") {
+            return;
+        }
+        this.#release = "current";
+        const reconnecting = Array.from(this.#active.keys(), (id) => this.#saved.get(id)).filter(
+            (connection) => connection !== undefined,
+        );
+        await this.disconnect();
+        for (const connection of reconnecting) {
+            await this.#connect(connection, signal);
+        }
+    }
+
     async #connect(connection: Connection, signal: AbortSignal): Promise<void> {
         if (this.#active.has(connection.connection_id)) {
             return;
         }
         const daemon = await connectControlledAgentRuntime({
-            behavior: this.#options,
+            behavior: { ...this.#options, runtime: this.#release },
             connection: {
                 channelId: connection.channel_id,
                 origin: connection.origin,

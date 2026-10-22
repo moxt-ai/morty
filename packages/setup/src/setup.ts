@@ -644,12 +644,35 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         ];
     }
 
+    /**
+     * A daemon keeps running the release that started it after the CLI updates,
+     * and a release whose own upgrade check fails stays on that release. The
+     * installed CLI owns the upgrade path, so bring the running daemon to the
+     * newest release before setup reuses or pairs it. The upgrade only refines
+     * the Runtime: when it is unavailable, setup continues with the running
+     * daemon and reports why.
+     */
+    async function upgradeRuntime(context: Context, cwd: string): Promise<void> {
+        try {
+            await runMobius(context, ["upgrade"], cwd);
+            emit({ status: "runtime_upgrade_checked" });
+        } catch (cause) {
+            signal.throwIfAborted();
+            emit({
+                status: "runtime_upgrade_skipped",
+                error: { code: "RUNTIME_UPGRADE_FAILED", cause: serializeErrorCause(cause) },
+                message: "Continuing with the running Mobius daemon. Run mobius upgrade to update it.",
+            });
+        }
+    }
+
     async function startRuntime(
         context: Context,
         runtime: RuntimeSelection,
         cwd: string,
         harness: string,
     ): Promise<Context> {
+        await upgradeRuntime(context, cwd);
         const reuseOnline = async () => {
             if (runtime.kind !== "existing" || !(await runtimeIsOnline(context, runtime, harness))) {
                 return false;

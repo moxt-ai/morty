@@ -279,6 +279,8 @@ for (const failure of ["exit", "signal", "cancel", "recover"]) {
                     `#!${process.execPath}
 import { readFileSync, writeFileSync } from 'node:fs';
 const output = process.argv.find(arg => arg.startsWith('--output-json='));
+// The daemon already runs the newest release, so an upgrade has nothing to do.
+if (process.argv[2] === 'upgrade') { process.exit(0); }
 if (output) { writeFileSync(output.slice('--output-json='.length), readFileSync('connections.json')); }
 else {
     const attempts = Number(readFileSync('attempts.txt', 'utf8')) + 1;
@@ -509,4 +511,72 @@ for (const segments of [4, 8]) {
             }
         },
     );
+}
+
+for (const upgrade of ["available", "unavailable"] as const) {
+    test(`Given the machine runs a previous daemon release and an upgrade is ${upgrade}, When setup prepares the Runtime, Then setup completes ${upgrade === "available" ? "on the newest release" : "on the running release and reports why"}`, {
+        timeout: 60_000,
+    }, async () => {
+        const root = await realpath(await mkdtemp(join(tmpdir(), "morty-setup-upgrade-")));
+        const documents = join(root, "Documents");
+        const workspace = join(root, "workspace");
+        await mkdir(workspace, { recursive: true });
+        const fixture = await createIdentityFixture({ appOrigin: await localOrigin() });
+        const runtime = new ControlledSetupRuntime(
+            { agentId: "settings-test", agentName: "Settings Agent", reply: mortyReply, runtime: "previous" },
+            "Setup test Runtime",
+            upgrade,
+        );
+        const events: Readonly<Record<string, unknown>>[] = [];
+        let time = Date.parse("2026-10-22T12:00:00Z");
+        try {
+            const code = await runSetup(
+                [
+                    "setup",
+                    "--base-url",
+                    fixture.origin,
+                    "--cwd",
+                    workspace,
+                    "--harness",
+                    "settings-test",
+                    "--session-id",
+                    "native-upgrade-project",
+                ],
+                {
+                    documents,
+                    signal: AbortSignal.timeout(55_000),
+                    runtime,
+                    emit: (event) => events.push(event),
+                    clock: {
+                        now: () => new Date(time),
+                        wait: async (milliseconds, signal) => {
+                            signal.throwIfAborted();
+                            time += milliseconds;
+                        },
+                    },
+                },
+            );
+            expect(code, JSON.stringify(events)).toBe(0);
+            expect(events.at(-1)).toMatchObject({ status: "ready", workspace });
+            if (upgrade === "available") {
+                expect(runtime.daemonRelease()).toBe("current");
+            } else {
+                expect(runtime.daemonRelease()).toBe("previous");
+                expect(events).toContainEqual(
+                    expect.objectContaining({
+                        status: "runtime_upgrade_skipped",
+                        error: expect.objectContaining({ code: "RUNTIME_UPGRADE_FAILED" }),
+                    }),
+                );
+            }
+        } finally {
+            await runtime.disconnect();
+            await fixture.close();
+            const qrPath = events.at(-1)?.["qrPath"];
+            if (typeof qrPath === "string") {
+                await rm(qrPath, { force: true });
+            }
+            await rm(root, { recursive: true, force: true });
+        }
+    });
 }
