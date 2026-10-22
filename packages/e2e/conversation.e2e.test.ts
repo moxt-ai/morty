@@ -3,7 +3,7 @@ import { expect, test } from "./infra/test.ts";
 
 test("Given an agent answer with reasoning and a tool call, When the user reads it, Then agent work is grayer than the answer", async ({
     runtime,
-}) => {
+}, testInfo) => {
     const { page } = runtime;
     await runtime.openPairedChat();
 
@@ -24,6 +24,8 @@ test("Given an agent answer with reasoning and a tool call, When the user reads 
     await expect(toolDisclosure).toHaveCSS("color", agentWorkColor);
 
     await reasoningSummary.click();
+    await page.mouse.move(0, 0);
+    await page.screenshot({ fullPage: true, path: testInfo.outputPath("agent-work.png") });
     await expect(page.getByText("Inspecting the request before acting.", { exact: true })).toHaveCSS(
         "color",
         agentWorkColor,
@@ -51,14 +53,6 @@ test("Given a linked TypeScript file longer than the preview, When the user open
     const lineNumbers = preview.locator(`[data-testid="${dataTestId.filePreviewLineNumbers}"] [data-line-number]`);
     await expect(lineNumbers).toHaveCount(53);
     await expect(lineNumbers.last()).toHaveText("53");
-    const firstLineNumberBox = await lineNumbers.first().boundingBox();
-    const firstCodeLineBox = await preview.locator("code > span").first().boundingBox();
-    expect(firstLineNumberBox).not.toBeNull();
-    expect(firstCodeLineBox).not.toBeNull();
-    if (firstLineNumberBox === null || firstCodeLineBox === null) {
-        throw new Error("Expected the first line number and source line to have browser layout boxes");
-    }
-    expect(firstLineNumberBox.y).toBeCloseTo(firstCodeLineBox.y, 0);
     await preview.evaluate(
         (element) =>
             new Promise<void>((resolve) => {
@@ -79,6 +73,15 @@ test("Given a linked TypeScript file longer than the preview, When the user open
                 check();
             }),
     );
+    const firstLineNumberBox = await lineNumbers.first().boundingBox();
+    const firstCodeLineBox = await preview.locator("code > span").first().boundingBox();
+    expect(firstLineNumberBox).not.toBeNull();
+    expect(firstCodeLineBox).not.toBeNull();
+    if (firstLineNumberBox === null || firstCodeLineBox === null) {
+        throw new Error("Expected the first line number and source line to have browser layout boxes");
+    }
+    await page.screenshot({ fullPage: true, path: testInfo.outputPath("file-preview-alignment.png") });
+    expect(firstLineNumberBox.y).toBeCloseTo(firstCodeLineBox.y, 0);
     await expect(preview.getByText("tsx", { exact: true })).toBeHidden();
     await expect(preview.getByRole("button", { name: "Copy code" })).toBeHidden();
     await expect(preview.locator('[data-streamdown="code-block"]')).toHaveCSS("border-top-width", "0px");
