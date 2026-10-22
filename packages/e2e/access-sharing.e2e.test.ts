@@ -153,7 +153,7 @@ test("Given a recent session on mobile, When the user expands the session list, 
     const recentSessions = page.getByRole("button", { name: "Recent sessions", exact: true });
     await recentSessions.click();
     await expect(recentSessions).toHaveAttribute("aria-expanded", "true");
-    const session = page.getByRole("button", { name: /^Mobile session navigation/u });
+    const session = page.getByRole("button", { name: "Open Mobile session navigation", exact: true });
     await expect(session).toBeVisible();
     await page.screenshot({
         animations: "disabled",
