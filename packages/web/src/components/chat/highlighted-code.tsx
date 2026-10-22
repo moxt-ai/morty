@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { AgentMarkdown, MAX_MARKDOWN_CHARACTERS } from "../../agents/agent-markdown.tsx";
+import { AgentMarkdown, MAX_MARKDOWN_CHARACTERS } from "../agents/agent-markdown.tsx";
 import { ToolTextPreview } from "./tool-text-preview.tsx";
 
 const LANGUAGE_BY_EXTENSION: Readonly<Record<string, string>> = {

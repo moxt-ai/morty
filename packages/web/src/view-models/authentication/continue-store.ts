@@ -6,6 +6,8 @@ import { type AnonymousIdentity, AnonymousIdentityApi } from "@/services/identit
 import { encodeIdentityScope } from "@/services/identity/identity-scope-url";
 import { formatError } from "@/view-models/format-error";
 
+export type ContinueStoreApi = ReturnType<typeof createContinueStore>;
+
 type SessionHandoff = {
     readonly harness: string;
     readonly sessionId: string;
@@ -44,6 +46,8 @@ export type ContinueState =
 
 export interface ContinueStore {
     readonly state: ContinueState;
+    /** Aborts the in-flight redeem or session-open attempt, if any. */
+    readonly cancel: () => void;
     readonly redeem: (signal: AbortSignal) => Promise<void>;
     readonly retry: () => void;
     readonly enterMorty: () => void;
@@ -172,6 +176,9 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 if (state.kind === "session-failed") {
                     window.location.replace(identityDestination("/", state.identity));
                 }
+            },
+            cancel: () => {
+                attempt?.abort(new Error("The continuation was cancelled."));
             },
             retry: () => {
                 const state = get().state;

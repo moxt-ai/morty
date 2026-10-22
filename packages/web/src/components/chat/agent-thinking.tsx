@@ -1,12 +1,10 @@
 import { Brain, ChevronDown, Wrench } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import type { MarkdownImageReader } from "../../components/agents/agent-markdown.tsx";
+import { ToolTextPreview } from "../../components/chat/tool-text-preview.tsx";
 import { dataTestId } from "../../data-testid.ts";
-import {
-    REASONING_CHARACTER_LIMIT,
-    type SessionToolPresentation,
-} from "../../view-models/chat/session-presentation.ts";
-import type { MarkdownImageReader } from "../agents/agent-markdown.tsx";
 import { AgentRichContent } from "../agents/agent-rich-content.tsx";
+import type { SessionResourceStoreFactory } from "../agents/resource-reader.ts";
 import { FollowLatestScrollArea } from "../utils/follow-latest-scroll-area.tsx";
 import {
     agentThinkStepChevronClassName,
@@ -16,9 +14,9 @@ import {
     ToolCallDisclosure,
     ToolCallSupplementalContent,
 } from "./tools/tool-call-status.tsx";
+import { REASONING_CHARACTER_LIMIT, type SessionToolPresentation } from "./tools/tool-contract.ts";
 import { toolRichContent } from "./tools/tool-display-content.ts";
 import { renderRegisteredTool } from "./tools/tool-renderer-registry.tsx";
-import { ToolTextPreview } from "./tools/tool-text-preview.tsx";
 
 export type AgentThinkingEntry =
     | {
@@ -122,13 +120,21 @@ function ReasoningDisclosure({ active, entry }: { readonly active: boolean; read
 
 function ToolCall({
     entry,
+    createResourceStore,
     readImage,
 }: {
     readonly entry: SessionToolPresentation;
+    readonly createResourceStore?: SessionResourceStoreFactory | undefined;
     readonly readImage?: MarkdownImageReader | undefined;
 }) {
     const registered = renderRegisteredTool(entry);
-    const supplementalContent = <AgentRichContent contents={toolRichContent(entry.content)} readImage={readImage} />;
+    const supplementalContent = (
+        <AgentRichContent
+            contents={toolRichContent(entry.content)}
+            createResourceStore={createResourceStore}
+            readImage={readImage}
+        />
+    );
     if (registered !== null) {
         return <ToolCallSupplementalContent value={supplementalContent}>{registered}</ToolCallSupplementalContent>;
     }
@@ -163,10 +169,13 @@ function ToolCall({
 
 export function AgentThinking({
     active,
+    createResourceStore,
     entries,
     readImage,
 }: {
     readonly active: boolean;
+    /** The view-model resource store factory; without it remote images render as links. */
+    readonly createResourceStore?: SessionResourceStoreFactory | undefined;
     readonly entries: readonly AgentThinkingEntry[];
     readonly readImage?: MarkdownImageReader | undefined;
 }) {
@@ -221,7 +230,12 @@ export function AgentThinking({
                         key={`reasoning:${item.entry.id}`}
                     />
                 ) : (
-                    <ToolCall entry={item.entry} key={`tool:${item.entry.id}`} readImage={readImage} />
+                    <ToolCall
+                        createResourceStore={createResourceStore}
+                        entry={item.entry}
+                        key={`tool:${item.entry.id}`}
+                        readImage={readImage}
+                    />
                 ),
             )}
         </div>

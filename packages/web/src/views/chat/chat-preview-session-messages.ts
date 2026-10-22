@@ -1,7 +1,7 @@
 // TEMP style-tuning preview: remove with chat preview routes.
 
 import type { ContentBlock, SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
-import type { AgentDisplayContent } from "../../view-models/chat/display-content.ts";
+import type { AgentDisplayContent } from "../../components/agents/display-content.ts";
 import type {
     SessionMessage,
     SessionText,

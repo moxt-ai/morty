@@ -1,17 +1,23 @@
 import { Check, Copy } from "lucide-react";
 import { Lexer } from "marked";
-import { defaultRemarkPlugins, type MathPlugin, parseMarkdownIntoBlocks, Streamdown } from "streamdown";
+import {
+    defaultRehypePlugins,
+    defaultRemarkPlugins,
+    type MathPlugin,
+    parseMarkdownIntoBlocks,
+    Streamdown,
+} from "streamdown";
 import "streamdown/styles.css";
 import { type ComponentProps, type SVGProps, useEffect, useMemo, useState } from "react";
 import { dataTestId } from "@/data-testid";
 import { cn } from "@/lib/utils";
-import type { SessionResourceReader as MarkdownImageReader } from "../../view-models/chat/session-resource-store.ts";
-import { boundedCodeHighlighter } from "./bounded-code-highlighter.ts";
-import { MermaidCodeBlock } from "./mermaid-code-block.tsx";
-import { remarkMermaidCompletion } from "./remark-mermaid-completion.ts";
+import { boundedCodeHighlighter } from "../../components/agents/bounded-code-highlighter.ts";
+import { MermaidCodeBlock } from "../../components/agents/mermaid-code-block.tsx";
+import { remarkMermaidCompletion } from "../../components/agents/remark-mermaid-completion.ts";
+import type { SessionResourceReader as MarkdownImageReader, SessionResourceStoreFactory } from "./resource-reader.ts";
 import { SessionResource } from "./session-resource.tsx";
 
-export type { SessionResourceReader as MarkdownImageReader } from "../../view-models/chat/session-resource-store.ts";
+export type { SessionResourceReader as MarkdownImageReader } from "./resource-reader.ts";
 
 const STREAMDOWN_CONTROLS = Object.freeze({
     code: Object.freeze({ copy: true, download: false }),
@@ -21,6 +27,11 @@ const STREAMDOWN_PLUGINS = Object.freeze({
     renderers: [{ language: "mermaid", component: MermaidCodeBlock }],
 });
 const STREAMDOWN_TRANSLATIONS = Object.freeze({ copyCode: "Copy code" });
+// Without the raw-HTML parser, Streamdown preserves HTML nodes as literal text.
+// Keep sanitization and URL hardening for the elements produced by Markdown.
+const STREAMDOWN_REHYPE_PLUGINS = Object.entries(defaultRehypePlugins)
+    .filter(([name]) => name !== "raw")
+    .map(([, plugin]) => plugin);
 
 type StreamdownIconProps = SVGProps<SVGSVGElement> & { readonly size?: number };
 
@@ -38,14 +49,17 @@ const STREAMDOWN_ICONS = Object.freeze({
 });
 
 const STREAMDOWN_FENCED_CODE_BLOCK_CLASSES = [
-    "[&_[data-streamdown=code-block]]:overflow-hidden",
+    "[&_[data-streamdown=code-block]]:!overflow-hidden",
     "[&_[data-streamdown=code-block]]:rounded-[20px]",
     "[&_[data-streamdown=code-block]]:!border-0",
     "[&_[data-streamdown=code-block]]:!bg-muted",
     "[&_[data-streamdown=code-block-header]]:!h-6",
+    "[&_[data-streamdown=code-block-body]]:flex [&_[data-streamdown=code-block-body]]:min-h-0 [&_[data-streamdown=code-block-body]]:flex-col [&_[data-streamdown=code-block-body]]:!overflow-hidden",
     "[&_[data-streamdown=code-block-body]]:!border-0",
     "[&_[data-streamdown=code-block-body]]:!bg-background",
     "[&_[data-streamdown=code-block-body]]:!p-3",
+    "[&_[data-streamdown=code-block-body]]:!text-[13px]",
+    "[&_[data-streamdown=code-block-body]_pre]:min-h-0 [&_[data-streamdown=code-block-body]_pre]:flex-1 [&_[data-streamdown=code-block-body]_pre]:overflow-auto",
     "[&_[data-streamdown=code-block-actions]]:!border-0",
     "[&_[data-streamdown=code-block-actions]]:!bg-transparent",
     "[&_[data-streamdown=code-block-actions]]:shadow-none",
@@ -65,7 +79,7 @@ const STREAMDOWN_FENCED_CODE_BLOCK_CLASSES = [
     "[&_[data-streamdown=code-block-copy-button]]:focus-visible:ring-2",
     "[&_[data-streamdown=code-block-copy-button]]:focus-visible:ring-ring/60",
     "[&_[data-streamdown=code-block-copy-button]_svg]:size-3.5",
-    "[&_[data-streamdown=inline-code]]:text-copy-secondary",
+    "[&_[data-streamdown=inline-code]]:text-[13px] [&_[data-streamdown=inline-code]]:text-copy-secondary",
 ].join(" ");
 const LOCAL_FILE_URL_ORIGIN = "https://local-file.morty.invalid";
 const LATEX_DELIMITER_PATTERN = /(^|[^\\$])(?:\$\$[\s\S]+?\$\$|\$(?!\$)[^\n$]+\$)/u;
@@ -217,10 +231,12 @@ function directImageSource(value: string): string {
 function AgentMarkdownImage({
     alt,
     className,
+    createResourceStore,
     readImage,
     src,
     title,
 }: ComponentProps<"img"> & {
+    readonly createResourceStore?: SessionResourceStoreFactory | undefined;
     readonly readImage?: MarkdownImageReader | undefined;
 }) {
     const directSource = typeof src === "string" ? directImageSource(src) : "";
@@ -228,8 +244,16 @@ function AgentMarkdownImage({
     if (directSource.length > 0) {
         return <img alt={alt ?? ""} className={className} loading="lazy" src={directSource} title={title} />;
     }
+    if (createResourceStore === undefined || readImage === undefined) {
+        return <span className="text-xs text-muted-foreground">Image not available</span>;
+    }
     return (
-        <SessionResource inline request={{ kind: "image", path: requestedSource }} read={readImage}>
+        <SessionResource
+            inline
+            createStore={createResourceStore}
+            request={{ kind: "image", path: requestedSource }}
+            read={readImage}
+        >
             {(state) => {
                 if (state.kind === "loading") {
                     return <span className="text-xs text-muted-foreground">Loading image…</span>;
@@ -245,6 +269,8 @@ function AgentMarkdownImage({
 
 export interface AgentMarkdownProps {
     readonly className?: string;
+    /** The view-model resource store factory; without it remote images render as unavailable. */
+    readonly createResourceStore?: SessionResourceStoreFactory | undefined;
     readonly markdown: string;
     readonly openLocalFile?: ((path: string) => void) | undefined;
     readonly readImage?: MarkdownImageReader | undefined;
@@ -258,6 +284,7 @@ interface AgentMarkdownContentProps extends AgentMarkdownProps {
 
 export function AgentMarkdownContent({
     className,
+    createResourceStore,
     markdown,
     mathPlugin,
     openLocalFile,
@@ -276,9 +303,11 @@ export function AgentMarkdownContent({
     const components = useMemo(
         () => ({
             a: (properties: ComponentProps<"a">) => <AgentMarkdownLink {...properties} openLocalFile={openLocalFile} />,
-            img: (properties: ComponentProps<"img">) => <AgentMarkdownImage {...properties} readImage={readImage} />,
+            img: (properties: ComponentProps<"img">) => (
+                <AgentMarkdownImage {...properties} createResourceStore={createResourceStore} readImage={readImage} />
+            ),
         }),
-        [openLocalFile, readImage],
+        [openLocalFile, readImage, createResourceStore],
     );
     const plugins = useMemo(
         () => (mathPlugin === undefined ? STREAMDOWN_PLUGINS : { ...STREAMDOWN_PLUGINS, math: mathPlugin }),
@@ -320,6 +349,7 @@ export function AgentMarkdownContent({
             mode={streaming ? "streaming" : "static"}
             parseMarkdownIntoBlocksFn={parseStreamingMarkdownIntoBlocks}
             plugins={plugins}
+            rehypePlugins={STREAMDOWN_REHYPE_PLUGINS}
             remarkPlugins={remarkPlugins}
             translations={STREAMDOWN_TRANSLATIONS}
         >

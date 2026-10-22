@@ -1,33 +1,27 @@
-import { type RefObject, useEffect, useLayoutEffect, useRef } from "react";
-
-import { LinkButton } from "../ui/link-button.tsx";
+import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 const TOP_EDGE_PIXELS = 80;
 
 /**
  * Requests an older page when a scroll container reaches its top edge, then
  * restores the visible scroll offset after the older content is prepended.
+ * Renders no UI; loading feedback belongs to the scroll content above.
  *
- * This is intentionally free of any domain or workflow knowledge: callers pass
- * a scroll container, whether more content exists, whether a request is already
- * in flight, a monotonic revision that changes when content is prepended, and
- * the load callback.
+ * Wire {@link checkScrollEdge} into the scroll container's `onScroll` handler.
  */
-export function LoadMoreTrigger({
+export function useLoadMoreOnScroll({
     container,
     hasMore,
     loading,
-    label,
     onLoadMore,
     revision,
 }: {
     readonly container: RefObject<HTMLElement | null>;
     readonly hasMore: boolean;
     readonly loading: boolean;
-    readonly label: string;
     readonly onLoadMore: (signal: AbortSignal) => Promise<void>;
     readonly revision: number;
-}) {
+}): { readonly checkScrollEdge: (element: HTMLElement, requireLayout?: boolean) => void } {
     const anchor = useRef<{ readonly height: number; readonly top: number } | null>(null);
     const pending = useRef(false);
     const controller = useRef<AbortController | null>(null);
@@ -67,14 +61,25 @@ export function LoadMoreTrigger({
             });
     };
 
+    const checkScrollEdge = useCallback((element: HTMLElement, requireLayout = false) => {
+        if (element.scrollTop > TOP_EDGE_PIXELS) {
+            return;
+        }
+        if (requireLayout && element.clientHeight <= 0) {
+            return;
+        }
+        requestRef.current();
+    }, []);
+
     useLayoutEffect(() => {
         const element = container.current;
         if (element === null) {
             return;
         }
         const request = (): void => {
-            if (element.clientHeight > 0 && element.scrollTop <= TOP_EDGE_PIXELS) {
-                requestRef.current();
+            const current = container.current;
+            if (current !== null) {
+                checkScrollEdge(current, false);
             }
         };
         element.addEventListener("scroll", request, { passive: true });
@@ -90,12 +95,12 @@ export function LoadMoreTrigger({
     useEffect(() => {
         const frame = requestAnimationFrame(() => {
             const element = container.current;
-            if (element !== null && element.clientHeight > 0 && element.scrollTop <= TOP_EDGE_PIXELS) {
-                requestRef.current();
+            if (element !== null) {
+                checkScrollEdge(element, true);
             }
         });
         return () => cancelAnimationFrame(frame);
-    }, [container, hasMore, revision]);
+    }, [checkScrollEdge, container, hasMore, revision]);
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: Restore the scroll offset after the prepended content commits.
     useLayoutEffect(() => {
@@ -107,9 +112,5 @@ export function LoadMoreTrigger({
         }
     }, [container, revision]);
 
-    return hasMore && !loading ? (
-        <div className="flex justify-center py-2">
-            <LinkButton onClick={() => requestRef.current()}>{label}</LinkButton>
-        </div>
-    ) : null;
+    return { checkScrollEdge };
 }

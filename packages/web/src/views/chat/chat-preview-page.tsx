@@ -3,6 +3,7 @@ import { Tooltip } from "radix-ui";
 import { type ReactNode, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
+import { createComposerAttachmentStore } from "../../components/chat/composer-attachment-store.ts";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
@@ -10,7 +11,6 @@ import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.t
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
-import { createComposerAttachmentStore } from "../../view-models/chat/composer-attachment-store.ts";
 import { SetupCardDescription, SetupCardLogo, SetupCardShell, SetupCardTitle } from "../setup/setup-card-shell.tsx";
 import type { ChatPreviewStateId } from "./chat-preview.ts";
 import { InteractiveChatPreview } from "./chat-preview-interactive.tsx";
@@ -76,7 +76,7 @@ function PreviewSidebar({
     return (
         <aside
             aria-label="Morty navigation"
-            className="grid min-h-0 w-full shrink-0 grid-cols-[minmax(0,1fr)_auto] gap-y-2 overflow-hidden border-b border-border/80 bg-sidebar px-3 py-3 sm:flex sm:w-[280px] sm:flex-col sm:gap-0 sm:border-r sm:border-b-0 sm:px-3.5 sm:py-4"
+            className="grid min-h-0 w-full shrink-0 grid-cols-[minmax(0,1fr)_auto] gap-y-2 overflow-hidden border-b border-border/80 bg-sidebar px-3 py-3 sm:flex sm:w-[264px] sm:flex-col sm:gap-0 sm:border-r sm:border-b-0 sm:px-3.5 sm:py-4"
         >
             <div className="col-start-1 row-start-1 flex items-center gap-3 px-1.5 sm:col-auto sm:row-auto sm:mb-3">
                 <span

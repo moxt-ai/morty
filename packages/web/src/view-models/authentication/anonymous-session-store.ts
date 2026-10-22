@@ -17,7 +17,18 @@ export interface AnonymousSessionStore {
     readonly load: (signal: AbortSignal) => Promise<void>;
 }
 
-export const createAnonymousSessionStore = (fetchRequest: (request: Request) => Promise<Response>, origin: string) =>
+/**
+ * Announced from the explicit state transitions that leave or enter an
+ * `active` identity, so the owner of the store reacts without subscribing to
+ * it. `null` means the session no longer carries an identity.
+ */
+export type AnnounceIdentity = (identity: AnonymousIdentity | null) => void;
+
+export const createAnonymousSessionStore = (
+    fetchRequest: (request: Request) => Promise<Response>,
+    origin: string,
+    onIdentityChanged: AnnounceIdentity,
+) =>
     createStore<AnonymousSessionStore>()((set, get) => {
         const api = new AnonymousIdentityApi({ fetchRequest, origin });
         return {
@@ -34,6 +45,7 @@ export const createAnonymousSessionStore = (fetchRequest: (request: Request) => 
             },
             load: async (signal) => {
                 set({ state: { kind: "loading" } });
+                onIdentityChanged(null);
                 try {
                     const existing = await api.loadExisting(signal);
                     signal.throwIfAborted();
@@ -46,6 +58,7 @@ export const createAnonymousSessionStore = (fetchRequest: (request: Request) => 
                     const identity = existing;
                     signal.throwIfAborted();
                     set({ state: { identity, kind: "active" } });
+                    onIdentityChanged(identity);
                 } catch {
                     if (!signal.aborted) {
                         set({ state: { kind: "failed" } });

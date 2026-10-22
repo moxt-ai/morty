@@ -1,9 +1,9 @@
 import { createRootRoute, createRoute, createRouter, Link, Outlet, useParams } from "@tanstack/react-router";
-import { useState } from "react";
-import { useStore } from "zustand";
 import { reportApplicationError } from "../../index.ts";
-import { useApiTransport } from "../../services/api/api-transport-context.tsx";
-import { createContinueStore } from "../../view-models/authentication/continue-store.ts";
+import type { ContinueStoreApi } from "../../view-models/authentication/continue-store.ts";
+import { useExternalStore } from "../../view-models/external-store.ts";
+import type { MortyApplication } from "../../view-models/morty-application.ts";
+import { useMortyApplication } from "../application/application-context.tsx";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import { setupPageClassName, setupSectionClassName } from "../setup/setup-card-shell.tsx";
 import { ContinuePageContent } from "./continue-page-content.tsx";
@@ -21,27 +21,32 @@ function ContinuePagePreview({ previewId }: { readonly previewId: ContinuePrevie
     return <ContinuePageContent enterMorty={() => {}} retry={() => {}} state={state} />;
 }
 
-function ContinuePageLive() {
-    const transport = useApiTransport();
-    // The page's lifetime owns the redeem: the store starts it on creation
-    // and its retry action restarts it, so no mount effect drives the flow.
-    const [store] = useState(() => createContinueStore(transport.fetch));
-    const { retry, enterMorty, state, diagnostics } = useStore(store);
+function ContinuePageLive({
+    application,
+    continuation,
+}: {
+    readonly application: MortyApplication;
+    readonly continuation: ContinueStoreApi;
+}) {
+    // The application creates the redeem with itself; the page only
+    // subscribes.
+    const { retry, enterMorty, state, diagnostics } = useExternalStore(continuation);
     return (
         <>
             <ContinuePageContent enterMorty={enterMorty} retry={retry} state={state} />
-            <BugReportButton appearance="floating" daemonSource={diagnostics} />
+            <BugReportButton appearance="floating" daemonSource={diagnostics} dialog={application.bugReportDialog} />
         </>
     );
 }
 
 function ContinuePage() {
     // TEMP style-tuning preview: `?continuePreview=<state>` on /continue forces one UI state. Remove with continue-preview.ts.
+    const application = useMortyApplication();
     const previewId = getContinuePreviewStateId(new URLSearchParams(window.location.search));
     if (previewId !== null) {
         return <ContinuePagePreview previewId={previewId} />;
     }
-    return <ContinuePageLive />;
+    return <ContinuePageLive application={application} continuation={application.continuation} />;
 }
 
 function ContinuePreviewIndexPage() {
