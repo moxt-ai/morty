@@ -102,7 +102,7 @@ export function ExecutionContextBar({ context }: { readonly context: ExecutionCo
                             collisionPadding={12}
                             className="relative z-50 w-[360px] max-w-[calc(100vw-24px)] rounded-2xl border border-border bg-card p-5 shadow-[0_12px_40px_rgba(0,0,0,0.12)] outline-none"
                         >
-                            <h3 className="mb-5 pr-8 text-sm font-semibold">Execution details</h3>
+                            <h3 className="mb-5 pr-8 text-16 font-semibold">Execution details</h3>
                             {close}
                             <ExecutionDetails context={context} />
                         </Popover.Content>
@@ -114,7 +114,7 @@ export function ExecutionContextBar({ context }: { readonly context: ExecutionCo
                     <Dialog.Portal>
                         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/25" />
                         <Dialog.Content className="fixed inset-x-0 bottom-0 z-50 max-h-[80dvh] overflow-y-auto rounded-t-3xl border-t border-border/50 bg-card px-6 pt-6 pb-[max(24px,env(safe-area-inset-bottom))] shadow-[0_-8px_40px_rgba(0,0,0,0.08)] outline-none">
-                            <Dialog.Title className="mb-5 pr-8 text-base font-semibold">Execution details</Dialog.Title>
+                            <Dialog.Title className="mb-5 pr-8 text-16 font-semibold">Execution details</Dialog.Title>
                             <Dialog.Description className="sr-only">
                                 Machine, Agent, and working directory for this conversation.
                             </Dialog.Description>

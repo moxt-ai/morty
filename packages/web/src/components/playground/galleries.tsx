@@ -1,0 +1,699 @@
+import { FileText, Plus } from "lucide-react";
+import { Tooltip } from "radix-ui";
+import { type ComponentType, useState } from "react";
+import { AttemptFailure } from "../chat/attempt-failure.tsx";
+import { HarnessMark } from "../chat/harness-mark.tsx";
+import { MessageBubble } from "../chat/message-bubble.tsx";
+import { ToolCallDisclosure } from "../chat/tools/tool-call-status.tsx";
+import type { ToolCallState } from "../chat/tools/tool-renderer.ts";
+import { UserMessageShell } from "../chat/user-message-shell.tsx";
+import { WorkingIndicator } from "../chat/working-indicator.tsx";
+import { AutoSelectInput } from "../ui/auto-select-input.tsx";
+import { Button as FieldButton } from "../ui/button.tsx";
+import { Card } from "../ui/card.tsx";
+import { Button } from "../ui/cloud-button.tsx";
+import { CopyToClipboardButton } from "../ui/copy-to-clipboard-button.tsx";
+import { Dialog } from "../ui/dialog.tsx";
+import { Input } from "../ui/input.tsx";
+import { LinkButton } from "../ui/link-button.tsx";
+import { MortyAlert } from "../ui/morty-alert.tsx";
+import { MortyTooltipContent } from "../ui/morty-tooltip-content.tsx";
+import { NavigationCardLink } from "../ui/navigation-card-link.tsx";
+import { Select as OptionSelect } from "../ui/option-select.tsx";
+import { Popover } from "../ui/popover.tsx";
+import {
+    Select,
+    SelectContent,
+    SelectGroup,
+    SelectItem,
+    SelectLabel,
+    SelectTrigger,
+    SelectValue,
+} from "../ui/select.tsx";
+import { Spinner } from "../ui/spinner.tsx";
+import { Textarea } from "../ui/textarea.tsx";
+import { useToast } from "../ui/toast.tsx";
+import type { PlaygroundEntryId } from "./catalog.ts";
+import { Specimen } from "./specimen.tsx";
+
+const colorSwatches = [
+    { className: "bg-background", name: "background" },
+    { className: "bg-foreground", name: "foreground" },
+    { className: "bg-card", name: "card" },
+    { className: "bg-popover", name: "popover" },
+    { className: "bg-primary", name: "primary" },
+    { className: "bg-primary-foreground", name: "primary-foreground" },
+    { className: "bg-secondary", name: "secondary" },
+    { className: "bg-muted", name: "muted" },
+    { className: "bg-accent", name: "accent" },
+    { className: "bg-accent-active", name: "accent-active" },
+    { className: "bg-destructive", name: "destructive" },
+    { className: "bg-border", name: "border" },
+    { className: "bg-ring", name: "ring" },
+    { className: "bg-success", name: "success" },
+    { className: "bg-surface-subtle", name: "surface-subtle" },
+    { className: "bg-user-message-surface", name: "user-message" },
+    { className: "bg-sidebar", name: "sidebar" },
+    { className: "bg-primary-subtle", name: "primary-subtle" },
+    { className: "bg-morty-brand-1", name: "brand-1" },
+    { className: "bg-morty-brand-6", name: "brand-6" },
+    { className: "bg-morty-brand-7", name: "brand-7" },
+    { className: "bg-morty-text-2", name: "text-2" },
+    { className: "bg-morty-text-3", name: "text-3" },
+    { className: "bg-morty-text-4", name: "text-4" },
+    { className: "bg-morty-fill-opacity-1", name: "fill-1" },
+    { className: "bg-morty-fill-opacity-2", name: "fill-2" },
+    { className: "bg-morty-fill-opacity-3", name: "fill-3" },
+    { className: "bg-morty-fill-opacity-4", name: "fill-4" },
+] as const;
+
+const typeSamples = [
+    { className: "text-10", name: "text-10" },
+    { className: "text-11", name: "text-11" },
+    { className: "text-12", name: "text-12" },
+    { className: "text-13", name: "text-13" },
+    { className: "text-14", name: "text-14" },
+    { className: "text-15", name: "text-15" },
+    { className: "text-16", name: "text-16" },
+    { className: "text-18", name: "text-18" },
+    { className: "text-20", name: "text-20" },
+    { className: "text-22", name: "text-22" },
+    { className: "text-24", name: "text-24" },
+    { className: "text-28", name: "text-28" },
+    { className: "text-32", name: "text-32" },
+] as const;
+
+const radii = [
+    { className: "rounded-xs", name: "xs" },
+    { className: "rounded-sm", name: "sm" },
+    { className: "rounded-md", name: "md" },
+    { className: "rounded-lg", name: "lg" },
+    { className: "rounded-xl", name: "xl" },
+    { className: "rounded-2xl", name: "2xl" },
+    { className: "rounded-3xl", name: "3xl" },
+    { className: "rounded-4xl", name: "4xl" },
+] as const;
+
+const cloudVariants = ["primary", "outline", "ghost", "destructive"] as const;
+const cloudSizes = ["default", "sm", "icon"] as const;
+const fieldVariants = ["default", "outline", "secondary", "ghost"] as const;
+const fieldSizes = ["sm", "default", "lg", "icon"] as const;
+
+const agentOptions = [
+    { label: "Codex", value: "codex" },
+    { label: "Claude", value: "claude" },
+    { label: "Pi", value: "pi" },
+] as const;
+
+const toolStates = [
+    { kind: "running" },
+    { kind: "succeeded" },
+    { kind: "failed" },
+    { kind: "interrupted" },
+    { kind: "unknown" },
+] as const satisfies readonly ToolCallState[];
+
+type CloudVariant = (typeof cloudVariants)[number];
+type CloudSize = (typeof cloudSizes)[number];
+type FieldVariant = (typeof fieldVariants)[number];
+type FieldSize = (typeof fieldSizes)[number];
+type DialogAppearance = "default" | "setup" | "surface" | "wide" | "busy";
+
+function ChoiceRow<T extends string>({
+    label,
+    onChange,
+    options,
+    value,
+}: {
+    readonly label: string;
+    readonly onChange: (value: T) => void;
+    readonly options: readonly T[];
+    readonly value: T;
+}) {
+    return (
+        <div className="flex flex-wrap items-center gap-2">
+            <span className="w-16 text-12 text-muted-foreground">{label}</span>
+            {options.map((option) => (
+                <Button
+                    aria-pressed={option === value}
+                    key={option}
+                    onClick={() => onChange(option)}
+                    size="sm"
+                    variant={option === value ? "primary" : "outline"}
+                >
+                    {option}
+                </Button>
+            ))}
+        </div>
+    );
+}
+
+function ColorGallery() {
+    return (
+        <Specimen title="Tokens">
+            {colorSwatches.map((swatch) => (
+                <div className="w-28" key={swatch.name}>
+                    <div className={`h-14 rounded-lg border border-border ${swatch.className}`} />
+                    <p className="mt-2 text-12 font-medium">{swatch.name}</p>
+                </div>
+            ))}
+        </Specimen>
+    );
+}
+
+function TypeGallery() {
+    return (
+        <div className="grid gap-6">
+            <Specimen layout="stack" title="Scale">
+                {typeSamples.map((sample) => (
+                    <p className={sample.className} key={sample.name}>
+                        <span className="mr-3 font-mono text-12 text-muted-foreground">{sample.name}</span>
+                        The agent is working
+                    </p>
+                ))}
+            </Specimen>
+            <Specimen layout="stack" title="Family and weight">
+                <p className="font-sans text-16 font-normal">Sans regular</p>
+                <p className="font-sans text-16 font-medium">Sans medium</p>
+                <p className="font-sans text-16 font-semibold">Sans semibold</p>
+                <p className="font-inter text-16">Inter</p>
+                <p className="font-mono text-16">Roboto Mono 0123</p>
+            </Specimen>
+        </div>
+    );
+}
+
+function RadiusGallery() {
+    return (
+        <div className="grid gap-6">
+            <Specimen title="Radius">
+                {radii.map((radius) => (
+                    <div key={radius.name}>
+                        <div className={`size-16 border border-border bg-primary-subtle ${radius.className}`} />
+                        <p className="mt-2 text-center text-12 text-muted-foreground">{radius.name}</p>
+                    </div>
+                ))}
+            </Specimen>
+            <Specimen title="Module shadow">
+                <div className="rounded-3xl bg-card px-6 py-5 shadow-module">
+                    <p className="text-14 font-medium">Setup card</p>
+                    <p className="mt-1 text-13 text-muted-foreground">shadow-module</p>
+                </div>
+            </Specimen>
+        </div>
+    );
+}
+
+function CloudButtonGallery() {
+    const [variant, setVariant] = useState<CloudVariant>("primary");
+    const [size, setSize] = useState<CloudSize>("default");
+    const [disabled, setDisabled] = useState(false);
+    return (
+        <div className="grid gap-6">
+            <Specimen layout="stack" title="Try it">
+                <ChoiceRow label="Variant" onChange={setVariant} options={cloudVariants} value={variant} />
+                <ChoiceRow label="Size" onChange={setSize} options={cloudSizes} value={size} />
+                <Button onClick={() => setDisabled((current) => !current)} size="sm" variant="outline">
+                    {disabled ? "Enable" : "Disable"}
+                </Button>
+                <Button
+                    aria-label={size === "icon" ? "Add" : undefined}
+                    disabled={disabled}
+                    size={size}
+                    variant={variant}
+                >
+                    {size === "icon" ? <Plus aria-hidden="true" className="size-4" /> : "Continue"}
+                </Button>
+            </Specimen>
+            <Specimen layout="stack" title="All variants">
+                {cloudVariants.map((item) => (
+                    <div className="flex flex-wrap items-center gap-3" key={item}>
+                        <span className="w-24 text-12 text-muted-foreground">{item}</span>
+                        {cloudSizes.map((itemSize) => (
+                            <Button
+                                aria-label={itemSize === "icon" ? item : undefined}
+                                key={itemSize}
+                                size={itemSize}
+                                variant={item}
+                            >
+                                {itemSize === "icon" ? <Plus aria-hidden="true" className="size-4" /> : itemSize}
+                            </Button>
+                        ))}
+                        <Button disabled variant={item}>
+                            Disabled
+                        </Button>
+                    </div>
+                ))}
+            </Specimen>
+        </div>
+    );
+}
+
+function FieldButtonGallery() {
+    const [variant, setVariant] = useState<FieldVariant>("default");
+    const [size, setSize] = useState<FieldSize>("default");
+    return (
+        <div className="grid gap-6">
+            <Specimen layout="stack" title="Try it">
+                <ChoiceRow label="Variant" onChange={setVariant} options={fieldVariants} value={variant} />
+                <ChoiceRow label="Size" onChange={setSize} options={fieldSizes} value={size} />
+                <FieldButton aria-label={size === "icon" ? "Add" : undefined} size={size} variant={variant}>
+                    {size === "icon" ? <Plus aria-hidden="true" className="size-4" /> : "Approve"}
+                </FieldButton>
+            </Specimen>
+            <Specimen layout="stack" title="All variants">
+                {fieldVariants.map((item) => (
+                    <div className="flex flex-wrap items-center gap-3" key={item}>
+                        <span className="w-24 text-12 text-muted-foreground">{item}</span>
+                        {fieldSizes.map((itemSize) => (
+                            <FieldButton
+                                aria-label={itemSize === "icon" ? item : undefined}
+                                key={itemSize}
+                                size={itemSize}
+                                variant={item}
+                            >
+                                {itemSize === "icon" ? <Plus aria-hidden="true" className="size-4" /> : itemSize}
+                            </FieldButton>
+                        ))}
+                    </div>
+                ))}
+            </Specimen>
+        </div>
+    );
+}
+
+function InputGallery() {
+    const [value, setValue] = useState("morty");
+    return (
+        <Specimen layout="stack" title="States">
+            <div className="grid max-w-sm gap-1.5">
+                <label className="text-12 text-muted-foreground" htmlFor="playground-session-name">
+                    Session name
+                </label>
+                <Input
+                    id="playground-session-name"
+                    onChange={(event) => setValue(event.currentTarget.value)}
+                    value={value}
+                />
+            </div>
+            <Input aria-label="Placeholder" className="max-w-sm" placeholder="Name this session" />
+            <Input aria-label="Disabled field" className="max-w-sm" disabled value="Unavailable" />
+        </Specimen>
+    );
+}
+
+function TextareaGallery() {
+    const [value, setValue] = useState("Ask the agent to tighten the button padding.");
+    return (
+        <Specimen layout="stack" title="Inside a composer surface">
+            <div className="w-full max-w-lg rounded-xl border border-border bg-background px-3 py-2">
+                <Textarea
+                    aria-label="Message"
+                    onChange={(event) => setValue(event.currentTarget.value)}
+                    value={value}
+                />
+            </div>
+            <div className="w-full max-w-lg rounded-xl border border-border bg-background px-3 py-2">
+                <Textarea aria-label="Disabled message" disabled placeholder="Connect an agent to type" />
+            </div>
+        </Specimen>
+    );
+}
+
+function AutoSelectInputGallery() {
+    return (
+        <Specimen layout="stack" title="Selects its text on mount">
+            <AutoSelectInput
+                aria-label="Rename session"
+                className="h-9 max-w-sm rounded-md border border-border bg-background px-3 text-13 outline-none focus-visible:ring-2 focus-visible:ring-ring/20"
+                defaultValue="Rename this session"
+            />
+        </Specimen>
+    );
+}
+
+function OptionSelectGallery() {
+    const [value, setValue] = useState("codex");
+    return (
+        <div className="grid gap-6">
+            <Specimen title="Default">
+                <div className="w-56">
+                    <OptionSelect label="Agent" onValueChange={setValue} options={agentOptions} value={value} />
+                </div>
+            </Specimen>
+            <Specimen title="Compact">
+                <OptionSelect compact label="Model" onValueChange={setValue} options={agentOptions} value={value} />
+            </Specimen>
+            <Specimen title="Searchable">
+                <div className="w-56">
+                    <OptionSelect
+                        label="Model"
+                        onValueChange={setValue}
+                        options={agentOptions}
+                        searchable
+                        value={value}
+                    />
+                </div>
+            </Specimen>
+            <Specimen title="Disabled">
+                <div className="w-56">
+                    <OptionSelect
+                        disabled
+                        label="Agent"
+                        onValueChange={setValue}
+                        options={agentOptions}
+                        value={value}
+                    />
+                </div>
+            </Specimen>
+        </div>
+    );
+}
+
+function MenuSelectGallery() {
+    const [value, setValue] = useState("codex");
+    return (
+        <Specimen title="Grouped menu">
+            <Select onValueChange={setValue} value={value}>
+                <SelectTrigger aria-label="Agent">
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectGroup>
+                        <SelectLabel>Agents</SelectLabel>
+                        <SelectItem value="claude">Claude</SelectItem>
+                        <SelectItem value="codex">Codex</SelectItem>
+                        <SelectItem value="pi">Pi</SelectItem>
+                    </SelectGroup>
+                </SelectContent>
+            </Select>
+        </Specimen>
+    );
+}
+
+function LinkButtonGallery() {
+    const [followed, setFollowed] = useState(false);
+    return (
+        <Specimen title="In a sentence">
+            <p className="text-14 text-foreground">
+                Keep your computer online, or{" "}
+                <LinkButton onClick={() => setFollowed(true)}>open the pairing steps</LinkButton>.
+            </p>
+            <p className="text-13 text-muted-foreground" role="status">
+                {followed ? "Pairing steps opened in this preview." : "The link has not been used."}
+            </p>
+        </Specimen>
+    );
+}
+
+function SpinnerGallery() {
+    return (
+        <Specimen title="Announced status">
+            <span className="inline-flex items-center gap-2 text-13 text-muted-foreground">
+                <Spinner label="Loading sessions" />
+                Loading sessions
+            </span>
+        </Specimen>
+    );
+}
+
+function CardGallery() {
+    return (
+        <Specimen title="Grouped content">
+            <Card className="max-w-sm p-4">
+                <p className="text-14 font-semibold">Today</p>
+                <p className="mt-1 text-13 text-muted-foreground">Sessions from this computer stay grouped here.</p>
+            </Card>
+        </Specimen>
+    );
+}
+
+function AlertGallery() {
+    return (
+        <Specimen title="Error">
+            <div className="w-full max-w-lg">
+                <MortyAlert>The agent could not reach your computer. Check that it is awake and online.</MortyAlert>
+            </div>
+        </Specimen>
+    );
+}
+
+function NavigationCardGallery() {
+    return (
+        <Specimen title="Pending while the route loads">
+            <NavigationCardLink
+                className="inline-flex min-w-48 rounded-xl border border-border bg-card px-4 py-3 text-14 font-medium"
+                label="Component library"
+                to="/playground"
+            >
+                {(pending) => (pending ? "Opening library…" : "Component library")}
+            </NavigationCardLink>
+        </Specimen>
+    );
+}
+
+function DialogGallery() {
+    const [open, setOpen] = useState<DialogAppearance | null>(null);
+    const appearance = open === "wide" || open === "busy" || open === null ? "default" : open;
+    return (
+        <Specimen title="Open one">
+            <Button onClick={() => setOpen("default")} variant="outline">
+                Default
+            </Button>
+            <Button onClick={() => setOpen("setup")} variant="outline">
+                Setup
+            </Button>
+            <Button onClick={() => setOpen("surface")} variant="outline">
+                Surface
+            </Button>
+            <Button onClick={() => setOpen("wide")} variant="outline">
+                Wide
+            </Button>
+            <Button onClick={() => setOpen("busy")} variant="outline">
+                Busy
+            </Button>
+            {open !== null && (
+                <Dialog
+                    appearance={appearance}
+                    busy={open === "busy"}
+                    description="This preview uses the real dialog. Close it to return to the library."
+                    onClose={() => setOpen(null)}
+                    title={open === "busy" ? "Saving session" : "Continue on this device"}
+                    wide={open === "wide"}
+                >
+                    <p>
+                        {open === "busy"
+                            ? "Close stays disabled until the work finishes. Use the button below to finish it."
+                            : "Approve requests and send instructions while the agent runs on your computer."}
+                    </p>
+                    {open === "busy" && (
+                        <div className="mt-4 flex justify-end">
+                            <Button onClick={() => setOpen(null)}>Finish</Button>
+                        </div>
+                    )}
+                </Dialog>
+            )}
+        </Specimen>
+    );
+}
+
+function PopoverGallery() {
+    return (
+        <Specimen title="Caller supplies the surface">
+            <Popover.Root>
+                <Popover.Trigger asChild>
+                    <Button variant="outline">Open popover</Button>
+                </Popover.Trigger>
+                <Popover.Portal>
+                    <Popover.Content
+                        className="z-50 w-64 rounded-xl border border-border bg-popover p-4 text-13 text-popover-foreground shadow-lg outline-none"
+                        sideOffset={8}
+                    >
+                        A popover keeps a small related action on the same page.
+                        <Popover.Arrow className="fill-popover" />
+                    </Popover.Content>
+                </Popover.Portal>
+            </Popover.Root>
+        </Specimen>
+    );
+}
+
+function TooltipGallery() {
+    return (
+        <Specimen title="Hover or focus">
+            <Tooltip.Provider delayDuration={200}>
+                <Tooltip.Root>
+                    <Tooltip.Trigger asChild>
+                        <Button variant="outline">Saved locally</Button>
+                    </Tooltip.Trigger>
+                    <Tooltip.Portal>
+                        <MortyTooltipContent sideOffset={6}>Only this browser keeps the draft</MortyTooltipContent>
+                    </Tooltip.Portal>
+                </Tooltip.Root>
+            </Tooltip.Provider>
+        </Specimen>
+    );
+}
+
+function ToastGallery() {
+    const showToast = useToast();
+    return (
+        <Specimen title="Show a notification">
+            <Button onClick={() => showToast({ title: "Session saved" })} variant="outline">
+                Default
+            </Button>
+            <Button
+                onClick={() => showToast({ description: "The command is on your clipboard.", title: "Copied" })}
+                variant="outline"
+            >
+                With description
+            </Button>
+            <Button
+                onClick={() =>
+                    showToast({ description: "Try the copy again.", title: "Could not save", variant: "error" })
+                }
+                variant="outline"
+            >
+                Error
+            </Button>
+        </Specimen>
+    );
+}
+
+function CopyButtonGallery() {
+    return (
+        <Specimen title="Copies and toasts">
+            <code className="font-mono text-12">mobius bot approve --bot preview</code>
+            <CopyToClipboardButton
+                failureToast={{ description: "Select the command and copy it manually.", title: "Copy failed" }}
+                label="Copy command"
+                successToast={{ title: "Copied" }}
+                value="mobius bot approve --bot preview"
+            />
+        </Specimen>
+    );
+}
+
+function MessageGallery() {
+    return (
+        <Specimen layout="stack" title="Thread">
+            <div className="grid w-full gap-6 py-2">
+                <UserMessageShell>
+                    <MessageBubble speaker="user">Check the button spacing on mobile.</MessageBubble>
+                </UserMessageShell>
+                <MessageBubble speaker="assistant">
+                    The primary button uses a 13px label and a 36px minimum height.
+                </MessageBubble>
+            </div>
+        </Specimen>
+    );
+}
+
+function ToolCallGallery() {
+    return (
+        <Specimen layout="stack" title="States">
+            {toolStates.map((state) => (
+                <ToolCallDisclosure
+                    ariaLabel={`Read styles.css, ${state.kind}`}
+                    autoOpen={state.kind === "failed"}
+                    icon={<FileText aria-hidden="true" />}
+                    key={state.kind}
+                    state={state}
+                    title={`Read styles.css (${state.kind})`}
+                >
+                    <p className="text-13 text-muted-foreground">packages/web/src/styles.css</p>
+                </ToolCallDisclosure>
+            ))}
+        </Specimen>
+    );
+}
+
+function WorkingIndicatorGallery() {
+    const [startedAt] = useState(() => Date.now() - 75_000);
+    return (
+        <Specimen title="Elapsed">
+            <WorkingIndicator startedAt={startedAt} />
+        </Specimen>
+    );
+}
+
+function HarnessMarkGallery() {
+    const marks = [
+        { agentRef: "claude", label: "Claude" },
+        { agentRef: "codex", label: "Codex" },
+        { agentRef: "pi", label: "Pi" },
+        { agentRef: "local", label: "Local agent" },
+    ] as const;
+    return (
+        <Specimen title="Products">
+            {marks.map((mark) => (
+                <span className="inline-flex items-center gap-2 text-13" key={mark.agentRef}>
+                    <HarnessMark
+                        agentRef={mark.agentRef}
+                        label={mark.label}
+                        testId={`playground-harness-${mark.agentRef}`}
+                    />
+                    {mark.label}
+                </span>
+            ))}
+        </Specimen>
+    );
+}
+
+function AttemptFailureGallery() {
+    return (
+        <div className="grid gap-6">
+            <Specimen title="Message only">
+                <div className="w-full">
+                    <AttemptFailure
+                        approval={{ kind: "unavailable" }}
+                        code="agent_unavailable"
+                        message="The agent stopped before it could answer."
+                    />
+                </div>
+            </Specimen>
+            <Specimen title="Needs approval">
+                <div className="w-full">
+                    <AttemptFailure
+                        approval={{ botId: "preview-bot", kind: "bot-approval" }}
+                        code="binding_not_approved"
+                        message="This browser is not approved to talk to the agent yet."
+                    />
+                </div>
+            </Specimen>
+        </div>
+    );
+}
+
+const galleries = {
+    alert: AlertGallery,
+    "attempt-failure": AttemptFailureGallery,
+    "auto-select-input": AutoSelectInputGallery,
+    button: FieldButtonGallery,
+    card: CardGallery,
+    "cloud-button": CloudButtonGallery,
+    color: ColorGallery,
+    "copy-button": CopyButtonGallery,
+    dialog: DialogGallery,
+    "harness-mark": HarnessMarkGallery,
+    input: InputGallery,
+    "link-button": LinkButtonGallery,
+    "menu-select": MenuSelectGallery,
+    message: MessageGallery,
+    "navigation-card": NavigationCardGallery,
+    "option-select": OptionSelectGallery,
+    popover: PopoverGallery,
+    radius: RadiusGallery,
+    spinner: SpinnerGallery,
+    textarea: TextareaGallery,
+    toast: ToastGallery,
+    "tool-call": ToolCallGallery,
+    tooltip: TooltipGallery,
+    type: TypeGallery,
+    "working-indicator": WorkingIndicatorGallery,
+} satisfies Record<PlaygroundEntryId, ComponentType>;
+
+export function PlaygroundGallery({ id }: { readonly id: PlaygroundEntryId }) {
+    const Gallery = galleries[id];
+    return <Gallery />;
+}

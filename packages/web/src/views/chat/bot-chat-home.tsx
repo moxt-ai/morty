@@ -290,11 +290,11 @@ export function BotChatHome({
             {disconnectionNotice.kind === "visible" && !model.disconnectedNoticeDismissed && (
                 <div
                     aria-live="polite"
-                    className="fixed top-28 right-4 z-[100] grid w-[calc(100%-2rem)] max-w-sm grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground shadow-lg sm:top-6 sm:right-6"
+                    className="fixed top-28 right-4 z-[100] grid w-[calc(100%-2rem)] max-w-sm grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-lg border border-border bg-background p-2 text-sm text-foreground shadow-lg sm:top-6 sm:right-6"
                     role="status"
                 >
-                    <div className="min-w-0">
-                        <p className="font-medium">{disconnectionNotice.title}</p>
+                    <div className="min-w-0 py-2 pl-2">
+                        <p className="font-semibold">{disconnectionNotice.title}</p>
                         <p className="mt-1 text-xs leading-5 text-muted-foreground">
                             {disconnectionNotice.description}
                         </p>
