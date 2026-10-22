@@ -191,6 +191,22 @@ export class PlatformProjectGateway {
         }
     };
 
+    /**
+     * Asks the local Runtime to re-run Agent discovery and republish its catalog. The Runtime
+     * republishes before replying, so the directory this response describes is already stored.
+     */
+    readonly refreshChatRuntimeAgents = async (projectId: string, runtimeId: string, parent: AbortSignal) => {
+        const discovered = await this.#withProject(
+            projectId,
+            parent,
+            async (client) => {
+                return await client.runtimes.discoverAgents(runtimeId, parent);
+            },
+            120000,
+        );
+        return discovered.map((agent) => ({ agentRef: agent.id, label: agent.label }));
+    };
+
     readonly readRuntimeDiagnostics = async (projectId: string, runtimeId: string, parent: AbortSignal) => {
         const endpoint = new URL(this.configuration().origin);
         endpoint.pathname = `/mobius/api/v1/projects/${encodeURIComponent(v.parse(platformIdentifier, projectId))}/runtimes/${encodeURIComponent(v.parse(platformIdentifier, runtimeId))}/diagnostics`;

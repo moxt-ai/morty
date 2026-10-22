@@ -170,6 +170,9 @@ export function createBotChatRoutes() {
         .post("/bots/:botId/workspace", authenticatedSession, authorizedChat(), async (context) => {
             return privateJson(await context.env.services.chat.runtimeConfiguration(context.get("chatScope")));
         })
+        .post("/bots/:botId/workspace/refresh", authenticatedSession, authorizedChat(120000), async (context) => {
+            return privateJson(await context.env.services.chat.refreshRuntimeConfiguration(context.get("chatScope")));
+        })
         .post("/bots/:botId/daemon-diagnostics", authenticatedSession, authorizedChat(), async (context) => {
             return privateJson(await context.env.services.chat.daemonDiagnostics(context.get("chatScope")));
         })

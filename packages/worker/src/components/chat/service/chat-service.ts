@@ -134,6 +134,21 @@ export class ChatService {
         };
     };
 
+    /**
+     * Re-reads the Machine's live harness list: the Runtime re-runs discovery and republishes
+     * its Agent catalog, so a harness installed after the daemon started becomes usable without
+     * restarting the daemon.
+     */
+    readonly refreshRuntimeConfiguration = async (scope: ChatScope) => {
+        const runtime = await this.localRuntime(scope);
+        return {
+            runtime: {
+                runtimeId: runtime.runtimeId,
+                agents: await this.#platform.refreshChatRuntimeAgents(scope.projectId, runtime.runtimeId, scope.signal),
+            },
+        };
+    };
+
     readonly daemonDiagnostics = async (scope: ChatScope) => {
         const runtime = await this.localRuntime(scope);
         return await this.#platform.readRuntimeDiagnostics(scope.projectId, runtime.runtimeId, scope.signal);

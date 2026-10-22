@@ -68,11 +68,19 @@ function controlledRuntime(
     agents: ReturnType<typeof createMortyFakeDaemon>["agents"],
     connection: RuntimeConnectionOptions,
     directory: string,
+    rediscoverAgents?: NonNullable<Parameters<typeof createRuntimeConfig>[5]>,
 ): { readonly start: (onConnectionStatus: (status: "online" | "reconnecting") => void) => ControlledRuntimeEngine } {
     const release = behavior.runtime ?? "current";
     switch (release) {
         case "current": {
-            const config = createRuntimeConfig(connection, agents, new RuntimeLocalContext(directory, process.env));
+            const config = createRuntimeConfig(
+                connection,
+                agents,
+                new RuntimeLocalContext(directory, process.env),
+                undefined,
+                undefined,
+                rediscoverAgents,
+            );
             return { start: (onConnectionStatus) => new MobiusRuntimeEngine(config, { onConnectionStatus }) };
         }
         case "previous": {
@@ -158,13 +166,21 @@ export async function connectControlledAgentRuntime(options: {
     relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
     relayUrl.searchParams.set("token", options.connection.runtimeCredential);
     // The Agents can change across restarts, as when the user installs another Agent on the machine.
+    // The injected set can also grow while the daemon runs; catalog discovery re-reads it, so
+    // tests can install a harness after the Runtime came online.
+    let agents: ReturnType<typeof createMortyFakeDaemon>["agents"] = [];
     const configure = (behavior: ControlledAgentBehavior) => {
         const harness = createMortyFakeDaemon(behavior, workspace);
+        agents = harness.agents;
         const runtime = controlledRuntime(
             behavior,
-            harness.agents,
+            agents,
             { channelId: options.connection.channelId, defaultWorkspace: workspace, relayUrl },
             directory,
+            (signal: AbortSignal) => {
+                signal.throwIfAborted();
+                return Promise.resolve([...agents]);
+            },
         );
         return { harness, runtime };
     };
@@ -224,6 +240,18 @@ export async function connectControlledAgentRuntime(options: {
     };
     return {
         continueReply: (...reply: Parameters<typeof harness.continueReply>) => harness.continueReply(...reply),
+        /** Adds a controlled Agent to the daemon's injected set, as if it were installed. */
+        installAgent: async (agent: { readonly id: string; readonly label: string }): Promise<void> => {
+            const daemon = createMortyFakeDaemon({
+                ...options.behavior,
+                agentId: agent.id,
+                agentName: agent.label,
+            });
+            const added = daemon.agents.filter(
+                (entry) => entry.id === agent.id && !agents.some((existing) => existing.id === entry.id),
+            );
+            agents = [...agents, ...added];
+        },
         writeFiles: async (files: NonNullable<ControlledAgentBehavior["files"]>): Promise<void> =>
             await writeWorkspaceFiles(files, workspace, options.signal),
         disconnect,

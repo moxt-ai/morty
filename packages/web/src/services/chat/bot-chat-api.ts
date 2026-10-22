@@ -475,6 +475,15 @@ export class BotChatApi {
     };
     readonly runtimeConfiguration = async (botId: string, parent: AbortSignal): Promise<BotRuntimeConfiguration> =>
         v.parse(runtimeConfigurationSchema, await this.#request(botId, "workspace", undefined, parent));
+    /**
+     * Asks the Machine to re-run local harness discovery. A harness installed after the daemon
+     * started becomes selectable once this resolves.
+     */
+    readonly refreshRuntimeConfiguration = async (
+        botId: string,
+        parent: AbortSignal,
+    ): Promise<BotRuntimeConfiguration> =>
+        v.parse(runtimeConfigurationSchema, await this.#request(botId, "workspace/refresh", undefined, parent));
     readonly directory = async (botId: string, directoryId: string, signal: AbortSignal) =>
         decodeWorkspaceEntriesEvent(
             JSON.stringify(await this.#request(botId, "workspace/directory", { directoryId }, signal)),
