@@ -40,6 +40,14 @@ import {
     transitionSessionActivity,
     workingCommandId,
 } from "./session-activity-machine.ts";
+import {
+    connectionFailure,
+    disconnectedConnection,
+    isConnectionSettled,
+    type SessionConnection,
+    sessionReconnectAttempt,
+    sessionUpdatesEndedError,
+} from "./session-connection.ts";
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import { createSessionDeliveryStore, type Journal, type SessionDeliveryStore } from "./session-delivery-store.ts";
 import { createSessionInteractionStore } from "./session-interaction-store.ts";
@@ -87,50 +95,11 @@ type TitleEdit =
     | { readonly kind: "closed" }
     | { readonly kind: "editing"; readonly draft: string }
     | { readonly kind: "saving"; readonly draft: string };
-type Connection =
-    | { readonly kind: "loading" }
-    | { readonly kind: "ready"; readonly client: MobiusClient }
-    | { readonly kind: "reconnecting"; readonly message: string | null }
-    | {
-          readonly kind: "disconnected";
-          readonly message: string;
-          readonly retry:
-              | { readonly kind: "scheduled"; readonly remainingSeconds: number }
-              | { readonly kind: "exhausted" };
-      }
-    | {
-          /** The Runtime closed the Session. Reopening it, which only the user chooses to do, resumes the connection. */
-          readonly kind: "closed";
-          /** The Runtime's explanation, or null when this page learned of the closing from a failed operation. */
-          readonly reason: string | null;
-          readonly reopen:
-              | { readonly kind: "available" }
-              | { readonly kind: "reopening" }
-              | { readonly kind: "failed"; readonly message: string };
-      }
-    | { readonly kind: "failed"; readonly message: string };
 
-function connectionFailure(connection: Connection): string | null {
-    switch (connection.kind) {
-        case "disconnected":
-        case "failed":
-        case "reconnecting":
-            return connection.message;
-        case "closed":
-            return connection.reopen.kind === "failed" ? connection.reopen.message : null;
-        case "loading":
-        case "ready":
-            return null;
-    }
-}
-
-export type SessionConnection = Connection;
+export type { SessionConnection } from "./session-connection.ts";
 
 const SESSION_EVENT_PAGE_LIMIT = 30;
 const HISTORY_MESSAGE_TARGET = 20;
-const SESSION_RECONNECT_DELAYS_MS = [5_000, 10_000, 20_000] as const;
-const SESSION_RECONNECT_DELAY_CAP_MS = 30_000;
-const SESSION_AUTO_RECONNECT_ATTEMPTS = 7;
 function interactionId(interaction: SessionInteraction): string {
     return interaction.kind === "permission"
         ? interaction.permission.interactionId
@@ -199,7 +168,7 @@ function resolvePermission(
 }
 
 export interface SessionPaneStore {
-    readonly connection: Connection;
+    readonly connection: SessionConnection;
     readonly title: string;
     readonly titleEdit: TitleEdit;
     readonly messages: readonly SessionMessage[];
@@ -641,13 +610,7 @@ export function createSessionPaneModel(options: {
     const connectionWaiters = new Set<() => void>();
     const store = createStore<SessionPaneStore>()((set, get) => {
         const settleConnectionWaiters = (): void => {
-            const connection = get().connection;
-            const settled =
-                connection.kind === "ready" ||
-                connection.kind === "failed" ||
-                connection.kind === "closed" ||
-                (connection.kind === "disconnected" && connection.retry.kind === "exhausted");
-            if (settled) {
+            if (isConnectionSettled(get().connection)) {
                 for (const wake of connectionWaiters) {
                     wake();
                 }
@@ -1174,7 +1137,7 @@ export function createSessionPaneModel(options: {
                     // the service deduplicates the repeated submission.
                     await subscription.completed;
                     signal.throwIfAborted();
-                    throw new Error("Session updates disconnected. Reopen the Session to continue.");
+                    throw sessionUpdatesEndedError();
                 };
                 readStoredLastSentMessage();
                 for (;;) {
@@ -1217,38 +1180,25 @@ export function createSessionPaneModel(options: {
                             });
                             return;
                         }
-                        const canAutoRetry = consecutiveFailures < SESSION_AUTO_RECONNECT_ATTEMPTS;
-                        const delay = Math.min(
-                            SESSION_RECONNECT_DELAYS_MS[consecutiveFailures] ?? SESSION_RECONNECT_DELAY_CAP_MS,
-                            SESSION_RECONNECT_DELAY_CAP_MS,
-                        );
+                        const retry = sessionReconnectAttempt(consecutiveFailures);
                         consecutiveFailures += 1;
                         const message = formatError(cause, "The Session could not be opened.");
-                        const remainingSeconds = Math.ceil(delay / 1000);
                         setAndSettle({
-                            connection: {
-                                kind: "disconnected",
+                            connection: disconnectedConnection(
                                 message,
-                                retry: canAutoRetry ? { kind: "scheduled", remainingSeconds } : { kind: "exhausted" },
-                            },
+                                retry.kind === "scheduled" ? retry.delayMs : null,
+                            ),
                         });
                         countdownInterrupt = new AbortController();
                         const retrySignal = AbortSignal.any([signal, countdownInterrupt.signal]);
                         try {
-                            if (canAutoRetry) {
-                                const retryAt = clock.now() + delay;
+                            if (retry.kind === "scheduled") {
+                                const retryAt = clock.now() + retry.delayMs;
                                 while (clock.now() < retryAt) {
                                     await clock.sleep(Math.min(1000, retryAt - clock.now()), retrySignal);
                                     retrySignal.throwIfAborted();
                                     setAndSettle({
-                                        connection: {
-                                            kind: "disconnected",
-                                            message,
-                                            retry: {
-                                                kind: "scheduled",
-                                                remainingSeconds: Math.ceil((retryAt - clock.now()) / 1000),
-                                            },
-                                        },
+                                        connection: disconnectedConnection(message, retryAt - clock.now()),
                                     });
                                 }
                             } else {
@@ -1300,7 +1250,7 @@ export function createSessionPaneModel(options: {
                 if (current.kind !== "closed" || current.reopen.kind === "reopening" || resumeAfterReopen === null) {
                     return;
                 }
-                const setReopen = (reopen: Extract<Connection, { readonly kind: "closed" }>["reopen"]): void => {
+                const setReopen = (reopen: Extract<SessionConnection, { readonly kind: "closed" }>["reopen"]): void => {
                     const connection = get().connection;
                     if (connection.kind === "closed") {
                         set({ connection: { ...connection, reopen } });
