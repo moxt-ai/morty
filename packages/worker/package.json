@@ -23,8 +23,6 @@
         "miniflare": "catalog:"
     },
     "dependencies": {
-        "@clerk/backend": "catalog:",
-
         "@moxt-ai/mobius-sdk": "workspace:*",
         "drizzle-orm": "catalog:",
         "hono": "catalog:",

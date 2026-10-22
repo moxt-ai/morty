@@ -1,8 +1,7 @@
 import * as v from "valibot";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import worker, { fetchPublicApplication } from "../src/application.ts";
-import { APP_ORIGIN, clerk as issuer } from "./support/clerk.ts";
-import { accountRequest, createIdentityFixture } from "./support/identity-fixture.ts";
+import { APP_ORIGIN, accountRequest, createIdentityFixture } from "./support/identity-fixture.ts";
 
 let fixture: Awaited<ReturnType<typeof createIdentityFixture>>;
 
@@ -448,41 +447,19 @@ test("Given the first browser for Morty, When remote access ends after a recover
     expect((await worker.fetch(accountRequest(recoveryToken, identity.projectId), environment)).status).toBe(200);
 });
 
-test("Given Morty configuration and sessions, When public and account endpoints authenticate them, Then only valid active identities are disclosed", async () => {
-    const publicConfiguration = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/config`),
-        fixture.baseConfiguration,
-    );
-    expect(publicConfiguration.status).toBe(200);
-    expect(await publicConfiguration.json()).toEqual({ publishableKey: issuer.publishableKey });
-    expect(publicConfiguration.headers.get("Cache-Control")).toBe("no-store");
-
+test("Given anonymous Morty sessions, When the account endpoint authenticates them, Then only valid active identities are disclosed", async () => {
     const unauthenticated = await worker.fetch(accountRequest(), {});
     expect(unauthenticated.status).toBe(401);
     expect(await unauthenticated.json()).toMatchObject({ error: { code: "UNAUTHENTICATED" } });
-    for (const token of [
-        issuer.createSession("user_alice", "https://untrusted.example"),
-        issuer.createSession("user_alice", APP_ORIGIN, "pending"),
-    ]) {
+    for (const token of ["mobius_anon_v2_invalid", "user_alice"]) {
         expect((await worker.fetch(accountRequest(token), fixture.baseConfiguration)).status).toBe(401);
     }
     const environment = fixture.environment();
     const local = await fixture.createAnonymousUser();
-    const clerkToken = issuer.createSession("user_alice", APP_ORIGIN, "active", "org_ignored");
-    const bound = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/projects/${local.projectId}/identity/clerk-binding`, {
-            body: JSON.stringify({ action: "bind", anonymousToken: local.token }),
-            headers: { authorization: `Bearer ${clerkToken}`, "content-type": "application/json" },
-            method: "POST",
-        }),
-        environment,
-    );
-    expect(bound.status).toBe(200);
-    const response = await worker.fetch(accountRequest(clerkToken, local.projectId), environment);
+    const response = await worker.fetch(accountRequest(local.token, local.projectId), environment);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-        authentication: { kind: "clerk" },
+        authentication: { kind: "anonymous" },
         userId: local.userId,
-        sessionId: expect.stringMatching(/^sess_/),
     });
 });

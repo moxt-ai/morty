@@ -28,6 +28,7 @@ import restoreContinueLinkExpiry from "../../migrations/project-do/0028_lovely_h
 import removeContinueLinkUsageLimit from "../../migrations/project-do/0029_late_hammerhead.sql?raw";
 
 import deferredAgentPairing from "../../migrations/project-do/0030_tough_speedball.sql?raw";
+import removeClerkUserBinding from "../../migrations/project-do/0031_wealthy_silver_centurion.sql?raw";
 
 const migrations = [
     management,
@@ -59,6 +60,7 @@ const migrations = [
     restoreContinueLinkExpiry,
     removeContinueLinkUsageLimit,
     deferredAgentPairing,
+    removeClerkUserBinding,
 ];
 
 type BoundValue = ArrayBuffer | string | number | null;

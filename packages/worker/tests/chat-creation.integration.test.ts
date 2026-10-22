@@ -1,8 +1,7 @@
 import * as v from "valibot";
 import { afterEach, test as baseTest, beforeEach, expect, vi } from "vitest";
 import worker from "../src/application.ts";
-import { APP_ORIGIN, AUTH_TIME } from "./support/clerk.ts";
-import { createIdentityFixture } from "./support/identity-fixture.ts";
+import { APP_ORIGIN, AUTH_TIME, createIdentityFixture } from "./support/identity-fixture.ts";
 
 beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });

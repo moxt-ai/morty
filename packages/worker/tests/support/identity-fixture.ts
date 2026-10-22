@@ -5,8 +5,10 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import * as v from "valibot";
 import { expect } from "vitest";
 import worker from "../../src/application.ts";
-import { APP_ORIGIN, clerk as issuer } from "./clerk.ts";
 import { startTestPlatform } from "./test-platform.ts";
+
+export const AUTH_TIME = new Date("2026-09-07T00:00:00.000Z");
+export const APP_ORIGIN = "http://localhost:5173";
 
 export function accountRequest(token?: string, projectId?: string): Request {
     return new Request(`${APP_ORIGIN}/morty/api${projectId === undefined ? "" : `/projects/${projectId}`}/session`, {
@@ -44,8 +46,6 @@ export async function createIdentityFixture(
     const baseConfiguration = {
         APP_ORIGIN: appOrigin,
         AUTHENTICATION_BASE_URL: "https://identity.test",
-        CLERK_JWT_KEY: issuer.publicKey,
-        CLERK_PUBLISHABLE_KEY: issuer.publishableKey,
         MOBIUS_APP_ID: platform.appId,
         MOBIUS_APP_SECRET: platform.appCredential,
         MOBIUS_BASE_URL: platform.baseUrl,

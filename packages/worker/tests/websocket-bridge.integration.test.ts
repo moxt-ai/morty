@@ -24,8 +24,6 @@ beforeAll(async () => {
         convertV4MiniflareOptions({
             bindings: {
                 APP_ORIGIN: "https://chat.test",
-                CLERK_JWT_KEY: "-----BEGIN PUBLIC KEY-----\ntest",
-                CLERK_PUBLISHABLE_KEY: "pk_test_browser",
             },
             compatibilityDate: "2026-09-07",
             compatibilityFlags: ["nodejs_compat"],
@@ -56,12 +54,12 @@ function receive(socket: MiniflareWebSocket): Promise<unknown> {
 }
 
 test("Given a public HTTP client, When it requests browser-only APIs, Then Chat does not expose the endpoints", async () => {
-    const [cloudResponse, projectResponse] = await Promise.all([
-        runtime.dispatchFetch("https://chat.test/morty/api/config"),
+    const [identityResponse, projectResponse] = await Promise.all([
+        runtime.dispatchFetch("https://chat.test/morty/api/identity/transfers"),
         runtime.dispatchFetch("https://chat.test/morty/api/projects/prj_test/management/bots/bot_test"),
     ]);
 
-    for (const response of [cloudResponse, projectResponse]) {
+    for (const response of [identityResponse, projectResponse]) {
         expect(response.status).toBe(404);
         await expect(response.json()).resolves.toEqual({ error: { code: "NOT_FOUND", message: "Not found." } });
     }
@@ -82,17 +80,17 @@ test("Given a browser API request, When the Chat web application uses the WebSoc
         JSON.stringify({
             kind: "request",
             requestId: "request-1",
-            method: "GET",
-            path: "/morty/api/config",
+            method: "POST",
+            path: "/morty/api/identity/transfers",
             headers: [],
-            body: "",
+            body: null,
         }),
     );
     await expect(reply).resolves.toMatchObject({
         kind: "response",
         requestId: "request-1",
-        status: 200,
-        body: JSON.stringify({ publishableKey: "pk_test_browser" }),
+        status: 401,
+        body: JSON.stringify({ error: { code: "UNAUTHENTICATED", message: "Anonymous identity is required." } }),
     });
     const rejected = receive(socket);
     socket.send(

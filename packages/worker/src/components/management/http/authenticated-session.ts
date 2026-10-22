@@ -17,7 +17,5 @@ export const authenticatedSession = createMiddleware<
             return;
         case "unauthenticated":
             throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
-        case "unavailable":
-            throw new ManagementError("AUTH_UNAVAILABLE", "Sign-in is temporarily unavailable.", 503);
     }
 });

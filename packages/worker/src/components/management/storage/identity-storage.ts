@@ -1,22 +1,13 @@
-import { and, eq, gt, isNull, notExists, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
 import * as v from "valibot";
 import {
-    agentPairingTicket,
     anonymousCredential,
     appUser,
-    clerkUserBinding,
     continueLink,
-    managedBot,
     platformProjectMapping,
 } from "../../../schema/project-do/index.ts";
 import { createProjectCredential, readProjectCredential } from "../entity/project-credential.ts";
-import {
-    type AnonymousIdentity,
-    digest,
-    IdentityStorageError,
-    randomSecret,
-    requireIdentityDatabase,
-} from "./identity-storage-common.ts";
+import { type AnonymousIdentity, digest, randomSecret, requireIdentityDatabase } from "./identity-storage-common.ts";
 
 const anonymousToken = v.pipe(
     v.string(),
@@ -30,11 +21,6 @@ export interface IdentityTransfer {
     readonly code: string;
     readonly expiresAt: number;
 }
-
-export type BindingResult =
-    | { readonly kind: "bound"; readonly userId: string }
-    | { readonly kind: "conflict" }
-    | { readonly kind: "invalid-local-user" };
 
 export type EndRemoteAccessResult =
     | { readonly kind: "ended-credential"; readonly credentialId: string; readonly userId: string }
@@ -278,18 +264,6 @@ export class IdentityStorage {
         return { kind: "ended-transfer", transferId: credential.transferId, userId: credential.userId };
     };
 
-    readonly clerkBinding = async (clerkUserId: string, signal: AbortSignal): Promise<string | null> => {
-        signal.throwIfAborted();
-        const row = await requireIdentityDatabase(this.#database)
-            .select({ userId: clerkUserBinding.userId })
-            .from(clerkUserBinding)
-            .where(eq(clerkUserBinding.clerkUserId, clerkUserId))
-            .get();
-        signal.throwIfAborted();
-        const parsed = v.safeParse(userRow, row);
-        return parsed.success ? parsed.output.userId : null;
-    };
-
     readonly ownsProject = async (userId: string, projectId: string, signal: AbortSignal): Promise<boolean> => {
         signal.throwIfAborted();
         const row = await requireIdentityDatabase(this.#database)
@@ -299,92 +273,5 @@ export class IdentityStorage {
             .get();
         signal.throwIfAborted();
         return row !== undefined;
-    };
-
-    readonly resolveOrCreateClerk = async (clerkUserId: string, now: number, signal: AbortSignal): Promise<string> => {
-        const existing = await this.clerkBinding(clerkUserId, signal);
-        if (existing !== null) {
-            return existing;
-        }
-        const database = requireIdentityDatabase(this.#database);
-        await database.batch([
-            database.insert(appUser).values({ id: clerkUserId, createdAt: now }).onConflictDoNothing(),
-            database
-                .insert(clerkUserBinding)
-                .values({ clerkUserId, userId: clerkUserId, createdAt: now, updatedAt: now })
-                .onConflictDoNothing(),
-        ]);
-        signal.throwIfAborted();
-        const resolved = await this.clerkBinding(clerkUserId, signal);
-        if (resolved === null) {
-            throw new IdentityStorageError("IDENTITY_UNAVAILABLE", "Identity binding could not be created.");
-        }
-        return resolved;
-    };
-
-    readonly bindClerk = async (
-        clerkUserId: string,
-        localUserId: string,
-        action: "bind" | "discard-local" | "override",
-        now: number,
-        signal: AbortSignal,
-    ): Promise<BindingResult> => {
-        const current = await this.clerkBinding(clerkUserId, signal);
-        if (current === localUserId) {
-            return { kind: "bound", userId: current };
-        }
-        const database = requireIdentityDatabase(this.#database);
-        if (action === "bind") {
-            if (current !== null) {
-                return { kind: "conflict" };
-            }
-            const result = await database
-                .insert(clerkUserBinding)
-                .values({ clerkUserId, userId: localUserId, createdAt: now, updatedAt: now })
-                .onConflictDoNothing()
-                .run();
-            signal.throwIfAborted();
-            return result.meta.changes === 1 ? { kind: "bound", userId: localUserId } : { kind: "conflict" };
-        }
-        if (current === null) {
-            return { kind: "conflict" };
-        }
-        if (action === "override") {
-            const result = await database
-                .update(clerkUserBinding)
-                .set({ userId: localUserId, updatedAt: now })
-                .where(
-                    and(
-                        eq(clerkUserBinding.clerkUserId, clerkUserId),
-                        eq(clerkUserBinding.userId, current),
-                        notExists(
-                            database
-                                .select({ userId: clerkUserBinding.userId })
-                                .from(clerkUserBinding)
-                                .where(eq(clerkUserBinding.userId, localUserId)),
-                        ),
-                    ),
-                )
-                .run();
-            signal.throwIfAborted();
-            return result.meta.changes === 1 ? { kind: "bound", userId: localUserId } : { kind: "invalid-local-user" };
-        }
-        const localBinding = await database
-            .select({ userId: clerkUserBinding.userId })
-            .from(clerkUserBinding)
-            .where(eq(clerkUserBinding.userId, localUserId))
-            .get();
-        if (localBinding !== undefined) {
-            return { kind: "invalid-local-user" };
-        }
-        await database.batch([
-            database.delete(agentPairingTicket).where(eq(agentPairingTicket.userId, localUserId)),
-            database.delete(continueLink).where(eq(continueLink.userId, localUserId)),
-            database.delete(anonymousCredential).where(eq(anonymousCredential.userId, localUserId)),
-            database.delete(managedBot).where(eq(managedBot.userId, localUserId)),
-            database.delete(appUser).where(eq(appUser.id, localUserId)),
-        ]);
-        signal.throwIfAborted();
-        return { kind: "bound", userId: current };
     };
 }

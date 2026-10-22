@@ -29,7 +29,7 @@ export async function digest(value: string): Promise<string> {
     return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export class IdentityStorageError extends Error implements HttpError {
+class IdentityStorageError extends Error implements HttpError {
     readonly code: "IDENTITY_UNAVAILABLE";
     constructor(code: "IDENTITY_UNAVAILABLE", message: string) {
         super(message);

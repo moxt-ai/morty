@@ -13,30 +13,9 @@ const anonymousUserInput = v.strictObject({
         v.picklist(["wnam", "enam", "sam", "weur", "eeur", "apac", "apac-ne", "apac-se", "oc", "afr", "me"]),
     ),
 });
-const bindingInput = v.pipe(
-    v.object({
-        action: v.picklist(["bind", "discard-local", "override"]),
-        anonymousToken: v.string(),
-    }),
-    v.readonly(),
-);
-
-function unavailable(): never {
-    throw new ManagementError("AUTH_UNAVAILABLE", "Sign-in is temporarily unavailable.", 503);
-}
 
 export function createAuthenticationRoutes() {
     return new Hono<ManagementHttpEnvironment>()
-        .all("/config", (context) => {
-            const request = context.req.raw;
-            if (request.method !== "GET") {
-                throw new ManagementError("METHOD_NOT_ALLOWED", "Method not allowed.", 405, {
-                    Allow: "GET",
-                });
-            }
-            const configuration = context.env.services.authentication.publicConfiguration();
-            return configuration === null ? unavailable() : json(configuration);
-        })
         .all("/session", async (context) => {
             const request = context.req.raw;
             if (request.method !== "GET") {
@@ -51,8 +30,6 @@ export function createAuthenticationRoutes() {
                     return json(result.session);
                 case "unauthenticated":
                     throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
-                case "unavailable":
-                    return unavailable();
             }
         })
         .post("/identity/anonymous-users", async (context) => {
@@ -139,42 +116,5 @@ export function createAuthenticationRoutes() {
                 case "unauthenticated":
                     throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
             }
-        })
-        .get("/identity/clerk-binding", async (context) => {
-            const result = await context.env.services.authentication.clerkBinding(
-                context.get("bearerToken"),
-                context.req.raw.signal,
-            );
-            if (result === null) {
-                throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
-            }
-            return json(result);
-        })
-        .post(
-            "/identity/clerk-binding",
-            bodyParser<ManagementHttpEnvironment, typeof bindingInput>(bindingInput),
-            async (context) => {
-                const input = context.req.valid("json");
-                const result = await context.env.services.authentication.bindClerk(
-                    context.get("bearerToken"),
-                    input.anonymousToken,
-                    input.action,
-                    context.req.raw.signal,
-                );
-                switch (result.kind) {
-                    case "bound":
-                        return json(result);
-                    case "conflict":
-                        throw new ManagementError(
-                            "BINDING_CONFLICT",
-                            "This account is already connected to another local user.",
-                            409,
-                        );
-                    case "invalid-local-user":
-                        throw new ManagementError("INVALID_LOCAL_USER", "The local user cannot be connected.", 409);
-                    case "unauthenticated":
-                        throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
-                }
-            },
-        );
+        });
 }
