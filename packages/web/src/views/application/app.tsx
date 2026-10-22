@@ -11,6 +11,7 @@ import {
     SetupCardSection,
     SetupCardShell,
     SetupCardTitle,
+    setupPrimaryButtonClassName,
 } from "../setup/setup-card-shell.tsx";
 
 export type AppState =
@@ -119,9 +120,9 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
                     <SetupCardTitle id="invalid-link-title">This link is no longer valid</SetupCardTitle>
                     <SetupCardAlert>Ask for a new link. Morty has not switched to another computer.</SetupCardAlert>
                     {state.continueHref !== null && (
-                        <a className="mt-5 inline-flex text-primary underline" href={state.continueHref}>
-                            Continue on your last computer
-                        </a>
+                        <Button asChild variant="outline" className={`${setupPrimaryButtonClassName} mt-5 text-center`}>
+                            <a href={state.continueHref}>Continue on your last computer</a>
+                        </Button>
                     )}
                 </SetupCardShell>
             );
@@ -156,17 +157,26 @@ function SetupApplication({
                 </div>
             )}
             {returnHref !== null && (
-                <a href={returnHref} className="mb-5 inline-flex text-sm text-primary underline">
-                    Continue on your last computer
+                <a
+                    href={returnHref}
+                    className="mb-5 inline-flex min-h-11 items-center rounded-lg text-sm text-foreground underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                >
+                    ← Back to your last computer
                 </a>
             )}
             <p className="text-sm font-medium text-primary">Morty</p>
-            <SetupCardTitle id="setup-title">Continue your coding session from your phone.</SetupCardTitle>
+            <SetupCardTitle id="setup-title">
+                {returnHref === null ? "Continue your coding session from your phone." : "Connect another computer"}
+            </SetupCardTitle>
             <SetupCardDescription>
-                Check progress, send instructions, and approve requests while your agent runs on your computer.
+                {returnHref === null
+                    ? "Check progress, send instructions, and approve requests while your agent runs on your computer."
+                    : "Use the coding agent on the computer you want to add to get a connection link."}
             </SetupCardDescription>
             <p className="mt-2 max-w-xl text-sm text-muted-foreground">Works with Codex, Claude Code, and Pi.</p>
-            <h2 className="mt-10 text-lg font-semibold tracking-tight">Start on your computer</h2>
+            <h2 className="mt-10 text-lg font-semibold tracking-tight">
+                {returnHref === null ? "Start on your computer" : "Start on the computer you want to add"}
+            </h2>
             <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
                 Paste the instruction below into the coding agent session you want to continue. Then open the link it
                 returns on your phone or in another browser.

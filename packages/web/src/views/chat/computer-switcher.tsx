@@ -33,7 +33,7 @@ export function ComputerSwitcher({
                 >
                     <Laptop aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
                     <span className="flex min-w-0 flex-1 items-center justify-between gap-2 sm:flex-col sm:items-start sm:gap-0.5">
-                        <span className="min-w-0 truncate text-sm font-medium" title={computerName}>
+                        <span className="min-w-0 max-w-full truncate text-sm font-medium" title={computerName}>
                             {computerName}
                         </span>
                         <span
@@ -45,7 +45,11 @@ export function ComputerSwitcher({
                                 aria-hidden="true"
                                 className={`size-1.5 rounded-full ${status.kind === "connected" ? "bg-primary" : status.kind === "connecting" ? "bg-amber-500" : "bg-muted-foreground/60"}`}
                             />
-                            {status.label}
+                            {status.kind === "connected"
+                                ? "Online"
+                                : status.kind === "connecting"
+                                  ? "Connecting"
+                                  : "Offline"}
                         </span>
                     </span>
                     <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
@@ -82,7 +86,7 @@ export function ComputerSwitcher({
                                         className="block truncate text-xs text-muted-foreground"
                                         title={choice.directory ?? undefined}
                                     >
-                                        {choice.directory ??
+                                        {choice.directoryName ??
                                             (choice.lastUsedAt > 0
                                                 ? `Last used ${new Date(choice.lastUsedAt).toLocaleString()}`
                                                 : "Not opened yet")}

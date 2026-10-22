@@ -1,4 +1,4 @@
-import { getAllByRole, getByRole, queryByRole } from "@testing-library/dom";
+import { getAllByRole, getByRole, getByTitle, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { encodeIdentityScope } from "../src/services/identity/identity-scope-url.ts";
@@ -76,6 +76,11 @@ test("Given two remembered computers, When I return and then switch, Then the la
         return item;
     });
     expect(new URL(firstLink.href).searchParams.get("sessionId")).toBe(firstSession);
+    expect(firstLink.textContent).toContain("workspace");
+    expect(firstLink.textContent).not.toContain("/workspace");
+    const directory = getByTitle(firstLink, /\/workspace$/u);
+    expect(directory?.textContent).toBe("workspace");
+    expect(directory?.getAttribute("title")).toMatch(/\/workspace$/u);
     window.location.href = firstLink.href;
     const switched = await returned.reload();
     await switched.waitForView(() =>
@@ -124,10 +129,8 @@ test("Given a remembered computer, When I connect another computer, Then setup r
     expect(setup.getAttribute("href")).toBe("/setup");
     window.location.href = `${app.origin}/setup`;
     const instruction = await app.reload();
-    await instruction.waitForView(() =>
-        getByRole(document.body, "heading", { name: "Continue your coding session from your phone." }),
-    );
-    expect(getByRole(document.body, "link", { name: "Continue on your last computer" }).getAttribute("href")).toBe("/");
+    await instruction.waitForView(() => getByRole(document.body, "heading", { name: "Connect another computer" }));
+    expect(getByRole(document.body, "link", { name: "← Back to your last computer" }).getAttribute("href")).toBe("/");
     window.location.href = `${app.origin}/`;
     const returned = await instruction.reload();
     await returned.waitForView(() =>

@@ -9,11 +9,14 @@ import {
     rememberedComputers,
 } from "../../services/identity/remembered-computers.ts";
 
+import { directoryName } from "./directory-name.ts";
+
 export interface ComputerChoice {
     readonly key: string;
     readonly name: string;
     readonly href: string;
     readonly directory: string | null;
+    readonly directoryName: string | null;
     readonly lastUsedAt: number;
     readonly status: "online" | "offline" | "unavailable";
 }
@@ -72,6 +75,7 @@ export function createComputerSwitcher(options: {
                             name: computer.name || "Computer",
                             href: computerAddress(computer.scope, computer.destination),
                             directory: computer.directory,
+                            directoryName: computer.directory === null ? null : directoryName(computer.directory),
                             lastUsedAt: computer.lastUsedAt,
                             status: "unavailable",
                         };

@@ -1,20 +1,12 @@
 import type { ExecutionContext } from "../../components/chat/execution-context.ts";
 import type { BotRuntimeConfiguration } from "../../services/chat/bot-chat-api.ts";
 import type { BotChatHomeStore } from "./bot-chat-home-store.ts";
+import { directoryName } from "./directory-name.ts";
 import type { DraftControlsStore } from "./draft-controls-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import type { SessionConnection } from "./session-pane-store.ts";
 
 export type { ExecutionContext };
-
-function directoryName(directory: string): string {
-    return (
-        directory
-            .replace(/[\\/]+$/u, "")
-            .split(/[\\/]/u)
-            .at(-1) || directory
-    );
-}
 
 export function pendingExecutionContext(
     home: BotChatHomeStore,

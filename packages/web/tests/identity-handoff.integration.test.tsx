@@ -203,6 +203,7 @@ test("Given an expired handoff with no retained access, When the failure page sh
 
     const alert = await app.waitForView(() => getByRole(document.body, "alert"));
     expect(alert.textContent).toContain("This transfer link has expired or been revoked.");
+    expect(getByRole(document.body, "heading", { name: "This link is no longer available" })).toBeDefined();
     expect(queryByRole(document.body, "button", { name: "Go to Morty" })).toBeNull();
     expect(queryByRole(document.body, "button", { name: "Try again" })).toBeNull();
     expect(document.body.textContent).toContain("Run setup again on that computer to get a new link.");
@@ -246,7 +247,7 @@ test("Given connected shared Morty access, When the user refreshes Network laten
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     await app.user.click(await app.queryElementByTestId(dataTestId.userMenu));
     await app.user.click(getByRole(document.body, "menuitem", { name: "Network latency" }));
@@ -483,6 +484,7 @@ test("Given an expired sharing link with no retained access, When I open it, The
     await app.waitForView(() =>
         expect(getByRole(document.body, "alert").textContent).toContain("expired or been revoked"),
     );
+    expect(getByRole(document.body, "heading", { name: "This link is no longer available" })).toBeDefined();
     expect(document.body.textContent).toContain("Ask for a new link.");
     expect(document.body.textContent).not.toContain("Run setup again");
     expect(queryByRole(document.body, "button", { name: "Try again" })).toBeNull();

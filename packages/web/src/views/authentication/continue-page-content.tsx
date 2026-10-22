@@ -23,9 +23,9 @@ export function ContinuePageContent({
 }) {
     const fallback =
         continueHref === null ? null : (
-            <a className="mt-5 inline-flex text-sm text-primary underline" href={continueHref}>
-                Continue on your last computer
-            </a>
+            <Button asChild variant="outline" className={`${setupPrimaryButtonClassName} mt-5 text-center`}>
+                <a href={continueHref}>Continue on your last computer</a>
+            </Button>
         );
     switch (state.kind) {
         case "session-opening":
@@ -71,9 +71,7 @@ export function ContinuePageContent({
         case "link-unavailable":
             return (
                 <SetupCardShell titleId="continue-title">
-                    <SetupCardTitle id="continue-title">
-                        {state.recovery === "setup" ? "Continue native session" : "Continue in Morty"}
-                    </SetupCardTitle>
+                    <SetupCardTitle id="continue-title">This link is no longer available</SetupCardTitle>
                     <SetupCardAlert>{state.message}</SetupCardAlert>
                     <SetupCardDescription>
                         {state.recovery === "setup"

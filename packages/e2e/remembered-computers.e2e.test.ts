@@ -33,6 +33,7 @@ for (const viewport of [
         await page.getByRole("button", { name: "Switch computer, Office MacBook" }).click();
         const firstComputer = page.getByRole("menuitem").filter({ hasText: "Browser test Runtime" });
         await expect(firstComputer).toContainText("Online");
+        await expect(firstComputer.getByTitle(/\/workspace$/)).toHaveText("workspace");
         await expect(page.getByRole("menuitem", { name: "Connect another computer" })).toBeVisible();
         await page.screenshot({
             path: testInfo.outputPath("computer-picker.png"),
@@ -78,6 +79,18 @@ for (const viewport of [
             animations: "disabled",
         });
         await otherTab.close();
+        await page.getByRole("button", { name: "Switch computer, Office MacBook" }).click();
+        await page.getByRole("menuitem", { name: "Connect another computer" }).click();
+        await expect(page.getByRole("heading", { name: "Connect another computer" })).toBeVisible();
+        await page.screenshot({
+            path: testInfo.outputPath("connect-another-computer.png"),
+            fullPage: true,
+            animations: "disabled",
+        });
+        await page.getByRole("link", { name: "← Back to your last computer" }).click();
+        await expect(page.getByRole("article", { name: "Agent response" })).toContainText(
+            "Computer B release checklist",
+        );
         // The sharing code can expire independently of the access it issued.
         const scope = new URL(secondAddress).searchParams.get("identity");
         const projectId = scope?.split("~")[1];
