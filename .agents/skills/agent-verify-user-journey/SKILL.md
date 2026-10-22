@@ -28,7 +28,7 @@ Resolve these inputs before starting:
 | --- | --- | --- |
 | Harness | `codex` | Use the harness the user names; otherwise use `codex`. |
 | Native session ID | none, required | Read the exact current session ID from the selected harness's own session metadata. Never guess, reuse a default, or substitute another harness's session. |
-| Model | `gpt 5.6 terra` | Use the model the user names; otherwise use `gpt 5.6 terra`. |
+| Model | `gpt 6.1 sol` | Use the model the user names; otherwise use `gpt 6.1 sol`. |
 | Browser | session-attached browser, then headed `agent-browser` CLI | Honor a user-specified browser first. Otherwise use the browser attached to the current session when one exists; fall back to an installed `agent-browser` CLI running in the foreground. |
 | App | to-do-list web app | Preserve any app or journey requirements supplied by the user. |
 
