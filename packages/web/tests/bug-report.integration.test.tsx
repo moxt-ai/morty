@@ -4,8 +4,23 @@ import { getAllByRole, getByLabelText, getByRole, queryByRole } from "@testing-l
 import { cleanup, render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { WebSocketApiTransport } from "../src/services/api/websocket-api-transport.ts";
+import { createMortyApplication } from "../src/view-models/morty-application.ts";
 import { App } from "../src/views/application/app.tsx";
 import { createTestApp } from "./infra/test-app.tsx";
+
+/**
+ * A dependency-injected transport that touches nothing: measurements and
+ * requests degrade instead of reaching the network.
+ */
+/**
+ * A real transport pointed at an unreachable origin and never opened: every
+ * operation fails on its own, so measurements and requests degrade instead of
+ * reaching the network.
+ */
+function noopTransport(): WebSocketApiTransport {
+    return new WebSocketApiTransport("http://127.0.0.1:1");
+}
 
 const observers = new Set<MutationObserver>();
 const pngBytes = Uint8Array.from(
@@ -30,7 +45,15 @@ test("Given the report dialog is open, When a user pastes and selects images and
     vi.setSystemTime(new Date("2026-10-13T08:00:00Z"));
     const inbox = await createReportInbox();
     try {
-        render(<App state={{ kind: "failed" }} />);
+        render(
+            <App
+                bugReportDialog={
+                    createMortyApplication({ origin: window.location.origin, transport: noopTransport() })
+                        .bugReportDialog
+                }
+                state={{ kind: "failed" }}
+            />,
+        );
         const user = userEvent.setup();
         await user.click(getByRole(document.body, "button", { name: "Report a bug" }));
         const description = getByRole(document.body, "textbox", { name: "What went wrong?" });
@@ -73,7 +96,15 @@ test.each([
     async ({ type, size, count, error }) => {
         const inbox = await createReportInbox();
         try {
-            render(<App state={{ kind: "failed" }} />);
+            render(
+                <App
+                    bugReportDialog={
+                        createMortyApplication({ origin: window.location.origin, transport: noopTransport() })
+                            .bugReportDialog
+                    }
+                    state={{ kind: "failed" }}
+                />,
+            );
             const user = userEvent.setup();
             await user.click(getByRole(document.body, "button", { name: "Report a bug" }));
             await user.click(getByRole(document.body, "textbox", { name: "What went wrong?" }));
@@ -100,7 +131,15 @@ test.each([
 test("Given a file claims to be a PNG, When its contents do not match and the user submits it, Then the report is rejected locally and can be sent after removing the image", async () => {
     const inbox = await createReportInbox();
     try {
-        render(<App state={{ kind: "failed" }} />);
+        render(
+            <App
+                bugReportDialog={
+                    createMortyApplication({ origin: window.location.origin, transport: noopTransport() })
+                        .bugReportDialog
+                }
+                state={{ kind: "failed" }}
+            />,
+        );
         const user = userEvent.setup();
         await user.click(getByRole(document.body, "button", { name: "Report a bug" }));
         await user.type(getByRole(document.body, "textbox", { name: "What went wrong?" }), "The layout is broken");
@@ -188,7 +227,15 @@ async function createReportInbox() {
 test("Given Morty cannot load and no daemon is connected, When a user reports a bug, Then Sentry receives the description and available diagnostics and the user sees a report number", async () => {
     const inbox = await createReportInbox();
     try {
-        render(<App state={{ kind: "failed" }} />);
+        render(
+            <App
+                bugReportDialog={
+                    createMortyApplication({ origin: window.location.origin, transport: noopTransport() })
+                        .bugReportDialog
+                }
+                state={{ kind: "failed" }}
+            />,
+        );
         const user = userEvent.setup();
         await user.click(getByRole(document.body, "button", { name: "Report a bug" }));
         await user.type(
@@ -209,7 +256,7 @@ test("Given Morty cannot load and no daemon is connected, When a user reports a 
         expect(report.network).toMatchObject({
             online: navigator.onLine,
             measurements: {
-                browserMorty: { kind: "unavailable", code: "NO_ACTIVE_TRANSPORT" },
+                browserMorty: { kind: "unavailable", code: "NETWORK_DIAGNOSTIC_FAILED" },
                 browserMobius: { kind: "unavailable", code: "NO_ACTIVE_RUNTIME" },
             },
         });
@@ -225,7 +272,15 @@ test("Given Sentry rejects a report, When the user retries after it recovers, Th
     const inbox = await createReportInbox();
     try {
         inbox.accept(503);
-        render(<App state={{ kind: "failed" }} />);
+        render(
+            <App
+                bugReportDialog={
+                    createMortyApplication({ origin: window.location.origin, transport: noopTransport() })
+                        .bugReportDialog
+                }
+                state={{ kind: "failed" }}
+            />,
+        );
         const user = userEvent.setup();
         await user.click(getByRole(document.body, "button", { name: "Report a bug" }));
         await user.type(getByRole(document.body, "textbox", { name: "What went wrong?" }), "My message disappeared");
@@ -288,7 +343,15 @@ test("Given a native handoff cannot find its Agent, When the user reports the di
         );
         expect(envelope).not.toContain("The handoff harness is unavailable.");
         await app.close();
-        render(<App state={{ kind: "failed" }} />);
+        render(
+            <App
+                bugReportDialog={
+                    createMortyApplication({ origin: window.location.origin, transport: noopTransport() })
+                        .bugReportDialog
+                }
+                state={{ kind: "failed" }}
+            />,
+        );
         const user = userEvent.setup();
         await user.click(getByRole(document.body, "button", { name: "Report a bug" }));
         await user.type(getByRole(document.body, "textbox", { name: "What went wrong?" }), "Another page failed");
@@ -312,7 +375,14 @@ test("Given a connected Runtime, When the user reports a bug, Then the report au
     const inbox = await createReportInbox();
     try {
         const app = await createTestApp({ connectAgent: true });
-        await app.waitForView(() => getByRole(document.body, "button", { name: "Report a bug" }));
+        // The chat page's sidebar button, not the floating trigger the
+        // loading page shows before the anonymous session resolves.
+        await app.waitForView(() => {
+            if (document.querySelector('main[aria-label="Chat"]') === null) {
+                throw new Error("The chat page did not appear.");
+            }
+            return getByRole(document.body, "button", { name: "Report a bug" });
+        });
         await app.user.click(getByRole(document.body, "button", { name: "Report a bug" }));
         const dialog = getByRole(document.body, "dialog", { name: "Report a bug" });
         expect(queryByRole(dialog, "combobox")).toBeNull();
@@ -352,9 +422,12 @@ test("Given two Runtime views are mounted, When a user reports from the first vi
     const inbox = await createReportInbox();
     try {
         const first = await createTestApp({ connectAgent: true });
-        const reportButton = await first.waitForView(() =>
-            getByRole(document.body, "button", { name: "Report a bug" }),
-        );
+        const reportButton = await first.waitForView(() => {
+            if (document.querySelector('main[aria-label="Chat"]') === null) {
+                throw new Error("The chat page did not appear.");
+            }
+            return getByRole(document.body, "button", { name: "Report a bug" });
+        });
         const second = await createTestApp({ connectAgent: true });
         await second.waitForView(() =>
             expect(getAllByRole(document.body, "button", { name: "Report a bug" })).toHaveLength(2),

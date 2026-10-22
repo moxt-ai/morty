@@ -1,6 +1,6 @@
 /**
- * In-memory display model for tool call content rendering. Derived from raw
- * session event content in the view-model layer; it never crosses a transport.
+ * In-memory display model for tool call content rendering. Pure presentational
+ * union shared by view-models and components; it never crosses a transport.
  */
 export type AgentDisplayContent =
     | { readonly text: string; readonly type: "text" }

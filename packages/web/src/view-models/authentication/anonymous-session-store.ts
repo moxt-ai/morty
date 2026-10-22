@@ -19,7 +19,18 @@ export interface AnonymousSessionStore {
     readonly load: (signal: AbortSignal) => Promise<void>;
 }
 
-export const createAnonymousSessionStore = (fetchRequest: (request: Request) => Promise<Response>, origin: string) =>
+/**
+ * Announced from the explicit state transitions that leave or enter an
+ * `active` identity, so the owner of the store reacts without subscribing to
+ * it. `null` means the session no longer carries an identity.
+ */
+export type AnnounceIdentity = (identity: AnonymousIdentity | null) => void;
+
+export const createAnonymousSessionStore = (
+    fetchRequest: (request: Request) => Promise<Response>,
+    origin: string,
+    onIdentityChanged: AnnounceIdentity,
+) =>
     createStore<AnonymousSessionStore>()((set, get) => {
         const api = new AnonymousIdentityApi({ fetchRequest, origin });
         return {
@@ -36,6 +47,7 @@ export const createAnonymousSessionStore = (fetchRequest: (request: Request) => 
             },
             load: async (signal) => {
                 set({ state: { kind: "loading" } });
+                onIdentityChanged(null);
                 try {
                     if (window.location.pathname === "/setup" && !hasIdentityScope()) {
                         set({ state: { kind: "setup", notice: "none" } });
@@ -53,6 +65,7 @@ export const createAnonymousSessionStore = (fetchRequest: (request: Request) => 
                         set({
                             state: identity === null ? { kind: "setup", notice: "none" } : { identity, kind: "active" },
                         });
+                        onIdentityChanged(identity);
                         return;
                     }
                     const saved = await api.loadSaved(signal);
@@ -63,6 +76,7 @@ export const createAnonymousSessionStore = (fetchRequest: (request: Request) => 
                     } else if (saved.length === 1) {
                         api.saveIdentity(access.identity);
                         set({ state: { identity: access.identity, kind: "active" } });
+                        onIdentityChanged(access.identity);
                     } else {
                         const choices = saved.map((candidate, index) => {
                             const parameters = new URLSearchParams({

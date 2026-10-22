@@ -1,8 +1,8 @@
 import * as v from "valibot";
+import { isOversizedToolText } from "../tool-text-preview.tsx";
 import { ShellCommandPresentation } from "./shell-command-presentation.tsx";
 import { toolTextContent } from "./tool-display-content.ts";
 import type { ToolRendererProps } from "./tool-renderer.ts";
-import { isOversizedToolText } from "./tool-text-preview.tsx";
 
 const requestSchema = v.pipe(
     v.strictObject({

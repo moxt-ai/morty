@@ -67,6 +67,8 @@ type CwdBrowserState =
 
 export interface DraftControlsStore {
     readonly cwdBrowser: CwdBrowserState;
+    /** Whether the working-directory popover trigger is expanded. */
+    readonly cwdMenuOpen: boolean;
     readonly recentCwds: readonly RecentCwdPreference[];
     readonly settings: DraftSettingsState;
     readonly browseCwd: (directoryId: string, signal: AbortSignal) => Promise<void>;
@@ -74,6 +76,7 @@ export interface DraftControlsStore {
     readonly forgetRecentCwd: (directoryId: string) => void;
     readonly load: (signal: AbortSignal) => Promise<void>;
     readonly openCwd: () => void;
+    readonly setCwdMenuOpen: (open: boolean) => void;
     readonly refreshAgentSettings: (signal: AbortSignal) => Promise<void>;
     readonly saveCwd: (signal: AbortSignal) => Promise<void>;
     readonly selectRecentCwd: (directoryId: string, signal: AbortSignal) => Promise<void>;
@@ -347,6 +350,7 @@ export const createDraftControlsStore = (
         };
         return {
             cwdBrowser: { kind: "closed" },
+            cwdMenuOpen: false,
             recentCwds: readRecentCwdPreferences(botId) ?? [],
             settings: cachedSettings ?? { kind: "loading" },
             browseCwd,
@@ -373,6 +377,7 @@ export const createDraftControlsStore = (
                     set({ cwdBrowser: { kind: "ready", directory: settings.cwd, path: settings.cwd.directoryLabel } });
                 }
             },
+            setCwdMenuOpen: (open) => set({ cwdMenuOpen: open }),
             refreshAgentSettings: async (signal) => {
                 const settings = get().settings;
                 if (settings.kind !== "ready") {

@@ -33,6 +33,31 @@ test("Given a tool returns an unsupported image type, When the user opens its ou
     });
 });
 
+test("Given the agent references external content, When the user reads the response, Then Chat loads and renders the referenced file", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, "show external content");
+    const activity = await app.waitForView(() => getByRole(document.body, "group", { name: "Tool: External content" }));
+    await app.user.click(getByRole(activity, "button", { name: "External content Tool succeeded" }));
+    await app.waitForView(() => {
+        const activity = getByRole(document.body, "group", { name: "Tool: External content" });
+        const image = activity.querySelector("img");
+        if (image === null) {
+            throw new Error("The external content image has not rendered");
+        }
+        if (!(image.src.startsWith("blob:") || image.src.includes("data:"))) {
+            throw new Error(`The external content image did not resolve to a preview source: ${image.src}`);
+        }
+        expect(activity.textContent).not.toContain("Loading content");
+        expect(activity.textContent).not.toContain("Content could not be loaded");
+    });
+});
+
 test("Given the user selected an option and entered a custom response, When they reopen the completed ask tool, Then Chat shows both answers", () => {
     render(
         renderRegisteredTool({

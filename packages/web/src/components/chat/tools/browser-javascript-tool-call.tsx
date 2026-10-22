@@ -1,10 +1,10 @@
 import { Monitor } from "lucide-react";
 import * as v from "valibot";
-import { HighlightedCode } from "./highlighted-code.tsx";
+import { HighlightedCode } from "../highlighted-code.tsx";
+import { isOversizedToolText, ToolTextPreview } from "../tool-text-preview.tsx";
 import { ToolCallDisclosure } from "./tool-call-status.tsx";
 import { toolTextContent } from "./tool-display-content.ts";
 import type { ToolRendererProps } from "./tool-renderer.ts";
-import { isOversizedToolText, ToolTextPreview } from "./tool-text-preview.tsx";
 
 const requestSchema = v.pipe(
     v.strictObject({

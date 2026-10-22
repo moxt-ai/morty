@@ -2,7 +2,7 @@ import Anser from "anser";
 import { Check, Copy } from "lucide-react";
 import { type CSSProperties, useRef, useState } from "react";
 import { dataTestId } from "../../../data-testid.ts";
-import { isOversizedToolText, ToolTextPreview } from "./tool-text-preview.tsx";
+import { isOversizedToolText, ToolTextPreview } from "../tool-text-preview.tsx";
 
 function color(value: string | null | undefined): string | undefined {
     return value === null || value === undefined || value.length === 0 ? undefined : `rgb(${value})`;
