@@ -94,9 +94,51 @@ test("Given a dropped bridge that reconnected, When the Runtime changes, Then th
     // the watch was re-armed, this never refreshed and the page stayed
     // "connected" forever.
     await app.daemon?.disconnect();
-    await app.queryElementByTestId(
-        dataTestId.botConnectionStatus,
-        (element) => element.getAttribute("data-connection-status") === "disconnected",
-    );
+    await app.waitForView(() => {
+        // The execution-context bar shows the Machine connection, which the
+        // re-armed watch keeps current.
+        expect(document.body.textContent).toContain("Disconnected");
+    });
     void failure;
+});
+
+test("Given repeated bridge drops on one page, When the Runtime goes offline after each recovery, Then the page still follows it", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    const machine = (): string => {
+        const body = document.body.textContent ?? "";
+        const marker = body.indexOf("Machine: Controlled Agent Runtime");
+        const rest = marker === -1 ? "" : body.slice(marker + "Machine: Controlled Agent Runtime".length);
+        return rest.slice(0, rest.indexOf("Test ") === -1 ? 30 : rest.indexOf("Test "));
+    };
+    const composer = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    await sendPrompt(app, composer, "Before two drops");
+    await app.waitForView(() => expect(agentAnswered(app, "Codex turn 1: Before two drops")).toBe(true));
+
+    // First drop: the watch dies with the socket, and the bridge returns.
+    app.transport.disconnect();
+    await act(async () => {
+        clock.advanceBy(1_000);
+    });
+
+    // The re-armed watch is live: the Runtime going away reaches the page.
+    await app.daemon?.disconnect();
+    await app.waitForView(() => expect(machine().startsWith("Disconnected")).toBe(true));
+
+    // Later drops on the same page must each be followed by recovery: the
+    // watch re-armed by the first resume is itself dropped and re-armed again,
+    // and none of them may surface a failure dialog over the conversation.
+    for (const backoff of [2_000, 2_000]) {
+        app.transport.disconnect();
+        await act(async () => {
+            clock.advanceBy(backoff);
+        });
+        expect(queryByRole(document.body, "dialog", { name: "Runtime connection unavailable" })).toBeNull();
+    }
+    await app.waitForView(() => expect(machine().startsWith("Disconnected")).toBe(true));
 });

@@ -256,7 +256,14 @@ export const createBotChatHomeStore = (
             dismissNotice: () => set((current) => ({ notices: { ...current.notices, pairing: { kind: "hidden" } } })),
             load: async (signal) => {
                 set((current) => ({ view: "botId" in current.view ? current.view : { kind: "loading" } }));
-                let opened = false;
+                /**
+                 * Which stage of the load is in flight. A bridge failure before
+                 * the session content exists is an unfinished user request that
+                 * must become an operable failure; afterwards it only takes the
+                 * background watches, which can be resumed without replaying
+                 * the session load.
+                 */
+                let phase: "request" | "watch" = "request";
                 const watchRuntimeConfigurationChanges = async (): Promise<void> => {
                     while (true) {
                         try {
@@ -290,38 +297,67 @@ export const createBotChatHomeStore = (
                     }
                 };
                 /**
-                 * A dropped socket takes every watch with it. Wait for the
-                 * bridge to return, then re-arm the safe watches: this re-reads
-                 * runtime configuration and pairing, and never re-issues a
-                 * fork/import load that the user did not ask to repeat.
+                 * Re-reads configuration after the bridge returns and moves the
+                 * draft page to the view the recovered configuration implies.
                  */
-                const resumeAfterBridge = async (bridgeSignal: AbortSignal): Promise<void> => {
-                    await requests.waitForBridge(bridgeSignal);
-                    bridgeSignal.throwIfAborted();
-                    const configuration = await requests.runtimeConfiguration(botId, bridgeSignal);
-                    bridgeSignal.throwIfAborted();
+                const applyRecoveredConfiguration = (configuration: BotRuntimeConfiguration): void => {
                     options.onRuntimeConfiguration?.(configuration);
                     const reason = setupReason(configuration);
-                    set((current) => ({
-                        runtimeConfiguration: configuration,
-                        connectionStatus: runtimeConnectionStatus(configuration),
-                        ...(current.selection.kind === "draft" && reason !== null
-                            ? { view: { kind: "setup" as const, botId, reason } }
-                            : {}),
-                    }));
-                    if (get().view.kind === "setup") {
-                        await requests.waitForSetupChange(botId, bridgeSignal);
-                        bridgeSignal.throwIfAborted();
-                        set((current) => ({
-                            selection: transitionConversationSelection(current.selection, {
-                                kind: "retry-requested",
-                            }),
-                            revision: current.revision + 1,
-                        }));
-                        onRestart();
-                        return;
+                    set((current) =>
+                        current.selection.kind === "draft"
+                            ? {
+                                  runtimeConfiguration: configuration,
+                                  connectionStatus: runtimeConnectionStatus(configuration),
+                                  view: reason === null ? { kind: "active", botId } : { kind: "setup", botId, reason },
+                              }
+                            : {
+                                  runtimeConfiguration: configuration,
+                                  connectionStatus: runtimeConnectionStatus(configuration),
+                              },
+                    );
+                };
+                /**
+                 * A dropped socket takes every watch with it. This loop re-arms
+                 * the safe watches every time the bridge returns, so repeated
+                 * drops on the same page keep being followed by recovery. It
+                 * only re-reads configuration and pairing, and never re-issues
+                 * a fork/import load that the user did not ask to repeat.
+                 */
+                const followConfigurationChanges = async (watchSignal: AbortSignal): Promise<void> => {
+                    while (true) {
+                        try {
+                            await watchRuntimeConfigurationChanges();
+                            return;
+                        } catch (cause) {
+                            watchSignal.throwIfAborted();
+                            if (!isChatBridgeError(cause)) {
+                                throw cause;
+                            }
+                            console.error("The Chat WebSocket bridge failed to complete a request.", cause);
+                            await requests.waitForBridge(watchSignal);
+                            watchSignal.throwIfAborted();
+                            const configuration = await requests.runtimeConfiguration(botId, watchSignal);
+                            watchSignal.throwIfAborted();
+                            applyRecoveredConfiguration(configuration);
+                            // The recovered configuration decides the watch:
+                            // only an unconfigured Machine can still be waiting
+                            // on the setup watch; a configured one keeps
+                            // following workspace changes.
+                            const recoveredReason = setupReason(configuration);
+                            if (recoveredReason !== null && get().view.kind === "setup") {
+                                await requests.waitForSetupChange(botId, watchSignal);
+                                watchSignal.throwIfAborted();
+                                set((current) => ({
+                                    selection: transitionConversationSelection(current.selection, {
+                                        kind: "retry-requested",
+                                    }),
+                                    revision: current.revision + 1,
+                                }));
+                                onRestart();
+                                return;
+                            }
+                        }
                     }
-                    await watchRuntimeConfigurationChanges();
                 };
                 try {
                     const current = get();
@@ -330,7 +366,6 @@ export const createBotChatHomeStore = (
                         current.selection.kind === "loading" &&
                         current.selection.target.kind === "session"
                     ) {
-                        opened = true;
                         const target = current.selection.target;
                         const session = await requests.managedSession(botId, target.sessionId, signal);
                         signal.throwIfAborted();
@@ -342,7 +377,8 @@ export const createBotChatHomeStore = (
                             }),
                         }));
                         announceSelection();
-                        await watchRuntimeConfigurationChanges();
+                        phase = "watch";
+                        await followConfigurationChanges(signal);
                         return;
                     }
                     set((current) =>
@@ -355,7 +391,6 @@ export const createBotChatHomeStore = (
                               }
                             : current,
                     );
-                    opened = true;
                     const detail = await requests.readBot(botId, signal);
                     signal.throwIfAborted();
                     if (!detail.configured) {
@@ -411,7 +446,8 @@ export const createBotChatHomeStore = (
                             }),
                         });
                         announceSelection();
-                        await watchRuntimeConfigurationChanges();
+                        phase = "watch";
+                        await followConfigurationChanges(signal);
                         return;
                     }
                     if (currentTarget?.kind === "session") {
@@ -426,7 +462,8 @@ export const createBotChatHomeStore = (
                             }),
                         }));
                         announceSelection();
-                        await watchRuntimeConfigurationChanges();
+                        phase = "watch";
+                        await followConfigurationChanges(signal);
                         return;
                     }
                     const reason = currentTarget === null ? setupReason(configuration) : null;
@@ -471,7 +508,8 @@ export const createBotChatHomeStore = (
                         }),
                     }));
                     announceSelection();
-                    await watchRuntimeConfigurationChanges();
+                    phase = "watch";
+                    await followConfigurationChanges(signal);
                 } catch (cause) {
                     if (signal.aborted) {
                         return;
@@ -495,33 +533,38 @@ export const createBotChatHomeStore = (
                         return;
                     }
                     if (isChatBridgeError(cause)) {
-                        // A dropped bridge is an ordinary failed call. An opened
-                        // conversation keeps whatever it showed, and the next
-                        // user action reports its own failure; a request the user
-                        // is still waiting on must not strand the page in
-                        // loading, so it becomes an operable failure state.
+                        // A dropped bridge is an ordinary failed call. An
+                        // established conversation keeps whatever it showed, and
+                        // the next user action reports its own failure; a load
+                        // the user is still waiting on must not strand the page,
+                        // so it becomes an operable failure state that keeps its
+                        // target.
                         console.error("The Chat WebSocket bridge failed to complete a request.", cause);
                         const message = formatError(cause, "Chat is unavailable.");
-                        const bridgeTarget = get().selection;
-                        if (!opened && bridgeTarget.kind === "loading") {
+                        const current = get();
+                        if (current.selection.kind === "loading") {
+                            // The selection never completed, so this load is a
+                            // user request still in flight: it becomes an
+                            // operable failure that keeps its target.
                             set({
-                                selection: transitionConversationSelection(bridgeTarget, {
+                                selection: transitionConversationSelection(current.selection, {
                                     kind: "session-load-failed",
                                     message,
-                                    target: bridgeTarget.target,
+                                    target: current.selection.target,
                                 }),
                                 view: { kind: "failed", message },
                             });
                             return;
                         }
-                        if (!opened) {
+                        if (current.view.kind === "loading" || current.view.kind === "connecting") {
+                            // Nothing has rendered yet, so the page cannot keep
+                            // showing content it does not have.
                             set({ view: { kind: "failed", message } });
                             return;
                         }
-                        // The watches below were dropped with the socket. Resume
-                        // them once the bridge is back so agent and runtime
-                        // changes still reach this page.
-                        await resumeAfterBridge(signal);
+                        // Content is already on screen: the view stays, and the
+                        // dropped watches are re-armed when the bridge returns.
+                        await followConfigurationChanges(signal);
                         return;
                     }
                     if (cause instanceof CloudApiError && cause.code === "AGENT_REQUIRED") {
@@ -557,11 +600,12 @@ export const createBotChatHomeStore = (
                                 message,
                                 target: failedSelection.target,
                             }),
-                            view: opened
-                                ? runtimeFailure
-                                    ? { kind: "runtime-disconnected", botId, message }
-                                    : { kind: "active", botId }
-                                : { kind: "failed", message },
+                            view:
+                                phase === "watch"
+                                    ? runtimeFailure
+                                        ? { kind: "runtime-disconnected", botId, message }
+                                        : { kind: "active", botId }
+                                    : { kind: "failed", message },
                             ...(runtimeFailure
                                 ? {
                                       connectionStatus: {
@@ -574,7 +618,7 @@ export const createBotChatHomeStore = (
                         });
                         return;
                     }
-                    if (opened && runtimeFailure) {
+                    if (phase === "watch" && runtimeFailure) {
                         set((current) => ({
                             connectionStatus: { kind: "disconnected", label: "Disconnected" },
                             disconnectedNoticeDismissed:
