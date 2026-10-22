@@ -4,6 +4,17 @@ import { dataTestId } from "../src/data-testid.ts";
 import { encodeIdentityScope } from "../src/services/identity/identity-scope-url.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
+type TestApp = Awaited<ReturnType<typeof createTestApp>>;
+
+async function openDesktopUserMenu(app: TestApp) {
+    await app.user.click(await app.queryElementByTestId(dataTestId.userMenu));
+}
+
+async function clickDesktopEndRemoteAccess(app: TestApp) {
+    await openDesktopUserMenu(app);
+    await app.user.click(await app.queryElementByTestId(dataTestId.endRemoteAccess));
+}
+
 test("Given a stored identity for the active project, When the user shares access, Then a working transfer link and QR code appear", {
     timeout: 30_000,
 }, async () => {
@@ -89,11 +100,7 @@ test("Given shared Morty access, When the user continues on another device, Then
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap", identity: true } });
     await app.user.click(await app.queryElementByTestId(dataTestId.closeDialog));
-    const share = await app.waitForView(() =>
-        getByRole(document.body, "button", { name: "Continue on another device" }),
-    );
-    expect(share.textContent).toContain("Continue on another device");
-    await app.user.click(share);
+    await app.user.click(await app.queryElementByTestId(dataTestId.shareIdentity));
 
     const dialog = getByRole(document.body, "dialog", { name: "Continue on another device" });
     expect(dialog.textContent).toContain(
@@ -272,9 +279,7 @@ test("Given current Morty access, When the user opens its visible end action, Th
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap", identity: true } });
     await app.user.click(await app.queryElementByTestId(dataTestId.closeDialog));
-    const endAccess = getByRole(document.body, "button", { name: "End current access" });
-    expect(endAccess.textContent).toContain("End current access");
-    await app.user.click(endAccess);
+    await clickDesktopEndRemoteAccess(app);
 
     const dialog = await app.queryElementByTestId(dataTestId.endRemoteAccessDialog);
     await app.waitForView(() =>
@@ -297,7 +302,7 @@ test("Given current Morty access, When ending succeeds, Then the setup page conf
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap", identity: true } });
     await app.user.click(await app.queryElementByTestId(dataTestId.closeDialog));
-    await app.user.click(getByRole(document.body, "button", { name: "End current access" }));
+    await clickDesktopEndRemoteAccess(app);
     const dialog = await app.queryElementByTestId(dataTestId.endRemoteAccessDialog);
     const confirm = await app.waitForView(() => {
         const button = getByRole(dialog, "button", { name: "End current access" });
@@ -328,9 +333,7 @@ test("Given the end confirmation, When the real API transport closes, Then an un
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap", identity: true }, connectAgent: true });
-    await app.user.click(
-        await app.waitForView(() => getByRole(document.body, "button", { name: "End current access" })),
-    );
+    await clickDesktopEndRemoteAccess(app);
     const dialog = await app.queryElementByTestId(dataTestId.endRemoteAccessDialog);
     const confirm = await app.waitForView(() => {
         const button = getByRole(dialog, "button", { name: "End current access" });
@@ -359,9 +362,7 @@ test("Given an end confirmation for revoked access, When the API rejects the req
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap", identity: true }, connectAgent: true });
-    await app.user.click(
-        await app.waitForView(() => getByRole(document.body, "button", { name: "End current access" })),
-    );
+    await clickDesktopEndRemoteAccess(app);
     const dialog = await app.queryElementByTestId(dataTestId.endRemoteAccessDialog);
     const confirm = await app.waitForView(() => {
         const button = getByRole(dialog, "button", { name: "End current access" });
@@ -389,13 +390,13 @@ test("Given an unavailable connection, When current access cannot be prepared, T
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap", identity: true }, connectAgent: true });
-    const endAccess = await app.waitForView(() => getByRole(document.body, "button", { name: "End current access" }));
+    await app.waitForView(() => getByRole(document.body, "button", { name: "User menu" }));
     app.transport.close();
     const connectionNotice = await app.waitForView(() =>
         getByRole(document.body, "dialog", { name: "Runtime connection unavailable" }),
     );
     await app.user.click(getByRole(connectionNotice, "button", { name: "Close dialog" }));
-    await app.user.click(endAccess);
+    await clickDesktopEndRemoteAccess(app);
     const dialog = await app.queryElementByTestId(dataTestId.endRemoteAccessDialog);
     await app.waitForView(() =>
         expect(getByRole(dialog, "alert").textContent).toContain("Couldn't prepare to end this access"),

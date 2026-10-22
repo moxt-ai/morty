@@ -1,5 +1,6 @@
-import { getByRole, getByText, queryAllByRole, queryByRole } from "@testing-library/dom";
-import { expect, test, vi } from "vitest";
+import { fireEvent, getByRole, getByText, queryAllByRole, queryByRole } from "@testing-library/dom";
+import { flushSync } from "react-dom";
+import { expect, onTestFinished, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
@@ -533,9 +534,15 @@ test("Given more saved messages than one history page, When live output arrives 
     if (!(messages instanceof HTMLElement)) {
         throw new Error("Expected the Session message list");
     }
+    vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+    onTestFinished(() => {
+        vi.useRealTimers();
+    });
     const loading = app.waitForView(() => getByRole(document.body, "status", { name: "Loading older messages" }));
-    await app.user.click(getByRole(document.body, "button", { name: "Load older messages" }));
+    messages.scrollTop = 0;
+    flushSync(() => fireEvent.scroll(messages));
     await loading;
+    vi.useRealTimers();
     await app.daemon.continueReply(livePrompt, {
         outcome: "complete",
         output: [{ kind: "text", text: "Live completion while older messages load" }],
@@ -609,6 +616,10 @@ test("Given more saved messages than one history page, When older messages load,
         }
         return candidate;
     });
+    vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+    onTestFinished(() => {
+        vi.useRealTimers();
+    });
     await app.user.click(conversation);
     await app.waitForView(() =>
         expect(getByRole(document.body, "textbox", { name: "Message" }).hasAttribute("disabled")).toBe(false),
@@ -624,7 +635,8 @@ test("Given more saved messages than one history page, When older messages load,
         throw new Error("Expected the Session message list");
     }
     const loading = app.waitForView(() => getByRole(document.body, "status", { name: "Loading older messages" }));
-    await app.user.click(getByRole(document.body, "button", { name: "Load older messages" }));
+    messages.scrollTop = 0;
+    flushSync(() => fireEvent.scroll(messages));
     expect((await loading).textContent).not.toContain("Loading");
 
     await app.waitForView(() => {

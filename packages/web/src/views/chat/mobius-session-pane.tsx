@@ -26,7 +26,7 @@ import { WorkingIndicator } from "../../components/chat/working-indicator.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { LinkButton } from "../../components/ui/link-button.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
-import { LoadMoreTrigger } from "../../components/utils/load-more-trigger.tsx";
+import { useLoadMoreOnScroll } from "../../components/utils/load-more-trigger.tsx";
 import { cn } from "../../lib/utils.ts";
 import type { BotChatApi, BotRuntimeConfiguration } from "../../services/chat/bot-chat-api.ts";
 import type { QueuedDraftMessage } from "../../view-models/chat/conversation-creation-machine.ts";
@@ -309,11 +309,17 @@ export function MobiusSessionPaneShell({
     );
 }
 
-export function MobiusSessionPaneLoading({ executionContext }: { readonly executionContext: ExecutionContext }) {
+export function MobiusSessionPaneLoading({
+    executionContext,
+    footer,
+}: {
+    readonly executionContext: ExecutionContext;
+    readonly footer?: ReactNode;
+}) {
     const desktop = useDesktopChatLayout();
     return (
         <>
-            <MobiusSessionPaneShell mobileTitlePortaled={!desktop} titleLoading={desktop}>
+            <MobiusSessionPaneShell footer={footer} mobileTitlePortaled={!desktop} titleLoading={desktop}>
                 <ExecutionContextBar context={executionContext} />
                 <div aria-label="Messages" className={chatSessionMessageScrollClassName} role="log">
                     <SessionMessageListSkeleton />
@@ -520,6 +526,13 @@ export function MobiusSessionPane({
         async (signal: AbortSignal) => await pane.store.getState().loadOlderMessages(signal),
         [pane],
     );
+    const { checkScrollEdge } = useLoadMoreOnScroll({
+        container: messageList,
+        hasMore: model.hasOlderHistory,
+        loading: model.historyLoading,
+        onLoadMore: loadOlderMessages,
+        revision: model.historyRevision,
+    });
 
     const run = (action: (signal: AbortSignal) => Promise<void>) => {
         const signal = pane.operationsSignal();
@@ -587,6 +600,7 @@ export function MobiusSessionPane({
                     showTopFade
                     aria-label="Messages"
                     className={chatSessionMessageScrollClassName}
+                    onScroll={(event) => checkScrollEdge(event.currentTarget, false)}
                 >
                     {sessionMessagesLoading && <SessionMessageListSkeleton />}
                     {!sessionMessagesLoading && model.messages.length === 0 && model.connection.kind === "failed" && (
@@ -680,14 +694,6 @@ export function MobiusSessionPane({
                         </div>
                     )}
                 </FollowLatestScrollArea>
-                <LoadMoreTrigger
-                    label="Load older messages"
-                    container={messageList}
-                    hasMore={model.hasOlderHistory}
-                    loading={model.historyLoading}
-                    onLoadMore={loadOlderMessages}
-                    revision={model.historyRevision}
-                />
                 <ChatMessageQueue
                     messages={messageQueue.messages}
                     steeringSupported={taskControls.steeringSupported}
@@ -716,7 +722,7 @@ export function MobiusSessionPane({
                 <BotChatComposer
                     attachmentModel={attachmentModel}
                     attachmentSignal={pane.operationsSignal()}
-                    disabled={presentation.composerDisabled}
+                    disabled={presentation.composerInputDisabled}
                     draft={model.draft}
                     error={presentation.composerError}
                     errorStatus={
