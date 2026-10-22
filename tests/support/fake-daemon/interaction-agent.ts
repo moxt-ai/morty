@@ -40,15 +40,23 @@ export function createInteractionAgent() {
                 const planMode = context.params.prompt.some(
                     (content) => content.type === "text" && content.text === "request plan mode",
                 );
-                const options: acp.PermissionOption[] = planMode
+                const sessionScope = context.params.prompt.some(
+                    (content) => content.type === "text" && content.text === "request session permission",
+                );
+                const options: acp.PermissionOption[] = sessionScope
                     ? [
-                          { optionId: "allow-once", kind: "allow_once", name: "Yes, enter plan mode" },
-                          { optionId: "reject", kind: "reject_once", name: "No, start implementing now" },
+                          { optionId: "allow-session", kind: "allow_always", name: "Allow for this session" },
+                          { optionId: "deny-session", kind: "reject_always", name: "Deny for this session" },
                       ]
-                    : [
-                          { optionId: "allow-once", kind: "allow_once", name: "Yes" },
-                          { optionId: "reject", kind: "reject_once", name: "No" },
-                      ];
+                    : planMode
+                      ? [
+                            { optionId: "allow-once", kind: "allow_once", name: "Yes, enter plan mode" },
+                            { optionId: "reject", kind: "reject_once", name: "No, start implementing now" },
+                        ]
+                      : [
+                            { optionId: "allow-once", kind: "allow_once", name: "Yes" },
+                            { optionId: "reject", kind: "reject_once", name: "No" },
+                        ];
                 try {
                     const permission = await context.client.request(
                         acp.methods.client.session.requestPermission,
@@ -76,7 +84,9 @@ export function createInteractionAgent() {
                     );
                     let text = "Permission cancelled";
                     if (permission.outcome.outcome === "selected") {
-                        if (permission.outcome.optionId === "reject") {
+                        if (sessionScope) {
+                            text = `Selected decision: ${permission.outcome.optionId}`;
+                        } else if (permission.outcome.optionId === "reject") {
                             text = planMode ? "Selected decision: No, start implementing now" : "Permission rejected";
                         } else {
                             const input = await context.client.request(
