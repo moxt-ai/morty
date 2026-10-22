@@ -156,10 +156,9 @@ test("Given an active Pi conversation, When the Runtime is offline while the new
         throw new Error("Expected a connected Runtime");
     }
     await app.daemon.disconnect();
-    await app.waitForView(() => {
-        const context = getByRole(document.body, "region", { name: "Execution context" });
-        expect(context.textContent).toContain("Disconnected");
-    });
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "status", { name: "Connection" }).textContent).toBe("Disconnected"),
+    );
 
     await startNewSession(app);
     const composer = await app.queryElementByTestId(

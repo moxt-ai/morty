@@ -8,6 +8,7 @@ import {
     SetupCardShell,
     SetupCardTitle,
     setupPrimaryButtonClassName,
+    setupPrimaryButtonSize,
 } from "../setup/setup-card-shell.tsx";
 
 export function ContinuePageContent({
@@ -46,10 +47,15 @@ export function ContinuePageContent({
                     <SetupCardTitle id="continue-title">Continue native session</SetupCardTitle>
                     <SetupCardAlert>{state.message}</SetupCardAlert>
                     <SetupCardSection>
-                        <Button className={setupPrimaryButtonClassName} onClick={retry}>
+                        <Button className={setupPrimaryButtonClassName} onClick={retry} size={setupPrimaryButtonSize}>
                             Try again
                         </Button>
-                        <Button className={setupPrimaryButtonClassName} onClick={enterMorty} variant="outline">
+                        <Button
+                            className={setupPrimaryButtonClassName}
+                            onClick={enterMorty}
+                            size={setupPrimaryButtonSize}
+                            variant="outline"
+                        >
                             Go to Morty
                         </Button>
                     </SetupCardSection>
@@ -61,7 +67,7 @@ export function ContinuePageContent({
                     <SetupCardTitle id="continue-title">Continue native session</SetupCardTitle>
                     <SetupCardAlert>{state.message}</SetupCardAlert>
                     <SetupCardSection>
-                        <Button className={setupPrimaryButtonClassName} onClick={retry}>
+                        <Button className={setupPrimaryButtonClassName} onClick={retry} size={setupPrimaryButtonSize}>
                             Try again
                         </Button>
                         {fallback}

@@ -8,8 +8,9 @@ const variants = {
     destructive: "border-transparent bg-destructive text-white hover:bg-destructive/90",
 };
 const sizes = {
-    default: "min-h-9 px-3 py-1.5 text-[13px]",
-    sm: "min-h-8 px-3 py-1.5 text-xs",
+    default: "min-h-9 px-4 py-1.5 text-[13px]",
+    lg: "h-10 px-6 text-16",
+    sm: "min-h-8 px-4 py-1.5 text-xs",
     icon: "size-9 p-0 text-base",
 };
 

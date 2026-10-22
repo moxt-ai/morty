@@ -1,10 +1,33 @@
-import { ChevronDown, Folder, X } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { Dialog } from "radix-ui";
 import { useId, useState } from "react";
 import { dataTestId } from "../../data-testid.ts";
+import { cn } from "../../lib/utils.ts";
+import { overlaySurfaceRadiusClassName } from "../ui/overlay-surface.ts";
 import { Popover } from "../ui/popover.tsx";
 import { useDesktopChatLayout } from "../utils/use-desktop-chat-layout.ts";
 import type { ExecutionContext } from "./execution-context.ts";
+import { HarnessMark } from "./harness-mark.tsx";
+
+export function SessionExecutionHeaderEnd({
+    context,
+    showHarnessMark = false,
+}: {
+    readonly context: ExecutionContext;
+    readonly showHarnessMark?: boolean;
+}) {
+    return (
+        <div className="ml-auto flex shrink-0 items-center gap-3">
+            <ExecutionContextBar
+                context={context}
+                layout="header"
+                showConnection={false}
+                showHarnessMark={showHarnessMark}
+            />
+            <ExecutionConnectionStatus connection={context.connection} />
+        </div>
+    );
+}
 
 function ExecutionDetails({ context }: { readonly context: ExecutionContext }) {
     return (
@@ -34,43 +57,90 @@ function ExecutionDetails({ context }: { readonly context: ExecutionContext }) {
     );
 }
 
-export function ExecutionContextBar({ context }: { readonly context: ExecutionContext }) {
+function ExecutionConnectionStatus({
+    connection,
+    className,
+}: {
+    readonly connection: ExecutionContext["connection"];
+    readonly className?: string;
+}) {
+    return (
+        <span
+            aria-label="Connection"
+            className={cn(
+                "flex shrink-0 items-center gap-1.5 text-xs leading-5 text-muted-foreground",
+                (connection === "Disconnected" || connection === "Unavailable") && "text-destructive",
+                className,
+            )}
+            role="status"
+        >
+            <span
+                aria-hidden="true"
+                className={`size-1.5 rounded-full ${connection === "Connected" ? "bg-primary" : "bg-current"}`}
+            />
+            {connection}
+        </span>
+    );
+}
+
+export function ExecutionContextBar({
+    context,
+    layout = "strip",
+    showConnection = true,
+    showHarnessMark = true,
+}: {
+    readonly context: ExecutionContext;
+    /** `header` places a compact trigger in the session title bar; `strip` is the full-width row. */
+    readonly layout?: "header" | "strip";
+    readonly showConnection?: boolean;
+    /** When the harness mark is shown in the session title, hide it here. */
+    readonly showHarnessMark?: boolean;
+}) {
     const [open, setOpen] = useState(false);
     const summaryId = useId();
     const desktop = useDesktopChatLayout();
+    const headerLayout = layout === "header";
     const trigger = (
         <button
             type="button"
             aria-label="Show execution details"
             aria-describedby={summaryId}
-            className="group grid min-h-11 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-lg px-2 py-1.5 text-left outline-none transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:transition-none lg:py-1"
+            className={cn(
+                "group text-left outline-none transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:transition-none",
+                headerLayout
+                    ? "inline-flex max-w-[min(240px,36vw)] items-center gap-1 rounded-md px-2 py-1 text-xs leading-5 text-muted-foreground"
+                    : "grid min-h-11 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg px-2 py-1.5 lg:py-1",
+            )}
         >
-            <span id={summaryId} className="contents">
-                <span className="col-start-1 row-start-1 flex min-w-0 items-center gap-2 text-[13px] leading-5">
-                    <span className="max-w-[45%] truncate font-medium text-foreground lg:max-w-40">
-                        <span className="sr-only">Agent </span>
-                        {context.agent}
-                    </span>
-                    <span aria-hidden="true" className="text-border">
-                        /
-                    </span>
-                    <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
-                        <Folder aria-hidden="true" className="size-3.5 shrink-0" />
-                        <span className="sr-only">Working directory: </span>
-                        <span className="truncate lg:max-w-48">{context.directoryName}</span>
-                    </span>
-                </span>
-                {context.connection !== "Connected" && (
-                    <span
-                        className={`col-span-2 col-start-1 row-start-2 text-xs leading-5 ${context.connection === "Disconnected" || context.connection === "Unavailable" ? "text-destructive" : "text-muted-foreground"}`}
-                    >
-                        Session: {context.connection}
-                    </span>
+            <span
+                id={summaryId}
+                className={cn(
+                    "flex min-w-0 items-center gap-2",
+                    headerLayout ? "text-xs leading-5" : "col-start-1 row-start-1 text-[13px] leading-5",
                 )}
+            >
+                {showHarnessMark ? (
+                    <HarnessMark
+                        agentRef={context.agentRef || context.agent}
+                        appearance="line"
+                        label={context.agent}
+                        testId={dataTestId.executionContextHarnessMark}
+                    />
+                ) : null}
+                <span className={cn("min-w-0 truncate", headerLayout ? "font-normal" : "font-medium text-foreground")}>
+                    <span className="sr-only">Machine: </span>
+                    {context.machine}
+                </span>
+                {showConnection ? (
+                    <ExecutionConnectionStatus className="ml-auto shrink-0" connection={context.connection} />
+                ) : null}
             </span>
             <ChevronDown
                 aria-hidden="true"
-                className="col-start-2 row-start-1 size-3.5 text-muted-foreground/70 transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none"
+                className={cn(
+                    "size-3.5 shrink-0 text-muted-foreground/70 transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none",
+                    headerLayout ? "" : "col-start-2 row-start-1",
+                )}
             />
         </button>
     );
@@ -85,10 +155,10 @@ export function ExecutionContextBar({ context }: { readonly context: ExecutionCo
         </button>
     );
     return (
-        <section aria-label="Execution context" className="min-w-0 shrink-0 px-1 pb-1 sm:px-4 sm:pb-0">
-            <span role="status" aria-label="Connection" className="sr-only">
-                {context.connection}
-            </span>
+        <section
+            aria-label="Execution context"
+            className={cn(headerLayout ? "min-w-0 shrink-0" : "min-w-0 shrink-0 px-1 pb-1 sm:px-4 sm:pb-0")}
+        >
             {desktop ? (
                 <Popover.Root open={open} onOpenChange={setOpen}>
                     <Popover.Trigger asChild>{trigger}</Popover.Trigger>
@@ -96,13 +166,16 @@ export function ExecutionContextBar({ context }: { readonly context: ExecutionCo
                         <Popover.Content
                             role="dialog"
                             aria-label="Execution details"
-                            align="start"
+                            align={headerLayout ? "end" : "start"}
                             side="bottom"
                             sideOffset={6}
                             collisionPadding={12}
-                            className="relative z-50 w-[360px] max-w-[calc(100vw-24px)] rounded-2xl border border-border bg-card p-5 shadow-[0_12px_40px_rgba(0,0,0,0.12)] outline-none"
+                            className={cn(
+                                "relative z-50 w-[360px] max-w-[calc(100vw-24px)] border border-border bg-card p-5 shadow-[0_12px_40px_rgba(0,0,0,0.12)] outline-none",
+                                overlaySurfaceRadiusClassName,
+                            )}
                         >
-                            <h3 className="mb-5 pr-8 text-sm font-semibold">Execution details</h3>
+                            <h3 className="mb-5 pr-8 text-16 font-semibold">Execution details</h3>
                             {close}
                             <ExecutionDetails context={context} />
                         </Popover.Content>
@@ -114,7 +187,7 @@ export function ExecutionContextBar({ context }: { readonly context: ExecutionCo
                     <Dialog.Portal>
                         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/25" />
                         <Dialog.Content className="fixed inset-x-0 bottom-0 z-50 max-h-[80dvh] overflow-y-auto rounded-t-3xl border-t border-border/50 bg-card px-6 pt-6 pb-[max(24px,env(safe-area-inset-bottom))] shadow-[0_-8px_40px_rgba(0,0,0,0.08)] outline-none">
-                            <Dialog.Title className="mb-5 pr-8 text-base font-semibold">Execution details</Dialog.Title>
+                            <Dialog.Title className="mb-5 pr-8 text-16 font-semibold">Execution details</Dialog.Title>
                             <Dialog.Description className="sr-only">
                                 Machine, Agent, and working directory for this conversation.
                             </Dialog.Description>

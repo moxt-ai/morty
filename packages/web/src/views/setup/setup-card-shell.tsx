@@ -1,32 +1,80 @@
+import { CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 
 const setupPageBackgroundClassName = "bg-[radial-gradient(circle_at_top,_#f6f7f9_0%,_#f0f1f4_48%)]";
 
 export const setupPageClassName = `flex min-h-screen flex-col items-center justify-center overflow-y-auto ${setupPageBackgroundClassName} px-6 py-12 text-foreground`;
 
-export const setupSectionClassName = "mx-auto w-full max-w-[560px]";
+export const setupSectionClassName = "mx-auto w-full max-w-[480px]";
 
 const setupSectionWideClassName = `${setupSectionClassName} md:max-w-[960px]`;
 
 const setupCardClassName =
-    "overflow-hidden rounded-3xl border-[1px] border-white bg-card/90 p-8 shadow-module backdrop-blur sm:p-12";
+    "overflow-hidden rounded-3xl border-[1px] border-white bg-card/90 px-8 py-6 shadow-module backdrop-blur sm:px-12";
+
+const setupCardCenteredClassName = `${setupCardClassName} flex flex-col items-center text-center`;
 
 /** Vertical rhythm below title or description (24px top, 12px between children). */
 const setupContentStackClassName = "mt-6 space-y-3";
 
-export const setupPrimaryButtonClassName = "w-full min-h-11 !rounded-xl text-16";
+/** Full-width setup actions; pair with `setupPrimaryButtonSize` on cloud `Button`. */
+export const setupPrimaryButtonClassName = "w-full !rounded-xl";
+
+export const setupPrimaryButtonSize = "lg" as const;
+
+const mortyLogoMarkClassName = "flex items-center justify-center bg-primary text-xl font-bold text-primary-foreground";
+
+function MortyLogoMark({ layout }: { readonly layout: "header" | "card" }) {
+    if (layout === "header") {
+        return (
+            <span aria-hidden="true" className={`${mortyLogoMarkClassName} size-9 rounded-lg`}>
+                M
+            </span>
+        );
+    }
+
+    return <div className={`${mortyLogoMarkClassName} mb-6 size-14 rounded-[16px]`}>M</div>;
+}
 
 function SetupCardLogo() {
+    return <MortyLogoMark layout="card" />;
+}
+
+function SetupPageHeader() {
     return (
-        <div className="mb-6 flex size-14 items-center justify-center rounded-[16px] bg-primary text-xl font-bold text-primary-foreground">
-            M
-        </div>
+        <header className="w-full shrink-0">
+            <div className="mx-auto flex min-h-16 max-w-6xl items-center px-4 py-3 sm:px-6">
+                <a className="flex items-center gap-3 font-semibold tracking-tight" href="/" aria-label="Morty home">
+                    <MortyLogoMark layout="header" />
+                    Morty
+                </a>
+            </div>
+        </header>
     );
 }
 
-export function SetupCardTitle({ id, children }: { readonly id: string; readonly children: ReactNode }) {
+export function SetupCardFailureIcon() {
     return (
-        <h1 id={id} className="max-w-md text-32 font-semibold tracking-[-0.035em]">
+        <span className="mb-6 flex size-12 items-center justify-center rounded-full bg-destructive/5">
+            <CircleAlert aria-hidden="true" className="size-6 shrink-0 text-destructive" />
+        </span>
+    );
+}
+
+export function SetupCardTitle({
+    id,
+    children,
+    size = "default",
+}: {
+    readonly id: string;
+    readonly children: ReactNode;
+    readonly size?: "default" | "compact";
+}) {
+    return (
+        <h1
+            id={id}
+            className={`max-w-md ${size === "compact" ? "text-18" : "text-32"} font-semibold tracking-[-0.035em]`}
+        >
             {children}
         </h1>
     );
@@ -85,22 +133,38 @@ export function SetupCardOpeningStatus({
 }
 
 export function SetupCardShell({
+    cardLeading,
+    contentAlignment = "start",
+    showPageHeader = false,
     titleId,
     children,
     wide = false,
 }: {
+    readonly cardLeading?: ReactNode | null;
+    readonly contentAlignment?: "start" | "center";
+    readonly showPageHeader?: boolean;
     readonly titleId: string;
     readonly children: ReactNode;
     readonly wide?: boolean;
 }) {
-    return (
-        <main className={setupPageClassName}>
-            <section aria-labelledby={titleId} className={wide ? setupSectionWideClassName : setupSectionClassName}>
-                <div className={setupCardClassName}>
-                    <SetupCardLogo />
-                    {children}
-                </div>
-            </section>
-        </main>
+    const leading = cardLeading === undefined ? <SetupCardLogo /> : cardLeading === null ? null : cardLeading;
+    const card = (
+        <section aria-labelledby={titleId} className={wide ? setupSectionWideClassName : setupSectionClassName}>
+            <div className={contentAlignment === "center" ? setupCardCenteredClassName : setupCardClassName}>
+                {leading}
+                {children}
+            </div>
+        </section>
     );
+    if (showPageHeader) {
+        return (
+            <main
+                className={`flex min-h-screen flex-col overflow-y-auto ${setupPageBackgroundClassName} text-foreground`}
+            >
+                <SetupPageHeader />
+                <div className="flex flex-1 flex-col items-center justify-center px-6 py-12">{card}</div>
+            </main>
+        );
+    }
+    return <main className={setupPageClassName}>{card}</main>;
 }

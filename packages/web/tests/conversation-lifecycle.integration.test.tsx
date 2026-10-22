@@ -2,7 +2,7 @@ import { fireEvent, getByRole, getByText, queryAllByRole, queryByRole } from "@t
 import { flushSync } from "react-dom";
 import { expect, onTestFinished, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt } from "./infra/application-scenario.ts";
+import { openAgentModelPicker, sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
 test("Given a conversation created from a queued first message, When the Chat application remounts, Then the prompt is delivered exactly once", {
@@ -66,8 +66,7 @@ test("Given a configuration request is in flight, When the chat view detaches an
     // detach aborts the request, and the pane it belonged to must not lock
     // the re-attached view out of the composer.
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
-    const setting = await app.queryElementByTestId(dataTestId.agentSetting("model"));
-    await app.user.click(setting);
+    await openAgentModelPicker(app);
     const value = await app.queryElementByTestId(dataTestId.sessionConfigValue("test-large"));
     await app.user.click(value);
     app.remount();

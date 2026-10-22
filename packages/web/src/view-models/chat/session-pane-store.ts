@@ -16,7 +16,7 @@ import {
     createComposerAttachmentStore,
 } from "../../components/chat/composer-attachment-store.ts";
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
-import { type BotChatApi, connectedChatRuntimeAgents } from "../../services/chat/bot-chat-api.ts";
+import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
 import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
 import { recordBrowserError } from "../../services/diagnostics/browser-diagnostics.ts";
@@ -31,6 +31,7 @@ import { formatError, isRetryableRuntimeConnectionFailure, isSessionClosedFailur
 import { reportApplicationError } from "../report-error.ts";
 import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
 import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
+import { nativeSessionAgentTabs } from "./native-session-agents.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { createSessionActiveTurn, type SessionActiveTurn } from "./session-active-turn.ts";
 import {
@@ -39,16 +40,20 @@ import {
     transitionSessionActivity,
     workingCommandId,
 } from "./session-activity-machine.ts";
+import {
+    connectionFailure,
+    disconnectedConnection,
+    isConnectionSettled,
+    type SessionConnection,
+    sessionReconnectAttempt,
+    sessionUpdatesEndedError,
+} from "./session-connection.ts";
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import { createSessionDeliveryStore, type Journal, type SessionDeliveryStore } from "./session-delivery-store.ts";
-import { createSessionInteractionStore } from "./session-interaction-store.ts";
+import { createSessionInteractionStore, type SessionInteractionStore } from "./session-interaction-store.ts";
+import { requestedInteraction, type SessionLifecycleFact, sessionLifecycleFact } from "./session-lifecycle.ts";
 import { createSessionMessageQueueStore, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
-import type {
-    ElicitationInteraction,
-    ElicitationInteractionResponse,
-    PermissionInteraction,
-    PermissionInteractionResponse,
-} from "./session-pane-types.ts";
+import type { ElicitationInteractionResponse, PermissionInteractionResponse } from "./session-pane-types.ts";
 import {
     createSessionMessageReduction,
     type SessionMessage,
@@ -86,122 +91,13 @@ type TitleEdit =
     | { readonly kind: "closed" }
     | { readonly kind: "editing"; readonly draft: string }
     | { readonly kind: "saving"; readonly draft: string };
-type Connection =
-    | { readonly kind: "loading" }
-    | { readonly kind: "ready"; readonly client: MobiusClient }
-    | { readonly kind: "reconnecting"; readonly message: string | null }
-    | {
-          readonly kind: "disconnected";
-          readonly message: string;
-          readonly retry:
-              | { readonly kind: "scheduled"; readonly remainingSeconds: number }
-              | { readonly kind: "exhausted" };
-      }
-    | {
-          /** The Runtime closed the Session. Reopening it, which only the user chooses to do, resumes the connection. */
-          readonly kind: "closed";
-          /** The Runtime's explanation, or null when this page learned of the closing from a failed operation. */
-          readonly reason: string | null;
-          readonly reopen:
-              | { readonly kind: "available" }
-              | { readonly kind: "reopening" }
-              | { readonly kind: "failed"; readonly message: string };
-      }
-    | { readonly kind: "failed"; readonly message: string };
 
-function connectionFailure(connection: Connection): string | null {
-    switch (connection.kind) {
-        case "disconnected":
-        case "failed":
-        case "reconnecting":
-            return connection.message;
-        case "closed":
-            return connection.reopen.kind === "failed" ? connection.reopen.message : null;
-        case "loading":
-        case "ready":
-            return null;
-    }
-}
-
-export type SessionConnection = Connection;
-type LocalInteraction =
-    | { readonly kind: "permission"; readonly permission: PermissionInteraction }
-    | { readonly kind: "elicitation"; readonly elicitation: ElicitationInteraction };
+export type { SessionConnection } from "./session-connection.ts";
 
 const SESSION_EVENT_PAGE_LIMIT = 30;
 const HISTORY_MESSAGE_TARGET = 20;
-const SESSION_RECONNECT_DELAYS_MS = [5_000, 10_000, 20_000] as const;
-const SESSION_RECONNECT_DELAY_CAP_MS = 30_000;
-const SESSION_AUTO_RECONNECT_ATTEMPTS = 7;
-function interactionId(interaction: LocalInteraction): string {
-    return interaction.kind === "permission"
-        ? interaction.permission.interactionId
-        : interaction.elicitation.interactionId;
-}
-
-function replaceInteraction(
-    current: readonly LocalInteraction[],
-    id: string,
-    replacement: LocalInteraction | null,
-): readonly LocalInteraction[] {
-    const remaining = current.filter((interaction) => interactionId(interaction) !== id);
-    return replacement === null ? remaining : [...remaining, replacement];
-}
-
-function resolveElicitation(
-    current: readonly LocalInteraction[],
-    id: string,
-    action: "accept" | "cancel" | "complete" | "decline",
-): readonly LocalInteraction[] {
-    return current.map((interaction): LocalInteraction => {
-        if (
-            interaction.kind !== "elicitation" ||
-            interaction.elicitation.interactionId !== id ||
-            interaction.elicitation.state.kind === "resolved"
-        ) {
-            return interaction;
-        }
-        return {
-            kind: "elicitation",
-            elicitation: {
-                ...interaction.elicitation,
-                state: {
-                    action,
-                    content:
-                        interaction.elicitation.state.kind === "submitted" ? interaction.elicitation.state.content : "",
-                    kind: "resolved",
-                },
-            },
-        };
-    });
-}
-
-function resolvePermission(
-    current: readonly LocalInteraction[],
-    id: string,
-    outcome: PermissionInteractionResponse["outcome"],
-    optionId: string,
-): readonly LocalInteraction[] {
-    return current.map((interaction): LocalInteraction => {
-        if (
-            interaction.kind !== "permission" ||
-            interaction.permission.interactionId !== id ||
-            interaction.permission.state.kind === "resolved"
-        ) {
-            return interaction;
-        }
-        return {
-            kind: "permission",
-            permission: {
-                ...interaction.permission,
-                state: { kind: "resolved", optionId, outcome },
-            },
-        };
-    });
-}
-
 export interface SessionPaneStore {
-    readonly connection: Connection;
+    readonly connection: SessionConnection;
     readonly title: string;
     readonly titleEdit: TitleEdit;
     readonly messages: readonly SessionMessage[];
@@ -210,22 +106,20 @@ export interface SessionPaneStore {
     readonly hasOlderHistory: boolean;
     readonly options: readonly SessionConfigOption[];
     readonly draft: string;
-    readonly interactions: readonly LocalInteraction[];
     /**
      * Bumped after a user-submitted action that appends content (send, queue,
      * steer) so the message surface re-arms following the latest message.
      */
     readonly followRevision: number;
-    /** In-flight response for the interaction cards; a submitted interaction stays answered. */
-    readonly interactionOperation:
-        | { readonly kind: "idle" }
-        | { readonly kind: "submitting"; readonly interactionId: string }
-        | { readonly kind: "submitted"; readonly interactionId: string }
-        | { readonly kind: "failed"; readonly interactionId: string; readonly message: string };
     readonly operation: Operation;
     readonly activity: SessionActivityState;
     /** Display-only harness list; loading failures leave the current harness. */
-    readonly harnesses: readonly { readonly agentRef?: string; readonly label: string; readonly value: string }[];
+    readonly harnesses: readonly {
+        readonly agentRef?: string;
+        readonly installed?: boolean;
+        readonly label: string;
+        readonly value: string;
+    }[];
     readonly connect: (signal: AbortSignal) => Promise<void>;
     readonly retryNow: () => void;
     /**
@@ -254,14 +148,6 @@ export interface SessionPaneStore {
     readonly confirmTitleEdit: (signal: AbortSignal) => Promise<void>;
     readonly cancelTitleEdit: () => void;
     readonly refreshSettings: (signal: AbortSignal) => Promise<void>;
-    readonly respondToPermission: (response: PermissionInteractionResponse, signal: AbortSignal) => Promise<void>;
-    readonly respondToElicitation: (response: ElicitationInteractionResponse, signal: AbortSignal) => Promise<void>;
-    /** Submits an interaction response, tracking busy/answered/failed state for the cards. */
-    readonly respondToInteraction: (
-        interactionId: string,
-        response: () => Promise<void>,
-        signal: AbortSignal,
-    ) => Promise<void>;
     readonly stop: (signal: AbortSignal) => Promise<void>;
 }
 
@@ -271,11 +157,12 @@ export function sessionPanePresentation(
     tasks: SessionTaskControlsStore,
     queue: SessionMessageQueueStore,
     attachments: ComposerAttachmentStore,
+    interactions: SessionInteractionStore,
 ) {
-    const needsApproval = model.interactions.some(
+    const needsApproval = interactions.interactions.some(
         (interaction) => interaction.kind === "permission" && interaction.permission.state.kind === "pending",
     );
-    const waitingForInput = model.interactions.some(
+    const waitingForInput = interactions.interactions.some(
         (interaction) =>
             (interaction.kind === "permission" && interaction.permission.state.kind !== "resolved") ||
             (interaction.kind === "elicitation" &&
@@ -631,6 +518,54 @@ export function createSessionPaneModel(options: {
     const draftEntry = sessionDraftEntry(sessionId);
     const initialTimeline = deriveTimeline();
 
+    const respondToPermission = async (response: PermissionInteractionResponse, signal: AbortSignal): Promise<void> => {
+        if (client === null || store.getState().connection.kind !== "ready") {
+            throw new Error("The Session is not connected.");
+        }
+        const reopeningsAtStart = reopenings;
+        try {
+            await client.interactions.respond(
+                sessionId,
+                response.interactionId,
+                new MobiusPermissionResponseRequest("mobius-web", response.outcome, response.optionId),
+                AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
+            );
+        } catch (cause) {
+            signal.throwIfAborted();
+            if (closedNow(cause, reopeningsAtStart)) {
+                store.getState().sessionClosed(null);
+            }
+            throw cause;
+        }
+    };
+    const respondToElicitation = async (
+        response: ElicitationInteractionResponse,
+        signal: AbortSignal,
+    ): Promise<void> => {
+        if (client === null || store.getState().connection.kind !== "ready") {
+            throw new Error("The Session is not connected.");
+        }
+        const reopeningsAtStart = reopenings;
+        try {
+            await client.interactions.respond(
+                sessionId,
+                response.interactionId,
+                new MobiusElicitationResponseRequest("mobius-web", response.action, response.content),
+                AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
+            );
+        } catch (cause) {
+            signal.throwIfAborted();
+            if (closedNow(cause, reopeningsAtStart)) {
+                store.getState().sessionClosed(null);
+            }
+            throw cause;
+        }
+    };
+    const interactions = createSessionInteractionStore({
+        permission: respondToPermission,
+        elicitation: respondToElicitation,
+    });
+
     // Activity transitions are reported to the owner through this latch at
     // the explicit sites that change activity; connection waiters are woken
     // where the connection settles. No wrapped set, no subscriptions.
@@ -638,13 +573,7 @@ export function createSessionPaneModel(options: {
     const connectionWaiters = new Set<() => void>();
     const store = createStore<SessionPaneStore>()((set, get) => {
         const settleConnectionWaiters = (): void => {
-            const connection = get().connection;
-            const settled =
-                connection.kind === "ready" ||
-                connection.kind === "failed" ||
-                connection.kind === "closed" ||
-                (connection.kind === "disconnected" && connection.retry.kind === "exhausted");
-            if (settled) {
+            if (isConnectionSettled(get().connection)) {
                 for (const wake of connectionWaiters) {
                     wake();
                 }
@@ -808,7 +737,8 @@ export function createSessionPaneModel(options: {
             }
             command = "";
             const activity = get().activity;
-            set({ activity: activity.kind === "failed" ? activity : { kind: "idle" }, interactions: [] });
+            interactions.getState().restore([]);
+            set({ activity: activity.kind === "failed" ? activity : { kind: "idle" } });
             announceActivity();
         };
         // Holds the connect loop on a closed Session until the user reopens it, then lets the loop connect again.
@@ -840,9 +770,7 @@ export function createSessionPaneModel(options: {
             options: session.result.ready.configOptions,
             draft: options.initialMessage?.content ?? centralSessionStorage.read(draftEntry) ?? "",
             harnesses: [{ agentRef: session.agentRef, label: session.agentRef, value: session.agentRef }],
-            interactions: [],
             followRevision: 0,
-            interactionOperation: { kind: "idle" },
             operation: { kind: "idle" },
             activity: initialActivity,
             loadOlderMessages: async (signal) => {
@@ -921,159 +849,111 @@ export function createSessionPaneModel(options: {
                         session.result.action === "conversation" ? session.result.access : undefined,
                     );
                     const connected = client;
-                    const receiveLifecycle = async (
-                        payload: Extract<SessionEvent, { readonly type: "lifecycle-metadata" }>["payload"],
-                    ): Promise<boolean> => {
-                        if ("event" in payload) {
-                            const event = payload.event;
-                            if (event.kind === "session.permission.requested") {
-                                set((current) => ({
-                                    interactions: replaceInteraction(current.interactions, event.interactionId, {
-                                        kind: "permission",
-                                        permission: { ...event, state: { kind: "pending" } },
-                                    }),
-                                }));
-                                return true;
-                            }
-                            if (event.kind === "session.permission.resolved") {
-                                set((current) => ({
-                                    interactions: resolvePermission(
-                                        current.interactions,
-                                        event.interactionId,
-                                        event.outcome,
-                                        event.optionId,
-                                    ),
-                                }));
-                                return true;
-                            }
-                            if (event.kind === "session.elicitation.requested") {
-                                const { accepted, ...elicitation } = event;
-                                set((current) => ({
-                                    interactions: replaceInteraction(current.interactions, event.interactionId, {
-                                        kind: "elicitation",
-                                        elicitation: {
-                                            ...elicitation,
-                                            state: accepted
-                                                ? { action: "accept", content: "", kind: "submitted" }
-                                                : { kind: "pending" },
-                                        },
-                                    }),
-                                }));
-                                return true;
-                            }
-                            if (event.kind === "session.elicitation.resolved") {
-                                set((current) => ({
-                                    interactions: resolveElicitation(
-                                        current.interactions,
-                                        event.interactionId,
-                                        event.action,
-                                    ),
-                                }));
-                                return true;
-                            }
-
-                            return true;
-                        }
-                        if (payload.kind === "session.queue.changed") {
-                            const execution = await connected.sessions.readSessionExecution(
-                                sessionId,
-                                sessionIdentity,
-                                signal,
-                            );
-                            signal.throwIfAborted();
-                            messageQueue.getState().replace(execution.queued);
-                            return true;
-                        }
-                        if (payload.kind === "prompt.started") {
-                            delivery.getState().reconcile([payload.commandId]);
-                            const queued = messageQueue.getState().takeStarted(payload.commandId);
-                            const owner = sessionProjectionExecutionOwner(projection, payload.commandId);
-                            if (owner !== null && owner !== payload.commandId) {
-                                // Steering starts a command, not a new execution to stop.
-                                return true;
-                            }
-                            if (command !== "" && command !== payload.commandId) {
-                                tasks.getState().finish(command);
-                                activeTurn.turnCleared(command);
-                            }
-                            command = payload.commandId;
-                            const accepted = activeTurn.current();
-                            const turnId =
-                                queued?.turnId ??
-                                (accepted.kind === "accepted" && accepted.commandId === payload.commandId
-                                    ? accepted.turnId
-                                    : payload.commandId);
-                            tasks.getState().start(payload.commandId, turnId);
-                            activeTurn.submissionAccepted(payload.commandId, turnId);
-                            const currentActivity = get().activity;
-                            const startedAt =
-                                currentActivity.kind === "working" && currentActivity.commandId === payload.commandId
-                                    ? currentActivity.startedAt
-                                    : lastSentMessage?.commandId === payload.commandId
-                                      ? lastSentMessage.sentAt
-                                      : Date.now();
-                            set({ activity: startSessionWork({ commandId: payload.commandId, startedAt }) });
-                            announceActivity();
-                            return true;
-                        }
-                        if (
-                            payload.kind === "prompt.completed" ||
-                            payload.kind === "prompt.failed" ||
-                            payload.kind === "prompt.failed-before-start"
-                        ) {
-                            delivery.getState().reconcile([payload.commandId]);
-                            if (payload.kind === "prompt.completed" && payload.stopReason === "steered") {
+                    const receiveLifecycle = async (fact: SessionLifecycleFact): Promise<void> => {
+                        switch (fact.kind) {
+                            case "interaction-requested":
+                            case "permission-resolved":
+                            case "elicitation-resolved":
+                                interactions.getState().apply(fact);
+                                return;
+                            case "queue-changed": {
                                 const execution = await connected.sessions.readSessionExecution(
                                     sessionId,
                                     sessionIdentity,
                                     signal,
                                 );
                                 signal.throwIfAborted();
-                                const running = execution.turn;
-                                if (running !== null) {
-                                    command = running.commandId;
-                                    tasks.getState().start(running.commandId, running.commandId);
-                                    activeTurn.submissionAccepted(running.commandId, running.commandId);
-                                    const timeline = deriveTimeline();
-                                    set({
-                                        activity: startSessionWork({
-                                            commandId: running.commandId,
-                                            startedAt:
-                                                lastSentMessage?.commandId === running.commandId
-                                                    ? lastSentMessage.sentAt
-                                                    : Date.now(),
-                                        }),
-                                        messages: timeline.messages,
-                                        operation: finishPromptOperation(get().operation, payload.commandId),
-                                    });
-                                    announceActivity();
-                                    return true;
+                                messageQueue.getState().replace(execution.queued);
+                                return;
+                            }
+                            case "turn-started": {
+                                delivery.getState().reconcile([fact.commandId]);
+                                const queued = messageQueue.getState().takeStarted(fact.commandId);
+                                const owner = sessionProjectionExecutionOwner(projection, fact.commandId);
+                                if (owner !== null && owner !== fact.commandId) {
+                                    // Steering starts a command, not a new execution to stop.
+                                    return;
                                 }
+                                if (command !== "" && command !== fact.commandId) {
+                                    tasks.getState().finish(command);
+                                    activeTurn.turnCleared(command);
+                                }
+                                command = fact.commandId;
+                                const accepted = activeTurn.current();
+                                const turnId =
+                                    queued?.turnId ??
+                                    (accepted.kind === "accepted" && accepted.commandId === fact.commandId
+                                        ? accepted.turnId
+                                        : fact.commandId);
+                                tasks.getState().start(fact.commandId, turnId);
+                                activeTurn.submissionAccepted(fact.commandId, turnId);
+                                const currentActivity = get().activity;
+                                const startedAt =
+                                    currentActivity.kind === "working" && currentActivity.commandId === fact.commandId
+                                        ? currentActivity.startedAt
+                                        : lastSentMessage?.commandId === fact.commandId
+                                          ? lastSentMessage.sentAt
+                                          : Date.now();
+                                set({ activity: startSessionWork({ commandId: fact.commandId, startedAt }) });
+                                announceActivity();
+                                return;
                             }
-                            const activity = transitionSessionActivity(
-                                get().activity,
-                                payload.kind === "prompt.failed" || payload.kind === "prompt.failed-before-start"
-                                    ? {
-                                          commandId: payload.commandId,
-                                          kind: "work-failed",
-                                          message: payload.message,
-                                      }
-                                    : { commandId: payload.commandId, kind: "work-completed" },
-                            );
-                            const completed = deriveTimeline();
-                            set({
-                                activity,
-                                messages: completed.messages,
-                                operation: finishPromptOperation(get().operation, payload.commandId),
-                            });
-                            announceActivity();
-                            tasks.getState().finish(payload.commandId);
-                            activeTurn.turnCleared(payload.commandId);
-                            if (command === payload.commandId) {
-                                command = "";
+                            case "turn-completed":
+                            case "turn-failed": {
+                                delivery.getState().reconcile([fact.commandId]);
+                                if (fact.kind === "turn-completed" && fact.steered) {
+                                    const execution = await connected.sessions.readSessionExecution(
+                                        sessionId,
+                                        sessionIdentity,
+                                        signal,
+                                    );
+                                    signal.throwIfAborted();
+                                    const running = execution.turn;
+                                    if (running !== null) {
+                                        command = running.commandId;
+                                        tasks.getState().start(running.commandId, running.commandId);
+                                        activeTurn.submissionAccepted(running.commandId, running.commandId);
+                                        const timeline = deriveTimeline();
+                                        set({
+                                            activity: startSessionWork({
+                                                commandId: running.commandId,
+                                                startedAt:
+                                                    lastSentMessage?.commandId === running.commandId
+                                                        ? lastSentMessage.sentAt
+                                                        : Date.now(),
+                                            }),
+                                            messages: timeline.messages,
+                                            operation: finishPromptOperation(get().operation, fact.commandId),
+                                        });
+                                        announceActivity();
+                                        return;
+                                    }
+                                }
+                                const activity = transitionSessionActivity(
+                                    get().activity,
+                                    fact.kind === "turn-failed"
+                                        ? { commandId: fact.commandId, kind: "work-failed", message: fact.message }
+                                        : { commandId: fact.commandId, kind: "work-completed" },
+                                );
+                                const completed = deriveTimeline();
+                                set({
+                                    activity,
+                                    messages: completed.messages,
+                                    operation: finishPromptOperation(get().operation, fact.commandId),
+                                });
+                                announceActivity();
+                                tasks.getState().finish(fact.commandId);
+                                activeTurn.turnCleared(fact.commandId);
+                                if (command === fact.commandId) {
+                                    command = "";
+                                }
+                                return;
                             }
+                            case "none":
+                                return;
+                            default:
+                                return fact satisfies never;
                         }
-                        return true;
                     };
                     const observer: MobiusSessionEventObserver = {
                         reconcile: async (connection) => {
@@ -1139,36 +1019,15 @@ export function createSessionPaneModel(options: {
                                 });
                             }
                             signal.throwIfAborted();
-                            const interactions: readonly LocalInteraction[] = (() => {
-                                const interaction = execution.turn?.interaction;
-                                if (interaction === undefined || interaction === null) {
-                                    return [];
-                                }
-                                if (interaction.kind === "session.permission.requested") {
-                                    return [
-                                        {
-                                            kind: "permission",
-                                            permission: { ...interaction, state: { kind: "pending" } },
-                                        },
-                                    ];
-                                }
-                                const { accepted, ...elicitation } = interaction;
-                                return [
-                                    {
-                                        kind: "elicitation",
-                                        elicitation: {
-                                            ...elicitation,
-                                            state: accepted
-                                                ? { action: "accept", content: "", kind: "submitted" }
-                                                : { kind: "pending" },
-                                        },
-                                    },
-                                ];
-                            })();
-                            set({
-                                interactions,
-                                activity: restoredActivity,
-                            });
+                            const interaction = execution.turn?.interaction;
+                            interactions
+                                .getState()
+                                .restore(
+                                    interaction === undefined || interaction === null
+                                        ? []
+                                        : [requestedInteraction(interaction)],
+                                );
+                            set({ activity: restoredActivity });
                             announceActivity();
                             switch (reconciliation.kind) {
                                 case "initial-subscription":
@@ -1188,7 +1047,7 @@ export function createSessionPaneModel(options: {
                                     }
                                 }
                                 if (event.type !== "acp") {
-                                    await receiveLifecycle(event.payload);
+                                    await receiveLifecycle(sessionLifecycleFact(event.payload));
                                 }
                                 await new Promise<void>((resolve) => queueMicrotask(resolve));
                                 signal.throwIfAborted();
@@ -1217,7 +1076,7 @@ export function createSessionPaneModel(options: {
                     // the service deduplicates the repeated submission.
                     await subscription.completed;
                     signal.throwIfAborted();
-                    throw new Error("Session updates disconnected. Reopen the Session to continue.");
+                    throw sessionUpdatesEndedError();
                 };
                 readStoredLastSentMessage();
                 for (;;) {
@@ -1260,38 +1119,25 @@ export function createSessionPaneModel(options: {
                             });
                             return;
                         }
-                        const canAutoRetry = consecutiveFailures < SESSION_AUTO_RECONNECT_ATTEMPTS;
-                        const delay = Math.min(
-                            SESSION_RECONNECT_DELAYS_MS[consecutiveFailures] ?? SESSION_RECONNECT_DELAY_CAP_MS,
-                            SESSION_RECONNECT_DELAY_CAP_MS,
-                        );
+                        const retry = sessionReconnectAttempt(consecutiveFailures);
                         consecutiveFailures += 1;
                         const message = formatError(cause, "The Session could not be opened.");
-                        const remainingSeconds = Math.ceil(delay / 1000);
                         setAndSettle({
-                            connection: {
-                                kind: "disconnected",
+                            connection: disconnectedConnection(
                                 message,
-                                retry: canAutoRetry ? { kind: "scheduled", remainingSeconds } : { kind: "exhausted" },
-                            },
+                                retry.kind === "scheduled" ? retry.delayMs : null,
+                            ),
                         });
                         countdownInterrupt = new AbortController();
                         const retrySignal = AbortSignal.any([signal, countdownInterrupt.signal]);
                         try {
-                            if (canAutoRetry) {
-                                const retryAt = clock.now() + delay;
+                            if (retry.kind === "scheduled") {
+                                const retryAt = clock.now() + retry.delayMs;
                                 while (clock.now() < retryAt) {
                                     await clock.sleep(Math.min(1000, retryAt - clock.now()), retrySignal);
                                     retrySignal.throwIfAborted();
                                     setAndSettle({
-                                        connection: {
-                                            kind: "disconnected",
-                                            message,
-                                            retry: {
-                                                kind: "scheduled",
-                                                remainingSeconds: Math.ceil((retryAt - clock.now()) / 1000),
-                                            },
-                                        },
+                                        connection: disconnectedConnection(message, retryAt - clock.now()),
                                     });
                                 }
                             } else {
@@ -1343,7 +1189,7 @@ export function createSessionPaneModel(options: {
                 if (current.kind !== "closed" || current.reopen.kind === "reopening" || resumeAfterReopen === null) {
                     return;
                 }
-                const setReopen = (reopen: Extract<Connection, { readonly kind: "closed" }>["reopen"]): void => {
+                const setReopen = (reopen: Extract<SessionConnection, { readonly kind: "closed" }>["reopen"]): void => {
                     const connection = get().connection;
                     if (connection.kind === "closed") {
                         set({ connection: { ...connection, reopen } });
@@ -1750,77 +1596,8 @@ export function createSessionPaneModel(options: {
                     });
                 }
             },
-            respondToPermission: async (response, signal) => {
-                if (client === null || get().connection.kind !== "ready") {
-                    throw new Error("The Session is not connected.");
-                }
-                const reopeningsAtStart = reopenings;
-                try {
-                    await client.interactions.respond(
-                        sessionId,
-                        response.interactionId,
-                        new MobiusPermissionResponseRequest("mobius-web", response.outcome, response.optionId),
-                        AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
-                    );
-                } catch (cause) {
-                    signal.throwIfAborted();
-                    if (closedNow(cause, reopeningsAtStart)) {
-                        get().sessionClosed(null);
-                    }
-                    throw cause;
-                }
-            },
-            respondToElicitation: async (response, signal) => {
-                if (client === null || get().connection.kind !== "ready") {
-                    throw new Error("The Session is not connected.");
-                }
-                const reopeningsAtStart = reopenings;
-                try {
-                    await client.interactions.respond(
-                        sessionId,
-                        response.interactionId,
-                        new MobiusElicitationResponseRequest("mobius-web", response.action, response.content),
-                        AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
-                    );
-                } catch (cause) {
-                    signal.throwIfAborted();
-                    if (closedNow(cause, reopeningsAtStart)) {
-                        get().sessionClosed(null);
-                    }
-                    throw cause;
-                }
-            },
-            respondToInteraction: async (interactionId, response, signal) => {
-                const current = get().interactionOperation;
-                if (
-                    current.kind === "submitting" ||
-                    (current.kind === "submitted" && current.interactionId === interactionId)
-                ) {
-                    return;
-                }
-                set({ interactionOperation: { kind: "submitting", interactionId } });
-                try {
-                    await response();
-                    if (!signal.aborted) {
-                        set({ interactionOperation: { kind: "submitted", interactionId } });
-                    }
-                } catch (cause) {
-                    signal.throwIfAborted();
-                    set({
-                        interactionOperation: {
-                            kind: "failed",
-                            interactionId,
-                            message: formatError(cause, "The response could not be submitted."),
-                        },
-                    });
-                }
-            },
             stop: async (signal) => await tasks.getState().stop(signal),
         };
-    });
-    const interactionSubmissions = createSessionInteractionStore({
-        permission: (response, signal) => store.getState().respondToPermission(response, signal),
-        elicitation: (response, signal) => store.getState().respondToElicitation(response, signal),
     });
     // The pane's connection lifetime: attach starts connecting with its own
     // signal, detach aborts it. The view drives this through a ref callback,
@@ -1846,8 +1623,9 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 store.setState({
-                    harnesses: connectedChatRuntimeAgents(configuration.runtime).map((agent) => ({
+                    harnesses: nativeSessionAgentTabs(configuration.runtime).map((agent) => ({
                         agentRef: agent.agentRef,
+                        installed: agent.installed,
                         label: agent.label,
                         value: `${agent.runtimeId}:${agent.agentRef}`,
                     })),
@@ -1958,7 +1736,7 @@ export function createSessionPaneModel(options: {
     };
     return {
         composerAttachments,
-        interactionSubmissions,
+        interactions,
         store,
         delivery,
         filePreview,

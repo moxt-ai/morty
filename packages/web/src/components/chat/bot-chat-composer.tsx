@@ -125,15 +125,24 @@ export function BotChatComposer({
         attachmentModel.addFiles(images, attachmentSignal);
     };
     const submitAction = outputState === "idle" || (outputState === "running" && !submitDisabled);
+    const composerErrorMessage =
+        error.length > 0 ? error : attachmentState.kind === "failed" ? attachmentState.message : "";
+    const showComposerNotice = composerErrorMessage.length > 0 || errorStatus !== undefined;
 
     return (
         <form className={chatSessionComposerClassName} onSubmit={submit}>
-            {(error.length > 0 || attachmentState.kind === "failed") && (
-                <p className="mb-2 px-1 text-sm text-destructive" role="alert">
-                    {error.length > 0 ? error : attachmentState.kind === "failed" ? attachmentState.message : ""}
-                </p>
+            {showComposerNotice && (
+                <div
+                    className={`mb-2 flex items-center gap-3 px-1 text-13 ${composerErrorMessage.length > 0 && errorStatus !== undefined ? "justify-between" : errorStatus !== undefined ? "justify-end" : ""}`}
+                >
+                    {composerErrorMessage.length > 0 ? (
+                        <p className="min-w-0 text-destructive" role="alert">
+                            {composerErrorMessage}
+                        </p>
+                    ) : null}
+                    {errorStatus}
+                </div>
             )}
-            {errorStatus}
             <div className="rounded-[24px] border-[0.5px] border-border bg-surface-elevated px-3 pt-3 pb-2.5 shadow-[0_8px_28px_rgba(23,30,36,0.06)] sm:min-h-[128px] sm:pb-3">
                 {attachments.length > 0 && (
                     <ul aria-label="Attachments" className="mb-2 flex list-none flex-wrap gap-2 p-0">
@@ -149,7 +158,7 @@ export function BotChatComposer({
                 <Textarea
                     aria-describedby="chat-composer-keyboard-hint"
                     aria-label={messageLabel}
-                    className="min-h-[56px] px-1 py-1 text-base sm:min-h-[64px]"
+                    className="min-h-[56px] px-1 py-1 text-14 placeholder:text-14 sm:min-h-[64px]"
                     data-testid={dataTestId.messageComposer}
                     disabled={disabled}
                     onChange={(event) => onDraftChange(event.target.value)}
@@ -162,16 +171,16 @@ export function BotChatComposer({
                     <div className="flex min-w-0 items-center gap-1">
                         <button
                             aria-label="Add attachment"
-                            className="flex size-9 items-center justify-center rounded-full text-copy-secondary outline-none transition-colors duration-150 hover:bg-black/[0.045] focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50 motion-reduce:transition-none"
+                            className="flex size-9 items-center justify-center rounded-full text-copy-secondary outline-none transition-colors duration-150 hover:bg-black/[0.045] hover:text-foreground active:bg-black/[0.07] active:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50 motion-reduce:transition-none"
                             disabled={disabled || !canAttach}
                             onClick={() => fileInput.current?.click()}
                             title="Add attachment"
                             type="button"
                         >
                             {attachmentState.kind === "reading" ? (
-                                <LoaderCircle className="size-5 animate-spin motion-reduce:animate-none" />
+                                <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
                             ) : (
-                                <Plus className="size-5" />
+                                <Plus className="size-4" />
                             )}
                         </button>
                         <input

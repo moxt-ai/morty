@@ -1,7 +1,21 @@
 import { MobiusError, SESSION_CLOSED_ERROR_CODE } from "@moxt-ai/mobius-sdk";
 import { isRuntimeConnectionFailure } from "../services/management/management-api.ts";
 
-const runtimeDisconnectedMessage = "Your Mobius is disconnected. Start your Mobius to reconnect, then try again.";
+const runtimeDisconnectedFailure = {
+    detail: "Start your Mobius to reconnect, then try again.",
+    title: "Your Mobius is disconnected.",
+} as const;
+
+const runtimeDisconnectedMessage = `${runtimeDisconnectedFailure.title} ${runtimeDisconnectedFailure.detail}`;
+
+export function describeSessionFailureMessage(
+    message: string,
+): Readonly<{ readonly title: string; readonly detail?: string }> {
+    if (message === runtimeDisconnectedMessage) {
+        return runtimeDisconnectedFailure;
+    }
+    return { title: message };
+}
 const retryableRuntimeFailureCodes = new Set(["runtime_offline", "service_unavailable"]);
 
 /**

@@ -1,17 +1,18 @@
 import { type AnyRouter, RouterProvider } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { Button } from "../../components/ui/cloud-button.tsx";
-import { Spinner } from "../../index.ts";
+import { Button, Spinner } from "../../index.ts";
 import type { BugReportDialogStore } from "../../view-models/bug-report-dialog-store.ts";
 import { PairingInstruction } from "../chat/pairing-instruction.tsx";
 import { BugReportButton, BugReportDialogHost } from "../diagnostics/bug-report-button.tsx";
 import {
     SetupCardAlert,
     SetupCardDescription,
+    SetupCardFailureIcon,
     SetupCardSection,
     SetupCardShell,
     SetupCardTitle,
     setupPrimaryButtonClassName,
+    setupPrimaryButtonSize,
 } from "../setup/setup-card-shell.tsx";
 
 export type AppState =
@@ -95,23 +96,38 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
     switch (state.kind) {
         case "loading":
             return (
-                <SetupCardShell titleId="bootstrap-loading">
-                    <SetupCardTitle id="bootstrap-loading">Loading Morty</SetupCardTitle>
+                <SetupCardShell contentAlignment="center" titleId="bootstrap-loading">
+                    <SetupCardTitle id="bootstrap-loading" size="compact">
+                        Loading Morty
+                    </SetupCardTitle>
                     <SetupCardSection className="flex justify-center">
-                        <Spinner label="Loading Morty" />
+                        <Spinner label="Loading Morty" size="large" />
                     </SetupCardSection>
                 </SetupCardShell>
             );
         case "failed":
             return (
-                <SetupCardShell titleId="bootstrap-failed">
-                    <SetupCardTitle id="bootstrap-failed">Morty is unavailable</SetupCardTitle>
-                    <SetupCardAlert>
+                <SetupCardShell
+                    cardLeading={<SetupCardFailureIcon />}
+                    contentAlignment="center"
+                    showPageHeader
+                    titleId="bootstrap-failed"
+                >
+                    <SetupCardTitle id="bootstrap-failed" size="compact">
+                        Morty is unavailable
+                    </SetupCardTitle>
+                    <SetupCardDescription>
                         Check your connection and try again. Your saved computers are still here.
-                    </SetupCardAlert>
-                    <Button className="mt-4" onClick={state.retry}>
-                        Retry
-                    </Button>
+                    </SetupCardDescription>
+                    <SetupCardSection>
+                        <Button
+                            className={setupPrimaryButtonClassName}
+                            onClick={state.retry}
+                            size={setupPrimaryButtonSize}
+                        >
+                            Retry
+                        </Button>
+                    </SetupCardSection>
                 </SetupCardShell>
             );
         case "invalid-link":

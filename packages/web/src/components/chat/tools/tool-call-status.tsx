@@ -9,7 +9,7 @@ export const ToolCallSupplementalContent = createContext<ReactNode>(null);
 export const agentThinkStepTriggerClassName =
     "flex w-full min-w-0 cursor-pointer items-start gap-2 rounded-md px-0.5 py-1 text-[13px] leading-[22px] text-muted-foreground outline-none hover:text-copy-secondary focus-visible:ring-2 focus-visible:ring-ring/60";
 
-const agentThinkStepTitleClassName = "min-w-0 truncate text-left";
+export const agentThinkStepTitleClassName = "min-w-0 truncate text-left";
 
 export const agentThinkStepInlineLabelClassName = "flex min-w-0 flex-1 max-w-full items-start gap-2";
 
@@ -88,7 +88,7 @@ export function ToolCallDisclosure({
     );
 }
 
-function ToolCallStatus({ state }: { readonly state: ToolCallState }) {
+export function ToolCallStatus({ state }: { readonly state: ToolCallState }) {
     switch (state.kind) {
         case "running":
             return (

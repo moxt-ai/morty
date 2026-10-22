@@ -1,16 +1,13 @@
 import type { NativeSessionEntry, NativeSessionResult } from "@moxt-ai/mobius-sdk/channel";
 import { createStore } from "zustand/vanilla";
-import {
-    type BotChatApi,
-    type ChatAgentSelection,
-    connectedChatRuntimeAgents,
-} from "../../services/chat/bot-chat-api.ts";
+import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { formatError } from "../format-error.ts";
+import { type NativeSessionAgent, nativeSessionAgentTabs } from "./native-session-agents.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { type SessionMessage, sessionEventLogPresentation } from "./session-presentation.ts";
 
 type NativeSessionDirectory =
-    | { readonly kind: "loading" }
+    | { readonly kind: "loading"; readonly scope: "initial" | "refresh" }
     | { readonly kind: "empty" }
     | {
           readonly kind: "ready";
@@ -21,7 +18,8 @@ type NativeSessionDirectory =
           readonly entries: readonly NativeSessionEntry[];
           readonly nextCursor: string | null;
       }
-    | { readonly kind: "failed"; readonly message: string };
+    | { readonly kind: "failed"; readonly message: string }
+    | { readonly kind: "agent-unavailable"; readonly agentLabel: string };
 
 type NativeSessionPreview =
     | { readonly kind: "empty" }
@@ -39,7 +37,7 @@ type NativeSessionPreview =
 type Operation = "idle" | "more" | "import" | "fork";
 
 export interface NativeSessionStore {
-    readonly agents: readonly ChatAgentSelection[];
+    readonly agents: readonly NativeSessionAgent[];
     readonly selected: string;
     readonly directory: NativeSessionDirectory;
     readonly preview: NativeSessionPreview;
@@ -79,7 +77,7 @@ export const createNativeSessionStore = (
         },
         agents: [],
         selected: "",
-        directory: { kind: "loading" },
+        directory: { kind: "loading", scope: "initial" },
         preview: { kind: "empty" },
         operation: "idle",
         error: "",
@@ -88,18 +86,32 @@ export const createNativeSessionStore = (
             discovery?.abort(new Error("Native session discovery restarted."));
             discovery = attempt;
             const signal = AbortSignal.any([parent, attempt.signal]);
-            set({ directory: { kind: "loading" }, preview: { kind: "empty" }, error: "" });
+            const scope = get().agents.length === 0 ? ("initial" as const) : ("refresh" as const);
+            set({ directory: { kind: "loading", scope }, preview: { kind: "empty" }, error: "" });
             try {
                 const configuration = await requests.runtimeConfiguration(botId, signal);
                 signal.throwIfAborted();
-                const agents = connectedChatRuntimeAgents(configuration.runtime);
-                set({ agents });
-                const selected = get().selected;
-                const agent = agents.find((item) => `${item.runtimeId}:${item.agentRef}` === selected) ?? agents[0];
+                const agents = nativeSessionAgentTabs(configuration.runtime);
+                const priorSelected = get().selected;
+                const agent =
+                    agents.find((item) => `${item.runtimeId}:${item.agentRef}` === priorSelected) ??
+                    agents.find((item) => item.installed) ??
+                    agents[0];
                 if (agent === undefined) {
-                    set({ directory: { kind: "empty" } });
+                    set({ agents, selected: "", directory: { kind: "empty" } });
                     return;
                 }
+                const selected = `${agent.runtimeId}:${agent.agentRef}`;
+                if (!agent.installed) {
+                    set({
+                        agents,
+                        selected,
+                        directory: { kind: "agent-unavailable", agentLabel: agent.label },
+                        preview: { kind: "empty" },
+                    });
+                    return;
+                }
+                set({ agents, selected });
                 const result = await requests.nativeSessions(
                     botId,
                     agent.runtimeId,

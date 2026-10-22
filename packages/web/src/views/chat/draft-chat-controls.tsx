@@ -5,8 +5,8 @@ import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-
 import { CwdSelector } from "../../components/chat/cwd-selector.tsx";
 import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
-import { connectedChatRuntimeAgents } from "../../services/chat/bot-chat-api.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
+import { nativeSessionAgentTabs } from "../../view-models/chat/native-session-agents.ts";
 import { useExternalStore } from "../../view-models/external-store.ts";
 
 export function DraftChatControls({
@@ -81,8 +81,9 @@ export function DraftChatControls({
                         onValueChange: (value) => {
                             void viewModel.selectHarness(value, disabled, signal);
                         },
-                        options: connectedChatRuntimeAgents(settings.configuration.runtime).map((agent) => ({
+                        options: nativeSessionAgentTabs(settings.configuration.runtime).map((agent) => ({
                             agentRef: agent.agentRef,
+                            installed: agent.installed,
                             value: `${agent.runtimeId}:${agent.agentRef}`,
                             label: agent.label,
                             tabLabel: agent.label,

@@ -17,4 +17,10 @@ export const chatSessionComposerClassName =
 export const chatSessionPaneSectionClassName =
     "relative z-20 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden mb-2 ml-2 mr-2 mt-0 motion-reduce:animate-none sm:animate-cloud-enter sm:rounded-t-md sm:rounded-b-[32px] sm:border sm:border-white sm:bg-card/90 sm:shadow-module sm:backdrop-blur sm:my-2 sm:ml-0 sm:mr-2";
 
+/** Session pane top bar: title on the left, execution controls on the right. */
+export const chatSessionExecutionHeaderClassName = "flex h-12 shrink-0 items-center gap-4 px-4";
+
 export const chatSessionMessageItemClassName = "mt-4 first:mt-0";
+
+/** Agent output for one user turn (text, tools, thinking, completion notices). */
+export const chatSessionAgentReplyGroupClassName = `${chatSessionMessageItemClassName} space-y-4 pb-8`;
