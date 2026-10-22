@@ -36,9 +36,11 @@ test("Given two devices share an idle conversation, When both send a draft, Then
         );
         const outcome = await Promise.race([
             ...participants.map(async (participant) => {
+                // History also shows "Response failed" on both devices;
+                // the composer rejection belongs to this device's draft.
                 await participant.page
                     .getByRole("alert")
-                    .filter({ hasText: "Another prompt is already running" })
+                    .filter({ hasText: /^Another prompt is already running/u })
                     .waitFor();
                 return { kind: "rejected" as const, participant };
             }),

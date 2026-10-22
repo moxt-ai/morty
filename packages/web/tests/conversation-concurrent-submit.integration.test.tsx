@@ -48,6 +48,12 @@ test("Given two idle viewers with drafts and attachments, When both submit befor
         await current.waitForView(() =>
             expect(getByRole(form, "list", { name: "Attachments" }).textContent).toContain(fileName),
         );
+        // Draft editing is available while the live subscription is still loading.
+        // Both devices must be able to send before exercising simultaneous submissions.
+        await current.waitForView(() => {
+            const send = getByRole(form, "button", { name: "Send message" });
+            expect(send instanceof HTMLButtonElement && !send.disabled).toBe(true);
+        });
         participants.push({ app: current, composer, fileName, form, prompt });
     }
     // Submit both visible forms in the same browser event turn, before either
