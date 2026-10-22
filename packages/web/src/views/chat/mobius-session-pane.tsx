@@ -88,7 +88,7 @@ function thinkingEntry(message: SessionMessage): AgentThinkingEntry | null {
     return null;
 }
 
-export function sessionRenderItems(messages: readonly SessionMessage[]): readonly SessionRenderItem[] {
+function sessionRenderItems(messages: readonly SessionMessage[]): readonly SessionRenderItem[] {
     type RenderItemBuilder =
         | { kind: "assistant-text"; id: string; messageId: string | null; text: string[] }
         | { readonly kind: "event"; readonly message: SessionMessage }
@@ -119,12 +119,6 @@ export function sessionRenderItems(messages: readonly SessionMessage[]): readonl
         (item): SessionRenderItem => (item.kind === "assistant-text" ? { ...item, text: item.text.join("") } : item),
     );
 }
-
-export {
-    chatSessionMessageColumnClassName as mobiusSessionMessageColumnClassName,
-    chatSessionMessageItemClassName as mobiusSessionMessageItemClassName,
-    chatSessionMessageScrollClassName as mobiusSessionMessageScrollClassName,
-} from "../../components/chat/chat-session-layout.ts";
 
 export function SessionMessageListSkeleton() {
     return (
@@ -251,7 +245,7 @@ function SessionConversationTitleBar({
     );
 }
 
-export function MobiusSessionPaneShell({
+function MobiusSessionPaneShell({
     title,
     titleLoading = false,
     mobileTitlePortaled = false,
