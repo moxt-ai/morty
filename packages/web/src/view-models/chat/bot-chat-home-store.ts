@@ -462,12 +462,29 @@ export const createBotChatHomeStore = (
                     }
                     if (isChatBridgeError(cause)) {
                         // A dropped bridge is an ordinary failed call: report it
-                        // for diagnostics and resume once the transport
-                        // reconnects instead of blocking the page with a dialog.
+                        // for diagnostics instead of blocking the page with a
+                        // dialog.
                         console.error("The Chat WebSocket bridge failed to complete a request.", cause);
+                        const selection = get().selection;
+                        if (selection.kind === "loading" && selection.target.kind === "continue") {
+                            // Continuing, importing, or forking a native session
+                            // may already have happened server-side, so the same
+                            // load must not be replayed without the user asking.
+                            set({ view: { kind: "failed", message: formatError(cause, "Chat is unavailable.") } });
+                            return;
+                        }
                         try {
                             await requests.waitForBridge(signal);
-                        } catch {
+                        } catch (bridgeCause) {
+                            if (signal.aborted) {
+                                return;
+                            }
+                            // The bridge gave up reconnecting: hand the page an
+                            // explicit retry instead of leaving it loading.
+                            console.error("The Chat WebSocket bridge did not reconnect.", bridgeCause);
+                            set({
+                                view: { kind: "failed", message: formatError(bridgeCause, "Chat is unavailable.") },
+                            });
                             return;
                         }
                         if (signal.aborted) {
