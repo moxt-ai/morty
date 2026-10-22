@@ -3,7 +3,8 @@
         CommentEmoji, Inter, apple-system, BlinkMacSystemFont, segoe ui, Helvetica Neue, Arial,
         PingFang SC, Microsoft Yahei, Hiragino Sans GB, Noto Sans, Heiti SC, sans-serif, Apple Color Emoji;
 
-    --font-mono: RobotoMono;
+    --font-mono:
+        RobotoMono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 
     --font-inter:
         Inter, apple-system, BlinkMacSystemFont, segoe ui, Helvetica Neue, Arial, PingFang SC,
@@ -52,6 +53,7 @@
 
 @font-face {
     font-family: RobotoMono;
+    font-display: swap;
     src: url("/fonts/RobotoMono.ttf") format("truetype");
 }
 
@@ -73,18 +75,21 @@
 
 @font-face {
     font-family: "Inter";
+    font-display: swap;
     src: url("/fonts/Inter-Regular.ttf") format("truetype");
     font-weight: 400;
     font-style: normal;
 }
 @font-face {
     font-family: "Inter";
+    font-display: swap;
     src: url("/fonts/Inter-Medium.otf") format("opentype");
     font-weight: 500;
     font-style: normal;
 }
 @font-face {
     font-family: "Inter";
+    font-display: swap;
     src: url("/fonts/Inter-SemiBold.ttf") format("truetype");
     font-weight: 600;
     font-style: normal;
