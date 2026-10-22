@@ -2,6 +2,7 @@ import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as v from "valibot";
+import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runtime.ts";
 import { createIdentityFixture } from "../../../worker/tests/support/identity-fixture.ts";
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
 
@@ -57,10 +58,7 @@ export async function createChatWorkerEnvironment() {
         const botId = identity.bot.botId;
         const transport = new WebSocketApiTransport(origin);
         transport.open();
-        const connect = async (
-            agents: readonly { readonly id: string; readonly label: string }[],
-            nativeSessionIds?: ReadonlySet<string>,
-        ) => {
+        const connect = async (agents: readonly ControlledAgent[], nativeSessionIds?: ReadonlySet<string>) => {
             const runtime = await cloud.connectAgent(identity.projectId, agents, nativeSessionIds);
             const setup = await request(`chat/projects/${identity.projectId}/bots/${botId}/setup`, {
                 runtimeId: runtime.runtimeId,
@@ -84,13 +82,11 @@ export async function createChatWorkerEnvironment() {
         return {
             botId,
             connectAgent: async (
-                agent: { readonly id: string; readonly label: string } = { id: "claude", label: "Codex" },
+                agent: ControlledAgent = { id: "claude", label: "Codex" },
                 nativeSessionIds?: ReadonlySet<string>,
             ) => await connect([agent], nativeSessionIds),
-            connectAgents: async (
-                agents: readonly { readonly id: string; readonly label: string }[],
-                nativeSessionIds?: ReadonlySet<string>,
-            ) => await connect(agents, nativeSessionIds),
+            connectAgents: async (agents: readonly ControlledAgent[], nativeSessionIds?: ReadonlySet<string>) =>
+                await connect(agents, nativeSessionIds),
             connectRuntime: async () => {
                 const runtime = await cloud.connectAgent(identity.projectId);
                 return { failure: runtime.failure, runtimeId: runtime.runtimeId };

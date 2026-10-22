@@ -6,8 +6,19 @@ import {
 } from "@moxt-ai/mobius/runtime";
 import { fakeDaemonCapabilities } from "@moxt-ai/mobius-test-support/fake-daemon";
 
-/** A stateful Agent whose configuration can disappear through a real ACP update. */
-export function createSettingsAgent() {
+export type DefineInProcessAgent<Definition> = (
+    ...options: ConstructorParameters<typeof InProcessAcpAgentDefinition>
+) => Definition;
+
+export const defineCurrentAgent: DefineInProcessAgent<InProcessAcpAgentDefinition> = (...options) =>
+    new InProcessAcpAgentDefinition(...options);
+
+/**
+ * A stateful Agent with one model setting. Asked to "Remove settings", it removes
+ * its configuration through a real ACP update; it answers any other prompt.
+ * `define` registers it with the daemon release under test.
+ */
+export function createSettingsAgent<Definition>(define: DefineInProcessAgent<Definition>) {
     const sessions = new Map<string, acp.SessionConfigOption[]>();
     const configuration = (sessionId: string): acp.SessionConfigOption[] => {
         const options = sessions.get(sessionId);
@@ -64,6 +75,17 @@ export function createSettingsAgent() {
             .onRequest(acp.methods.agent.session.prompt, async (context) => {
                 const sessionId = context.params.sessionId;
                 configuration(sessionId);
+                const prompt = context.params.prompt.map((block) => (block.type === "text" ? block.text : "")).join("");
+                if (prompt !== "Remove settings") {
+                    await context.client.notify(acp.methods.client.session.update, {
+                        sessionId,
+                        update: {
+                            sessionUpdate: "agent_message_chunk",
+                            content: { type: "text", text: `Settings Agent: ${prompt}` },
+                        },
+                    });
+                    return { stopReason: "end_turn" };
+                }
                 sessions.set(sessionId, []);
                 await context.client.notify(acp.methods.client.session.update, {
                     sessionId,
@@ -86,7 +108,7 @@ export function createSettingsAgent() {
             close: async () => termination.resolve({ kind: "closed" }),
         };
     };
-    return new InProcessAcpAgentDefinition(
+    return define(
         "settings-test",
         "Settings Agent",
         process.execPath,

@@ -3,6 +3,7 @@ import { act, render } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { flushSync } from "react-dom";
 import { afterAll, afterEach } from "vitest";
+import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runtime.ts";
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../src/services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope } from "../../src/services/identity/identity-scope-url.ts";
@@ -48,8 +49,8 @@ export async function createTestApp(
         readonly application?: Application;
         readonly connectAgent?: boolean;
         readonly clock?: Clock;
-        readonly agent?: { readonly id: string; readonly label: string };
-        readonly agents?: readonly { readonly id: string; readonly label: string }[];
+        readonly agent?: ControlledAgent;
+        readonly agents?: readonly ControlledAgent[];
         readonly nativeSessionIds?: ReadonlySet<string>;
         readonly page?:
             | {

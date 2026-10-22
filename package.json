@@ -51,6 +51,7 @@
         "@biomejs/biome": "catalog:",
         "@cloudflare/vite-plugin": "catalog:",
         "@moxt-ai/mobius": "workspace:*",
+        "@moxt-ai/mobius-previous": "npm:@moxt-ai/mobius@0.0.271",
         "@moxt-ai/mobius-sdk": "workspace:*",
         "@moxt-ai/mobius-test-support": "workspace:*",
         "@sentry/vite-plugin": "catalog:",

@@ -194,6 +194,9 @@ importers:
       '@moxt-ai/mobius':
         specifier: workspace:*
         version: link:third-party/mobius/packages/cli
+      '@moxt-ai/mobius-previous':
+        specifier: npm:@moxt-ai/mobius@0.0.271
+        version: '@moxt-ai/mobius@0.0.271(@anthropic-ai/sdk@0.122.0(zod@4.6.5))(@modelcontextprotocol/sdk@1.32.1(supports-color@10.2.2)(zod@4.6.5))'
       '@moxt-ai/mobius-sdk':
         specifier: workspace:*
         version: link:third-party/mobius/packages/mobius-sdk
@@ -1935,6 +1938,11 @@ packages:
     peerDependenciesMeta:
       '@cfworker/json-schema':
         optional: true
+
+  '@moxt-ai/mobius@0.0.271':
+    resolution: {integrity: sha512-A1LptbEzLGYY0pYONHb8eKyS4GttJqKbMZz8rbK8+q2R6rq/o6EvN0uSunm7uraXTH7tsb6RDmLS/XH9SX32Qg==}
+    engines: {node: '>=22.13.0'}
+    hasBin: true
 
   '@napi-rs/wasm-runtime@1.2.3':
     resolution: {integrity: sha512-UMduMbqO5s5zF2NkNacMT/yK5Y5QiKvWr2+50bzIIxFDwVJ2h49b+oyjaCGPhJxd2/gC2x39EHv/gHVuu36x2Q==}
@@ -7224,6 +7232,18 @@ snapshots:
       zod-to-json-schema: 3.25.2(zod@4.6.5)
     transitivePeerDependencies:
       - supports-color
+
+  '@moxt-ai/mobius@0.0.271(@anthropic-ai/sdk@0.122.0(zod@4.6.5))(@modelcontextprotocol/sdk@1.32.1(supports-color@10.2.2)(zod@4.6.5))':
+    dependencies:
+      '@agentclientprotocol/sdk': 1.4.0(zod@4.6.5)
+      '@anthropic-ai/claude-agent-sdk': 0.3.257(@anthropic-ai/sdk@0.122.0(zod@4.6.5))(@modelcontextprotocol/sdk@1.32.1(supports-color@10.2.2)(zod@4.6.5))(zod@4.6.5)
+      commander: 15.0.0
+      semver: 7.8.5
+      undici: 8.10.2
+      zod: 4.6.5
+    transitivePeerDependencies:
+      - '@anthropic-ai/sdk'
+      - '@modelcontextprotocol/sdk'
 
   '@napi-rs/wasm-runtime@1.2.3(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)':
     dependencies:

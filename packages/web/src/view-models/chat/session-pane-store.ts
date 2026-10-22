@@ -19,6 +19,7 @@ import { registerMortyDebugSession } from "../../debug-bridge.ts";
 import { type BotChatApi, connectedChatRuntimeAgents } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
 import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
+import { recordBrowserError } from "../../services/diagnostics/browser-diagnostics.ts";
 import {
     centralIndexedDB,
     type SessionLastSentMessage,
@@ -514,6 +515,9 @@ export function createSessionPaneModel(options: {
         value: option.type === "select" ? option.currentValue : "",
         valueType: option.type,
     }));
+    // Counts adopted settings so a slower read cannot replace settings observed after it started.
+    let settingsRevision = 0;
+    let settingsRead: AbortController | null = null;
     const instructionUri = "morty://bot/instructions";
     const withInstructions = <T extends { readonly resources: readonly PromptResource[] }>(request: T): T => ({
         ...request,
@@ -666,6 +670,17 @@ export function createSessionPaneModel(options: {
             }
         };
         let historyLoadController: AbortController | null = null;
+        const adoptSettings = (configOptions: readonly SessionConfigOption[]): void => {
+            settingsRevision += 1;
+            sessionConfigurations = configOptions.map((candidate) => ({
+                booleanValue: candidate.type === "boolean" ? candidate.booleanValue : false,
+                configId: candidate.id,
+                value: candidate.type === "select" ? candidate.currentValue : "",
+                valueType: candidate.type,
+            }));
+            saveLastAgentSettings(botId, session.agentRef, configOptions);
+            set({ options: configOptions });
+        };
         const commitProjection = (input: SessionProjectionInput): readonly SessionProjectionEffect[] => {
             const result = transitionSessionProjection(projection, input);
             projection = result.state;
@@ -680,14 +695,7 @@ export function createSessionPaneModel(options: {
                     continue;
                 }
                 if (effect.config !== undefined) {
-                    sessionConfigurations = effect.config.map((candidate) => ({
-                        booleanValue: candidate.type === "boolean" ? candidate.booleanValue : false,
-                        configId: candidate.id,
-                        value: candidate.type === "select" ? candidate.currentValue : "",
-                        valueType: candidate.type,
-                    }));
-                    saveLastAgentSettings(botId, session.agentRef, effect.config);
-                    set({ options: effect.config });
+                    adoptSettings(effect.config);
                 }
                 if (effect.title !== undefined) {
                     sessionTitle = effect.title;
@@ -698,23 +706,38 @@ export function createSessionPaneModel(options: {
             return result.effects;
         };
         /**
-         * Re-reads the authoritative settings from the daemon. A daemon
-         * restart rebuilds the event log without config updates, so an
-         * established projection without a config event must fetch instead of
-         * keeping a stale view.
+         * Reads the authoritative settings from the daemon. A daemon restart
+         * rebuilds the event log without config updates, so the log alone
+         * cannot speak for them. The read only refines what the pane shows:
+         * the conversation stays usable while it runs, a Runtime that cannot
+         * answer (such as a release from before settings reads) keeps the
+         * current settings, and settings adopted after it started win.
          */
-        const recoverProjectionState = async (connected: MobiusClient, parentSignal: AbortSignal): Promise<void> => {
-            const signal = AbortSignal.any([parentSignal, AbortSignal.timeout(45_000)]);
-            const configurationResult = await connected.sessions.readConfiguration(sessionId, signal);
-            parentSignal.throwIfAborted();
-            sessionConfigurations = configurationResult.configOptions.map((candidate) => ({
-                booleanValue: candidate.type === "boolean" ? candidate.booleanValue : false,
-                configId: candidate.id,
-                value: candidate.type === "select" ? candidate.currentValue : "",
-                valueType: candidate.type,
-            }));
-            saveLastAgentSettings(botId, session.agentRef, configurationResult.configOptions);
-            set({ options: configurationResult.configOptions });
+        const readSettingsInBackground = (connected: MobiusClient, parentSignal: AbortSignal): void => {
+            settingsRead?.abort(new DOMException("A newer settings read replaced this one", "AbortError"));
+            const controller = new AbortController();
+            settingsRead = controller;
+            const revision = settingsRevision;
+            const signal = AbortSignal.any([parentSignal, controller.signal, AbortSignal.timeout(45_000)]);
+            void connected.sessions
+                .readConfiguration(sessionId, signal)
+                .then(
+                    (result) => {
+                        if (!parentSignal.aborted && !controller.signal.aborted && settingsRevision === revision) {
+                            adoptSettings(result.configOptions);
+                        }
+                    },
+                    (cause: unknown) => {
+                        if (!parentSignal.aborted && !controller.signal.aborted) {
+                            recordBrowserError("read-session-settings", cause);
+                        }
+                    },
+                )
+                .finally(() => {
+                    if (settingsRead === controller) {
+                        settingsRead = null;
+                    }
+                });
         };
         const loadProjectionHistory = async (
             effect: Extract<SessionProjectionEffect, { readonly kind: "load-history" }>,
@@ -765,13 +788,9 @@ export function createSessionPaneModel(options: {
                     historyReloaded = true;
                 }
             }
-            // A reloaded log without any config event is the post-restart
-            // shape: the rebuilt generation cannot speak for agent settings,
-            // so read them from the daemon instead of trusting a stale view.
-            // Until that read lands the pane keeps its current settings, so a
-            // failed or cancelled read cannot clobber what was configured.
+            // A reloaded log without any config event is the post-restart shape.
             if (historyReloaded && projection.kind === "established" && projection.config === null) {
-                await recoverProjectionState(connected, signal);
+                readSettingsInBackground(connected, signal);
             }
         };
         // A closed Session runs nothing. Settles the turn, queue and interactions it was holding, the way a
@@ -1634,14 +1653,8 @@ export function createSessionPaneModel(options: {
                         AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
                     );
                     signal.throwIfAborted();
-                    sessionConfigurations = result.configOptions.map((candidate) => ({
-                        booleanValue: candidate.type === "boolean" ? candidate.booleanValue : false,
-                        configId: candidate.id,
-                        value: candidate.type === "select" ? candidate.currentValue : "",
-                        valueType: candidate.type,
-                    }));
-                    saveLastAgentSettings(botId, session.agentRef, result.configOptions);
-                    set({ options: result.configOptions, operation: { kind: "idle" } });
+                    adoptSettings(result.configOptions);
+                    set({ operation: { kind: "idle" } });
                 } catch (cause) {
                     signal.throwIfAborted();
                     if (closedNow(cause, reopeningsAtStart)) {

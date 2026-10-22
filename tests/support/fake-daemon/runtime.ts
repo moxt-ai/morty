@@ -1,8 +1,10 @@
+/// <reference path="./previous-runtime.d.ts" />
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createRuntimeConfig, MobiusRuntimeEngine, RuntimeLocalContext } from "@moxt-ai/mobius/runtime";
+import * as previousRuntime from "@moxt-ai/mobius-previous/runtime";
 import { MobiusClient, StaticMobiusCredentialProvider } from "@moxt-ai/mobius-sdk/server";
 import {
     createFakeDaemon,
@@ -11,7 +13,7 @@ import {
 } from "@moxt-ai/mobius-test-support/fake-daemon";
 import * as v from "valibot";
 import { createInteractionAgent } from "./interaction-agent.ts";
-import { createSettingsAgent } from "./settings-agent.ts";
+import { createSettingsAgent, defineCurrentAgent } from "./settings-agent.ts";
 import { createToolLifecycleAgent } from "./tool-lifecycle-agent.ts";
 
 type TestServerApp = { readonly request: (request: Request) => Response | Promise<Response> };
@@ -36,8 +38,59 @@ export interface ControlledRuntimeConnection {
     readonly runtimeCredential: string;
 }
 
+/**
+ * The production daemon release that runs the controlled Agent. "previous" is the
+ * pinned earlier npm release, for scenarios where users have not upgraded yet.
+ */
+type ControlledRuntimeRelease = "current" | "previous";
+
+/** An Agent the controlled Runtime exposes, and the daemon release that runs it. */
+export interface ControlledAgent {
+    readonly id: string;
+    readonly label: string;
+    readonly runtime?: ControlledRuntimeRelease;
+}
+
 export interface ControlledAgentBehavior extends FakeAgentHarnessOptions {
     readonly files?: ReadonlyMap<string, { readonly content: string | Uint8Array; readonly mediaType: string }>;
+    readonly runtime?: ControlledRuntimeRelease;
+}
+
+interface ControlledRuntimeEngine {
+    readonly run: (signal: AbortSignal) => Promise<void>;
+}
+
+type RuntimeConnectionOptions = Parameters<typeof createRuntimeConfig>[0];
+
+/** Creates the daemon configuration once, so Agent state survives restarts of its engine. */
+function controlledRuntime(
+    behavior: ControlledAgentBehavior,
+    agents: ReturnType<typeof createMortyFakeDaemon>["agents"],
+    connection: RuntimeConnectionOptions,
+    directory: string,
+): { readonly start: (onConnectionStatus: (status: "online" | "reconnecting") => void) => ControlledRuntimeEngine } {
+    const release = behavior.runtime ?? "current";
+    switch (release) {
+        case "current": {
+            const config = createRuntimeConfig(connection, agents, new RuntimeLocalContext(directory, process.env));
+            return { start: (onConnectionStatus) => new MobiusRuntimeEngine(config, { onConnectionStatus }) };
+        }
+        case "previous": {
+            if (behavior.agentId !== "settings-test") {
+                throw new Error("The previous daemon release only runs the settings test Agent");
+            }
+            const config = previousRuntime.createRuntimeConfig(
+                connection,
+                [createSettingsAgent((...options) => new previousRuntime.InProcessAcpAgentDefinition(...options))],
+                new previousRuntime.RuntimeLocalContext(directory, process.env),
+            );
+            return {
+                start: (onConnectionStatus) => new previousRuntime.MobiusRuntimeEngine(config, { onConnectionStatus }),
+            };
+        }
+        default:
+            return release satisfies never;
+    }
 }
 
 function workspaceReply(behavior: ControlledAgentBehavior, workspace: string): FakeAgentHarnessOptions["reply"] {
@@ -86,7 +139,7 @@ export function createMortyFakeDaemon(behavior: ControlledAgentBehavior, workspa
         return { ...harness, agents: [createInteractionAgent()] };
     }
     if (behavior.agentId === "settings-test") {
-        return { ...harness, agents: [createSettingsAgent()] };
+        return { ...harness, agents: [createSettingsAgent(defineCurrentAgent)] };
     }
     return harness;
 }
@@ -105,14 +158,11 @@ export async function connectControlledAgentRuntime(options: {
     const relayUrl = new URL("/mobius/api/v1/runtimes/connect", options.connection.origin);
     relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
     relayUrl.searchParams.set("token", options.connection.runtimeCredential);
-    const config = createRuntimeConfig(
-        {
-            channelId: options.connection.channelId,
-            defaultWorkspace: workspace,
-            relayUrl,
-        },
+    const runtime = controlledRuntime(
+        options.behavior,
         harness.agents,
-        new RuntimeLocalContext(directory, process.env),
+        { channelId: options.connection.channelId, defaultWorkspace: workspace, relayUrl },
+        directory,
     );
     const unexpectedFailure = Promise.withResolvers<never>();
     void unexpectedFailure.promise.catch(() => undefined);
@@ -120,12 +170,10 @@ export async function connectControlledAgentRuntime(options: {
         const cancellation = new AbortController();
         const signal = AbortSignal.any([options.signal, cancellation.signal]);
         const ready = Promise.withResolvers<void>();
-        const engine = new MobiusRuntimeEngine(config, {
-            onConnectionStatus: (status) => {
-                if (status === "online") {
-                    ready.resolve();
-                }
-            },
+        const engine = runtime.start((status) => {
+            if (status === "online") {
+                ready.resolve();
+            }
         });
         const daemon = engine.run(signal);
         const failure = daemon.then<never>(() => {

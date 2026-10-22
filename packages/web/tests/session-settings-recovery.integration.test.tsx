@@ -5,16 +5,14 @@ import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
 
-async function openConfiguredConversation(app: TestApp): Promise<void> {
+async function openConfiguredConversation(app: TestApp, reply: string): Promise<void> {
     const composer = await app.queryElementByTestId(
         dataTestId.messageComposer,
         (element) => element instanceof HTMLTextAreaElement && !element.disabled,
     );
     await sendPrompt(app, composer, "Keep my selected model");
     await app.waitForView(() =>
-        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
-            "Codex turn 1: Keep my selected model",
-        ),
+        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(reply),
     );
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
     await app.user.click(
@@ -38,7 +36,7 @@ test("Given a configured conversation, When its Runtime stops and restarts with 
         clock: new TestClock("2026-10-21T08:00:00Z"),
         page: { kind: "bootstrap", identity: true },
     });
-    await openConfiguredConversation(app);
+    await openConfiguredConversation(app, "Codex turn 1: Keep my selected model");
     if (app.daemon === null) {
         throw new Error("Expected the connected Runtime");
     }
@@ -93,4 +91,28 @@ test("Given a configured conversation, When the Agent explicitly removes every s
     await app.waitForView(() =>
         expect(app.elementByTestId(dataTestId.agentConfiguration).textContent).not.toContain("Test Small"),
     );
+});
+
+test("Given a configured conversation on a Runtime released before settings reads, When the user reopens it, Then the conversation is ready with its model", {
+    timeout: 60_000,
+}, async () => {
+    const app = await createTestApp({
+        connectAgent: true,
+        agent: { id: "settings-test", label: "Settings Agent", runtime: "previous" },
+    });
+    await openConfiguredConversation(app, "Settings Agent: Keep my selected model");
+
+    const reloaded = await app.reload();
+    const composer = await reloaded.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    expect(reloaded.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Large");
+    await sendPrompt(reloaded, composer, "Continue on this Runtime");
+    await reloaded.waitForView(() =>
+        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
+            "Settings Agent: Continue on this Runtime",
+        ),
+    );
+    expect(reloaded.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Large");
 });
