@@ -465,12 +465,27 @@ export const createBotChatHomeStore = (
                         // for diagnostics instead of blocking the page with a
                         // dialog.
                         console.error("The Chat WebSocket bridge failed to complete a request.", cause);
+                        const failBridge = (message: string): void => {
+                            const failed = get().selection;
+                            set({
+                                ...(failed.kind === "loading"
+                                    ? {
+                                          selection: transitionConversationSelection(failed, {
+                                              kind: "session-load-failed",
+                                              message,
+                                              target: failed.target,
+                                          }),
+                                      }
+                                    : {}),
+                                view: { kind: "failed", message },
+                            });
+                        };
                         const selection = get().selection;
                         if (selection.kind === "loading" && selection.target.kind === "continue") {
                             // Continuing, importing, or forking a native session
                             // may already have happened server-side, so the same
                             // load must not be replayed without the user asking.
-                            set({ view: { kind: "failed", message: formatError(cause, "Chat is unavailable.") } });
+                            failBridge(formatError(cause, "Chat is unavailable."));
                             return;
                         }
                         try {
@@ -482,9 +497,7 @@ export const createBotChatHomeStore = (
                             // The bridge gave up reconnecting: hand the page an
                             // explicit retry instead of leaving it loading.
                             console.error("The Chat WebSocket bridge did not reconnect.", bridgeCause);
-                            set({
-                                view: { kind: "failed", message: formatError(bridgeCause, "Chat is unavailable.") },
-                            });
+                            failBridge(formatError(bridgeCause, "Chat is unavailable."));
                             return;
                         }
                         if (signal.aborted) {

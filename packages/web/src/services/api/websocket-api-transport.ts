@@ -205,7 +205,7 @@ export class WebSocketApiTransport {
         }
         const body = request.body === null ? null : await request.text();
         request.signal.throwIfAborted();
-        const socket = await this.#connect(request.signal);
+        const socket = await this.#connectForCall(request.signal);
         request.signal.throwIfAborted();
         return await new Promise<Response>((resolve, reject) => {
             const abort = () => {
@@ -237,7 +237,7 @@ export class WebSocketApiTransport {
 
     readonly measureMortyLatency = async (parent: AbortSignal): Promise<number> => {
         parent.throwIfAborted();
-        const socket = await this.#connect(parent);
+        const socket = await this.#connectForCall(parent);
         parent.throwIfAborted();
         const requestId = crypto.randomUUID();
         const timeout = AbortSignal.timeout(10_000);
@@ -307,7 +307,7 @@ export class WebSocketApiTransport {
         const requestBody = await request.text();
         const body = requestBody === "" ? null : requestBody;
         request.signal.throwIfAborted();
-        const socket = await this.#connect(request.signal);
+        const socket = await this.#connectForCall(request.signal);
         const subscriptionId = crypto.randomUUID();
         return await new Promise<void>((resolve, reject) => {
             const abort = () => {
@@ -353,7 +353,7 @@ export class WebSocketApiTransport {
                 headers.push([name, value]);
             }
         }
-        const socket = await this.#connect(request.signal);
+        const socket = await this.#connectForCall(request.signal);
         const subscriptionId = crypto.randomUUID();
         const frame = JSON.stringify({
             kind: "subscribe",
@@ -583,13 +583,19 @@ export class WebSocketApiTransport {
         }
     };
 
-    readonly #connect = async (signal: AbortSignal): Promise<WebSocket> => {
-        if (this.#disposed || this.#state.kind === "closed") {
+    /**
+     * API calls fail fast while a backoff attempt is pending, like a refused
+     * HTTP connection, instead of racing another socket.
+     */
+    readonly #connectForCall = async (signal: AbortSignal): Promise<WebSocket> => {
+        if (this.#reconnectTimer !== null) {
             throw bridgeClosed();
         }
-        if (this.#reconnectTimer !== null) {
-            // A reconnect is already scheduled: fail the call now, like a
-            // refused HTTP connection, instead of racing another socket.
+        return await this.#connect(signal);
+    };
+
+    readonly #connect = async (signal: AbortSignal): Promise<WebSocket> => {
+        if (this.#disposed || this.#state.kind === "closed") {
             throw bridgeClosed();
         }
         if (this.#state.kind === "connected" && this.#state.socket.readyState === WebSocket.OPEN) {
@@ -634,6 +640,9 @@ export class WebSocketApiTransport {
                     }
                 }, KEEPALIVE_MILLISECONDS);
                 socket.addEventListener("close", () => clearInterval(keepalive), { once: true });
+                // A successful connection retires any backoff that was armed
+                // while the attempt was in flight.
+                this.#cancelReconnect();
                 this.#reconnectAttempt = 0;
                 this.#reconnectExhausted = false;
                 this.#replaySubscriptions(socket);

@@ -32,6 +32,13 @@ test("Given a bridge that cannot reconnect, When the retry budget is consumed, T
 
     for (const [index, delay] of RECONNECT_DELAYS_MILLISECONDS.entries()) {
         clock.advanceBy(delay);
+        // The fired attempt arms the next backoff in a microtask; wait for it
+        // so every clock advance consumes exactly one attempt.
+        if (index < RECONNECT_DELAYS_MILLISECONDS.length - 1) {
+            for (let drained = 0; drained < 100 && clock.pendingSleeps() === 0; drained += 1) {
+                await Promise.resolve();
+            }
+        }
         // Each attempt fails against the closed port; awaiting the request
         // joins the in-flight attempt and yields until it settles.
         await expect(transport.fetch(request())).rejects.toBeInstanceOf(ChatBridgeError);
