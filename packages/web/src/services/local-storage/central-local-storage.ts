@@ -1,4 +1,6 @@
+import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import * as v from "valibot";
+import { identityScopeSchema } from "../identity/identity-scope-url.ts";
 
 /**
  * Central management of every value the web application persists in browser
@@ -131,6 +133,20 @@ export const lastAgentSettingsEntry = (botId: string, agentRef: string) =>
     });
 
 // ---------------------------------------------------------------------------
+// Last harness per Bot
+// ---------------------------------------------------------------------------
+
+/**
+ * The harness a Bot last worked in, so a new draft continues there instead of
+ * falling back to whichever connected Agent happens to be listed first.
+ */
+export const lastHarnessEntry = (botId: string): LocalStorageEntry<string> =>
+    stringLocalStorageEntry({
+        key: scopedKey("mobius:last-harness:v1:", botId),
+        schema: settingIdentifierSchema,
+    });
+
+// ---------------------------------------------------------------------------
 // Working-directory preferences
 // ---------------------------------------------------------------------------
 
@@ -184,4 +200,32 @@ const storedAnonymousCredentialsSchema = v.pipe(
 export const anonymousCredentialsEntry = jsonLocalStorageEntry({
     key: "mobius.anonymous-credentials.v1",
     schema: storedAnonymousCredentialsSchema,
+});
+
+const computerDestinationSchema = v.pipe(
+    v.variant("kind", [
+        v.object({ kind: v.literal("home") }),
+        v.object({ kind: v.literal("session"), sessionId: v.custom<string>(isIdentifier) }),
+    ]),
+    v.readonly(),
+);
+
+const rememberedComputerSchema = v.pipe(
+    v.object({
+        scope: identityScopeSchema,
+        destination: computerDestinationSchema,
+        name: v.pipe(v.string(), v.maxLength(256)),
+        directory: v.nullable(v.pipe(v.string(), v.maxLength(4096))),
+        lastUsedAt: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
+    }),
+    v.readonly(),
+);
+
+export type ComputerDestination = v.InferOutput<typeof computerDestinationSchema>;
+export type RememberedComputer = v.InferOutput<typeof rememberedComputerSchema>;
+
+/** Credentials remain separate; these are only validated navigation preferences. */
+export const rememberedComputersEntry = jsonLocalStorageEntry({
+    key: "morty:remembered-computers:v1",
+    schema: v.pipe(v.array(rememberedComputerSchema), v.maxLength(10), v.readonly()),
 });

@@ -1,5 +1,4 @@
 import { MessageSquare, X } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import {
@@ -7,13 +6,13 @@ import {
     chatSessionMessageScrollClassName,
     chatSessionPaneSectionClassName,
 } from "../../components/chat/chat-session-layout.ts";
+import { ExecutionContextBar } from "../../components/chat/execution-context-bar.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
-import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import { disconnectedBotNotice } from "../../view-models/chat/bot-chat-home-store.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import {
@@ -25,22 +24,16 @@ import {
 } from "../../view-models/chat/conversation-creation-machine.ts";
 import { selectedConversationId } from "../../view-models/chat/conversation-selection-machine.ts";
 import { pendingExecutionContext } from "../../view-models/chat/execution-context.ts";
-import type { SessionActivityState } from "../../view-models/chat/session-activity-machine.ts";
+import { OnlineComputerAlternative } from "./computer-switcher.tsx";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
-import { ExecutionContextBar } from "./execution-context-bar.tsx";
 import { MobiusSessionPane, MobiusSessionPaneLoading, SessionMessageListSkeleton } from "./mobius-session-pane.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
 
 export function BotChatHome({
-    workspace,
     requests,
-    createTransfer,
-    currentAccessToken,
-    endRemoteAccess,
-    projectId,
+    workspace,
 }: {
-    readonly workspace: ChatWorkspace;
     readonly requests: Pick<
         BotChatApi,
         | "readBot"
@@ -63,23 +56,13 @@ export function BotChatHome({
         | "daemonDiagnostics"
         | "networkDiagnostic"
     >;
-    readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
-    readonly currentAccessToken: (signal: AbortSignal) => Promise<string>;
-    readonly endRemoteAccess: (token: string, signal: AbortSignal) => Promise<void>;
-    readonly projectId: string;
+    readonly workspace: ChatWorkspace;
 }) {
     const store = workspace.home;
     const model = useStore(store);
     const draftControls = useStore(workspace.draftControls);
     const executionContext = pendingExecutionContext(model, draftControls.settings);
-    const [pairingDialogOpen, setPairingDialogOpen] = useState(false);
-    const [disconnectedNotificationDismissed, setDisconnectedNotificationDismissed] = useState(false);
     const attachmentModel = useStore(model.composerAttachments);
-    const [followRevision, setFollowRevision] = useState(0);
-    const rearmFollowing = () => {
-        setFollowRevision((revision) => revision + 1);
-    };
-    const messageList = useRef<HTMLDivElement | null>(null);
     const connectionStatus = model.connectionStatus;
     const disconnectionNotice = disconnectedBotNotice(model.view, connectionStatus);
     const creationBusy = conversationCreationBusy(model.creation);
@@ -89,7 +72,7 @@ export function BotChatHome({
     const queuedInitialMessage = queuedDraftMessage(model.creation);
     const draft = model.draft;
     const setupView = model.view.kind === "setup" ? model.view : null;
-    const pairingNotice = model.notices.pairing.kind === "visible" || pairingDialogOpen;
+    const pairingNotice = model.notices.pairing.kind === "visible" || model.pairingDialogOpen;
     const failureNotice = model.notices.connectionFailed.kind === "visible";
 
     const active =
@@ -100,22 +83,11 @@ export function BotChatHome({
         model.view.kind === "connection-failed"
             ? model.view
             : null;
-    const activeBotId = active?.botId;
     const activeConversationId = selectedConversationId(model.selection);
-    const onStatusChange = useCallback(
-        (sessionId: string, status: SessionActivityState): void => {
-            if (activeBotId !== undefined) {
-                workspace.sessionStatusChanged(sessionId, status);
-            }
-        },
-        [activeBotId, workspace],
-    );
     const newConversation = () => {
-        rearmFollowing();
         store.getState().newConversation();
     };
     const openManaged = (isExternal: boolean, id: string) => {
-        rearmFollowing();
         store.getState().openManaged(isExternal, id);
     };
 
@@ -125,6 +97,9 @@ export function BotChatHome({
             data-chat-state={model.selection.kind === "ready" ? "connected" : "disconnected"}
             className="fixed inset-0 flex min-h-0 overflow-hidden bg-card/90 text-foreground max-sm:flex-col sm:flex-row sm:bg-sidebar"
             ref={workspace.onAttach}
+            onPointerDownCapture={workspace.recordUserActivity}
+            onKeyDownCapture={workspace.recordUserActivity}
+            onInputCapture={workspace.recordUserActivity}
         >
             {active !== null && (
                 <ConversationSidebar
@@ -132,47 +107,23 @@ export function BotChatHome({
                     workspace={workspace}
                     activeId={activeConversationId}
                     optimisticTitles={model.optimisticTitles}
-                    projectId={projectId}
                     connectionStatus={connectionStatus}
-                    onConnectAgent={setupView?.reason === "unconfigured" ? () => setPairingDialogOpen(true) : null}
+                    onConnectAgent={setupView?.reason === "unconfigured" ? store.getState().showPairingDialog : null}
                     requests={requests}
-                    createTransfer={createTransfer}
-                    currentAccessToken={currentAccessToken}
                     onOpen={(session) => openManaged(session.isExternal, session.id)}
-                    onOpenSession={(session) =>
-                        openManaged(session.result.action === "import", session.result.ready.sessionId)
-                    }
                     onNewConversation={newConversation}
-                    endRemoteAccess={endRemoteAccess}
                 />
             )}
+            {workspace.accessNotice !== null && (
+                <div
+                    role="status"
+                    className="fixed bottom-24 left-4 z-[100] rounded-lg border border-border bg-background px-4 py-3 text-sm shadow-lg"
+                >
+                    {workspace.accessNotice}
+                </div>
+            )}
             {model.selection.kind === "ready" && active !== null ? (
-                <MobiusSessionPane
-                    runtimeConfiguration={model.runtimeConfiguration}
-                    botId={active.botId}
-                    requests={requests}
-                    key={model.selection.session.result.ready.sessionId}
-                    session={model.selection.session}
-                    initialMessage={
-                        model.creation.kind === "initial-message-pending" ? model.creation.message : undefined
-                    }
-                    unconfirmedMessage={
-                        model.creation.kind === "initial-message-unconfirmed" ? model.creation.journal : undefined
-                    }
-                    onInitialMessageDelivered={() =>
-                        store.getState().initialMessageDelivered(selectedConversationId(model.selection))
-                    }
-                    onInitialMessageRecoveryCleared={(commandId) =>
-                        store
-                            .getState()
-                            .initialMessageRecoveryCleared(selectedConversationId(model.selection), commandId)
-                    }
-                    onInitialMessageUnconfirmed={(commandId) =>
-                        store.getState().initialMessageUnconfirmed(selectedConversationId(model.selection), commandId)
-                    }
-                    onStatusChange={onStatusChange}
-                    onTitleChange={store.getState().updateConversationTitle}
-                />
+                <MobiusSessionPane key={model.selection.session.result.ready.sessionId} workspace={workspace} />
             ) : model.selection.kind === "loading" && active !== null ? (
                 <MobiusSessionPaneLoading
                     executionContext={executionContext}
@@ -197,9 +148,8 @@ export function BotChatHome({
                 <section className={chatSessionPaneSectionClassName}>
                     <ExecutionContextBar context={executionContext} />
                     <FollowLatestScrollArea
-                        container={messageList}
                         followThreshold={80}
-                        followRevision={followRevision}
+                        followRevision={model.scrollFollowRevision}
                         className={`flex flex-col gap-8 ${chatSessionMessageScrollClassName}`}
                         role="log"
                         aria-label="Messages"
@@ -287,7 +237,6 @@ export function BotChatHome({
                             onDraftChange={store.getState().setDraft}
                             onStop={() => {}}
                             onSubmit={() => {
-                                rearmFollowing();
                                 void store.getState().createConversation(workspace.chatSignal());
                             }}
                             outputState="idle"
@@ -312,7 +261,7 @@ export function BotChatHome({
                     title="Connect agent"
                     description="Morty is ready. Paste this instruction into your local agent to connect it."
                     onClose={() => {
-                        setPairingDialogOpen(false);
+                        store.getState().closePairingDialog();
                         store.getState().dismissNotice("pairing");
                     }}
                 >
@@ -338,10 +287,10 @@ export function BotChatHome({
                     </Button>
                 </Dialog>
             )}
-            {disconnectionNotice.kind === "visible" && !disconnectedNotificationDismissed && (
+            {disconnectionNotice.kind === "visible" && !model.disconnectedNoticeDismissed && (
                 <div
                     aria-live="polite"
-                    className="fixed top-4 right-4 z-[100] grid w-[calc(100%-2rem)] max-w-sm grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground shadow-lg sm:top-6 sm:right-6"
+                    className="fixed top-28 right-4 z-[100] grid w-[calc(100%-2rem)] max-w-sm grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground shadow-lg sm:top-6 sm:right-6"
                     role="status"
                 >
                     <div className="min-w-0">
@@ -349,11 +298,12 @@ export function BotChatHome({
                         <p className="mt-1 text-xs leading-5 text-muted-foreground">
                             {disconnectionNotice.description}
                         </p>
+                        {workspace.computers !== null && <OnlineComputerAlternative model={workspace.computers} />}
                     </div>
                     <button
                         aria-label="Dismiss disconnected agent notification"
                         className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/70"
-                        onClick={() => setDisconnectedNotificationDismissed(true)}
+                        onClick={store.getState().dismissDisconnectedNotice}
                         type="button"
                     >
                         <X aria-hidden="true" className="size-4" />

@@ -2,6 +2,8 @@ import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { SessionActivityState } from "./session-activity-machine.ts";
 
+export type ConversationStatusStoreApi = ReturnType<typeof createConversationStatusStore>;
+
 export type ConversationListStatus =
     | { readonly kind: "idle" }
     | { readonly commandId: string; readonly kind: "working" }

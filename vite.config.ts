@@ -16,19 +16,21 @@ const sentry = v.parse(
     process.env,
 );
 const cloudflareEnvironment = v.parse(v.optional(v.picklist(["staging", "production"])), process.env["CLOUDFLARE_ENV"]);
-const assetOrigin =
+const assetOrigins =
     cloudflareEnvironment === "staging"
-        ? "https://assets.morty.paradev.biz"
+        ? { application: "https://morty.paradev.biz", generated: "https://assets.morty.paradev.biz" }
         : cloudflareEnvironment === "production"
-          ? "https://assets.morty.build"
+          ? { application: "https://morty.build", generated: "https://assets.morty.build" }
           : undefined;
 
 export default defineConfig({
-    ...(assetOrigin === undefined
+    ...(assetOrigins === undefined
         ? {}
         : {
               experimental: {
-                  renderBuiltUrl: (filename: string) => `${assetOrigin}/${filename}`,
+                  // Public files ship with the Worker; only generated assets are uploaded to R2.
+                  renderBuiltUrl: (filename: string, { type }: { readonly type: "asset" | "public" }) =>
+                      `${type === "public" ? assetOrigins.application : assetOrigins.generated}/${filename}`,
               },
           }),
     plugins: [

@@ -6,6 +6,7 @@ export const CONTINUE_PREVIEW_STATES = [
     "session-opening",
     "session-failed",
     "identity-redeeming",
+    "link-unavailable",
     "failed",
     "invalid",
 ] as const;
@@ -54,8 +55,14 @@ export function continuePreviewState(id: ContinuePreviewStateId): ContinueState 
             };
         case "identity-redeeming":
             return { code: PREVIEW_CODE, kind: "identity-redeeming" };
+        case "link-unavailable":
+            return {
+                kind: "link-unavailable",
+                recovery: "share",
+                message: "This transfer link has expired or been revoked.",
+            };
         case "failed":
-            return { kind: "failed", message: "This transfer link is unavailable." };
+            return { kind: "failed", code: "preview", message: "This transfer link is unavailable." };
         case "invalid":
             return { kind: "invalid" };
     }
@@ -65,6 +72,7 @@ export const CONTINUE_PREVIEW_STATE_LABELS: Record<ContinuePreviewStateId, strin
     "session-opening": "Session opening",
     "session-failed": "Session failed",
     "identity-redeeming": "Identity redeeming (opening Morty)",
+    "link-unavailable": "Expired sharing link",
     failed: "Transfer failed",
     invalid: "Link unavailable / invalid",
 };

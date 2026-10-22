@@ -57,28 +57,36 @@ export async function createChatWorkerEnvironment() {
         const botId = identity.bot.botId;
         const transport = new WebSocketApiTransport(origin);
         transport.open();
+        const connect = async (
+            agents: readonly { readonly id: string; readonly label: string }[],
+            nativeSessionIds?: ReadonlySet<string>,
+        ) => {
+            const runtime = await cloud.connectAgent(identity.projectId, agents, nativeSessionIds);
+            const setup = await request(`chat/projects/${identity.projectId}/bots/${botId}/setup`, {
+                runtimeId: runtime.runtimeId,
+                agentRef: agents[0]?.id ?? "codex",
+            });
+            if (setup.status !== 202) {
+                throw new Error(`Could not prepare the test Runtime: ${setup.status} ${await setup.text()}`);
+            }
+            return {
+                failure: runtime.failure,
+                continueReply: runtime.continueReply,
+                disconnect: runtime.disconnect,
+                reconnect: runtime.reconnect,
+                writeFiles: runtime.writeFiles,
+            };
+        };
         return {
             botId,
             connectAgent: async (
                 agent: { readonly id: string; readonly label: string } = { id: "claude", label: "Codex" },
                 nativeSessionIds?: ReadonlySet<string>,
-            ) => {
-                const runtime = await cloud.connectAgent(identity.projectId, [agent], nativeSessionIds);
-                const setup = await request(`chat/projects/${identity.projectId}/bots/${botId}/setup`, {
-                    runtimeId: runtime.runtimeId,
-                    agentRef: agent.id,
-                });
-                if (setup.status !== 202) {
-                    throw new Error(`Could not prepare the test Runtime: ${setup.status} ${await setup.text()}`);
-                }
-                return {
-                    failure: runtime.failure,
-                    continueReply: runtime.continueReply,
-                    disconnect: runtime.disconnect,
-                    reconnect: runtime.reconnect,
-                    writeFiles: runtime.writeFiles,
-                };
-            },
+            ) => await connect([agent], nativeSessionIds),
+            connectAgents: async (
+                agents: readonly { readonly id: string; readonly label: string }[],
+                nativeSessionIds?: ReadonlySet<string>,
+            ) => await connect(agents, nativeSessionIds),
             connectRuntime: async () => {
                 const runtime = await cloud.connectAgent(identity.projectId);
                 return { failure: runtime.failure, runtimeId: runtime.runtimeId };

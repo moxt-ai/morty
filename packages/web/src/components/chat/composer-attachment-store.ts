@@ -1,5 +1,5 @@
 import { createStore } from "zustand/vanilla";
-import { AttachmentReadError, ReadPromptImage, readPromptAttachment } from "../../services/chat/attachment-reader.ts";
+import { AttachmentReadError, ReadPromptImage, readPromptAttachment } from "./attachment-reader.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 
 type AttachmentReadState =
@@ -13,6 +13,7 @@ export interface ComposerAttachmentStore {
     readonly addFiles: (files: readonly File[], signal: AbortSignal) => void;
     readonly remove: (index: number) => void;
     readonly clear: () => void;
+    readonly restore: (attachments: readonly ComposerAttachment[]) => void;
 }
 
 const ATTACHMENT_LIMIT = 8;
@@ -80,6 +81,10 @@ export function createComposerAttachmentStore(initial: readonly ComposerAttachme
             pending = null;
             previous?.abort(new DOMException("The attachment draft was cleared.", "AbortError"));
             set({ attachments: [], state: { kind: "idle" } });
+        },
+        restore: (attachments) => {
+            get().clear();
+            set({ attachments });
         },
     }));
 }

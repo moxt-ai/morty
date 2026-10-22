@@ -1,22 +1,63 @@
+import type { StoreApi } from "zustand/vanilla";
 import type { BotChatApi, ChatDraftConfiguration } from "../../services/chat/bot-chat-api.ts";
+import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
+import type { IdentityScope } from "../../services/identity/identity-scope-url.ts";
+import { rememberComputerName, rememberComputerVisit } from "../../services/identity/remembered-computers.ts";
+import type { Clock } from "../../services/time/clock.ts";
+import type { BugReportDialogStore } from "../bug-report-dialog-store.ts";
 import { formatError } from "../format-error.ts";
 import { reportApplicationError } from "../report-error.ts";
-import { createBotChatHomeStore } from "./bot-chat-home-store.ts";
-import { createConversationDirectoryStore } from "./conversation-directory-store.ts";
-import type { SelectedConversationTarget } from "./conversation-selection-machine.ts";
+import { type BotChatHomeStoreApi, createBotChatHomeStore } from "./bot-chat-home-store.ts";
+import type { ComputerSwitcherModel } from "./computer-switcher-store.ts";
+import { type ConversationDirectoryStore, createConversationDirectoryStore } from "./conversation-directory-store.ts";
+import type { ConversationSelectionState, SelectedConversationTarget } from "./conversation-selection-machine.ts";
 import { selectedConversationId, transitionConversationSelection } from "./conversation-selection-machine.ts";
-import { createConversationStatusStore } from "./conversation-status-store.ts";
-import { createDraftControlsStore } from "./draft-controls-store.ts";
+import { type ConversationStatusStoreApi, createConversationStatusStore } from "./conversation-status-store.ts";
+import { createDraftControlsStore, type DraftControlsStore } from "./draft-controls-store.ts";
+import { createNetworkDiagnosticStore, type NetworkDiagnosticStore } from "./network-diagnostic-store.ts";
+import type { OpenMobiusSession } from "./open-session.ts";
+import { createRemoteAccessStore, type RemoteAccessStore } from "./remote-access-store.ts";
 import type { SessionActivityState } from "./session-activity-machine.ts";
+import { createSessionPaneModel, type SessionPaneModel } from "./session-pane-store.ts";
+import { createSidebarDialogs, type SidebarDialogs } from "./sidebar-dialogs.ts";
+
+interface ChatWorkspaceSidebar {
+    readonly dialogs: SidebarDialogs;
+    readonly remoteAccess: StoreApi<RemoteAccessStore>;
+    readonly networkDiagnostic: StoreApi<NetworkDiagnosticStore>;
+}
+
+interface ChatWorkspacePaneEntry {
+    readonly session: OpenMobiusSession;
+    readonly model: SessionPaneModel;
+}
 
 export interface ChatWorkspace {
+    readonly computers: ComputerSwitcherModel | null;
+    readonly accessNotice: string | null;
     /** The chat API this workspace was composed with. */
     readonly requests: BotChatApi;
-    readonly home: ReturnType<typeof createBotChatHomeStore>;
-    readonly directory: ReturnType<typeof createConversationDirectoryStore>;
-    readonly statuses: ReturnType<typeof createConversationStatusStore>;
+    /** The application-owned bug-report dialog state, flowing to entry points. */
+    readonly bugReportDialog: BugReportDialogStore;
+    /** The Bot this workspace talks to; also scopes diagnostics sources. */
+    readonly botId: string;
+    /** The project location label source for the sidebar, when known. */
+    readonly projectId: string | null;
+    readonly home: BotChatHomeStoreApi;
+    readonly directory: StoreApi<ConversationDirectoryStore>;
+    readonly statuses: ConversationStatusStoreApi;
     /** Harness and working-directory settings for the next draft message. */
-    readonly draftControls: ReturnType<typeof createDraftControlsStore>;
+    readonly draftControls: StoreApi<DraftControlsStore>;
+    /** Sidebar ephemeral UI and dialog stores; lives outside React with this workspace. */
+    readonly sidebar: ChatWorkspaceSidebar;
+    /**
+     * The session pane model for the currently selected conversation, created
+     * by the workspace when the selection becomes ready for a fresh session
+     * record and released when it moves on. Render-time access is a pure
+     * read: `null` means the pane for the ready selection is not built (yet),
+     * which no current view renders through.
+     */
+    readonly sessionPane: () => SessionPaneModel | null;
     /** Restarts the draft settings load, for example from its retry control. */
     readonly retryDraftControls: () => void;
     /**
@@ -36,10 +77,14 @@ export interface ChatWorkspace {
     readonly chatSignal: () => AbortSignal;
     /** A stable signal for user-triggered operations such as archiving and diagnostics. */
     readonly operationsSignal: () => AbortSignal;
+    /** Records deliberate activity in this tab without following another tab's selection. */
+    readonly recordUserActivity: () => void;
+    /** Starts the workspace's loads; the application calls this when it activates the workspace. */
+    readonly start: () => void;
     readonly dispose: () => void;
 }
 
-function historyNavigation() {
+function historyNavigation(onDraft: () => void) {
     const replace = (modify: (url: URL) => void): void => {
         const url = new URL(window.location.href);
         modify(url);
@@ -52,12 +97,14 @@ function historyNavigation() {
                 url.searchParams.delete("nativeSessionAction");
                 url.searchParams.set("sessionId", sessionId);
             }),
-        showDraft: () =>
+        showDraft: () => {
+            onDraft();
             replace((url) => {
                 url.searchParams.delete("conversation");
                 url.searchParams.delete("conversationId");
                 url.searchParams.delete("sessionId");
-            }),
+            });
+        },
         showForkInstead: () =>
             replace((url) => {
                 url.searchParams.set("nativeSessionAction", "fork");
@@ -74,28 +121,127 @@ function historyNavigation() {
  * Composes the chat screen's collaborating stores — home selection, the
  * conversation directory, and conversation statuses — and owns their loading
  * lifetimes outside React. The home store's revision counters are the restart
- * signals; this workspace observes them through store subscriptions, so a
- * restart cancels the previous attempt without any component effect.
+ * signals; the store announces restarts and pane replacements through
+ * explicit port callbacks, so a restart cancels the previous attempt without
+ * any component effect.
  */
 export function createChatWorkspace(options: {
+    readonly clock: Clock;
     readonly botId: string;
+    readonly rememberedIdentity?: IdentityScope;
+    readonly computers?: ComputerSwitcherModel;
+    readonly accessNotice?: string | null;
+    readonly entry?: "address" | "restore";
+    readonly bugReportDialog: BugReportDialogStore;
+    readonly projectId?: string;
     readonly requests: BotChatApi;
     readonly url?: string;
+    readonly createTransfer?: ((signal: AbortSignal) => Promise<IdentityTransfer>) | undefined;
+    readonly currentAccessToken?: ((signal: AbortSignal) => Promise<string>) | undefined;
+    readonly endRemoteAccess?: ((token: string, signal: AbortSignal) => Promise<void>) | undefined;
+    readonly networkDiagnostics?: {
+        readonly measureBrowserMobius: (origin: string, signal: AbortSignal) => Promise<number>;
+        readonly measureBrowserMorty: (signal: AbortSignal) => Promise<number>;
+    };
 }): ChatWorkspace {
     const botId = options.botId;
     const requests = options.requests;
+    let rememberedSessionId: string | null = null;
+    let initialVisitPending = true;
+    const recordHome = () => {
+        rememberedSessionId = null;
+        if (options.rememberedIdentity !== undefined) {
+            rememberComputerVisit(options.rememberedIdentity, options.clock.now(), { kind: "home" });
+        }
+    };
     const home = createBotChatHomeStore(requests, {
         botId,
         createId: () => crypto.randomUUID(),
-        navigation: historyNavigation(),
+        navigation: historyNavigation(recordHome),
+        entry: options.entry ?? "address",
+        onRuntimeConfiguration: (configuration) => {
+            options.computers?.updateCurrent(configuration);
+            if (initialVisitPending) {
+                initialVisitPending = false;
+                if (home.getState().selection.kind === "draft") {
+                    recordHome();
+                }
+            }
+            if (options.rememberedIdentity !== undefined) {
+                rememberComputerName(options.rememberedIdentity, configuration.runtime.machineName);
+            }
+        },
+        onDraftSelected: () => {
+            void draftControls
+                .getState()
+                .load(chatLifetime.signal)
+                .catch(() => undefined);
+        },
+        onRestart: () => {
+            startHomeLoad();
+            startDirectoryLoad();
+        },
+        onDirectoryRefreshed: () => startDirectoryLoad(),
+        onSelectionReady: (selection) => replacePane(selection),
+        onSelectionTargeted: (conversationId) => statuses.getState().selectionChanged(conversationId),
         url: options.url ?? window.location.href,
     });
-    const directory = createConversationDirectoryStore(botId, requests);
+    const directory = createConversationDirectoryStore(botId, requests, (sessions) => {
+        statuses.getState().directoryLoaded(botId, sessions, statusLifetime.signal);
+    });
     const statuses = createConversationStatusStore(requests);
     const draftControls = createDraftControlsStore(botId, requests, (settings: ChatDraftConfiguration | null) => {
         home.setState({ draftSettings: settings });
     });
-
+    // Sidebar stores live with the workspace, outside React: dialogs (native
+    // session import, identity sharing, expanded state), remote access, and
+    // network diagnostics all outlive any single sidebar render.
+    const sidebar: ChatWorkspaceSidebar = {
+        dialogs: createSidebarDialogs({
+            clock: options.clock,
+            botId,
+            requests,
+            createTransfer: (signal) => {
+                if (options.createTransfer === undefined) {
+                    return Promise.reject(new Error("Identity sharing is unavailable."));
+                }
+                return options.createTransfer(signal);
+            },
+            onOpenSession: (session) => {
+                home.getState().openManaged(session.result.action === "import", session.result.ready.sessionId);
+            },
+            onOpenedSession: () => startDirectoryLoad(),
+        }),
+        remoteAccess: createRemoteAccessStore({
+            currentAccessToken: (signal) => {
+                if (options.currentAccessToken === undefined) {
+                    return Promise.reject(new Error("Remote access is unavailable."));
+                }
+                return options.currentAccessToken(signal);
+            },
+            endRemoteAccess: (token, signal) => {
+                if (options.endRemoteAccess === undefined) {
+                    return Promise.reject(new Error("Remote access is unavailable."));
+                }
+                return options.endRemoteAccess(token, signal);
+            },
+        }),
+        networkDiagnostic: createNetworkDiagnosticStore({
+            measureBrowserMobius: (origin, signal) => {
+                if (options.networkDiagnostics === undefined) {
+                    return Promise.reject(new Error("Network diagnostics are unavailable."));
+                }
+                return options.networkDiagnostics.measureBrowserMobius(origin, signal);
+            },
+            measureBrowserMorty: (signal) => {
+                if (options.networkDiagnostics === undefined) {
+                    return Promise.reject(new Error("Network diagnostics are unavailable."));
+                }
+                return options.networkDiagnostics.measureBrowserMorty(signal);
+            },
+            measureServerHops: (signal) => requests.networkDiagnostic(botId, signal),
+        }),
+    };
     let chatLifetime = new AbortController();
     chatLifetime.abort(new Error("The chat workspace has not loaded yet."));
     let directoryLifetime = new AbortController();
@@ -117,8 +263,8 @@ export function createChatWorkspace(options: {
             });
         // Harness settings belong to the draft composer; skip the
         // configuration burst when the entry targets an existing session. A
-        // later new draft triggers the load through the draft-key
-        // subscription.
+        // later new draft triggers the load through the onDraftSelected
+        // announcement.
         if (home.getState().selection.kind === "draft") {
             void draftControls
                 .getState()
@@ -162,6 +308,15 @@ export function createChatWorkspace(options: {
                             target,
                         }),
                     }));
+                    // The re-attach read replaces the pane through the same
+                    // entry as a ready transition inside home.load(): the
+                    // previous pane may hold operation locks cancelled by its
+                    // own stop(), and the freshly read session record must
+                    // build the next model instead of the stopped one.
+                    const ready = home.getState().selection;
+                    if (ready.kind === "ready") {
+                        replacePane(ready);
+                    }
                 }
             })
             .catch((cause: unknown) => {
@@ -192,6 +347,9 @@ export function createChatWorkspace(options: {
     // re-attach re-reads the session itself. This gates the second read so a
     // fresh entry performs exactly one managedSession request.
     let releasedByDetach = false;
+    // The single live pane model; replaced when a different session is
+    // requested, torn down with the workspace.
+    let paneEntry: ChatWorkspacePaneEntry | null = null;
     const announceChatViewAttached = (node: HTMLElement): (() => void) => {
         if (announcedViews.has(node)) {
             return () => {};
@@ -227,45 +385,82 @@ export function createChatWorkspace(options: {
     const initialSelection = home.getState().selection;
     const initialSelectionId = selectedConversationId(initialSelection);
     statuses.getState().selectionChanged(initialSelectionId.length > 0 ? initialSelectionId : null);
-    let selectionKey: string | null = initialSelection.kind === "draft" ? initialSelection.key : null;
 
-    const unsubscribeHome = home.subscribe((state, previous) => {
-        if (state.revision !== previous.revision) {
-            startHomeLoad();
+    const replacePane = (selection: Extract<ConversationSelectionState, { readonly kind: "ready" }>): void => {
+        if (paneEntry !== null && paneEntry.session === selection.session) {
+            return;
         }
-        if (state.revision !== previous.revision || state.directoryRevision !== previous.directoryRevision) {
-            startDirectoryLoad();
+        // Keyed by the session record, not its id: every ready selection
+        // arrives as a fresh record (a re-read for a reopened conversation, a
+        // creation result for a new one), so the pane starts from a pristine
+        // projection with its older-history pagination instead of whatever
+        // the previous mount accumulated. The replaced pane's attached
+        // element stops it through the ref-cleanup protocol.
+        paneEntry?.model.stop();
+        const sessionId = selection.session.result.ready.sessionId;
+        if (options.rememberedIdentity !== undefined && rememberedSessionId !== sessionId) {
+            rememberComputerVisit(
+                options.rememberedIdentity,
+                options.clock.now(),
+                { kind: "session", sessionId },
+                selection.session.result.ready.directoryLabel,
+            );
+            rememberedSessionId = sessionId;
         }
-        const selectionId = selectedConversationId(state.selection);
-        if (selectionId !== selectedConversationId(previous.selection)) {
-            statuses.getState().selectionChanged(selectionId.length > 0 ? selectionId : null);
-        }
-        // A new draft (New Session) clears the home draft settings; the draft
-        // controls republish them when their load restarts for the new draft.
-        const draftKey = state.selection.kind === "draft" ? state.selection.key : null;
-        if (draftKey !== null && draftKey !== selectionKey) {
-            selectionKey = draftKey;
-            void draftControls
-                .getState()
-                .load(chatLifetime.signal)
-                .catch(() => undefined);
-        }
-    });
-    const unsubscribeDirectory = directory.subscribe((state) => {
-        if (state.state.kind === "ready") {
-            statuses.getState().directoryLoaded(botId, state.state.sessions, statusLifetime.signal);
-        }
-    });
-
-    startHomeLoad();
-    startDirectoryLoad();
+        const creation = home.getState().creation;
+        const model = createSessionPaneModel({
+            clock: options.clock,
+            session: selection.session,
+            botId,
+            requests,
+            initialMessage: creation.kind === "initial-message-pending" ? creation.message : undefined,
+            unconfirmedMessage: creation.kind === "initial-message-unconfirmed" ? creation.journal : undefined,
+            onInitialMessageDelivered: () => home.getState().initialMessageDelivered(sessionId),
+            onInitialMessageRecoveryCleared: (commandId) =>
+                home.getState().initialMessageRecoveryCleared(sessionId, commandId),
+            onInitialMessageUnconfirmed: (journal) => home.getState().initialMessageUnconfirmed(sessionId, journal),
+            onStatusChange: (status) =>
+                statuses.getState().statusChanged(botId, sessionId, status, statusLifetime.signal),
+            onTitleChange: (id, title) => home.getState().updateConversationTitle(id, title),
+        });
+        paneEntry = { model, session: selection.session };
+    };
 
     return {
+        computers: options.computers ?? null,
+        accessNotice: options.accessNotice ?? null,
+        recordUserActivity: () => {
+            if (options.rememberedIdentity !== undefined) {
+                const selection = home.getState().selection;
+                const destination =
+                    selection.kind === "ready"
+                        ? { kind: "session" as const, sessionId: selection.session.result.ready.sessionId }
+                        : selection.kind === "draft"
+                          ? { kind: "home" as const }
+                          : undefined;
+                rememberComputerVisit(
+                    options.rememberedIdentity,
+                    options.clock.now(),
+                    destination,
+                    selection.kind === "ready" ? selection.session.result.ready.directoryLabel : undefined,
+                );
+            }
+        },
+        start: () => {
+            void options.computers?.refresh();
+            startHomeLoad();
+            startDirectoryLoad();
+        },
         requests,
+        botId,
+        bugReportDialog: options.bugReportDialog,
+        projectId: options.projectId ?? null,
         directory,
         home,
         statuses,
         draftControls,
+        sidebar,
+        sessionPane: () => paneEntry?.model ?? null,
         retryDraftControls: () => {
             void draftControls
                 .getState()
@@ -279,9 +474,9 @@ export function createChatWorkspace(options: {
         chatSignal: () => chatLifetime.signal,
         operationsSignal: () => operationsLifetime.signal,
         dispose: () => {
+            options.computers?.dispose();
             home.getState().composerAttachments.getState().clear();
-            unsubscribeHome();
-            unsubscribeDirectory();
+            paneEntry?.model.stop();
             chatLifetime.abort(new Error("The chat workspace was disposed."));
             directoryLifetime.abort(new Error("The chat workspace was disposed."));
             statusLifetime.abort(new Error("Conversation status lifetime ended."));

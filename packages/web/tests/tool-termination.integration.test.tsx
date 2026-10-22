@@ -1,0 +1,256 @@
+import {
+    fireEvent,
+    getAllByLabelText,
+    getByLabelText,
+    getByRole,
+    queryByLabelText,
+    queryByRole,
+} from "@testing-library/dom";
+import { flushSync } from "react-dom";
+import { expect, test } from "vitest";
+import { dataTestId } from "../src/data-testid.ts";
+import { sendPrompt } from "./infra/application-scenario.ts";
+import { createTestApp, type TestApp } from "./infra/test-app.tsx";
+
+function readTool(app: TestApp, title: string) {
+    const entry = app
+        .elementsByTestId(dataTestId.agentToolCall)
+        .find((element) => element.getAttribute("aria-label") === `Tool: ${title}`);
+    if (entry === undefined) {
+        throw new Error(`Tool unavailable: ${title}`);
+    }
+    return entry;
+}
+async function tool(app: TestApp, title: string) {
+    return await app.waitForView(() => readTool(app, title));
+}
+async function assertSettled(app: TestApp) {
+    for (const title of ["Unfinished verification", "Pending verification"]) {
+        await app.waitForView(() => expect(getByLabelText(readTool(app, title), "Tool interrupted")).toBeDefined());
+        expect(queryByLabelText(readTool(app, title), "Tool running")).toBeNull();
+    }
+    expect(getByLabelText(await tool(app, "Completed verification"), "Tool succeeded")).toBeDefined();
+    expect(getByLabelText(await tool(app, "Failed verification"), "Tool failed")).toBeDefined();
+}
+async function start(prompt: string) {
+    const app = await createTestApp({
+        connectAgent: true,
+        agent: { id: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
+        page: { kind: "bootstrap", identity: true },
+    });
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), prompt);
+    return app;
+}
+
+test("Given unfinished tools in an active turn, When the user stops it, Then every viewer sees interrupted tools and a stop notice after reload", {
+    timeout: 30_000,
+}, async () => {
+    const app = await start("hold unfinished tools");
+    expect(getByLabelText(await tool(app, "Unfinished verification"), "Tool running")).toBeDefined();
+    const viewer = await app.openViewer();
+    expect(getByLabelText(await tool(viewer, "Unfinished verification"), "Tool running")).toBeDefined();
+    await app.user.click(
+        await app.queryElementByTestId(
+            dataTestId.sendMessage,
+            (element) => element.getAttribute("aria-label") === "Stop agent output",
+        ),
+    );
+    for (const current of [app, viewer]) {
+        await assertSettled(current);
+        expect((await current.queryElementByTestId(dataTestId.agentReplyStatus)).textContent).toContain(
+            "Turn stopped.",
+        );
+    }
+    await viewer.close();
+    const reloaded = await app.reload();
+    await assertSettled(reloaded);
+    expect((await reloaded.queryElementByTestId(dataTestId.agentReplyStatus)).textContent).toContain("Turn stopped.");
+});
+
+for (const prompt of ["fail unfinished tools", "complete unfinished tools"]) {
+    test(`Given unfinished tools, When the agent returns ${prompt}, Then terminal tool outcomes are preserved and unfinished tools become interrupted`, {
+        timeout: 30_000,
+    }, async () => {
+        const app = await start(prompt);
+        await assertSettled(app);
+        const reloaded = await app.reload();
+        await assertSettled(reloaded);
+        await sendPrompt(
+            reloaded,
+            await reloaded.queryElementByTestId(dataTestId.messageComposer),
+            "hold unfinished tools",
+        );
+        await reloaded.waitForView(() => expect(getAllByLabelText(document.body, "Tool running")).toHaveLength(2));
+        expect(getAllByLabelText(document.body, "Tool interrupted")).toHaveLength(2);
+        await reloaded.user.click(
+            await reloaded.queryElementByTestId(
+                dataTestId.sendMessage,
+                (element) => element.getAttribute("aria-label") === "Stop agent output",
+            ),
+        );
+        await reloaded.waitForView(() => expect(getAllByLabelText(document.body, "Tool interrupted")).toHaveLength(4));
+    });
+}
+
+test("Given a stopped tool starts on an older history page, When the user loads that page, Then it remains interrupted and the stop notice is not duplicated", {
+    timeout: 60_000,
+}, async () => {
+    const app = await start("hold tools across history pages");
+    await app.waitForView(() => expect(document.body.textContent).toContain("Progress item 249"));
+    await app.user.click(
+        await app.queryElementByTestId(
+            dataTestId.sendMessage,
+            (element) => element.getAttribute("aria-label") === "Stop agent output",
+        ),
+    );
+    await app.queryElementByTestId(dataTestId.agentReplyStatus);
+    const reloaded = await app.reload();
+    await reloaded.queryElementByTestId(dataTestId.agentReplyStatus);
+    for (let page = 0; page < 10; page += 1) {
+        if (reloaded.elementsByTestId(dataTestId.agentToolCall).length === 4) {
+            break;
+        }
+        const before = reloaded.elementsByTestId(dataTestId.agentResponse).length;
+        await reloaded.waitForView(() =>
+            expect(queryByRole(document.body, "status", { name: "Loading older messages" })).toBeNull(),
+        );
+        const messages = getByRole(document.body, "log", { name: "Messages" });
+        messages.scrollTop = 0;
+        flushSync(() => fireEvent.scroll(messages));
+        await reloaded.waitForView(() =>
+            expect(
+                reloaded.elementsByTestId(dataTestId.agentResponse).length +
+                    reloaded.elementsByTestId(dataTestId.agentToolCall).length,
+            ).toBeGreaterThan(before),
+        );
+    }
+    await assertSettled(reloaded);
+    expect(reloaded.elementsByTestId(dataTestId.agentReplyStatus)).toHaveLength(1);
+});
+
+for (const prompt of ["hold unfinished tools", "hold steering acknowledgement"]) {
+    test(`Given a running turn receives steering during ${prompt}, When the user stops the original turn, Then tools created by the steered work are interrupted for every viewer`, {
+        timeout: 30_000,
+    }, async () => {
+        const app = await start(prompt);
+        await tool(app, "Pending verification");
+        const viewer = await app.openViewer();
+        await tool(viewer, "Pending verification");
+        const instruction = "Add another verification";
+        await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), instruction);
+        const queued = await app.queryElementByTestId(
+            dataTestId.queuedMessage,
+            (element) => element.textContent?.includes(instruction) === true,
+        );
+        await app.user.click(getByLabelText(queued, `Steer queued message: ${instruction}`));
+        await tool(app, "Steered verification");
+        if (prompt === "hold unfinished tools") {
+            await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull());
+        }
+        await app.user.click(
+            await app.queryElementByTestId(
+                dataTestId.sendMessage,
+                (element) => element.getAttribute("aria-label") === "Stop agent output",
+            ),
+        );
+        for (const current of [app, viewer]) {
+            await assertSettled(current);
+            await current.waitForView(() =>
+                expect(getByLabelText(readTool(current, "Steered verification"), "Tool interrupted")).toBeDefined(),
+            );
+        }
+        await viewer.close();
+        const reloaded = await app.reload();
+        await reloaded.waitForView(() =>
+            expect(getByLabelText(readTool(reloaded, "Steered verification"), "Tool interrupted")).toBeDefined(),
+        );
+    });
+}
+
+test("Given an idle conversation is being opened by another viewer, When a new turn starts, Then its tools remain running in both viewers until stopped", {
+    timeout: 30_000,
+}, async () => {
+    const app = await start("complete unfinished tools");
+    await assertSettled(app);
+    const viewer = await app.openViewer();
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold unfinished tools");
+    for (const current of [app, viewer]) {
+        await current.waitForView(() => expect(current.elementsByTestId(dataTestId.agentToolCall)).toHaveLength(8));
+        const unfinished = current
+            .elementsByTestId(dataTestId.agentToolCall)
+            .filter((entry) => entry.getAttribute("aria-label") === "Tool: Unfinished verification");
+        const activeTool = unfinished[1];
+        if (activeTool === undefined) {
+            throw new Error("Missing the new turn's tool");
+        }
+        expect(getByLabelText(activeTool, "Tool running")).toBeDefined();
+    }
+    await app.user.click(
+        await app.queryElementByTestId(
+            dataTestId.sendMessage,
+            (element) => element.getAttribute("aria-label") === "Stop agent output",
+        ),
+    );
+    for (const current of [app, viewer]) {
+        await current.waitForView(() =>
+            expect(
+                current
+                    .elementsByTestId(dataTestId.agentToolCall)
+                    .filter((entry) => queryByLabelText(entry, "Tool interrupted") !== null),
+            ).toHaveLength(4),
+        );
+    }
+    await viewer.close();
+});
+
+test("Given another viewer opens a history page beginning with steering already in progress, When the original execution stops, Then all visible steered tools are interrupted without loading older messages", {
+    timeout: 30_000,
+}, async () => {
+    const app = await start("hold paginated steering");
+    await tool(app, "Pending verification");
+    const instruction = "Add verification tools";
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), instruction);
+    const queued = await app.queryElementByTestId(
+        dataTestId.queuedMessage,
+        (element) => element.textContent?.includes(instruction) === true,
+    );
+    await app.user.click(getByLabelText(queued, `Steer queued message: ${instruction}`));
+    await tool(app, "Steered verification 27");
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull());
+    const viewer = await app.openViewer();
+    await tool(viewer, "Steered verification 27");
+    // Enough visible tools fill the latest history page without the steering request.
+    expect(viewer.elementsByTestId(dataTestId.agentToolCall)).toHaveLength(27);
+    expect(getByLabelText(await tool(viewer, "Steered verification 1"), "Tool running")).toBeDefined();
+    await app.user.click(
+        await app.queryElementByTestId(
+            dataTestId.sendMessage,
+            (element) => element.getAttribute("aria-label") === "Stop agent output",
+        ),
+    );
+    await viewer.waitForView(() =>
+        expect(
+            viewer
+                .elementsByTestId(dataTestId.agentToolCall)
+                .filter((entry) => queryByLabelText(entry, "Tool interrupted") !== null),
+        ).toHaveLength(27),
+    );
+    await viewer.close();
+});
+
+for (const [reason, notice] of [
+    ["max_tokens", "The response reached its length limit."],
+    ["max_turn_requests", "The agent reached its request limit for this turn."],
+    ["refusal", "The agent declined this request."],
+] as const) {
+    test(`Given a turn ends with ${reason}, When I view it and reload, Then the reason is explained in plain language and its tools are settled`, {
+        timeout: 30_000,
+    }, async () => {
+        const app = await start(`stop with ${reason}`);
+        await assertSettled(app);
+        expect((await app.queryElementByTestId(dataTestId.agentReplyStatus)).textContent).toBe(notice);
+        const reloaded = await app.reload();
+        await assertSettled(reloaded);
+        expect((await reloaded.queryElementByTestId(dataTestId.agentReplyStatus)).textContent).toBe(notice);
+    });
+}

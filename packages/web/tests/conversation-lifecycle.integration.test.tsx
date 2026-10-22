@@ -11,7 +11,7 @@ test("Given a conversation created from a queued first message, When the Chat ap
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -41,6 +41,57 @@ test("Given a conversation created from a queued first message, When the Chat ap
     });
 });
 
+test("Given a configuration request is in flight, When the chat view detaches and re-attaches, Then the reconnected composer accepts and sends a new prompt", {
+    timeout: 30_000,
+}, async () => {
+    const prompt = "Configuration cancelled by detach";
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.getAttribute("data-connection-status") === "connected",
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, prompt);
+    await app.waitForView(() =>
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes(`Codex turn 1: ${prompt}`)),
+        ).toBe(true),
+    );
+    // Start a configuration request and detach while it is in flight: the
+    // detach aborts the request, and the pane it belonged to must not lock
+    // the re-attached view out of the composer.
+    await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
+    const setting = await app.queryElementByTestId(dataTestId.agentSetting("model"));
+    await app.user.click(setting);
+    const value = await app.queryElementByTestId(dataTestId.sessionConfigValue("test-large"));
+    await app.user.click(value);
+    app.remount();
+    const restored = await app.waitForView(() => {
+        const element = app.elementByTestId(dataTestId.messageComposer);
+        if (!(element instanceof HTMLTextAreaElement)) {
+            throw new Error("Expected the message composer after re-attach");
+        }
+        if (element.disabled) {
+            throw new Error("The re-attached composer is still disabled by the cancelled configuration");
+        }
+        return element;
+    });
+    const followUp = "Usable again after the cancelled configuration";
+    await sendPrompt(app, restored, followUp);
+    await app.waitForView(() =>
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes(`Codex turn 2: ${followUp}`)),
+        ).toBe(true),
+    );
+});
+
 test("Given an open conversation, When the chat view detaches and re-attaches, Then the pane re-reads the session and restores its history", {
     timeout: 30_000,
 }, async () => {
@@ -48,7 +99,7 @@ test("Given an open conversation, When the chat view detaches and re-attaches, T
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -86,7 +137,7 @@ test("Given a remounted conversation whose re-read is in flight, When the user r
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -125,7 +176,7 @@ test("Given conversations updated across recent dates, When the directory loads,
         const app = await createTestApp({ connectAgent: true });
         await app.queryElementByTestId(
             dataTestId.botConnectionStatus,
-            (element) => element.textContent?.includes("Connected") === true,
+            (element) => element.getAttribute("data-connection-status") === "connected",
         );
         const conversations = [
             { title: "Today conversation", updatedAt: "2026-10-10T12:00:00+08:00" },
@@ -188,7 +239,7 @@ test("Given an unsent message draft, When the Chat application remounts, Then th
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -210,7 +261,7 @@ test("Given a completed turn, When the user leaves and reopens it, Then daemon h
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -254,7 +305,7 @@ test("Given a saved Session, When the user opens its context menu, Then the Sess
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -282,7 +333,7 @@ test("Given a named conversation, When the user opens it, Then the Session title
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -304,7 +355,7 @@ test("Given a new conversation titled from its prompt, When the Agent generates 
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -332,7 +383,7 @@ test("Given an open conversation, When the user renames it from the header, Then
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -378,7 +429,7 @@ test("Given the header title editor is open, When the user cancels, Then the con
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -414,7 +465,7 @@ test("Given Claude Code does not echo the submitted prompt, When the response st
     });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -440,7 +491,7 @@ test("Given more saved messages than one history page, When live output arrives 
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     for (const [index, prompt] of prompts.entries()) {
         const composer = await app.queryElementByTestId(dataTestId.messageComposer);
@@ -586,7 +637,7 @@ test("Given more saved messages than one history page, When older messages load,
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     for (const [index, prompt] of prompts.entries()) {
         const composer = await app.queryElementByTestId(dataTestId.messageComposer);
@@ -668,7 +719,7 @@ test("Given a completed turn, When I send another prompt, Then my prompt is visi
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
