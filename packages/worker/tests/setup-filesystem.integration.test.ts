@@ -213,65 +213,6 @@ test.runIf(process.platform !== "win32")(
     },
 );
 
-test.runIf(process.env["MORTY_VERIFY_SYSTEM_DOCUMENTS"] === "true" && process.platform === "darwin")(
-    "Given DOCUMENT_DIR is unset on macOS, When setup connects and the user cancels, Then the private identity is saved under ~/Documents",
-    async () => {
-        if (process.env["CI"] !== "true" || process.env["DOCUMENT_DIR"] !== undefined) {
-            throw new Error("System Documents verification requires an isolated CI runner without DOCUMENT_DIR");
-        }
-        const documents = join(homedir(), "Documents");
-        const configuration = join(documents, "morty");
-        try {
-            await stat(configuration);
-            throw new Error("Refusing to overwrite existing Morty configuration");
-        } catch (cause) {
-            if (!(cause instanceof Error && "code" in cause && cause.code === "ENOENT")) {
-                throw cause;
-            }
-        }
-        await mkdir(documents, { recursive: true });
-        const workspace = await mkdtemp(join(tmpdir(), "morty-macos-workspace-"));
-        const fixture = await createIdentityFixture({ appOrigin: await localOrigin() });
-        const cancellation = new AbortController();
-        const events: Readonly<Record<string, unknown>>[] = [];
-        try {
-            const code = await runSetup(
-                [
-                    "setup",
-                    "--base-url",
-                    fixture.origin,
-                    "--cwd",
-                    workspace,
-                    "--harness",
-                    "codex",
-                    "--session-id",
-                    "macos-current-session",
-                ],
-                {
-                    documents: "",
-                    signal: cancellation.signal,
-                    emit: (event) => {
-                        events.push(event);
-                        if (event["status"] === "identity_ready") {
-                            cancellation.abort();
-                        }
-                    },
-                },
-            );
-            expect(code).toBe(1);
-            expect(events).toContainEqual(expect.objectContaining({ status: "identity_ready" }));
-            expect(events.at(-1)).toMatchObject({ error: { code: "CANCELLED" } });
-            const saved: unknown = JSON.parse(await readFile(join(configuration, "config.json"), "utf8"));
-            expect(saved).toMatchObject({ base_url: fixture.origin });
-            expect((await stat(join(configuration, "config.json"))).mode & 0o777).toBe(0o600);
-        } finally {
-            await fixture.close();
-            await rm(configuration, { recursive: true, force: true });
-            await rm(workspace, { recursive: true, force: true });
-        }
-    },
-);
-
 for (const failure of ["exit", "signal", "cancel", "recover"]) {
     test.runIf(process.platform !== "win32")(
         `Given an offline managed Runtime, When its starter ${failure === "cancel" ? "fails and setup is cancelled during recovery" : `fails by ${failure}`}, Then setup reports actionable diagnostics and bounds recovery`,
@@ -427,3 +368,62 @@ process.exitCode = await runSetup(process.argv.slice(2), {
         30000,
     );
 }
+
+test.runIf(process.env["MORTY_VERIFY_SYSTEM_DOCUMENTS"] === "true" && process.platform === "darwin")(
+    "Given DOCUMENT_DIR is unset on macOS, When setup connects and the user cancels, Then the private identity is saved under ~/Documents",
+    async () => {
+        if (process.env["CI"] !== "true" || process.env["DOCUMENT_DIR"] !== undefined) {
+            throw new Error("System Documents verification requires an isolated CI runner without DOCUMENT_DIR");
+        }
+        const documents = join(homedir(), "Documents");
+        const configuration = join(documents, "morty");
+        try {
+            await stat(configuration);
+            throw new Error("Refusing to overwrite existing Morty configuration");
+        } catch (cause) {
+            if (!(cause instanceof Error && "code" in cause && cause.code === "ENOENT")) {
+                throw cause;
+            }
+        }
+        await mkdir(documents, { recursive: true });
+        const workspace = await mkdtemp(join(tmpdir(), "morty-macos-workspace-"));
+        const fixture = await createIdentityFixture({ appOrigin: await localOrigin() });
+        const cancellation = new AbortController();
+        const events: Readonly<Record<string, unknown>>[] = [];
+        try {
+            const code = await runSetup(
+                [
+                    "setup",
+                    "--base-url",
+                    fixture.origin,
+                    "--cwd",
+                    workspace,
+                    "--harness",
+                    "codex",
+                    "--session-id",
+                    "macos-current-session",
+                ],
+                {
+                    documents: "",
+                    signal: cancellation.signal,
+                    emit: (event) => {
+                        events.push(event);
+                        if (event["status"] === "identity_ready") {
+                            cancellation.abort();
+                        }
+                    },
+                },
+            );
+            expect(code).toBe(1);
+            expect(events).toContainEqual(expect.objectContaining({ status: "identity_ready" }));
+            expect(events.at(-1)).toMatchObject({ error: { code: "CANCELLED" } });
+            const saved: unknown = JSON.parse(await readFile(join(configuration, "config.json"), "utf8"));
+            expect(saved).toMatchObject({ base_url: fixture.origin });
+            expect((await stat(join(configuration, "config.json"))).mode & 0o777).toBe(0o600);
+        } finally {
+            await fixture.close();
+            await rm(configuration, { recursive: true, force: true });
+            await rm(workspace, { recursive: true, force: true });
+        }
+    },
+);
