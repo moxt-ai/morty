@@ -16,6 +16,11 @@ import {
     saveLastCwdPreference,
     saveRecentCwdPreference,
 } from "@/services/chat/last-cwd-preference";
+import {
+    clearLastHarnessPreference,
+    readLastHarnessPreference,
+    saveLastHarnessPreference,
+} from "@/services/chat/last-harness-preference";
 import { formatError } from "../format-error.ts";
 
 type DraftSettingsState =
@@ -139,10 +144,9 @@ export const createDraftControlsStore = (
     createStore<DraftControlsStore>()((set, get) => {
         const cachedSettings = draftSettingsCache.get(requests)?.get(botId);
         let cwdOperation: AbortController | null = null;
-        let selectedHarness =
-            cachedSettings === undefined
-                ? ""
-                : `${cachedSettings.selectedAgent.runtimeId}:${cachedSettings.selectedAgent.agentRef}`;
+        // Set while an explicit harness choice is being loaded. The load waits
+        // for that exact harness instead of falling back to another one.
+        let pendingHarness: string | null = null;
         const changedOptionIds = new Set(
             cachedSettings === undefined
                 ? []
@@ -311,11 +315,18 @@ export const createDraftControlsStore = (
                 set({ settings: { kind: "loading" } });
             }
             try {
+                const requestedHarness = pendingHarness ?? readLastHarnessPreference(botId);
                 while (!signal.aborted) {
                     const configuration = await requests.runtimeConfiguration(botId, signal);
-                    const selected = connectedChatRuntimeAgents(configuration.runtime).find(
-                        (agent) => selectedHarness === "" || `${agent.runtimeId}:${agent.agentRef}` === selectedHarness,
-                    );
+                    const agents = connectedChatRuntimeAgents(configuration.runtime);
+                    const selected =
+                        (requestedHarness === null
+                            ? undefined
+                            : agents.find((agent) => agent.agentRef === requestedHarness)) ??
+                        // A remembered harness that is not connected must not
+                        // block the draft; the first connected Agent stands in
+                        // until the user chooses again.
+                        (pendingHarness === null ? agents[0] : undefined);
                     if (selected !== undefined) {
                         const [result, defaultCwd] = await Promise.all([
                             requests.agentSettings(botId, selected.agentRef, false, signal),
@@ -507,20 +518,30 @@ export const createDraftControlsStore = (
                 if (agent === undefined) {
                     return;
                 }
-                selectedHarness = value;
+                const previousHarness = readLastHarnessPreference(botId);
+                saveLastHarnessPreference(botId, agent.agentRef);
+                pendingHarness = agent.agentRef;
                 set({ settings: { kind: "switching", selectedHarness: value, configuration: settings.configuration } });
                 onSettings(null);
                 try {
                     await load(signal);
                 } catch (cause) {
                     if (!signal.aborted) {
-                        selectedHarness = "";
+                        if (previousHarness === null) {
+                            clearLastHarnessPreference(botId);
+                        } else {
+                            saveLastHarnessPreference(botId, previousHarness);
+                        }
                         set({
                             settings: {
                                 kind: "failed",
                                 message: formatError(cause, "The harness could not be selected."),
                             },
                         });
+                    }
+                } finally {
+                    if (pendingHarness === agent.agentRef) {
+                        pendingHarness = null;
                     }
                 }
             },

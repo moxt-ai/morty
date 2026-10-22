@@ -49,6 +49,7 @@ export async function createTestApp(
         readonly connectAgent?: boolean;
         readonly clock?: Clock;
         readonly agent?: { readonly id: string; readonly label: string };
+        readonly agents?: readonly { readonly id: string; readonly label: string }[];
         readonly nativeSessionIds?: ReadonlySet<string>;
         readonly page?:
             | {
@@ -69,7 +70,11 @@ export async function createTestApp(
     const current = options.application ?? (await (await environment).createApplication());
     await options.prepare?.(current);
     const daemon =
-        options.connectAgent === true ? await current.connectAgent(options.agent, options.nativeSessionIds) : null;
+        options.connectAgent === true
+            ? options.agents === undefined
+                ? await current.connectAgent(options.agent, options.nativeSessionIds)
+                : await current.connectAgents(options.agents, options.nativeSessionIds)
+            : null;
     const agentFailure = daemon?.failure ?? null;
     const page = options.page ?? { kind: "morty" };
     if (page.kind === "continue" || page.kind === "share") {
