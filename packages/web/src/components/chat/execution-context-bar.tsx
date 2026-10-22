@@ -1,10 +1,10 @@
 import { ChevronDown, Folder, X } from "lucide-react";
 import { Dialog } from "radix-ui";
 import { useId, useState } from "react";
-import { Popover } from "../../components/ui/popover.tsx";
 import { dataTestId } from "../../data-testid.ts";
-import type { ExecutionContext } from "../../view-models/chat/execution-context.ts";
-import { useDesktopChatLayout } from "./use-desktop-chat-layout.ts";
+import { Popover } from "../ui/popover.tsx";
+import { useDesktopChatLayout } from "../utils/use-desktop-chat-layout.ts";
+import type { ExecutionContext } from "./execution-context.ts";
 
 function ExecutionDetails({ context }: { readonly context: ExecutionContext }) {
     return (

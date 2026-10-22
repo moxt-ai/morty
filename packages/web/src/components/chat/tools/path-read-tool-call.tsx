@@ -1,5 +1,6 @@
 import * as v from "valibot";
-import { HighlightedCode, languageForPath } from "./highlighted-code.tsx";
+import { HighlightedCode, languageForPath } from "../highlighted-code.tsx";
+import { isOversizedToolText, ToolTextPreview } from "../tool-text-preview.tsx";
 import {
     type NumberedCodeLine,
     NumberedCodeLines,
@@ -8,7 +9,6 @@ import {
 } from "./read-tool-presentation.tsx";
 import { toolTextContent } from "./tool-display-content.ts";
 import type { ToolRendererProps } from "./tool-renderer.ts";
-import { isOversizedToolText, ToolTextPreview } from "./tool-text-preview.tsx";
 
 const requestSchema = v.pipe(
     v.strictObject({

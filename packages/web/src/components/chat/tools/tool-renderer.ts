@@ -1,4 +1,4 @@
-import type { SessionToolPresentation } from "../../../view-models/chat/session-presentation.ts";
+import type { SessionToolPresentation } from "./tool-contract.ts";
 
 export type ToolCallState = SessionToolPresentation["state"];
 export type ToolThinkingEntry = SessionToolPresentation;

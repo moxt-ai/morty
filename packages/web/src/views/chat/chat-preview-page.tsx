@@ -3,6 +3,7 @@ import { Tooltip } from "radix-ui";
 import { type ReactNode, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
+import { createComposerAttachmentStore } from "../../components/chat/composer-attachment-store.ts";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
@@ -10,7 +11,6 @@ import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.t
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
-import { createComposerAttachmentStore } from "../../view-models/chat/composer-attachment-store.ts";
 import { SetupCardDescription, SetupCardLogo, SetupCardShell, SetupCardTitle } from "../setup/setup-card-shell.tsx";
 import type { ChatPreviewStateId } from "./chat-preview.ts";
 import { InteractiveChatPreview } from "./chat-preview-interactive.tsx";
