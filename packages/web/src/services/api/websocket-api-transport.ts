@@ -1,5 +1,6 @@
 import * as v from "valibot";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
+import { type Clock, systemClock } from "../time/clock.ts";
 
 const responseFrame = v.strictObject({
     kind: v.literal("response"),
@@ -31,6 +32,31 @@ const serverFrame = v.variant("kind", [
 ]);
 const permittedHeaders = new Set(["authorization", "content-type"]);
 const KEEPALIVE_MILLISECONDS = 25_000;
+/** Delays between automatic reconnects; the last entry repeats until the bridge returns. */
+const RECONNECT_DELAYS_MILLISECONDS = [1_000, 2_000, 4_000, 8_000, 15_000] as const;
+/** Background attempts before Chat waits for a user action to dial again. */
+const MAX_RECONNECT_ATTEMPTS = 10;
+
+/**
+ * A bridge failure that crosses the transport boundary. Requests and watches
+ * receive it at their call site so product workflows handle it like any other
+ * failed API call; subscriptions recover without surfacing it.
+ */
+export class ChatBridgeError extends Error {
+    /** One stable code: every bridge failure means the same unavailable transport. */
+    readonly code = "bridge_unavailable";
+    constructor(message: string) {
+        super(message);
+        this.name = "ChatBridgeError";
+    }
+}
+
+export function isChatBridgeError(cause: unknown): cause is ChatBridgeError {
+    return cause instanceof ChatBridgeError;
+}
+
+const bridgeClosed = (): ChatBridgeError => new ChatBridgeError("The WebSocket to Morty is closed.");
+const bridgeUnavailable = (): ChatBridgeError => new ChatBridgeError("The WebSocket to Morty could not connect.");
 
 type BridgeState =
     | { readonly kind: "closed" }
@@ -58,25 +84,80 @@ interface PendingDiagnostic {
 }
 
 interface PendingEventStream extends PendingWatch {
+    /** The subscription frame replayed after the bridge reconnects. */
+    readonly frame: string;
     readonly receive: (data: string) => void;
 }
 
+interface PendingBridgeWaiter {
+    readonly reject: (cause: unknown) => void;
+    readonly resolve: () => void;
+}
+
 export class WebSocketApiTransport {
+    readonly #clock: Clock;
     readonly #origin: string;
     readonly #pending = new Map<string, PendingRequest>();
     readonly #eventStreams = new Map<string, PendingEventStream>();
     readonly #diagnostics = new Map<string, PendingDiagnostic>();
     readonly #watches = new Map<string, PendingWatch>();
+    readonly #bridgeWaiters = new Set<PendingBridgeWaiter>();
+    readonly #lifetime = new AbortController();
     #state: BridgeState = { kind: "disconnected" };
+    #desired = false;
+    #disposed = false;
+    #reconnectAttempt = 0;
+    #reconnectTimer: { readonly cancel: () => void } | null = null;
 
-    constructor(origin: string) {
+    constructor(origin: string, clock: Clock = systemClock) {
         this.#origin = new URL(origin).origin;
+        this.#clock = clock;
     }
 
     readonly open = (): void => {
+        if (this.#disposed) {
+            return;
+        }
+        this.#desired = true;
         if (this.#state.kind === "closed") {
             this.#state = { kind: "disconnected" };
         }
+        // An explicit open cancels the scheduled retry so the next call dials
+        // immediately instead of failing fast while a timer is pending.
+        this.#cancelReconnect();
+        this.#reconnectAttempt = 0;
+    };
+
+    /**
+     * Waits for the bridge to be connected. Callers that lost a request to a
+     * bridge failure use this to resume once the transport reconnects.
+     */
+    readonly waitForBridge = async (signal: AbortSignal): Promise<void> => {
+        signal.throwIfAborted();
+        if (this.#disposed) {
+            throw bridgeClosed();
+        }
+        if (this.#state.kind === "connected" && this.#state.socket.readyState === WebSocket.OPEN) {
+            return;
+        }
+        await new Promise<void>((resolve, reject) => {
+            const waiter: PendingBridgeWaiter = {
+                resolve: () => {
+                    signal.removeEventListener("abort", abort);
+                    resolve();
+                },
+                reject: (cause) => {
+                    signal.removeEventListener("abort", abort);
+                    reject(cause);
+                },
+            };
+            const abort = () => {
+                this.#bridgeWaiters.delete(waiter);
+                waiter.reject(signal.reason);
+            };
+            this.#bridgeWaiters.add(waiter);
+            signal.addEventListener("abort", abort, { once: true });
+        });
     };
 
     readonly fetch = async (request: Request): Promise<Response> => {
@@ -228,7 +309,7 @@ export class WebSocketApiTransport {
         const subscriptionId = crypto.randomUUID();
         return await new Promise<void>((resolve, reject) => {
             const abort = () => {
-                socket.send(JSON.stringify({ kind: "unwatch", subscriptionId }));
+                this.#sendIfConnected(JSON.stringify({ kind: "unwatch", subscriptionId }));
                 this.#settleWatch(subscriptionId)?.reject(request.signal.reason);
             };
             request.signal.addEventListener("abort", abort, { once: true });
@@ -272,63 +353,200 @@ export class WebSocketApiTransport {
         }
         const socket = await this.#connect(request.signal);
         const subscriptionId = crypto.randomUUID();
+        const frame = JSON.stringify({
+            kind: "subscribe",
+            subscriptionId,
+            method: request.method,
+            path: `${url.pathname}${url.search}`,
+            headers,
+            body: null,
+        });
         return await new Promise<void>((resolve, reject) => {
             const abort = () => {
-                socket.send(JSON.stringify({ kind: "unwatch", subscriptionId }));
+                this.#sendIfConnected(JSON.stringify({ kind: "unwatch", subscriptionId }));
                 this.#settleEventStream(subscriptionId)?.reject(request.signal.reason);
             };
             request.signal.addEventListener("abort", abort, { once: true });
             this.#eventStreams.set(subscriptionId, {
+                frame,
                 receive,
                 reject,
                 resolve,
                 release: () => request.signal.removeEventListener("abort", abort),
             });
             try {
-                socket.send(
-                    JSON.stringify({
-                        kind: "subscribe",
-                        subscriptionId,
-                        method: request.method,
-                        path: `${url.pathname}${url.search}`,
-                        headers,
-                        body: null,
-                    }),
-                );
+                socket.send(frame);
             } catch (cause) {
                 this.#settleEventStream(subscriptionId)?.reject(cause);
             }
         });
     };
 
-    readonly close = (): void => {
-        const state = this.#state;
+    /**
+     * Drops the current bridge connection. Requests and watches in flight fail
+     * at their call site; subscriptions stay registered and resume after the
+     * transport reconnects on its own.
+     */
+    readonly disconnect = (): void => {
+        if (this.#disposed) {
+            return;
+        }
+        this.#desired = true;
+        this.#dropConnection(bridgeClosed());
+    };
+
+    /** Releases the bridge for good and stops reconnecting. */
+    readonly dispose = (): void => {
+        if (this.#disposed) {
+            return;
+        }
+        this.#disposed = true;
+        this.#desired = false;
+        this.#cancelReconnect();
+        this.#lifetime.abort(bridgeClosed());
+        this.#closeSocket("Chat API transport disposed");
         this.#state = { kind: "closed" };
+        const cause = bridgeClosed();
+        this.#rejectRequests(cause);
+        for (const subscriptionId of [...this.#eventStreams.keys()]) {
+            this.#settleEventStream(subscriptionId)?.reject(cause);
+        }
+        for (const waiter of [...this.#bridgeWaiters]) {
+            this.#bridgeWaiters.delete(waiter);
+            waiter.reject(cause);
+        }
+    };
+
+    readonly #closeSocket = (reason: string): void => {
+        const state = this.#state;
         if (state.kind === "connected") {
-            state.socket.close(1000, "Chat API transport closed");
+            state.socket.close(1000, reason);
         } else if (state.kind === "connecting") {
             void state.connection.then(
-                (socket) => socket.close(1000, "Chat API transport closed"),
+                (socket) => socket.close(1000, reason),
                 () => undefined,
             );
         }
+    };
+
+    readonly #dropConnection = (cause: ChatBridgeError): void => {
+        const state = this.#state;
+        this.#state = { kind: "disconnected" };
+        if (state.kind === "connected") {
+            state.socket.close(1000, "Chat API transport disconnected");
+        } else if (state.kind === "connecting") {
+            void state.connection.then(
+                (socket) => socket.close(1000, "Chat API transport disconnected"),
+                () => undefined,
+            );
+        }
+        this.#rejectRequests(cause);
+        this.#scheduleReconnect();
+    };
+
+    readonly #rejectRequests = (cause: unknown): void => {
         for (const requestId of [...this.#pending.keys()]) {
-            this.#settle(requestId)?.reject(new Error("The Chat API transport closed."));
+            this.#settle(requestId)?.reject(cause);
         }
         for (const subscriptionId of [...this.#watches.keys()]) {
-            this.#settleWatch(subscriptionId)?.reject(new Error("The Chat API transport closed."));
-        }
-        for (const subscriptionId of [...this.#eventStreams.keys()]) {
-            this.#settleEventStream(subscriptionId)?.reject(new Error("The Chat API transport closed."));
+            this.#settleWatch(subscriptionId)?.reject(cause);
         }
         for (const requestId of [...this.#diagnostics.keys()]) {
-            this.#settleDiagnostic(requestId)?.reject(new Error("The Chat API transport closed."));
+            this.#settleDiagnostic(requestId)?.reject(cause);
+        }
+    };
+
+    readonly #dial = (): void => {
+        if (!this.#desired || this.#disposed || this.#reconnectTimer !== null) {
+            return;
+        }
+        if (this.#state.kind === "connected" || this.#state.kind === "connecting") {
+            return;
+        }
+        void this.#connect(this.#lifetime.signal).catch(() => this.#scheduleReconnect());
+    };
+
+    readonly #scheduleReconnect = (): void => {
+        if (!this.#desired || this.#disposed || this.#reconnectTimer !== null) {
+            return;
+        }
+        if (this.#state.kind === "connected" || this.#state.kind === "connecting") {
+            return;
+        }
+        if (this.#reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
+            // Give the user a chance to act: the next call dials on demand.
+            return;
+        }
+        const delay =
+            RECONNECT_DELAYS_MILLISECONDS[Math.min(this.#reconnectAttempt, RECONNECT_DELAYS_MILLISECONDS.length - 1)] ??
+            15_000;
+        this.#reconnectAttempt += 1;
+        const controller = new AbortController();
+        const timer = {
+            cancel: () => controller.abort(new Error("The Chat transport stopped reconnecting.")),
+        };
+        this.#reconnectTimer = timer;
+        void this.#clock.sleep(delay, AbortSignal.any([this.#lifetime.signal, controller.signal])).then(
+            () => {
+                if (this.#reconnectTimer !== timer) {
+                    return;
+                }
+                this.#reconnectTimer = null;
+                this.#dial();
+            },
+            () => {
+                if (this.#reconnectTimer === timer) {
+                    this.#reconnectTimer = null;
+                }
+            },
+        );
+    };
+
+    readonly #cancelReconnect = (): void => {
+        const timer = this.#reconnectTimer;
+        this.#reconnectTimer = null;
+        timer?.cancel();
+    };
+
+    readonly #notifyConnected = (): void => {
+        for (const waiter of [...this.#bridgeWaiters]) {
+            this.#bridgeWaiters.delete(waiter);
+            waiter.resolve();
+        }
+    };
+
+    /** Re-registers live subscriptions so a reconnect never surfaces to subscribers. */
+    readonly #replaySubscriptions = (socket: WebSocket): void => {
+        for (const [subscriptionId, stream] of this.#eventStreams) {
+            try {
+                socket.send(stream.frame);
+            } catch (cause) {
+                this.#settleEventStream(subscriptionId)?.reject(cause);
+            }
+        }
+    };
+
+    readonly #sendIfConnected = (frame: string): void => {
+        const state = this.#state;
+        if (state.kind !== "connected" || state.socket.readyState !== WebSocket.OPEN) {
+            return;
+        }
+        try {
+            state.socket.send(frame);
+        } catch {
+            // The connection closed first; the bridge already dropped the request.
+            return;
         }
     };
 
     readonly #connect = async (signal: AbortSignal): Promise<WebSocket> => {
-        if (this.#state.kind === "closed") {
-            throw new Error("The Chat API transport is closed.");
+        if (this.#disposed || this.#state.kind === "closed") {
+            throw bridgeClosed();
+        }
+        if (this.#reconnectTimer !== null) {
+            // A reconnect is already scheduled: fail the call now, like a
+            // refused HTTP connection, instead of racing another socket.
+            throw bridgeClosed();
         }
         if (this.#state.kind === "connected" && this.#state.socket.readyState === WebSocket.OPEN) {
             return this.#state.socket;
@@ -347,14 +565,14 @@ export class WebSocketApiTransport {
                 if (this.#state.kind !== "closed") {
                     this.#state = { kind: "disconnected" };
                 }
-                reject(new Error("The Chat WebSocket bridge closed while connecting."));
+                reject(bridgeClosed());
             };
             const opened = () => {
                 socket.removeEventListener("error", failed);
                 socket.removeEventListener("close", closedWhileConnecting);
-                if (this.#state.kind === "closed") {
-                    socket.close(1000, "Chat API transport closed");
-                    reject(new Error("The Chat API transport is closed."));
+                if (this.#disposed || this.#state.kind === "closed") {
+                    socket.close(1000, "Chat API transport disposed");
+                    reject(bridgeClosed());
                     return;
                 }
                 recordBrowserDiagnostic({
@@ -372,6 +590,9 @@ export class WebSocketApiTransport {
                     }
                 }, KEEPALIVE_MILLISECONDS);
                 socket.addEventListener("close", () => clearInterval(keepalive), { once: true });
+                this.#reconnectAttempt = 0;
+                this.#replaySubscriptions(socket);
+                this.#notifyConnected();
                 resolve(socket);
             };
             const failed = () => {
@@ -388,7 +609,7 @@ export class WebSocketApiTransport {
                 if (this.#state.kind !== "closed") {
                     this.#state = { kind: "disconnected" };
                 }
-                reject(new Error("The Chat WebSocket bridge could not connect."));
+                reject(bridgeUnavailable());
             };
             socket.addEventListener("open", opened, { once: true });
             socket.addEventListener("error", failed, { once: true });
@@ -406,23 +627,14 @@ export class WebSocketApiTransport {
                         requestId: "",
                         elapsedMs: 0,
                     });
+                    if (this.#disposed) {
+                        return;
+                    }
                     if (this.#state.kind === "connected" && this.#state.socket === socket) {
                         this.#state = { kind: "disconnected" };
                     }
-                    for (const requestId of [...this.#pending.keys()]) {
-                        this.#settle(requestId)?.reject(new Error("The Chat WebSocket bridge disconnected."));
-                    }
-                    for (const subscriptionId of [...this.#watches.keys()]) {
-                        this.#settleWatch(subscriptionId)?.reject(new Error("The Chat WebSocket bridge disconnected."));
-                    }
-                    for (const subscriptionId of [...this.#eventStreams.keys()]) {
-                        this.#settleEventStream(subscriptionId)?.reject(
-                            new Error("The Chat WebSocket bridge disconnected."),
-                        );
-                    }
-                    for (const requestId of [...this.#diagnostics.keys()]) {
-                        this.#settleDiagnostic(requestId)?.reject(new Error("The Chat WebSocket bridge disconnected."));
-                    }
+                    this.#rejectRequests(bridgeClosed());
+                    this.#scheduleReconnect();
                 },
                 { once: true },
             );

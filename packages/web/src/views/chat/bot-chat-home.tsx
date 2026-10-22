@@ -76,14 +76,12 @@ export function BotChatHome({
     const draft = model.draft;
     const setupView = model.view.kind === "setup" ? model.view : null;
     const pairingNotice = model.notices.pairing.kind === "visible" || model.pairingDialogOpen;
-    const failureNotice = model.notices.connectionFailed.kind === "visible";
 
     const active =
         model.view.kind === "connecting" ||
         model.view.kind === "active" ||
         model.view.kind === "setup" ||
-        model.view.kind === "runtime-disconnected" ||
-        model.view.kind === "connection-failed"
+        model.view.kind === "runtime-disconnected"
             ? model.view
             : null;
     const activeConversationId = selectedConversationId(model.selection);
@@ -263,29 +261,10 @@ export function BotChatHome({
                     description="Morty is ready. Paste this instruction into your local agent to connect it."
                     onClose={() => {
                         store.getState().closePairingDialog();
-                        store.getState().dismissNotice("pairing");
+                        store.getState().dismissNotice();
                     }}
                 >
                     <PairingInstruction />
-                </Dialog>
-            )}
-            {failureNotice && model.view.kind === "connection-failed" && (
-                <Dialog
-                    title="Runtime connection unavailable"
-                    description={model.view.message}
-                    onClose={() => {
-                        store.getState().dismissNotice("connection-failed");
-                    }}
-                    testId={dataTestId.runtimeSetupFailure}
-                >
-                    <Button
-                        onClick={() => {
-                            store.getState().dismissNotice("connection-failed");
-                            store.getState().retry();
-                        }}
-                    >
-                        Reconnect
-                    </Button>
                 </Dialog>
             )}
             {disconnectionNotice.kind === "visible" && !model.disconnectedNoticeDismissed && (

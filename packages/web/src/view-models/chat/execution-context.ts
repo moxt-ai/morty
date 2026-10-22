@@ -23,7 +23,7 @@ export function pendingExecutionContext(
         directoryPlaceholder: loading ? "Loading…" : "Unknown",
         connection: loading
             ? "Connecting"
-            : home.selection.kind === "failed" || home.view.kind === "failed" || home.view.kind === "connection-failed"
+            : home.selection.kind === "failed" || home.view.kind === "failed"
               ? "Unavailable"
               : home.connectionStatus.label,
     };

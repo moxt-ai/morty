@@ -1,6 +1,7 @@
 import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
 import { createComposerAttachmentStore } from "../../components/chat/composer-attachment-store.ts";
+import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
 import type {
     BotChatApi,
     BotRuntimeConfiguration,
@@ -38,7 +39,6 @@ export type BotChatHomeView =
     | ({ readonly kind: "active" } & BotView)
     | ({ readonly kind: "setup"; readonly reason: SetupReason } & BotView)
     | ({ readonly kind: "runtime-disconnected"; readonly message: string } & BotView)
-    | ({ readonly kind: "connection-failed"; readonly message: string } & BotView)
     | { readonly kind: "failed"; readonly message: string };
 
 export type BotConnectionStatus =
@@ -61,7 +61,6 @@ export function disconnectedBotNotice(
     switch (view.kind) {
         case "active":
         case "runtime-disconnected":
-        case "connection-failed":
             return {
                 kind: "visible",
                 title: "Your agent is disconnected",
@@ -102,7 +101,6 @@ export interface BotChatNavigation {
 type ChatEntryNotice = { readonly kind: "hidden" } | { readonly kind: "visible" };
 
 interface ChatEntryNotices {
-    readonly connectionFailed: ChatEntryNotice;
     readonly pairing: ChatEntryNotice;
 }
 
@@ -125,7 +123,7 @@ export interface BotChatHomeStore {
     readonly disconnectedNoticeDismissed: boolean;
     /** Entry notices that surface a dialog once when the workflow resolves. */
     readonly notices: ChatEntryNotices;
-    readonly dismissNotice: (notice: "connection-failed" | "pairing") => void;
+    readonly dismissNotice: () => void;
     readonly load: (signal: AbortSignal) => Promise<void>;
     readonly newConversation: () => void;
     readonly openManaged: (isExternal: boolean, id: string) => void;
@@ -188,6 +186,7 @@ export const createBotChatHomeStore = (
         | "waitForRuntimeConfigurationChange"
         | "runtimeConfiguration"
         | "directory"
+        | "waitForBridge"
     >,
     options: {
         readonly botId: string;
@@ -253,14 +252,8 @@ export const createBotChatHomeStore = (
             scrollFollowRevision: 0,
             pairingDialogOpen: false,
             disconnectedNoticeDismissed: false,
-            notices: { connectionFailed: { kind: "hidden" }, pairing: { kind: "hidden" } },
-            dismissNotice: (notice) =>
-                set((current) => ({
-                    notices:
-                        notice === "connection-failed"
-                            ? { ...current.notices, connectionFailed: { kind: "hidden" } }
-                            : { ...current.notices, pairing: { kind: "hidden" } },
-                })),
+            notices: { pairing: { kind: "hidden" } },
+            dismissNotice: () => set((current) => ({ notices: { ...current.notices, pairing: { kind: "hidden" } } })),
             load: async (signal) => {
                 set((current) => ({ view: "botId" in current.view ? current.view : { kind: "loading" } }));
                 let opened = false;
@@ -467,6 +460,23 @@ export const createBotChatHomeStore = (
                         onRestart();
                         return;
                     }
+                    if (isChatBridgeError(cause)) {
+                        // A dropped bridge is an ordinary failed call: report it
+                        // for diagnostics and resume once the transport
+                        // reconnects instead of blocking the page with a dialog.
+                        console.error("The Chat WebSocket bridge failed to complete a request.", cause);
+                        try {
+                            await requests.waitForBridge(signal);
+                        } catch {
+                            return;
+                        }
+                        if (signal.aborted) {
+                            return;
+                        }
+                        set((current) => ({ revision: current.revision + 1 }));
+                        onRestart();
+                        return;
+                    }
                     if (cause instanceof CloudApiError && cause.code === "AGENT_REQUIRED") {
                         const currentSelection = get().selection;
                         const failedSelection =
@@ -549,10 +559,7 @@ export const createBotChatHomeStore = (
                             current.connectionStatus.kind === "connecting" || runtimeFailure
                                 ? { kind: "disconnected", label: "Disconnected" }
                                 : current.connectionStatus,
-                        view: opened ? { kind: "connection-failed", botId, message } : { kind: "failed", message },
-                        ...(opened && current.notices.connectionFailed.kind === "hidden"
-                            ? { notices: { ...current.notices, connectionFailed: { kind: "visible" as const } } }
-                            : {}),
+                        view: { kind: "failed", message },
                     }));
                 }
             },

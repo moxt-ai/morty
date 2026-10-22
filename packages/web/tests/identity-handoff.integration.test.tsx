@@ -347,11 +347,10 @@ test("Given the end confirmation, When the real API transport closes, Then an un
         expect(button.hasAttribute("disabled")).toBe(false);
         return button;
     });
-    app.transport.close();
-    const connectionNotice = await app.waitForView(() =>
-        getByRole(document.body, "dialog", { name: "Runtime connection unavailable" }),
-    );
-    await app.user.click(getByRole(connectionNotice, "button", { name: "Close dialog" }));
+    app.transport.disconnect();
+    // A dropped bridge is an ordinary failed request: Chat keeps working and
+    // does not block the page with a connection dialog.
+    expect(queryByRole(document.body, "dialog", { name: "Runtime connection unavailable" })).toBeNull();
     await app.user.click(confirm);
 
     await app.waitForView(() =>
@@ -398,11 +397,8 @@ test("Given an unavailable connection, When current access cannot be prepared, T
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap", identity: true }, connectAgent: true });
     await app.waitForView(() => getByRole(document.body, "button", { name: "User menu" }));
-    app.transport.close();
-    const connectionNotice = await app.waitForView(() =>
-        getByRole(document.body, "dialog", { name: "Runtime connection unavailable" }),
-    );
-    await app.user.click(getByRole(connectionNotice, "button", { name: "Close dialog" }));
+    app.transport.disconnect();
+    expect(queryByRole(document.body, "dialog", { name: "Runtime connection unavailable" })).toBeNull();
     await clickDesktopEndRemoteAccess(app);
     const dialog = await app.queryElementByTestId(dataTestId.endRemoteAccessDialog);
     await app.waitForView(() =>
@@ -512,7 +508,7 @@ for (const linkKind of ["handoff", "sharing"] as const) {
                       }
                     : { kind: "share", code: (application) => code(application.identity) },
         });
-        app.transport.close();
+        app.transport.disconnect();
         const retry = await app.waitForView(() => getByRole(document.body, "button", { name: "Try again" }));
         expect(document.body.textContent).not.toContain("Ask for a new link.");
         expect(document.body.textContent).not.toContain("Run setup again");
