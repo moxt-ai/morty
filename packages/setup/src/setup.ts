@@ -542,7 +542,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                             }
                             const exited = once(child, "exit", { signal: AbortSignal.timeout(10000) });
                             child.kill(termination);
-                            await exited;
+                            // A command that ignores SIGTERM is killed in the next round.
+                            await exited.catch(() => undefined);
                         }
                     }
                 } catch {
@@ -683,7 +684,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
      * the Runtime: when it is unavailable, setup continues with the running
      * daemon and reports why.
      */
-    async function upgradeRuntime(context: Context, cwd: string): Promise<boolean> {
+    async function upgradeRuntime(context: Context, cwd: string): Promise<void> {
         // The upgrade has its own budget so a slow download leaves setup time to reuse the running daemon.
         const budget = deadline(RUNTIME_UPGRADE_BUDGET_MILLISECONDS);
         try {
@@ -691,7 +692,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             // stopping the command's process tree cannot stop the daemon.
             await runMobius(context, ["upgrade"], cwd, AbortSignal.any([signal, budget]), "process-tree");
             emit({ status: "runtime_upgrade_checked" });
-            return true;
         } catch (cause) {
             signal.throwIfAborted();
             emit({
@@ -702,7 +702,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 },
                 message: "Continuing with the running Mobius daemon. Run mobius upgrade to update it.",
             });
-            return false;
         }
     }
 
@@ -976,10 +975,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         context = prepared.context;
         context = await startRuntime(context, prepared.runtime, cwd, options.harness);
         await waitForRuntime(context, prepared.runtime, options.harness);
-        if (await upgradeRuntime(context, cwd)) {
-            // Switching releases reconnects the Runtime.
-            await waitForRuntime(context, prepared.runtime, options.harness);
-        }
+        await upgradeRuntime(context, cwd);
+        // A release switch reconnects the Runtime, and the manager finishes a switch even
+        // when setup stopped waiting for the upgrade, so wait for it before binding.
+        await waitForRuntime(context, prepared.runtime, options.harness);
         context = await bindAgent(context, prepared.runtime, options.harness);
         await finishSetup(context, prepared.runtime, options);
     }

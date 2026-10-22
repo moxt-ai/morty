@@ -232,6 +232,7 @@ const starterFailures = [
         "cancel-upgrade",
         "When setup is cancelled while the daemon upgrade downloads, Then the upgrade stops the processes it started",
     ],
+    ["stuck-start", "When setup is cancelled while its starter ignores SIGTERM, Then setup still stops the starter"],
 ] as const;
 
 for (const [failure, scenario] of starterFailures) {
@@ -306,7 +307,13 @@ if (process.argv[2] === 'upgrade') {
             : "// The daemon already runs the newest release, so an upgrade has nothing to do.\n    process.exit(0);"
     }
 } else if (output) { writeFileSync(output.slice('--output-json='.length), readFileSync('connections.json')); }
-else {
+else if (${JSON.stringify(failure === "stuck-start")}) {
+    // A starter that ignores the request to stop and never exits on its own.
+    process.on('SIGTERM', () => {});
+    writeFileSync('starter.pid', String(process.pid));
+    process.kill(process.ppid, 'SIGUSR2');
+    setInterval(() => {}, 1000);
+} else {
     const attempts = Number(readFileSync('attempts.txt', 'utf8')) + 1;
     writeFileSync('attempts.txt', String(attempts));
     ${failure === "signal" ? "process.kill(process.pid, 'SIGTERM');" : failure === "recover" ? "process.exit(attempts === 1 ? 42 : 0);" : failure === "cancel-upgrade" ? "process.exit(0);" : "process.exit(42);"}
@@ -373,9 +380,14 @@ process.exitCode = await runSetup(process.argv.slice(2), {
                     .trim()
                     .split("\n")
                     .map((line) => v.parse(v.record(v.string(), v.unknown()), JSON.parse(line)));
-                if (failure === "cancel-upgrade") {
+                if (failure === "cancel-upgrade" || failure === "stuck-start") {
                     expect(events.at(-1)).toMatchObject({ error: { code: "CANCELLED" } });
-                    const download = Number(await readFile(join(directory, "download.pid"), "utf8"));
+                    const download = Number(
+                        await readFile(
+                            join(directory, failure === "stuck-start" ? "starter.pid" : "download.pid"),
+                            "utf8",
+                        ),
+                    );
                     let running = true;
                     try {
                         process.kill(download, 0);
@@ -385,7 +397,10 @@ process.exitCode = await runSetup(process.argv.slice(2), {
                     if (running) {
                         process.kill(download, "SIGKILL");
                     }
-                    expect(running, "the upgrade download outlived setup").toBe(false);
+                    expect(
+                        running,
+                        `the ${failure === "stuck-start" ? "starter" : "upgrade download"} outlived setup`,
+                    ).toBe(false);
                     return;
                 }
                 const retries = events.filter((event) => event["status"] === "runtime_retrying");
@@ -672,5 +687,31 @@ test("Given a daemon upgrade stops responding, When its budget expires, Then set
                 error: expect.objectContaining({ code: "RUNTIME_UPGRADE_TIMEOUT" }),
             }),
         );
+    });
+});
+
+test("Given a daemon upgrade is still switching releases when its budget expires, When the manager finishes the switch, Then setup waits for the Runtime and completes on the newest release", {
+    timeout: 60_000,
+}, async () => {
+    await withUpgradeMachine("interrupted-switch", async (runtime, paths) => {
+        const budget = new AbortController();
+        const setup = setupMachine(runtime, paths, () => budget.signal);
+        await runtime.upgradeRequested;
+        budget.abort(new DOMException("The upgrade budget elapsed", "TimeoutError"));
+        const { code, events } = await setup;
+        expect(code, JSON.stringify(events)).toBe(0);
+        expect(events).toContainEqual(
+            expect.objectContaining({
+                status: "runtime_upgrade_skipped",
+                error: expect.objectContaining({ code: "RUNTIME_UPGRADE_TIMEOUT" }),
+            }),
+        );
+        const skipped = events.findIndex((event) => event["status"] === "runtime_upgrade_skipped");
+        const online = events.findIndex((event, index) => index > skipped && event["status"] === "runtime_online");
+        const bound = events.findIndex((event) => event["status"] === "binding_activated");
+        expect(online, JSON.stringify(events)).toBeGreaterThan(skipped);
+        expect(bound, JSON.stringify(events)).toBeGreaterThan(online);
+        expect(events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
+        expect(runtime.daemonRelease()).toBe("current");
     });
 });
