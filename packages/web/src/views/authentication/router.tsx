@@ -30,10 +30,10 @@ function ContinuePageLive({
 }) {
     // The application creates the redeem with itself; the page only
     // subscribes.
-    const { retry, enterMorty, state, diagnostics } = useExternalStore(continuation);
+    const { retry, enterMorty, state, diagnostics, continueHref } = useExternalStore(continuation);
     return (
         <>
-            <ContinuePageContent enterMorty={enterMorty} retry={retry} state={state} />
+            <ContinuePageContent continueHref={continueHref} enterMorty={enterMorty} retry={retry} state={state} />
             <BugReportButton appearance="floating" daemonSource={diagnostics} dialog={application.bugReportDialog} />
         </>
     );
@@ -123,8 +123,9 @@ const continuePreviewStateRoute = createRoute({
     component: ContinuePreviewStatePage,
 });
 
-export const router = createRouter({
-    routeTree: rootRoute.addChildren([continueRoute, continuePreviewIndexRoute, continuePreviewStateRoute]),
-    defaultOnCatch: (error) => reportApplicationError(error, "continuation-route"),
-    scrollRestoration: true,
-});
+export const createContinuationRouter = () =>
+    createRouter({
+        routeTree: rootRoute.addChildren([continueRoute, continuePreviewIndexRoute, continuePreviewStateRoute]),
+        defaultOnCatch: (error) => reportApplicationError(error, "continuation-route"),
+        scrollRestoration: true,
+    });

@@ -57,6 +57,7 @@ import {
     type SessionEventHistory,
     type SessionProjectionEffect,
     type SessionProjectionInput,
+    sessionProjectionExecutionOwner,
     sessionProjectionMessages,
     sessionProjectionPagination,
     transitionSessionProjection,
@@ -841,6 +842,11 @@ export function createSessionPaneModel(options: {
                         if (payload.kind === "prompt.started") {
                             delivery.getState().reconcile([payload.commandId]);
                             const queued = messageQueue.getState().takeStarted(payload.commandId);
+                            const owner = sessionProjectionExecutionOwner(projection, payload.commandId);
+                            if (owner !== null && owner !== payload.commandId) {
+                                // Steering starts a command, not a new execution to stop.
+                                return true;
+                            }
                             if (command !== "" && command !== payload.commandId) {
                                 tasks.getState().finish(command);
                                 activeTurn.turnCleared(command);
@@ -943,21 +949,20 @@ export function createSessionPaneModel(options: {
                                     });
                                     break;
                             }
-                            const executionPromise = connected.sessions.readSessionExecution(
+                            await dispatchProjection({ kind: "reconcile" }, connected, signal);
+                            signal.throwIfAborted();
+                            // Confirm execution after history is adopted. An earlier idle snapshot
+                            // cannot settle work that started while those pages were loading.
+                            const execution = await connected.sessions.readSessionExecution(
                                 sessionId,
                                 sessionIdentity,
                                 signal,
                             );
-                            // Reconciliation may abandon this speculative read when the
-                            // subscription tears down; keep its aborted rejection awaited.
-                            void executionPromise.then(
-                                () => undefined,
-                                () => undefined,
-                            );
-                            await dispatchProjection({ kind: "reconcile" }, connected, signal);
                             signal.throwIfAborted();
-                            const execution = await executionPromise;
                             const running = execution.turn;
+                            if (running === null) {
+                                commitProjection({ kind: "execution-idle" });
+                            }
                             messageQueue.getState().replace(execution.queued);
                             if (running !== null) {
                                 command = running.commandId;

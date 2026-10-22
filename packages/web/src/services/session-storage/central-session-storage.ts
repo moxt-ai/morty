@@ -97,6 +97,11 @@ export const accessEndedNoticeEntry = stringSessionStorageEntry({
     schema: v.literal("ended"),
 });
 
+export const accessEndedComputerEntry = stringSessionStorageEntry({
+    key: "morty:access-ended-computer:v1",
+    schema: v.pipe(v.string(), v.maxLength(256)),
+});
+
 export const newConversationDraftEntry = (botId: string): SessionStorageEntry<string> =>
     stringSessionStorageEntry({
         key: scopedKey("morty:message-draft:new:v1:", botId),

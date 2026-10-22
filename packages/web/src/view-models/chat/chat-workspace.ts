@@ -1,11 +1,14 @@
 import type { StoreApi } from "zustand/vanilla";
 import type { BotChatApi, ChatDraftConfiguration } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
+import type { IdentityScope } from "../../services/identity/identity-scope-url.ts";
+import { rememberComputerName, rememberComputerVisit } from "../../services/identity/remembered-computers.ts";
 import type { Clock } from "../../services/time/clock.ts";
 import type { BugReportDialogStore } from "../bug-report-dialog-store.ts";
 import { formatError } from "../format-error.ts";
 import { reportApplicationError } from "../report-error.ts";
 import { type BotChatHomeStoreApi, createBotChatHomeStore } from "./bot-chat-home-store.ts";
+import type { ComputerSwitcherModel } from "./computer-switcher-store.ts";
 import { type ConversationDirectoryStore, createConversationDirectoryStore } from "./conversation-directory-store.ts";
 import type { ConversationSelectionState, SelectedConversationTarget } from "./conversation-selection-machine.ts";
 import { selectedConversationId, transitionConversationSelection } from "./conversation-selection-machine.ts";
@@ -30,6 +33,8 @@ interface ChatWorkspacePaneEntry {
 }
 
 export interface ChatWorkspace {
+    readonly computers: ComputerSwitcherModel | null;
+    readonly accessNotice: string | null;
     /** The chat API this workspace was composed with. */
     readonly requests: BotChatApi;
     /** The application-owned bug-report dialog state, flowing to entry points. */
@@ -72,12 +77,14 @@ export interface ChatWorkspace {
     readonly chatSignal: () => AbortSignal;
     /** A stable signal for user-triggered operations such as archiving and diagnostics. */
     readonly operationsSignal: () => AbortSignal;
+    /** Records deliberate activity in this tab without following another tab's selection. */
+    readonly recordUserActivity: () => void;
     /** Starts the workspace's loads; the application calls this when it activates the workspace. */
     readonly start: () => void;
     readonly dispose: () => void;
 }
 
-function historyNavigation() {
+function historyNavigation(onDraft: () => void) {
     const replace = (modify: (url: URL) => void): void => {
         const url = new URL(window.location.href);
         modify(url);
@@ -90,12 +97,14 @@ function historyNavigation() {
                 url.searchParams.delete("nativeSessionAction");
                 url.searchParams.set("sessionId", sessionId);
             }),
-        showDraft: () =>
+        showDraft: () => {
+            onDraft();
             replace((url) => {
                 url.searchParams.delete("conversation");
                 url.searchParams.delete("conversationId");
                 url.searchParams.delete("sessionId");
-            }),
+            });
+        },
         showForkInstead: () =>
             replace((url) => {
                 url.searchParams.set("nativeSessionAction", "fork");
@@ -119,6 +128,10 @@ function historyNavigation() {
 export function createChatWorkspace(options: {
     readonly clock: Clock;
     readonly botId: string;
+    readonly rememberedIdentity?: IdentityScope;
+    readonly computers?: ComputerSwitcherModel;
+    readonly accessNotice?: string | null;
+    readonly entry?: "address" | "restore";
     readonly bugReportDialog: BugReportDialogStore;
     readonly projectId?: string;
     readonly requests: BotChatApi;
@@ -133,10 +146,31 @@ export function createChatWorkspace(options: {
 }): ChatWorkspace {
     const botId = options.botId;
     const requests = options.requests;
+    let rememberedSessionId: string | null = null;
+    let initialVisitPending = true;
+    const recordHome = () => {
+        rememberedSessionId = null;
+        if (options.rememberedIdentity !== undefined) {
+            rememberComputerVisit(options.rememberedIdentity, options.clock.now(), { kind: "home" });
+        }
+    };
     const home = createBotChatHomeStore(requests, {
         botId,
         createId: () => crypto.randomUUID(),
-        navigation: historyNavigation(),
+        navigation: historyNavigation(recordHome),
+        entry: options.entry ?? "address",
+        onRuntimeConfiguration: (configuration) => {
+            options.computers?.updateCurrent(configuration);
+            if (initialVisitPending) {
+                initialVisitPending = false;
+                if (home.getState().selection.kind === "draft") {
+                    recordHome();
+                }
+            }
+            if (options.rememberedIdentity !== undefined) {
+                rememberComputerName(options.rememberedIdentity, configuration.runtime.machineName);
+            }
+        },
         onDraftSelected: () => {
             void draftControls
                 .getState()
@@ -364,6 +398,15 @@ export function createChatWorkspace(options: {
         // element stops it through the ref-cleanup protocol.
         paneEntry?.model.stop();
         const sessionId = selection.session.result.ready.sessionId;
+        if (options.rememberedIdentity !== undefined && rememberedSessionId !== sessionId) {
+            rememberComputerVisit(
+                options.rememberedIdentity,
+                options.clock.now(),
+                { kind: "session", sessionId },
+                selection.session.result.ready.directoryLabel,
+            );
+            rememberedSessionId = sessionId;
+        }
         const creation = home.getState().creation;
         const model = createSessionPaneModel({
             clock: options.clock,
@@ -384,7 +427,27 @@ export function createChatWorkspace(options: {
     };
 
     return {
+        computers: options.computers ?? null,
+        accessNotice: options.accessNotice ?? null,
+        recordUserActivity: () => {
+            if (options.rememberedIdentity !== undefined) {
+                const selection = home.getState().selection;
+                const destination =
+                    selection.kind === "ready"
+                        ? { kind: "session" as const, sessionId: selection.session.result.ready.sessionId }
+                        : selection.kind === "draft"
+                          ? { kind: "home" as const }
+                          : undefined;
+                rememberComputerVisit(
+                    options.rememberedIdentity,
+                    options.clock.now(),
+                    destination,
+                    selection.kind === "ready" ? selection.session.result.ready.directoryLabel : undefined,
+                );
+            }
+        },
         start: () => {
+            void options.computers?.refresh();
             startHomeLoad();
             startDirectoryLoad();
         },
@@ -411,6 +474,7 @@ export function createChatWorkspace(options: {
         chatSignal: () => chatLifetime.signal,
         operationsSignal: () => operationsLifetime.signal,
         dispose: () => {
+            options.computers?.dispose();
             home.getState().composerAttachments.getState().clear();
             paneEntry?.model.stop();
             chatLifetime.abort(new Error("The chat workspace was disposed."));

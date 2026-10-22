@@ -42,6 +42,49 @@ test("Given a paired Bot, When a Mermaid reply finishes, Then I can view, copy a
     await page.screenshot({ path: testInfo.outputPath("mermaid-mobile.png"), fullPage: true });
 });
 
+test("Given a wide Mermaid diagram on a phone viewport, When I open it fullscreen, Then it opens legible and I can pan it", async ({
+    runtime,
+}, testInfo) => {
+    const { page } = runtime;
+    await page.clock.install({ time: new Date("2026-10-10T12:00:00Z") });
+    await runtime.openPairedChat();
+    await page.getByRole("textbox", { name: "Message" }).fill("draw a wide deployment diagram");
+    await page.getByRole("button", { name: "Send message" }).click();
+    const response = page.getByRole("article", { name: "Agent response" }).filter({ hasText: "Morty chat UI" });
+    await expect(response).toContainText("model backend");
+    await runtime.continueReply("draw a wide deployment diagram", {
+        outcome: "complete",
+        output: [],
+    });
+    const diagram = response.getByRole("img", { name: "Mermaid chart", exact: true });
+    await expect(diagram).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await response.getByRole("button", { name: "View diagram fullscreen", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    const chart = dialog.getByRole("img", { name: "Mermaid chart" });
+    await expect(chart).toBeVisible();
+    // The diagram is wider than the phone. It opens at a readable scale that
+    // uses the viewport width instead of shrinking to a fraction of it.
+    const chartBox = await chart.boundingBox();
+    expect(chartBox?.width ?? 0).toBeGreaterThan(390);
+    const labelBox = await dialog.getByText("Browser", { exact: true }).first().boundingBox();
+    expect(labelBox?.height ?? 0).toBeGreaterThan(10);
+    await page.screenshot({ path: testInfo.outputPath("mermaid-fullscreen-mobile.png"), fullPage: true });
+
+    // The unreadable part of the graph is reachable by panning.
+    await page.mouse.move(195, 422);
+    await page.mouse.down();
+    await page.mouse.move(315, 422, { steps: 5 });
+    await page.mouse.up();
+    const pannedBox = await chart.boundingBox();
+    expect(Math.round((pannedBox?.x ?? 0) - (chartBox?.x ?? 0))).toBeGreaterThan(100);
+
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
 test("Given a live reply with a closed Mermaid fence, When I read the response, Then the sequence diagram is visible before the turn ends", async ({
     runtime,
 }, testInfo) => {
