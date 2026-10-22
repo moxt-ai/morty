@@ -849,3 +849,21 @@ export function sessionEventCommandIds(events: readonly SessionEvent[]): readonl
     }
     return commandIds;
 }
+
+export function completedTurnNotice(stopReason: string): string | null {
+    switch (stopReason) {
+        case "end_turn":
+        case "steered":
+            return null;
+        case "cancelled":
+            return "Turn stopped.";
+        case "max_tokens":
+            return "The response reached its length limit.";
+        case "max_turn_requests":
+            return "The agent reached its request limit for this turn.";
+        case "refusal":
+            return "The agent declined this request.";
+        default:
+            return "The response stopped before completing.";
+    }
+}

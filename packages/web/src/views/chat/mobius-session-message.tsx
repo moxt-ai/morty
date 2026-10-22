@@ -14,6 +14,7 @@ import { dataTestId } from "../../data-testid.ts";
 import { isDisplayableImageType } from "../../services/chat/image-media-type.ts";
 import {
     COMPACTION_CHARACTER_LIMIT,
+    completedTurnNotice,
     type SessionMessage,
     sessionTextValue,
 } from "../../view-models/chat/session-presentation.ts";
@@ -373,14 +374,13 @@ export function MobiusSessionMessage({
         );
     }
     if (presentation.kind === "completed") {
-        if (presentation.stopReason === "end_turn" || presentation.stopReason === "steered") {
+        const notice = completedTurnNotice(presentation.stopReason);
+        if (notice === null) {
             return null;
         }
         return (
             <p className="text-sm text-muted-foreground" data-testid={dataTestId.agentReplyStatus} role="status">
-                {presentation.stopReason === "cancelled"
-                    ? "Turn stopped."
-                    : `Response stopped: ${presentation.stopReason}`}
+                {notice}
             </p>
         );
     }

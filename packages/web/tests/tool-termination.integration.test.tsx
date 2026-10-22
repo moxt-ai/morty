@@ -237,3 +237,20 @@ test("Given another viewer opens a history page beginning with steering already 
     );
     await viewer.close();
 });
+
+for (const [reason, notice] of [
+    ["max_tokens", "The response reached its length limit."],
+    ["max_turn_requests", "The agent reached its request limit for this turn."],
+    ["refusal", "The agent declined this request."],
+] as const) {
+    test(`Given a turn ends with ${reason}, When I view it and reload, Then the reason is explained in plain language and its tools are settled`, {
+        timeout: 30_000,
+    }, async () => {
+        const app = await start(`stop with ${reason}`);
+        await assertSettled(app);
+        expect((await app.queryElementByTestId(dataTestId.agentReplyStatus)).textContent).toBe(notice);
+        const reloaded = await app.reload();
+        await assertSettled(reloaded);
+        expect((await reloaded.queryElementByTestId(dataTestId.agentReplyStatus)).textContent).toBe(notice);
+    });
+}

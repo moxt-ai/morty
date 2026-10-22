@@ -79,6 +79,11 @@ export function createToolLifecycleAgent() {
                     if (prompt === "fail unfinished tools") {
                         throw new Error("Controlled Agent execution failed");
                     }
+                    for (const stopReason of ["max_tokens", "max_turn_requests", "refusal"] as const) {
+                        if (prompt === `stop with ${stopReason}`) {
+                            return { stopReason };
+                        }
+                    }
                     if (prompt === "complete unfinished tools") {
                         return { stopReason: "end_turn" };
                     }
