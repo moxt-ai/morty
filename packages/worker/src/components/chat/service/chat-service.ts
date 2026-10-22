@@ -2,7 +2,10 @@ import {
     decodeIdentifier,
     decodeMessageKind,
     decodeRuntimeStatusEvent,
+    decodeSessionCloseNoticeEvent,
     decodeSessionStatusChangedEvent,
+    SESSION_CLOSE_NOTICE_KIND,
+    type SessionCloseNoticeEvent,
     type SessionStatusChangedEvent,
 } from "@moxt-ai/mobius-sdk/protocol";
 import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
@@ -12,6 +15,9 @@ import type { ManagedBotStorage } from "../../management/storage/managed-bot-sto
 import type { ManagedSessionStorage } from "../storage/managed-session-storage.ts";
 
 const STATUS_LIVENESS_MILLISECONDS = 120_000;
+
+/** What the managed Session stream tells a client: a Session's activity changed, or the Runtime closed a Session. */
+export type ManagedSessionEvent = SessionStatusChangedEvent | SessionCloseNoticeEvent;
 
 export type ChatScope = {
     readonly userId: string;
@@ -219,9 +225,10 @@ export class ChatService {
         };
     };
 
+    /** Publishes the activity changes and close notices of the caller's Sessions until the stream ends. */
     readonly subscribeManagedSessionStatuses = async (
         scope: ChatScope,
-        publish: (event: SessionStatusChangedEvent) => void,
+        publish: (event: ManagedSessionEvent) => void,
         signal: AbortSignal,
     ): Promise<void> => {
         const runtime = await this.localRuntime(scope);
@@ -270,6 +277,13 @@ export class ChatService {
                     if (kind === "runtime.status") {
                         if (!decodeRuntimeStatusEvent(event.data).online) {
                             closed();
+                        }
+                        return;
+                    }
+                    if (kind === SESSION_CLOSE_NOTICE_KIND) {
+                        const notice = decodeSessionCloseNoticeEvent(event.data);
+                        if (owned.has(notice.sessionId)) {
+                            publish(notice);
                         }
                         return;
                     }

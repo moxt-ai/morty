@@ -69,6 +69,8 @@ export function sessionExecutionContext(
             return { ...base, connection: "Disconnected" };
         case "reconnecting":
             return { ...base, connection: "Reconnecting" };
+        case "closed":
+            return { ...base, connection: "Closed" };
         case "failed":
             return { ...base, connection: "Unavailable" };
     }

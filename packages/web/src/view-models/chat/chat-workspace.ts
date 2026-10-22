@@ -189,7 +189,12 @@ export function createChatWorkspace(options: {
     const directory = createConversationDirectoryStore(botId, requests, (sessions) => {
         statuses.getState().directoryLoaded(botId, sessions, statusLifetime.signal);
     });
-    const statuses = createConversationStatusStore(requests);
+    const statuses = createConversationStatusStore(requests, (sessionId, reason) => {
+        // Only the open pane has something to tell its user; the other Sessions reopen when selected.
+        if (paneEntry?.session.result.ready.sessionId === sessionId) {
+            paneEntry.model.store.getState().sessionClosed(reason);
+        }
+    });
     const draftControls = createDraftControlsStore(botId, requests, (settings: ChatDraftConfiguration | null) => {
         home.setState({ draftSettings: settings });
     });

@@ -403,6 +403,26 @@ function SessionReconnectNotice({
     return <ReconnectingNotice />;
 }
 
+/** Tells the user that the Runtime closed the Session, and why when it said so, and offers to reopen it. */
+function SessionClosedNotice({
+    connection,
+    onReopen,
+}: {
+    readonly connection: Extract<SessionConnection, { readonly kind: "closed" }>;
+    readonly onReopen: () => void;
+}) {
+    return (
+        <div data-testid={dataTestId.sessionClosedNotice} className="mb-2 px-1 text-sm text-muted-foreground">
+            <p role="status">
+                The session is closed.{connection.reason === null ? "" : ` Reason: ${connection.reason}`}{" "}
+                <LinkButton disabled={connection.reopen.kind === "reopening"} onClick={onReopen}>
+                    {connection.reopen.kind === "reopening" ? "Reopening…" : "Reopen it"}
+                </LinkButton>
+            </p>
+        </div>
+    );
+}
+
 /**
  * Stands in for older messages while an earlier history page is fetched above
  * the visible list. It carries no text of its own so the placeholder reads as
@@ -654,6 +674,11 @@ function MobiusSessionPaneBody({
                             <SessionReconnectNotice
                                 connection={model.connection}
                                 onRetryNow={() => pane.store.getState().retryNow()}
+                            />
+                        ) : model.connection.kind === "closed" ? (
+                            <SessionClosedNotice
+                                connection={model.connection}
+                                onReopen={() => run(pane.store.getState().reopen)}
                             />
                         ) : undefined
                     }

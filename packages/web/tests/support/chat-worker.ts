@@ -72,6 +72,10 @@ export async function createChatWorkerEnvironment() {
             return {
                 failure: runtime.failure,
                 continueReply: runtime.continueReply,
+                /** Closes a Session through the Platform, the way another Mobius client of this Runtime would. */
+                closeSession: async (sessionId: string): Promise<void> => {
+                    await runtime.client.sessions.close(runtime.runtimeId, sessionId, new AbortController().signal);
+                },
                 disconnect: runtime.disconnect,
                 reconnect: runtime.reconnect,
                 writeFiles: runtime.writeFiles,
