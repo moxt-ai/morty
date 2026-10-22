@@ -163,7 +163,7 @@ function PermissionCard({
     const presentation = permissionPresentation(permission);
     return (
         <section
-            className="w-full rounded-lg border-[0.5px] border-input bg-white px-4 pt-5 pb-4 text-sm"
+            className="min-w-0 w-full rounded-lg border-[0.5px] border-input bg-white px-4 pt-5 pb-4 text-sm"
             role="alertdialog"
             aria-label="Agent permission request"
         >
@@ -189,11 +189,11 @@ function PermissionCard({
                             ))}
                         </section>
                     )}
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">{permission.title}</p>
+                    <p className="mt-2 break-all text-sm leading-6 text-muted-foreground">{permission.title}</p>
                     <div className="mt-2.5 flex flex-wrap gap-2">
                         {presentation.options.map((option) => (
                             <Button
-                                className="min-h-11 md:min-h-10"
+                                className="h-auto min-h-11 max-w-full whitespace-normal break-all py-2 md:min-h-10"
                                 disabled={busy || confirmed}
                                 key={option.optionId}
                                 onClick={() => {
@@ -211,7 +211,7 @@ function PermissionCard({
                             </Button>
                         ))}
                         <Button
-                            className="min-h-11 md:min-h-10"
+                            className="h-auto min-h-11 max-w-full whitespace-normal break-all py-2 md:min-h-10"
                             disabled={busy || confirmed}
                             onClick={stop}
                             size="sm"

@@ -37,6 +37,10 @@ export function createInteractionAgent() {
                 const cancellation = new AbortController();
                 turns.set(sessionId, cancellation);
                 const signal = AbortSignal.any([lifetime.signal, context.signal, cancellation.signal]);
+                const longPermission = context.params.prompt.some(
+                    (content) => content.type === "text" && content.text === "request long permission",
+                );
+                const longPath = `/workspace/${"long-directory-".repeat(12)}/src/index.ts`;
                 const planMode = context.params.prompt.some(
                     (content) => content.type === "text" && content.text === "request plan mode",
                 );
@@ -54,7 +58,11 @@ export function createInteractionAgent() {
                             { optionId: "reject", kind: "reject_once", name: "No, start implementing now" },
                         ]
                       : [
-                            { optionId: "allow-once", kind: "allow_once", name: "Yes" },
+                            {
+                                optionId: "allow-once",
+                                kind: "allow_once",
+                                name: longPermission ? `Allow reading ${longPath} for this session` : "Yes",
+                            },
                             { optionId: "reject", kind: "reject_once", name: "No" },
                         ];
                 try {
@@ -66,7 +74,11 @@ export function createInteractionAgent() {
                                 toolCallId: crypto.randomUUID(),
                                 kind: planMode ? "switch_mode" : "execute",
                                 status: "pending",
-                                title: planMode ? "Enter plan mode" : "Run verification",
+                                title: planMode
+                                    ? "Enter plan mode"
+                                    : longPermission
+                                      ? `Read ${longPath}`
+                                      : "Run verification",
                                 rawInput: planMode
                                     ? { mode: "plan" }
                                     : context.params.prompt.some(
