@@ -12,7 +12,3 @@ export function readLastHarnessPreference(botId: string): string | null {
 export function saveLastHarnessPreference(botId: string, agentRef: string): void {
     centralLocalStorage.write(lastHarnessEntry(botId), agentRef);
 }
-
-export function clearLastHarnessPreference(botId: string): void {
-    centralLocalStorage.remove(lastHarnessEntry(botId));
-}

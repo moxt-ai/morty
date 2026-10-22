@@ -16,11 +16,7 @@ import {
     saveLastCwdPreference,
     saveRecentCwdPreference,
 } from "@/services/chat/last-cwd-preference";
-import {
-    clearLastHarnessPreference,
-    readLastHarnessPreference,
-    saveLastHarnessPreference,
-} from "@/services/chat/last-harness-preference";
+import { readLastHarnessPreference, saveLastHarnessPreference } from "@/services/chat/last-harness-preference";
 import { formatError } from "../format-error.ts";
 
 type DraftSettingsState =
@@ -195,6 +191,7 @@ export const createDraftControlsStore = (
             selectedAgent: ChatAgentSelection,
             cwd: WorkspaceEntriesEvent,
             options: readonly SessionConfigOption[],
+            rememberHarness: boolean,
         ): void => {
             const restoredSettings = restoreLastAgentSettings(botId, selectedAgent.agentRef, options);
             const ready = {
@@ -207,6 +204,12 @@ export const createDraftControlsStore = (
             changedOptionIds.clear();
             for (const configId of restoredSettings.restoredIds) {
                 changedOptionIds.add(configId);
+            }
+            // A harness becomes the remembered default only once its settings
+            // are actually applied. A fallback to another connected Agent, or
+            // a load that fails, must leave the user's choice in place.
+            if (rememberHarness) {
+                saveLastHarnessPreference(botId, selectedAgent.agentRef);
             }
             const existingRecentCwds = readRecentCwdPreferences(botId);
             saveLastCwdPreference(botId, selectedAgent.runtimeId, selectedAgent.agentRef, cwd.directoryId);
@@ -306,14 +309,13 @@ export const createDraftControlsStore = (
         const load = async (lifetimeSignal: AbortSignal): Promise<void> => {
             const signal = AbortSignal.any([lifetimeSignal, AbortSignal.timeout(120_000)]);
             const currentSettings = get().settings;
-            if (currentSettings.kind === "ready") {
-                publishSettings(currentSettings);
-            } else {
-                onSettings(null);
-            }
-            if (currentSettings.kind !== "ready" && currentSettings.kind !== "switching") {
+            // Nothing from the previous harness may stay submittable while the
+            // target harness and its settings load: a message sent in that
+            // window would create a conversation on the harness being left.
+            if (currentSettings.kind !== "switching") {
                 set({ settings: { kind: "loading" } });
             }
+            onSettings(null);
             try {
                 const requestedHarness = pendingHarness ?? readLastHarnessPreference(botId);
                 while (!signal.aborted) {
@@ -343,13 +345,20 @@ export const createDraftControlsStore = (
                                 signal.throwIfAborted();
                             }
                         }
-                        applyAgentSettings(configuration, selected, cwd, result.options);
+                        applyAgentSettings(
+                            configuration,
+                            selected,
+                            cwd,
+                            result.options,
+                            requestedHarness === selected.agentRef,
+                        );
                         return;
                     }
                     await wait(signal);
                 }
             } catch (cause) {
                 if (!lifetimeSignal.aborted) {
+                    onSettings(null);
                     set({
                         settings: {
                             kind: "failed",
@@ -406,7 +415,13 @@ export const createDraftControlsStore = (
                 try {
                     const result = await requests.agentSettings(botId, settings.selectedAgent.agentRef, true, signal);
                     signal.throwIfAborted();
-                    applyAgentSettings(settings.configuration, settings.selectedAgent, settings.cwd, result.options);
+                    applyAgentSettings(
+                        settings.configuration,
+                        settings.selectedAgent,
+                        settings.cwd,
+                        result.options,
+                        false,
+                    );
                 } catch (cause) {
                     if (!signal.aborted) {
                         set({
@@ -518,8 +533,6 @@ export const createDraftControlsStore = (
                 if (agent === undefined) {
                     return;
                 }
-                const previousHarness = readLastHarnessPreference(botId);
-                saveLastHarnessPreference(botId, agent.agentRef);
                 pendingHarness = agent.agentRef;
                 set({ settings: { kind: "switching", selectedHarness: value, configuration: settings.configuration } });
                 onSettings(null);
@@ -527,11 +540,7 @@ export const createDraftControlsStore = (
                     await load(signal);
                 } catch (cause) {
                     if (!signal.aborted) {
-                        if (previousHarness === null) {
-                            clearLastHarnessPreference(botId);
-                        } else {
-                            saveLastHarnessPreference(botId, previousHarness);
-                        }
+                        onSettings(null);
                         set({
                             settings: {
                                 kind: "failed",
