@@ -58,6 +58,7 @@ export async function createTestApp(
                   /** Replaces the created transfer code, for example with one that cannot be redeemed. */
                   readonly code?: (application: Application) => string;
               }
+            | { readonly kind: "share"; readonly code?: (application: Application) => string }
             | { readonly kind: "bootstrap"; readonly identity?: boolean }
             | { readonly kind: "reload" }
             | { readonly kind: "managed-session"; readonly sessionId: string }
@@ -71,10 +72,12 @@ export async function createTestApp(
         options.connectAgent === true ? await current.connectAgent(options.agent, options.nativeSessionIds) : null;
     const agentFailure = daemon?.failure ?? null;
     const page = options.page ?? { kind: "morty" };
-    if (page.kind === "continue") {
+    if (page.kind === "continue" || page.kind === "share") {
         const transfer = new URL(await current.createTransferUrl());
-        transfer.searchParams.set("harness", page.harness);
-        transfer.searchParams.set("sessionId", page.sessionId);
+        if (page.kind === "continue") {
+            transfer.searchParams.set("harness", page.harness);
+            transfer.searchParams.set("sessionId", page.sessionId);
+        }
         if (page.code !== undefined) {
             transfer.hash = `code=${page.code(current)}`;
         }

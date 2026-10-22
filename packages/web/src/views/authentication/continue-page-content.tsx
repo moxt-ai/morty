@@ -68,6 +68,21 @@ export function ContinuePageContent({
                     </SetupCardSection>
                 </SetupCardShell>
             );
+        case "link-unavailable":
+            return (
+                <SetupCardShell titleId="continue-title">
+                    <SetupCardTitle id="continue-title">
+                        {state.recovery === "setup" ? "Continue native session" : "Continue in Morty"}
+                    </SetupCardTitle>
+                    <SetupCardAlert>{state.message}</SetupCardAlert>
+                    <SetupCardDescription>
+                        {state.recovery === "setup"
+                            ? "Run setup again on that computer to get a new link."
+                            : "Ask for a new link."}
+                    </SetupCardDescription>
+                    {fallback}
+                </SetupCardShell>
+            );
         case "identity-redeeming":
             return (
                 <SetupCardShell titleId="continue-title">

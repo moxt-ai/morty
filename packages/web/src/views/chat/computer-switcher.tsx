@@ -59,7 +59,7 @@ export function ComputerSwitcher({
                     aria-label="Computers"
                 >
                     <DropdownMenu.Label className="px-3 py-2 text-xs font-medium text-muted-foreground">
-                        Your computers
+                        Computers
                     </DropdownMenu.Label>
                     {state.kind === "loading" && (
                         <p role="status" className="px-3 pb-2 text-xs text-muted-foreground">

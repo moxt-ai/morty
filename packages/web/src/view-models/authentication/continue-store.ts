@@ -45,6 +45,7 @@ export type ContinueState =
           readonly handoff: SessionHandoff;
           readonly message: string;
       }
+    | { readonly kind: "link-unavailable"; readonly recovery: "setup" | "share"; readonly message: string }
     | { readonly kind: "identity-redeeming"; readonly code: string }
     | { readonly kind: "failed"; readonly code: string; readonly message: string }
     | { readonly kind: "invalid" };
@@ -113,6 +114,19 @@ function transferCodeProject(code: string): string | null {
 export const createContinueStore = (fetchRequest: (request: Request) => Promise<Response>) => {
     let attempt: AbortController | null = null;
     const store = createStore<ContinueStore>()((set, get) => {
+        const showRetryableFailure = (
+            state: Extract<ContinueState, { readonly kind: "session-opening" | "identity-redeeming" }>,
+            cause: unknown,
+        ) => {
+            const message = formatError(cause, "Check your connection and try again.");
+            set({
+                continueHref: rememberedComputers().length > 0 ? "/" : null,
+                state:
+                    state.kind === "identity-redeeming"
+                        ? { kind: "failed", code: state.code, message }
+                        : { kind: "redeem-failed", code: state.code, handoff: state.handoff, message },
+            });
+        };
         /**
          * Opens the handoff session with an already-redeemed access. The
          * identity stays in the resulting states, so a retry reuses it instead
@@ -269,20 +283,22 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                                 return;
                             }
                             recordBrowserError("load-retained-identity", retainedCause);
+                            // The code is terminal, but checking independently
+                            // retained access can still succeed after reconnecting.
+                            showRetryableFailure(state, retainedCause);
+                            return;
                         }
-                    }
-                    if (state.kind === "identity-redeeming") {
-                        set({ state: { kind: "failed", code: state.code, message } });
+                        set({
+                            continueHref: rememberedComputers().length > 0 ? "/" : null,
+                            state: {
+                                kind: "link-unavailable",
+                                recovery: state.kind === "session-opening" ? "setup" : "share",
+                                message,
+                            },
+                        });
                         return;
                     }
-                    set({
-                        state: {
-                            code: state.code,
-                            handoff: state.handoff,
-                            kind: "redeem-failed",
-                            message,
-                        },
-                    });
+                    showRetryableFailure(state, cause);
                     return;
                 }
                 if (state.kind === "identity-redeeming") {

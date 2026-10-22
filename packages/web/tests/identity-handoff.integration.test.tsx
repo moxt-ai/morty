@@ -189,7 +189,7 @@ test("Given the Morty access was redeemed and opening the original session faile
     expect(getByRole(document.body, "button", { name: "Go to Morty" })).toBeInstanceOf(HTMLButtonElement);
 });
 
-test("Given the Morty access was not redeemed, When the failure page shows, Then entering Morty home is not offered", {
+test("Given an expired handoff with no retained access, When the failure page shows, Then it explains how to get a new link without offering an ineffective retry", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({
@@ -204,7 +204,8 @@ test("Given the Morty access was not redeemed, When the failure page shows, Then
     const alert = await app.waitForView(() => getByRole(document.body, "alert"));
     expect(alert.textContent).toContain("This transfer link has expired or been revoked.");
     expect(queryByRole(document.body, "button", { name: "Go to Morty" })).toBeNull();
-    expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
+    expect(queryByRole(document.body, "button", { name: "Try again" })).toBeNull();
+    expect(document.body.textContent).toContain("Run setup again on that computer to get a new link.");
 });
 
 test("Given a native session handoff whose Runtime went offline, When the page loads, Then the page reports Mobius is disconnected instead of a transfer-link problem", {
@@ -469,3 +470,53 @@ test("Given the access was redeemed and its transfer link later stopped working,
     const home = await app.reload();
     expect(await home.queryElementByTestId(dataTestId.chatLanding)).toBeInstanceOf(HTMLElement);
 });
+
+test("Given an expired sharing link with no retained access, When I open it, Then it asks for a new link without offering retry", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({
+        page: {
+            kind: "share",
+            code: (application) => `mobius_transfer_v2.${application.identity.projectId}.${"a".repeat(43)}`,
+        },
+    });
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "alert").textContent).toContain("expired or been revoked"),
+    );
+    expect(document.body.textContent).toContain("Ask for a new link.");
+    expect(document.body.textContent).not.toContain("Run setup again");
+    expect(queryByRole(document.body, "button", { name: "Try again" })).toBeNull();
+});
+
+for (const linkKind of ["handoff", "sharing"] as const) {
+    test(`Given a ${linkKind} link and an unavailable connection, When I reconnect and retry, Then Morty checks the link again and explains its terminal failure`, {
+        timeout: 30_000,
+    }, async () => {
+        const code = (application: TestApp["identity"]) =>
+            `mobius_transfer_v2.${application.projectId}.${"a".repeat(43)}`;
+        const app = await createTestApp({
+            page:
+                linkKind === "handoff"
+                    ? {
+                          kind: "continue",
+                          harness: "pi",
+                          sessionId: "missing-session",
+                          code: (application) => code(application.identity),
+                      }
+                    : { kind: "share", code: (application) => code(application.identity) },
+        });
+        app.transport.close();
+        const retry = await app.waitForView(() => getByRole(document.body, "button", { name: "Try again" }));
+        expect(document.body.textContent).not.toContain("Ask for a new link.");
+        expect(document.body.textContent).not.toContain("Run setup again");
+        app.transport.open();
+        await app.user.click(retry);
+        await app.waitForView(() =>
+            expect(getByRole(document.body, "alert").textContent).toContain("expired or been revoked"),
+        );
+        expect(queryByRole(document.body, "button", { name: "Try again" })).toBeNull();
+        expect(document.body.textContent).toContain(
+            linkKind === "handoff" ? "Run setup again on that computer to get a new link." : "Ask for a new link.",
+        );
+    });
+}

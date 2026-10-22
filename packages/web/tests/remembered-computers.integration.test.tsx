@@ -319,6 +319,8 @@ test("Given another saved computer, When a transfer link cannot be redeemed, The
     expect(getByRole(document.body, "link", { name: "Continue on your last computer" })).toBeInstanceOf(
         HTMLAnchorElement,
     );
+    expect(queryByRole(document.body, "button", { name: "Try again" })).toBeNull();
+    expect(document.body.textContent).toContain("Run setup again on that computer to get a new link.");
     expect(window.location.pathname).toBe("/continue");
     expect(queryByRole(document.body, "button", { name: "Go to Morty" })).toBeNull();
 });
