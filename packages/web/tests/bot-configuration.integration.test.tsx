@@ -55,12 +55,6 @@ test("Given a paired Bot with cached agent settings, When a user filters its mod
     expect(created.optionalElementByTestId(dataTestId.pairingInstruction)).toBeNull();
 
     await created.user.click(await created.queryElementByTestId(dataTestId.agentConfiguration));
-    await created.user.click(
-        await created.queryElementByTestId(
-            dataTestId.agentSetting("model"),
-            (element) => element instanceof HTMLButtonElement && !element.disabled,
-        ),
-    );
     const search = await created.queryElementByTestId(dataTestId.modelSearch);
     await created.user.type(search, "large");
     await created.queryElementByTestId(
@@ -113,7 +107,9 @@ test("Given multiple Runtimes share a Project, When a user configures a paired B
     const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
 
     expect(getAllByRole(configuration, "tab", { name: "Codex" })).toHaveLength(1);
-    expect(getAllByRole(configuration, "tab")).toHaveLength(1);
+    expect(getAllByRole(configuration, "tab", { name: "Pi" })).toHaveLength(1);
+    expect(getAllByRole(configuration, "tab")).toHaveLength(2);
+    expect(getByRole(configuration, "tab", { name: "Pi" })).toHaveProperty("disabled", true);
 });
 
 test("Given a Bot has a recent directory from another harness, When its Runtime configuration loads, Then the directory remains available", {
@@ -222,6 +218,7 @@ test("Given a Bot paired with the Claude harness, When the user opens its settin
         (element) => element.getAttribute("data-harness-product") === "claude",
     );
     expect(triggerMark.getAttribute("aria-hidden")).toBe("true");
+    expect(triggerMark.tagName).toBe("svg");
 
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
     const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
@@ -229,7 +226,7 @@ test("Given a Bot paired with the Claude harness, When the user opens its settin
     const tabMark = app.elementByTestId(dataTestId.harnessMark, tab);
     expect(tabMark.getAttribute("data-harness-product")).toBe("claude");
     expect(tabMark.getAttribute("aria-hidden")).toBe("true");
-    expect(tabMark.querySelector("svg")).not.toBeNull();
+    expect(tabMark.tagName === "svg" || tabMark.querySelector("svg")).toBeTruthy();
 });
 
 test("Given a paired Bot, When the composer controls are visible, Then the configuration trigger shows its harness mark without repeating the harness or machine name", {

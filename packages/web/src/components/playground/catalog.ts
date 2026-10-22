@@ -28,7 +28,7 @@ export const PLAYGROUND_ENTRIES = [
         group: "Controls",
         id: "cloud-button",
         source: "components/ui/cloud-button.tsx",
-        summary: "Product actions: primary, outline, ghost, and destructive.",
+        summary: "Product actions with default, lg, sm, and icon sizes.",
         title: "Cloud button",
     },
     {
@@ -119,7 +119,7 @@ export const PLAYGROUND_ENTRIES = [
         group: "Overlays",
         id: "popover",
         source: "components/ui/popover.tsx",
-        summary: "Unstyled popover primitives. Callers supply the surface.",
+        summary: "Unstyled popover primitives. Callers supply the surface; use overlaySurfaceRadiusClassName (28px).",
         title: "Popover",
     },
     {
@@ -163,6 +163,20 @@ export const PLAYGROUND_ENTRIES = [
         source: "components/chat/working-indicator.tsx",
         summary: "Elapsed time while an agent turn is running.",
         title: "Working indicator",
+    },
+    {
+        group: "Chat",
+        id: "native-session-directory-placeholder",
+        source: "components/chat/native-session-directory-placeholder.tsx",
+        summary: "Centered empty state for native session lists and preview panes.",
+        title: "Native session placeholder",
+    },
+    {
+        group: "Chat",
+        id: "session-agent-tabs",
+        source: "components/chat/session-agent-tabs.tsx",
+        summary: "Agent switcher that expands the selected harness and keeps the others icon-only.",
+        title: "Session agent tabs",
     },
     {
         group: "Chat",

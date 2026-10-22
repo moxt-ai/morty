@@ -1,24 +1,44 @@
-import { Check, ChevronDown, ChevronRight, Folder, FolderOpen, LoaderCircle, MapPinPlus, X } from "lucide-react";
+import { Check, ChevronRight, Folder, FolderOpen, LoaderCircle, MapPinPlus, X } from "lucide-react";
 import { Tooltip } from "radix-ui";
 import { useState } from "react";
 import { dataTestId } from "@/data-testid";
+import { cn } from "@/lib/utils";
 import type { DraftControlsStore } from "@/view-models/chat/draft-controls-store";
 import { Button } from "../ui/cloud-button.tsx";
 import { Dialog } from "../ui/dialog.tsx";
 import { MortyTooltipContent } from "../ui/morty-tooltip-content.tsx";
+import { overlaySurfaceRadiusClassName } from "../ui/overlay-surface.ts";
 import { Popover } from "../ui/popover.tsx";
 import { ScrollEdgeFade } from "../utils/scroll-edge-fade.tsx";
+import { StartClippedLabel } from "../utils/start-clipped-label.tsx";
 
-// Clips the start of the path so its leaf stays visible, fading the cut edge out
-// gradually; the owning button's title tooltip carries the full path on hover.
-function StartClippedLabel({ value }: { readonly value: string }) {
+const workingDirectoryTriggerBaseClassName =
+    "flex h-9 min-w-0 max-w-[200px] items-center gap-2 rounded-lg px-2 text-[13px] text-copy-secondary outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:transition-none";
+
+const workingDirectoryTriggerInteractiveClassName = `${workingDirectoryTriggerBaseClassName} hover:bg-accent data-[state=open]:bg-accent disabled:cursor-not-allowed disabled:opacity-50`;
+
+export function ReadonlyWorkingDirectory({ directoryLabel }: { readonly directoryLabel: string }) {
     return (
-        <span
-            className="min-w-0 flex-1 overflow-hidden whitespace-nowrap [-webkit-mask-image:linear-gradient(to_right,transparent,black_12px)] [mask-image:linear-gradient(to_right,transparent,black_12px)]"
-            dir="rtl"
-        >
-            <span dir="ltr">{value}</span>
-        </span>
+        <Tooltip.Provider delayDuration={150}>
+            <Tooltip.Root>
+                <Tooltip.Trigger asChild>
+                    <span
+                        className={workingDirectoryTriggerBaseClassName}
+                        data-testid={dataTestId.workingDirectory}
+                        title={directoryLabel}
+                    >
+                        <FolderOpen aria-hidden="true" className="size-3.5 shrink-0" />
+                        <StartClippedLabel value={directoryLabel} />
+                    </span>
+                </Tooltip.Trigger>
+                <Tooltip.Portal>
+                    <MortyTooltipContent className="max-w-80 break-all px-3 py-2 leading-5" side="top" sideOffset={8}>
+                        {directoryLabel}
+                        <Tooltip.Arrow className="fill-foreground" />
+                    </MortyTooltipContent>
+                </Tooltip.Portal>
+            </Tooltip.Root>
+        </Tooltip.Provider>
     );
 }
 
@@ -50,17 +70,13 @@ export function CwdSelector({
                             <Popover.Trigger asChild>
                                 <button
                                     aria-label={`Working directory: ${workingDirectory}`}
-                                    className="flex h-9 min-w-0 max-w-[200px] items-center gap-2 rounded-lg px-2 text-[13px] text-copy-secondary outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
+                                    className={workingDirectoryTriggerInteractiveClassName}
                                     data-testid={dataTestId.workingDirectory}
                                     disabled={disabled}
                                     type="button"
                                 >
-                                    <FolderOpen aria-hidden="true" className="size-4 shrink-0" />
+                                    <FolderOpen aria-hidden="true" className="size-3.5 shrink-0" />
                                     <StartClippedLabel value={workingDirectory} />
-                                    <ChevronDown
-                                        aria-hidden="true"
-                                        className="size-3.5 shrink-0 text-muted-foreground"
-                                    />
                                 </button>
                             </Popover.Trigger>
                         </Tooltip.Trigger>
@@ -80,12 +96,19 @@ export function CwdSelector({
                     <Popover.Content
                         align="start"
                         aria-label="Working directory menu"
-                        className="z-50 w-80 overflow-hidden rounded-2xl border border-[#d5d9dc] bg-white p-1.5 shadow-[0_16px_42px_rgba(0,0,0,0.14)]"
+                        className={cn(
+                            "z-50 w-80 overflow-hidden border border-[#d5d9dc] bg-white p-1.5 shadow-[0_16px_42px_rgba(0,0,0,0.14)]",
+                            overlaySurfaceRadiusClassName,
+                        )}
                         role="menu"
                         side="top"
                         sideOffset={10}
                     >
-                        <ScrollEdgeFade fadeFromClassName="from-white" className="max-h-80 overflow-y-auto">
+                        <ScrollEdgeFade
+                            fadeFromClassName="from-white"
+                            fadeToClassName="to-white/0"
+                            className="max-h-80 overflow-y-auto"
+                        >
                             {viewModel.recentCwds.map((recent) => (
                                 <div className="flex items-center gap-0.5" key={recent.directoryId}>
                                     <button
@@ -183,7 +206,8 @@ export function CwdSelector({
                                         <ScrollEdgeFade
                                             scrollElement="ul"
                                             aria-label={`Folders in ${directory.directoryLabel}`}
-                                            fadeFromClassName="from-surface-subtle"
+                                            revealSurface
+                                            edgeStroke={{ className: "border-surface-subtle/50", placement: "inside" }}
                                             frameClassName={directoryNavigationDisabled ? "opacity-50" : ""}
                                             className="max-h-64 overflow-y-auto p-2"
                                         >

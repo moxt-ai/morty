@@ -48,6 +48,8 @@
     --success: var(--primary);
     --copy-secondary: var(--morty-text-2);
     --surface-subtle: #f7f8f9;
+    /* Opaque visual match for bg-card/90 over the dialog overlay. */
+    --surface-dialog-composite: #f2f2f3;
     --user-message-surface: #e6e8eb;
     --sidebar: #f4f5f7;
     --surface-elevated: var(--popover);
@@ -63,6 +65,7 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
+    --radius-overlay: 1.75rem;
 
     /* module surfaces (chat pane, setup card, …) */
     --morty-shadow-module: 0 6px 56px rgba(0, 0, 0, 0.06);
@@ -90,6 +93,7 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
+    --radius-overlay: 1.75rem;
     --color-background: var(--background);
     --color-foreground: var(--foreground);
     --color-card: var(--card);
@@ -112,6 +116,7 @@
     --color-success: var(--success);
     --color-copy-secondary: var(--copy-secondary);
     --color-surface-subtle: var(--surface-subtle);
+    --color-surface-dialog-composite: var(--surface-dialog-composite);
     --color-user-message-surface: var(--user-message-surface);
     --color-sidebar: var(--sidebar);
     --color-surface-elevated: var(--surface-elevated);

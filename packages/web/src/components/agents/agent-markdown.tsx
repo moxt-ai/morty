@@ -195,7 +195,7 @@ function AgentMarkdownLink({
     if (path !== null && openLocalFile !== undefined) {
         return (
             <button
-                className="cursor-pointer font-inherit font-medium text-[#19764a] underline decoration-[#2fb872]/35 underline-offset-2 hover:decoration-[#2fb872]"
+                className="cursor-pointer font-inherit font-medium text-primary underline decoration-primary/35 underline-offset-2 hover:decoration-primary"
                 data-testid={dataTestId.localFileLink}
                 onClick={(event) => {
                     // Preserve a return-focus target even on browsers that do not focus tapped buttons.
@@ -337,7 +337,7 @@ export function AgentMarkdownContent({
                 "[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-5",
                 "[&_li>p]:my-0",
                 "[&_blockquote]:my-3 [&_blockquote]:border-l-[3px] [&_blockquote]:border-black/12 [&_blockquote]:pl-3 [&_blockquote]:text-[#454959]",
-                "[&_a]:font-medium [&_a]:text-[#19764a] [&_a]:underline [&_a]:decoration-[#2fb872]/35 [&_a]:underline-offset-2 hover:[&_a]:decoration-[#2fb872]",
+                "[&_a]:font-medium [&_a]:text-primary [&_a]:underline [&_a]:decoration-primary/35 [&_a]:underline-offset-2 hover:[&_a]:decoration-primary",
                 "[&_code]:font-mono",
                 "[&_table]:text-sm",
                 STREAMDOWN_FENCED_CODE_BLOCK_CLASSES,

@@ -47,7 +47,7 @@ export function Dialog({
                     setup
                         ? "text-32 font-semibold tracking-[-0.035em]"
                         : surface
-                          ? "py-3 font-inter text-16 font-semibold tracking-[-0.015em]"
+                          ? "py-4 font-inter text-16 font-semibold tracking-[-0.015em]"
                           : "text-16 font-semibold tracking-tight"
                 }
             >

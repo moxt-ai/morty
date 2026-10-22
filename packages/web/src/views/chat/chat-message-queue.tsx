@@ -59,6 +59,7 @@ export function ChatMessageQueue({
                 <ScrollEdgeFade
                     scrollElement="ol"
                     fadeFromClassName="from-white"
+                    fadeToClassName="to-white/0"
                     className="max-h-36 overflow-y-auto p-2"
                 >
                     {messages.map((message) => {

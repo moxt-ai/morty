@@ -73,7 +73,7 @@ export function HarnessMark({
         return (
             <svg
                 aria-hidden="true"
-                className="size-3.5 shrink-0"
+                className="size-[17px] shrink-0"
                 data-harness-product={product}
                 data-testid={testId}
                 fill="none"
@@ -91,7 +91,7 @@ export function HarnessMark({
         return (
             <svg
                 aria-hidden="true"
-                className="size-3.5 shrink-0"
+                className="size-4 shrink-0"
                 data-harness-product={product}
                 data-testid={testId}
                 fill="none"
@@ -113,9 +113,9 @@ export function HarnessMark({
             data-testid={testId}
         >
             {path === undefined ? (
-                <SquareTerminal aria-hidden="true" className="size-[14px]" />
+                <SquareTerminal aria-hidden="true" className="size-[12px]" />
             ) : (
-                <svg aria-hidden="true" className="size-[14px]" fill="currentColor" viewBox="0 0 24 24">
+                <svg aria-hidden="true" className="size-[12px]" fill="currentColor" viewBox="0 0 24 24">
                     <path d={path} />
                 </svg>
             )}

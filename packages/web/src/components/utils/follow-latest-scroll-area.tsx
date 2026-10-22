@@ -32,6 +32,7 @@ type FollowLatestScrollAreaProps = Omit<ComponentPropsWithoutRef<"div">, "ref"> 
      */
     readonly followRevision: number | null;
     readonly showTopFade?: boolean;
+    /** `from-<surface> to-<surface>/0` for the opaque surface behind this scroller. */
     readonly topFadeClassName?: string;
 };
 
@@ -45,7 +46,7 @@ export function FollowLatestScrollArea({
     followThreshold = 1,
     followRevision = null,
     showTopFade = false,
-    topFadeClassName = "from-card",
+    topFadeClassName = "from-card to-card/0",
     className,
     onScroll,
     ...props
@@ -145,7 +146,7 @@ export function FollowLatestScrollArea({
             <div
                 aria-hidden="true"
                 className={cn(
-                    "pointer-events-none absolute inset-x-0 top-0 z-10 h-10 bg-gradient-to-b to-transparent transition-opacity duration-150 motion-reduce:transition-none",
+                    "pointer-events-none absolute inset-x-0 top-0 z-10 h-10 bg-gradient-to-b transition-opacity duration-150 motion-reduce:transition-none",
                     topFadeClassName,
                     topFadeVisible ? "opacity-100" : "opacity-0",
                 )}

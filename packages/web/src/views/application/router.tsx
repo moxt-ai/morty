@@ -1,42 +1,74 @@
 import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
-import { createRootRoute, createRoute, createRouter, Outlet, useRouter, useRouterState } from "@tanstack/react-router";
+import { createRootRoute, createRoute, createRouter, Outlet, useRouter } from "@tanstack/react-router";
+import { CircleAlert } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
-import { Spinner } from "../../components/ui/spinner.tsx";
 import { reportApplicationError } from "../../view-models/report-error.ts";
 
 export interface ApplicationShellProps {
     readonly children: ReactNode;
 }
 
-function LoadingIndicator() {
-    const loading = useRouterState({ select: (state) => state.status === "pending" });
-    return (
-        <>
-            {loading && (
-                <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex size-10 items-center justify-center rounded-lg border border-border bg-card">
-                    <Spinner label="Loading application" />
-                </div>
-            )}
-            <Outlet />
-        </>
-    );
+function RootRoute() {
+    return <Outlet />;
+}
+
+type RouteFailureDetails =
+    | { readonly kind: "message"; readonly message: string }
+    | { readonly kind: "message-with-url"; readonly message: string; readonly url: string };
+
+function getRouteFailureDetails(error: Error): RouteFailureDetails {
+    const message = error.message.trim() || "The application could not be loaded.";
+    const separatorIndex = message.lastIndexOf(": ");
+    if (separatorIndex < 0) {
+        return { kind: "message", message };
+    }
+    const candidate = message.slice(separatorIndex + 2);
+    try {
+        const url = new URL(candidate);
+        if (url.protocol !== "http:" && url.protocol !== "https:") {
+            return { kind: "message", message };
+        }
+    } catch {
+        return { kind: "message", message };
+    }
+    return {
+        kind: "message-with-url",
+        message: message.slice(0, separatorIndex),
+        url: candidate,
+    };
 }
 
 function RouteFailure({ error, reset }: { readonly error: Error; readonly reset: () => void }) {
     const router = useRouter();
+    const details = getRouteFailureDetails(error);
     return (
-        <section className="grid gap-4" role="alert">
-            <p>{error.message || "The application could not be loaded."}</p>
-            <Button
-                onClick={() => {
-                    reset();
-                    void router.invalidate();
-                }}
-            >
-                Try again
-            </Button>
-        </section>
+        <div className="grid min-h-dvh place-items-center p-4">
+            <section className="grid w-full min-w-0 max-w-[400px] gap-4" role="alert">
+                <div className="grid min-w-0 justify-items-center gap-3 text-center">
+                    <span className="flex size-12 items-center justify-center rounded-full bg-destructive/5">
+                        <CircleAlert aria-hidden="true" className="size-6 shrink-0 text-destructive" />
+                    </span>
+                    <div className="grid min-w-0 gap-2">
+                        <p className="text-sm leading-5">{details.message}</p>
+                        {details.kind === "message-with-url" && (
+                            <code className="block select-text rounded-2xl bg-muted/70 px-3.5 py-3 font-mono text-xs leading-5 text-foreground [overflow-wrap:anywhere]">
+                                {details.url}
+                            </code>
+                        )}
+                    </div>
+                </div>
+                <Button
+                    className="h-10 w-full"
+                    onClick={() => {
+                        reset();
+                        void router.invalidate();
+                    }}
+                >
+                    Try again
+                </Button>
+            </section>
+        </div>
     );
 }
 
@@ -50,7 +82,7 @@ export function createApplicationRouter(
 ) {
     const root = createRootRoute({
         beforeLoad: async ({ abortController }) => await authorize(abortController.signal),
-        component: LoadingIndicator,
+        component: RootRoute,
         errorComponent: (props) => (
             <layouts.Standard>
                 <RouteFailure {...props} />

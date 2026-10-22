@@ -1,6 +1,8 @@
 import { Select as Primitive } from "radix-ui";
 import { useState } from "react";
 import { dataTestId } from "@/data-testid";
+import { cn } from "@/lib/utils";
+import { overlaySurfacePanelClassName, overlaySurfaceRadiusClassName } from "./overlay-surface.ts";
 
 export function Select({
     compact = false,
@@ -12,6 +14,7 @@ export function Select({
     disabled = false,
     truncateOptions = false,
     testId,
+    previewOpen = false,
 }: {
     readonly label: string;
     readonly value: string;
@@ -22,6 +25,8 @@ export function Select({
     readonly compact?: boolean;
     readonly truncateOptions?: boolean;
     readonly testId?: string | undefined;
+    /** TEMP style-tuning preview: forces the listbox open. Remove with chat-configuration-menu-preview.ts. */
+    readonly previewOpen?: boolean;
 }) {
     const [search, setSearch] = useState("");
     const normalizedSearch = search.trim().toLocaleLowerCase();
@@ -36,7 +41,11 @@ export function Select({
     return (
         <Primitive.Root
             disabled={disabled}
+            {...(previewOpen ? { open: true } : {})}
             onOpenChange={(open) => {
+                if (previewOpen) {
+                    return;
+                }
                 if (!open) {
                     setSearch("");
                 }
@@ -60,38 +69,17 @@ export function Select({
                 <Primitive.Content
                     position="popper"
                     sideOffset={4}
-                    className={`z-[60] max-h-[var(--radix-select-content-available-height)] animate-cloud-enter overflow-hidden rounded-lg border border-border bg-card text-foreground shadow-lg motion-reduce:animate-none ${truncateOptions ? "w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)]" : "min-w-[var(--radix-select-trigger-width)]"}`}
+                    className={cn(
+                        "z-[60] flex min-h-0 max-h-[var(--radix-select-content-available-height)] animate-cloud-enter flex-col overflow-hidden text-foreground motion-reduce:animate-none",
+                        overlaySurfacePanelClassName,
+                        overlaySurfaceRadiusClassName,
+                        truncateOptions
+                            ? "w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)]"
+                            : "min-w-[var(--radix-select-trigger-width)]",
+                    )}
                 >
-                    <Primitive.ScrollUpButton className="flex justify-center">
-                        <ChevronUp aria-hidden="true" className="size-4" />
-                    </Primitive.ScrollUpButton>
-                    <Primitive.Viewport className={truncateOptions ? "w-full p-1" : "p-1"}>
-                        {visibleOptions.map((option) => (
-                            <Primitive.Item
-                                data-testid={dataTestId.sessionConfigValue(option.value)}
-                                key={option.value}
-                                title={truncateOptions ? option.label : undefined}
-                                value={option.value}
-                                className={`relative cursor-default select-none rounded-md py-2 pl-7 pr-3 text-[13px] outline-none data-[highlighted]:bg-accent ${truncateOptions ? "w-full min-w-0" : ""}`}
-                            >
-                                <Primitive.ItemIndicator className="absolute left-2">
-                                    <Check aria-hidden="true" className="size-3.5" />
-                                </Primitive.ItemIndicator>
-                                {truncateOptions ? (
-                                    <Primitive.ItemText asChild>
-                                        <span className="block truncate">{option.label}</span>
-                                    </Primitive.ItemText>
-                                ) : (
-                                    <Primitive.ItemText>{option.label}</Primitive.ItemText>
-                                )}
-                            </Primitive.Item>
-                        ))}
-                        {visibleOptions.length === 0 && (
-                            <p className="px-3 py-2 text-center text-xs text-muted-foreground">No matching models</p>
-                        )}
-                    </Primitive.Viewport>
                     {searchable && (
-                        <div className="border-t border-border bg-card p-1.5">
+                        <div className="relative z-10 shrink-0 px-3 pt-3 pb-1">
                             <div className="relative">
                                 <Search
                                     aria-hidden="true"
@@ -100,7 +88,7 @@ export function Select({
                                 <input
                                     aria-label="Search models"
                                     autoComplete="off"
-                                    className="h-8 w-full rounded-md border border-border bg-background pr-2 pl-8 text-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20"
+                                    className="h-9 w-full rounded-full border border-border bg-background pr-2 pl-8 text-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20"
                                     data-testid={dataTestId.modelSearch}
                                     onChange={(event) => setSearch(event.currentTarget.value)}
                                     onKeyDown={(event) => event.stopPropagation()}
@@ -109,15 +97,49 @@ export function Select({
                                     value={search}
                                 />
                             </div>
+                            <div
+                                aria-hidden="true"
+                                className="pointer-events-none absolute inset-x-0 top-full h-8 bg-gradient-to-b from-card/90 to-card/0"
+                            />
                         </div>
                     )}
-                    <Primitive.ScrollDownButton className="flex justify-center">
-                        <ChevronDown aria-hidden="true" className="size-4" />
-                    </Primitive.ScrollDownButton>
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                        <Primitive.Viewport
+                            className={
+                                truncateOptions ? "h-full w-full min-h-0 flex-1 p-1" : "h-full min-h-0 flex-1 p-1"
+                            }
+                        >
+                            {visibleOptions.map((option) => (
+                                <Primitive.Item
+                                    data-testid={dataTestId.sessionConfigValue(option.value)}
+                                    key={option.value}
+                                    title={truncateOptions ? option.label : undefined}
+                                    value={option.value}
+                                    className={`relative cursor-default select-none rounded-md py-2 pl-7 pr-3 text-[13px] outline-none data-[highlighted]:bg-accent ${truncateOptions ? "w-full min-w-0" : ""}`}
+                                >
+                                    <Primitive.ItemIndicator className="absolute top-1/2 left-2 flex -translate-y-1/2 items-center justify-center">
+                                        <Check aria-hidden="true" className="size-3.5" />
+                                    </Primitive.ItemIndicator>
+                                    {truncateOptions ? (
+                                        <Primitive.ItemText asChild>
+                                            <span className="block truncate">{option.label}</span>
+                                        </Primitive.ItemText>
+                                    ) : (
+                                        <Primitive.ItemText>{option.label}</Primitive.ItemText>
+                                    )}
+                                </Primitive.Item>
+                            ))}
+                            {visibleOptions.length === 0 && (
+                                <p className="px-3 py-2 text-center text-xs text-muted-foreground">
+                                    No matching models
+                                </p>
+                            )}
+                        </Primitive.Viewport>
+                    </div>
                 </Primitive.Content>
             </Primitive.Portal>
         </Primitive.Root>
     );
 }
 
-import { Check, ChevronDown, ChevronUp, Search } from "lucide-react";
+import { Check, ChevronDown, Search } from "lucide-react";

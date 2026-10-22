@@ -66,8 +66,6 @@ test("Given a configuration request is in flight, When the chat view detaches an
     // detach aborts the request, and the pane it belonged to must not lock
     // the re-attached view out of the composer.
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
-    const setting = await app.queryElementByTestId(dataTestId.agentSetting("model"));
-    await app.user.click(setting);
     const value = await app.queryElementByTestId(dataTestId.sessionConfigValue("test-large"));
     await app.user.click(value);
     app.remount();

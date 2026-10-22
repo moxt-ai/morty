@@ -63,6 +63,7 @@ export async function createTestApp(
               }
             | { readonly kind: "share"; readonly code?: (application: Application) => string }
             | { readonly kind: "bootstrap"; readonly identity?: boolean }
+            | { readonly kind: "component-library"; readonly entryId: string }
             | { readonly kind: "reload" }
             | { readonly kind: "managed-session"; readonly sessionId: string }
             | { readonly kind: "morty" };
@@ -92,6 +93,8 @@ export async function createTestApp(
             transfer.hash = `code=${page.code(current)}`;
         }
         window.location.href = transfer.href;
+    } else if (page.kind === "component-library") {
+        window.location.href = new URL(`/playground/${page.entryId}`, current.origin).href;
     } else if (page.kind === "bootstrap") {
         const destination = new URL("/", current.origin);
         if (page.identity === true) {

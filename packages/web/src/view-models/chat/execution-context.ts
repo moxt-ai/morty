@@ -15,6 +15,7 @@ export function pendingExecutionContext(
     const loading =
         home.selection.kind === "loading" || home.view.kind === "loading" || home.view.kind === "connecting";
     const base: ExecutionContext = {
+        agentRef: "",
         machine: home.runtimeConfiguration?.runtime.machineName.trim() || (loading ? "Loading…" : "Unknown"),
         agent: loading ? "Loading…" : "Unknown",
         directory: null,
@@ -34,6 +35,7 @@ export function pendingExecutionContext(
         case "refreshing":
             return {
                 ...base,
+                agentRef: settings.selectedAgent.agentRef,
                 machine: settings.selectedAgent.machineName.trim() || "Unknown",
                 agent: settings.selectedAgent.label.trim() || "Unknown",
                 directory: settings.cwd.directoryLabel,
@@ -54,6 +56,7 @@ export function sessionExecutionContext(
 ): ExecutionContext {
     const agent = configuration?.runtime.agents.find((candidate) => candidate.agentRef === session.agentRef);
     const base = {
+        agentRef: session.agentRef,
         machine: configuration?.runtime.machineName.trim() || "Unknown",
         agent: agent?.label.trim() || session.result.ready.agentName.trim() || "Unknown",
         directory: session.result.ready.directoryLabel,

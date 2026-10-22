@@ -3,6 +3,7 @@
  * the execution context bar renders it without knowing the workflow.
  */
 export interface ExecutionContext {
+    readonly agentRef: string;
     readonly machine: string;
     readonly agent: string;
     readonly directory: string | null;

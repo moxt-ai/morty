@@ -16,7 +16,7 @@ import {
     createComposerAttachmentStore,
 } from "../../components/chat/composer-attachment-store.ts";
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
-import { type BotChatApi, connectedChatRuntimeAgents } from "../../services/chat/bot-chat-api.ts";
+import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
 import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
 import { recordBrowserError } from "../../services/diagnostics/browser-diagnostics.ts";
@@ -31,6 +31,7 @@ import { formatError, isRetryableRuntimeConnectionFailure, isSessionClosedFailur
 import { reportApplicationError } from "../report-error.ts";
 import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
 import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
+import { nativeSessionAgentTabs } from "./native-session-agents.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { createSessionActiveTurn, type SessionActiveTurn } from "./session-active-turn.ts";
 import {
@@ -225,7 +226,12 @@ export interface SessionPaneStore {
     readonly operation: Operation;
     readonly activity: SessionActivityState;
     /** Display-only harness list; loading failures leave the current harness. */
-    readonly harnesses: readonly { readonly agentRef?: string; readonly label: string; readonly value: string }[];
+    readonly harnesses: readonly {
+        readonly agentRef?: string;
+        readonly installed?: boolean;
+        readonly label: string;
+        readonly value: string;
+    }[];
     readonly connect: (signal: AbortSignal) => Promise<void>;
     readonly retryNow: () => void;
     /**
@@ -1846,8 +1852,9 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 store.setState({
-                    harnesses: connectedChatRuntimeAgents(configuration.runtime).map((agent) => ({
+                    harnesses: nativeSessionAgentTabs(configuration.runtime).map((agent) => ({
                         agentRef: agent.agentRef,
+                        installed: agent.installed,
                         label: agent.label,
                         value: `${agent.runtimeId}:${agent.agentRef}`,
                     })),

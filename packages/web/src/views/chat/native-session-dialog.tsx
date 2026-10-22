@@ -1,8 +1,10 @@
-import { Tabs } from "radix-ui";
+import { CircleAlert, Inbox, MessageSquare, PackageOpen, Unplug } from "lucide-react";
+import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { StoreApi } from "zustand/vanilla";
 import { mortyThinScrollbarClassName } from "../../components/chat/chat-session-layout.ts";
-import { HarnessMark } from "../../components/chat/harness-mark.tsx";
+import { NativeSessionDirectoryPlaceholder } from "../../components/chat/native-session-directory-placeholder.tsx";
+import { SessionAgentTabs } from "../../components/chat/session-agent-tabs.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
@@ -16,84 +18,114 @@ import { MobiusSessionMessage } from "./mobius-session-message.tsx";
 
 const loadMoreNativeSessions = "load-more-native-sessions";
 
-function NativeSessionDirectorySkeleton() {
+const nativeSessionPreviewTitleBarClassName =
+    "flex h-9 min-w-0 shrink-0 items-center px-4 font-inter text-14 font-semibold tracking-[-0.015em] sm:mt-[11px] sm:pr-[59px] sm:pl-6";
+
+function NativeSessionDirectoryDiscovering() {
     return (
-        <div role="status" aria-label="Discovering native sessions">
+        <div role="status" aria-label="Discovering native sessions" className="min-h-0 flex-1">
             <span className="sr-only">Discovering native sessions</span>
-            <div aria-hidden="true" className="grid animate-pulse motion-reduce:animate-none">
-                <div className="rounded-[20px] px-2.5 py-2">
-                    <div className="h-3.5 w-3/4 rounded-full bg-morty-fill-opacity-3" />
+            <NativeSessionDirectoryListSkeleton />
+        </div>
+    );
+}
+
+function NativeSessionDirectoryListSkeleton() {
+    return (
+        <div aria-hidden="true" className="grid animate-pulse motion-reduce:animate-none">
+            <div className="rounded-[20px] px-2.5 py-2">
+                <div className="h-3.5 w-3/4 rounded-full bg-morty-fill-opacity-3" />
+            </div>
+            <div className="rounded-[20px] px-2.5 py-2">
+                <div className="h-3.5 w-2/3 rounded-full bg-morty-fill-opacity-3" />
+            </div>
+            <div className="rounded-[20px] px-2.5 py-2">
+                <div className="h-3.5 w-4/5 rounded-full bg-morty-fill-opacity-3" />
+            </div>
+        </div>
+    );
+}
+
+function NativeSessionAgentTabsSkeleton() {
+    return (
+        <div
+            aria-hidden="true"
+            className="mx-2.5 flex h-9 animate-pulse gap-0.5 rounded-full bg-morty-fill-opacity-2 p-0.5 motion-reduce:animate-none"
+        >
+            <div className="h-full w-10 rounded-full bg-morty-fill-opacity-3" />
+            <div className="h-full w-10 rounded-full bg-morty-fill-opacity-3" />
+            <div className="h-full w-10 rounded-full bg-morty-fill-opacity-3" />
+        </div>
+    );
+}
+
+function NativeSessionFooterSkeleton() {
+    return (
+        <div aria-hidden="true" className="flex animate-pulse justify-end gap-2 motion-reduce:animate-none">
+            <div className="h-9 w-[4.5rem] rounded-full bg-morty-fill-opacity-3" />
+            <div className="h-9 w-[4.5rem] rounded-full bg-morty-fill-opacity-3" />
+        </div>
+    );
+}
+
+function NativeSessionDialogDiscoveringSkeleton({ title }: { readonly title: ReactNode }) {
+    return (
+        <div role="status" aria-label="Discovering native sessions" className="contents">
+            <span className="sr-only">Discovering native sessions</span>
+            <div className="grid grid-cols-1 gap-0 sm:h-[min(72dvh,40rem)] sm:grid-cols-[minmax(15rem,16.5rem)_minmax(0,1fr)]">
+                <div className="flex min-h-0 flex-col gap-1 px-4">
+                    {title}
+                    <section aria-label="Native sessions" className="-mx-2.5 flex min-h-0 flex-1 flex-col gap-2">
+                        <NativeSessionAgentTabsSkeleton />
+                        <NativeSessionDirectoryListSkeleton />
+                    </section>
                 </div>
-                <div className="rounded-[20px] px-2.5 py-2">
-                    <div className="h-3.5 w-2/3 rounded-full bg-morty-fill-opacity-3" />
-                </div>
-                <div className="rounded-[20px] px-2.5 py-2">
-                    <div className="h-3.5 w-4/5 rounded-full bg-morty-fill-opacity-3" />
+                <div className="flex min-h-[18rem] min-w-0 flex-col overflow-hidden rounded-[22px] border border-white bg-card shadow-module sm:min-h-0">
+                    <section
+                        aria-label="Selected session preview"
+                        className="flex min-h-0 min-w-0 flex-1 flex-col"
+                        aria-busy="true"
+                    >
+                        <div aria-hidden="true" className={nativeSessionPreviewTitleBarClassName}>
+                            <div className="h-3.5 w-2/5 max-w-full animate-pulse rounded-full bg-morty-fill-opacity-3 motion-reduce:animate-none" />
+                        </div>
+                        <div className="min-h-0 flex-1 p-4 sm:px-6 sm:py-5">
+                            <NativeSessionPreviewSkeletonContent />
+                        </div>
+                    </section>
+                    <footer className="flex shrink-0 px-4 py-3 sm:px-5">
+                        <NativeSessionFooterSkeleton />
+                    </footer>
                 </div>
             </div>
         </div>
     );
 }
 
-function SessionAgentTabs({
-    agents,
-    disabled,
-    onValueChange,
-    value,
-}: {
-    readonly agents: NativeSessionStore["agents"];
-    readonly disabled: boolean;
-    readonly onValueChange: (value: string) => void;
-    readonly value: string;
-}) {
+function NativeSessionPreviewSkeletonContent() {
     return (
-        <Tabs.Root className="mx-2.5" onValueChange={onValueChange} value={value}>
-            <Tabs.List
-                aria-label="Session agent"
-                className="flex h-9 min-w-0 gap-0.5 rounded-full bg-morty-fill-opacity-2 p-0.5"
-            >
-                {agents.map((agent) => {
-                    const optionValue = `${agent.runtimeId}:${agent.agentRef}`;
-                    return (
-                        <Tabs.Trigger
-                            className="group relative flex min-w-0 shrink-0 grow-0 items-center justify-center gap-1.5 rounded-full px-1.5 text-[13px] text-copy-secondary outline-none transition-[flex-grow,background-color,color,box-shadow] duration-200 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[state=active]:grow data-[state=active]:shrink data-[state=active]:bg-background data-[state=active]:px-2.5 data-[state=active]:font-medium data-[state=active]:text-foreground data-[state=active]:shadow-sm motion-reduce:transition-none"
-                            disabled={disabled}
-                            key={optionValue}
-                            title={agent.label}
-                            value={optionValue}
-                        >
-                            <HarnessMark
-                                agentRef={agent.agentRef}
-                                appearance="line"
-                                label={agent.label}
-                                testId={dataTestId.harnessMark}
-                            />
-                            <span className="min-w-0 truncate group-data-[state=inactive]:sr-only">{agent.label}</span>
-                        </Tabs.Trigger>
-                    );
-                })}
-            </Tabs.List>
-        </Tabs.Root>
+        <div aria-hidden="true" className="grid animate-pulse gap-8 motion-reduce:animate-none">
+            <div className="h-5 w-2/5 rounded-full bg-morty-fill-opacity-3" />
+            <div className="ml-auto grid w-full max-w-[68%] justify-items-end gap-2">
+                <div className="h-4 w-2/3 rounded-full bg-morty-fill-opacity-3" />
+                <div className="h-4 w-full rounded-full bg-morty-fill-opacity-2" />
+                <div className="h-4 w-4/5 rounded-full bg-morty-fill-opacity-3" />
+            </div>
+            <div className="grid w-full max-w-[78%] gap-2">
+                <div className="h-4 w-1/3 rounded-full bg-morty-fill-opacity-3" />
+                <div className="h-4 w-full rounded-full bg-morty-fill-opacity-2" />
+                <div className="h-4 w-5/6 rounded-full bg-morty-fill-opacity-3" />
+                <div className="h-4 w-3/5 rounded-full bg-morty-fill-opacity-2" />
+            </div>
+        </div>
     );
 }
 
 function NativeSessionPreviewSkeleton() {
     return (
         <div role="status" aria-label="Loading session preview">
-            <div aria-hidden="true" className="grid animate-pulse gap-8 motion-reduce:animate-none">
-                <div className="h-5 w-2/5 rounded-full bg-morty-fill-opacity-3" />
-                <div className="ml-auto grid w-full max-w-[68%] justify-items-end gap-2">
-                    <div className="h-4 w-2/3 rounded-full bg-morty-fill-opacity-3" />
-                    <div className="h-4 w-full rounded-full bg-morty-fill-opacity-2" />
-                    <div className="h-4 w-4/5 rounded-full bg-morty-fill-opacity-3" />
-                </div>
-                <div className="grid w-full max-w-[78%] gap-2">
-                    <div className="h-4 w-1/3 rounded-full bg-morty-fill-opacity-3" />
-                    <div className="h-4 w-full rounded-full bg-morty-fill-opacity-2" />
-                    <div className="h-4 w-5/6 rounded-full bg-morty-fill-opacity-3" />
-                    <div className="h-4 w-3/5 rounded-full bg-morty-fill-opacity-2" />
-                </div>
-            </div>
+            <span className="sr-only">Loading session preview</span>
+            <NativeSessionPreviewSkeletonContent />
         </div>
     );
 }
@@ -126,219 +158,267 @@ export function NativeSessionDialog({
         >
             {(title) => (
                 <>
-                    <div className="grid grid-cols-1 gap-0 sm:h-[min(72dvh,40rem)] sm:grid-cols-[minmax(15rem,17.5rem)_minmax(0,1fr)]">
-                        <div className="flex min-h-0 flex-col gap-4 px-4">
-                            {title}
-                            <section
-                                aria-label="Native sessions"
-                                className="-mx-2.5 flex min-h-0 flex-1 flex-col gap-2 overflow-hidden"
-                            >
-                                <h2 className="px-2.5 pt-1 font-inter text-13 font-semibold tracking-normal text-foreground">
-                                    Native Session
-                                </h2>
-                                {model.agents.length > 0 && (
-                                    <SessionAgentTabs
-                                        agents={model.agents}
-                                        disabled={model.operation !== "idle"}
-                                        onValueChange={store.getState().selectAgent}
-                                        value={
-                                            model.selected ||
-                                            (fallback === undefined ? "" : `${fallback.runtimeId}:${fallback.agentRef}`)
-                                        }
-                                    />
-                                )}
-                                {model.directory.kind === "loading" && <NativeSessionDirectorySkeleton />}
-                                {model.directory.kind === "empty" && (
-                                    <p className="px-2.5 text-13 text-morty-text-3">
-                                        Connect a local agent to browse its sessions.
-                                    </p>
-                                )}
-                                {model.directory.kind === "failed" && (
-                                    <p className="px-2.5 text-13 text-destructive" role="alert">
-                                        {model.directory.message}
-                                    </p>
-                                )}
-                                {model.directory.kind === "ready" && model.directory.entries.length === 0 && (
-                                    <p className="px-2.5 text-13 text-morty-text-3">
-                                        No saved sessions were reported by this agent.
-                                    </p>
-                                )}
-                                {model.directory.kind === "ready" && model.directory.entries.length > 0 && (
-                                    <div className="sm:hidden">
-                                        <Select
-                                            label="Native session"
-                                            value={selectedEntryId}
+                    {model.directory.kind === "loading" && model.directory.scope === "initial" ? (
+                        <NativeSessionDialogDiscoveringSkeleton title={title} />
+                    ) : (
+                        <div className="grid grid-cols-1 gap-0 sm:h-[min(72dvh,40rem)] sm:grid-cols-[minmax(15rem,16.5rem)_minmax(0,1fr)]">
+                            <div className="flex min-h-0 flex-col gap-1 px-4">
+                                {title}
+                                <section
+                                    aria-label="Native sessions"
+                                    className="-mx-2.5 flex min-h-0 flex-1 flex-col gap-2"
+                                >
+                                    {model.agents.length > 0 && (
+                                        <SessionAgentTabs
+                                            agents={model.agents}
+                                            className="mx-2.5"
+                                            dimInactive={
+                                                !(
+                                                    model.directory.kind === "loading" &&
+                                                    model.directory.scope === "refresh"
+                                                )
+                                            }
                                             disabled={model.operation !== "idle"}
-                                            truncateOptions
-                                            options={[
-                                                ...model.directory.entries.map((entry) => ({
-                                                    value: entry.entryId,
-                                                    label: `${entry.title || "Untitled session"} · ${entry.directoryLabel}`,
-                                                })),
-                                                ...(model.directory.nextCursor === null
-                                                    ? []
-                                                    : [{ value: loadMoreNativeSessions, label: "Load more" }]),
-                                            ]}
-                                            onValueChange={(entryId) => {
-                                                if (entryId === loadMoreNativeSessions) {
-                                                    withSignal(store.getState().more);
-                                                    return;
-                                                }
-                                                const entry =
-                                                    model.directory.kind === "ready"
-                                                        ? model.directory.entries.find(
-                                                              (candidate) => candidate.entryId === entryId,
-                                                          )
-                                                        : undefined;
-                                                if (entry !== undefined) {
-                                                    withSignal(
-                                                        async (signal) => await store.getState().select(entry, signal),
-                                                    );
-                                                }
-                                            }}
+                                            onValueChange={store.getState().selectAgent}
+                                            value={
+                                                model.selected ||
+                                                (fallback === undefined
+                                                    ? ""
+                                                    : `${fallback.runtimeId}:${fallback.agentRef}`)
+                                            }
                                         />
-                                    </div>
-                                )}
-                                {model.directory.kind === "ready" && model.directory.entries.length > 0 && (
+                                    )}
+                                    {model.directory.kind === "loading" && model.directory.scope === "refresh" && (
+                                        <NativeSessionDirectoryDiscovering />
+                                    )}
+                                    {model.directory.kind === "empty" && (
+                                        <NativeSessionDirectoryPlaceholder
+                                            icon={Unplug}
+                                            title="No local agent"
+                                            description="Connect a runtime to browse saved sessions."
+                                        />
+                                    )}
+                                    {model.directory.kind === "agent-unavailable" && (
+                                        <NativeSessionDirectoryPlaceholder
+                                            icon={PackageOpen}
+                                            title={`${model.directory.agentLabel} is not installed`}
+                                            description="Install it on this machine to browse saved sessions."
+                                        />
+                                    )}
+                                    {model.directory.kind === "failed" && (
+                                        <NativeSessionDirectoryPlaceholder
+                                            icon={CircleAlert}
+                                            title="Couldn't load sessions"
+                                            description={model.directory.message}
+                                            tone="destructive"
+                                        />
+                                    )}
+                                    {model.directory.kind === "ready" && model.directory.entries.length === 0 && (
+                                        <NativeSessionDirectoryPlaceholder
+                                            icon={Inbox}
+                                            title="No saved sessions"
+                                            description="This agent didn't report any on this machine."
+                                        />
+                                    )}
+                                    {model.directory.kind === "ready" && model.directory.entries.length > 0 && (
+                                        <div className="sm:hidden">
+                                            <Select
+                                                label="Native session"
+                                                value={selectedEntryId}
+                                                disabled={model.operation !== "idle"}
+                                                truncateOptions
+                                                options={[
+                                                    ...model.directory.entries.map((entry) => ({
+                                                        value: entry.entryId,
+                                                        label: `${entry.title || "Untitled session"} · ${entry.directoryLabel}`,
+                                                    })),
+                                                    ...(model.directory.nextCursor === null
+                                                        ? []
+                                                        : [{ value: loadMoreNativeSessions, label: "Load more" }]),
+                                                ]}
+                                                onValueChange={(entryId) => {
+                                                    if (entryId === loadMoreNativeSessions) {
+                                                        withSignal(store.getState().more);
+                                                        return;
+                                                    }
+                                                    const entry =
+                                                        model.directory.kind === "ready"
+                                                            ? model.directory.entries.find(
+                                                                  (candidate) => candidate.entryId === entryId,
+                                                              )
+                                                            : undefined;
+                                                    if (entry !== undefined) {
+                                                        withSignal(
+                                                            async (signal) =>
+                                                                await store.getState().select(entry, signal),
+                                                        );
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+                                    )}
+                                    {model.directory.kind === "ready" && model.directory.entries.length > 0 && (
+                                        <ScrollEdgeFade
+                                            revealSurface
+                                            edgeStroke={{
+                                                className: "border-surface-dialog-composite",
+                                                placement: "outside",
+                                            }}
+                                            frameClassName="hidden min-h-0 flex-1 sm:flex sm:flex-col"
+                                            className={cn(
+                                                "min-h-0 flex-1 space-y-0 overflow-y-auto pr-3 pb-2 pl-1",
+                                                mortyThinScrollbarClassName,
+                                            )}
+                                        >
+                                            {model.directory.entries.map((entry) => (
+                                                <button
+                                                    type="button"
+                                                    key={entry.entryId}
+                                                    data-testid={dataTestId.localSessionEntry}
+                                                    aria-label={entry.title || "Untitled session"}
+                                                    aria-pressed={
+                                                        model.preview.kind !== "empty" &&
+                                                        model.preview.entry.entryId === entry.entryId
+                                                    }
+                                                    disabled={model.operation !== "idle"}
+                                                    onClick={() =>
+                                                        withSignal(
+                                                            async (signal) =>
+                                                                await store.getState().select(entry, signal),
+                                                        )
+                                                    }
+                                                    className="box-border mb-0 grid h-9 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-2.5 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:text-copy-secondary disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-pressed:bg-morty-fill-opacity-3 aria-pressed:text-foreground aria-pressed:hover:bg-morty-fill-opacity-4 aria-pressed:hover:text-foreground aria-pressed:disabled:hover:text-foreground disabled:aria-pressed:text-foreground motion-reduce:transition-none"
+                                                >
+                                                    <span className="min-w-0 truncate">
+                                                        {entry.title || "Untitled session"}
+                                                    </span>
+                                                </button>
+                                            ))}
+                                            {model.directory.nextCursor !== null && (
+                                                <div className="flex justify-center py-2">
+                                                    {model.operation === "more" ? (
+                                                        <Spinner label="Loading more sessions" />
+                                                    ) : (
+                                                        <Button
+                                                            variant="ghost"
+                                                            disabled={model.operation !== "idle"}
+                                                            onClick={() => withSignal(store.getState().more)}
+                                                        >
+                                                            Load more
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </ScrollEdgeFade>
+                                    )}
+                                </section>
+                            </div>
+                            <div className="flex min-h-[18rem] min-w-0 flex-col overflow-hidden rounded-[22px] border border-white bg-card shadow-module sm:min-h-0">
+                                <section
+                                    aria-label="Selected session preview"
+                                    className="flex min-h-0 min-w-0 flex-1 flex-col"
+                                >
+                                    {model.preview.kind === "ready" && (
+                                        <h2
+                                            className={nativeSessionPreviewTitleBarClassName}
+                                            title={model.preview.entry.title || "Untitled session"}
+                                        >
+                                            <span className="min-w-0 truncate">
+                                                {model.preview.entry.title || "Untitled session"}
+                                            </span>
+                                        </h2>
+                                    )}
+                                    {model.preview.kind === "loading" && (
+                                        <div aria-hidden="true" className={nativeSessionPreviewTitleBarClassName}>
+                                            <div className="h-3.5 w-2/5 max-w-full animate-pulse rounded-full bg-morty-fill-opacity-3 motion-reduce:animate-none" />
+                                        </div>
+                                    )}
+                                    {model.preview.kind === "empty" && (
+                                        <div aria-hidden="true" className={nativeSessionPreviewTitleBarClassName} />
+                                    )}
                                     <ScrollEdgeFade
-                                        fadeFromClassName="from-card/90"
-                                        frameClassName="hidden min-h-0 flex-1 sm:flex sm:flex-col"
+                                        revealSurface
+                                        edgeStroke={{ className: "border-card", placement: "outside" }}
+                                        frameClassName="flex min-h-0 flex-1 flex-col"
                                         className={cn(
-                                            "min-h-0 flex-1 space-y-0 overflow-y-auto pr-3",
+                                            "min-h-0 flex-1 overflow-y-auto font-inter",
+                                            model.preview.kind === "ready"
+                                                ? "px-4 pt-4 pb-4 sm:px-6 sm:pt-4 sm:pb-5"
+                                                : model.preview.kind === "empty"
+                                                  ? undefined
+                                                  : "p-4 sm:px-6 sm:py-5",
                                             mortyThinScrollbarClassName,
+                                            model.preview.kind === "empty" && "flex min-h-0 flex-1 flex-col",
                                         )}
                                     >
-                                        {model.directory.entries.map((entry) => (
-                                            <button
-                                                type="button"
-                                                key={entry.entryId}
-                                                data-testid={dataTestId.localSessionEntry}
-                                                aria-label={entry.title || "Untitled session"}
-                                                aria-pressed={
-                                                    model.preview.kind !== "empty" &&
-                                                    model.preview.entry.entryId === entry.entryId
-                                                }
-                                                disabled={model.operation !== "idle"}
-                                                onClick={() =>
-                                                    withSignal(
-                                                        async (signal) => await store.getState().select(entry, signal),
-                                                    )
-                                                }
-                                                className="box-border mb-0 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-2.5 py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:text-copy-secondary disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-pressed:bg-morty-fill-opacity-3 aria-pressed:text-foreground aria-pressed:hover:bg-morty-fill-opacity-4 aria-pressed:hover:text-foreground aria-pressed:disabled:hover:text-foreground disabled:aria-pressed:text-foreground motion-reduce:transition-none"
-                                            >
-                                                <span className="min-w-0 truncate">
-                                                    {entry.title || "Untitled session"}
-                                                </span>
-                                            </button>
-                                        ))}
-                                        {model.directory.nextCursor !== null && (
-                                            <div className="flex justify-center py-2">
-                                                {model.operation === "more" ? (
-                                                    <Spinner label="Loading more sessions" />
-                                                ) : (
-                                                    <Button
-                                                        variant="ghost"
-                                                        disabled={model.operation !== "idle"}
-                                                        onClick={() => withSignal(store.getState().more)}
-                                                    >
-                                                        Load more
-                                                    </Button>
+                                        {model.preview.kind === "empty" && (
+                                            <NativeSessionDirectoryPlaceholder
+                                                icon={MessageSquare}
+                                                title="Select a session"
+                                                description="Preview its message history here."
+                                            />
+                                        )}
+                                        {model.preview.kind === "loading" && <NativeSessionPreviewSkeleton />}
+                                        {model.preview.kind === "failed" && (
+                                            <p role="alert" className="text-destructive">
+                                                {model.preview.message}
+                                            </p>
+                                        )}
+                                        {model.preview.kind === "ready" && (
+                                            <div className="space-y-4">
+                                                {model.preview.content.messages.length === 0 && (
+                                                    <p>No events in this session.</p>
+                                                )}
+                                                {model.preview.content.messages.map((message) => (
+                                                    <MobiusSessionMessage
+                                                        deliveryUnknownUserMessageId={null}
+                                                        failureApproval={{ kind: "unavailable" }}
+                                                        key={message.firstEvent.eventId}
+                                                        message={message}
+                                                        onRemoveUnknownDelivery={() => undefined}
+                                                        onRetryUnknownDelivery={() => undefined}
+                                                        openLocalFile={() => undefined}
+                                                    />
+                                                ))}
+                                                {model.preview.content.truncated && (
+                                                    <p className="text-13 text-morty-text-3">
+                                                        Showing a partial event preview.
+                                                    </p>
                                                 )}
                                             </div>
                                         )}
                                     </ScrollEdgeFade>
-                                )}
-                            </section>
+                                </section>
+                                <footer className="flex shrink-0 justify-end gap-2 px-4 py-3 sm:px-5">
+                                    <Button
+                                        data-testid={dataTestId.importLocalSession}
+                                        variant="outline"
+                                        disabled={
+                                            model.preview.kind !== "ready" ||
+                                            model.operation !== "idle" ||
+                                            model.directory.kind !== "ready" ||
+                                            (!model.directory.capabilities.loadSession &&
+                                                !model.directory.capabilities.resumeSession)
+                                        }
+                                        onClick={() =>
+                                            withSignal(async (signal) => await store.getState().open("import", signal))
+                                        }
+                                    >
+                                        {model.operation === "import" ? "Opening…" : "Open"}
+                                    </Button>
+                                    <Button
+                                        data-testid={dataTestId.forkLocalSession}
+                                        disabled={model.preview.kind !== "ready" || model.operation !== "idle"}
+                                        onClick={() =>
+                                            withSignal(async (signal) => await store.getState().open("fork", signal))
+                                        }
+                                    >
+                                        {model.operation === "fork" ? "Forking…" : "Fork"}
+                                    </Button>
+                                </footer>
+                            </div>
                         </div>
-                        <div className="flex min-h-[18rem] min-w-0 flex-col overflow-hidden rounded-[22px] border border-white bg-card sm:min-h-0">
-                            <section
-                                aria-label="Selected session preview"
-                                className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-                            >
-                                <ScrollEdgeFade
-                                    fadeFromClassName="from-card"
-                                    frameClassName="min-h-0 flex-1"
-                                    className={cn(
-                                        "min-h-0 flex-1 overflow-y-auto p-4 font-inter sm:px-6 sm:py-5",
-                                        mortyThinScrollbarClassName,
-                                        model.preview.kind === "empty" && "flex items-center justify-center",
-                                    )}
-                                >
-                                    {model.preview.kind === "empty" && (
-                                        <p className="text-center text-13 text-morty-text-3">
-                                            Select a session to preview its history.
-                                        </p>
-                                    )}
-                                    {model.preview.kind === "loading" && <NativeSessionPreviewSkeleton />}
-                                    {model.preview.kind === "failed" && (
-                                        <p role="alert" className="text-destructive">
-                                            {model.preview.message}
-                                        </p>
-                                    )}
-                                    {model.preview.kind === "ready" && (
-                                        <div className="space-y-4">
-                                            <h2 className="font-inter text-16 font-semibold tracking-[-0.015em]">
-                                                {model.preview.entry.title || "Untitled session"}
-                                            </h2>
-                                            {model.preview.content.messages.length === 0 && (
-                                                <p>No events in this session.</p>
-                                            )}
-                                            {model.preview.content.messages.map((message) => (
-                                                <MobiusSessionMessage
-                                                    deliveryUnknownUserMessageId={null}
-                                                    failureApproval={{ kind: "unavailable" }}
-                                                    key={message.firstEvent.eventId}
-                                                    message={message}
-                                                    onRemoveUnknownDelivery={() => undefined}
-                                                    onRetryUnknownDelivery={() => undefined}
-                                                    openLocalFile={() => undefined}
-                                                />
-                                            ))}
-                                            {model.preview.content.truncated && (
-                                                <p className="text-13 text-morty-text-3">
-                                                    Showing a partial event preview.
-                                                </p>
-                                            )}
-                                        </div>
-                                    )}
-                                </ScrollEdgeFade>
-                            </section>
-                            <footer className="flex shrink-0 justify-end gap-2 px-4 py-3 sm:px-5">
-                                <Button
-                                    data-testid={dataTestId.importLocalSession}
-                                    variant="outline"
-                                    disabled={
-                                        model.preview.kind !== "ready" ||
-                                        model.operation !== "idle" ||
-                                        model.directory.kind !== "ready" ||
-                                        (!model.directory.capabilities.loadSession &&
-                                            !model.directory.capabilities.resumeSession)
-                                    }
-                                    onClick={() =>
-                                        withSignal(async (signal) => await store.getState().open("import", signal))
-                                    }
-                                >
-                                    {model.operation === "import" ? "Opening…" : "Open"}
-                                </Button>
-                                <Button
-                                    data-testid={dataTestId.forkLocalSession}
-                                    disabled={model.preview.kind !== "ready" || model.operation !== "idle"}
-                                    onClick={() =>
-                                        withSignal(async (signal) => await store.getState().open("fork", signal))
-                                    }
-                                >
-                                    {model.operation === "fork" ? "Forking…" : "Fork"}
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    disabled={model.operation === "import" || model.operation === "fork"}
-                                    onClick={closeDialog}
-                                >
-                                    Cancel
-                                </Button>
-                            </footer>
-                        </div>
-                    </div>
+                    )}
                     {model.error !== "" &&
                         createPortal(
                             <div

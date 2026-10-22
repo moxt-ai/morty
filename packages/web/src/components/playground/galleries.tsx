@@ -1,9 +1,11 @@
-import { FileText, Plus } from "lucide-react";
+import { CircleAlert, FileText, Inbox, MessageSquare, PackageOpen, Plus, Unplug } from "lucide-react";
 import { Tooltip } from "radix-ui";
-import { type ComponentType, useState } from "react";
+import { type ComponentType, type ReactNode, useState } from "react";
 import { AttemptFailure } from "../chat/attempt-failure.tsx";
 import { HarnessMark } from "../chat/harness-mark.tsx";
 import { MessageBubble } from "../chat/message-bubble.tsx";
+import { NativeSessionDirectoryPlaceholder } from "../chat/native-session-directory-placeholder.tsx";
+import { SessionAgentTabs } from "../chat/session-agent-tabs.tsx";
 import { ToolCallDisclosure } from "../chat/tools/tool-call-status.tsx";
 import type { ToolCallState } from "../chat/tools/tool-renderer.ts";
 import { UserMessageShell } from "../chat/user-message-shell.tsx";
@@ -20,6 +22,7 @@ import { MortyAlert } from "../ui/morty-alert.tsx";
 import { MortyTooltipContent } from "../ui/morty-tooltip-content.tsx";
 import { NavigationCardLink } from "../ui/navigation-card-link.tsx";
 import { Select as OptionSelect } from "../ui/option-select.tsx";
+import { overlaySurfaceRadiusClassName } from "../ui/overlay-surface.ts";
 import { Popover } from "../ui/popover.tsx";
 import {
     Select,
@@ -52,6 +55,7 @@ const colorSwatches = [
     { className: "bg-ring", name: "ring" },
     { className: "bg-success", name: "success" },
     { className: "bg-surface-subtle", name: "surface-subtle" },
+    { className: "bg-surface-dialog-composite", name: "dialog-composite" },
     { className: "bg-user-message-surface", name: "user-message" },
     { className: "bg-sidebar", name: "sidebar" },
     { className: "bg-primary-subtle", name: "primary-subtle" },
@@ -92,10 +96,11 @@ const radii = [
     { className: "rounded-2xl", name: "2xl" },
     { className: "rounded-3xl", name: "3xl" },
     { className: "rounded-4xl", name: "4xl" },
+    { className: overlaySurfaceRadiusClassName, name: "overlay · 28px" },
 ] as const;
 
 const cloudVariants = ["primary", "outline", "ghost", "destructive"] as const;
-const cloudSizes = ["default", "sm", "icon"] as const;
+const cloudSizes = ["default", "lg", "sm", "icon"] as const;
 const fieldVariants = ["default", "outline", "secondary", "ghost"] as const;
 const fieldSizes = ["sm", "default", "lg", "icon"] as const;
 
@@ -103,6 +108,12 @@ const agentOptions = [
     { label: "Codex", value: "codex" },
     { label: "Claude", value: "claude" },
     { label: "Pi", value: "pi" },
+] as const;
+
+const sessionAgents = [
+    { agentRef: "codex", label: "Codex", runtimeId: "runtime" },
+    { agentRef: "claude-code", label: "Claude Code", runtimeId: "runtime" },
+    { agentRef: "pi", label: "Pi", runtimeId: "runtime" },
 ] as const;
 
 const toolStates = [
@@ -306,14 +317,14 @@ function TextareaGallery() {
     const [value, setValue] = useState("Ask the agent to tighten the button padding.");
     return (
         <Specimen layout="stack" title="Inside a composer surface">
-            <div className="w-full max-w-lg rounded-xl border border-border bg-background px-3 py-2">
+            <div className="w-full max-w-lg rounded-[20px] border border-border bg-background px-3 py-2">
                 <Textarea
                     aria-label="Message"
                     onChange={(event) => setValue(event.currentTarget.value)}
                     value={value}
                 />
             </div>
-            <div className="w-full max-w-lg rounded-xl border border-border bg-background px-3 py-2">
+            <div className="w-full max-w-lg rounded-[20px] border border-border bg-background px-3 py-2">
                 <Textarea aria-label="Disabled message" disabled placeholder="Connect an agent to type" />
             </div>
         </Specimen>
@@ -499,17 +510,17 @@ function DialogGallery() {
 
 function PopoverGallery() {
     return (
-        <Specimen title="Caller supplies the surface">
+        <Specimen title="Caller supplies padding, border, and shadow">
             <Popover.Root>
                 <Popover.Trigger asChild>
                     <Button variant="outline">Open popover</Button>
                 </Popover.Trigger>
                 <Popover.Portal>
                     <Popover.Content
-                        className="z-50 w-64 rounded-xl border border-border bg-popover p-4 text-13 text-popover-foreground shadow-lg outline-none"
+                        className={`z-50 w-64 border border-border bg-popover p-4 text-13 text-popover-foreground shadow-lg outline-none ${overlaySurfaceRadiusClassName}`}
                         sideOffset={8}
                     >
-                        A popover keeps a small related action on the same page.
+                        Anchored floating surfaces use {overlaySurfaceRadiusClassName} (28px).
                         <Popover.Arrow className="fill-popover" />
                     </Popover.Content>
                 </Popover.Portal>
@@ -592,18 +603,20 @@ function MessageGallery() {
 function ToolCallGallery() {
     return (
         <Specimen layout="stack" title="States">
-            {toolStates.map((state) => (
-                <ToolCallDisclosure
-                    ariaLabel={`Read styles.css, ${state.kind}`}
-                    autoOpen={state.kind === "failed"}
-                    icon={<FileText aria-hidden="true" />}
-                    key={state.kind}
-                    state={state}
-                    title={`Read styles.css (${state.kind})`}
-                >
-                    <p className="text-13 text-muted-foreground">packages/web/src/styles.css</p>
-                </ToolCallDisclosure>
-            ))}
+            <div className="grid gap-0">
+                {toolStates.map((state) => (
+                    <ToolCallDisclosure
+                        ariaLabel={`Read styles.css, ${state.kind}`}
+                        autoOpen={state.kind === "failed"}
+                        icon={<FileText aria-hidden="true" />}
+                        key={state.kind}
+                        state={state}
+                        title={`Read styles.css (${state.kind})`}
+                    >
+                        <p className="text-13 text-muted-foreground">packages/web/src/styles.css</p>
+                    </ToolCallDisclosure>
+                ))}
+            </div>
         </Specimen>
     );
 }
@@ -613,6 +626,86 @@ function WorkingIndicatorGallery() {
     return (
         <Specimen title="Elapsed">
             <WorkingIndicator startedAt={startedAt} />
+        </Specimen>
+    );
+}
+
+function NativeSessionDirectoryPlaceholderFrame({ children }: { readonly children: ReactNode }) {
+    return (
+        <div className="flex h-52 w-[15.75rem] max-w-full flex-col rounded-2xl border border-border bg-surface-subtle">
+            {children}
+        </div>
+    );
+}
+
+function NativeSessionDirectoryPlaceholderGallery() {
+    return (
+        <div className="grid gap-6">
+            <Specimen title="Preview empty">
+                <NativeSessionDirectoryPlaceholderFrame>
+                    <NativeSessionDirectoryPlaceholder
+                        description="Preview its message history here."
+                        icon={MessageSquare}
+                        title="Select a session"
+                    />
+                </NativeSessionDirectoryPlaceholderFrame>
+            </Specimen>
+            <Specimen title="Agent not installed">
+                <NativeSessionDirectoryPlaceholderFrame>
+                    <NativeSessionDirectoryPlaceholder
+                        description="Install it on this machine to browse saved sessions."
+                        icon={PackageOpen}
+                        title="Pi is not installed"
+                    />
+                </NativeSessionDirectoryPlaceholderFrame>
+            </Specimen>
+            <Specimen title="No runtime">
+                <NativeSessionDirectoryPlaceholderFrame>
+                    <NativeSessionDirectoryPlaceholder
+                        description="Connect a runtime to browse saved sessions."
+                        icon={Unplug}
+                        title="No local agent"
+                    />
+                </NativeSessionDirectoryPlaceholderFrame>
+            </Specimen>
+            <Specimen title="Empty directory">
+                <NativeSessionDirectoryPlaceholderFrame>
+                    <NativeSessionDirectoryPlaceholder
+                        description="This agent didn't report any on this machine."
+                        icon={Inbox}
+                        title="No saved sessions"
+                    />
+                </NativeSessionDirectoryPlaceholderFrame>
+            </Specimen>
+            <Specimen title="Load failed">
+                <NativeSessionDirectoryPlaceholderFrame>
+                    <NativeSessionDirectoryPlaceholder
+                        description="The local agent operation could not be completed."
+                        icon={CircleAlert}
+                        title="Couldn't load sessions"
+                        tone="destructive"
+                    />
+                </NativeSessionDirectoryPlaceholderFrame>
+            </Specimen>
+        </div>
+    );
+}
+
+function SessionAgentTabsGallery() {
+    const [disabled, setDisabled] = useState(false);
+    const [value, setValue] = useState("runtime:codex");
+    const selected = sessionAgents.find((agent) => `${agent.runtimeId}:${agent.agentRef}` === value);
+    return (
+        <Specimen layout="stack" title="Try it">
+            <Button onClick={() => setDisabled((current) => !current)} size="sm" variant="outline">
+                {disabled ? "Enable" : "Disable"}
+            </Button>
+            <div className="w-[15.75rem] max-w-full">
+                <SessionAgentTabs agents={sessionAgents} disabled={disabled} onValueChange={setValue} value={value} />
+            </div>
+            <p className="text-12 text-muted-foreground" role="status">
+                Selected: {selected?.label ?? "None"}
+            </p>
         </Specimen>
     );
 }
@@ -680,10 +773,12 @@ const galleries = {
     "link-button": LinkButtonGallery,
     "menu-select": MenuSelectGallery,
     message: MessageGallery,
+    "native-session-directory-placeholder": NativeSessionDirectoryPlaceholderGallery,
     "navigation-card": NavigationCardGallery,
     "option-select": OptionSelectGallery,
     popover: PopoverGallery,
     radius: RadiusGallery,
+    "session-agent-tabs": SessionAgentTabsGallery,
     spinner: SpinnerGallery,
     textarea: TextareaGallery,
     toast: ToastGallery,

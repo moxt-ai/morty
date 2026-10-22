@@ -3,15 +3,18 @@ import { useStore } from "zustand";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import {
     chatSessionColumnClassName,
+    chatSessionExecutionHeaderClassName,
     chatSessionMessageScrollClassName,
     chatSessionPaneSectionClassName,
 } from "../../components/chat/chat-session-layout.ts";
 import { ExecutionContextBar } from "../../components/chat/execution-context-bar.tsx";
+import { SessionLoadFailure } from "../../components/chat/session-load-failure.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { dataTestId } from "../../data-testid.ts";
+import { cn } from "../../lib/utils.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { disconnectedBotNotice } from "../../view-models/chat/bot-chat-home-store.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
@@ -146,7 +149,9 @@ export function BotChatHome({
                 />
             ) : (
                 <section className={chatSessionPaneSectionClassName}>
-                    <ExecutionContextBar context={executionContext} />
+                    <header className={cn(chatSessionExecutionHeaderClassName, "justify-end")}>
+                        <ExecutionContextBar context={executionContext} layout="header" />
+                    </header>
                     <FollowLatestScrollArea
                         followThreshold={80}
                         followRevision={model.scrollFollowRevision}
@@ -159,13 +164,15 @@ export function BotChatHome({
                                 <SessionMessageListSkeleton />
                             ) : model.view.kind === "failed" || model.selection.kind === "failed" ? (
                                 <div className="m-auto grid justify-items-center gap-4 text-center">
-                                    <p data-testid={dataTestId.sessionLoadFailure} role="alert">
-                                        {model.selection.kind === "failed"
-                                            ? model.selection.message
-                                            : model.view.kind === "failed"
-                                              ? model.view.message
-                                              : "Chat is unavailable."}
-                                    </p>
+                                    <SessionLoadFailure
+                                        message={
+                                            model.selection.kind === "failed"
+                                                ? model.selection.message
+                                                : model.view.kind === "failed"
+                                                  ? model.view.message
+                                                  : "Chat is unavailable."
+                                        }
+                                    />
                                     {model.selection.kind === "failed" &&
                                     model.selection.target.kind === "continue" &&
                                     model.selection.target.action === "import" ? (
@@ -212,12 +219,7 @@ export function BotChatHome({
                                     <span className="mx-auto mb-5 flex size-14 items-center justify-center rounded-[18px] bg-primary-subtle text-primary shadow-[inset_0_0_0_1px_rgba(34,123,78,0.08)]">
                                         <MessageSquare className="size-6" aria-hidden="true" />
                                     </span>
-                                    <p className="mb-2 text-[11px] font-semibold tracking-[0.1em] text-primary uppercase">
-                                        {model.view.kind === "connecting"
-                                            ? "Connecting to agent"
-                                            : "Ready to collaborate"}
-                                    </p>
-                                    <h1 className="text-[28px] leading-9 font-semibold tracking-[-0.025em]">Morty</h1>
+                                    <h1 className="text-[18px] leading-6 font-semibold tracking-[-0.025em]">Morty</h1>
                                     <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-muted-foreground">
                                         {model.view.kind === "connecting"
                                             ? "Chat is restoring access to this session."

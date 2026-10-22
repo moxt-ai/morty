@@ -15,12 +15,6 @@ async function openConfiguredConversation(app: TestApp, reply: string): Promise<
         expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(reply),
     );
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
-    await app.user.click(
-        await app.queryElementByTestId(
-            dataTestId.agentSetting("model"),
-            (element) => element instanceof HTMLButtonElement && !element.disabled,
-        ),
-    );
     await app.user.click(await app.queryElementByTestId(dataTestId.sessionConfigValue("test-large")));
     await app.user.keyboard("{Escape}");
     await app.waitForView(() =>
