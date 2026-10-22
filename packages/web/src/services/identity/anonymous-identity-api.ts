@@ -1,7 +1,9 @@
 import { type Identifier, isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import * as v from "valibot";
 import { anonymousCredentialsEntry, centralLocalStorage } from "../local-storage/central-local-storage.ts";
+import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 import { clearIdentityScope, type IdentityScope, readIdentityScope, writeIdentityScope } from "./identity-scope-url.ts";
+import { forgetComputer, rememberComputer, rememberedComputers } from "./remembered-computers.ts";
 
 const tokenSchema = v.pipe(
     v.string(),
@@ -70,29 +72,51 @@ export class AnonymousIdentityApi {
         this.#origin = v.parse(v.pipe(v.string(), v.url()), options.origin);
     }
 
-    readonly loadExisting = async (requestSignal: AbortSignal): Promise<AnonymousIdentity | null> => {
+    readonly loadExisting = async (signal: AbortSignal): Promise<AnonymousIdentity | null> => {
         const scope = readIdentityScope();
-        const token = scope === null ? null : readStoredToken(scope.userId);
-        if (scope === null || token === null) {
-            if (scope !== null) {
-                this.#forgetScope(scope);
-            }
+        return scope === null ? null : await this.loadScope(scope, signal);
+    };
+
+    /** Validate one access without navigating or changing recency. */
+    readonly loadScope = async (scope: IdentityScope, signal: AbortSignal): Promise<AnonymousIdentity | null> => {
+        signal.throwIfAborted();
+        const token = readStoredToken(scope.userId);
+        if (token === null) {
+            this.#forgetScope(scope);
             return null;
         }
-        const identity: AnonymousIdentity = {
-            botId: scope.botId,
-            projectId: scope.projectId,
-            token,
-            userId: scope.userId,
-        };
-        const session = await this.#anonymousSession(identity, requestSignal);
-        if (session !== null) {
-            if (session.userId === identity.userId) {
-                return identity;
-            }
+        const identity: AnonymousIdentity = { ...scope, token };
+        const session = await this.#anonymousSession(identity, signal);
+        signal.throwIfAborted();
+        if (session?.userId !== identity.userId) {
+            this.#forgetScope(scope);
+            return null;
         }
-        this.#forgetScope(scope);
-        return null;
+        const management = new ManagementApi({
+            fetchRequest: this.#fetchRequest,
+            origin: this.#origin,
+            projectId: identity.projectId,
+            getToken: async (requestSignal) => {
+                requestSignal.throwIfAborted();
+                return identity.token;
+            },
+        });
+        try {
+            await management.readBot(identity.botId, signal);
+            signal.throwIfAborted();
+        } catch (cause) {
+            signal.throwIfAborted();
+            if (
+                cause instanceof CloudApiError &&
+                (cause.code === "BOT_NOT_FOUND" || cause.status === 401 || cause.status === 403)
+            ) {
+                this.#forgetScope(scope);
+                return null;
+            }
+            throw cause;
+        }
+        rememberComputer(scope);
+        return identity;
     };
 
     readonly loadOrCreate = async (requestSignal: AbortSignal): Promise<AnonymousIdentity> => {
@@ -161,9 +185,16 @@ export class AnonymousIdentityApi {
         );
         const scope = readIdentityScope();
         if (scope !== null) {
-            removeStoredToken(scope.userId);
+            this.#forgetScope(scope);
         }
         clearIdentityScope();
+        const destination = new URL(window.location.href);
+        destination.pathname = "/chat";
+        for (const key of ["sessionId", "conversationId", "conversation", "harness", "nativeSessionAction"]) {
+            destination.searchParams.delete(key);
+        }
+        destination.hash = "";
+        window.history.replaceState(window.history.state, "", destination);
     };
 
     readonly createRecoveryToken = async (
@@ -187,12 +218,15 @@ export class AnonymousIdentityApi {
 
     readonly #saveIdentity = (identity: AnonymousIdentity) => {
         writeStoredToken(identity.userId, identity.token);
+        rememberComputer(identity);
         writeIdentityScope({ botId: identity.botId, projectId: identity.projectId, userId: identity.userId });
     };
 
     readonly #forgetScope = (scope: IdentityScope) => {
-        removeStoredToken(scope.userId);
-        clearIdentityScope();
+        forgetComputer(scope);
+        if (!rememberedComputers().some((computer) => computer.scope.userId === scope.userId)) {
+            removeStoredToken(scope.userId);
+        }
     };
 
     /** Maps the nested `bot` of an anonymous-user creation response onto the identity. */
@@ -225,7 +259,8 @@ export class AnonymousIdentityApi {
                 ),
             );
         } catch (error) {
-            if (error instanceof IdentityApiError) {
+            requestSignal.throwIfAborted();
+            if (error instanceof IdentityApiError && (error.status === 401 || error.status === 403)) {
                 return null;
             }
             throw error;
@@ -252,6 +287,7 @@ export class AnonymousIdentityApi {
             throw new IdentityApiError(
                 error.success ? error.output.error.code : "IDENTITY_UNAVAILABLE",
                 error.success ? error.output.error.message : "Identity service is unavailable.",
+                response.status,
             );
         }
         return value;
@@ -290,9 +326,11 @@ function removeStoredToken(userId: string): void {
 
 export class IdentityApiError extends Error {
     readonly code: string;
-    constructor(code: string, message: string) {
+    readonly status: number | null;
+    constructor(code: string, message: string, status: number | null = null) {
         super(message);
         this.code = code;
+        this.status = status;
         this.name = "IdentityApiError";
     }
 }

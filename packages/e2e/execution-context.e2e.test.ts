@@ -17,7 +17,7 @@ for (const viewport of [
         await page.setViewportSize(viewport);
         await runtime.openPairedChat();
         const context = page.getByRole("region", { name: "Execution context" });
-        await expect(context).toContainText(machineName);
+        await expect(page.getByRole("button", { name: `Switch computer, ${machineName}` })).toContainText("Online");
         await expect(context).toContainText("Claude Code");
         await expect(context.getByRole("status", { name: "Connection" })).toHaveText("Connected");
         await page.getByRole("textbox", { name: "Message" }).fill("Verify execution context");
@@ -32,10 +32,10 @@ for (const viewport of [
         expect(box.x).toBeGreaterThanOrEqual(0);
         expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
-        expect(box.height).toBeLessThanOrEqual(viewport.width < 1024 ? 64 : 48);
+        expect(box.height).toBeLessThanOrEqual(48);
         await expect(context.getByText("workspace", { exact: true })).toBeVisible();
         const details = context.getByRole("button", { name: "Show execution details" });
-        await expect(details).toHaveAccessibleDescription(/Claude Code.*workspace.*Browser test Runtime.*Connected/);
+        await expect(details).toHaveAccessibleDescription(/Claude Code.*workspace/);
         const target = await details.boundingBox();
         expect(target?.height).toBeGreaterThanOrEqual(44);
         await details.click();

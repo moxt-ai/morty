@@ -6,6 +6,7 @@ import type { Clock } from "../services/time/clock.ts";
 import { createMortyApplication, type MortyApplication } from "../view-models/morty-application.ts";
 import { Page } from "./application/app.tsx";
 import { MortyApplicationProvider } from "./application/application-context.tsx";
+import { createContinuationRouter } from "./authentication/router.tsx";
 import { createSignedInRouter, SessionApplication } from "./authentication/session-application.tsx";
 import { BugReportButton, BugReportDialogHost } from "./diagnostics/bug-report-button.tsx";
 
@@ -37,6 +38,7 @@ export function assembleMorty(options: {
     // (the stable authorize action, the application) are fixed for the
     // application's lifetime, so no component rebuilds it while rendering.
     const signedInRouter = createSignedInRouter(application);
+    const continuationRouter = createContinuationRouter();
     const element = (
         <MortyApplicationProvider application={application}>
             <ToastProvider>
@@ -49,7 +51,11 @@ export function assembleMorty(options: {
                         </Page>
                     }
                 >
-                    <SessionApplication application={application} signedInRouter={signedInRouter} />
+                    <SessionApplication
+                        application={application}
+                        signedInRouter={signedInRouter}
+                        continuationRouter={continuationRouter}
+                    />
                 </ErrorBoundary>
             </ToastProvider>
         </MortyApplicationProvider>

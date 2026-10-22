@@ -1,6 +1,9 @@
 import { createStore } from "zustand/vanilla";
 import { AnonymousIdentityApi, IdentityApiError } from "../../services/identity/anonymous-identity-api.ts";
+import { readIdentityScope } from "../../services/identity/identity-scope-url.ts";
+import { computerKey, rememberedComputers } from "../../services/identity/remembered-computers.ts";
 import {
+    accessEndedComputerEntry,
     accessEndedNoticeEntry,
     centralSessionStorage,
 } from "../../services/session-storage/central-session-storage.ts";
@@ -38,9 +41,15 @@ export function createRemoteAccessOperations(options: {
                 : await options.identity.getToken(signal);
         },
         endRemoteAccess: async (token, signal) => {
+            const scope = readIdentityScope();
+            const computer =
+                scope === null
+                    ? undefined
+                    : rememberedComputers().find((entry) => computerKey(entry.scope) === computerKey(scope));
             await api.endRemoteAccess(token, signal);
             signal.throwIfAborted();
             centralSessionStorage.write(accessEndedNoticeEntry, "ended");
+            centralSessionStorage.write(accessEndedComputerEntry, computer?.name || "the previous computer");
             options.onEnded();
         },
     };

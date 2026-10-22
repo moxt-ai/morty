@@ -36,7 +36,7 @@ test("Given a paired Bot, When its Runtime disconnects, Then the disconnected st
     });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Disconnected") === true,
+        (element) => element.getAttribute("data-connection-status") === "disconnected",
     );
 });
 
@@ -47,7 +47,7 @@ test("Given a paired Bot with cached agent settings, When a user filters its mod
     const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
     await created.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     const composer = await created.queryElementByTestId(dataTestId.messageComposer);
     expect(composer).toBeInstanceOf(HTMLTextAreaElement);
@@ -104,7 +104,7 @@ test("Given multiple Runtimes share a Project, When a user configures a paired B
     await Promise.race([
         created.queryElementByTestId(
             dataTestId.botConnectionStatus,
-            (element) => element.textContent?.includes("Connected") === true,
+            (element) => element.getAttribute("data-connection-status") === "connected",
         ),
         failure,
     ]);
@@ -153,7 +153,7 @@ test("Given the working directory browser is open, When the user edits the path,
     await Promise.race([
         app.queryElementByTestId(
             dataTestId.botConnectionStatus,
-            (element) => element.textContent?.includes("Connected") === true,
+            (element) => element.getAttribute("data-connection-status") === "connected",
         ),
         failure,
     ]);
@@ -214,7 +214,7 @@ test("Given a Bot paired with the Claude harness, When the user opens its settin
     const app = await createTestApp({ connectAgent: true, agent: { id: "claude", label: "Claude Code" } });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
 
     const triggerMark = await app.queryElementByTestId(
@@ -238,7 +238,7 @@ test("Given a paired Bot, When the composer controls are visible, Then the confi
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
 
     const configurationTrigger = await app.queryElementByTestId(dataTestId.agentConfiguration);
@@ -255,7 +255,7 @@ test("Given a Bot paired with an unlisted harness, When the user opens its setti
     const app = await createTestApp({ connectAgent: true, agent: { id: "unlisted-agent", label: "Unlisted Agent" } });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
 
     const triggerMark = await app.queryElementByTestId(
@@ -277,7 +277,7 @@ test("Given a Bot paired with Pi, When the user opens its settings and sends a p
     const app = await createTestApp({ connectAgent: true, agent: { id: "pi", label: "Pi" } });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
     const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });

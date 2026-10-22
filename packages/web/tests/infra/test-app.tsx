@@ -6,8 +6,11 @@ import { afterAll, afterEach } from "vitest";
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../src/services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope } from "../../src/services/identity/identity-scope-url.ts";
+import {
+    anonymousCredentialsEntry,
+    centralLocalStorage,
+} from "../../src/services/local-storage/central-local-storage.ts";
 import type { Clock } from "../../src/services/time/clock.ts";
-import { router as authenticationRouter } from "../../src/views/authentication/router.tsx";
 import { assembleMorty } from "../../src/views/bootstrap.tsx";
 import { createChatWorkerEnvironment } from "../support/chat-worker.ts";
 
@@ -55,6 +58,7 @@ export async function createTestApp(
                   /** Replaces the created transfer code, for example with one that cannot be redeemed. */
                   readonly code?: (application: Application) => string;
               }
+            | { readonly kind: "share"; readonly code?: (application: Application) => string }
             | { readonly kind: "bootstrap"; readonly identity?: boolean }
             | { readonly kind: "reload" }
             | { readonly kind: "managed-session"; readonly sessionId: string }
@@ -68,15 +72,16 @@ export async function createTestApp(
         options.connectAgent === true ? await current.connectAgent(options.agent, options.nativeSessionIds) : null;
     const agentFailure = daemon?.failure ?? null;
     const page = options.page ?? { kind: "morty" };
-    if (page.kind === "continue") {
+    if (page.kind === "continue" || page.kind === "share") {
         const transfer = new URL(await current.createTransferUrl());
-        transfer.searchParams.set("harness", page.harness);
-        transfer.searchParams.set("sessionId", page.sessionId);
+        if (page.kind === "continue") {
+            transfer.searchParams.set("harness", page.harness);
+            transfer.searchParams.set("sessionId", page.sessionId);
+        }
         if (page.code !== undefined) {
             transfer.hash = `code=${page.code(current)}`;
         }
         window.location.href = transfer.href;
-        authenticationRouter.history.replace(`${transfer.pathname}${transfer.search}${transfer.hash}`);
     } else if (page.kind === "bootstrap") {
         const destination = new URL("/", current.origin);
         if (page.identity === true) {
@@ -91,6 +96,7 @@ export async function createTestApp(
             window.localStorage.setItem(
                 ANONYMOUS_CREDENTIAL_KEY_NAME,
                 JSON.stringify({
+                    ...(centralLocalStorage.read(anonymousCredentialsEntry) ?? {}),
                     [current.userId]: await current.identity.getToken(new AbortController().signal),
                 }),
             );
@@ -115,6 +121,7 @@ export async function createTestApp(
         window.localStorage.setItem(
             ANONYMOUS_CREDENTIAL_KEY_NAME,
             JSON.stringify({
+                ...(centralLocalStorage.read(anonymousCredentialsEntry) ?? {}),
                 [current.userId]: await current.identity.getToken(new AbortController().signal),
             }),
         );

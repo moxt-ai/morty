@@ -12,7 +12,7 @@ import * as v from "valibot";
 const projectIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u));
 const userIdSchema = v.pipe(v.string(), v.minLength(8), v.maxLength(128));
 
-const identityScopeSchema = v.pipe(
+export const identityScopeSchema = v.pipe(
     v.object({
         botId: v.custom<Identifier>(isIdentifier),
         projectId: projectIdSchema,
@@ -49,6 +49,10 @@ function decodeIdentityScope(value: string): IdentityScope | null {
     }
     const parsed = v.safeParse(scopeSchema, decoded);
     return parsed.success ? { botId: parsed.output[0], projectId: parsed.output[1], userId: parsed.output[2] } : null;
+}
+
+export function hasIdentityScope(): boolean {
+    return new URLSearchParams(window.location.search).has("identity");
 }
 
 /** Reads the scope of the page's current URL; null when absent or invalid. */

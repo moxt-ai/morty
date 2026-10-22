@@ -1,5 +1,6 @@
 import { type AnyRouter, RouterProvider } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { Button } from "../../components/ui/cloud-button.tsx";
 import { Spinner } from "../../index.ts";
 import type { BugReportDialogStore } from "../../view-models/bug-report-dialog-store.ts";
 import { PairingInstruction } from "../chat/pairing-instruction.tsx";
@@ -10,12 +11,18 @@ import {
     SetupCardSection,
     SetupCardShell,
     SetupCardTitle,
+    setupPrimaryButtonClassName,
 } from "../setup/setup-card-shell.tsx";
 
 export type AppState =
     | { readonly kind: "loading" }
-    | { readonly kind: "failed" }
-    | { readonly kind: "setup"; readonly accessEnded: boolean }
+    | { readonly kind: "failed"; readonly retry: () => void }
+    | { readonly kind: "invalid-link"; readonly continueHref: string | null }
+    | {
+          readonly kind: "setup";
+          readonly notice: "access-ended" | "legacy" | "none";
+          readonly returnHref: string | null;
+      }
     | { readonly kind: "authentication"; readonly router: AnyRouter }
     | {
           readonly kind: "signed-in";
@@ -99,11 +106,28 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
             return (
                 <SetupCardShell titleId="bootstrap-failed">
                     <SetupCardTitle id="bootstrap-failed">Morty is unavailable</SetupCardTitle>
-                    <SetupCardAlert>Morty is temporarily unavailable. Please reload to try again.</SetupCardAlert>
+                    <SetupCardAlert>
+                        Check your connection and try again. Your saved computers are still here.
+                    </SetupCardAlert>
+                    <Button className="mt-4" onClick={state.retry}>
+                        Retry
+                    </Button>
+                </SetupCardShell>
+            );
+        case "invalid-link":
+            return (
+                <SetupCardShell titleId="invalid-link-title">
+                    <SetupCardTitle id="invalid-link-title">This link is no longer valid</SetupCardTitle>
+                    <SetupCardAlert>Ask for a new link. Morty has not switched to another computer.</SetupCardAlert>
+                    {state.continueHref !== null && (
+                        <Button asChild variant="outline" className={`${setupPrimaryButtonClassName} mt-5 text-center`}>
+                            <a href={state.continueHref}>Continue on your last computer</a>
+                        </Button>
+                    )}
                 </SetupCardShell>
             );
         case "setup":
-            return <SetupApplication accessEnded={state.accessEnded} />;
+            return <SetupApplication notice={state.notice} returnHref={state.returnHref} />;
         case "authentication":
             return <RouterProvider router={state.router} />;
         case "signed-in":
@@ -111,22 +135,48 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
     }
 }
 
-function SetupApplication({ accessEnded }: { readonly accessEnded: boolean }) {
+function SetupApplication({
+    notice,
+    returnHref,
+}: {
+    readonly notice: "access-ended" | "legacy" | "none";
+    readonly returnHref: string | null;
+}) {
     return (
         <SetupCardShell titleId="setup-title">
-            {accessEnded && (
+            {notice === "access-ended" && (
                 <div role="status" className="mb-5 rounded-xl border border-primary/20 bg-primary/5 px-5 py-4 text-sm">
                     <p className="font-medium">Current access ended</p>
                     <p className="mt-1 text-muted-foreground">Your local agent and tasks keep running.</p>
                 </div>
             )}
+            {notice === "legacy" && (
+                <div className="mb-5 rounded-xl border border-border px-5 py-4 text-sm" role="status">
+                    Already using Morty? Open the link your agent gave you once, and this browser will remember your
+                    computer.
+                </div>
+            )}
+            {returnHref !== null && (
+                <a
+                    href={returnHref}
+                    className="mb-5 inline-flex min-h-11 items-center rounded-lg text-sm text-foreground underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                >
+                    ← Back to your last computer
+                </a>
+            )}
             <p className="text-sm font-medium text-primary">Morty</p>
-            <SetupCardTitle id="setup-title">Continue your coding session from your phone.</SetupCardTitle>
+            <SetupCardTitle id="setup-title">
+                {returnHref === null ? "Continue your coding session from your phone." : "Connect another computer"}
+            </SetupCardTitle>
             <SetupCardDescription>
-                Check progress, send instructions, and approve requests while your agent runs on your computer.
+                {returnHref === null
+                    ? "Check progress, send instructions, and approve requests while your agent runs on your computer."
+                    : "Use the coding agent on the computer you want to add to get a connection link."}
             </SetupCardDescription>
             <p className="mt-2 max-w-xl text-sm text-muted-foreground">Works with Codex, Claude Code, and Pi.</p>
-            <h2 className="mt-10 text-lg font-semibold tracking-tight">Start on your computer</h2>
+            <h2 className="mt-10 text-lg font-semibold tracking-tight">
+                {returnHref === null ? "Start on your computer" : "Start on the computer you want to add"}
+            </h2>
             <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
                 Paste the instruction below into the coding agent session you want to continue. Then open the link it
                 returns on your phone or in another browser.

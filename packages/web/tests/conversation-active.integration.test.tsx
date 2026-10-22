@@ -23,7 +23,7 @@ test("Given interleaved live text and tool events, When the agent responds, Then
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -54,7 +54,7 @@ test("Given an active turn exceeds one recovery page, When the user leaves and r
             .reduce((total, text) => total + text.length, 0);
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -120,7 +120,7 @@ test("Given a partially streamed reply, When Chat remounts and the daemon contin
     }
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -176,7 +176,7 @@ test("Given a conversation is running in the background, When it completes after
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -225,7 +225,7 @@ test("Given a running reply, When the user reads the conversation, Then its work
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
