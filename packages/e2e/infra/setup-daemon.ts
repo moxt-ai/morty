@@ -18,6 +18,9 @@ type Connection = Readonly<{
     origin: string;
 }>;
 
+/** How `mobius upgrade` behaves on the controlled machine. */
+type ControlledUpgrade = "available" | "unavailable" | "unresponsive";
+
 /** Setup CLI test port backed by the production daemon and a controlled Agent harness. */
 export class ControlledSetupRuntime implements SetupRuntime {
     readonly #saved = new Map<string, Connection>();
@@ -27,17 +30,16 @@ export class ControlledSetupRuntime implements SetupRuntime {
 
     readonly #options: ControlledAgentBehavior;
     readonly #machineName: string;
-    readonly #upgrade: "available" | "unavailable";
+    #upgrade: ControlledUpgrade;
     #release: NonNullable<ControlledAgentBehavior["runtime"]>;
+    readonly #upgradeRequested = Promise.withResolvers<void>();
+    /** Settles when setup first asks for an upgrade. */
+    readonly upgradeRequested = this.#upgradeRequested.promise;
     /**
      * `options.runtime` is the release the machine's daemon runs before setup.
-     * `upgrade` says whether `mobius upgrade` can reach a newer release.
+     * `upgrade` says how `mobius upgrade` behaves.
      */
-    constructor(
-        options: ControlledAgentBehavior,
-        machineName: string,
-        upgrade: "available" | "unavailable" = "available",
-    ) {
+    constructor(options: ControlledAgentBehavior, machineName: string, upgrade: ControlledUpgrade = "available") {
         this.#machineName = machineName;
         this.#options = options;
         this.#upgrade = upgrade;
@@ -112,14 +114,32 @@ export class ControlledSetupRuntime implements SetupRuntime {
         return result;
     };
 
+    /** Changes how later `mobius upgrade` runs behave, such as when the registry becomes reachable. */
+    readonly setUpgrade = (upgrade: ControlledUpgrade): void => {
+        this.#upgrade = upgrade;
+    };
+
     /** The daemon release `mobius --version` reports. */
     readonly daemonRelease = (): NonNullable<ControlledAgentBehavior["runtime"]> => this.#release;
 
     // Like `mobius upgrade`: the running daemon switches to the newest release, and
     // its active connections come back on it.
     async #upgradeDaemon(signal: AbortSignal): Promise<void> {
-        if (this.#upgrade === "unavailable") {
-            throw new Error("npm could not return a valid latest Mobius version");
+        this.#upgradeRequested.resolve();
+        switch (this.#upgrade) {
+            case "unavailable":
+                throw new Error("npm could not return a valid latest Mobius version");
+            case "unresponsive":
+                // A download that never finishes: only cancellation ends it.
+                await new Promise<never>((_resolve, reject) => {
+                    signal.throwIfAborted();
+                    signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+                });
+                return;
+            case "available":
+                break;
+            default:
+                return this.#upgrade satisfies never;
         }
         if (this.#release === "current") {
             return;

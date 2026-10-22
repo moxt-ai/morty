@@ -34,6 +34,8 @@ export interface SetupHost {
     readonly clock?: {
         readonly now: () => Date;
         readonly wait: (milliseconds: number, signal: AbortSignal) => Promise<void>;
+        /** A signal that aborts once the duration elapses. */
+        readonly deadline?: (milliseconds: number) => AbortSignal;
     };
 }
 
@@ -168,6 +170,9 @@ function serializeErrorCause(cause: unknown, seen = new WeakSet<object>()): Erro
     };
 }
 
+// Leaves most of the 300 second setup budget for pairing and the handoff.
+const RUNTIME_UPGRADE_BUDGET_MILLISECONDS = 120_000;
+
 export async function runSetup(args: readonly string[], host: SetupHost): Promise<number> {
     const signal = AbortSignal.any([host.signal, AbortSignal.timeout(300000)]);
     const clock = host.clock ?? {
@@ -176,6 +181,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             await delay(milliseconds, undefined, { signal: parent });
         },
     };
+    const deadline = host.clock?.deadline ?? ((milliseconds: number) => AbortSignal.timeout(milliseconds));
     const emit = (value: Readonly<Record<string, unknown>>) => host.emit({ time: clock.now().toISOString(), ...value });
 
     function progress(stage: string, message: string) {
@@ -468,10 +474,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         };
     }
 
-    async function runMobius(context: Context, args: readonly string[], cwd: string) {
-        signal.throwIfAborted();
+    async function runMobius(context: Context, args: readonly string[], cwd: string, operation = signal) {
+        operation.throwIfAborted();
         if (host.runtime !== undefined) {
-            return await host.runtime.run(context.directory, args, cwd, signal);
+            return await host.runtime.run(context.directory, args, cwd, operation);
         }
         const logPath = join(context.directory, `runtime-${crypto.randomUUID()}.log`);
         const log = await open(
@@ -492,11 +498,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 stdio: ["ignore", log.fd, log.fd],
                 windowsHide: true,
             });
-            await once(child, "spawn", { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) });
+            await once(child, "spawn", { signal: AbortSignal.any([operation, AbortSignal.timeout(10000)]) });
             if (child.pid === undefined || !Number.isSafeInteger(child.pid) || child.pid < 2) {
                 fail("RUNTIME_START_FAILED");
             }
-            const [code, exitSignal] = await once(child, "exit", { signal });
+            const [code, exitSignal] = await once(child, "exit", { signal: operation });
             if (typeof exitSignal === "string") {
                 throw new RuntimeStartError({ kind: "signal", signal: exitSignal }, logPath);
             }
@@ -509,16 +515,20 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             return { pid: child.pid, logPath };
         } catch (cause) {
             // Only terminate the child this invocation still owns; an exited PID may be reused.
-            if (child?.pid !== undefined && child.exitCode === null && child.signalCode === null) {
+            // Ask it to stop first so it can stop the processes it started, such as npm.
+            for (const termination of ["SIGTERM", "SIGKILL"] as const) {
+                if (child?.pid === undefined || child.exitCode !== null || child.signalCode !== null) {
+                    break;
+                }
                 const exited = once(child, "exit", { signal: AbortSignal.timeout(10000) });
-                child.kill("SIGKILL");
+                child.kill(termination);
                 try {
                     await exited;
                 } catch {
                     // Cleanup must not replace the launch failure or prevent its diagnostic from being written.
                 }
             }
-            signal.throwIfAborted();
+            operation.throwIfAborted();
             if (errorCode(cause) === "RUNTIME_NOT_INSTALLED") {
                 throw cause;
             }
@@ -653,14 +663,19 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
      * daemon and reports why.
      */
     async function upgradeRuntime(context: Context, cwd: string): Promise<void> {
+        // The upgrade has its own budget so a slow download leaves setup time to reuse the running daemon.
+        const budget = deadline(RUNTIME_UPGRADE_BUDGET_MILLISECONDS);
         try {
-            await runMobius(context, ["upgrade"], cwd);
+            await runMobius(context, ["upgrade"], cwd, AbortSignal.any([signal, budget]));
             emit({ status: "runtime_upgrade_checked" });
         } catch (cause) {
             signal.throwIfAborted();
             emit({
                 status: "runtime_upgrade_skipped",
-                error: { code: "RUNTIME_UPGRADE_FAILED", cause: serializeErrorCause(cause) },
+                error: {
+                    code: budget.aborted ? "RUNTIME_UPGRADE_TIMEOUT" : "RUNTIME_UPGRADE_FAILED",
+                    cause: serializeErrorCause(cause),
+                },
                 message: "Continuing with the running Mobius daemon. Run mobius upgrade to update it.",
             });
         }
