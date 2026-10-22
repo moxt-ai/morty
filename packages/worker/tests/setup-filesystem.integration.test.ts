@@ -1,7 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,26 +39,12 @@ if (!isSetupModule(setupModule)) {
 }
 const { runSetup } = setupModule;
 
-async function localOrigin(): Promise<string> {
-    const server = createServer();
-    await new Promise<void>((resolve, reject) => {
-        server.once("error", reject);
-        server.listen(0, "127.0.0.1", resolve);
-    });
-    const address = server.address();
-    if (address === null || typeof address === "string") {
-        throw new Error("Missing local port");
-    }
-    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
-    return `http://127.0.0.1:${address.port}`;
-}
-
 test("Given a local workspace and private Documents path, When setup creates its identity and the user cancels, Then credentials remain private and can be reused", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-setup-filesystem-"));
     const documents = join(directory, "Documents ' & workspace");
     const workspace = join(directory, "workspace with spaces & quotes '");
     await Promise.all([documents, workspace].map((path) => mkdir(path)));
-    const fixture = await createIdentityFixture({ appOrigin: await localOrigin() });
+    const fixture = await createIdentityFixture({ listenOnLoopback: true });
     const cancellation = new AbortController();
     const events: Readonly<Record<string, unknown>>[] = [];
     try {
@@ -168,7 +153,7 @@ test.runIf(process.platform !== "win32")(
         const workspace = join(directory, "workspace");
         await Promise.all([redirectedDocuments, configuration, workspace].map((path) => mkdir(path)));
         await writeFile(join(configuration, "user-dirs.dirs"), `XDG_DOCUMENTS_DIR="${redirectedDocuments}"\n`);
-        const fixture = await createIdentityFixture({ appOrigin: await localOrigin() });
+        const fixture = await createIdentityFixture({ listenOnLoopback: true });
         const environment = Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== "DOCUMENT_DIR"));
         const child = spawn(
             process.execPath,
@@ -243,7 +228,7 @@ for (const [failure, scenario] of starterFailures) {
             const documents = join(directory, "Documents");
             const bin = join(directory, "bin");
             await Promise.all([mkdir(join(documents, "morty"), { recursive: true }), mkdir(bin)]);
-            const fixture = await createIdentityFixture({ appOrigin: await localOrigin() });
+            const fixture = await createIdentityFixture({ listenOnLoopback: true });
             try {
                 const identity = await fixture.createAnonymousUser();
                 const runtime = await fixture.connectAgent(identity.projectId);
@@ -452,7 +437,7 @@ test.runIf(process.env["MORTY_VERIFY_SYSTEM_DOCUMENTS"] === "true" && process.pl
         }
         await mkdir(documents, { recursive: true });
         const workspace = await mkdtemp(join(tmpdir(), "morty-macos-workspace-"));
-        const fixture = await createIdentityFixture({ appOrigin: await localOrigin() });
+        const fixture = await createIdentityFixture({ listenOnLoopback: true });
         const cancellation = new AbortController();
         const events: Readonly<Record<string, unknown>>[] = [];
         try {
@@ -505,7 +490,7 @@ for (const segments of [4, 8]) {
                 ...Array.from({ length: segments }, () => "\u00e9".repeat(segments === 8 ? 110 : 90)),
             );
             await mkdir(workspace, { recursive: true });
-            const fixture = await createIdentityFixture({ appOrigin: await localOrigin() });
+            const fixture = await createIdentityFixture({ listenOnLoopback: true });
             const runtime = new ControlledSetupRuntime(
                 { agentId: "codex", agentName: "Codex", reply: mortyReply },
                 "Setup test Runtime",
@@ -620,7 +605,7 @@ async function withUpgradeMachine(
     const root = await realpath(await mkdtemp(join(tmpdir(), "morty-setup-upgrade-")));
     const workspace = join(root, "workspace");
     await mkdir(workspace, { recursive: true });
-    const fixture = await createIdentityFixture({ appOrigin: await localOrigin() });
+    const fixture = await createIdentityFixture({ listenOnLoopback: true });
     const runtime = new ControlledSetupRuntime(
         { agentId: "settings-test", agentName: "Settings Agent", reply: mortyReply, runtime: "previous" },
         "Setup test Runtime",

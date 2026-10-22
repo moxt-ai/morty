@@ -84,13 +84,33 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # GitHub-hosted runners for this repository have 2 vCPUs. Each web test file starts its own Chat and Platform
+        # workerd isolates and a Runtime daemon, so a shard runs one file at a time and the suite spreads across shards.
         include:
           - suite: web
-            shard: 1/2
+            shard: 1/8
             report: web-1
           - suite: web
-            shard: 2/2
+            shard: 2/8
             report: web-2
+          - suite: web
+            shard: 3/8
+            report: web-3
+          - suite: web
+            shard: 4/8
+            report: web-4
+          - suite: web
+            shard: 5/8
+            report: web-5
+          - suite: web
+            shard: 6/8
+            report: web-6
+          - suite: web
+            shard: 7/8
+            report: web-7
+          - suite: web
+            shard: 8/8
+            report: web-8
           - suite: worker
             shard: 1/1
             report: worker
@@ -105,10 +125,11 @@ jobs:
 
       - name: Run integration tests with coverage
         working-directory: packages/${{ matrix.suite }}
-        run: pnpm exec vitest run --coverage --shard="$TEST_SHARD" --coverage.reportsDirectory="../../coverage/$COVERAGE_REPORT"
+        run: pnpm exec vitest run --coverage --shard="$TEST_SHARD" --coverage.reportsDirectory="../../coverage/$COVERAGE_REPORT" $TEST_WORKERS
         env:
           TEST_SHARD: ${{ matrix.shard }}
           COVERAGE_REPORT: ${{ matrix.report }}
+          TEST_WORKERS: ${{ matrix.suite == 'web' && '--maxWorkers=1' || '' }}
 
       - name: Verify web asset publishing
         if: matrix.suite == 'worker'
@@ -173,7 +194,7 @@ jobs:
           path: coverage/
           merge-multiple: true
 
-      - run: pnpm test:coverage:merge --web-shards=2
+      - run: pnpm test:coverage:merge --web-shards=8
 
       - name: Save combined coverage report
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

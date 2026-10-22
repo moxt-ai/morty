@@ -1,4 +1,3 @@
-import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as v from "valibot";
@@ -6,30 +5,14 @@ import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runt
 import { createIdentityFixture } from "../../../worker/tests/support/identity-fixture.ts";
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
 
-async function availableOrigin(): Promise<string> {
-    const server = createServer();
-    await new Promise<void>((resolve, reject) => {
-        server.once("error", reject);
-        server.listen(0, "127.0.0.1", resolve);
-    });
-    const address = server.address();
-    if (address === null || typeof address === "string") {
-        throw new Error("Could not allocate a Chat Worker port");
-    }
-    await new Promise<void>((resolve, reject) =>
-        server.close((error) => (error === undefined ? resolve() : reject(error))),
-    );
-    return `http://127.0.0.1:${address.port}`;
-}
-
 export async function createChatWorkerEnvironment() {
-    const origin = await availableOrigin();
     const cloud = await createIdentityFixture({
-        appOrigin: origin,
+        listenOnLoopback: true,
         platformAllowedOrigins: new Set(["*"]),
         workerEntryPoint: resolve(process.cwd(), "../worker/src/index.ts"),
         wranglerConfiguration: pathToFileURL(resolve(process.cwd(), "../../wrangler.jsonc")),
     });
+    const origin = cloud.origin;
     const createApplication = async () => {
         const identityResponse = await cloud.dispatchFetch(`${origin}/morty/api/identity/anonymous-users`, {
             method: "POST",
